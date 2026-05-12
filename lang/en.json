@@ -1,0 +1,20 @@
+{
+    "FundFlow Family Sponsorship SaaS": "FundFlow Family Sponsorship SaaS",
+    "Manage parents and dependents, enroll family members, and collaborate through Filament comments.": "Manage parents and dependents, enroll family members, and collaborate through Filament comments.",
+    "Open a family portal by slug. Example:": "Open a family portal by slug. Example:",
+    "Admins sign in at /admin and members at /member after family login.": "Admins sign in at /admin and members at /member after family login.",
+    "Family code": "Family code",
+    "Member/Admin Login": "Member/Admin Login",
+    "Enrollment Workflow": "Enrollment Workflow",
+    "Applicant Name": "Applicant Name",
+    "Phone": "Phone",
+    "Notes": "Notes",
+    "Submit Enrollment": "Submit Enrollment",
+    "Enrollment submitted successfully.": "Enrollment submitted successfully.",
+    "Family Login": "Family Login",
+    "Login to": "Login to",
+    "Use your family account credentials.": "Use your family account credentials.",
+    "Password": "Password",
+    "Login": "Login",
+    "Invalid credentials for this family.": "Invalid credentials for this family."
+}

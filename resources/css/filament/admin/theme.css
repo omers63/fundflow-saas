@@ -1,0 +1,20 @@
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+@source '../../../../app/Filament/**/*';
+@source '../../../../resources/views/filament/**/*';
+@source '../../../../vendor/relaticle/comments/resources/views/**/*.blade.php';
+
+:root {
+    --ff-admin-primary: #4f46e5;
+    --ff-admin-gradient: linear-gradient(135deg, color-mix(in srgb, var(--ff-admin-primary), black 45%) 0%, var(--ff-admin-primary) 100%);
+}
+
+.fi-sidebar-header,
+.fi-topbar {
+    background: var(--ff-admin-gradient);
+}
+
+.fi-logo {
+    font-weight: 700;
+    letter-spacing: 0.03em;
+}
