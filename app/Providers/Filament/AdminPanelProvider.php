@@ -2,29 +2,25 @@
 
 namespace App\Providers\Filament;
 
-use App\Support\SystemSettings;
+use App\Filament\Widgets\MyTenants;
+use App\Filament\Widgets\StatsOverview;
+use App\Filament\Widgets\TenantGrowthChart;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Filament\Pages\Dashboard;
+use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
-use Filament\View\PanelsRenderHook;
-use Relaticle\Comments\CommentsPlugin;
-use Filament\Widgets\AccountWidget;
-use Filament\Widgets\FilamentInfoWidget;
+use Filament\Widgets;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
-use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
-use Illuminate\Support\HtmlString;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
-use Stancl\Tenancy\Middleware\InitializeTenancyByDomainOrSubdomain;
-use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 
 class AdminPanelProvider extends PanelProvider
 {
@@ -34,34 +30,27 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
-            ->login()
-            ->databaseNotifications()
+            ->domains([
+                config('tenancy.central_domain'),
+
+                // you can add more domains here and adjusting the tenancy config for multiple central domains
+            ])
             ->viteTheme('resources/css/filament/admin/theme.css')
-            ->brandName(fn(): string => (SystemSettings::get('app_name', 'FundFlow') . ' Admin'))
+            ->login()
+            ->registration() // Enabled registration
             ->colors([
-                'primary' => Color::Indigo,
-                'warning' => Color::Amber,
-                'success' => Color::Emerald,
+                'primary' => Color::Amber,
             ])
-            ->renderHook(
-                PanelsRenderHook::HEAD_END,
-                fn(): HtmlString => new HtmlString(
-                    '<style>:root{--ff-admin-primary:' . e(SystemSettings::get('admin_primary_color', '#4f46e5')) . ';}</style>'
-                )
-            )
-            ->plugins([
-                FilamentShieldPlugin::make(),
-                CommentsPlugin::make(),
-            ])
-            ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
-            ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
+            ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
+            ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([
-                Dashboard::class,
+                Pages\Dashboard::class,
             ])
-            ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
+            ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
             ->widgets([
-                AccountWidget::class,
-                FilamentInfoWidget::class,
+                StatsOverview::class,
+                MyTenants::class,
+                TenantGrowthChart::class,
             ])
             ->middleware([
                 EncryptCookies::class,
@@ -69,7 +58,7 @@ class AdminPanelProvider extends PanelProvider
                 StartSession::class,
                 AuthenticateSession::class,
                 ShareErrorsFromSession::class,
-                PreventRequestForgery::class,
+                VerifyCsrfToken::class,
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
@@ -77,9 +66,8 @@ class AdminPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
             ])
-            ->tenantMiddleware([
-                InitializeTenancyByDomainOrSubdomain::class,
-                PreventAccessFromCentralDomains::class,
-            ], isPersistent: true);
+            ->plugins([
+                FilamentShieldPlugin::make(),
+            ]);
     }
 }

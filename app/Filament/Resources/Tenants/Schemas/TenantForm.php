@@ -2,9 +2,13 @@
 
 namespace App\Filament\Resources\Tenants\Schemas;
 
-use App\Models\Tenant;
-use Filament\Schemas\Components\Section;
+use App\Models\Central\Plan;
+use App\Models\Central\User;
+use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
 class TenantForm
@@ -13,36 +17,42 @@ class TenantForm
     {
         return $schema
             ->components([
-                Section::make('Tenant')
+                Section::make('Tenant Information')
+                    ->columns(2)
                     ->schema([
                         TextInput::make('id')
+                            ->label('Tenant ID / Subdomain')
                             ->required()
-                            ->alphaDash()
-                            ->maxLength(64)
-                            ->unique(Tenant::class, 'id', ignoreRecord: true)
-                            ->helperText('Unique tenant key, e.g. al-hassan'),
-                        TextInput::make('name')->required(),
-                        TextInput::make('slug')
-                            ->required()
-                            ->alphaDash()
-                            ->unique(Tenant::class, 'slug', ignoreRecord: true),
-                        TextInput::make('tenancy_db_name')
-                            ->label('Tenant DB name')
-                            ->helperText('Optional. Auto-generated when empty.'),
-                    ])->columns(2),
-                Section::make('Domain')
-                    ->schema([
-                        TextInput::make('primary_domain')
-                            ->label('Primary domain')
-                            ->required(fn(string $operation): bool => $operation === 'create')
-                            ->helperText('Example: al-hassan.localhost'),
+                            ->unique(ignoreRecord: true)
+                            ->disabled(fn ($record) => $record !== null)
+                            ->placeholder('e.g. acme'),
+                        TextInput::make('name')
+                            ->label('Business Name')
+                            ->required(),
+                        Select::make('central_user_id')
+                            ->label('Owner')
+                            ->options(User::all()->pluck('name', 'id'))
+                            ->searchable()
+                            ->required(),
+                        Select::make('plan_id')
+                            ->label('Subscription Plan')
+                            ->options(Plan::all()->pluck('name', 'id'))
+                            ->searchable()
+                            ->required(),
                     ]),
-                Section::make('Provision admin user')
+
+                Section::make('Provisioning Status')
+                    ->columns(2)
                     ->schema([
-                        TextInput::make('admin_name')->required(fn(string $operation): bool => $operation === 'create'),
-                        TextInput::make('admin_email')->email()->required(fn(string $operation): bool => $operation === 'create'),
-                        TextInput::make('admin_password')->password()->required(fn(string $operation): bool => $operation === 'create')->minLength(8),
-                    ])->columns(2),
+                        Toggle::make('is_provisioned')
+                            ->label('Is Provisioned')
+                            ->disabled()
+                            ->dehydrated(false),
+                        DateTimePicker::make('provisioned_at')
+                            ->label('Provisioned At')
+                            ->disabled()
+                            ->dehydrated(false),
+                    ]),
             ]);
     }
 }
