@@ -3,11 +3,13 @@
         "opencode",
         "gemini"
     ],
+    "cloud": false,
     "guidelines": true,
     "herd_mcp": false,
     "mcp": true,
     "sail": false,
     "skills": [
+        "laravel-best-practices",
         "pest-testing",
         "tailwindcss-development"
     ]
