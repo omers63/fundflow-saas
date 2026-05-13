@@ -1,98 +1,285 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Laravel Tenancy Starter Kit
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A robust, production-ready starter kit for building multi-tenant applications with [Laravel](https://laravel.com) and [stancl/tenancy](https://tenancyforlaravel.com). This boilerplate comes pre-configured with a powerful Central Admin Panel built on [Filament](https://filamentphp.com) to manage tenants, subscriptions, and billing.
 
-## FundFlow Tenancy & Theming
+**Built by and actively used at [quikpl.com](https://quikpl.com) to power our own SaaS platform.**
 
-This project is configured for production-oriented multi-tenancy using `stancl/tenancy` with a central + tenant database split.
+## Table of Contents
 
-- Central DB connection: `central`
-- Tenant runtime DB connection: `tenant`
-- Tenant template DB connection: `tenant_template`
-- Tenant model: `App\Models\Tenant`
-- Tenant migrations path: `database/migrations/tenant`
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Automating Tenant Provisioning with Payments](#automating-tenant-provisioning-with-payments-stripe-example)
+- [Testing](#testing)
+- [Useful Documentation](#useful-documentation)
+- [Architecture Overview](#architecture-overview)
+- [Contributing](#contributing)
+- [Custom Development Services](#custom-development-services)
+- [License](#license)
 
-### Setup Flow
+## Features
 
-1. Configure central and tenant DB credentials in `.env` (see `.env.example`).
-2. Run central migrations:
-   - `php artisan migrate`
-3. Create a tenant + domain (example):
-   - `php artisan tinker`
-   - `App\Models\Tenant::create(['id' => 'family-acme', 'name' => 'Acme Family', 'slug' => 'acme'])->domains()->create(['domain' => 'acme.localhost']);`
-4. Run tenant migrations:
-   - `php artisan tenants:migrate`
+### Multi-Tenancy (stancl/tenancy v3)
+- **Database per Tenant:** Complete data isolation with automatic database creation and migration.
+- **Domain Identification:** Tenants are identified by domains/subdomains.
+- **Tenant Lifecycle Management:** Automated jobs for creating, migrating, and deleting tenant databases.
+- **Tenant-Aware Services:** Filesystem, Cache, Queue, and Redis are configured to be tenant-aware.
 
-### Filament Branding
+### Central Administration (Filament v5)
+- **Tenant Management:** Create, update, and delete tenants directly from the admin panel.
+- **Subscription Billing:**
+    - **Plans Management:** Create and manage flexible subscription plans.
+    - **Subscription Tracking:** Monitor tenant subscriptions and statuses.
+    - **Invoicing:** Generate and manage invoices for tenants.
+- **Role-Based Access Control:** integrated with Filament Shield (v3) for granular permissions.
 
-- Admin panel theme: `resources/css/filament/admin/theme.css`
-- Member panel theme: `resources/css/filament/member/theme.css`
-- Comments plugin styles are included in both themes via:
-  - `@source '../../../../vendor/relaticle/comments/resources/views/**/*.blade.php';`
+### Modern Stack
+- **Framework:** Laravel 12
+- **Admin Panel:** Filament v5
+- **Frontend:** Livewire v4 + Tailwind CSS v4
+- **Testing:** Pest v4
+- **Tooling:** Laravel Pint (Code Style), Laravel Sail (Docker)
 
-### Centralized Settings
+## Prerequisites
 
-Use Admin panel `System > Settings` to configure:
+- PHP 8.2+
+- Composer
+- Node.js & NPM
+- MySQL 8.0+ (Recommended) or SQLite
+- Redis
 
-- Public homepage copy and brand colors
-- Distinct admin/member theme accent colors
-- Global maintenance mode toggle and message
+**Recommendation:** For local development, especially with subdomains, we highly recommend using [Laravel Valet](https://laravel.com/docs/valet) (macOS) or [Laravel Herd](https://herd.laravel.com/). These tools make handling `*.test` domains seamless.
 
-### Tenant Onboarding
+## Installation
 
-Use Admin panel `System > Tenant Onboarding` to create tenant + primary domain and auto-provision a tenant admin user in one create action.
+1.  **Clone the repository**
+    ```bash
+    git clone https://github.com/danihidayatx/tenancy-starterkit.git
+    cd tenancy-starterkit
+    ```
 
-## About Laravel
+2.  **Install PHP dependencies**
+    ```bash
+    composer install
+    ```
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+3.  **Install Node dependencies**
+    ```bash
+    npm install
+    ```
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+4.  **Environment Configuration**
+    ```bash
+    cp .env.example .env
+    php artisan key:generate
+    ```
+    Update your `.env` file with your database credentials. Ensure you have a central database created.
+    ```env
+    DB_CONNECTION=mysql
+    DB_HOST=127.0.0.1
+    DB_PORT=3306
+    DB_DATABASE=tenancy_central
+    DB_USERNAME=root
+    DB_PASSWORD=
+    ```
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+5.  **Run Migrations & Seeds**
+    This will migrate the central database and seed default roles/permissions.
+    ```bash
+    php artisan migrate --seed
+    ```
 
-## Learning Laravel
+6.  **Build Assets**
+    ```bash
+    npm run build
+    ```
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+7.  **Generate Shield Permissions & Assign Super Admin**
+    First, generate all permissions for Filament Shield. When prompted, select `permissions` for what you'd like to manage.
+    ```bash
+    php artisan shield:generate --all
+    ```
+    Next, assign the `super_admin` role to a user. When prompted, choose the `admin` panel and then select the `UserID` of the super admin (usually `1`).
+    ```bash
+    php artisan shield:super-admin
+    ```
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Usage
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+### Local Development with Valet (Recommended)
+If you are using Valet:
+1.  Park or link your directory: `valet link tenancy-starterkit`
+2.  Your app is now available at `http://tenancy-starterkit.test`.
 
-## Agentic Development
+### Accessing the Central Admin
+Visit `http://tenancy-starterkit.test/admin` (or your configured domain) and log in with the admin user you created.
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+### Creating a Tenant
+1.  Navigate to the **Tenants** resource in the admin panel.
+2.  Click **New Tenant**.
+3.  Fill in the tenant details and assign a domain.
+    *   *Tip: Use subdomains like `foo` to access `foo.tenancy-starterkit.test` automatically with Valet.*
+4.  The system will automatically:
+    -   Create a new database for the tenant.
+    -   Run tenant-specific migrations.
+    -   Create the domain record.
+
+### Accessing a Tenant
+Once a tenant is created (e.g., with id `foo`), you can access their application at:
+`http://foo.tenancy-starterkit.test`
+
+## Automating Tenant Provisioning with Payments (Stripe Example)
+
+A key feature of a SaaS application is automatically provisioning a new tenant account after a successful payment. Here’s a high-level guide on how to implement this using Stripe and Laravel Cashier.
+
+The core idea is to create a Stripe webhook that, upon a successful payment, creates a `Tenant` model, which in turn triggers the automatic provisioning jobs.
+
+1.  **Install Laravel Cashier (Stripe)**
+    ```bash
+    composer require laravel/cashier
+    php artisan cashier:install
+    php artisan migrate
+    ```
+
+2.  **Configure Stripe**
+    Add your Stripe keys and a webhook secret to your `.env` file.
+    ```env
+    STRIPE_KEY=pk_...
+    STRIPE_SECRET=sk_...
+    STRIPE_WEBHOOK_SECRET=whsec_...
+    ```
+
+3.  **Create a Webhook Controller**
+    This controller will handle incoming events from Stripe.
+    ```bash
+    php artisan make:controller StripeWebhookController
+    ```
+    In your `StripeWebhookController.php`, create a method to handle the `checkout.session.completed` event. This is where the magic happens.
+
+4.  **Define the Webhook Route**
+    In `routes/web.php`, create a route that points to your new controller. Remember to exclude it from CSRF protection.
+    ```php
+    Route::post(
+        'stripe/webhook',
+        [StripeWebhookController::class, 'handleWebhook']
+    )->name('cashier.webhook');
+    ```
+
+5.  **Implement the Controller Logic**
+    Inside your `handleWebhook` method:
+    -   Verify the webhook signature.
+    -   Get the user and payment details from the Stripe session object.
+    -   **Crucially, create the `Tenant` record.** You can pass user details or generate a unique ID.
+        ```php
+        // Example logic in your controller
+        $session = $event->data['object'];
+        $user = User::find($session->client_reference_id);
+
+        $tenant = App\Models\Central\Tenant::create([
+            'id' => 'tenant-' . uniqid(),
+            'name' => $user->name . "'s Team",
+            'owner_id' => $user->id,
+        ]);
+        
+        $tenant->createDomain([
+            'domain' => strtolower(str_replace(' ', '', $user->name))
+        ]);
+        ```
+
+6.  **Automatic Provisioning**
+    That's it! The `TenancyServiceProvider` is already configured to listen for the `TenantCreated` event. Once the `Tenant` model is created in the webhook, the service provider will automatically trigger the job pipeline to:
+    -   Create the tenant's database.
+    -   Run the tenant's migrations.
+    -   Perform any other setup jobs you've defined.
+
+7.  **Frontend Integration**
+    You will need to build a UI for users to select a plan and initiate the Stripe Checkout session. The `app/Filament/Pages/PurchasePlan.php` is a great starting point for this.
+
+## Testing
+
+This project uses **Pest** for testing and comes with a foundational test suite to ensure the core multi-tenancy and Filament features are working as expected. We highly recommend you extend this test suite as you build out your application.
+
+### Running Tests
 
 ```bash
-composer require laravel/boost --dev
+# Run all tests
+php artisan test
 
-php artisan boost:install
+# Run tests with a compact report
+php artisan test --compact
+
+# Run a specific test file (e.g., feature test)
+php artisan test tests/Feature/Central/TenantLifecycleTest.php
+
+# Run unit tests
+php artisan test --group=unit
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+### Existing Test Structure
+
+-   **`tests/Feature/Central/`**: Contains feature tests for the central application, covering functionalities such as:
+    -   `InvoiceTest.php`: Tests invoice-related features.
+    -   `SubscriptionTest.php`: Tests subscription management.
+    -   `TenantLifecycleTest.php`: Essential tests for tenant creation, migration, and deletion.
+    -   `UserTest.php`: Tests user management and authentication.
+-   **`tests/Feature/Tenant/AppTest.php`**: A basic feature test for the tenant-specific application, ensuring it loads correctly. This is a good starting point for your tenant-specific feature tests.
+-   **`tests/Unit/ExampleTest.php`**: An example unit test.
+
+### Extending Your Test Suite
+
+-   **Central Application Tests:** When adding new features to your central admin panel (e.g., new Filament resources, custom pages, or central API endpoints), create new feature tests in `tests/Feature/Central/`.
+-   **Tenant Application Tests:** For any features specific to the tenant application (e.g., tenant-specific models, controllers, or API endpoints), create feature tests in `tests/Feature/Tenant/`. Remember to leverage [Pest's multi-tenancy testing utilities](https://tenancyforlaravel.com/docs/v3/testing#testing-with-tenancy) when interacting with tenant contexts.
+-   **Unit Tests:** For isolated logic (e.g., service classes, complex helper functions, or model methods without database interaction), create unit tests in `tests/Unit/`.
+
+## Useful Documentation
+
+-   **Laravel Tenancy (stancl/tenancy):** [https://tenancyforlaravel.com/docs/v3](https://tenancyforlaravel.com/docs/v3) - *The core multi-tenancy package.*
+-   **Filament PHP:** [https://filamentphp.com/docs](https://filamentphp.com/docs) - *The admin panel framework.*
+-   **Laravel Documentation:** [https://laravel.com/docs](https://laravel.com/docs) - *The PHP framework.*
+-   **Livewire:** [https://livewire.laravel.com/docs](https://livewire.laravel.com/docs) - *Dynamic frontend components.*
+-   **Tailwind CSS:** [https://tailwindcss.com/docs](https://tailwindcss.com/docs) - *Utility-first CSS framework.*
+
+## Architecture Overview
+
+### Central Context (`App\Models\Central`)
+Models and logic related to the management of the SaaS platform itself.
+-   **User:** Administrators of the central application.
+-   **Tenant:** The entity representing a customer account.
+-   **Domain:** The domain(s) associated with a tenant.
+-   **Plan/Subscription/Invoice:** Billing-related models.
+
+### Tenant Context (`App\Models\Tenant`)
+Models and logic specific to the tenant's application.
+-   *Currently empty boilerplate.*
+-   Define your application's specific models here (e.g., `Product`, `Order`, `Post`).
+-   Migrations for these models go in `database/migrations/tenant`.
+
+### Routing
+-   `routes/web.php`: Routes for the Central Application (Landing page, Admin Panel).
+-   `routes/tenant.php`: Routes for the Tenant Application (accessed via subdomain).
 
 ## Contributing
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-## Code of Conduct
+1.  Fork the project
+2.  Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4.  Push to the branch (`git push origin feature/AmazingFeature`)
+5.  Open a Pull Request
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
 
-## Security Vulnerabilities
+## Custom Development Services
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Need custom features, additional integrations, or professional assistance in developing your multi-tenant application?
+
+I offer custom development services to help you bring your project vision to life. Whether it's implementing new features, performance optimization, or technical support, feel free to contact me.
+
+**Contact me to discuss your project needs!**
+
+-   **Email:** dani@quikpl.com
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+This project is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).

@@ -1,1 +1,1 @@
-import './pwa-register';
+import './bootstrap';

@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Support\Str;
-use Pdo\Mysql;
 
 return [
 
@@ -17,7 +16,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'central'),
+    'default' => env('DB_CONNECTION', 'sqlite'),
 
     /*
     |--------------------------------------------------------------------------
@@ -31,65 +30,6 @@ return [
     */
 
     'connections' => [
-        'central' => [
-            'driver' => env('DB_CENTRAL_DRIVER', 'mysql'),
-            'url' => env('DB_CENTRAL_URL'),
-            'host' => env('DB_CENTRAL_HOST', '127.0.0.1'),
-            'port' => env('DB_CENTRAL_PORT', '3306'),
-            'database' => env('DB_CENTRAL_DATABASE', 'fundflow_central'),
-            'username' => env('DB_CENTRAL_USERNAME', 'root'),
-            'password' => env('DB_CENTRAL_PASSWORD', ''),
-            'unix_socket' => env('DB_CENTRAL_SOCKET', ''),
-            'charset' => env('DB_CENTRAL_CHARSET', 'utf8mb4'),
-            'collation' => env('DB_CENTRAL_COLLATION', 'utf8mb4_unicode_ci'),
-            'prefix' => '',
-            'prefix_indexes' => true,
-            'strict' => true,
-            'engine' => null,
-            'options' => extension_loaded('pdo_mysql') ? array_filter([
-                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
-            ]) : [],
-        ],
-
-        'tenant' => [
-            'driver' => env('DB_TENANT_DRIVER', 'mysql'),
-            'url' => env('DB_TENANT_URL'),
-            'host' => env('DB_TENANT_HOST', '127.0.0.1'),
-            'port' => env('DB_TENANT_PORT', '3306'),
-            'database' => null,
-            'username' => env('DB_TENANT_USERNAME', 'root'),
-            'password' => env('DB_TENANT_PASSWORD', ''),
-            'unix_socket' => env('DB_TENANT_SOCKET', ''),
-            'charset' => env('DB_TENANT_CHARSET', 'utf8mb4'),
-            'collation' => env('DB_TENANT_COLLATION', 'utf8mb4_unicode_ci'),
-            'prefix' => '',
-            'prefix_indexes' => true,
-            'strict' => true,
-            'engine' => null,
-            'options' => extension_loaded('pdo_mysql') ? array_filter([
-                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
-            ]) : [],
-        ],
-
-        'tenant_template' => [
-            'driver' => env('DB_TENANT_TEMPLATE_DRIVER', 'mysql'),
-            'url' => env('DB_TENANT_TEMPLATE_URL'),
-            'host' => env('DB_TENANT_TEMPLATE_HOST', env('DB_TENANT_HOST', '127.0.0.1')),
-            'port' => env('DB_TENANT_TEMPLATE_PORT', env('DB_TENANT_PORT', '3306')),
-            'database' => env('DB_TENANT_TEMPLATE_DATABASE', env('DB_CENTRAL_DATABASE', 'fundflow_central')),
-            'username' => env('DB_TENANT_TEMPLATE_USERNAME', env('DB_TENANT_USERNAME', 'root')),
-            'password' => env('DB_TENANT_TEMPLATE_PASSWORD', env('DB_TENANT_PASSWORD', '')),
-            'unix_socket' => env('DB_TENANT_TEMPLATE_SOCKET', env('DB_TENANT_SOCKET', '')),
-            'charset' => env('DB_TENANT_TEMPLATE_CHARSET', 'utf8mb4'),
-            'collation' => env('DB_TENANT_TEMPLATE_COLLATION', 'utf8mb4_unicode_ci'),
-            'prefix' => '',
-            'prefix_indexes' => true,
-            'strict' => true,
-            'engine' => null,
-            'options' => extension_loaded('pdo_mysql') ? array_filter([
-                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
-            ]) : [],
-        ],
 
         'sqlite' => [
             'driver' => 'sqlite',
@@ -119,7 +59,7 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+                (PHP_VERSION_ID >= 80500 ? \Pdo\Mysql::ATTR_SSL_CA : \PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
         ],
 
@@ -139,7 +79,7 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+                (PHP_VERSION_ID >= 80500 ? \Pdo\Mysql::ATTR_SSL_CA : \PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
         ],
 
@@ -208,7 +148,7 @@ return [
 
         'options' => [
             'cluster' => env('REDIS_CLUSTER', 'redis'),
-            'prefix' => env('REDIS_PREFIX', Str::slug((string) env('APP_NAME', 'laravel')) . '-database-'),
+            'prefix' => env('REDIS_PREFIX', Str::slug((string) env('APP_NAME', 'laravel')).'-database-'),
             'persistent' => env('REDIS_PERSISTENT', false),
         ],
 

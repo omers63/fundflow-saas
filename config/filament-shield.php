@@ -1,10 +1,6 @@
 <?php
 
 declare(strict_types=1);
-use BezhanSalleh\FilamentShield\Resources\Roles\RoleResource;
-use Filament\Pages\Dashboard;
-use Filament\Widgets\AccountWidget;
-use Filament\Widgets\FilamentInfoWidget;
 
 return [
 
@@ -42,7 +38,7 @@ return [
     |
     */
 
-    'tenant_model' => null,
+    'tenant_model' => null, // Set to null because we use a manual, policy-based approach for tenant data scoping in the central admin panel instead of Shield's built-in multi-tenancy.
 
     /*
     |--------------------------------------------------------------------------
@@ -55,7 +51,7 @@ return [
     |
     */
 
-    'auth_provider_model' => 'App\\Models\\User',
+    'auth_provider_model' => 'App\\Models\\Central\\User',
 
     /*
     |--------------------------------------------------------------------------
@@ -126,7 +122,7 @@ return [
         'merge' => true,
         'generate' => true,
         'methods' => [
-            'viewAny', 'view', 'create', 'update', 'delete', 'deleteAny', 'restore',
+            'viewAny', 'view', 'create', 'update', 'delete', 'restore',
             'forceDelete', 'forceDeleteAny', 'restoreAny', 'replicate', 'reorder',
         ],
         'single_parameter_methods' => [
@@ -169,7 +165,7 @@ return [
     'resources' => [
         'subject' => 'model',
         'manage' => [
-            RoleResource::class => [
+            \BezhanSalleh\FilamentShield\Resources\Roles\RoleResource::class => [
                 'viewAny',
                 'view',
                 'create',
@@ -197,7 +193,7 @@ return [
         'subject' => 'class',
         'prefix' => 'view',
         'exclude' => [
-            Dashboard::class,
+            \Filament\Pages\Dashboard::class,
         ],
     ],
 
@@ -216,8 +212,8 @@ return [
         'subject' => 'class',
         'prefix' => 'view',
         'exclude' => [
-            AccountWidget::class,
-            FilamentInfoWidget::class,
+            \Filament\Widgets\AccountWidget::class,
+            \Filament\Widgets\FilamentInfoWidget::class,
         ],
     ],
 
