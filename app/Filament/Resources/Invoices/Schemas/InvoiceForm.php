@@ -16,7 +16,7 @@ class InvoiceForm
     {
         return $schema
             ->components([
-                Section::make('Invoice Header')
+                Section::make(__('Invoice Header'))
                     ->columns(2)
                     ->schema([
                         TextInput::make('invoice_number')
@@ -33,7 +33,7 @@ class InvoiceForm
                             ->default('pending'),
                     ]),
 
-                Section::make('Billing Information')
+                Section::make(__('Billing Information'))
                     ->columns(2)
                     ->schema([
                         Select::make('tenant_id')
@@ -55,7 +55,7 @@ class InvoiceForm
                             ->default('IDR'),
                     ]),
 
-                Section::make('Payment Details')
+                Section::make(__('Payment Details'))
                     ->columns(2)
                     ->schema([
                         TextInput::make('payment_method'),

@@ -15,7 +15,7 @@ class SubscriptionForm
     {
         return $schema
             ->components([
-                Section::make('Subscription Details')
+                Section::make(__('Subscription Details'))
                     ->columns(2)
                     ->schema([
                         Select::make('tenant_id')
@@ -41,7 +41,7 @@ class SubscriptionForm
                             ->default('active'),
                     ]),
 
-                Section::make('Timeline')
+                Section::make(__('Timeline'))
                     ->columns(2)
                     ->schema([
                         DateTimePicker::make('starts_at'),

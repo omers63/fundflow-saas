@@ -28,7 +28,7 @@ class ViewSubscription extends ViewRecord
         return [
             Split::make([
                 Group::make([
-                    Section::make('Subscription Details')
+                    Section::make(__('Subscription Details'))
                         ->schema([
                             TextInput::make('tenant.name')
                                 ->label('Tenant')
@@ -40,30 +40,30 @@ class ViewSubscription extends ViewRecord
                                 ->label('Status')
                                 ->disabled(),
                             TextInput::make('starts_at')
-                                ->label('Starts At')
+                                ->label('Starts at')
                                 ->disabled(),
                             TextInput::make('ends_at')
-                                ->label('Ends At')
+                                ->label('Ends at')
                                 ->disabled(),
                             TextInput::make('trial_ends_at')
-                                ->label('Trial Ends At')
+                                ->label('Trial ends at')
                                 ->disabled(),
                             TextInput::make('cancels_at')
-                                ->label('Cancels At')
+                                ->label('Cancels at')
                                 ->disabled(),
                             TextInput::make('canceled_at')
-                                ->label('Canceled At')
+                                ->label('Canceled at')
                                 ->disabled(),
                         ]),
                 ]),
                 Group::make([
-                    Section::make('Other Details')
+                    Section::make(__('Other Details'))
                         ->schema([
                             TextInput::make('created_at')
-                                ->label('Created At')
+                                ->label('Created at')
                                 ->disabled(),
                             TextInput::make('updated_at')
-                                ->label('Updated At')
+                                ->label('Updated at')
                                 ->disabled(),
                         ]),
                 ]),

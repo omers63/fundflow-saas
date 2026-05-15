@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Invoices\Tables;
 
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Models\Central\Invoice;
 use App\Services\TenantProvisioningService;
 use Filament\Actions\Action;
@@ -10,6 +11,7 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
 class InvoicesTable
@@ -47,10 +49,28 @@ class InvoicesTable
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggledHiddenByDefault(),
             ])
             ->filters([
-                //
+                SelectFilter::make('status')
+                    ->options([
+                        'pending' => 'Pending',
+                        'paid' => 'Paid',
+                        'failed' => 'Failed',
+                        'cancelled' => 'Cancelled',
+                    ]),
+                SelectFilter::make('tenant_id')
+                    ->label('Tenant')
+                    ->relationship('tenant', 'name')
+                    ->searchable()
+                    ->preload(),
+                SelectFilter::make('plan_id')
+                    ->label('Plan')
+                    ->relationship('plan', 'name')
+                    ->searchable()
+                    ->preload(),
+                DateColumnRangeFilter::make('paid_at', 'Paid on'),
+                DateColumnRangeFilter::make('created_at', 'Created'),
             ])
             ->recordActions([
                 EditAction::make(),
@@ -70,8 +90,8 @@ class InvoicesTable
                         $service->provisionTenant($record);
 
                         Notification::make()
-                            ->title('Invoice marked as paid')
-                            ->body('Tenant provisioning has been started.')
+                            ->title(__('Invoice marked as paid'))
+                            ->body(__('Tenant provisioning has been started.'))
                             ->success()
                             ->send();
                     }),

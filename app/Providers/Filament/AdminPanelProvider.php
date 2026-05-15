@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use App\Filament\Widgets\MyTenants;
 use App\Filament\Widgets\StatsOverview;
 use App\Filament\Widgets\TenantGrowthChart;
+use App\Support\FundflowBrand;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -14,12 +15,13 @@ use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
-use Filament\Widgets;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\HtmlString;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
@@ -39,8 +41,14 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             ->registration() // Enabled registration
             ->colors([
-                'primary' => Color::Amber,
+                'primary' => Color::Rose,
             ])
+            ->favicon(FundflowBrand::faviconUrl())
+            ->brandLogo(FundflowBrand::panelLogoUrl())
+            ->darkModeBrandLogo(FundflowBrand::panelLogoUrl())
+            ->brandLogoHeight('5rem')
+            ->sidebarCollapsibleOnDesktop()
+            ->sidebarFullyCollapsibleOnDesktop()
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([
@@ -52,6 +60,8 @@ class AdminPanelProvider extends PanelProvider
                 MyTenants::class,
                 TenantGrowthChart::class,
             ])
+            ->renderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(view('partials.pwa-head')->render()))
+            ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

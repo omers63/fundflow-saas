@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Models\Central\Invoice;
 use App\Models\Central\Plan;
 use App\Models\Central\Subscription;
@@ -22,6 +23,7 @@ use Illuminate\Support\Str;
 class PurchasePlan extends Page implements HasForms
 {
     use InteractsWithForms;
+    use TranslatesPageNavigationLabel;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-shopping-cart';
 
@@ -60,7 +62,7 @@ class PurchasePlan extends Page implements HasForms
     {
         return $schema
             ->schema([
-                Section::make('Select a Plan')
+                Section::make(__('Select a Plan'))
                     ->schema([
                         Radio::make('plan_id')
                             ->label('Choose your subscription plan')
@@ -72,11 +74,11 @@ class PurchasePlan extends Page implements HasForms
                             ->live(),
                     ]),
 
-                Section::make('Tenant Details')
-                    ->description('Set up your business workspace')
+                Section::make(__('Tenant Details'))
+                    ->description(__('Set up your business workspace'))
                     ->schema([
                         TextInput::make('tenant_name')
-                            ->label('Business Name')
+                            ->label('Business name')
                             ->required()
                             ->live(onBlur: true)
                             ->afterStateUpdated(fn (string $operation, $state, $set) => $set('subdomain', Str::slug($state))),
@@ -87,13 +89,13 @@ class PurchasePlan extends Page implements HasForms
                             ->suffix('.'.config('tenancy.central_domain'))
                             ->unique(table: 'tenants', column: 'id')
                             ->regex('/^[a-z0-9\-]+$/')
-                            ->helperText('Only lowercase letters, numbers, and hyphens.'),
+                            ->helperText(__('Only lowercase letters, numbers, and hyphens.')),
                         TextInput::make('custom_domain')
-                            ->label('Custom Domain')
-                            ->placeholder('example.com')
+                            ->label('Custom domain')
+                            ->placeholder(__('example.com'))
                             ->visible(fn (callable $get) => Plan::find($get('plan_id'))?->support_custom_domain ?? false)
                             ->unique(table: 'domains', column: 'domain')
-                            ->helperText('Enter your own domain name if your plan supports it.'),
+                            ->helperText(__('Enter your own domain name if your plan supports it.')),
                     ]),
             ])
             ->statePath('data');
@@ -136,8 +138,8 @@ class PurchasePlan extends Page implements HasForms
         ]);
 
         Notification::make()
-            ->title('Order placed successfully!')
-            ->body('Your invoice '.$invoice->invoice_number.' has been generated. Please complete the payment to activate your workspace.')
+            ->title(__('Order placed successfully!'))
+            ->body(__('Your invoice :number has been generated. Please complete the payment to activate your workspace.', ['number' => $invoice->invoice_number]))
             ->success()
             ->send();
 

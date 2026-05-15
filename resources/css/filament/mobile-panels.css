@@ -1,0 +1,94 @@
+/**
+ * Mobile-first ergonomics for all Filament panels (admin, tenant, member).
+ * Imported after the Filament theme so these rules can refine layout.
+ */
+
+/* Topbar height matches the legacy app: Filament min-h-16 + panel brandLogoHeight (5rem). */
+.fi-body .fi-topbar .fi-logo,
+.fi-body .fi-topbar .fi-logo img {
+    width: auto;
+    max-width: min(18rem, 50vw);
+    object-fit: contain;
+    transform: translateZ(0);
+}
+
+.fi-body .fi-topbar-start .fi-logo {
+    margin-block: auto;
+}
+
+/* Table cells: allow flex children to shrink so wrapped text can use full width */
+.fi-body .fi-ta-cell .fi-ta-col {
+    min-width: 0;
+}
+
+.fi-body .fi-ta-text {
+    max-width: 100%;
+}
+
+/* Table summaries: one horizontal line per cell (column label + sum value), not stacked */
+.fi-body .fi-ta-text-summary {
+    display: flex;
+    flex-flow: row wrap;
+    align-items: baseline;
+    column-gap: 0.35rem;
+    row-gap: 0;
+}
+
+.fi-body .fi-ta-text-summary > .fi-ta-text-summary-label::after {
+    content: ':';
+}
+
+/* Infolists: prose-style blocks should not overflow small viewports */
+.fi-body .fi-in-text {
+    max-width: 100%;
+}
+
+.fi-body .fi-in-text:not(.fi-in-text-has-badges) {
+    overflow-wrap: anywhere;
+}
+
+/* Narrow screens: slightly smaller base type, tighter stats, comfortable forms */
+@media (max-width: 1023px) {
+    .fi-body {
+        font-size: 0.9375rem;
+        line-height: 1.45;
+    }
+
+    .fi-body .fi-wi-stats-overview-stat {
+        padding: 1rem 1.1rem;
+    }
+
+    .fi-body .fi-wi-stats-overview-stat-label {
+        font-size: 0.75rem;
+    }
+
+    .fi-body .fi-wi-stats-overview-stat-value {
+        font-size: 1.25rem;
+        line-height: 1.25;
+    }
+
+    .fi-body .fi-wi-stats-overview-stat-description {
+        font-size: 0.75rem;
+    }
+
+    .fi-body .fi-fo-field-wrp-label-content,
+    .fi-body .fi-fo-field-wrp-hint,
+    .fi-body .fi-fo-field-wrp-helper-text {
+        font-size: 0.8125rem;
+    }
+
+    .fi-body .fi-sidebar-nav-item-label {
+        font-size: 0.8125rem;
+    }
+}
+
+/* Extra-small phones */
+@media (max-width: 639px) {
+    .fi-body {
+        font-size: 0.875rem;
+    }
+
+    .fi-body .fi-wi-stats-overview-stat-value {
+        font-size: 1.125rem;
+    }
+}

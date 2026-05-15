@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Subscriptions;
 
+use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Resources\Subscriptions\Pages\CreateSubscription;
 use App\Filament\Resources\Subscriptions\Pages\EditSubscription;
 use App\Filament\Resources\Subscriptions\Pages\ListSubscriptions;
@@ -18,6 +19,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class SubscriptionResource extends Resource
 {
+    use TranslatesFilamentNavigationLabels;
+
     protected static ?string $model = Subscription::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;

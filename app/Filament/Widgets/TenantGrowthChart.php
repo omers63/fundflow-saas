@@ -11,6 +11,7 @@ use Illuminate\Support\Carbon;
 class TenantGrowthChart extends ChartWidget
 {
     protected ?string $heading = 'Tenant Growth';
+
     protected int|string|array $columnSpan = 'full';
 
     protected static ?int $sort = 2;

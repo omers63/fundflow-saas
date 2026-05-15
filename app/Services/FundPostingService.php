@@ -1,0 +1,147 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Tenant\Account;
+use App\Models\Tenant\BankStatement;
+use App\Models\Tenant\BankTransaction;
+use App\Models\Tenant\FundPosting;
+use App\Models\Tenant\Member;
+use App\Models\Tenant\User;
+use App\Notifications\Tenant\NewFundPostingNotification;
+use Illuminate\Support\Facades\DB;
+
+class FundPostingService
+{
+    public function __construct(
+        public AccountingService $accounting,
+    ) {}
+
+    /**
+     * Submit a fund posting request from a member.
+     * Creates the posting, creates an uncleared bank transaction,
+     * and notifies admin users.
+     */
+    public function submit(
+        Member $member,
+        float $amount,
+        string $postingDate,
+        ?string $reference = null,
+        ?string $attachment = null,
+        ?string $comments = null,
+    ): FundPosting {
+        return DB::transaction(function () use ($member, $amount, $postingDate, $reference, $attachment, $comments) {
+            $posting = FundPosting::create([
+                'member_id' => $member->id,
+                'posting_date' => $postingDate,
+                'amount' => $amount,
+                'reference' => $reference,
+                'attachment' => $attachment,
+                'comments' => $comments,
+                'status' => 'pending',
+            ]);
+
+            $statement = BankStatement::firstOrCreate(
+                ['filename' => 'member-postings', 'status' => 'completed'],
+                [
+                    'bank_name' => 'Member Postings',
+                    'total_rows' => 0,
+                    'imported_rows' => 0,
+                    'duplicate_rows' => 0,
+                ],
+            );
+
+            $bankTxn = BankTransaction::create([
+                'bank_statement_id' => $statement->id,
+                'transaction_date' => $postingDate,
+                'description' => "Fund posting by {$member->name}",
+                'amount' => $amount,
+                'reference' => $reference,
+                'status' => 'imported',
+                'member_id' => $member->id,
+                'hash' => md5("posting-{$posting->id}-{$postingDate}-{$amount}"),
+                'is_cleared' => false,
+                'fund_posting_id' => $posting->id,
+            ]);
+
+            $posting->update(['bank_transaction_id' => $bankTxn->id]);
+
+            $admins = User::where('is_admin', true)->get();
+            foreach ($admins as $admin) {
+                $admin->notify(new NewFundPostingNotification($posting));
+            }
+
+            return $posting;
+        });
+    }
+
+    /**
+     * Accept a fund posting.
+     * Credits Master Cash, then posts to the member's cash account.
+     * The associated bank transaction stays uncleared until matched.
+     */
+    public function accept(FundPosting $posting, ?int $reviewedBy = null, ?string $remarks = null): void
+    {
+        DB::transaction(function () use ($posting, $reviewedBy, $remarks) {
+            $member = $posting->member;
+            $masterCash = Account::masterCash();
+            $memberCash = $member->cashAccount;
+            $amount = (float) $posting->amount;
+            $description = "Fund posting #{$posting->id} by {$member->name}";
+
+            $this->accounting->credit($masterCash, $amount, $description, $posting);
+
+            $this->accounting->mirror($memberCash, $amount, "Posted: {$description}", $posting);
+
+            $posting->update([
+                'status' => 'accepted',
+                'reviewed_by' => $reviewedBy,
+                'reviewed_at' => now(),
+                'admin_remarks' => $remarks,
+            ]);
+
+            if ($posting->bankTransaction) {
+                $posting->bankTransaction->update(['status' => 'posted']);
+            }
+        });
+    }
+
+    /**
+     * Reject a fund posting.
+     * Removes the associated uncleared bank transaction.
+     */
+    public function reject(FundPosting $posting, ?int $reviewedBy = null, ?string $remarks = null): void
+    {
+        DB::transaction(function () use ($posting, $reviewedBy, $remarks) {
+            $posting->update([
+                'status' => 'rejected',
+                'reviewed_by' => $reviewedBy,
+                'reviewed_at' => now(),
+                'admin_remarks' => $remarks,
+            ]);
+
+            if ($posting->bankTransaction) {
+                $posting->bankTransaction->update(['status' => 'ignored']);
+            }
+        });
+    }
+
+    /**
+     * Clear an uncleared bank transaction by matching it against an imported one.
+     */
+    public function clearTransaction(BankTransaction $uncleared, BankTransaction $imported): void
+    {
+        DB::transaction(function () use ($uncleared, $imported) {
+            $uncleared->update([
+                'is_cleared' => true,
+                'cleared_at' => now(),
+            ]);
+
+            $imported->update([
+                'is_cleared' => true,
+                'cleared_at' => now(),
+                'fund_posting_id' => $uncleared->fund_posting_id,
+            ]);
+        });
+    }
+}

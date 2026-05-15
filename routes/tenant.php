@@ -2,6 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Tenant\MembershipApplicationImportSampleController;
+use App\Http\Controllers\Tenant\StartDependentImpersonationController;
+use App\Http\Controllers\Tenant\TenantManifestController;
+use App\Http\Controllers\Tenant\TermsConditionsDownloadController;
+use App\Livewire\Tenant\ApplicationStatusPage;
+use App\Livewire\Tenant\MembershipEnrollmentWizard;
 use Illuminate\Support\Facades\Route;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
@@ -24,6 +30,37 @@ Route::middleware([
     PreventAccessFromCentralDomains::class,
 ])->group(function () {
     Route::get('/', function () {
-        return 'This is your multi-tenant application. The id of the current tenant is '.tenant('id');
+        return view('tenant.landing');
+    })->name('tenant.home');
+
+    Route::get('/membership', MembershipEnrollmentWizard::class)
+        ->name('tenant.membership');
+
+    Route::get('/apply', MembershipEnrollmentWizard::class)
+        ->name('tenant.apply');
+
+    Route::get('/application-status', ApplicationStatusPage::class)
+        ->name('tenant.application.status');
+
+    Route::redirect('/login', '/member/login')->name('tenant.login');
+
+    Route::get('/downloads/terms-and-conditions', TermsConditionsDownloadController::class)
+        ->name('tenant.downloads.terms-and-conditions');
+
+    Route::get('/downloads/membership-application-import-sample', MembershipApplicationImportSampleController::class)
+        ->name('tenant.downloads.membership-application-import-sample');
+
+    Route::get('/manifest.json', TenantManifestController::class)
+        ->name('tenant.manifest');
+
+    Route::get('/offline', fn () => view('offline'));
+
+    Route::get('/storage/{path}', function (string $path) {
+        return redirect(tenant_asset($path), 301);
+    })->where('path', '.*')->name('tenant.storage-legacy');
+
+    Route::middleware(['auth:tenant'])->group(function () {
+        Route::get('/member/dependents/{dependent}/impersonate', StartDependentImpersonationController::class)
+            ->name('tenant.member.dependents.impersonate');
     });
 });

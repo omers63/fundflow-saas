@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets;
 
+use App\Filament\Resources\Tenants\TenantResource;
 use App\Models\Central\Tenant;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -22,9 +23,10 @@ class MyTenants extends BaseWidget
             ->query(Tenant::query()->where('central_user_id', auth()->id()))
             ->columns([
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Tenant Name')
+                    ->label('Tenant name')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->url(fn (Tenant $record): string => TenantResource::getUrl('view', ['record' => $record])),
                 Tables\Columns\TextColumn::make('id')
                     ->label('Subdomain')
                     ->searchable()

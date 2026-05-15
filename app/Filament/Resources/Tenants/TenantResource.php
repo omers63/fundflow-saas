@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Tenants;
 
+use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Resources\Tenants\Pages\CreateTenant;
 use App\Filament\Resources\Tenants\Pages\EditTenant;
 use App\Filament\Resources\Tenants\Pages\ListTenants;
@@ -18,6 +19,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class TenantResource extends Resource
 {
+    use TranslatesFilamentNavigationLabels;
+
     protected static ?string $model = Tenant::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBuildingStorefront;

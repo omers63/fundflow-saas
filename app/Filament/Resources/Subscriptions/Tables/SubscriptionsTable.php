@@ -3,11 +3,13 @@
 namespace App\Filament\Resources\Subscriptions\Tables;
 
 use App\Filament\Resources\Subscriptions\SubscriptionResource;
+use App\Filament\Support\DateColumnRangeFilter;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 
@@ -43,10 +45,26 @@ class SubscriptionsTable
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggledHiddenByDefault(),
             ])
             ->filters([
-                //
+                SelectFilter::make('status')
+                    ->options([
+                        'active' => 'Active',
+                        'pending' => 'Pending',
+                        'cancelled' => 'Cancelled',
+                        'expired' => 'Expired',
+                        'pending_upgrade' => 'Pending upgrade',
+                        'pending_extension' => 'Pending extension',
+                    ]),
+                SelectFilter::make('plan_id')
+                    ->label('Plan')
+                    ->relationship('plan', 'name')
+                    ->searchable()
+                    ->preload(),
+                DateColumnRangeFilter::make('starts_at', 'Starts'),
+                DateColumnRangeFilter::make('ends_at', 'Ends'),
+                DateColumnRangeFilter::make('created_at', 'Created'),
             ])
             ->recordUrl(fn (Model $record): string => SubscriptionResource::getUrl('view', ['record' => $record]))
             ->recordActions([

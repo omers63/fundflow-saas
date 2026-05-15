@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Tenants\Tables;
 
 use App\Filament\Resources\Tenants\TenantResource;
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Models\Central\Tenant;
 use App\Services\TenantDeletionService;
 use App\Services\TenantProvisioningService;
@@ -14,6 +15,8 @@ use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 
@@ -28,9 +31,10 @@ class TenantsTable
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('name')
-                    ->label('Business Name')
+                    ->label('Business name')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->url(fn (Tenant $record): string => TenantResource::getUrl('view', ['record' => $record])),
                 TextColumn::make('owner.name')
                     ->label('Owner')
                     ->searchable()
@@ -45,10 +49,17 @@ class TenantsTable
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggledHiddenByDefault(),
             ])
             ->filters([
-                //
+                SelectFilter::make('plan_id')
+                    ->label('Plan')
+                    ->relationship('plan', 'name')
+                    ->searchable()
+                    ->preload(),
+                TernaryFilter::make('is_provisioned')
+                    ->label('Provisioned'),
+                DateColumnRangeFilter::make('created_at', 'Created'),
             ])
             ->recordUrl(fn (Model $record): string => TenantResource::getUrl('view', ['record' => $record]))
             ->recordActions([
@@ -65,7 +76,7 @@ class TenantsTable
                     ->action(function (Tenant $record, TenantProvisioningService $service) {
                         $service->provisionManual($record);
                         Notification::make()
-                            ->title('Provisioning started')
+                            ->title(__('Provisioning started'))
                             ->success()
                             ->send();
                     }),
@@ -74,12 +85,12 @@ class TenantsTable
                     ->icon('heroicon-o-trash')
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->modalDescription('This will permanently delete the tenant database, storage, and record. This action cannot be undone.')
+                    ->modalDescription(__('This will permanently delete the tenant database, storage, and record. This action cannot be undone.'))
                     ->visible(fn () => auth()->user()->hasRole('super_admin'))
                     ->action(function (Tenant $record, TenantDeletionService $service) {
                         $service->deleteTenant($record);
                         Notification::make()
-                            ->title('Tenant purge process started')
+                            ->title(__('Tenant purge process started'))
                             ->warning()
                             ->send();
                     }),

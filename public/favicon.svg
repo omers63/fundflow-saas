@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="FundFlow">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#g)"/>
+  <path fill="#ffffff" d="M9 8h10v2.25H11.75V14H18v2.25h-6.25v7.75H9V8z"/>
+  <path fill="#ffffff" fill-opacity="0.35" d="M20 10c2.5 1.2 4 3.4 4 6s-1.5 4.8-4 6" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+</svg>

@@ -28,13 +28,13 @@ class ViewTenant extends ViewRecord
         return [
             Split::make([
                 Group::make([
-                    Section::make('Details')
+                    Section::make(__('Details'))
                         ->schema([
                             TextInput::make('id')
                                 ->label('ID / Subdomain')
                                 ->disabled(),
                             TextInput::make('name')
-                                ->label('Business Name')
+                                ->label('Business name')
                                 ->disabled(),
                             TextInput::make('owner.name')
                                 ->label('Owner')
@@ -48,13 +48,13 @@ class ViewTenant extends ViewRecord
                         ]),
                 ]),
                 Group::make([
-                    Section::make('Dates')
+                    Section::make(__('Dates'))
                         ->schema([
                             TextInput::make('created_at')
-                                ->label('Created At')
+                                ->label('Created at')
                                 ->disabled(),
                             TextInput::make('updated_at')
-                                ->label('Updated At')
+                                ->label('Updated at')
                                 ->disabled(),
                         ]),
                 ]),

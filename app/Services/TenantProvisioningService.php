@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Jobs\Central\CreateFrameworkCacheDirForTenant;
+use App\Jobs\Central\MarkTenantAsProvisioned;
 use App\Models\Central\Invoice;
 use App\Models\Central\Subscription;
 use App\Models\Central\Tenant;
@@ -57,11 +59,11 @@ class TenantProvisioningService
             Bus::chain([
                 new Jobs\CreateDatabase($tenant),      // Create new DB
                 new Jobs\MigrateDatabase($tenant),     // Run migrations in database/migrations/tenant folder
-                new \App\Jobs\Central\CreateFrameworkCacheDirForTenant($tenant), // Setup isolated cache folder
+                new CreateFrameworkCacheDirForTenant($tenant), // Setup isolated cache folder
 
                 // Place additional jobs here (like seeding initial data, role setup, etc.)
 
-                new \App\Jobs\Central\MarkTenantAsProvisioned($tenant->id), // Mark as finished
+                new MarkTenantAsProvisioned($tenant->id), // Mark as finished
             ])->dispatch();
 
             // 3. Activate the subscription

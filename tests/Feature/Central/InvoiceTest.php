@@ -32,7 +32,7 @@ test('invoice can be marked as paid', function () {
     $tenant = Tenant::factory()->createQuietly();
     $invoice = Invoice::factory()->create([
         'tenant_id' => $tenant->id,
-        'status' => 'pending'
+        'status' => 'pending',
     ]);
 
     $paidAt = now();

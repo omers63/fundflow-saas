@@ -7,7 +7,7 @@ use App\Models\Central\Tenant;
 test('can create a subscription for a tenant', function () {
     $plan = Plan::factory()->create();
     $tenant = Tenant::factory()->createQuietly(['plan_id' => $plan->id]);
-    
+
     $subscription = Subscription::factory()->create([
         'tenant_id' => $tenant->id,
         'plan_id' => $plan->id,
@@ -31,11 +31,10 @@ test('subscription status can be updated', function () {
     $tenant = Tenant::factory()->createQuietly();
     $subscription = Subscription::factory()->create([
         'tenant_id' => $tenant->id,
-        'status' => 'active'
+        'status' => 'active',
     ]);
 
     $subscription->update(['status' => 'expired']);
 
     expect($subscription->fresh()->status)->toBe('expired');
 });
-

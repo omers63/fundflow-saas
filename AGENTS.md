@@ -32,6 +32,10 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - You must follow all existing code conventions used in this application. When creating or editing a file, check sibling files for the correct structure, approach, and naming.
 - Use descriptive names for variables and methods. For example, `isRegisteredForDiscounts`, not `discount()`.
 - Check for existing components to reuse before writing a new one.
+- **Mobile-first UI:** Design for small viewports first. Filament uses shared `resources/css/filament/mobile-panels.css` plus global `TextColumn` / `TextEntry` defaults (wrapped cell text, compact `TextSize::ExtraSmall`, wrapped column headers). Prefer narrow layouts that do not rely on horizontal scrolling for critical information. Only override wrap/size when there is a deliberate reason.
+- **Table totals row:** For every table, show **one** footer row for the **full filtered result set** (not a separate per-page totals row). Only **Sum** summarizers are attached automatically, and only for clearly monetary / quantity-style columns (`isMoney()`, `*_amount`, or an allow-listed base name such as `balance`, `price`, `quantity`, import row counts, etc.). Each sum uses the **column’s own label** as its summarizer label. Count and average are not used globally. Tables may still show Filament’s default summary heading; grouped tables may add group summary rows.
+- **Table column headers:** Resolved header labels (string labels) are normalized with **`Str::ucfirst()`** so the first character is uppercase (e.g. translations that return lowercase). Implemented via container bindings in `AppServiceProvider` and `App\Filament\Tables\Columns\*` / `CapitalizesTableColumnHeaderLabel`. `Htmlable` labels are left unchanged.
+- **Striped tables:** Every Filament table uses **`->striped()`** by default (alternating row backgrounds). Opt out on a specific table with `->striped(false)` if needed.
 
 ## Verification Scripts
 

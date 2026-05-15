@@ -1,0 +1,101 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Tenant\MembershipApplication;
+use App\Support\PublicPageSettings;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+
+class MembershipEnrollmentService
+{
+    public function assertEnrollmentOpen(): void
+    {
+        if (! PublicPageSettings::enrollmentIsOpen()) {
+            throw ValidationException::withMessages([
+                'enrollment' => __('Membership enrollment is currently closed. The fund has reached its member limit.'),
+            ]);
+        }
+    }
+
+    /**
+     * @param  array{
+     *     name: string,
+     *     email: string,
+     *     password: string,
+     *     application_type: string,
+     *     national_id: string,
+     *     date_of_birth: string,
+     *     address: string,
+     *     city: string,
+     *     mobile_phone: string,
+     *     bank_account_number: string,
+     *     iban: string,
+     *     next_of_kin_name?: string|null,
+     *     next_of_kin_phone?: string|null,
+     *     phone?: string|null,
+     *     gender?: string|null,
+     *     marital_status?: string|null,
+     *     home_phone?: string|null,
+     *     work_phone?: string|null,
+     *     work_place?: string|null,
+     *     residency_place?: string|null,
+     *     occupation?: string|null,
+     *     employer?: string|null,
+     *     monthly_income?: float|string|null,
+     *     membership_date?: string|null,
+     *     message?: string|null,
+     *     application_form?: UploadedFile|null,
+     *     membership_fee_amount?: float,
+     *     membership_fee_transfer_reference?: string|null,
+     * }  $data
+     */
+    public function submitApplication(array $data): MembershipApplication
+    {
+        $this->assertEnrollmentOpen();
+
+        $feeAmount = (float) ($data['membership_fee_amount'] ?? 0);
+
+        $applicationFormPath = null;
+        if ($data['application_form'] instanceof UploadedFile) {
+            $extension = $data['application_form']->getClientOriginalExtension();
+            $filename = Str::slug($data['name']).'-'.Str::slug($data['national_id']).'-'.Str::uuid().'.'.$extension;
+            $applicationFormPath = $data['application_form']->storeAs('applications', $filename, 'public');
+        }
+
+        return MembershipApplication::create([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'password' => $data['password'],
+            'phone' => $data['phone'] ?? $data['mobile_phone'],
+            'application_type' => $data['application_type'],
+            'gender' => $data['gender'] ?? null,
+            'marital_status' => $data['marital_status'] ?? null,
+            'national_id' => $data['national_id'],
+            'date_of_birth' => $data['date_of_birth'],
+            'address' => $data['address'],
+            'city' => $data['city'],
+            'home_phone' => $data['home_phone'] ?? null,
+            'work_phone' => $data['work_phone'] ?? null,
+            'mobile_phone' => $data['mobile_phone'],
+            'occupation' => $data['occupation'] ?? null,
+            'employer' => $data['employer'] ?? null,
+            'work_place' => $data['work_place'] ?? null,
+            'residency_place' => $data['residency_place'] ?? null,
+            'monthly_income' => $data['monthly_income'] ?? null,
+            'bank_account_number' => $data['bank_account_number'],
+            'iban' => $data['iban'],
+            'membership_date' => $data['membership_date'] ?? null,
+            'next_of_kin_name' => $data['next_of_kin_name'] ?? null,
+            'next_of_kin_phone' => $data['next_of_kin_phone'] ?? null,
+            'message' => $data['message'] ?? null,
+            'application_form_path' => $applicationFormPath,
+            'membership_fee_amount' => $feeAmount > 0 ? $feeAmount : null,
+            'membership_fee_transfer_reference' => $feeAmount > 0
+                ? ($data['membership_fee_transfer_reference'] ?? null)
+                : null,
+            'status' => 'pending',
+        ]);
+    }
+}

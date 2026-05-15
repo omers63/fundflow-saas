@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Plans;
 
+use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Resources\Plans\Pages\CreatePlan;
 use App\Filament\Resources\Plans\Pages\EditPlan;
 use App\Filament\Resources\Plans\Pages\ListPlans;
@@ -16,6 +17,8 @@ use Filament\Tables\Table;
 
 class PlanResource extends Resource
 {
+    use TranslatesFilamentNavigationLabels;
+
     protected static ?string $model = Plan::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedListBullet;

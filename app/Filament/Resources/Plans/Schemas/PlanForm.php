@@ -16,7 +16,7 @@ class PlanForm
     {
         return $schema
             ->components([
-                Section::make('General Information')
+                Section::make(__('General Information'))
                     ->columns(2)
                     ->schema([
                         TextInput::make('name')
@@ -44,16 +44,16 @@ class PlanForm
                             ->columnSpanFull(),
                     ]),
 
-                Section::make('Configuration')
-                    ->description('Flexible limits and features for this plan')
+                Section::make(__('Configuration'))
+                    ->description(__('Flexible limits and features for this plan'))
                     ->schema([
                         KeyValue::make('data')
                             ->keyLabel('Feature/Limit Name')
                             ->valueLabel('Value')
-                            ->helperText('Add custom data like max_users, storage_limit, etc.'),
+                            ->helperText(__('Add custom data like max_users, storage_limit, etc.')),
                     ]),
 
-                Section::make('Status')
+                Section::make(__('Status'))
                     ->columns(2)
                     ->schema([
                         Toggle::make('is_active')
@@ -61,11 +61,11 @@ class PlanForm
                             ->default(true)
                             ->required(),
                         Toggle::make('is_custom')
-                            ->label('Custom Plan')
+                            ->label('Custom plan')
                             ->default(false)
                             ->required(),
                         Toggle::make('support_custom_domain')
-                            ->label('Support Custom Domain')
+                            ->label('Support custom domain')
                             ->default(false)
                             ->required(),
                     ]),

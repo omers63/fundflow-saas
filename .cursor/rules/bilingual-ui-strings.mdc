@@ -1,0 +1,12 @@
+---
+description: User-visible strings must be translatable for bilingual locales
+alwaysApply: true
+---
+
+# Bilingual UI strings
+
+- **Default locale** is English (`config('app.locale')`). Add Arabic (or other) strings in `lang/ar.json` (JSON) or `lang/ar/*.php` using the **same keys** as English; Laravel falls back to `config('app.fallback_locale')` when a key is missing.
+- **Filament**: Prefer component `translateLabel()` (enabled globally in `AppServiceProvider` for columns, form fields, actions, filters, tabs, fieldsets). Do **not** wrap `->label('…')` in `__()` when `translateLabel()` applies — that would double-translate.
+- **Always wrap** user-facing literals that Filament does not translate automatically: `Section::make()`, `Notification` title/body, `Stat::make()` labels and descriptions, `->helperText()`, `->placeholder()`, `->modalHeading()`, `->modalDescription()`, static `->options([…])` values (use `App\Support\Lang::transOptions([…])` or `__('…')` per entry), `Indicator::make()`, navigation overrides (`getNavigationLabel()`, `getNavigationGroup()`, `getModelLabel()`), Blade `{{ __('…') }}`, and validation messages.
+- **Interpolation**: use `__('Posted to :name', ['name' => $member->name])`, never concatenate untranslated sentences around dynamic values.
+- **Do not translate**: internal keys (`'imported'`, `'active'`), log messages, API machine names, enum case names, or CSS class names.

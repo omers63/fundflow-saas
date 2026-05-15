@@ -17,17 +17,17 @@ class TenantForm
     {
         return $schema
             ->components([
-                Section::make('Tenant Information')
+                Section::make(__('Tenant Information'))
                     ->columns(2)
                     ->schema([
                         TextInput::make('id')
-                            ->label('Tenant ID / Subdomain')
+                            ->label('Tenant ID / subdomain')
                             ->required()
                             ->unique(ignoreRecord: true)
                             ->disabled(fn ($record) => $record !== null)
-                            ->placeholder('e.g. acme'),
+                            ->placeholder(__('e.g. acme')),
                         TextInput::make('name')
-                            ->label('Business Name')
+                            ->label('Business name')
                             ->required(),
                         Select::make('central_user_id')
                             ->label('Owner')
@@ -35,21 +35,21 @@ class TenantForm
                             ->searchable()
                             ->required(),
                         Select::make('plan_id')
-                            ->label('Subscription Plan')
+                            ->label('Subscription plan')
                             ->options(Plan::all()->pluck('name', 'id'))
                             ->searchable()
                             ->required(),
                     ]),
 
-                Section::make('Provisioning Status')
+                Section::make(__('Provisioning Status'))
                     ->columns(2)
                     ->schema([
                         Toggle::make('is_provisioned')
-                            ->label('Is Provisioned')
+                            ->label('Is provisioned')
                             ->disabled()
                             ->dehydrated(false),
                         DateTimePicker::make('provisioned_at')
-                            ->label('Provisioned At')
+                            ->label('Provisioned at')
                             ->disabled()
                             ->dehydrated(false),
                     ]),

@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Policies\Central;
 
-use Illuminate\Foundation\Auth\User as AuthUser;
 use App\Models\Central\Subscription;
 use Illuminate\Auth\Access\HandlesAuthorization;
+use Illuminate\Foundation\Auth\User as AuthUser;
 
 class SubscriptionPolicy
 {
     use HandlesAuthorization;
-    
+
     public function viewAny(AuthUser $authUser): bool
     {
         return $authUser->can('ViewAny:Subscription');
@@ -66,5 +66,4 @@ class SubscriptionPolicy
     {
         return $authUser->can('Reorder:Subscription');
     }
-
 }

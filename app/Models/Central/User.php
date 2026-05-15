@@ -3,6 +3,7 @@
 namespace App\Models\Central;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Database\Factories\Central\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -13,7 +14,7 @@ use Stancl\Tenancy\Database\Concerns\CentralConnection;
 
 class User extends Authenticatable implements FilamentUser
 {
-    /** @use HasFactory<\Database\Factories\Central\UserFactory> */
+    /** @use HasFactory<UserFactory> */
     use CentralConnection, HasFactory, HasRoles, Notifiable;
 
     /**

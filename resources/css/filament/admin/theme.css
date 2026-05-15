@@ -1,4 +1,71 @@
 @import '../../../../vendor/filament/filament/resources/css/theme.css';
+@import '../mobile-panels.css';
 
 @source '../../../../app/Filament/**/*';
 @source '../../../../resources/views/filament/**/*';
+
+/* Rose / crimson atmosphere — central operator */
+.fi-body.fi-panel-admin {
+    background:
+        radial-gradient(1100px 560px at 0% -5%, rgb(244 63 94 / 0.16), transparent 55%),
+        radial-gradient(900px 480px at 100% 0%, rgb(225 29 72 / 0.12), transparent 48%),
+        linear-gradient(180deg, rgb(255 241 242) 0%, rgb(255 255 255) 48%, rgb(254 242 242) 100%);
+}
+
+.dark .fi-body.fi-panel-admin {
+    background:
+        radial-gradient(1000px 500px at 5% 0%, rgb(244 63 94 / 0.2), transparent 52%),
+        radial-gradient(800px 420px at 100% 5%, rgb(225 29 72 / 0.14), transparent 48%),
+        linear-gradient(180deg, rgb(76 5 25 / 0.45) 0%, rgb(2 6 23) 100%);
+}
+
+.fi-body.fi-panel-admin .fi-main {
+    background: linear-gradient(155deg, rgb(255 255 255 / 0.55) 0%, transparent 42%);
+}
+
+.dark .fi-body.fi-panel-admin .fi-main {
+    background: linear-gradient(155deg, rgb(76 5 25 / 0.25) 0%, transparent 45%);
+}
+
+@keyframes ff-stat-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fi-body.fi-panel-admin .fi-wi-stats-overview-stat {
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.25s ease,
+        border-color 0.2s ease;
+}
+
+.fi-body.fi-panel-admin a.fi-wi-stats-overview-stat:hover {
+    transform: translateY(-3px);
+    box-shadow:
+        0 12px 28px -12px rgb(225 29 72 / 0.38),
+        0 0 0 1px rgb(244 63 94 / 0.14);
+}
+
+.fi-body.fi-panel-admin .fi-wi-stats-overview > * {
+    animation: ff-stat-in 0.42s ease-out both;
+}
+
+.fi-body.fi-panel-admin .fi-wi-stats-overview > *:nth-child(1) {
+    animation-delay: 0.02s;
+}
+
+.fi-body.fi-panel-admin .fi-wi-stats-overview > *:nth-child(2) {
+    animation-delay: 0.06s;
+}
+
+.fi-body.fi-panel-admin .fi-wi-stats-overview > *:nth-child(3) {
+    animation-delay: 0.1s;
+}
+

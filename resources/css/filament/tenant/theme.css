@@ -1,0 +1,82 @@
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+@import '../mobile-panels.css';
+
+@source '../../../../app/Filament/Tenant/**/*';
+@source '../../../../resources/views/filament/**/*';
+
+/* Blue atmosphere — tenant fund admin */
+.fi-body.fi-panel-tenant {
+    background:
+        radial-gradient(1200px 600px at 10% -10%, rgb(59 130 246 / 0.14), transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, rgb(14 165 233 / 0.12), transparent 50%),
+        linear-gradient(180deg, rgb(248 250 252) 0%, rgb(255 255 255) 45%, rgb(241 245 249) 100%);
+}
+
+.dark .fi-body.fi-panel-tenant {
+    background:
+        radial-gradient(1000px 500px at 15% -5%, rgb(59 130 246 / 0.18), transparent 55%),
+        radial-gradient(800px 400px at 100% 5%, rgb(14 165 233 / 0.12), transparent 50%),
+        linear-gradient(180deg, rgb(15 23 42) 0%, rgb(2 6 23) 100%);
+}
+
+.fi-body.fi-panel-tenant .fi-main {
+    background: linear-gradient(160deg, rgb(255 255 255 / 0.55) 0%, transparent 42%);
+}
+
+.dark .fi-body.fi-panel-tenant .fi-main {
+    background: linear-gradient(160deg, rgb(30 41 59 / 0.35) 0%, transparent 45%);
+}
+
+@keyframes ff-stat-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fi-body.fi-panel-tenant .fi-wi-stats-overview-stat {
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.25s ease,
+        border-color 0.2s ease;
+}
+
+.fi-body.fi-panel-tenant a.fi-wi-stats-overview-stat:hover {
+    transform: translateY(-3px);
+    box-shadow:
+        0 12px 28px -12px rgb(37 99 235 / 0.35),
+        0 0 0 1px rgb(59 130 246 / 0.12);
+}
+
+.fi-body.fi-panel-tenant .fi-wi-stats-overview > * {
+    animation: ff-stat-in 0.42s ease-out both;
+}
+
+.fi-body.fi-panel-tenant .fi-wi-stats-overview > *:nth-child(1) {
+    animation-delay: 0.02s;
+}
+
+.fi-body.fi-panel-tenant .fi-wi-stats-overview > *:nth-child(2) {
+    animation-delay: 0.06s;
+}
+
+.fi-body.fi-panel-tenant .fi-wi-stats-overview > *:nth-child(3) {
+    animation-delay: 0.1s;
+}
+
+.fi-body.fi-panel-tenant .fi-wi-stats-overview > *:nth-child(4) {
+    animation-delay: 0.14s;
+}
+
+.fi-body.fi-panel-tenant .fi-wi-stats-overview > *:nth-child(5) {
+    animation-delay: 0.18s;
+}
+
+.fi-body.fi-panel-tenant .fi-wi-stats-overview > *:nth-child(6) {
+    animation-delay: 0.22s;
+}
