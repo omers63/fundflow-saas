@@ -3,9 +3,12 @@
 namespace App\Filament\Resources\Invoices\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableToolbar;
 use App\Models\Central\Invoice;
 use App\Services\TenantProvisioningService;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -13,6 +16,7 @@ use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Collection;
 
 class InvoicesTable
 {
@@ -72,7 +76,7 @@ class InvoicesTable
                 DateColumnRangeFilter::make('paid_at', 'Paid on'),
                 DateColumnRangeFilter::make('created_at', 'Created'),
             ])
-            ->recordActions([
+            ->recordActions(TableRecordActionGroups::wrap([
                 EditAction::make(),
                 Action::make('markAsPaid')
                     ->label('Mark as Paid')
@@ -95,10 +99,37 @@ class InvoicesTable
                             ->success()
                             ->send();
                     }),
-            ])
+            ]))
             ->toolbarActions([
                 BulkActionGroup::make([
+                    BulkAction::make('markSelectedAsPaid')
+                        ->label(__('Mark as paid'))
+                        ->icon('heroicon-o-check-circle')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->visible(fn () => auth()->user()->hasRole('super_admin'))
+                        ->action(function (Collection $records, TenantProvisioningService $service) {
+                            $count = 0;
+                            foreach ($records as $record) {
+                                if ($record->status !== 'pending') {
+                                    continue;
+                                }
+                                $record->update([
+                                    'status' => 'paid',
+                                    'paid_at' => now(),
+                                    'payment_method' => 'manual_admin',
+                                ]);
+                                $service->provisionTenant($record);
+                                $count++;
+                            }
+                            Notification::make()
+                                ->title(__(':count invoice(s) marked as paid', ['count' => $count]))
+                                ->body(__('Tenant provisioning has been started where applicable.'))
+                                ->success()
+                                ->send();
+                        }),
                     DeleteBulkAction::make(),
+                    TableToolbar::refreshBulkAction(),
                 ]),
             ]);
     }

@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\Accounts\Pages;
 
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
+use App\Filament\Tenant\Widgets\MemberAccountsInsightsWidget;
 use App\Models\Tenant\Loan;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -47,6 +48,21 @@ class ListAccounts extends ListRecords
     public function getTitle(): string|Htmlable
     {
         return __('Member Accounts');
+    }
+
+    /**
+     * @return array<int, class-string>
+     */
+    protected function getHeaderWidgets(): array
+    {
+        return [
+            MemberAccountsInsightsWidget::class,
+        ];
+    }
+
+    public function getHeaderWidgetsColumns(): int|array
+    {
+        return 1;
     }
 
     public function getTabs(): array

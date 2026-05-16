@@ -82,6 +82,112 @@
     }
 }
 
+/* Tab labels: colored pill badges; count badges stay rounded */
+.fi-body .fi-tabs-item[data-ff-tab-color] .fi-tabs-item-label {
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.25;
+    padding: 0.2rem 0.65rem;
+    transition:
+        background-color 0.15s ease,
+        color 0.15s ease;
+}
+
+.fi-body .fi-tabs-item[data-ff-tab-color] .fi-badge {
+    border-radius: 9999px;
+}
+
+.fi-body .fi-tabs-item[data-ff-tab-color='primary'] .fi-tabs-item-label {
+    background-color: rgb(var(--primary-50));
+    color: rgb(var(--primary-700));
+}
+
+.dark .fi-body .fi-tabs-item[data-ff-tab-color='primary'] .fi-tabs-item-label {
+    background-color: rgb(var(--primary-400) / 0.15);
+    color: rgb(var(--primary-400));
+}
+
+.fi-body .fi-tabs-item.fi-active[data-ff-tab-color='primary'] .fi-tabs-item-label {
+    background-color: rgb(var(--primary-100));
+    color: rgb(var(--primary-800));
+}
+
+.fi-body .fi-tabs-item[data-ff-tab-color='info'] .fi-tabs-item-label {
+    background-color: rgb(var(--info-50));
+    color: rgb(var(--info-700));
+}
+
+.dark .fi-body .fi-tabs-item[data-ff-tab-color='info'] .fi-tabs-item-label {
+    background-color: rgb(var(--info-400) / 0.15);
+    color: rgb(var(--info-400));
+}
+
+.fi-body .fi-tabs-item.fi-active[data-ff-tab-color='info'] .fi-tabs-item-label {
+    background-color: rgb(var(--info-100));
+    color: rgb(var(--info-800));
+}
+
+.fi-body .fi-tabs-item[data-ff-tab-color='success'] .fi-tabs-item-label {
+    background-color: rgb(var(--success-50));
+    color: rgb(var(--success-700));
+}
+
+.dark .fi-body .fi-tabs-item[data-ff-tab-color='success'] .fi-tabs-item-label {
+    background-color: rgb(var(--success-400) / 0.15);
+    color: rgb(var(--success-400));
+}
+
+.fi-body .fi-tabs-item.fi-active[data-ff-tab-color='success'] .fi-tabs-item-label {
+    background-color: rgb(var(--success-100));
+    color: rgb(var(--success-800));
+}
+
+.fi-body .fi-tabs-item[data-ff-tab-color='warning'] .fi-tabs-item-label {
+    background-color: rgb(var(--warning-50));
+    color: rgb(var(--warning-700));
+}
+
+.dark .fi-body .fi-tabs-item[data-ff-tab-color='warning'] .fi-tabs-item-label {
+    background-color: rgb(var(--warning-400) / 0.15);
+    color: rgb(var(--warning-400));
+}
+
+.fi-body .fi-tabs-item.fi-active[data-ff-tab-color='warning'] .fi-tabs-item-label {
+    background-color: rgb(var(--warning-100));
+    color: rgb(var(--warning-800));
+}
+
+.fi-body .fi-tabs-item[data-ff-tab-color='danger'] .fi-tabs-item-label {
+    background-color: rgb(var(--danger-50));
+    color: rgb(var(--danger-700));
+}
+
+.dark .fi-body .fi-tabs-item[data-ff-tab-color='danger'] .fi-tabs-item-label {
+    background-color: rgb(var(--danger-400) / 0.15);
+    color: rgb(var(--danger-400));
+}
+
+.fi-body .fi-tabs-item.fi-active[data-ff-tab-color='danger'] .fi-tabs-item-label {
+    background-color: rgb(var(--danger-100));
+    color: rgb(var(--danger-800));
+}
+
+.fi-body .fi-tabs-item[data-ff-tab-color='gray'] .fi-tabs-item-label {
+    background-color: rgb(var(--gray-100));
+    color: rgb(var(--gray-700));
+}
+
+.dark .fi-body .fi-tabs-item[data-ff-tab-color='gray'] .fi-tabs-item-label {
+    background-color: rgb(var(--gray-400) / 0.15);
+    color: rgb(var(--gray-300));
+}
+
+.fi-body .fi-tabs-item.fi-active[data-ff-tab-color='gray'] .fi-tabs-item-label {
+    background-color: rgb(var(--gray-200));
+    color: rgb(var(--gray-800));
+}
+
 /* Extra-small phones */
 @media (max-width: 639px) {
     .fi-body {

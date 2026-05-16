@@ -3,11 +3,13 @@
 namespace App\Filament\Member\Resources\MyAccounts\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
+use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\AccountTransactionAmountColumn;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableToolbar;
 use App\Filament\Support\ViewActions\ViewAccountTransactionAction;
 use App\Models\Tenant\Setting;
-use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Actions\BulkActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -52,6 +54,11 @@ class TransactionsRelationManager extends RelationManager
                     ]),
                 DateColumnRangeFilter::make('transacted_at', 'Date'),
             ])
-            ->defaultSort('transacted_at', 'desc'));
+            ->defaultSort('transacted_at', 'desc'), editable: false)
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    TableToolbar::refreshBulkAction(),
+                ]),
+            ]);
     }
 }

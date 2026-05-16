@@ -27,6 +27,20 @@
                     </div>
                 @endif
 
+                @if ($statusType === 'delinquent')
+                    <div class="member-login-alert member-login-alert--rose">
+                        <p class="member-login-alert__title">{{ __('Membership delinquent') }}</p>
+                        <p class="member-login-alert__text">{{ $statusMessage }}</p>
+                    </div>
+                @endif
+
+                @if ($statusType === 'terminated')
+                    <div class="member-login-alert member-login-alert--slate">
+                        <p class="member-login-alert__title">{{ __('Membership terminated') }}</p>
+                        <p class="member-login-alert__text">{{ $statusMessage }}</p>
+                    </div>
+                @endif
+
                 @if (! $showProfilePicker)
                     <form wire:submit="login" class="member-login-form">
                         <div>

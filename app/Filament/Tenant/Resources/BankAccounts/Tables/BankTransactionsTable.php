@@ -3,6 +3,8 @@
 namespace App\Filament\Tenant\Resources\BankAccounts\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\ViewActions\ViewBankTransactionAction;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Member;
@@ -30,7 +32,7 @@ class BankTransactionsTable
 {
     public static function configure(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('transaction_date')
                     ->date()
@@ -125,7 +127,7 @@ class BankTransactionsTable
             ])
             ->recordUrl(fn (): ?string => null)
             ->recordAction(ViewAction::getDefaultName())
-            ->recordActions([
+            ->recordActions(TableRecordActionGroups::wrap([
                 ViewBankTransactionAction::make(),
                 Action::make('mirrorToCash')
                     ->label('Mirror to cash')
@@ -201,7 +203,7 @@ class BankTransactionsTable
                         $record->update(['status' => 'ignored']);
                         Notification::make()->title(__('Transaction ignored'))->send();
                     }),
-            ])
+            ]))
             ->toolbarActions([
                 BulkActionGroup::make([
                     BulkAction::make('mirrorSelectedToCash')
@@ -220,6 +222,34 @@ class BankTransactionsTable
                             $count = $service->mirrorToCash($importedIds);
                             Notification::make()->title(__(':count transaction(s) mirrored to cash', ['count' => $count]))->success()->send();
                         }),
+                    BulkAction::make('postSelectedToMember')
+                        ->label(__('Post to member'))
+                        ->icon('heroicon-o-user-plus')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->modalDescription(__('Post all selected mirrored transactions to the same member.'))
+                        ->form([
+                            Select::make('member_id')
+                                ->label('Member')
+                                ->options(fn () => Member::active()->pluck('name', 'id'))
+                                ->searchable()
+                                ->required(),
+                        ])
+                        ->action(function (Collection $records, array $data, FundFlowService $service) {
+                            $member = Member::findOrFail($data['member_id']);
+                            $count = 0;
+                            foreach ($records as $record) {
+                                if ($record->status !== 'mirrored') {
+                                    continue;
+                                }
+                                $service->postToMember($record, $member);
+                                $count++;
+                            }
+                            Notification::make()
+                                ->title(__(':count transaction(s) posted to :name', ['count' => $count, 'name' => $member->name]))
+                                ->success()
+                                ->send();
+                        }),
                     BulkAction::make('ignoreSelected')
                         ->label('Ignore selected')
                         ->icon('heroicon-o-x-mark')
@@ -237,6 +267,7 @@ class BankTransactionsTable
                         }),
                 ]),
             ])
-            ->defaultSort('transaction_date', 'desc');
+            ->defaultSort('transaction_date', 'desc'),
+            TableGrouping::bankTransactions());
     }
 }

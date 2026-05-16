@@ -3,20 +3,25 @@
 namespace App\Filament\Tenant\Resources\Loans\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableRecordActionGroups;
 use App\Models\Tenant\Setting;
 use App\Services\LoanService;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
+use Filament\Actions\BulkActionGroup;
 use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Collection;
 
 class LoansTable
 {
     public static function configure(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('member.name')
                     ->searchable()
@@ -60,7 +65,7 @@ class LoansTable
                     ]),
                 DateColumnRangeFilter::make('applied_at', 'Applied'),
             ])
-            ->recordActions([
+            ->recordActions(TableRecordActionGroups::wrap([
                 EditAction::make(),
                 Action::make('approve')
                     ->label('Approve')
@@ -94,7 +99,59 @@ class LoansTable
                         $service->payoutLoan($record);
                         Notification::make()->title(__('Loan paid out to member'))->success()->send();
                     }),
+            ]))
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    BulkAction::make('approveSelected')
+                        ->label(__('Approve'))
+                        ->icon('heroicon-o-check')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->action(function (Collection $records, LoanService $service) {
+                            $count = 0;
+                            foreach ($records as $loan) {
+                                if ($loan->status === 'pending') {
+                                    $service->approveLoan($loan);
+                                    $count++;
+                                }
+                            }
+                            Notification::make()->title(__(':count loan(s) approved', ['count' => $count]))->success()->send();
+                        }),
+                    BulkAction::make('disburseSelected')
+                        ->label(__('Disburse'))
+                        ->icon('heroicon-o-banknotes')
+                        ->color('primary')
+                        ->requiresConfirmation()
+                        ->modalDescription(__('This will debit Master Fund, debit Member Fund, and credit Member Cash for each selected approved loan.'))
+                        ->action(function (Collection $records, LoanService $service) {
+                            $count = 0;
+                            foreach ($records as $loan) {
+                                if ($loan->status === 'approved') {
+                                    $service->disburseLoan($loan);
+                                    $count++;
+                                }
+                            }
+                            Notification::make()->title(__(':count loan(s) disbursed', ['count' => $count]))->success()->send();
+                        }),
+                    BulkAction::make('payoutSelected')
+                        ->label(__('Payout'))
+                        ->icon('heroicon-o-arrow-up-tray')
+                        ->color('warning')
+                        ->requiresConfirmation()
+                        ->modalDescription(__('This will debit Member Cash and Master Cash for each selected disbursed loan.'))
+                        ->action(function (Collection $records, LoanService $service) {
+                            $count = 0;
+                            foreach ($records as $loan) {
+                                if ($loan->status === 'disbursed') {
+                                    $service->payoutLoan($loan);
+                                    $count++;
+                                }
+                            }
+                            Notification::make()->title(__(':count loan(s) paid out', ['count' => $count]))->success()->send();
+                        }),
+                ]),
             ])
-            ->defaultSort('applied_at', 'desc');
+            ->defaultSort('applied_at', 'desc'),
+            TableGrouping::loans());
     }
 }

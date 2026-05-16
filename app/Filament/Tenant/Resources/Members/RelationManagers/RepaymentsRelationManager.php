@@ -3,10 +3,17 @@
 namespace App\Filament\Tenant\Resources\Members\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
+use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Setting;
-use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Actions\Action;
+use Filament\Actions\BulkActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -21,7 +28,7 @@ class RepaymentsRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->recordTitleAttribute('paid_at')
             ->columns([
                 TextColumn::make('loan.amount')
@@ -55,6 +62,18 @@ class RepaymentsRelationManager extends RelationManager
                     }),
                 DateColumnRangeFilter::make('paid_at', 'Paid on'),
             ])
-            ->defaultSort('paid_at', 'desc');
+            ->recordActions(TableRecordActionGroups::wrap([
+                Action::make('viewLoan')
+                    ->label(__('View loan'))
+                    ->icon('heroicon-o-banknotes')
+                    ->url(fn (LoanRepayment $record): string => LoanResource::getUrl('edit', ['record' => $record->loan_id])),
+            ]))
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    TableToolbar::refreshBulkAction(),
+                ]),
+            ])
+            ->defaultSort('paid_at', 'desc'),
+            TableGrouping::loanRepayments());
     }
 }

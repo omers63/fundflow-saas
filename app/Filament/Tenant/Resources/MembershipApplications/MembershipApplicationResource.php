@@ -8,12 +8,14 @@ use App\Filament\Tenant\Resources\MembershipApplications\Pages\EditMembershipApp
 use App\Filament\Tenant\Resources\MembershipApplications\Pages\ListMembershipApplications;
 use App\Filament\Tenant\Resources\MembershipApplications\Schemas\MembershipApplicationForm;
 use App\Filament\Tenant\Resources\MembershipApplications\Tables\MembershipApplicationsTable;
+use App\Filament\Tenant\Widgets\MembershipApplicationInsightsWidget;
 use App\Models\Tenant\MembershipApplication;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Livewire\Component;
 
 class MembershipApplicationResource extends Resource
 {
@@ -63,5 +65,21 @@ class MembershipApplicationResource extends Resource
             'create' => CreateMembershipApplication::route('/create'),
             'edit' => EditMembershipApplication::route('/{record}/edit'),
         ];
+    }
+
+    public static function dispatchInsightsRefresh(?Component $livewire): void
+    {
+        if ($livewire === null) {
+            return;
+        }
+
+        $targetName = json_encode(
+            app('livewire.factory')->resolveComponentName(MembershipApplicationInsightsWidget::class),
+            JSON_THROW_ON_ERROR
+        );
+
+        $livewire->js(
+            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
+        );
     }
 }

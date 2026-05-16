@@ -3,6 +3,7 @@
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
+use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -46,6 +47,57 @@ test('debit decreases account balance', function () {
     expect($transaction->amount)->toBe('2000.00');
     expect($transaction->balance_after)->toBe('3000.00');
     expect($transaction->getSignedAmount())->toBe(-2000.0);
+});
+
+test('update transaction adjusts account balance when amount changes', function () {
+    $account = Account::masterCash();
+    $account->update(['balance' => 1000]);
+
+    $transaction = $this->service->credit($account, 200, 'Original credit');
+
+    $this->service->updateTransaction($transaction, [
+        'amount' => 350,
+        'type' => 'credit',
+        'description' => 'Adjusted credit',
+        'transacted_at' => $transaction->transacted_at,
+    ]);
+
+    $account->refresh();
+    $transaction->refresh();
+
+    expect((float) $account->balance)->toBe(1350.0)
+        ->and((float) $transaction->amount)->toBe(350.0)
+        ->and($transaction->description)->toBe('Adjusted credit')
+        ->and((float) $transaction->balance_after)->toBe(1350.0);
+});
+
+test('update transaction can change type and reconcile balance', function () {
+    $account = Account::masterCash();
+    $account->update(['balance' => 500]);
+
+    $transaction = $this->service->credit($account, 200, 'Will become debit');
+
+    $this->service->updateTransaction($transaction, [
+        'amount' => 100,
+        'type' => 'debit',
+        'description' => 'Corrected to debit',
+        'transacted_at' => $transaction->transacted_at,
+    ]);
+
+    $account->refresh();
+
+    expect((float) $account->balance)->toBe(400.0);
+});
+
+test('credit and debit accept a custom transacted at datetime', function () {
+    $account = Account::masterCash();
+    $when = Carbon::parse('2023-01-10 09:15:00');
+
+    $credit = $this->service->credit($account, 100.00, 'Dated credit', null, $when);
+    $debit = $this->service->debit($account->fresh(), 40.00, 'Dated debit', null, $when->copy()->addHour());
+
+    expect($credit->transacted_at->format('Y-m-d H:i:s'))->toBe('2023-01-10 09:15:00')
+        ->and($debit->transacted_at->format('Y-m-d H:i:s'))->toBe('2023-01-10 10:15:00');
 });
 
 test('signed amount is positive for credits and negative for debits', function () {

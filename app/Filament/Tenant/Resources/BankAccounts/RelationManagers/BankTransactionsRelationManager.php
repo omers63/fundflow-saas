@@ -3,12 +3,14 @@
 namespace App\Filament\Tenant\Resources\BankAccounts\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
+use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableToolbar;
 use App\Filament\Support\ViewActions\ViewBankTransactionAction;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
+use Filament\Actions\BulkActionGroup;
 use Filament\Forms\Components\TextInput;
-use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\Indicator;
@@ -109,6 +111,11 @@ class BankTransactionsRelationManager extends RelationManager
                         ];
                     }),
             ])
-            ->defaultSort('transaction_date', 'desc'));
+            ->defaultSort('transaction_date', 'desc'))
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    TableToolbar::refreshBulkAction(),
+                ]),
+            ]);
     }
 }

@@ -43,7 +43,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
 
         if ($panel->getId() === 'member') {
             return $this->member !== null
-                && ! in_array($this->member->status, ['suspended', 'withdrawn'], true);
+                && ! in_array($this->member->status, Member::PORTAL_BLOCKED_STATUSES, true);
         }
 
         return false;

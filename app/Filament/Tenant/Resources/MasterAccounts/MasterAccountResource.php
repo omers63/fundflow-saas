@@ -51,7 +51,7 @@ class MasterAccountResource extends Resource
      */
     public static function tabKeys(): array
     {
-        return [...self::tabTypes(), 'all'];
+        return ['all', ...self::tabTypes()];
     }
 
     public static function tabLabel(string $tab): string
@@ -98,10 +98,10 @@ class MasterAccountResource extends Resource
         if ($livewire instanceof ListMasterAccounts && filled($livewire->activeTab)) {
             $tab = $livewire->activeTab;
         } else {
-            $tab = request()->string('tab')->toString() ?: 'cash';
+            $tab = request()->string('tab')->toString() ?: 'all';
         }
 
-        return in_array($tab, self::tabKeys(), true) ? $tab : 'cash';
+        return in_array($tab, self::tabKeys(), true) ? $tab : 'all';
     }
 
     public static function getRelations(): array

@@ -62,6 +62,22 @@ class AccountFactory extends Factory
         ]);
     }
 
+    public function masterExpense(): static
+    {
+        return $this->master()->state(fn (array $attributes) => [
+            'type' => 'expense',
+            'name' => 'Master Expense',
+        ]);
+    }
+
+    public function masterInvest(): static
+    {
+        return $this->master()->state(fn (array $attributes) => [
+            'type' => 'invest',
+            'name' => 'Master Invest',
+        ]);
+    }
+
     public function withBalance(float $amount): static
     {
         return $this->state(fn (array $attributes) => [

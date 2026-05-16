@@ -3,6 +3,7 @@
 namespace App\Filament\Member\Resources\MyContributions\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
 use App\Models\Tenant\Setting;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -12,7 +13,7 @@ class MyContributionsTable
 {
     public static function configure(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('period')
                     ->date('M Y')
@@ -42,6 +43,7 @@ class MyContributionsTable
                 DateColumnRangeFilter::make('period', 'Contribution period'),
                 DateColumnRangeFilter::make('posted_at', 'Posted'),
             ])
-            ->defaultSort('period', 'desc');
+            ->defaultSort('period', 'desc'),
+            TableGrouping::contributions(includeMember: false));
     }
 }

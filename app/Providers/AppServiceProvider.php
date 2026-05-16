@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Filament\Support\TabLabelColors;
 use App\Filament\Support\TableSummaryFooter;
 use App\Filament\Tables\Columns\BadgeColumn as AppBadgeColumn;
 use App\Filament\Tables\Columns\BooleanColumn as AppBooleanColumn;
@@ -97,12 +98,19 @@ class AppServiceProvider extends ServiceProvider
 
         Fieldset::configureUsing(fn (Fieldset $fieldset): Fieldset => $fieldset->translateLabel());
 
-        Tab::configureUsing(fn (Tab $tab): Tab => $tab->translateLabel());
+        Tab::configureUsing(function (Tab $tab): Tab {
+            $color = TabLabelColors::forLabel($tab->getLabel());
+
+            return $tab
+                ->translateLabel()
+                ->extraAttributes(['data-ff-tab-color' => $color], merge: true)
+                ->badgeColor($color);
+        });
 
         Tabs::configureUsing(fn (Tabs $tabs): Tabs => $tabs->translateLabel());
 
         Table::configureUsing(function (Table $table): Table {
-            return TableSummaryFooter::applyToTable($table->striped());
+            return TableSummaryFooter::applyToTable($table->striped()->selectable());
         });
     }
 

@@ -12,6 +12,16 @@ class CreateLoan extends CreateRecord
 {
     protected static string $resource = LoanResource::class;
 
+    public function mount(): void
+    {
+        parent::mount();
+
+        $memberId = request()->query('member_id');
+        if (filled($memberId)) {
+            $this->form->fill(['member_id' => $memberId]);
+        }
+    }
+
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         $member = Member::findOrFail($data['member_id']);

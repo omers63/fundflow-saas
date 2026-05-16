@@ -15,13 +15,17 @@ class MemberForm
     {
         return $schema
             ->components([
-                Section::make(__('Member Information'))
+                Section::make(__('Membership'))
+                    ->icon('heroicon-o-identification')
+                    ->columnSpanFull()
                     ->columns(2)
                     ->schema([
                         TextInput::make('member_number')
                             ->required()
                             ->unique(ignoreRecord: true)
-                            ->default(fn () => 'MEM-'.str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT)),
+                            ->default(fn (): string => Member::generateMemberNumber())
+                            ->disabled()
+                            ->dehydrated(),
                         TextInput::make('name')
                             ->required()
                             ->maxLength(255),
@@ -31,30 +35,27 @@ class MemberForm
                         TextInput::make('phone')
                             ->tel()
                             ->maxLength(255),
-                    ]),
-
-                Section::make(__('Membership Details'))
-                    ->columns(2)
-                    ->schema([
-                        TextInput::make('monthly_contribution_amount')
-                            ->numeric()
-                            ->prefix('$')
+                        Select::make('monthly_contribution_amount')
+                            ->label(__('Monthly contribution'))
+                            ->options(Member::contributionAmountOptions())
+                            ->default(500)
                             ->required()
-                            ->minValue(0),
+                            ->helperText(__('Multiples of :step, from :min to :max.', [
+                                'step' => 500,
+                                'min' => 500,
+                                'max' => 3000,
+                            ])),
                         DatePicker::make('joined_at')
                             ->required()
                             ->default(now()),
                         Select::make('status')
-                            ->options([
-                                'active' => 'Active',
-                                'suspended' => 'Suspended',
-                                'withdrawn' => 'Withdrawn',
-                            ])
+                            ->options(Member::statusOptions())
                             ->default('active')
                             ->required(),
                         Select::make('parent_member_id')
-                            ->label('Parent member')
-                            ->options(fn (?Member $record) => Member::where('id', '!=', $record?->id)
+                            ->label(__('Parent member'))
+                            ->options(fn (?Member $record) => Member::query()
+                                ->where('id', '!=', $record?->id)
                                 ->pluck('name', 'id'))
                             ->searchable()
                             ->nullable()

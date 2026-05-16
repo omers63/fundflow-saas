@@ -125,6 +125,15 @@ final class PublicPageSettings
         return self::nullableUrl('membership_application_document_url');
     }
 
+    /**
+     * URL for the blank membership application template (fund settings or default rules PDF).
+     */
+    public static function membershipApplicationFormUploadDownloadUrl(): ?string
+    {
+        return self::membershipApplicationDocumentUrl()
+            ?? self::termsAndConditionsDownloadUrl();
+    }
+
     public static function feeTransferBankName(): ?string
     {
         return self::nullableString('fee_transfer_bank_name');

@@ -37,6 +37,20 @@ class MemberFactory extends Factory
         ]);
     }
 
+    public function delinquent(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => 'delinquent',
+        ]);
+    }
+
+    public function terminated(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => 'terminated',
+        ]);
+    }
+
     public function withParent(Member $parent): static
     {
         return $this->state(fn (array $attributes) => [

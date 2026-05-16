@@ -3,6 +3,9 @@
 namespace App\Filament\Tenant\Resources\BankAccounts\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Models\Tenant\BankStatement;
 use Filament\Actions\Action;
@@ -20,7 +23,7 @@ class BankStatementsTable
 {
     public static function configure(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('filename')
                     ->searchable()
@@ -70,7 +73,7 @@ class BankStatementsTable
                 DateColumnRangeFilter::make('imported_at', 'Imported'),
             ])
             ->recordUrl(fn (Model $record): string => BankAccountsResource::getUrl('view', ['record' => $record]))
-            ->recordActions([
+            ->recordActions(TableRecordActionGroups::wrap([
                 ViewAction::make(),
                 Action::make('delete')
                     ->icon('heroicon-o-trash')
@@ -85,11 +88,11 @@ class BankStatementsTable
                         $record->delete();
                         Notification::make()->title(__('Statement deleted'))->success()->send();
                     }),
-            ])
+            ]))
             ->toolbarActions([
                 BulkActionGroup::make([
                     BulkAction::make('deleteSelected')
-                        ->label('Delete selected')
+                        ->label(__('Delete'))
                         ->icon('heroicon-o-trash')
                         ->color('danger')
                         ->requiresConfirmation()
@@ -104,8 +107,10 @@ class BankStatementsTable
                             }
                             Notification::make()->title(__(':count statement(s) deleted', ['count' => $count]))->success()->send();
                         }),
+                    TableToolbar::refreshBulkAction(),
                 ]),
             ])
-            ->defaultSort('imported_at', 'desc');
+            ->defaultSort('imported_at', 'desc'),
+            TableGrouping::bankStatements());
     }
 }

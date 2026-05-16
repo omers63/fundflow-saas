@@ -3,8 +3,12 @@
 namespace App\Filament\Tenant\Resources\MasterAccounts\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Models\Tenant\Setting;
+use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -42,15 +46,21 @@ class MasterAccountsTable
             ->dateTime()
             ->sortable();
 
-        return $table
+        return TableGrouping::apply($table
             ->columns($columns)
             ->filters([
                 DateColumnRangeFilter::make('updated_at', __('Last activity')),
             ])
             ->recordUrl(fn (Model $record): string => MasterAccountResource::getUrl('view', ['record' => $record]))
-            ->recordActions([
+            ->recordActions(TableRecordActionGroups::wrap([
                 ViewAction::make(),
+            ]))
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    TableToolbar::refreshBulkAction(),
+                ]),
             ])
-            ->defaultSort('name');
+            ->defaultSort('name'),
+            TableGrouping::memberAccounts($showTypeColumn));
     }
 }

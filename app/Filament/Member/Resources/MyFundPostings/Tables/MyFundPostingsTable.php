@@ -3,6 +3,7 @@
 namespace App\Filament\Member\Resources\MyFundPostings\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
 use App\Models\Tenant\Setting;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -12,7 +13,7 @@ class MyFundPostingsTable
 {
     public static function configure(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('posting_date')
                     ->date()
@@ -48,6 +49,7 @@ class MyFundPostingsTable
                 DateColumnRangeFilter::make('posting_date', 'Posting date'),
                 DateColumnRangeFilter::make('created_at', 'Submitted'),
             ])
-            ->defaultSort('created_at', 'desc');
+            ->defaultSort('created_at', 'desc'),
+            TableGrouping::fundPostings(includeMember: false));
     }
 }

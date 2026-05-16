@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\MasterAccounts\Pages;
 
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
+use App\Filament\Tenant\Widgets\MasterAccountsInsightsWidget;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
 use Illuminate\Contracts\Support\Htmlable;
@@ -46,6 +47,21 @@ class ListMasterAccounts extends ListRecords
     public function getTitle(): string|Htmlable
     {
         return __('Master Accounts');
+    }
+
+    /**
+     * @return array<int, class-string>
+     */
+    protected function getHeaderWidgets(): array
+    {
+        return [
+            MasterAccountsInsightsWidget::class,
+        ];
+    }
+
+    public function getHeaderWidgetsColumns(): int|array
+    {
+        return 1;
     }
 
     public function getTabs(): array

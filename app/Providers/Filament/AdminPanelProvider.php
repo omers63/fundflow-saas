@@ -39,6 +39,8 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->login()
+            ->disabledErrorNotification(419)
+            ->disabledErrorNotification(401)
             ->registration() // Enabled registration
             ->colors([
                 'primary' => Color::Rose,
@@ -61,6 +63,7 @@ class AdminPanelProvider extends PanelProvider
                 TenantGrowthChart::class,
             ])
             ->renderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(view('partials.pwa-head')->render()))
+            ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.livewire-session-recovery')->render()))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))
             ->middleware([
                 EncryptCookies::class,

@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use Filament\Facades\Filament;
 use Filament\Http\Middleware\Authenticate;
@@ -36,16 +37,13 @@ class AuthenticateMemberPanel extends Authenticate
                 $panel->getId() === 'member'
                 && $authUser instanceof User
                 && $authUser->member !== null
-                && in_array($authUser->member->status, ['suspended', 'withdrawn'], true)
+                && in_array($authUser->member->status, Member::PORTAL_BLOCKED_STATUSES, true)
             ) {
                 $memberStatus = $authUser->member->status;
                 $guard->logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
-                $request->session()->flash(
-                    $memberStatus === 'withdrawn' ? 'member_withdrawn_notice' : 'member_suspended_notice',
-                    true,
-                );
+                $request->session()->flash(Member::portalBlockedSessionKey($memberStatus), true);
 
                 redirect()->route('filament.member.auth.login')->send();
 

@@ -4,6 +4,8 @@ namespace App\Filament\Support\ViewActions;
 
 use App\Filament\Support\BankTransactionImportFields;
 use App\Filament\Support\MoneyDisplay;
+use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableRecordActionGroups;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
 use Filament\Actions\ViewAction;
@@ -114,11 +116,12 @@ final class ViewBankTransactionAction
 
     public static function configure(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->recordUrl(fn (): ?string => null)
             ->recordAction(ViewAction::getDefaultName())
-            ->recordActions([
+            ->recordActions(TableRecordActionGroups::wrap([
                 self::make(),
-            ]);
+            ])),
+            TableGrouping::bankTransactions());
     }
 }

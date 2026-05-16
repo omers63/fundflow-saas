@@ -231,26 +231,13 @@ class MembershipApplicationForm
                             ->icon('heroicon-o-clipboard-document-list')
                             ->schema($detailsSchema),
 
-                        Tab::make(__('Form upload'))
+                        Tab::make(__('Form Upload'))
                             ->icon('heroicon-o-document-text')
                             ->schema([
                                 Section::make()
-                                    ->description(function (): ?HtmlString {
-                                        $downloadUrl = PublicPageSettings::membershipApplicationDocumentUrl()
-                                            ?? PublicPageSettings::termsAndConditionsDownloadUrl();
-
-                                        if ($downloadUrl === null) {
-                                            return null;
-                                        }
-
-                                        return new HtmlString(
-                                            '<a class="text-primary-600 underline" href="'
-                                            .e($downloadUrl)
-                                            .'" target="_blank" rel="noopener noreferrer">'
-                                            .e(__('Download membership application form template'))
-                                            .'</a>'
-                                        );
-                                    })
+                                    ->description(new HtmlString(view('filament.tenant.membership-application-form-upload-notice', [
+                                        'downloadUrl' => PublicPageSettings::membershipApplicationFormUploadDownloadUrl(),
+                                    ])->render()))
                                     ->schema([
                                         FileUpload::make('application_form_path')
                                             ->label(__('Signed application form'))
@@ -274,7 +261,11 @@ class MembershipApplicationForm
                                                 'image/webp',
                                             ])
                                             ->maxSize(10240)
-                                            ->helperText(__('PDF or image, max 10 MB.')),
+                                            ->helperText(
+                                                $forCreate
+                                                ? __('PDF or image, max 10 MB. Optional if you will add it later from edit.')
+                                                : __('PDF or image, max 10 MB. Replace the file if the applicant sends a corrected document.')
+                                            ),
                                     ]),
                             ]),
                     ]),

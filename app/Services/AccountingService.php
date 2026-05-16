@@ -5,8 +5,12 @@ namespace App\Services;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
+use Carbon\Carbon;
+use Carbon\CarbonInterface;
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 class AccountingService
 {
@@ -40,8 +44,12 @@ class AccountingService
         float $amount,
         string $description,
         ?Model $reference = null,
+        ?DateTimeInterface $transactedAt = null,
+        ?int $memberId = null,
     ): Transaction {
-        return DB::transaction(function () use ($account, $amount, $description, $reference) {
+        $memberId = $this->resolveTransactionMemberId($account, $memberId);
+
+        return DB::transaction(function () use ($account, $amount, $description, $reference, $transactedAt, $memberId) {
             $account->lockForUpdate();
             $account->refresh();
 
@@ -50,13 +58,14 @@ class AccountingService
 
             return Transaction::create([
                 'account_id' => $account->id,
+                'member_id' => $memberId,
                 'type' => 'credit',
                 'amount' => $amount,
                 'balance_after' => $newBalance,
                 'reference_type' => $reference ? get_class($reference) : null,
                 'reference_id' => $reference?->id,
                 'description' => $description,
-                'transacted_at' => now(),
+                'transacted_at' => $transactedAt ?? now(),
             ]);
         });
     }
@@ -69,8 +78,12 @@ class AccountingService
         float $amount,
         string $description,
         ?Model $reference = null,
+        ?DateTimeInterface $transactedAt = null,
+        ?int $memberId = null,
     ): Transaction {
-        return DB::transaction(function () use ($account, $amount, $description, $reference) {
+        $memberId = $this->resolveTransactionMemberId($account, $memberId);
+
+        return DB::transaction(function () use ($account, $amount, $description, $reference, $transactedAt, $memberId) {
             $account->lockForUpdate();
             $account->refresh();
 
@@ -79,14 +92,502 @@ class AccountingService
 
             return Transaction::create([
                 'account_id' => $account->id,
+                'member_id' => $memberId,
                 'type' => 'debit',
                 'amount' => $amount,
                 'balance_after' => $newBalance,
                 'reference_type' => $reference ? get_class($reference) : null,
                 'reference_id' => $reference?->id,
                 'description' => $description,
-                'transacted_at' => now(),
+                'transacted_at' => $transactedAt ?? now(),
             ]);
+        });
+    }
+
+    /**
+     * Update a ledger transaction and reconcile the account balance when amount or type changes.
+     *
+     * @param  array{description?: string, type?: string, amount?: float|int|string, transacted_at?: mixed, member_id?: int|null}  $data
+     */
+    public function updateTransaction(Transaction $transaction, array $data): Transaction
+    {
+        $transaction->loadMissing('account');
+        $account = $transaction->account;
+
+        if ($account === null) {
+            throw new InvalidArgumentException(__('Transaction has no account.'));
+        }
+
+        $description = trim((string) ($data['description'] ?? $transaction->description ?? ''));
+
+        if ($description === '') {
+            throw new InvalidArgumentException(__('Description is required.'));
+        }
+
+        $type = (string) ($data['type'] ?? $transaction->type);
+
+        if (! in_array($type, ['credit', 'debit'], true)) {
+            throw new InvalidArgumentException(__('Type must be credit or debit.'));
+        }
+
+        $amount = round((float) ($data['amount'] ?? $transaction->amount), 2);
+
+        if ($amount <= 0) {
+            throw new InvalidArgumentException(__('Amount must be greater than zero.'));
+        }
+
+        $transactedAt = $data['transacted_at'] ?? $transaction->transacted_at;
+
+        if (! $transactedAt instanceof CarbonInterface) {
+            $transactedAt = Carbon::parse($transactedAt);
+        }
+
+        $oldType = (string) $transaction->type;
+        $oldAmount = round((float) $transaction->amount, 2);
+        $balanceAffectingChanged = $oldType !== $type || abs($oldAmount - $amount) >= 0.005;
+
+        $memberId = array_key_exists('member_id', $data)
+            ? $this->resolveTransactionMemberId($account, filled($data['member_id']) ? (int) $data['member_id'] : null)
+            : $transaction->member_id;
+
+        return DB::transaction(function () use ($transaction, $account, $description, $type, $amount, $transactedAt, $balanceAffectingChanged, $oldType, $oldAmount, $memberId): Transaction {
+            $lockedAccount = Account::query()->lockForUpdate()->findOrFail($account->id);
+
+            if ($balanceAffectingChanged) {
+                if ($oldType === 'credit') {
+                    $lockedAccount->decrement('balance', $oldAmount);
+                } else {
+                    $lockedAccount->increment('balance', $oldAmount);
+                }
+
+                if ($type === 'credit') {
+                    $lockedAccount->increment('balance', $amount);
+                } else {
+                    $lockedAccount->decrement('balance', $amount);
+                }
+
+                $lockedAccount->refresh();
+            }
+
+            $transaction->update([
+                'description' => $description,
+                'type' => $type,
+                'amount' => $amount,
+                'transacted_at' => $transactedAt,
+                'member_id' => $memberId,
+                'balance_after' => $balanceAffectingChanged
+                    ? $lockedAccount->balance
+                    : $transaction->balance_after,
+            ]);
+
+            return $transaction->fresh();
+        });
+    }
+
+    /**
+     * Delete a ledger transaction after reversing its effect on the account balance.
+     * Does not adjust paired entries from the same source reference.
+     */
+    public function deleteTransaction(Transaction $transaction): void
+    {
+        $transaction->loadMissing('account');
+        $account = $transaction->account;
+
+        if ($account === null) {
+            throw new InvalidArgumentException(__('Transaction has no account.'));
+        }
+
+        $type = (string) $transaction->type;
+        $amount = round((float) $transaction->amount, 2);
+
+        DB::transaction(function () use ($transaction, $account, $type, $amount): void {
+            $lockedAccount = Account::query()->lockForUpdate()->findOrFail($account->id);
+
+            if ($type === 'credit') {
+                $lockedAccount->decrement('balance', $amount);
+            } else {
+                $lockedAccount->increment('balance', $amount);
+            }
+
+            $transaction->delete();
+        });
+    }
+
+    public function canSplitTransaction(Transaction $transaction): bool
+    {
+        if ($this->isReversalEntry($transaction)) {
+            return false;
+        }
+
+        if ($this->hasExistingReversal($transaction)) {
+            return false;
+        }
+
+        return round((float) $transaction->amount, 2) > 0;
+    }
+
+    /**
+     * Replace one ledger entry with labelled parts that sum to the same amount and type.
+     * Net balance effect is zero (original removed, then parts re-posted).
+     *
+     * @param  array<int, array{amount: float|int|string, description: string}>  $parts
+     */
+    public function splitTransaction(Transaction $original, array $parts): void
+    {
+        $original->loadMissing('account');
+        $account = $original->account;
+
+        if ($account === null) {
+            throw new InvalidArgumentException(__('Transaction has no account.'));
+        }
+
+        if (! $this->canSplitTransaction($original)) {
+            throw new InvalidArgumentException(__('This transaction cannot be split.'));
+        }
+
+        $originalAmount = round((float) $original->amount, 2);
+        $partTotal = round(array_sum(array_map(
+            fn (array $part): float => round((float) ($part['amount'] ?? 0), 2),
+            $parts,
+        )), 2);
+
+        if (abs($partTotal - $originalAmount) >= 0.005) {
+            throw new InvalidArgumentException(__('Parts must sum to the original amount (:amount).', [
+                'amount' => number_format($originalAmount, 2),
+            ]));
+        }
+
+        if (count($parts) < 2) {
+            throw new InvalidArgumentException(__('At least two parts are required for a split.'));
+        }
+
+        foreach ($parts as $index => $part) {
+            $partNumber = $index + 1;
+
+            if (round((float) ($part['amount'] ?? 0), 2) <= 0) {
+                throw new InvalidArgumentException(__('Part #:number must have a positive amount.', [
+                    'number' => $partNumber,
+                ]));
+            }
+
+            if (trim((string) ($part['description'] ?? '')) === '') {
+                throw new InvalidArgumentException(__('Part #:number requires a description.', [
+                    'number' => $partNumber,
+                ]));
+            }
+        }
+
+        $type = (string) $original->type;
+        $transactedAt = $original->transacted_at;
+        $reference = $original->reference;
+
+        DB::transaction(function () use ($original, $account, $parts, $type, $reference, $transactedAt): void {
+            $this->deleteTransaction($original);
+
+            $account->refresh();
+
+            foreach ($parts as $part) {
+                $amount = round((float) $part['amount'], 2);
+                $description = trim((string) $part['description']);
+
+                if ($type === 'credit') {
+                    $this->credit($account, $amount, $description, $reference, $transactedAt, $original->member_id);
+                } else {
+                    $this->debit($account, $amount, $description, $reference, $transactedAt, $original->member_id);
+                }
+
+                $account->refresh();
+            }
+        });
+    }
+
+    /**
+     * Post an equal-and-opposite counter-entry on the same account, leaving the original intact.
+     */
+    public function createReversalEntry(
+        Transaction $original,
+        string $reason,
+        ?DateTimeInterface $transactedAt = null,
+    ): Transaction {
+        $original->loadMissing('account');
+        $account = $original->account;
+
+        if ($account === null) {
+            throw new InvalidArgumentException(__('Transaction has no account.'));
+        }
+
+        $trimmed = trim($reason);
+
+        if ($trimmed === '') {
+            throw new InvalidArgumentException(__('A reason is required for a reversal.'));
+        }
+
+        $counterType = $original->type === 'credit' ? 'debit' : 'credit';
+        $amount = round((float) $original->amount, 2);
+
+        if ($counterType === 'debit' && $account->type === 'cash' && $amount > (float) $account->balance) {
+            throw new InvalidArgumentException(__('Reversal would exceed the available cash balance.'));
+        }
+
+        $description = __('Reversal of #:id: :original — :reason', [
+            'id' => $original->id,
+            'original' => $original->description ?? '—',
+            'reason' => $trimmed,
+        ]);
+
+        $reversal = $counterType === 'credit'
+            ? $this->credit($account, $amount, $description, $original, $transactedAt, $original->member_id)
+            : $this->debit($account, $amount, $description, $original, $transactedAt, $original->member_id);
+
+        return $reversal;
+    }
+
+    /**
+     * Reverse every ledger line that shares the same polymorphic reference as the given entry.
+     *
+     * @return int Number of counter-entries created.
+     */
+    public function createFullSourceReversal(
+        Transaction $transaction,
+        string $reason,
+        ?DateTimeInterface $transactedAt = null,
+    ): int {
+        if (blank($transaction->reference_type) || blank($transaction->reference_id)) {
+            throw new InvalidArgumentException(__('This transaction has no source reference — use single-entry reversal instead.'));
+        }
+
+        if ($transaction->reference_type === Transaction::class) {
+            throw new InvalidArgumentException(__('This transaction has no source reference — use single-entry reversal instead.'));
+        }
+
+        $siblings = Transaction::query()
+            ->where('reference_type', $transaction->reference_type)
+            ->where('reference_id', $transaction->reference_id)
+            ->get();
+
+        if ($siblings->isEmpty()) {
+            throw new InvalidArgumentException(__('No ledger entries found for this source.'));
+        }
+
+        $count = 0;
+
+        DB::transaction(function () use ($siblings, $reason, $transactedAt, &$count): void {
+            foreach ($siblings as $entry) {
+                if ($entry->account === null) {
+                    continue;
+                }
+
+                $this->createReversalEntry($entry, $reason, $transactedAt);
+                $count++;
+            }
+        });
+
+        if ($count === 0) {
+            throw new InvalidArgumentException(__('No ledger entries found for this source.'));
+        }
+
+        return $count;
+    }
+
+    public function canUseFullSourceReversal(Transaction $transaction): bool
+    {
+        return filled($transaction->reference_type)
+            && filled($transaction->reference_id)
+            && $transaction->reference_type !== Transaction::class;
+    }
+
+    public function countRelatedLedgerEntries(Transaction $transaction): int
+    {
+        if (blank($transaction->reference_type) || blank($transaction->reference_id)) {
+            return 1;
+        }
+
+        return Transaction::query()
+            ->where('reference_type', $transaction->reference_type)
+            ->where('reference_id', $transaction->reference_id)
+            ->count();
+    }
+
+    public function hasExistingReversal(Transaction $transaction): bool
+    {
+        return Transaction::query()
+            ->where('reference_type', Transaction::class)
+            ->where('reference_id', $transaction->id)
+            ->exists();
+    }
+
+    public function isReversalEntry(Transaction $transaction): bool
+    {
+        return $transaction->reference_type === Transaction::class
+            && filled($transaction->reference_id);
+    }
+
+    /**
+     * Debit a member cash account and master cash to record a refund paid to the member.
+     */
+    public function refundMemberCash(
+        Account $memberCash,
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt = null,
+    ): void {
+        if ($memberCash->is_master || $memberCash->type !== 'cash') {
+            throw new InvalidArgumentException(__('Refund can only be posted to a member cash account.'));
+        }
+
+        if ($amount <= 0) {
+            throw new InvalidArgumentException(__('Refund amount must be greater than zero.'));
+        }
+
+        if ($amount > (float) $memberCash->balance) {
+            throw new InvalidArgumentException(__('Refund amount exceeds the available cash balance.'));
+        }
+
+        $reason = trim($description);
+
+        if ($reason === '') {
+            throw new InvalidArgumentException(__('Refund description is required.'));
+        }
+
+        $masterCash = Account::masterCash();
+
+        if ($masterCash === null) {
+            throw new InvalidArgumentException(__('Master cash account is not configured.'));
+        }
+
+        $memberCash->loadMissing('member');
+
+        $refundDescription = __('Refund — :member — :reason', [
+            'member' => $memberCash->member?->name ?? __('Member'),
+            'reason' => $reason,
+        ]);
+
+        DB::transaction(function () use ($memberCash, $masterCash, $amount, $refundDescription, $transactedAt): void {
+            $this->debit($memberCash, $amount, $refundDescription, null, $transactedAt);
+            $this->debit($masterCash, $amount, $refundDescription, null, $transactedAt);
+        });
+    }
+
+    /**
+     * Fund a master reserve account (expense or investment) from master fund.
+     */
+    public function fundReserveAccountFromMasterFund(
+        Account $reserveAccount,
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt = null,
+    ): void {
+        $this->assertMasterReserveAccount($reserveAccount);
+
+        if ($amount <= 0) {
+            throw new InvalidArgumentException(__('Amount must be greater than zero.'));
+        }
+
+        $masterFund = Account::masterFund();
+
+        if ($masterFund === null) {
+            throw new InvalidArgumentException(__('Master fund account is not configured.'));
+        }
+
+        if ($amount > (float) $masterFund->balance) {
+            throw new InvalidArgumentException(__('Amount exceeds the available master fund balance.'));
+        }
+
+        $description = trim($description);
+
+        if ($description === '') {
+            throw new InvalidArgumentException(__('Description is required.'));
+        }
+
+        $fundTransferDescription = __(':description (master fund transfer)', ['description' => $description]);
+        $reserveFundingDescription = __(':description (reserve funding)', ['description' => $description]);
+
+        DB::transaction(function () use ($masterFund, $reserveAccount, $amount, $fundTransferDescription, $reserveFundingDescription, $transactedAt): void {
+            $this->debit($masterFund, $amount, $fundTransferDescription, null, $transactedAt);
+            $this->credit($reserveAccount, $amount, $reserveFundingDescription, null, $transactedAt);
+        });
+    }
+
+    /**
+     * Disburse from a master reserve account via master cash (check outflow).
+     */
+    public function disburseReserveAccountByCheck(
+        Account $reserveAccount,
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt = null,
+    ): void {
+        $this->assertMasterReserveAccount($reserveAccount);
+
+        if ($amount <= 0) {
+            throw new InvalidArgumentException(__('Amount must be greater than zero.'));
+        }
+
+        if ($amount > (float) $reserveAccount->balance) {
+            throw new InvalidArgumentException(__('Amount exceeds the available reserve balance.'));
+        }
+
+        $masterCash = Account::masterCash();
+
+        if ($masterCash === null) {
+            throw new InvalidArgumentException(__('Master cash account is not configured.'));
+        }
+
+        $description = trim($description);
+
+        if ($description === '') {
+            throw new InvalidArgumentException(__('Description is required.'));
+        }
+
+        $toCashDescription = __(':description (to master cash)', ['description' => $description]);
+        $fromReserveDescription = __(':description (from reserve)', ['description' => $description]);
+        $checkOutDescription = __(':description (check out)', ['description' => $description]);
+
+        DB::transaction(function () use ($reserveAccount, $masterCash, $amount, $toCashDescription, $fromReserveDescription, $checkOutDescription, $transactedAt): void {
+            $this->debit($reserveAccount, $amount, $toCashDescription, null, $transactedAt);
+            $this->credit($masterCash, $amount, $fromReserveDescription, null, $transactedAt);
+            $this->debit($masterCash, $amount, $checkOutDescription, null, $transactedAt);
+        });
+    }
+
+    /**
+     * Record investment return received through master cash into master invest.
+     */
+    public function recordInvestmentReturn(
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt = null,
+    ): void {
+        if ($amount <= 0) {
+            throw new InvalidArgumentException(__('Amount must be greater than zero.'));
+        }
+
+        $masterInvest = Account::masterInvest();
+
+        if ($masterInvest === null) {
+            throw new InvalidArgumentException(__('Master invest account is not configured.'));
+        }
+
+        $masterCash = Account::masterCash();
+
+        if ($masterCash === null) {
+            throw new InvalidArgumentException(__('Master cash account is not configured.'));
+        }
+
+        $description = trim($description);
+
+        if ($description === '') {
+            throw new InvalidArgumentException(__('Description is required.'));
+        }
+
+        $receiptDescription = __(':description (receipt)', ['description' => $description]);
+        $transferDescription = __(':description (transfer to invest account)', ['description' => $description]);
+        $returnDescription = __(':description (investment return)', ['description' => $description]);
+
+        DB::transaction(function () use ($masterInvest, $masterCash, $amount, $receiptDescription, $transferDescription, $returnDescription, $transactedAt): void {
+            $this->credit($masterCash, $amount, $receiptDescription, null, $transactedAt);
+            $this->debit($masterCash, $amount, $transferDescription, null, $transactedAt);
+            $this->credit($masterInvest, $amount, $returnDescription, null, $transactedAt);
         });
     }
 
@@ -106,6 +607,30 @@ class AccountingService
         }
 
         return $this->debit($account, abs($amount), $description, $reference);
+    }
+
+    private function assertMasterReserveAccount(Account $account): void
+    {
+        if (! $account->is_master || ! in_array($account->type, ['expense', 'invest'], true)) {
+            throw new InvalidArgumentException(__('Reserve account must be a master expense or investment account.'));
+        }
+    }
+
+    private function resolveTransactionMemberId(Account $account, ?int $memberId): ?int
+    {
+        if ($account->member_id !== null) {
+            return (int) $account->member_id;
+        }
+
+        if ($memberId === null) {
+            return null;
+        }
+
+        if (! Member::query()->whereKey($memberId)->exists()) {
+            throw new InvalidArgumentException(__('Selected member does not exist.'));
+        }
+
+        return $memberId;
     }
 
     /**

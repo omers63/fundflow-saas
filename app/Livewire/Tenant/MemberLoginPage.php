@@ -68,6 +68,12 @@ class MemberLoginPage extends Component
         } elseif (session()->pull('member_withdrawn_notice')) {
             $this->statusType = 'withdrawn';
             $this->statusMessage = __('Your membership has been withdrawn. Member portal access is no longer available. Please contact fund administration for support.');
+        } elseif (session()->pull('member_delinquent_notice')) {
+            $this->statusType = 'delinquent';
+            $this->statusMessage = __('Your membership is marked delinquent. Member portal access is restricted until fund administration resolves outstanding items.');
+        } elseif (session()->pull('member_terminated_notice')) {
+            $this->statusType = 'terminated';
+            $this->statusMessage = __('Your membership has been terminated. Member portal access is no longer available. Please contact fund administration for support.');
         }
     }
 
@@ -262,6 +268,20 @@ class MemberLoginPage extends Component
             if ($member->status === 'withdrawn') {
                 $this->statusType = 'withdrawn';
                 $this->statusMessage = __('Your membership has been withdrawn. Member portal access is no longer available. Please contact fund administration for support.');
+
+                return;
+            }
+
+            if ($member->status === 'delinquent') {
+                $this->statusType = 'delinquent';
+                $this->statusMessage = __('Your membership is marked delinquent. Member portal access is restricted until fund administration resolves outstanding items.');
+
+                return;
+            }
+
+            if ($member->status === 'terminated') {
+                $this->statusType = 'terminated';
+                $this->statusMessage = __('Your membership has been terminated. Member portal access is no longer available. Please contact fund administration for support.');
 
                 return;
             }

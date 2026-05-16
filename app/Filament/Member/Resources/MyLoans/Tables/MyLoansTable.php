@@ -4,7 +4,11 @@ namespace App\Filament\Member\Resources\MyLoans\Tables;
 
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Setting;
+use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -15,7 +19,7 @@ class MyLoansTable
 {
     public static function configure(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('amount')
                     ->label('Loan amount')
@@ -58,9 +62,15 @@ class MyLoansTable
                 DateColumnRangeFilter::make('applied_at', 'Applied'),
             ])
             ->recordUrl(fn (Model $record): string => MyLoanResource::getUrl('view', ['record' => $record]))
-            ->recordActions([
+            ->recordActions(TableRecordActionGroups::wrap([
                 ViewAction::make(),
+            ]))
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    TableToolbar::refreshBulkAction(),
+                ]),
             ])
-            ->defaultSort('applied_at', 'desc');
+            ->defaultSort('applied_at', 'desc'),
+            TableGrouping::loans(includeMember: false));
     }
 }

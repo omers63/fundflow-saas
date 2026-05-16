@@ -3,11 +3,14 @@
 namespace App\Filament\Tenant\Resources\Accounts\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
+use App\Filament\Resources\RelationManagers\RelationManager;
+use App\Filament\Support\AccountDetailInsightsRefresh;
 use App\Filament\Support\AccountTransactionAmountColumn;
+use App\Filament\Support\AccountTransactionManualAdjustmentHeaderActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\ViewActions\ViewAccountTransactionAction;
+use App\Models\Tenant\Account;
 use App\Models\Tenant\Setting;
-use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -52,6 +55,19 @@ class TransactionsRelationManager extends RelationManager
                     ]),
                 DateColumnRangeFilter::make('transacted_at', 'Date'),
             ])
-            ->defaultSort('transacted_at', 'desc'));
+            ->defaultSort('transacted_at', 'desc'))
+            ->toolbarActions(ViewAccountTransactionAction::tenantToolbarActions())
+            ->headerActions(AccountTransactionManualAdjustmentHeaderActions::make(
+                fn (): Account => $this->getOwnerRecord(),
+                $this->ledgerMutationAfter(),
+            ));
+    }
+
+    protected function ledgerMutationAfter(): \Closure
+    {
+        return function (): void {
+            $this->resetTable();
+            AccountDetailInsightsRefresh::dispatch($this, (int) $this->getOwnerRecord()->getKey());
+        };
     }
 }

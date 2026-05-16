@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\Members\Pages;
 
 use App\Filament\Tenant\Resources\Members\MemberResource;
+use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
@@ -47,12 +48,8 @@ class ViewMember extends ViewRecord
                             ->date(),
                         TextEntry::make('status')
                             ->badge()
-                            ->color(fn (string $state): string => match ($state) {
-                                'active' => 'success',
-                                'inactive' => 'danger',
-                                'suspended' => 'warning',
-                                default => 'gray',
-                            }),
+                            ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
+                            ->color(fn (string $state): string => Member::statusBadgeColor($state)),
                         TextEntry::make('parent.name')
                             ->label('Parent member')
                             ->placeholder(__('Independent')),

@@ -3,6 +3,9 @@
 namespace App\Filament\Tenant\Resources\Contributions\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Setting;
 use App\Services\ContributionService;
 use Filament\Actions\Action;
@@ -18,7 +21,7 @@ class ContributionsTable
 {
     public static function configure(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('member.name')
                     ->searchable()
@@ -55,7 +58,7 @@ class ContributionsTable
                 DateColumnRangeFilter::make('period', 'Contribution period'),
                 DateColumnRangeFilter::make('posted_at', 'Posted'),
             ])
-            ->recordActions([
+            ->recordActions(TableRecordActionGroups::wrap([
                 Action::make('post')
                     ->label('Post')
                     ->icon('heroicon-o-check-circle')
@@ -69,7 +72,7 @@ class ContributionsTable
                             ->success()
                             ->send();
                     }),
-            ])
+            ]))
             ->toolbarActions([
                 BulkActionGroup::make([
                     BulkAction::make('postSelected')
@@ -90,8 +93,10 @@ class ContributionsTable
                                 ->success()
                                 ->send();
                         }),
+                    TableToolbar::refreshBulkAction(),
                 ]),
             ])
-            ->defaultSort('period', 'desc');
+            ->defaultSort('period', 'desc'),
+            TableGrouping::contributions());
     }
 }

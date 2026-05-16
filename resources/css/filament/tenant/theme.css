@@ -80,3 +80,15 @@
 .fi-body.fi-panel-tenant .fi-wi-stats-overview > *:nth-child(6) {
     animation-delay: 0.22s;
 }
+
+.fi-body.fi-panel-tenant .ff-app-insights {
+  max-width: none;
+}
+
+.fi-body.fi-panel-tenant .ff-app-insights-kpi {
+  transition: background-color 0.15s ease;
+}
+
+.fi-body.fi-panel-tenant .ff-app-insights-hero {
+  transition: box-shadow 0.25s ease;
+}

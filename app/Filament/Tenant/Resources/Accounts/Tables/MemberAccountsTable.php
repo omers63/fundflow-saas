@@ -3,8 +3,12 @@
 namespace App\Filament\Tenant\Resources\Accounts\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
 use App\Models\Tenant\Setting;
+use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -45,7 +49,7 @@ class MemberAccountsTable
             ->sortable()
             ->toggledHiddenByDefault();
 
-        return $table
+        return TableGrouping::apply($table
             ->columns($columns)
             ->filters([
                 SelectFilter::make('member_id')
@@ -56,9 +60,15 @@ class MemberAccountsTable
                 DateColumnRangeFilter::make('updated_at', 'Last updated'),
             ])
             ->recordUrl(fn (Model $record): string => AccountResource::getUrl('view', ['record' => $record]))
-            ->recordActions([
+            ->recordActions(TableRecordActionGroups::wrap([
                 ViewAction::make(),
+            ]))
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    TableToolbar::refreshBulkAction(),
+                ]),
             ])
-            ->defaultSort('member_id');
+            ->defaultSort('member_id'),
+            TableGrouping::memberAccounts($showTypeColumn));
     }
 }

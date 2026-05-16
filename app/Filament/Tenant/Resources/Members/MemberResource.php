@@ -10,6 +10,8 @@ use App\Filament\Tenant\Resources\Members\Pages\ViewMember;
 use App\Filament\Tenant\Resources\Members\RelationManagers\AccountsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\ContributionsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\DependentsRelationManager;
+use App\Filament\Tenant\Resources\Members\RelationManagers\LoansRelationManager;
+use App\Filament\Tenant\Resources\Members\RelationManagers\MessagesRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\RepaymentsRelationManager;
 use App\Filament\Tenant\Resources\Members\Schemas\MemberForm;
 use App\Filament\Tenant\Resources\Members\Tables\MembersTable;
@@ -49,7 +51,9 @@ class MemberResource extends Resource
             AccountsRelationManager::class,
             ContributionsRelationManager::class,
             RepaymentsRelationManager::class,
+            LoansRelationManager::class,
             DependentsRelationManager::class,
+            MessagesRelationManager::class,
         ];
     }
 

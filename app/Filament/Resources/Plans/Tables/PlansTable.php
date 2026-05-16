@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Plans\Tables;
 
+use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableToolbar;
 use App\Models\Central\Plan;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -66,12 +68,13 @@ class PlansTable
                 TernaryFilter::make('is_custom')
                     ->label('Custom plan'),
             ])
-            ->recordActions([
+            ->recordActions(TableRecordActionGroups::wrap([
                 EditAction::make(),
-            ])
+            ]))
             ->toolbarActions([
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
+                    TableToolbar::refreshBulkAction(),
                 ]),
             ]);
     }

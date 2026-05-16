@@ -35,6 +35,8 @@ class MemberPanelProvider extends PanelProvider
             ->path('member')
             ->authGuard('tenant')
             ->login(MemberLoginPage::class)
+            ->disabledErrorNotification(419)
+            ->disabledErrorNotification(401)
             ->viteTheme('resources/css/filament/member/theme.css')
             ->colors([
                 'primary' => Color::Emerald,
@@ -65,6 +67,7 @@ class MemberPanelProvider extends PanelProvider
             ->discoverWidgets(in: app_path('Filament/Member/Widgets'), for: 'App\\Filament\\Member\\Widgets')
             ->widgets([])
             ->renderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(view('partials.pwa-head')->render()))
+            ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.livewire-session-recovery')->render()))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))
             ->middleware([
                 EncryptCookies::class,

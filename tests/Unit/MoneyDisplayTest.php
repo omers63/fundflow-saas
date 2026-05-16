@@ -5,9 +5,9 @@ use Tests\TestCase;
 
 uses(TestCase::class);
 
-it('formats negative amounts with currency code before the signed value', function (): void {
+it('formats negative amounts without a minus sign', function (): void {
     expect(MoneyDisplay::format(-50000, 'SAR', 'en'))
-        ->toBe('SAR -50,000.00');
+        ->toBe('SAR 50,000.00');
 });
 
 it('formats positive amounts with currency code before the value', function (): void {

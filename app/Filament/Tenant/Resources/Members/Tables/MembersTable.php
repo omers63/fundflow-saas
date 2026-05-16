@@ -3,6 +3,9 @@
 namespace App\Filament\Tenant\Resources\Members\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
@@ -17,7 +20,7 @@ class MembersTable
 {
     public static function configure(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('member_number')
                     ->searchable()
@@ -38,22 +41,15 @@ class MembersTable
                     ->placeholder(__('Independent')),
                 TextColumn::make('status')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'active' => 'success',
-                        'suspended' => 'warning',
-                        'withdrawn' => 'danger',
-                    }),
+                    ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
+                    ->color(fn (string $state): string => Member::statusBadgeColor($state)),
                 TextColumn::make('joined_at')
                     ->date()
                     ->sortable(),
             ])
             ->filters([
                 SelectFilter::make('status')
-                    ->options([
-                        'active' => 'Active',
-                        'suspended' => 'Suspended',
-                        'withdrawn' => 'Withdrawn',
-                    ]),
+                    ->options(Member::statusOptions()),
                 SelectFilter::make('parent_member_id')
                     ->label('Parent')
                     ->relationship('parent', 'name')
@@ -61,14 +57,16 @@ class MembersTable
                     ->preload(),
                 DateColumnRangeFilter::make('joined_at', 'Joined'),
             ])
-            ->recordActions([
+            ->recordActions(TableRecordActionGroups::wrap([
                 EditAction::make(),
-            ])
+            ]))
             ->toolbarActions([
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
+                    TableToolbar::refreshBulkAction(),
                 ]),
             ])
-            ->defaultSort('name');
+            ->defaultSort('name'),
+            TableGrouping::members());
     }
 }

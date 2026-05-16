@@ -1,0 +1,12 @@
+---
+description: Filament tables — grouped row actions, bulk parity, selection
+alwaysApply: true
+---
+
+# Filament tables — row actions & bulk
+
+- **Global defaults** (`AppServiceProvider`): tenant/central Filament tables use `Table::configureUsing()` for `striped()`, summary footer rules, and **`selectable()`** so rows are always checkbox-selectable.
+- **Row actions**: Every row action must live inside an `ActionGroup` (use `App\Filament\Support\TableRecordActionGroups::wrap([...])` for a single dropdown). Do not leave bare `Action` / `EditAction` / `ViewAction` at the top level of `recordActions()`.
+- **Bulk toolbar**: Every table must define `toolbarActions()` with at least one `BulkActionGroup`. Any **mutating** row action (approve, reject, delete, post, provision, etc.) should have a matching **bulk** counterpart where the same rules apply. Read-only listings may use `TableToolbar::refreshBulkAction()` inside the bulk group when no other bulk action exists.
+- **Relation managers & widgets**: Same rules — grouped row actions (or an explicit empty list only if the design truly has no row actions) and a bulk group (often refresh-only for read-only grids).
+- **Account `Transaction` history (ledger)**: On tenant panels, account transaction relation managers use **`headerActions()`** with **Credit**, **Debit**, and (member cash only) **Refund** via `App\Filament\Support\AccountTransactionManualAdjustmentHeaderActions`. Credit/debit call `AccountingService::credit()` / `debit()` on the owner account; **Refund** calls `AccountingService::refundMemberCash()` (debits member cash and master cash). Member-facing transaction tables do not expose manual adjustments.

@@ -4,6 +4,8 @@ namespace App\Filament\Resources\Subscriptions\Tables;
 
 use App\Filament\Resources\Subscriptions\SubscriptionResource;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableToolbar;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -67,15 +69,17 @@ class SubscriptionsTable
                 DateColumnRangeFilter::make('created_at', 'Created'),
             ])
             ->recordUrl(fn (Model $record): string => SubscriptionResource::getUrl('view', ['record' => $record]))
-            ->recordActions([
+            ->recordActions(TableRecordActionGroups::wrap([
                 ViewAction::make(),
                 EditAction::make()
                     ->visible(fn (Model $record) => auth()->user()->hasRole('super_admin') || $record->tenant->central_user_id === auth()->id()),
-            ])
+            ]))
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                ])->visible(fn () => auth()->user()->hasRole('super_admin')),
+                    DeleteBulkAction::make()
+                        ->visible(fn () => auth()->user()->hasRole('super_admin')),
+                    TableToolbar::refreshBulkAction(),
+                ]),
             ]);
     }
 }

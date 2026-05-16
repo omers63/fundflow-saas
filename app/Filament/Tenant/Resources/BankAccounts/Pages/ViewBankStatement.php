@@ -3,10 +3,12 @@
 namespace App\Filament\Tenant\Resources\BankAccounts\Pages;
 
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
+use App\Filament\Tenant\Widgets\BankStatementDetailInsightsWidget;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\TextEntry;
 use Filament\Schemas\Schema;
+use Livewire\Attributes\On;
 
 class ViewBankStatement extends ViewRecord
 {
@@ -15,6 +17,42 @@ class ViewBankStatement extends ViewRecord
     public function getHeading(): string
     {
         return $this->record->filename;
+    }
+
+    /**
+     * @return array<int, class-string>
+     */
+    protected function getHeaderWidgets(): array
+    {
+        return [
+            BankStatementDetailInsightsWidget::class,
+        ];
+    }
+
+    public function getHeaderWidgetsColumns(): int|array
+    {
+        return 1;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getWidgetData(): array
+    {
+        return [
+            ...parent::getWidgetData(),
+            'bankStatementId' => $this->getRecord()->getKey(),
+        ];
+    }
+
+    #[On('refresh-bank-statement-detail-insights')]
+    public function refreshStatementFromImport(int $bankStatementId): void
+    {
+        if ((int) $this->getRecord()->getKey() !== $bankStatementId) {
+            return;
+        }
+
+        $this->refreshRecord();
     }
 
     public function schema(Schema $schema): Schema

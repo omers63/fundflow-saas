@@ -3,7 +3,11 @@
 namespace App\Filament\Widgets;
 
 use App\Filament\Resources\Tenants\TenantResource;
+use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableToolbar;
 use App\Models\Central\Tenant;
+use Filament\Actions\Action;
+use Filament\Actions\BulkActionGroup;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
@@ -40,6 +44,17 @@ class MyTenants extends BaseWidget
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
+            ])
+            ->recordActions(TableRecordActionGroups::wrap([
+                Action::make('viewTenant')
+                    ->label(__('View'))
+                    ->icon('heroicon-o-eye')
+                    ->url(fn (Tenant $record): string => TenantResource::getUrl('view', ['record' => $record])),
+            ]))
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    TableToolbar::refreshBulkAction(),
+                ]),
             ]);
     }
 }

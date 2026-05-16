@@ -8,7 +8,8 @@ use Illuminate\Support\Number;
 final class MoneyDisplay
 {
     /**
-     * Format like "SAR -50,000.00" (currency code, then signed amount).
+     * Format like "SAR 50,000.00" (currency code, then absolute amount).
+     * Sign is not shown — use {@see color()} for danger (negative) vs success (zero/positive).
      */
     public static function format(float|int|string|null $amount, ?string $currency = null, ?string $locale = null): ?string
     {
@@ -20,7 +21,7 @@ final class MoneyDisplay
         $currencyCode = $currency ?? Setting::get('general', 'currency', 'USD');
         $locale ??= config('app.locale');
 
-        $formattedAmount = Number::format($numericAmount, 2, locale: $locale);
+        $formattedAmount = Number::format(abs($numericAmount), 2, locale: $locale);
 
         return "{$currencyCode} {$formattedAmount}";
     }

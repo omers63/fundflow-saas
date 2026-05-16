@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\BankAccounts\Pages;
 
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
+use App\Filament\Tenant\Widgets\BankAccountsInsightsWidget;
 use App\Models\Tenant\BankTemplate;
 use App\Models\Tenant\BankTransaction;
 use App\Services\BankImportService;
@@ -64,6 +65,21 @@ class ListBankAccounts extends ListRecords
     public function getTitle(): string|Htmlable
     {
         return __('Bank Accounts');
+    }
+
+    /**
+     * @return array<int, class-string>
+     */
+    protected function getHeaderWidgets(): array
+    {
+        return [
+            BankAccountsInsightsWidget::class,
+        ];
+    }
+
+    public function getHeaderWidgetsColumns(): int|array
+    {
+        return 1;
     }
 
     public function getTabs(): array

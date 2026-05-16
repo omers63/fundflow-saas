@@ -3,12 +3,18 @@
 namespace App\Filament\Tenant\Resources\Members\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
+use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Resources\Accounts\AccountResource;
 use App\Models\Tenant\Setting;
-use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Actions\Action;
+use Filament\Actions\BulkActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class AccountsRelationManager extends RelationManager
 {
@@ -47,6 +53,18 @@ class AccountsRelationManager extends RelationManager
                         'fund' => 'Fund',
                     ]),
                 DateColumnRangeFilter::make('updated_at', 'Last updated'),
+            ])
+            ->recordUrl(fn (Model $record): string => AccountResource::getUrl('view', ['record' => $record]))
+            ->recordActions(TableRecordActionGroups::wrap([
+                Action::make('viewAccount')
+                    ->label(__('View'))
+                    ->icon('heroicon-o-eye')
+                    ->url(fn ($record): string => AccountResource::getUrl('view', ['record' => $record])),
+            ]))
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    TableToolbar::refreshBulkAction(),
+                ]),
             ])
             ->defaultSort('type');
     }

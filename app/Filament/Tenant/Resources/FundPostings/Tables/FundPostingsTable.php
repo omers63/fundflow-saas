@@ -3,6 +3,8 @@
 namespace App\Filament\Tenant\Resources\FundPostings\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\ViewActions\ViewFundPostingAction;
 use App\Models\Tenant\Setting;
 use App\Services\FundPostingService;
@@ -21,7 +23,7 @@ class FundPostingsTable
 {
     public static function configure(Table $table): Table
     {
-        return ViewFundPostingAction::configure($table)
+        return TableGrouping::apply(ViewFundPostingAction::configure($table)
             ->columns([
                 TextColumn::make('member.name')
                     ->searchable()
@@ -79,7 +81,7 @@ class FundPostingsTable
                     ->trueLabel(__('Has receipt'))
                     ->falseLabel(__('No receipt')),
             ])
-            ->recordActions([
+            ->recordActions(TableRecordActionGroups::wrap([
                 ViewFundPostingAction::make(),
                 Action::make('accept')
                     ->label('Accept')
@@ -118,7 +120,7 @@ class FundPostingsTable
                         $service->reject($record, auth()->id(), $data['admin_remarks']);
                         Notification::make()->title(__('Fund posting rejected'))->send();
                     }),
-            ])
+            ]))
             ->toolbarActions([
                 BulkActionGroup::make([
                     BulkAction::make('acceptSelected')
@@ -136,8 +138,31 @@ class FundPostingsTable
                             }
                             Notification::make()->title(__(':count posting(s) accepted', ['count' => $count]))->success()->send();
                         }),
+                    BulkAction::make('rejectSelected')
+                        ->label(__('Reject selected'))
+                        ->icon('heroicon-o-x-circle')
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->modalHeading(__('Reject fund postings'))
+                        ->form([
+                            Textarea::make('admin_remarks')
+                                ->label(__('Reason for rejection'))
+                                ->required()
+                                ->rows(2),
+                        ])
+                        ->action(function (Collection $records, array $data, FundPostingService $service) {
+                            $count = 0;
+                            foreach ($records as $record) {
+                                if ($record->status === 'pending') {
+                                    $service->reject($record, auth()->id(), $data['admin_remarks']);
+                                    $count++;
+                                }
+                            }
+                            Notification::make()->title(__(':count posting(s) rejected', ['count' => $count]))->send();
+                        }),
                 ]),
             ])
-            ->defaultSort('created_at', 'desc');
+            ->defaultSort('created_at', 'desc'),
+            TableGrouping::fundPostings());
     }
 }

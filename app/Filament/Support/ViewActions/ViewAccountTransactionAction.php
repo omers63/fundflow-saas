@@ -3,14 +3,20 @@
 namespace App\Filament\Support\ViewActions;
 
 use App\Filament\Support\MoneyDisplay;
+use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
 use Filament\Tables\Table;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 
 final class ViewAccountTransactionAction
 {
@@ -22,7 +28,7 @@ final class ViewAccountTransactionAction
                 ? $record->description
                 : __('Transaction #:id', ['id' => $record->id]))
             ->mutateRecordDataUsing(function (array $data, Transaction $record): array {
-                $record->loadMissing(['account', 'reference']);
+                $record->loadMissing(['account', 'member', 'reference']);
 
                 $currency = Setting::get('general', 'currency', 'USD');
 
@@ -34,6 +40,7 @@ final class ViewAccountTransactionAction
                     'signed_amount_display' => MoneyDisplay::format($record->getSignedAmount(), $currency),
                     'balance_after_display' => MoneyDisplay::format((float) $record->balance_after, $currency),
                     'account_name' => $record->account?->name,
+                    'member_tag' => $record->member?->name,
                     'reference_summary' => $record->bankImportSummary() ?? $record->referenceSummary(),
                     'created_at_display' => $record->created_at?->format('M j, Y g:i A'),
                     'updated_at_display' => $record->updated_at?->format('M j, Y g:i A'),
@@ -64,6 +71,10 @@ final class ViewAccountTransactionAction
                     TextInput::make('account_name')
                         ->label(__('Account'))
                         ->placeholder(__('—')),
+                    TextInput::make('member_tag')
+                        ->label(__('Member tag'))
+                        ->placeholder(__('—'))
+                        ->visible(fn (?string $state): bool => filled($state)),
                     Textarea::make('description')
                         ->label(__('Description'))
                         ->placeholder(__('—'))
@@ -82,13 +93,46 @@ final class ViewAccountTransactionAction
         ];
     }
 
-    public static function configure(Table $table): Table
+    public static function configure(Table $table, bool $editable = true): Table
     {
-        return $table
-            ->recordUrl(fn (): ?string => null)
-            ->recordAction(ViewAction::getDefaultName())
-            ->recordActions([
-                self::make(),
-            ]);
+        $actions = $editable
+            ? [
+                EditAccountTransactionAction::make(),
+                SplitAccountTransactionAction::make(),
+                ReverseAccountTransactionAction::make(),
+                DeleteAccountTransactionAction::make(),
+                self::make()
+                    ->hidden(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin),
+            ]
+            : [self::make()];
+
+        return TableGrouping::apply(
+            $table
+                ->recordUrl(fn (): ?string => null)
+                ->recordActions(TableRecordActionGroups::wrap($actions)),
+            TableGrouping::accountTransactions()
+        )
+            ->recordAction(function () use ($editable): ?string {
+                if (! $editable) {
+                    return ViewAction::getDefaultName();
+                }
+
+                return Auth::guard('tenant')->user()?->is_admin
+                    ? EditAction::getDefaultName()
+                    : ViewAction::getDefaultName();
+            });
+    }
+
+    /**
+     * @return array<int, BulkActionGroup>
+     */
+    public static function tenantToolbarActions(): array
+    {
+        return [
+            BulkActionGroup::make([
+                DeleteAccountTransactionsBulkAction::make(),
+                TableToolbar::refreshBulkAction(),
+            ]),
+        ];
     }
 }

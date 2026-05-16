@@ -25,3 +25,18 @@ Let's start with these basic rules and build on it later.
 12. Click a transaction in any transaction table, should popup a modal page showing the full transaction details
 13. Split the table in the member account to 3 tables, each in it's own tab. One for "Cash", the second for "Fund" and the third for "Loans"
 14. I need to add a new Setting page section for controlling various aspect of the public page. The name of the fund. I also need to control how many user (max.) can entroll to the fund (membership control), with no-limit option. I need to define fees for verious types of membership types: New, Resume, Renew. I need to define a link to a document for "Rules and Conditions", and a link to a documnet for "Membership Application". In the public page, change. enrollement is done as a section in the main page. I need to change this to be redirected to a membership page with multi-step workflow. More on the exact steps later.
+15. Another global rule: all table's row actions need to be in a group. Applicable action need also be in the table bulk menu. All tables need to be bulk-enabled and row selectable.
+16. Add beatifull, modern and insightful widgets to the applications page, use the old project as a reference, but I want something more insightful and lots more attractive.
+17. Make the stats widgets smaller and combine widgets where possible and appropriate and use 2 or 3 columns layout when you see fit.
+18. Add the "Refund" table header action of the member's cash account in a similar manner to the older project.
+19. In all manual credit/debit entries, I need to be able to set the transaction datetime.
+20. Click a row of any transaction history should redirect me to an edit modal.
+21. Add the "Reverse entry" table row action of the member's cash account in a similar manner to the older project. Name it "Reverse" only.
+22. Add delete and bulk-delete to all transaction histories.
+23. Add split transaction functionality to any transaction.
+24. When the amounts are negitive, there is no need to show the "-" sign. Treat it as negative, but do not show the sign if the UI. It is enough to have it in red color.
+25. Add "Group By" to whichever table you see appropriate.
+26. When manually crediting or debiting one of the master accounts, add the option in the model to specify the member in simillar manner to the older project.
+27. Add beautiful, modern and insightful widgets to the accounts (bank, masters and members)  pages, use the old project as a reference, but I want something more insightful and lots more attractive. Layout compactly similar to what we did with the applications page.
+28. I also need an individual beatifull, modern and insightful widgets for each account page page, again use the old project as a reference, but I want something more insightful and lots more attractive. Layout compactly similar to what we did with the applications page
+

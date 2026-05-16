@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\MembershipApplications\Pages;
 
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
+use App\Filament\Tenant\Widgets\MembershipApplicationInsightsWidget;
 use App\Services\MembershipApplicationImportService;
 use App\Support\FilamentStoredUploadPath;
 use Filament\Actions\Action;
@@ -104,6 +105,7 @@ class ListMembershipApplications extends ListRecords
                         }
 
                         $livewire->resetTable();
+                        MembershipApplicationResource::dispatchInsightsRefresh($livewire);
 
                         $this->sendImportNotification(
                             Notification::make()
@@ -130,6 +132,18 @@ class ListMembershipApplications extends ListRecords
                 ->url(MembershipApplicationResource::getUrl('create'))
                 ->visible(fn (): bool => MembershipApplicationResource::canCreate()),
         ];
+    }
+
+    protected function getHeaderWidgets(): array
+    {
+        return [
+            MembershipApplicationInsightsWidget::class,
+        ];
+    }
+
+    public function getHeaderWidgetsColumns(): int|array
+    {
+        return 1;
     }
 
     public function getSubheading(): ?string

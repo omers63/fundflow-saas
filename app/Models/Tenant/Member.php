@@ -13,6 +13,15 @@ class Member extends Model
 {
     use HasFactory;
 
+    /** @var list<int> */
+    public const CONTRIBUTION_STEPS = [500, 1000, 1500, 2000, 2500, 3000];
+
+    /** @var list<string> */
+    public const STATUSES = ['active', 'suspended', 'withdrawn', 'delinquent', 'terminated'];
+
+    /** @var list<string> */
+    public const PORTAL_BLOCKED_STATUSES = ['suspended', 'withdrawn', 'delinquent', 'terminated'];
+
     protected $fillable = [
         'user_id',
         'parent_member_id',
@@ -89,6 +98,14 @@ class Member extends Model
         return $this->hasManyThrough(LoanRepayment::class, Loan::class);
     }
 
+    /**
+     * Admin/member direct messages for this member's login user (filtered further in the relation manager).
+     */
+    public function directMessages(): HasMany
+    {
+        return $this->hasMany(DirectMessage::class, 'to_user_id', 'user_id');
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
@@ -107,6 +124,67 @@ class Member extends Model
     public function scopeIndependent($query)
     {
         return $query->whereNull('parent_member_id');
+    }
+
+    public static function generateMemberNumber(): string
+    {
+        $next = static::query()->count() + 1;
+
+        return 'MEM-'.str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
+    public static function isValidContributionAmount(int $amount): bool
+    {
+        return in_array($amount, self::CONTRIBUTION_STEPS, true);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function contributionAmountOptions(): array
+    {
+        $currency = Setting::get('general', 'currency', 'USD');
+        $options = [];
+
+        foreach (self::CONTRIBUTION_STEPS as $amount) {
+            $options[$amount] = number_format($amount, 0).' '.$currency;
+        }
+
+        return $options;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function statusOptions(): array
+    {
+        return [
+            'active' => __('Active'),
+            'suspended' => __('Suspended'),
+            'withdrawn' => __('Withdrawn'),
+            'delinquent' => __('Delinquent'),
+            'terminated' => __('Terminated'),
+        ];
+    }
+
+    public static function statusBadgeColor(string $state): string
+    {
+        return match ($state) {
+            'active' => 'success',
+            'suspended' => 'warning',
+            'withdrawn', 'delinquent', 'terminated' => 'danger',
+            default => 'gray',
+        };
+    }
+
+    public static function portalBlockedSessionKey(string $status): string
+    {
+        return match ($status) {
+            'withdrawn' => 'member_withdrawn_notice',
+            'delinquent' => 'member_delinquent_notice',
+            'terminated' => 'member_terminated_notice',
+            default => 'member_suspended_notice',
+        };
     }
 
     public function isEligibleForLoan(): bool

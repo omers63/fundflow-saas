@@ -4,7 +4,10 @@ namespace App\Filament\Member\Resources\MyAccounts\Tables;
 
 use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Setting;
+use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -44,8 +47,13 @@ class MyMemberAccountsTable
                 DateColumnRangeFilter::make('updated_at', 'Last activity'),
             ])
             ->recordUrl(fn (Model $record): string => MyAccountResource::getUrl('view', ['record' => $record]))
-            ->recordActions([
+            ->recordActions(TableRecordActionGroups::wrap([
                 ViewAction::make(),
+            ]))
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    TableToolbar::refreshBulkAction(),
+                ]),
             ]);
     }
 }

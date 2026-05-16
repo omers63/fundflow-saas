@@ -34,6 +34,8 @@ class TenantPanelProvider extends PanelProvider
             ->path('admin')
             ->authGuard('tenant')
             ->login()
+            ->disabledErrorNotification(419)
+            ->disabledErrorNotification(401)
             ->viteTheme('resources/css/filament/tenant/theme.css')
             ->colors([
                 'primary' => Color::Sky,
@@ -54,6 +56,7 @@ class TenantPanelProvider extends PanelProvider
             ->widgets([])
             ->databaseNotifications()
             ->renderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(view('partials.pwa-head')->render()))
+            ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.livewire-session-recovery')->render()))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))
             ->middleware([
                 EncryptCookies::class,

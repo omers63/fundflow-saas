@@ -101,12 +101,22 @@ test('applications list shows purpose subheading and header actions for admin', 
 
     Filament::setCurrentPanel('tenant');
 
+    MembershipApplication::create([
+        'name' => 'Widget Pending',
+        'email' => 'widget-pending@test.com',
+        'application_type' => 'new',
+        'status' => 'pending',
+    ]);
+
     Livewire::actingAs($admin, 'tenant')
         ->test(ListMembershipApplications::class)
         ->assertSuccessful()
         ->assertSee(__('Review new membership applications, track approval rates, and manage the onboarding pipeline.'))
         ->assertSee(__('Import Applications'))
-        ->assertSee(__('New Application'));
+        ->assertSee(__('New Application'))
+        ->assertSee(__('Applications need your attention'))
+        ->assertSee(__('Pipeline'))
+        ->assertSee(__('Review queue'));
 });
 
 test('admin can create application from tenant panel', function () {
@@ -190,6 +200,27 @@ test('tenant membership application import sample download is available', functi
     $response->assertDownload('membership-applications-sample-20.csv');
 });
 
+test('membership application form upload notice view includes legacy instructions', function () {
+    $html = view('filament.tenant.membership-application-form-upload-notice', [
+        'downloadUrl' => 'https://example.com/template.pdf',
+    ])->render();
+
+    expect($html)
+        ->toContain('Please upload a readable scan or photo of your')
+        ->toContain('https://example.com/template.pdf')
+        ->toContain('Download blank form template (PDF)');
+});
+
+test('membership application form upload notice view omits download link when url is empty', function () {
+    $html = view('filament.tenant.membership-application-form-upload-notice', [
+        'downloadUrl' => null,
+    ])->render();
+
+    expect($html)
+        ->toContain('Please upload a readable scan or photo of your')
+        ->not->toContain('Download blank form template (PDF)');
+});
+
 test('admin can open application edit form with full profile fields', function () {
     $admin = User::create([
         'name' => 'Fund Admin',
@@ -225,4 +256,68 @@ test('admin can open application edit form with full profile fields', function (
             'national_id' => '1234567890',
             'city' => 'Riyadh',
         ]);
+});
+
+test('admin can delete membership application from applications table', function () {
+    $admin = User::create([
+        'name' => 'Fund Admin',
+        'email' => 'admin-delete-app@test.com',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $application = MembershipApplication::create([
+        'name' => 'To Delete',
+        'email' => 'delete-me@example.com',
+        'password' => bcrypt('secret'),
+        'application_type' => 'new',
+        'status' => 'rejected',
+        'reviewed_at' => now(),
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(ListMembershipApplications::class)
+        ->callTableAction('delete', $application)
+        ->assertNotified();
+
+    expect(MembershipApplication::query()->find($application->id))->toBeNull();
+});
+
+test('admin can bulk delete membership applications from applications table', function () {
+    $admin = User::create([
+        'name' => 'Fund Admin',
+        'email' => 'admin-bulk-delete-app@test.com',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $first = MembershipApplication::create([
+        'name' => 'Delete One',
+        'email' => 'delete-one@example.com',
+        'password' => bcrypt('secret'),
+        'application_type' => 'new',
+        'status' => 'pending',
+    ]);
+
+    $second = MembershipApplication::create([
+        'name' => 'Delete Two',
+        'email' => 'delete-two@example.com',
+        'password' => bcrypt('secret'),
+        'application_type' => 'renew',
+        'status' => 'rejected',
+        'reviewed_at' => now(),
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(ListMembershipApplications::class)
+        ->callTableBulkAction('delete', [$first, $second])
+        ->assertNotified();
+
+    expect(MembershipApplication::query()->whereKey([$first->id, $second->id])->count())->toBe(0);
 });
