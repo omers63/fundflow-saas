@@ -1,14 +1,24 @@
 @props([
     'size' => 'md',
-    'variant' => 'default',
+    'variant' => 'framed',
+    'height' => null,
 ])
 
 @php
     use App\Support\FundflowBrand;
+    use App\Support\PublicPageSettings;
 
-    $logoUrl = \App\Support\PublicPageSettings::fundLogoUrl();
-    $fallbackUrl = FundflowBrand::logoUrl();
-    $fundName = \App\Support\PublicPageSettings::fundName(tenant('name') ?? null);
+    $panelHeight = $height ?? PublicPageSettings::BRAND_LOGO_HEIGHT;
+    $fundName = PublicPageSettings::fundName(tenant('name') ?? null);
+
+    if ($variant === 'panel') {
+        $logoUrl = PublicPageSettings::fundPanelBrandLogoUrl();
+        $fallbackUrl = FundflowBrand::panelLogoUrl();
+    } else {
+        $logoUrl = PublicPageSettings::fundLogoUrl();
+        $fallbackUrl = FundflowBrand::logoUrl();
+    }
+
     $frameClasses = match ($size) {
         'sm' => 'h-10 w-10',
         'lg' => 'h-14 w-14',
@@ -25,18 +35,31 @@
     };
 @endphp
 
-<div {{ $attributes->class(['flex shrink-0 items-center justify-center overflow-hidden rounded-xl border', $frameClasses, $variantClasses]) }}>
+@if ($variant === 'panel')
     <img
+        {{ $attributes->class(['tenant-public-brand-logo object-contain']) }}
         src="{{ $logoUrl }}"
-        alt=""
-        role="presentation"
-        class="{{ $imageClasses }} object-contain"
-        width="40"
-        height="40"
+        alt="{{ $fundName }}"
+        style="height: {{ $panelHeight }};"
         loading="eager"
         decoding="async"
         data-fund-logo-fallback="{{ $fallbackUrl }}"
         onerror="if (this.dataset.fundLogoFallback) { this.src = this.dataset.fundLogoFallback; }"
     />
-    <span class="sr-only">{{ $fundName }}</span>
-</div>
+@else
+    <div {{ $attributes->class(['flex shrink-0 items-center justify-center overflow-hidden rounded-xl border', $frameClasses, $variantClasses]) }}>
+        <img
+            src="{{ $logoUrl }}"
+            alt=""
+            role="presentation"
+            class="{{ $imageClasses }} object-contain"
+            width="40"
+            height="40"
+            loading="eager"
+            decoding="async"
+            data-fund-logo-fallback="{{ $fallbackUrl }}"
+            onerror="if (this.dataset.fundLogoFallback) { this.src = this.dataset.fundLogoFallback; }"
+        />
+        <span class="sr-only">{{ $fundName }}</span>
+    </div>
+@endif

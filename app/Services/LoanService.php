@@ -1,184 +1,141 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
-use App\Models\Tenant\Account;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
+use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
-use Illuminate\Support\Facades\DB;
+use App\Services\Loans\LoanEarlySettlementService;
+use App\Services\Loans\LoanLifecycleService;
+use App\Services\Loans\LoanRepaymentService;
+use App\Support\LoanSettings;
+use Illuminate\Support\Carbon;
+use InvalidArgumentException;
 
+/**
+ * Facade for loan workflows (delegates to legacy-aligned lifecycle services).
+ */
 class LoanService
 {
     public function __construct(
-        public AccountingService $accounting,
+        private LoanLifecycleService $lifecycle,
+        private LoanRepaymentService $repayments,
+        private LoanEarlySettlementService $earlySettlement,
     ) {}
 
     /**
-     * Check loan eligibility and return reasons if not eligible.
-     *
      * @return array{eligible: bool, reasons: string[]}
      */
     public function checkEligibility(Member $member): array
     {
-        $reasons = [];
-
-        $membershipMonths = $member->joined_at->diffInMonths(now());
-        if ($membershipMonths < 12) {
-            $reasons[] = "Member must have at least 12 months of membership (currently {$membershipMonths} months).";
-        }
-
-        if ($member->status !== 'active') {
-            $reasons[] = 'Member must be in active status.';
-        }
-
-        $recentMissed = $member->contributions()
-            ->where('period', '>=', now()->subMonths(3)->startOfMonth())
-            ->whereIn('status', ['pending', 'failed'])
-            ->count();
-
-        if ($recentMissed > 0) {
-            $reasons[] = "Member has {$recentMissed} outstanding contribution(s) in the last 3 months.";
-        }
-
-        $hasActiveLoans = $member->loans()
-            ->whereIn('status', ['approved', 'disbursed', 'repaying'])
-            ->exists();
-
-        if ($hasActiveLoans) {
-            $reasons[] = 'Member already has an active loan (only one active loan allowed).';
-        }
-
-        return [
-            'eligible' => empty($reasons),
-            'reasons' => $reasons,
-        ];
+        return $this->lifecycle->checkEligibility($member);
     }
 
-    /**
-     * Apply for a loan.
-     */
-    public function applyForLoan(Member $member, float $amount, float $interestRate, int $termMonths): Loan
+    public function validateLoanAmount(Member $member, float $amount): ?string
     {
-        $totalDue = $amount + ($amount * $interestRate / 100);
-        $monthlyRepayment = round($totalDue / $termMonths, 2);
-
-        return Loan::create([
-            'member_id' => $member->id,
-            'amount' => $amount,
-            'interest_rate' => $interestRate,
-            'term_months' => $termMonths,
-            'monthly_repayment' => $monthlyRepayment,
-            'total_repaid' => 0,
-            'status' => 'pending',
-            'applied_at' => now(),
-        ]);
+        return $this->lifecycle->validateLoanAmount($member, $amount);
     }
 
-    /**
-     * Approve a pending loan.
-     */
-    public function approveLoan(Loan $loan): void
+    public function applyForLoan(
+        Member $member,
+        float $amount,
+        float $interestRate = 0,
+        int $termMonths = 0,
+        ?string $purpose = null,
+    ): Loan {
+        return $this->lifecycle->applyForLoan($member, $amount, $purpose);
+    }
+
+    public function approveLoan(Loan $loan, ?float $amountApproved = null): void
     {
-        $loan->update([
-            'status' => 'approved',
-            'approved_at' => now(),
-        ]);
+        $amount = $amountApproved ?? (float) $loan->amount_requested;
+        $this->lifecycle->approveLoan($loan, $amount);
     }
 
-    /**
-     * Disburse an approved loan per the fund flow rules:
-     * 1. Debit Master Fund for the full disbursement amount
-     * 2. Debit Member Fund by the same amount (can go negative)
-     * 3. Credit Member Cash account
-     */
-    public function disburseLoan(Loan $loan): void
+    public function rejectLoan(Loan $loan, string $reason): void
     {
-        DB::transaction(function () use ($loan) {
-            $masterFund = Account::masterFund();
-            $memberFund = $loan->member->fundAccount;
-            $memberCash = $loan->member->cashAccount;
-            $amount = (float) $loan->amount;
-            $description = "Loan disbursement #{$loan->id}";
-
-            $this->accounting->debit($masterFund, $amount, $description, $loan);
-
-            $this->accounting->debit($memberFund, $amount, $description, $loan);
-
-            $this->accounting->credit($memberCash, $amount, $description, $loan);
-
-            $loan->update([
-                'status' => 'disbursed',
-                'disbursed_at' => now(),
-            ]);
-        });
+        $this->lifecycle->rejectLoan($loan, $reason);
     }
 
-    /**
-     * Pay out the loan to the member (actual bank transfer):
-     * 1. Debit Member Cash (money leaves the system)
-     * 2. Debit Master Cash (mirror)
-     *
-     * This is matched by a future bank statement import showing the outgoing transfer.
-     */
+    public function cancelLoan(Loan $loan): void
+    {
+        $this->lifecycle->cancelLoan($loan);
+    }
+
+    public function disburseLoan(Loan $loan, ?float $amount = null): void
+    {
+        $loan->loadMissing('fundTier');
+        $toDisburse = $amount ?? $loan->remainingToDisburse();
+        if ($toDisburse <= 0) {
+            throw new InvalidArgumentException(__('Nothing remains to disburse.'));
+        }
+
+        $this->lifecycle->disbursePartial($loan, $toDisburse);
+    }
+
     public function payoutLoan(Loan $loan): void
     {
-        DB::transaction(function () use ($loan) {
-            $memberCash = $loan->member->cashAccount;
-            $masterCash = Account::masterCash();
-            $amount = (float) $loan->amount;
-            $description = "Loan payout #{$loan->id}";
+        $this->lifecycle->markBankPayout($loan);
+    }
 
-            $this->accounting->debit($memberCash, $amount, $description, $loan);
+    public function recordRepayment(Loan $loan, float $amount, ?string $notes = null): LoanRepayment
+    {
+        if ($loan->status !== 'active') {
+            throw new InvalidArgumentException(__('Repayments can only be recorded on active loans.'));
+        }
 
-            $this->accounting->debit($masterCash, $amount, $description, $loan);
+        $installment = $loan->installments()
+            ->whereIn('status', ['pending', 'overdue'])
+            ->orderBy('installment_number')
+            ->first();
 
-            $loan->update(['status' => 'repaying']);
-        });
+        if ($installment === null) {
+            throw new InvalidArgumentException(__('No unpaid installments found.'));
+        }
+
+        if (abs($amount - (float) $installment->amount) > 0.02) {
+            throw new InvalidArgumentException(__('Use early settlement for partial or lump-sum payoffs.'));
+        }
+
+        [$month, $year] = $this->periodFromInstallment($installment);
+        $this->repayments->applyOne($loan, $month, $year);
+
+        return $loan->repayments()->latest('id')->first()
+            ?? new LoanRepayment(['loan_id' => $loan->id, 'amount' => $amount, 'notes' => $notes]);
+    }
+
+    public function earlySettle(Loan $loan): void
+    {
+        $this->earlySettlement->earlySettle($loan);
+    }
+
+    public static function computeMonthlyRepayment(float $amount, float $interestRate, int $termMonths): float
+    {
+        $tier = LoanTier::forAmount($amount);
+        $minInstall = (float) ($tier?->min_monthly_installment ?? 1000);
+        $threshold = LoanSettings::settlementThreshold();
+        $fundBal = $amount / 2;
+        $count = max(1, Loan::computeInstallmentsCount($amount, $fundBal, $minInstall, $threshold));
+
+        return round($amount / $count, 2);
+    }
+
+    public static function computeTotalDue(float $amount, float $interestRate): float
+    {
+        return $amount + ($amount * $interestRate / 100);
     }
 
     /**
-     * Record a loan repayment (processed via contribution cycle):
-     * 1. Debit Member Cash
-     * 2. Credit Member Fund
-     * 3. Credit Master Fund
-     * 4. Update loan total_repaid
-     * 5. Mark loan completed if fully repaid
+     * @return array{0: int, 1: int}
      */
-    public function recordRepayment(Loan $loan, float $amount): LoanRepayment
+    private function periodFromInstallment(LoanInstallment $installment): array
     {
-        return DB::transaction(function () use ($loan, $amount) {
-            $repayment = LoanRepayment::create([
-                'loan_id' => $loan->id,
-                'amount' => $amount,
-                'paid_at' => now(),
-            ]);
+        $due = Carbon::parse($installment->due_date);
 
-            $memberCash = $loan->member->cashAccount;
-            $memberFund = $loan->member->fundAccount;
-            $masterFund = Account::masterFund();
-            $description = "Loan repayment #{$loan->id}";
-
-            $this->accounting->debit($memberCash, $amount, $description, $repayment);
-
-            $this->accounting->credit($memberFund, $amount, $description, $repayment);
-
-            $this->accounting->mirror($masterFund, $amount, "Fund recovery: {$description}", $repayment);
-
-            $loan->update([
-                'total_repaid' => (float) $loan->total_repaid + $amount,
-                'status' => 'repaying',
-            ]);
-
-            $loan->refresh();
-            if ($loan->isFullyRepaid()) {
-                $loan->update([
-                    'status' => 'completed',
-                    'completed_at' => now(),
-                ]);
-            }
-
-            return $repayment;
-        });
+        return [(int) $due->month, (int) $due->year];
     }
 }

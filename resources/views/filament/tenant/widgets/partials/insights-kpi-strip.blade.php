@@ -30,18 +30,18 @@
                 $iconClass = $accentIcon[$card['accent']] ?? 'text-gray-400';
             @endphp
             <div class="ff-app-insights-kpi relative px-2.5 py-2 transition hover:bg-gray-50/80 dark:hover:bg-gray-800/60"
-                style="animation: ff-stat-in 0.35s ease-out {{ 0.02 + ($i * 0.03) }}s both">
+                style="animation: ff-stat-in 0.35s ease-out {{ 0.02 + ($i * 0.03) }}s forwards">
                 <div @class(['absolute inset-y-0 left-0 w-0.5 opacity-100', $barClass])></div>
                 <div class="flex items-center justify-between gap-1 pl-1">
                     <x-dynamic-component :component="$card['icon']" @class(['h-3.5 w-3.5', $iconClass]) />
                 </div>
                 <p class="mt-0.5 pl-1 text-[10px] font-medium uppercase tracking-wide text-gray-500">
-                    {{ $card['label'] }}</p>
+                    {{ ui_label($card['label']) }}</p>
                 <p @class([
                     'pl-1 text-lg font-bold tabular-nums leading-tight',
                     $card['value_class'] ?? 'text-gray-900 dark:text-white',
                 ])>{{ $card['value'] }}</p>
-                <p class="pl-1 text-[10px] text-gray-400">{{ $card['sub'] }}</p>
+                <p class="pl-1 text-[10px] text-gray-400">{{ ui_label($card['sub']) }}</p>
             </div>
         @endforeach
     </div>

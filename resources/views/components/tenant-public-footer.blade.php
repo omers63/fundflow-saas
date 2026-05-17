@@ -7,12 +7,12 @@
     $contactPhone = PublicPageSettings::contactPhone();
 @endphp
 
-<footer class="tenant-public-footer mt-auto bg-gray-900 py-12 text-gray-400 sm:py-16">
+<footer class="tenant-public-footer mt-auto bg-gray-900 py-12 text-gray-400 sm:py-16" aria-label="{{ __('Site footer') }}">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div class="mb-10 grid gap-10 md:grid-cols-4">
             <div class="md:col-span-2">
                 <div class="mb-4 flex items-center gap-3">
-                    <x-fund-logo size="sm" variant="on-dark" />
+                    <x-fund-logo variant="panel" height="3.5rem" class="tenant-public-footer__logo" />
                     <span class="text-xl font-bold text-white">{{ $fundName }}</span>
                 </div>
                 <p class="max-w-xs text-sm leading-relaxed text-gray-400">
@@ -21,7 +21,7 @@
             </div>
 
             <div>
-                <h4 class="mb-4 text-sm font-semibold text-white">{{ __('Quick links') }}</h4>
+                <h2 class="mb-4 text-sm font-semibold text-white">{{ __('Quick links') }}</h2>
                 <ul class="space-y-2 text-sm">
                     <li>
                         <a href="{{ route('tenant.membership') }}"
@@ -46,17 +46,17 @@
             </div>
 
             <div>
-                <h4 class="mb-4 text-sm font-semibold text-white">{{ __('Contact') }}</h4>
+                <h2 class="mb-4 text-sm font-semibold text-white">{{ __('Contact') }}</h2>
                 <ul class="space-y-2 text-sm text-gray-400">
                     @if ($contactEmail)
                         <li>
-                            <a href="mailto:{{ $contactEmail }}"
+                            <a href="mailto:{{ $contactEmail }}" dir="ltr"
                                 class="transition-colors hover:text-sky-400">{{ $contactEmail }}</a>
                         </li>
                     @endif
                     @if ($contactPhone)
                         <li>
-                            <a href="tel:{{ preg_replace('/\s+/', '', $contactPhone) }}"
+                            <a href="tel:{{ preg_replace('/\s+/', '', $contactPhone) }}" dir="ltr"
                                 class="transition-colors hover:text-sky-400">{{ $contactPhone }}</a>
                         </li>
                     @endif
@@ -69,7 +69,7 @@
 
         <div
             class="flex flex-col items-center justify-between gap-4 border-t border-gray-800 pt-8 text-sm text-gray-500 md:flex-row">
-            <p>&copy; {{ date('Y') }} {{ $fundName }}. {{ __('All rights reserved.') }}</p>
+            <p>{{ __(':year © :fund. All rights reserved.', ['year' => date('Y'), 'fund' => $fundName]) }}</p>
             <p>{{ __('Managed in :currency (Saudi Riyal)', ['currency' => __('SAR')]) }}</p>
         </div>
     </div>

@@ -6,6 +6,7 @@ use App\Models\Tenant\Member;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
@@ -25,7 +26,8 @@ class MemberForm
                             ->unique(ignoreRecord: true)
                             ->default(fn (): string => Member::generateMemberNumber())
                             ->disabled()
-                            ->dehydrated(),
+                            ->dehydrated()
+                            ->helperText(__('Format is configured in fund settings.')),
                         TextInput::make('name')
                             ->required()
                             ->maxLength(255),
@@ -60,6 +62,28 @@ class MemberForm
                             ->searchable()
                             ->nullable()
                             ->helperText(__('If set, this member is a dependent of the selected parent.')),
+                    ]),
+                Section::make(__('Portal & household'))
+                    ->icon('heroicon-o-home')
+                    ->columnSpanFull()
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('household_email')
+                            ->email()
+                            ->maxLength(255)
+                            ->helperText(__('Shared login email for family members.')),
+                        TextInput::make('portal_pin')
+                            ->label(__('Portal PIN'))
+                            ->password()
+                            ->revealable()
+                            ->maxLength(20)
+                            ->helperText(__('Optional PIN for household profile picker.')),
+                        Toggle::make('is_separated')
+                            ->label(__('Separated household'))
+                            ->helperText(__('Dependent uses a different email and can log in directly.')),
+                        Toggle::make('direct_login_enabled')
+                            ->label(__('Direct login enabled'))
+                            ->visible(fn (callable $get): bool => (bool) $get('is_separated')),
                     ]),
             ]);
     }

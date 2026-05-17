@@ -2,6 +2,7 @@
 
 namespace App\Models\Tenant;
 
+use App\Support\LoanSettings;
 use Illuminate\Database\Eloquent\Model;
 
 class Setting extends Model
@@ -35,5 +36,35 @@ class Setting extends Model
         return static::where('group', $group)
             ->pluck('value', 'key')
             ->all();
+    }
+
+    public static function contributionCycleStartDay(): int
+    {
+        return (int) static::get('contribution', 'cycle_start_day', 6);
+    }
+
+    public static function loanSettlementThreshold(): float
+    {
+        return LoanSettings::settlementThreshold();
+    }
+
+    public static function loanMinFundBalance(): float
+    {
+        return LoanSettings::minFundBalance();
+    }
+
+    public static function loanEligibilityMonths(): int
+    {
+        return LoanSettings::eligibilityMonths();
+    }
+
+    public static function loanMaxBorrowMultiplier(): float
+    {
+        return LoanSettings::maxBorrowMultiplier();
+    }
+
+    public static function loanDefaultGraceCycles(): int
+    {
+        return LoanSettings::defaultGraceCycles();
     }
 }

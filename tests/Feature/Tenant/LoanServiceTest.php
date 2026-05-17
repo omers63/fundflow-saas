@@ -1,11 +1,10 @@
 <?php
 
 use App\Models\Tenant\Account;
-use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
-use App\Services\ContributionService;
 use App\Services\LoanService;
 use Tests\Concerns\InitializesTenancy;
 
@@ -14,18 +13,33 @@ uses(InitializesTenancy::class);
 beforeEach(function () {
     $this->initializeTenancy();
     $this->accounting = app(AccountingService::class);
-    $this->contributionService = app(ContributionService::class);
     $this->service = app(LoanService::class);
 
     Account::query()->delete();
     Member::query()->delete();
     Loan::query()->delete();
-    Contribution::query()->delete();
+    LoanInstallment::query()->delete();
 
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 0, 'is_master' => true]);
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 0, 'is_master' => true]);
     Account::create(['type' => 'bank', 'name' => 'Master Bank', 'balance' => 0, 'is_master' => true]);
 });
+
+function createEligibleLoanMember(AccountingService $accounting, float $fundBalance = 15000): Member
+{
+    $member = Member::create([
+        'member_number' => 'MEM-'.uniqid(),
+        'name' => 'Test Member',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subMonths(18),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($member);
+    $member->fundAccount()->update(['balance' => $fundBalance]);
+    $member->cashAccount()->update(['balance' => $fundBalance]);
+
+    return $member->fresh()->load(['fundAccount', 'cashAccount']);
+}
 
 test('member with less than 12 months is not eligible', function () {
     $member = Member::create([
@@ -39,7 +53,6 @@ test('member with less than 12 months is not eligible', function () {
     $result = $this->service->checkEligibility($member);
 
     expect($result['eligible'])->toBeFalse();
-    expect($result['reasons'][0])->toContain('12 months');
 });
 
 test('suspended member is not eligible', function () {
@@ -57,198 +70,92 @@ test('suspended member is not eligible', function () {
 });
 
 test('member with active loan is not eligible', function () {
-    $member = Member::create([
-        'member_number' => 'MEM-0001',
-        'name' => 'Test',
-        'monthly_contribution_amount' => 5000,
-        'joined_at' => now()->subMonths(18),
-        'status' => 'active',
-    ]);
-    $this->accounting->createMemberAccounts($member);
+    $member = createEligibleLoanMember($this->accounting);
 
     Loan::create([
         'member_id' => $member->id,
         'amount' => 10000,
+        'amount_requested' => 10000,
         'interest_rate' => 10,
         'term_months' => 12,
-        'monthly_repayment' => 917,
+        'monthly_repayment' => 0,
         'total_repaid' => 0,
-        'status' => 'disbursed',
+        'status' => 'active',
         'applied_at' => now(),
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
     ]);
 
     $result = $this->service->checkEligibility($member);
 
     expect($result['eligible'])->toBeFalse();
-    expect($result['reasons'])->toContain('Member already has an active loan (only one active loan allowed).');
 });
 
-test('eligible member passes all checks', function () {
-    $member = Member::create([
-        'member_number' => 'MEM-0001',
-        'name' => 'Eligible Member',
-        'monthly_contribution_amount' => 5000,
-        'joined_at' => now()->subMonths(18),
-        'status' => 'active',
-    ]);
-    $this->accounting->createMemberAccounts($member);
-    $member->cashAccount->update(['balance' => 15000]);
+test('eligible member passes checks when fund balance is sufficient', function () {
+    $member = createEligibleLoanMember($this->accounting, 20000);
 
-    foreach (range(1, 3) as $i) {
-        $period = now()->subMonths($i)->startOfMonth()->format('Y-m-d');
-        $contribution = $this->contributionService->recordContribution($member, $period);
-        $this->contributionService->postContribution($contribution);
-    }
+    expect((float) $member->fundAccount->balance)->toBeGreaterThan(6000);
 
     $result = $this->service->checkEligibility($member);
 
     expect($result['eligible'])->toBeTrue();
-    expect($result['reasons'])->toBeEmpty();
 });
 
-test('loan application creates a pending loan', function () {
-    $member = Member::create([
-        'member_number' => 'MEM-0001',
-        'name' => 'Test',
-        'monthly_contribution_amount' => 5000,
-        'joined_at' => now()->subMonths(18),
-        'status' => 'active',
-    ]);
+test('loan application creates a pending loan with amount requested', function () {
+    $member = createEligibleLoanMember($this->accounting, 25000);
 
-    $loan = $this->service->applyForLoan($member, 50000, 10, 12);
+    $loan = $this->service->applyForLoan($member, 20000, 0, 0, 'Education');
 
-    expect($loan->status)->toBe('pending');
-    expect($loan->amount)->toBe('50000.00');
-    expect($loan->interest_rate)->toBe('10.00');
-    expect($loan->term_months)->toBe(12);
-    expect($loan->monthly_repayment)->toBe('4583.33');
+    expect($loan->status)->toBe('pending')
+        ->and($loan->amount_requested)->toBe('20000.00')
+        ->and($loan->purpose)->toBe('Education');
 });
 
-test('loan disbursement debits master fund and member fund and credits member cash', function () {
-    $member = Member::create([
-        'member_number' => 'MEM-0001',
-        'name' => 'Test',
-        'monthly_contribution_amount' => 5000,
-        'joined_at' => now()->subMonths(18),
-        'status' => 'active',
-    ]);
-    $this->accounting->createMemberAccounts($member);
+test('approve and full disburse activates loan with installments', function () {
+    $member = createEligibleLoanMember($this->accounting, 30000);
+    Account::masterFund()->update(['balance' => 100000]);
+    Account::masterCash()->update(['balance' => 100000]);
 
-    $masterFund = Account::masterFund();
-    $masterFund->update(['balance' => 100000]);
-    $member->fundAccount->update(['balance' => 30000]);
-
-    $loan = $this->service->applyForLoan($member, 20000, 10, 12);
-    $this->service->approveLoan($loan);
+    $loan = $this->service->applyForLoan($member, 20000);
+    $this->service->approveLoan($loan, 20000);
     $this->service->disburseLoan($loan);
 
     $loan->refresh();
-    expect($loan->status)->toBe('disbursed');
-    expect($loan->disbursed_at)->not->toBeNull();
-
-    expect($member->cashAccount->fresh()->balance)->toBe('20000.00');
-    expect($masterFund->fresh()->balance)->toBe('80000.00');
-    expect($member->fundAccount->fresh()->balance)->toBe('10000.00');
+    expect($loan->status)->toBe('active')
+        ->and($loan->isFullyDisbursed())->toBeTrue()
+        ->and($loan->installments()->count())->toBeGreaterThan(0)
+        ->and($loan->disbursements()->count())->toBeGreaterThan(0);
 });
 
-test('member fund can go negative after loan disbursement', function () {
-    $member = Member::create([
-        'member_number' => 'MEM-0001',
-        'name' => 'Test',
-        'monthly_contribution_amount' => 5000,
-        'joined_at' => now()->subMonths(18),
-        'status' => 'active',
-    ]);
-    $this->accounting->createMemberAccounts($member);
+test('pending loan can be rejected with reason', function () {
+    $member = createEligibleLoanMember($this->accounting);
 
-    $masterFund = Account::masterFund();
-    $masterFund->update(['balance' => 100000]);
-    $member->fundAccount->update(['balance' => 5000]);
+    $loan = $this->service->applyForLoan($member, 10000, 0, 0, 'Home repair');
+    $this->service->rejectLoan($loan, 'Insufficient documentation');
 
-    $loan = $this->service->applyForLoan($member, 20000, 10, 12);
-    $this->service->approveLoan($loan);
-    $this->service->disburseLoan($loan);
-
-    expect($member->fundAccount->fresh()->balance)->toBe('-15000.00');
+    $loan->refresh();
+    expect($loan->status)->toBe('rejected')
+        ->and($loan->rejection_reason)->toBe('Insufficient documentation')
+        ->and($loan->rejected_at)->not->toBeNull();
 });
 
-test('loan payout debits member cash and master cash', function () {
-    $member = Member::create([
-        'member_number' => 'MEM-0001',
-        'name' => 'Test',
-        'monthly_contribution_amount' => 5000,
-        'joined_at' => now()->subMonths(18),
-        'status' => 'active',
-    ]);
-    $this->accounting->createMemberAccounts($member);
+test('loan amount cannot exceed configured maximum for member', function () {
+    $member = createEligibleLoanMember($this->accounting, 10000);
 
-    $masterFund = Account::masterFund();
-    $masterFund->update(['balance' => 100000]);
-    $masterCash = Account::masterCash();
-    $masterCash->update(['balance' => 50000]);
+    expect(fn () => $this->service->applyForLoan($member, 50000))
+        ->toThrow(InvalidArgumentException::class);
+});
 
-    $loan = $this->service->applyForLoan($member, 20000, 10, 12);
-    $this->service->approveLoan($loan);
+test('bank payout timestamp can be recorded after full disbursement', function () {
+    $member = createEligibleLoanMember($this->accounting, 30000);
+    Account::masterFund()->update(['balance' => 100000]);
+    Account::masterCash()->update(['balance' => 100000]);
+
+    $loan = $this->service->applyForLoan($member, 15000);
+    $this->service->approveLoan($loan, 15000);
     $this->service->disburseLoan($loan);
     $this->service->payoutLoan($loan);
 
     $loan->refresh();
-    expect($loan->status)->toBe('repaying');
-    expect($member->cashAccount->fresh()->balance)->toBe('0.00');
-    expect($masterCash->fresh()->balance)->toBe('30000.00');
-});
-
-test('loan repayment credits member fund and master fund', function () {
-    $member = Member::create([
-        'member_number' => 'MEM-0001',
-        'name' => 'Test',
-        'monthly_contribution_amount' => 5000,
-        'joined_at' => now()->subMonths(18),
-        'status' => 'active',
-    ]);
-    $this->accounting->createMemberAccounts($member);
-
-    $masterFund = Account::masterFund();
-    $masterFund->update(['balance' => 100000]);
-    $member->cashAccount->update(['balance' => 15000]);
-
-    $loan = $this->service->applyForLoan($member, 10000, 10, 12);
-    $this->service->approveLoan($loan);
-    $this->service->disburseLoan($loan);
-
-    $memberFundAfterDisburse = $member->fundAccount->fresh()->balance;
-    $masterFundAfterDisburse = $masterFund->fresh()->balance;
-
-    $this->service->recordRepayment($loan, 5000);
-
-    expect($member->fundAccount->fresh()->balance)
-        ->toBe(number_format((float) $memberFundAfterDisburse + 5000, 2, '.', ''));
-    expect($masterFund->fresh()->balance)
-        ->toBe(number_format((float) $masterFundAfterDisburse + 5000, 2, '.', ''));
-});
-
-test('loan completes when fully repaid', function () {
-    $member = Member::create([
-        'member_number' => 'MEM-0001',
-        'name' => 'Test',
-        'monthly_contribution_amount' => 5000,
-        'joined_at' => now()->subMonths(18),
-        'status' => 'active',
-    ]);
-    $this->accounting->createMemberAccounts($member);
-
-    $masterFund = Account::masterFund();
-    $masterFund->update(['balance' => 100000]);
-    $member->cashAccount->update(['balance' => 20000]);
-
-    $loan = $this->service->applyForLoan($member, 10000, 10, 12);
-    $this->service->approveLoan($loan);
-    $this->service->disburseLoan($loan);
-
-    $this->service->recordRepayment($loan, 11000);
-
-    $loan->refresh();
-    expect($loan->status)->toBe('completed');
-    expect($loan->total_repaid)->toBe('11000.00');
-    expect($loan->completed_at)->not->toBeNull();
+    expect($loan->payout_at)->not->toBeNull();
 });

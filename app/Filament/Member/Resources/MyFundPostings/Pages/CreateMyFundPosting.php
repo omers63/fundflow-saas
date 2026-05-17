@@ -30,7 +30,7 @@ class CreateMyFundPosting extends CreateRecord
     protected function getCreatedNotification(): ?Notification
     {
         return Notification::make()
-            ->title(__('Fund posting submitted'))
+            ->title(__('Deposit submitted'))
             ->body(__('Your request has been sent to the admin for review.'))
             ->success();
     }

@@ -6,11 +6,14 @@ use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Models\Tenant\BankTemplate;
 use App\Models\Tenant\Setting;
 use App\Support\Lang;
+use App\Support\LoanSettings;
+use App\Support\MemberNumberSettings;
 use App\Support\PublicPageSettings;
 use BackedEnum;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -54,6 +57,8 @@ class Settings extends Page implements HasForms
     {
         $general = Setting::getGroup('general');
         $contribution = Setting::getGroup('contribution');
+        $loan = LoanSettings::all();
+        $memberNumber = MemberNumberSettings::all();
         $public = PublicPageSettings::all();
 
         $templates = BankTemplate::orderBy('name')->get()->map(fn (BankTemplate $t) => [
@@ -77,9 +82,23 @@ class Settings extends Page implements HasForms
 
         $this->form->fill([
             'currency' => $general['currency'] ?? 'USD',
+            'member_number_prefix' => $memberNumber['prefix'],
+            'member_number_separator' => $memberNumber['separator'],
+            'member_number_padding' => $memberNumber['padding'],
+            'member_number_include_year' => (bool) $memberNumber['include_year'],
             'cycle_start_day' => $contribution['cycle_start_day'] ?? 6,
+            'loan_eligibility_months' => $loan['eligibility_months'] ?? 12,
+            'loan_min_fund_balance' => $loan['min_fund_balance'] ?? 6000,
+            'loan_max_borrow_multiplier' => $loan['max_borrow_multiplier'] ?? 2,
+            'loan_default_interest_rate' => $loan['default_interest_rate'] ?? 10,
+            'loan_default_term_months' => $loan['default_term_months'] ?? 12,
+            'loan_max_loan_amount' => $loan['max_loan_amount'] ?? 0,
+            'loan_settlement_threshold_pct' => ($loan['settlement_threshold_pct'] ?? 0.16) * 100,
             'bank_templates' => $templates,
-            'fund_name' => $public['fund_name'] ?? $general['fund_name'] ?? '',
+            'fund_name_en' => filled($public['fund_name_en'] ?? null)
+                ? $public['fund_name_en']
+                : ($general['fund_name'] ?? 'Family Fund'),
+            'fund_name_ar' => $public['fund_name_ar'] ?? 'صندوق العائلة',
             'membership_no_limit' => filter_var($public['membership_no_limit'] ?? true, FILTER_VALIDATE_BOOLEAN),
             'membership_max_members' => $public['membership_max_members'] ?? '',
             'fee_new' => $public['fee_new'] ?? '0',
@@ -114,6 +133,50 @@ class Settings extends Page implements HasForms
                                             ->options(static::currencyOptions())
                                             ->helperText(__('The primary currency used for all transactions.')),
                                     ]),
+                                Section::make(__('Member numbers'))
+                                    ->description(__('Controls how IDs are generated for new members (manual create and approved applications). Existing numbers are not changed.'))
+                                    ->columns(2)
+                                    ->schema([
+                                        TextInput::make('member_number_prefix')
+                                            ->label(__('Prefix'))
+                                            ->required()
+                                            ->maxLength(20)
+                                            ->regex('/^[A-Za-z0-9]+$/')
+                                            ->validationMessages([
+                                                'regex' => __('Use letters and numbers only.'),
+                                            ])
+                                            ->live(onBlur: true)
+                                            ->helperText(__('Stored in uppercase (e.g. MEM, FUND).')),
+                                        Select::make('member_number_separator')
+                                            ->label(__('Separator'))
+                                            ->options(MemberNumberSettings::separatorOptions())
+                                            ->required()
+                                            ->live(),
+                                        TextInput::make('member_number_padding')
+                                            ->label(__('Sequence digits'))
+                                            ->numeric()
+                                            ->minValue(3)
+                                            ->maxValue(8)
+                                            ->required()
+                                            ->live(onBlur: true)
+                                            ->helperText(__('How many digits to use for the running number (e.g. 4 → 0001).')),
+                                        Toggle::make('member_number_include_year')
+                                            ->label(__('Include calendar year'))
+                                            ->live()
+                                            ->helperText(__('When enabled, the year is inserted before the sequence (e.g. MEM-2026-0001). The sequence restarts each year.')),
+                                        Placeholder::make('member_number_preview')
+                                            ->label(__('Next number preview'))
+                                            ->columnSpanFull()
+                                            ->content(function (Get $get): string {
+                                                return MemberNumberSettings::preview([
+                                                    'prefix' => $get('member_number_prefix'),
+                                                    'separator' => $get('member_number_separator'),
+                                                    'padding' => $get('member_number_padding'),
+                                                    'include_year' => (bool) $get('member_number_include_year'),
+                                                ]);
+                                            })
+                                            ->helperText(__('Based on existing members matching this pattern.')),
+                                    ]),
                             ]),
                         Tab::make(__('Public page'))
                             ->icon('heroicon-o-globe-alt')
@@ -121,11 +184,16 @@ class Settings extends Page implements HasForms
                                 Section::make(__('Fund identity'))
                                     ->columns(2)
                                     ->schema([
-                                        TextInput::make('fund_name')
-                                            ->label(__('Fund name'))
+                                        TextInput::make('fund_name_en')
+                                            ->label(__('Fund name (English)'))
                                             ->required()
                                             ->maxLength(255)
-                                            ->helperText(__('Shown on the public landing and membership pages.')),
+                                            ->helperText(__('Shown on public pages and panels when the interface is in English.')),
+                                        TextInput::make('fund_name_ar')
+                                            ->label(__('Fund name (Arabic)'))
+                                            ->required()
+                                            ->maxLength(255)
+                                            ->helperText(__('Shown on public pages and panels when the interface is in Arabic.')),
                                         FileUpload::make('fund_logo')
                                             ->label(__('Fund logo'))
                                             ->image()
@@ -232,6 +300,63 @@ class Settings extends Page implements HasForms
                                             ->maxValue(28)
                                             ->required()
                                             ->helperText(__('Day of month when the contribution cycle starts (1-28). Default: 6th.')),
+                                    ]),
+                            ]),
+                        Tab::make(__('Loans'))
+                            ->icon('heroicon-o-banknotes')
+                            ->schema([
+                                Section::make(__('Eligibility'))
+                                    ->description(__('Rules applied when members apply for a loan or admins create an application.'))
+                                    ->columns(2)
+                                    ->schema([
+                                        TextInput::make('loan_eligibility_months')
+                                            ->label(__('Minimum membership (months)'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(120)
+                                            ->required(),
+                                        TextInput::make('loan_min_fund_balance')
+                                            ->label(__('Minimum fund balance'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->required()
+                                            ->helperText(__('Member fund account must meet this balance to apply.')),
+                                        TextInput::make('loan_max_borrow_multiplier')
+                                            ->label(__('Max borrow multiplier'))
+                                            ->numeric()
+                                            ->minValue(0.1)
+                                            ->step(0.1)
+                                            ->required()
+                                            ->helperText(__('Maximum loan = fund balance × this multiplier (unless capped below).')),
+                                        TextInput::make('loan_max_loan_amount')
+                                            ->label(__('Absolute max loan amount'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->helperText(__('Optional hard cap (0 = no cap, use multiplier only).')),
+                                    ]),
+                                Section::make(__('Defaults'))
+                                    ->columns(2)
+                                    ->schema([
+                                        TextInput::make('loan_default_interest_rate')
+                                            ->label(__('Default interest rate (%)'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->maxValue(100)
+                                            ->required(),
+                                        TextInput::make('loan_default_term_months')
+                                            ->label(__('Default term (months)'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(120)
+                                            ->required(),
+                                        TextInput::make('loan_settlement_threshold_pct')
+                                            ->label(__('Settlement threshold (%)'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->maxValue(100)
+                                            ->step(0.1)
+                                            ->required()
+                                            ->helperText(__('Percentage of approved amount member must hold in fund for full settlement.')),
                                     ]),
                             ]),
                         Tab::make('Bank Templates')
@@ -428,10 +553,27 @@ class Settings extends Page implements HasForms
         $state = $this->form->getState();
 
         Setting::set('general', 'currency', $state['currency']);
+        MemberNumberSettings::save([
+            'prefix' => $state['member_number_prefix'],
+            'separator' => $state['member_number_separator'],
+            'padding' => (int) $state['member_number_padding'],
+            'include_year' => (bool) ($state['member_number_include_year'] ?? false),
+        ]);
         Setting::set('contribution', 'cycle_start_day', $state['cycle_start_day']);
 
+        LoanSettings::save([
+            'eligibility_months' => (int) $state['loan_eligibility_months'],
+            'min_fund_balance' => (float) $state['loan_min_fund_balance'],
+            'max_borrow_multiplier' => (float) $state['loan_max_borrow_multiplier'],
+            'default_interest_rate' => (float) $state['loan_default_interest_rate'],
+            'default_term_months' => (int) $state['loan_default_term_months'],
+            'max_loan_amount' => (float) ($state['loan_max_loan_amount'] ?? 0),
+            'settlement_threshold_pct' => ((float) ($state['loan_settlement_threshold_pct'] ?? 16)) / 100,
+        ]);
+
         PublicPageSettings::save([
-            'fund_name' => $state['fund_name'],
+            'fund_name_en' => $state['fund_name_en'],
+            'fund_name_ar' => $state['fund_name_ar'],
             'fund_logo' => $state['fund_logo'] ?? '',
             'membership_no_limit' => (bool) ($state['membership_no_limit'] ?? true),
             'membership_max_members' => $state['membership_max_members'] ?? '',

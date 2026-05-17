@@ -28,7 +28,17 @@ final class TableSummaryFooter
             return $column;
         }
 
-        if (in_array($column->getName(), ['balance_after'], true)) {
+        if (
+            in_array($column->getName(), [
+                'balance_after',
+                'allocated_amount',
+                'available_amount',
+                'active_exposure',
+                'active_loans_count',
+                'declared_pool',
+                'tier_available',
+            ], true)
+        ) {
             return $column;
         }
 

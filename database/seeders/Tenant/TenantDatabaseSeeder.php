@@ -17,10 +17,12 @@ class TenantDatabaseSeeder extends Seeder
     public function run(): void
     {
         Setting::set('general', 'currency', 'USD');
-        Setting::set('general', 'fund_name', 'Family Fund');
+        PublicPageSettings::save([
+            ...PublicPageSettings::defaults(),
+            'fund_name_en' => 'Family Fund',
+            'fund_name_ar' => 'صندوق العائلة',
+        ]);
         Setting::set('contribution', 'cycle_start_day', '6');
-
-        PublicPageSettings::save(PublicPageSettings::defaults());
 
         BankTemplate::firstOrCreate(
             ['name' => 'Default CSV'],

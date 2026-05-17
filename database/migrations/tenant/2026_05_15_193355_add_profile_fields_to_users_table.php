@@ -13,7 +13,7 @@ return new class extends Migration
             $table->index('email');
             $table->string('phone')->nullable()->after('email');
             $table->string('avatar_path')->nullable()->after('phone');
-            $table->string('preferred_locale', 5)->default('en')->after('avatar_path');
+            $table->string('preferred_locale', 5)->default('ar')->after('avatar_path');
         });
     }
 

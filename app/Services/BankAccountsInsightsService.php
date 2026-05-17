@@ -230,7 +230,7 @@ final class BankAccountsInsightsService
                     ? trans_choice(':count unassigned credit|:count unassigned credits', $unassignedCredits, ['count' => $unassignedCredits])
                     : null,
                     $pendingFundPostings > 0
-                    ? trans_choice(':count fund posting|:count fund postings', $pendingFundPostings, ['count' => $pendingFundPostings])
+                    ? trans_choice(':count deposit pending|:count deposits pending', $pendingFundPostings, ['count' => $pendingFundPostings])
                     : null,
                 ])->filter()->implode(' · '),
                 'cta_label' => __('Transactions'),

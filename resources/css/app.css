@@ -186,21 +186,17 @@
     }
 
     .member-login-shell {
-        min-height: calc(100vh - 10rem);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 2.5rem;
-        padding: 2rem 1rem 3rem;
+        width: min(100%, var(--tenant-auth-card-width, 32rem));
+        max-width: var(--tenant-auth-card-width, 32rem);
+        margin-inline: auto;
     }
 
-    .member-login-shell__inner {
-        width: 100%;
-        max-width: 28rem;
+    .member-login-shell:has(.member-login-profile-picker) {
+        --tenant-auth-card-width: 36rem;
     }
 
     .member-login-card {
+        width: 100%;
         overflow: hidden;
         border-radius: 1.5rem;
         border: 1px solid #a7f3d0;
@@ -208,6 +204,59 @@
         box-shadow:
             0 20px 25px -5px rgb(16 185 129 / 0.12),
             0 8px 10px -6px rgb(0 0 0 / 0.06);
+    }
+
+    .member-login-card--admin {
+        border-color: #7dd3fc;
+        box-shadow:
+            0 20px 25px -5px rgb(14 165 233 / 0.12),
+            0 8px 10px -6px rgb(0 0 0 / 0.06);
+    }
+
+    .member-login-card--admin .member-login-card__header {
+        color: #0c4a6e;
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 42%, #bae6fd 100%);
+        border-bottom-color: #7dd3fc;
+    }
+
+    .member-login-card--admin .member-login-card__icon {
+        border-color: #38bdf8;
+        color: #0284c7;
+    }
+
+    .member-login-card--admin .member-login-card__title {
+        color: #0c4a6e;
+    }
+
+    .member-login-card--admin .member-login-card__subtitle {
+        color: #0369a1;
+    }
+
+    .member-login-card--admin .member-login-input:focus {
+        border-color: #0ea5e9;
+        box-shadow: 0 0 0 3px rgb(14 165 233 / 0.2);
+    }
+
+    .member-login-card--admin .member-login-remember__checkbox {
+        color: #0284c7;
+    }
+
+    .member-login-card--admin .member-login-submit {
+        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+        box-shadow: 0 4px 14px rgb(2 132 199 / 0.35);
+    }
+
+    .member-login-card--admin .member-login-submit:hover:not(:disabled) {
+        background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+        box-shadow: 0 6px 18px rgb(2 132 199 / 0.4);
+    }
+
+    .member-login-card--admin .member-login-links__accent {
+        color: #0284c7;
+    }
+
+    .member-login-card--admin .member-login-links__accent:hover {
+        color: #0369a1;
     }
 
     .member-login-card__header {
@@ -850,3 +899,70 @@
         border-color: rgb(52 211 153 / 0.85);
     }
 }
+
+/* Public site topbar — align with Filament panel topbar (min-h-16 + 5rem brand logo). */
+.tenant-public-nav {
+    --tenant-public-brand-logo-height: 5rem;
+}
+
+.tenant-public-nav__bar {
+    min-height: max(4rem, var(--tenant-public-brand-logo-height));
+}
+
+.tenant-public-brand-logo {
+    display: block;
+    height: var(--tenant-public-brand-logo-height, 5rem);
+    width: auto;
+    max-width: min(18rem, 50vw);
+    object-fit: contain;
+}
+
+.tenant-public-nav__brand {
+    text-decoration: none;
+}
+
+.tenant-public-nav__brand:hover .tenant-public-nav__fund-name {
+    color: rgb(17 24 39);
+}
+
+.tenant-public-nav__fund-name {
+    line-height: 1.25;
+}
+
+html[dir='rtl'] .tenant-public-nav__fund-name {
+    font-family: 'Noto Sans Arabic', 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+}
+
+.tenant-public-layout {
+    --tenant-public-topbar-offset: calc(var(--tenant-public-brand-logo-height, 5rem) + 1rem);
+}
+
+.tenant-public-layout > main {
+    padding-top: var(--tenant-public-topbar-offset);
+}
+
+.tenant-public-footer__logo {
+    --tenant-public-brand-logo-height: 3.5rem;
+}
+
+html[dir='rtl'] body {
+    font-family: 'Noto Sans Arabic', 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+}
+
+html[dir='rtl'] .tenant-public-nav,
+html[dir='rtl'] .tenant-public-footer,
+html[dir='rtl'] .landing-hero-section,
+html[dir='rtl'] .landing-cta-section {
+    text-align: start;
+}
+
+/* Public pages — match panel language switch (circular flag + dropdown). */
+.language-switcher .language-switch-trigger {
+    color: rgb(13 148 136);
+    background-color: rgb(20 184 166 / 0.1);
+}
+
+html[dir='rtl'] .language-switcher .fi-dropdown-trigger {
+    direction: ltr;
+}
+

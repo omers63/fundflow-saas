@@ -38,9 +38,12 @@ test('tenant manifest uses fund name and logo when configured', function () {
 
     PublicPageSettings::save([
         ...PublicPageSettings::defaults(),
-        'fund_name' => 'Al Noor Fund',
+        'fund_name_en' => 'Al Noor Fund',
+        'fund_name_ar' => 'صندوق النور',
         'fund_logo' => 'fund-branding/logo.png',
     ]);
+
+    app()->setLocale('en');
 
     $this->get('http://'.$domain.'/manifest.json')
         ->assertSuccessful()

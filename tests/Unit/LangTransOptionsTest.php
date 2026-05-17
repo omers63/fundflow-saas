@@ -13,4 +13,10 @@ it('translates string values in option arrays while preserving keys', function (
         'a' => 'Alpha',
         'b' => 'Beta',
     ]);
+
+    expect(Lang::transOptions([
+        'x' => 'pending status',
+    ]))->toBe([
+        'x' => 'Pending Status',
+    ]);
 });

@@ -17,23 +17,26 @@ test('landing page shows shared public navigation and footer', function () {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
+    app()->setLocale('ar');
+
     $this->get('http://'.$domain)
         ->assertSuccessful()
         ->assertSee('tenant-public-nav', false)
-        ->assertSee(__('Member login'), false)
-        ->assertSee(__('Check status'), false)
+        ->assertSee('tenant-public-brand-logo', false)
+        ->assertSee(__('Member login', locale: 'ar'), false)
+        ->assertSee(__('Check application status', locale: 'ar'), false)
         ->assertSee('tenant-public-footer', false)
-        ->assertSee(__('Quick links'), false)
-        ->assertSee(__('Contact'), false)
-        ->assertSee(__('Membership Management'), false)
-        ->assertSee(__('Monthly Statements'), false)
-        ->assertSee(__('Smart Notifications'), false)
-        ->assertSee('Admin dashboard', false)
-        ->assertSee('transparent accounting', false)
+        ->assertSee(__('Quick links', locale: 'ar'), false)
+        ->assertSee(__('Contact', locale: 'ar'), false)
+        ->assertSee(__('All rights reserved.', locale: 'ar'), false)
+        ->assertSee(__('Membership Management', locale: 'ar'), false)
+        ->assertSee(__('Monthly Statements', locale: 'ar'), false)
+        ->assertSee(__('Smart Notifications', locale: 'ar'), false)
+        ->assertSee(__('Admin dashboard & transparent accounting', locale: 'ar'), false)
         ->assertDontSee('>Transparent Accounting<', false);
 });
 
-test('member login page shows shared public navigation and footer', function () {
+test('member login page does not show public navigation or footer', function () {
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
@@ -43,17 +46,16 @@ test('member login page shows shared public navigation and footer', function () 
 
     $this->get('http://'.$domain.'/member/login')
         ->assertSuccessful()
-        ->assertSee('tenant-public-nav', false)
+        ->assertDontSee('tenant-public-nav', false)
+        ->assertDontSee('tenant-public-footer', false)
         ->assertSee('member-login-card', false)
         ->assertSee(__('Welcome back'), false)
-        ->assertSee(__('Home'), false)
         ->assertSee(route('tenant.membership', absolute: false), false)
-        ->assertSee('tenant-public-footer', false)
         ->assertSee(__('Apply for membership'), false)
         ->assertDontSee('fi-simple-header', false);
 });
 
-test('tenant admin login page shows shared public navigation and footer', function () {
+test('tenant admin login page does not show public navigation or footer', function () {
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
@@ -63,8 +65,9 @@ test('tenant admin login page shows shared public navigation and footer', functi
 
     $this->get('http://'.$domain.'/admin/login')
         ->assertSuccessful()
-        ->assertSee('tenant-public-nav', false)
-        ->assertSee(__('Apply'), false)
-        ->assertSee('tenant-public-footer', false)
-        ->assertSee(__('All rights reserved.'), false);
+        ->assertDontSee('tenant-public-nav', false)
+        ->assertDontSee('tenant-public-footer', false)
+        ->assertDontSee(__('All rights reserved.'), false)
+        ->assertSee('member-login-card', false)
+        ->assertDontSee('fi-simple-header', false);
 });

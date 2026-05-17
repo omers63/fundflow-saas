@@ -15,6 +15,7 @@ class LoanRepayment extends Model
         'loan_id',
         'amount',
         'paid_at',
+        'notes',
     ];
 
     protected function casts(): array

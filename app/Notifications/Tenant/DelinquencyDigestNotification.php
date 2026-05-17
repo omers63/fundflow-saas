@@ -1,0 +1,98 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Notifications\Tenant;
+
+use App\Models\Tenant\User;
+use Illuminate\Bus\Queueable;
+use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Notifications\Notification;
+use Illuminate\Support\Facades\URL;
+
+class DelinquencyDigestNotification extends Notification
+{
+    use Queueable;
+
+    /**
+     * @param  array<string, int>  $counts
+     */
+    public function __construct(
+        public array $counts,
+        public string $delinquencyUrl,
+    ) {}
+
+    /**
+     * @return list<string>
+     */
+    public function via(object $notifiable): array
+    {
+        $channels = ['database'];
+
+        if ($notifiable instanceof User && filled($notifiable->email)) {
+            $channels[] = 'mail';
+        }
+
+        return $channels;
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        $overdue = $this->counts['overdue_installments'] ?? 0;
+        $arrears = $this->counts['contribution_arrears_periods'] ?? 0;
+        $delinquent = $this->counts['delinquent_members'] ?? 0;
+        $guarantor = $this->counts['guarantor_at_risk'] ?? 0;
+
+        $message = (new MailMessage)
+            ->subject(__('Delinquency digest'))
+            ->greeting(__('Hello :name,', ['name' => $notifiable->name]))
+            ->line(__('Delinquency activity needs your attention:'))
+            ->line(__(':overdue overdue installment(s)', ['overdue' => $overdue]))
+            ->line(__(':arrears contribution period(s) in arrears', ['arrears' => $arrears]))
+            ->line(__(':delinquent delinquent member(s)', ['delinquent' => $delinquent]));
+
+        if ($guarantor > 0) {
+            $message->line(__(':guarantor loan(s) with guarantor exposure', ['guarantor' => $guarantor]));
+        }
+
+        return $message->action(__('Open delinquency workspace'), $this->absoluteDelinquencyUrl());
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toDatabase(object $notifiable): array
+    {
+        return $this->payload();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function payload(): array
+    {
+        $overdue = $this->counts['overdue_installments'] ?? 0;
+        $arrears = $this->counts['contribution_arrears_periods'] ?? 0;
+        $delinquent = $this->counts['delinquent_members'] ?? 0;
+
+        return [
+            'title' => __('Delinquency digest'),
+            'body' => __(':overdue overdue installment(s) · :arrears contribution period(s) in arrears · :delinquent delinquent member(s). Open the delinquency workspace to review.', [
+                'overdue' => $overdue,
+                'arrears' => $arrears,
+                'delinquent' => $delinquent,
+            ]),
+            'delinquency_url' => $this->absoluteDelinquencyUrl(),
+            'counts' => $this->counts,
+        ];
+    }
+
+    protected function absoluteDelinquencyUrl(): string
+    {
+        if (str_starts_with($this->delinquencyUrl, 'http://') || str_starts_with($this->delinquencyUrl, 'https://')) {
+            return $this->delinquencyUrl;
+        }
+
+        return URL::to($this->delinquencyUrl);
+    }
+}

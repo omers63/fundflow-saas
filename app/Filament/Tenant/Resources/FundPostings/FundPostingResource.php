@@ -5,11 +5,13 @@ namespace App\Filament\Tenant\Resources\FundPostings;
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Tenant\Resources\FundPostings\Pages\ListFundPostings;
 use App\Filament\Tenant\Resources\FundPostings\Tables\FundPostingsTable;
+use App\Filament\Tenant\Widgets\FundPostingInsightsWidget;
 use App\Models\Tenant\FundPosting;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Livewire\Component;
 use UnitEnum;
 
 class FundPostingResource extends Resource
@@ -22,9 +24,13 @@ class FundPostingResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = 'Fund Management';
 
-    protected static ?string $navigationLabel = 'Posted Funds';
+    protected static ?string $navigationLabel = 'Deposits';
 
-    protected static ?int $navigationSort = 6;
+    protected static ?string $modelLabel = 'Deposit';
+
+    protected static ?string $pluralModelLabel = 'Deposits';
+
+    protected static ?int $navigationSort = 4;
 
     public static function canCreate(): bool
     {
@@ -51,5 +57,21 @@ class FundPostingResource extends Resource
         return [
             'index' => ListFundPostings::route('/'),
         ];
+    }
+
+    public static function dispatchInsightsRefresh(?Component $livewire): void
+    {
+        if ($livewire === null) {
+            return;
+        }
+
+        $targetName = json_encode(
+            app('livewire.factory')->resolveComponentName(FundPostingInsightsWidget::class),
+            JSON_THROW_ON_ERROR
+        );
+
+        $livewire->js(
+            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
+        );
     }
 }

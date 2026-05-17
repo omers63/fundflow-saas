@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Tenant\Account;
+use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use Carbon\Carbon;
@@ -11,6 +12,7 @@ use DateTimeInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use RuntimeException;
 
 class AccountingService
 {
@@ -653,5 +655,72 @@ class AccountingService
             'balance' => 0,
             'is_master' => false,
         ]);
+    }
+
+    public function postContribution(Contribution $contribution): void
+    {
+        $contribution->loadMissing('member');
+        $member = $contribution->member;
+        $memberCash = $member->cashAccount;
+        $memberFund = $member->fundAccount;
+        $masterFund = Account::masterFund();
+
+        if ($memberCash === null || $memberFund === null) {
+            throw new InvalidArgumentException(__('Member accounts are not configured.'));
+        }
+
+        $amount = (float) $contribution->amount;
+        $lateFee = (float) ($contribution->late_fee_amount ?? 0);
+        $periodLabel = $contribution->period?->format('M Y') ?? '';
+        $description = __('Contribution — :period', ['period' => $periodLabel]);
+
+        DB::transaction(function () use ($contribution, $memberCash, $memberFund, $masterFund, $amount, $lateFee, $description): void {
+            if ($contribution->payment_method === Contribution::PAYMENT_METHOD_CASH_ACCOUNT) {
+                $this->debit($memberCash, $amount + $lateFee, $description, $contribution);
+            }
+
+            $this->credit($masterFund, $amount, $description, $contribution);
+            $this->credit($memberFund, $amount, $description, $contribution);
+
+            if ($lateFee > 0.00001) {
+                $masterCash = Account::masterCash();
+                $this->credit(
+                    $masterCash,
+                    $lateFee,
+                    __('Contribution late fee — :period', ['period' => $contribution->period?->format('M Y') ?? '']),
+                    $contribution,
+                );
+            }
+        });
+    }
+
+    public function fundDependentCashAccount(
+        Member $parent,
+        Member $dependent,
+        float $amount,
+        string $note = '',
+    ): void {
+        if ($amount <= 0) {
+            throw new InvalidArgumentException(__('Amount must be greater than zero.'));
+        }
+
+        $parentCash = $parent->cashAccount;
+        $dependentCash = $dependent->cashAccount;
+
+        if ($parentCash === null || $dependentCash === null) {
+            throw new InvalidArgumentException(__('Member cash accounts are not configured.'));
+        }
+
+        if ((float) $parentCash->balance < $amount) {
+            throw new RuntimeException(__('Insufficient parent cash balance.'));
+        }
+
+        $debitDesc = trim(__('Transfer to :name', ['name' => $dependent->name]).($note ? " — {$note}" : ''));
+        $creditDesc = trim(__('Transfer from :name', ['name' => $parent->name]).($note ? " — {$note}" : ''));
+
+        DB::transaction(function () use ($parentCash, $dependentCash, $amount, $debitDesc, $creditDesc, $parent, $dependent): void {
+            $this->debit($parentCash, $amount, $debitDesc, $parent);
+            $this->credit($dependentCash, $amount, $creditDesc, $dependent);
+        });
     }
 }

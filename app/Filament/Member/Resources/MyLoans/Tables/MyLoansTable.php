@@ -4,9 +4,11 @@ namespace App\Filament\Member\Resources\MyLoans\Tables;
 
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\LoanFilamentActions;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Models\Tenant\Loan;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
@@ -19,58 +21,48 @@ class MyLoansTable
 {
     public static function configure(Table $table): Table
     {
-        return TableGrouping::apply($table
-            ->columns([
-                TextColumn::make('amount')
-                    ->label('Loan amount')
-                    ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
-                    ->sortable(),
-                TextColumn::make('interest_rate')
-                    ->suffix('%')
-                    ->sortable(),
-                TextColumn::make('term_months')
-                    ->label('Term')
-                    ->suffix(' months')
-                    ->sortable(),
-                TextColumn::make('monthly_repayment')
-                    ->money(fn (): string => Setting::get('general', 'currency', 'USD')),
-                TextColumn::make('total_repaid')
-                    ->money(fn (): string => Setting::get('general', 'currency', 'USD')),
-                TextColumn::make('status')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'pending' => 'warning',
-                        'approved' => 'info',
-                        'disbursed', 'repaying' => 'primary',
-                        'completed' => 'success',
-                        'defaulted' => 'danger',
-                    }),
-                TextColumn::make('applied_at')
-                    ->dateTime()
-                    ->sortable(),
-            ])
-            ->filters([
-                SelectFilter::make('status')
-                    ->options([
-                        'pending' => 'Pending',
-                        'approved' => 'Approved',
-                        'disbursed' => 'Disbursed',
-                        'repaying' => 'Repaying',
-                        'completed' => 'Completed',
-                        'defaulted' => 'Defaulted',
+        $currency = Setting::get('general', 'currency', 'USD');
+
+        return TableGrouping::apply(
+            $table
+                ->columnManager(true)
+                ->columns([
+                    TextColumn::make('amount_requested')
+                        ->label(__('Amount'))
+                        ->money($currency)
+                        ->sortable(),
+                    TextColumn::make('outstanding')
+                        ->label(__('Outstanding'))
+                        ->state(fn (Loan $record): float => $record->getOutstandingBalance())
+                        ->money($currency),
+                    TextColumn::make('installments_count')
+                        ->label(__('Installments'))
+                        ->placeholder(__('—')),
+                    TextColumn::make('status')
+                        ->badge()
+                        ->formatStateUsing(fn (string $state): string => Loan::statusOptions()[$state] ?? $state)
+                        ->color(fn (string $state): string => Loan::statusColor($state)),
+                    TextColumn::make('applied_at')
+                        ->dateTime()
+                        ->sortable(),
+                ])
+                ->filters([
+                    SelectFilter::make('status')
+                        ->options(Loan::statusOptions()),
+                    DateColumnRangeFilter::make('applied_at', 'Applied'),
+                ])
+                ->recordUrl(fn (Model $record): string => MyLoanResource::getUrl('view', ['record' => $record]))
+                ->recordActions(TableRecordActionGroups::wrap([
+                    ViewAction::make(),
+                    LoanFilamentActions::cancel(),
+                ]))
+                ->toolbarActions([
+                    BulkActionGroup::make([
+                        TableToolbar::refreshBulkAction(),
                     ]),
-                DateColumnRangeFilter::make('applied_at', 'Applied'),
-            ])
-            ->recordUrl(fn (Model $record): string => MyLoanResource::getUrl('view', ['record' => $record]))
-            ->recordActions(TableRecordActionGroups::wrap([
-                ViewAction::make(),
-            ]))
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    TableToolbar::refreshBulkAction(),
-                ]),
-            ])
-            ->defaultSort('applied_at', 'desc'),
-            TableGrouping::loans(includeMember: false));
+                ])
+                ->defaultSort('applied_at', 'desc'),
+            TableGrouping::loans(includeMember: false)
+        );
     }
 }

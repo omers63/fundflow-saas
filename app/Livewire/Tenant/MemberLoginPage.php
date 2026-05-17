@@ -15,7 +15,7 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-#[Layout('layouts.tenant-public')]
+#[Layout('layouts.tenant-auth')]
 #[Title('Sign in')]
 class MemberLoginPage extends Component
 {

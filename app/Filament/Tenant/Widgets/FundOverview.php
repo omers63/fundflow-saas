@@ -10,11 +10,14 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
+use App\Support\Lang;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
 class FundOverview extends BaseWidget
 {
+    protected static bool $isDiscovered = false;
+
     protected function getStats(): array
     {
         $masterAccounts = Account::master()->get()->keyBy('type');
@@ -29,36 +32,36 @@ class FundOverview extends BaseWidget
         $activeLoans = Loan::active()->count();
 
         return [
-            Stat::make(__('Master Cash'), '$'.number_format($bal('cash'), 2))
-                ->description(__('Cash on hand'))
+            Stat::make(Lang::ui('Master Cash'), '$'.number_format($bal('cash'), 2))
+                ->description(Lang::ui('Cash on hand'))
                 ->descriptionIcon('heroicon-m-banknotes')
                 ->color('info')
                 ->url($masterViewUrl($masterAccounts->get('cash'))),
-            Stat::make(__('Master Fund'), '$'.number_format($bal('fund'), 2))
-                ->description(__('Total member funds'))
+            Stat::make(Lang::ui('Master Fund'), '$'.number_format($bal('fund'), 2))
+                ->description(Lang::ui('Total member funds'))
                 ->descriptionIcon('heroicon-m-building-library')
                 ->color('success')
                 ->url($masterViewUrl($masterAccounts->get('fund'))),
-            Stat::make(__('Master Bank'), '$'.number_format($bal('bank'), 2))
-                ->description(__('Bank balance'))
+            Stat::make(Lang::ui('Master Bank'), '$'.number_format($bal('bank'), 2))
+                ->description(Lang::ui('Bank balance'))
                 ->descriptionIcon('heroicon-m-building-office-2')
                 ->color('primary')
                 ->url($masterViewUrl($masterAccounts->get('bank'))),
-            Stat::make(__('Active Members'), $activeMembers)
-                ->description(__('Currently active'))
+            Stat::make(Lang::ui('Active Members'), $activeMembers)
+                ->description(Lang::ui('Currently active'))
                 ->descriptionIcon('heroicon-m-users')
                 ->color('primary')
                 ->url(MemberResource::getUrl('index')),
-            Stat::make(__('Pending Contributions'), $pendingContributions)
-                ->description(__('Awaiting posting'))
+            Stat::make(Lang::ui('Pending Contributions'), $pendingContributions)
+                ->description(Lang::ui('Awaiting posting'))
                 ->descriptionIcon('heroicon-m-clock')
                 ->color($pendingContributions > 0 ? 'warning' : 'success')
                 ->url(ContributionResource::getUrl('index')),
-            Stat::make(__('Outstanding Loans'), '$'.number_format(
+            Stat::make(Lang::ui('Outstanding Loans'), '$'.number_format(
                 Loan::active()->get()->sum(fn ($loan) => $loan->getOutstandingBalance()),
                 2
             ))
-                ->description(__(':count active loan(s)', ['count' => $activeLoans]))
+                ->description(Lang::ui(':count active loan(s)', ['count' => $activeLoans]))
                 ->descriptionIcon('heroicon-m-document-text')
                 ->color($activeLoans > 0 ? 'warning' : 'success')
                 ->url(LoanResource::getUrl('index')),

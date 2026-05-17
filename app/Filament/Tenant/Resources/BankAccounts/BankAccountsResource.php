@@ -34,7 +34,7 @@ class BankAccountsResource extends Resource
 
     protected static ?string $slug = 'bank-accounts';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 1;
 
     public static function canCreate(): bool
     {

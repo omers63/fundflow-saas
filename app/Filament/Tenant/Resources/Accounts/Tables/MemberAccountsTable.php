@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\Accounts\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberAccountTableActions;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -49,26 +50,30 @@ class MemberAccountsTable
             ->sortable()
             ->toggledHiddenByDefault();
 
-        return TableGrouping::apply($table
-            ->columns($columns)
-            ->filters([
-                SelectFilter::make('member_id')
-                    ->label('Member')
-                    ->relationship('member', 'name')
-                    ->searchable()
-                    ->preload(),
-                DateColumnRangeFilter::make('updated_at', 'Last updated'),
-            ])
-            ->recordUrl(fn (Model $record): string => AccountResource::getUrl('view', ['record' => $record]))
-            ->recordActions(TableRecordActionGroups::wrap([
-                ViewAction::make(),
-            ]))
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    TableToolbar::refreshBulkAction(),
-                ]),
-            ])
-            ->defaultSort('member_id'),
-            TableGrouping::memberAccounts($showTypeColumn));
+        return TableGrouping::apply(
+            $table
+                ->columns($columns)
+                ->filters([
+                    SelectFilter::make('member_id')
+                        ->label('Member')
+                        ->relationship('member', 'name')
+                        ->searchable()
+                        ->preload(),
+                    DateColumnRangeFilter::make('updated_at', 'Last updated'),
+                ])
+                ->recordUrl(fn (Model $record): string => AccountResource::getUrl('view', ['record' => $record]))
+                ->recordActions(TableRecordActionGroups::wrap([
+                    ViewAction::make(),
+                    MemberAccountTableActions::delete(),
+                ]))
+                ->toolbarActions([
+                    BulkActionGroup::make([
+                        MemberAccountTableActions::deleteBulk(),
+                        TableToolbar::refreshBulkAction(),
+                    ]),
+                ])
+                ->defaultSort('member_id'),
+            TableGrouping::memberAccounts($showTypeColumn)
+        );
     }
 }

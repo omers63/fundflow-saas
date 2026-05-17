@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Filament\Support\Action as AppAction;
 use App\Filament\Support\TabLabelColors;
 use App\Filament\Support\TableSummaryFooter;
 use App\Filament\Tables\Columns\BadgeColumn as AppBadgeColumn;
@@ -19,7 +20,9 @@ use App\Filament\Tables\Columns\ToggleColumn as AppToggleColumn;
 use App\Filament\Tables\Columns\ViewColumn as AppViewColumn;
 use App\Filament\Tables\Concerns\CapitalizesTableColumnHeaderLabel;
 use App\Http\Responses\FilamentLogoutResponse;
-use Filament\Actions\Action;
+use App\Models\Tenant\LoanInstallment;
+use App\Observers\LoanInstallmentObserver;
+use Filament\Actions\Action as FilamentAction;
 use Filament\Auth\Http\Responses\Contracts\LogoutResponse;
 use Filament\Forms\Components\Field;
 use Filament\Infolists\Components\TextEntry;
@@ -54,6 +57,8 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->registerFilamentTableColumnHeaderBindings();
 
+        $this->app->bind(FilamentAction::class, AppAction::class);
+
         $this->app->bind(
             LogoutResponse::class,
             FilamentLogoutResponse::class,
@@ -65,6 +70,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        LoanInstallment::observe(LoanInstallmentObserver::class);
+
         Column::configureUsing(function (Column $column): Column {
             $column = $column
                 ->toggleable()
@@ -92,7 +99,7 @@ class AppServiceProvider extends ServiceProvider
 
         Field::configureUsing(fn (Field $field): Field => $field->translateLabel());
 
-        Action::configureUsing(fn (Action $action): Action => $action->translateLabel());
+        FilamentAction::configureUsing(fn (FilamentAction $action): FilamentAction => $action->translateLabel());
 
         BaseFilter::configureUsing(fn (BaseFilter $filter): BaseFilter => $filter->translateLabel());
 

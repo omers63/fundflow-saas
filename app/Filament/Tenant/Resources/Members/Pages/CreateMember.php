@@ -13,5 +13,7 @@ class CreateMember extends CreateRecord
     protected function afterCreate(): void
     {
         app(AccountingService::class)->createMemberAccounts($this->record);
+
+        MemberResource::dispatchInsightsRefresh($this);
     }
 }

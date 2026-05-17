@@ -1,0 +1,1 @@
+{{-- Redirect handled in mount(); minimal view for Livewire. --}}

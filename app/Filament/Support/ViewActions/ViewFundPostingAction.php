@@ -59,7 +59,7 @@ final class ViewFundPostingAction
     {
         return ViewAction::make()
             ->modalWidth('2xl')
-            ->modalHeading(fn (FundPosting $record): string => __('Fund posting — :name', [
+            ->modalHeading(fn (FundPosting $record): string => __('Deposit — :name', [
                 'name' => $record->member->name,
             ]))
             ->mutateRecordDataUsing(function (array $data, FundPosting $record): array {

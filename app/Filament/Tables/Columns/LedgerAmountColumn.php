@@ -6,7 +6,7 @@ use App\Filament\Support\MoneyDisplay;
 use App\Filament\Tables\Columns\Summarizers\SignedLedgerSum;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
-use Illuminate\Support\Str;
+use App\Support\Lang;
 
 class LedgerAmountColumn extends TextColumn
 {
@@ -26,7 +26,7 @@ class LedgerAmountColumn extends TextColumn
             ->badge()
             ->color(fn ($state, Transaction $record): string => MoneyDisplay::color($record->getSignedAmount()));
 
-        $label = Str::ucfirst(str_replace('_', ' ', $this->getName()));
+        $label = Lang::formatUiLabel(str_replace('_', ' ', $this->getName()));
 
         $signedNetSum = SignedLedgerSum::make()
             ->label($label)

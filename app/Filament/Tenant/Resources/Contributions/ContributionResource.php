@@ -7,12 +7,14 @@ use App\Filament\Tenant\Resources\Contributions\Pages\CreateContribution;
 use App\Filament\Tenant\Resources\Contributions\Pages\ListContributions;
 use App\Filament\Tenant\Resources\Contributions\Schemas\ContributionForm;
 use App\Filament\Tenant\Resources\Contributions\Tables\ContributionsTable;
+use App\Filament\Tenant\Widgets\ContributionInsightsWidget;
 use App\Models\Tenant\Contribution;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Livewire\Component;
 use UnitEnum;
 
 class ContributionResource extends Resource
@@ -43,5 +45,21 @@ class ContributionResource extends Resource
             'index' => ListContributions::route('/'),
             'create' => CreateContribution::route('/create'),
         ];
+    }
+
+    public static function dispatchInsightsRefresh(?Component $livewire): void
+    {
+        if ($livewire === null) {
+            return;
+        }
+
+        $targetName = json_encode(
+            app('livewire.factory')->resolveComponentName(ContributionInsightsWidget::class),
+            JSON_THROW_ON_ERROR
+        );
+
+        $livewire->js(
+            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
+        );
     }
 }

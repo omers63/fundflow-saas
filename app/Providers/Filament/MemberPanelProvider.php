@@ -45,7 +45,7 @@ class MemberPanelProvider extends PanelProvider
             ->favicon(fn (): string => PublicPageSettings::fundLogoUrl())
             ->brandLogo(fn (): string => PublicPageSettings::fundPanelBrandLogoUrl())
             ->darkModeBrandLogo(fn (): string => PublicPageSettings::fundPanelBrandLogoUrl())
-            ->brandLogoHeight('5rem')
+            ->brandLogoHeight(PublicPageSettings::BRAND_LOGO_HEIGHT)
             ->sidebarCollapsibleOnDesktop()
             ->sidebarFullyCollapsibleOnDesktop()
             ->userMenuItems([

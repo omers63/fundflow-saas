@@ -20,8 +20,14 @@ it('resolves the all tab from the tab query string when Livewire is not bound', 
     expect(AccountResource::resolveListMemberAccountsTab())->toBe('all');
 });
 
-it('falls back to cash for an invalid tab query', function () {
+it('defaults to all when no tab query is present', function () {
+    request()->replace([]);
+
+    expect(AccountResource::resolveListMemberAccountsTab())->toBe('all');
+});
+
+it('falls back to all for an invalid tab query', function () {
     request()->replace(['tab' => 'invalid']);
 
-    expect(AccountResource::resolveListMemberAccountsTab())->toBe('cash');
+    expect(AccountResource::resolveListMemberAccountsTab())->toBe('all');
 });

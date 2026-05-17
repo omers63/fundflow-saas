@@ -3,12 +3,13 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Concerns\RegistersTenantPublicNavigation;
+use App\Filament\Tenant\Pages\Dashboard;
+use App\Livewire\Tenant\TenantAdminLoginPage;
 use App\Support\PublicPageSettings;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
@@ -33,7 +34,7 @@ class TenantPanelProvider extends PanelProvider
             ->id('tenant')
             ->path('admin')
             ->authGuard('tenant')
-            ->login()
+            ->login(TenantAdminLoginPage::class)
             ->disabledErrorNotification(419)
             ->disabledErrorNotification(401)
             ->viteTheme('resources/css/filament/tenant/theme.css')
@@ -44,13 +45,14 @@ class TenantPanelProvider extends PanelProvider
             ->favicon(fn (): string => PublicPageSettings::fundLogoUrl())
             ->brandLogo(fn (): string => PublicPageSettings::fundPanelBrandLogoUrl())
             ->darkModeBrandLogo(fn (): string => PublicPageSettings::fundPanelBrandLogoUrl())
-            ->brandLogoHeight('5rem')
+            ->brandLogoHeight(PublicPageSettings::BRAND_LOGO_HEIGHT)
             ->sidebarCollapsibleOnDesktop()
             ->sidebarFullyCollapsibleOnDesktop()
             ->discoverResources(in: app_path('Filament/Tenant/Resources'), for: 'App\\Filament\\Tenant\\Resources')
+            ->discoverClusters(in: app_path('Filament/Tenant/Clusters'), for: 'App\\Filament\\Tenant\\Clusters')
             ->discoverPages(in: app_path('Filament/Tenant/Pages'), for: 'App\\Filament\\Tenant\\Pages')
             ->pages([
-                Pages\Dashboard::class,
+                Dashboard::class,
             ])
             ->discoverWidgets(in: app_path('Filament/Tenant/Widgets'), for: 'App\\Filament\\Tenant\\Widgets')
             ->widgets([])

@@ -54,7 +54,7 @@ class FundPostingService
             $bankTxn = BankTransaction::create([
                 'bank_statement_id' => $statement->id,
                 'transaction_date' => $postingDate,
-                'description' => "Fund posting by {$member->name}",
+                'description' => __('Deposit by :name', ['name' => $member->name]),
                 'amount' => $amount,
                 'reference' => $reference,
                 'status' => 'imported',
@@ -87,7 +87,7 @@ class FundPostingService
             $masterCash = Account::masterCash();
             $memberCash = $member->cashAccount;
             $amount = (float) $posting->amount;
-            $description = "Fund posting #{$posting->id} by {$member->name}";
+            $description = __('Deposit #:id by :name', ['id' => $posting->id, 'name' => $member->name]);
 
             $this->accounting->credit($masterCash, $amount, $description, $posting);
 

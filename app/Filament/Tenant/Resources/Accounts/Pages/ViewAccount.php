@@ -2,9 +2,11 @@
 
 namespace App\Filament\Tenant\Resources\Accounts\Pages;
 
+use App\Filament\Support\MemberAccountTableActions;
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
 use App\Filament\Tenant\Widgets\AccountDetailInsightsWidget;
 use App\Models\Tenant\Setting;
+use Filament\Actions\Action;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\TextEntry;
@@ -18,6 +20,17 @@ class ViewAccount extends ViewRecord
     public function getHeading(): string
     {
         return $this->record->name;
+    }
+
+    /**
+     * @return array<int, Action>
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            MemberAccountTableActions::delete()
+                ->successRedirectUrl(AccountResource::getUrl('index')),
+        ];
     }
 
     /**

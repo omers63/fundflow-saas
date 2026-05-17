@@ -11,10 +11,13 @@ class Account extends Model
 {
     use HasFactory;
 
-    public const TYPES = ['cash', 'fund', 'bank', 'expense', 'fees', 'invest'];
+    public const TYPE_LOAN = 'loan';
+
+    public const TYPES = ['cash', 'fund', 'bank', 'expense', 'fees', 'invest', 'loan'];
 
     protected $fillable = [
         'member_id',
+        'loan_id',
         'type',
         'name',
         'balance',

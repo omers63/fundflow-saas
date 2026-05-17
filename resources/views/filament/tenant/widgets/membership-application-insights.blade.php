@@ -97,12 +97,12 @@
                             @endif
                         </div>
                         <p class="mt-0.5 pl-1 text-[10px] font-medium uppercase tracking-wide text-gray-500">
-                            {{ $card['label'] }}</p>
+                            {{ ui_label($card['label']) }}</p>
                         <p class="pl-1 text-lg font-bold tabular-nums leading-tight text-gray-900 dark:text-white">
                             {{ $card['value'] }}@if (!empty($card['suffix'] ?? null))<span
                             class="text-[10px] font-normal text-gray-400">{{ $card['suffix'] }}</span>@endif
                         </p>
-                        <p class="pl-1 text-[10px] text-gray-400">{{ $card['sub'] }}</p>
+                        <p class="pl-1 text-[10px] text-gray-400">{{ ui_label($card['sub']) }}</p>
                     </div>
                 @endforeach
             </div>

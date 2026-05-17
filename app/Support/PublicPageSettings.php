@@ -10,9 +10,40 @@ final class PublicPageSettings
 {
     public const GROUP = 'public';
 
-    public static function fundName(?string $default = null): string
+    /** Matches Filament panel `brandLogoHeight()` on tenant and member panels. */
+    public const BRAND_LOGO_HEIGHT = '5rem';
+
+    public static function fundName(?string $default = null, ?string $locale = null): string
     {
-        return (string) (self::get('fund_name') ?: $default ?: Setting::get('general', 'fund_name', 'Family Fund'));
+        $locale = $locale ?? app()->getLocale();
+        $primaryKey = $locale === 'ar' ? 'fund_name_ar' : 'fund_name_en';
+        $fallbackKey = $locale === 'ar' ? 'fund_name_en' : 'fund_name_ar';
+
+        $name = trim((string) self::get($primaryKey));
+
+        if ($name === '') {
+            $name = trim((string) self::get($fallbackKey));
+        }
+
+        if ($name === '') {
+            $name = trim((string) self::get('fund_name'));
+        }
+
+        if ($name !== '') {
+            return $name;
+        }
+
+        if (filled($default)) {
+            return $default;
+        }
+
+        $generalFallback = (string) Setting::get('general', 'fund_name', '');
+
+        if ($generalFallback !== '') {
+            return $generalFallback;
+        }
+
+        return $locale === 'ar' ? 'صندوق العائلة' : 'Family Fund';
     }
 
     public static function fundLogoPath(): ?string
@@ -207,7 +238,9 @@ final class PublicPageSettings
     public static function defaults(): array
     {
         return [
-            'fund_name' => 'Family Fund',
+            'fund_name_en' => '',
+            'fund_name_ar' => '',
+            'fund_name' => '',
             'fund_logo' => '',
             'membership_no_limit' => '1',
             'membership_max_members' => '',
@@ -228,7 +261,9 @@ final class PublicPageSettings
      */
     public static function all(): array
     {
-        return array_merge(self::defaults(), Setting::getGroup(self::GROUP));
+        $stored = Setting::getGroup(self::GROUP);
+
+        return self::normalizeFundNameKeys(array_merge(self::defaults(), $stored), $stored);
     }
 
     public static function get(string $key, mixed $default = null): mixed
@@ -281,12 +316,40 @@ final class PublicPageSettings
                 continue;
             }
 
+            if ($key === 'fund_name') {
+                continue;
+            }
+
             Setting::set(self::GROUP, $key, is_scalar($value) ? (string) $value : '');
         }
 
-        if (filled($values['fund_name'] ?? null)) {
-            Setting::set('general', 'fund_name', (string) $values['fund_name']);
+        $fundNameEn = trim((string) ($values['fund_name_en'] ?? ''));
+
+        if ($fundNameEn !== '') {
+            Setting::set('general', 'fund_name', $fundNameEn);
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     * @param  array<string, mixed>  $stored
+     * @return array<string, mixed>
+     */
+    private static function normalizeFundNameKeys(array $values, array $stored): array
+    {
+        $legacy = trim((string) ($stored['fund_name'] ?? ''));
+
+        if (! array_key_exists('fund_name_en', $stored) && $legacy !== '') {
+            $values['fund_name_en'] = $legacy;
+        }
+
+        if (! array_key_exists('fund_name_ar', $stored) && $legacy !== '' && trim((string) ($values['fund_name_ar'] ?? '')) === '') {
+            $values['fund_name_ar'] = $legacy;
+        }
+
+        unset($values['fund_name']);
+
+        return $values;
     }
 
     private static function nullableUrl(string $key): ?string

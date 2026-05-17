@@ -67,21 +67,20 @@ class ListAccounts extends ListRecords
 
     public function getTabs(): array
     {
-        return [
-            'cash' => Tab::make(__('Cash')),
-            'fund' => Tab::make(__('Fund')),
-            'loans' => Tab::make(__('Loans')),
-            'all' => Tab::make(__('All')),
-        ];
+        return collect(AccountResource::tabKeys())
+            ->mapWithKeys(fn (string $tab): array => [
+                $tab => Tab::make(AccountResource::tabLabel($tab)),
+            ])
+            ->all();
     }
 
     protected function getTableQuery(): Builder
     {
         return match (AccountResource::resolveListMemberAccountsTab()) {
+            'cash' => static::getResource()::getEloquentQuery()->where('type', 'cash'),
             'fund' => static::getResource()::getEloquentQuery()->where('type', 'fund'),
             'loans' => Loan::query(),
-            'all' => static::getResource()::getEloquentQuery(),
-            default => static::getResource()::getEloquentQuery()->where('type', 'cash'),
+            default => static::getResource()::getEloquentQuery(),
         };
     }
 }

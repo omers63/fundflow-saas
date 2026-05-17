@@ -4,9 +4,12 @@ namespace App\Filament\Tenant\Resources\Loans\Pages;
 
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Models\Tenant\Member;
-use App\Services\LoanService;
+use App\Services\Loans\LoanLifecycleService;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
+use Filament\Support\Exceptions\Halt;
+use Illuminate\Database\Eloquent\Model;
+use Throwable;
 
 class CreateLoan extends CreateRecord
 {
@@ -22,28 +25,28 @@ class CreateLoan extends CreateRecord
         }
     }
 
-    protected function mutateFormDataBeforeCreate(array $data): array
+    protected function handleRecordCreation(array $data): Model
     {
         $member = Member::findOrFail($data['member_id']);
-        $eligibility = app(LoanService::class)->checkEligibility($member);
 
-        if (! $eligibility['eligible']) {
+        try {
+            return app(LoanLifecycleService::class)->applyForLoan(
+                $member,
+                (float) $data['amount_requested'],
+                filled($data['purpose'] ?? null) ? (string) $data['purpose'] : null,
+                filled($data['guarantor_member_id'] ?? null) ? (int) $data['guarantor_member_id'] : null,
+                (bool) ($data['is_emergency'] ?? false),
+                (bool) ($data['has_grace_cycle'] ?? true),
+            );
+        } catch (Throwable $exception) {
             Notification::make()
-                ->title(__('Member not eligible for a loan'))
-                ->body(implode(' ', $eligibility['reasons']))
+                ->title(__('Could not create loan application'))
+                ->body($exception->getMessage())
                 ->danger()
                 ->persistent()
                 ->send();
 
-            $this->halt();
+            throw new Halt;
         }
-
-        $totalDue = $data['amount'] + ($data['amount'] * $data['interest_rate'] / 100);
-        $data['monthly_repayment'] = round($totalDue / $data['term_months'], 2);
-        $data['total_repaid'] = 0;
-        $data['status'] = 'pending';
-        $data['applied_at'] = now();
-
-        return $data;
     }
 }

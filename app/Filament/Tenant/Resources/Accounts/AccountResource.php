@@ -8,12 +8,14 @@ use App\Filament\Tenant\Resources\Accounts\Pages\ViewAccount;
 use App\Filament\Tenant\Resources\Accounts\RelationManagers\TransactionsRelationManager;
 use App\Filament\Tenant\Resources\Accounts\Tables\MemberAccountsLoansTable;
 use App\Filament\Tenant\Resources\Accounts\Tables\MemberAccountsTable;
+use App\Filament\Tenant\Widgets\MemberAccountsInsightsWidget;
 use App\Models\Tenant\Account;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Livewire\Component;
 use Livewire\Livewire;
 use UnitEnum;
 
@@ -35,11 +37,30 @@ class AccountResource extends Resource
 
     protected static ?string $slug = 'member-accounts';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 3;
 
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->where('is_master', false);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function tabKeys(): array
+    {
+        return ['all', 'cash', 'fund', 'loans'];
+    }
+
+    public static function tabLabel(string $tab): string
+    {
+        return match ($tab) {
+            'all' => __('All'),
+            'cash' => __('Cash'),
+            'fund' => __('Fund'),
+            'loans' => __('Loans'),
+            default => ucfirst($tab),
+        };
     }
 
     public static function table(Table $table): Table
@@ -71,10 +92,10 @@ class AccountResource extends Resource
         if ($livewire instanceof ListAccounts && filled($livewire->activeTab)) {
             $tab = $livewire->activeTab;
         } else {
-            $tab = request()->string('tab')->toString() ?: 'cash';
+            $tab = request()->string('tab')->toString() ?: 'all';
         }
 
-        return in_array($tab, ['cash', 'fund', 'loans', 'all'], true) ? $tab : 'cash';
+        return in_array($tab, self::tabKeys(), true) ? $tab : 'all';
     }
 
     public static function getRelations(): array
@@ -90,5 +111,21 @@ class AccountResource extends Resource
             'index' => ListAccounts::route('/'),
             'view' => ViewAccount::route('/{record}'),
         ];
+    }
+
+    public static function dispatchInsightsRefresh(?Component $livewire): void
+    {
+        if ($livewire === null) {
+            return;
+        }
+
+        $targetName = json_encode(
+            app('livewire.factory')->resolveComponentName(MemberAccountsInsightsWidget::class),
+            JSON_THROW_ON_ERROR
+        );
+
+        $livewire->js(
+            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
+        );
     }
 }

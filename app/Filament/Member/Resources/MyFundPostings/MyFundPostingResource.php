@@ -23,11 +23,11 @@ class MyFundPostingResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
 
-    protected static ?string $navigationLabel = 'Post Funds';
+    protected static ?string $navigationLabel = 'Deposits';
 
-    protected static ?string $modelLabel = 'Fund Posting';
+    protected static ?string $modelLabel = 'Deposit';
 
-    protected static ?string $pluralModelLabel = 'My Fund Postings';
+    protected static ?string $pluralModelLabel = 'Deposits';
 
     protected static ?int $navigationSort = 2;
 

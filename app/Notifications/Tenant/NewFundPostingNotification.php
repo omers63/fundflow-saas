@@ -25,8 +25,12 @@ class NewFundPostingNotification extends Notification
     public function toArray(object $notifiable): array
     {
         return [
-            'title' => 'New Fund Posting Request',
-            'body' => "{$this->fundPosting->member->name} posted {$this->fundPosting->amount} on {$this->fundPosting->posting_date->format('M d, Y')}",
+            'title' => __('New deposit request'),
+            'body' => __(':name submitted :amount on :date', [
+                'name' => $this->fundPosting->member->name,
+                'amount' => $this->fundPosting->amount,
+                'date' => $this->fundPosting->posting_date->format('M d, Y'),
+            ]),
             'fund_posting_id' => $this->fundPosting->id,
             'member_name' => $this->fundPosting->member->name,
             'amount' => $this->fundPosting->amount,

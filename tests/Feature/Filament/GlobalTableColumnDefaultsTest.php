@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Lang;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Support\Enums\TextSize;
 use Filament\Tables\Columns\Column;
@@ -31,10 +32,16 @@ it('defaults table columns to toggleable, sortable, searchable, translateLabel, 
         ->and($icon->canHeaderWrap())->toBeTrue();
 });
 
-it('capitalizes the first character of resolved table header labels', function () {
+it('title-cases resolved table header labels', function () {
     $column = TextColumn::make('example_field')->label('lower case header');
 
-    expect($column->getLabel())->toBe('Lower case header');
+    expect($column->getLabel())->toBe('Lower Case Header');
+});
+
+it('formats ui labels with title case', function () {
+    expect(Lang::formatUiLabel('member cash balance'))
+        ->toBe('Member Cash Balance')
+        ->and(Lang::formatUiLabel(''))->toBe('');
 });
 
 it('defaults text infolist entries to wrap and compact size', function () {

@@ -5,6 +5,7 @@ namespace App\Filament\Member\Resources\MyLoans;
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Member\Resources\MyLoans\Pages\ListMyLoans;
 use App\Filament\Member\Resources\MyLoans\Pages\ViewMyLoan;
+use App\Filament\Member\Resources\MyLoans\RelationManagers\InstallmentsRelationManager;
 use App\Filament\Member\Resources\MyLoans\Tables\MyLoansTable;
 use App\Models\Tenant\Loan;
 use BackedEnum;
@@ -45,6 +46,13 @@ class MyLoanResource extends Resource
     public static function table(Table $table): Table
     {
         return MyLoansTable::configure($table);
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            InstallmentsRelationManager::class,
+        ];
     }
 
     public static function getPages(): array

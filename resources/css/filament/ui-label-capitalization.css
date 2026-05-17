@@ -1,0 +1,57 @@
+/**
+ * Title-case multi-word UI labels (first letter of each word uppercase).
+ * Complements PHP formatting in App\Support\Lang::formatUiLabel() for table headers and navigation.
+ * text-transform: capitalize has no effect on Arabic script labels.
+ */
+
+.fi-body .fi-fo-field-label-content,
+.fi-body .fi-fo-field-label:not(.fi-sr-only),
+.fi-body .fi-ta-header-cell,
+.fi-body .fi-ta-header-group-cell,
+.fi-body .fi-ta-cell-label,
+.fi-body .fi-ta-col-manager-label,
+.fi-body .fi-ta-filter-indicators-label,
+.fi-body .fi-tabs-item-label,
+.fi-body .fi-fieldset > legend,
+.fi-body .fi-section-header-heading,
+.fi-body .fi-in-entry-label:not(.fi-sr-only),
+.fi-body .fi-in-entry-label .fi-in-entry-label,
+.fi-body .fi-sidebar-item-label,
+.fi-body .fi-sidebar-group-label,
+.fi-body .fi-topbar-item-label,
+.fi-body .fi-breadcrumbs-item-label,
+.fi-body .fi-dropdown-list-item-label,
+.fi-body .fi-modal-heading,
+.fi-body .fi-header-heading,
+.fi-body .fi-wi-stats-overview-stat-label,
+.fi-body .fi-wi-stats-overview-stat-description,
+.fi-body .fi-btn:not(.fi-icon-btn),
+.fi-body .fi-badge-label,
+.fi-body .fi-pagination-item-label {
+    text-transform: capitalize;
+}
+
+/* Custom dashboard & insights widgets (labels built in services or Blade) */
+.fi-body .ff-dashboard h3.text-\[11px\],
+.fi-body .ff-dashboard h4.text-\[11px\],
+.fi-body .ff-dashboard .ff-dashboard-balance span.text-\[10px\],
+.fi-body .ff-dashboard .ff-dashboard-action span.text-xs,
+.fi-body .ff-dashboard .ff-dashboard-action span.text-\[10px\],
+.fi-body .ff-dashboard .flex.items-center.gap-3.rounded-xl p.text-xs,
+.fi-body .ff-dashboard .flex.items-center.gap-3.rounded-xl p.text-\[11px\],
+.fi-body .ff-dashboard .grid a.flex.flex-col span.text-\[10px\].text-gray-500,
+.fi-body .ff-dashboard p.border-t.text-\[10px\],
+.fi-body .ff-app-insights h3.text-\[11px\],
+.fi-body .ff-app-insights h4.text-\[11px\],
+.fi-body .ff-app-insights .ff-app-insights-kpi > p.text-\[10px\].font-medium,
+.fi-body .ff-app-insights .ff-app-insights-kpi > p.text-\[10px\].text-gray-400,
+.fi-body .ff-app-insights .grid a.flex.flex-col span.text-\[10px\].text-gray-500,
+.fi-body .ff-app-insights a.flex.flex-col.items-center .text-\[10px\].text-gray-500 {
+    text-transform: capitalize;
+}
+
+/* Preserve intentional casing (acronyms, brand names, member names, amounts) */
+.fi-body .ff-label-as-is,
+.fi-body .ff-label-as-is * {
+    text-transform: none !important;
+}

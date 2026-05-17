@@ -53,6 +53,7 @@ test('posting contribution debits member cash and credits member fund and master
     $member->cashAccount->update(['balance' => 5000]);
 
     $contribution = $this->service->recordContribution($member, '2026-05-01');
+    $contribution->update(['payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT]);
     $this->service->postContribution($contribution);
 
     $contribution->refresh();

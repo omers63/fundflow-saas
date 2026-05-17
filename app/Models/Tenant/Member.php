@@ -2,12 +2,15 @@
 
 namespace App\Models\Tenant;
 
+use App\Services\LoanService;
+use App\Support\MemberNumberSettings;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Carbon;
 
 class Member extends Model
 {
@@ -111,6 +114,16 @@ class Member extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function isActive(): bool
+    {
+        return $this->status === 'active';
+    }
+
+    public function loanEligibilityStartDate(): ?Carbon
+    {
+        return $this->joined_at;
+    }
+
     public function scopeActive($query)
     {
         return $query->where('status', 'active');
@@ -128,9 +141,7 @@ class Member extends Model
 
     public static function generateMemberNumber(): string
     {
-        $next = static::query()->count() + 1;
-
-        return 'MEM-'.str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+        return MemberNumberSettings::generate();
     }
 
     public static function isValidContributionAmount(int $amount): bool
@@ -189,33 +200,7 @@ class Member extends Model
 
     public function isEligibleForLoan(): bool
     {
-        $membershipMonths = $this->joined_at->diffInMonths(now());
-        if ($membershipMonths < 12) {
-            return false;
-        }
-
-        if ($this->status !== 'active') {
-            return false;
-        }
-
-        $missedContributions = $this->contributions()
-            ->where('period', '>=', now()->subMonths(3)->startOfMonth())
-            ->where('status', '!=', 'posted')
-            ->count();
-
-        if ($missedContributions > 0) {
-            return false;
-        }
-
-        $hasActiveLoans = $this->loans()
-            ->whereIn('status', ['approved', 'disbursed', 'repaying'])
-            ->exists();
-
-        if ($hasActiveLoans) {
-            return false;
-        }
-
-        return true;
+        return app(LoanService::class)->checkEligibility($this)['eligible'];
     }
 
     public function getFundBalance(): float
@@ -226,5 +211,19 @@ class Member extends Model
     public function getCashBalance(): float
     {
         return (float) ($this->cashAccount?->balance ?? 0);
+    }
+
+    public function isExemptFromContributions(): bool
+    {
+        return Loan::query()
+            ->where('member_id', $this->id)
+            ->where('status', 'active')
+            ->whereHas('installments', fn ($q) => $q->whereIn('status', ['pending', 'overdue']))
+            ->exists();
+    }
+
+    public function monthlyStatements(): HasMany
+    {
+        return $this->hasMany(MonthlyStatement::class);
     }
 }

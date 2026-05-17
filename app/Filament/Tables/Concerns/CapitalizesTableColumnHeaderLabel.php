@@ -2,8 +2,8 @@
 
 namespace App\Filament\Tables\Concerns;
 
+use App\Support\Lang;
 use Illuminate\Contracts\Support\Htmlable;
-use Illuminate\Support\Str;
 
 trait CapitalizesTableColumnHeaderLabel
 {
@@ -21,6 +21,6 @@ trait CapitalizesTableColumnHeaderLabel
             return $label;
         }
 
-        return Str::ucfirst($string);
+        return Lang::formatUiLabel($string);
     }
 }

@@ -116,7 +116,7 @@ class Transaction extends Model
             $reference instanceof BankTransaction => $reference->description,
             $reference instanceof FundPosting => filled($reference->reference)
             ? $reference->reference
-            : __('Fund posting #:id', ['id' => $reference->id]),
+            : __('Deposit #:id', ['id' => $reference->id]),
             $reference instanceof Contribution => __('Contribution #:id', ['id' => $reference->id]),
             $reference instanceof Loan => __('Loan #:id', ['id' => $reference->id]),
             $reference instanceof LoanRepayment => __('Loan repayment #:id', ['id' => $reference->id]),

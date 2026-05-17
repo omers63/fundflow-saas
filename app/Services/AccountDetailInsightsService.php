@@ -240,16 +240,18 @@ final class AccountDetailInsightsService
         $pendingPostings = FundPosting::query()->where('status', 'pending')->count();
 
         return [
-            'panels' => [[
-                'title' => __('Operations queue'),
-                'rows' => [
-                    ['label' => __('Bank to post'), 'value' => (string) $pendingBank],
-                    ['label' => __('Fund postings'), 'value' => (string) $pendingPostings],
-                    ['label' => __('On hand'), 'value' => InsightFormatter::money($balance)],
+            'panels' => [
+                [
+                    'title' => __('Operations queue'),
+                    'rows' => [
+                        ['label' => __('Bank to post'), 'value' => (string) $pendingBank],
+                        ['label' => __('Deposits'), 'value' => (string) $pendingPostings],
+                        ['label' => __('On hand'), 'value' => InsightFormatter::money($balance)],
+                    ],
+                    'url' => BankAccountsResource::getUrl('index', ['tab' => 'transactions']),
+                    'link_label' => __('Bank transactions'),
                 ],
-                'url' => BankAccountsResource::getUrl('index', ['tab' => 'transactions']),
-                'link_label' => __('Bank transactions'),
-            ]],
+            ],
             'sixth_kpi' => [
                 'key' => 'queue',
                 'label' => __('To post'),
@@ -273,17 +275,19 @@ final class AccountDetailInsightsService
         $coveragePercent = $coverage !== null ? min(100, round($coverage * 100, 1)) : 100;
 
         return [
-            'panels' => [[
-                'title' => __('Fund coverage'),
-                'rows' => [
-                    ['label' => __('Master fund'), 'value' => InsightFormatter::money($balance)],
-                    ['label' => __('Loan exposure'), 'value' => InsightFormatter::money($loanExposure)],
-                    ['label' => __('Coverage'), 'value' => $coverage !== null ? $coverage.'×' : '—'],
+            'panels' => [
+                [
+                    'title' => __('Fund coverage'),
+                    'rows' => [
+                        ['label' => __('Master fund'), 'value' => InsightFormatter::money($balance)],
+                        ['label' => __('Loan exposure'), 'value' => InsightFormatter::money($loanExposure)],
+                        ['label' => __('Coverage'), 'value' => $coverage !== null ? $coverage.'×' : '—'],
+                    ],
+                    'progress' => $coveragePercent,
+                    'url' => LoanResource::getUrl('index'),
+                    'link_label' => __('Loans'),
                 ],
-                'progress' => $coveragePercent,
-                'url' => LoanResource::getUrl('index'),
-                'link_label' => __('Loans'),
-            ]],
+            ],
             'sixth_kpi' => [
                 'key' => 'coverage',
                 'label' => __('Coverage'),
@@ -303,17 +307,19 @@ final class AccountDetailInsightsService
         $masterCash = (float) (Account::masterCash()?->balance ?? 0);
 
         return [
-            'panels' => [[
-                'title' => __('Cash alignment'),
-                'rows' => [
-                    ['label' => __('Master bank'), 'value' => InsightFormatter::money($balance)],
-                    ['label' => __('Master cash'), 'value' => InsightFormatter::money($masterCash)],
+            'panels' => [
+                [
+                    'title' => __('Cash alignment'),
+                    'rows' => [
+                        ['label' => __('Master bank'), 'value' => InsightFormatter::money($balance)],
+                        ['label' => __('Master cash'), 'value' => InsightFormatter::money($masterCash)],
+                    ],
+                    'url' => Account::masterCash()
+                        ? MasterAccountResource::getUrl('view', ['record' => Account::masterCash()])
+                        : null,
+                    'link_label' => __('Master cash'),
                 ],
-                'url' => Account::masterCash()
-                    ? MasterAccountResource::getUrl('view', ['record' => Account::masterCash()])
-                    : null,
-                'link_label' => __('Master cash'),
-            ]],
+            ],
             'sixth_kpi' => [
                 'key' => 'cash',
                 'label' => __('Master cash'),
@@ -343,14 +349,16 @@ final class AccountDetailInsightsService
             ->sum('amount');
 
         return [
-            'panels' => [[
-                'title' => __('Reserve flow'),
-                'rows' => [
-                    ['label' => __('Funded in'), 'value' => InsightFormatter::money($fundedIn)],
-                    ['label' => __('Disbursed out'), 'value' => InsightFormatter::money($disbursedOut)],
-                    ['label' => __('Available'), 'value' => InsightFormatter::money($balance)],
+            'panels' => [
+                [
+                    'title' => __('Reserve flow'),
+                    'rows' => [
+                        ['label' => __('Funded in'), 'value' => InsightFormatter::money($fundedIn)],
+                        ['label' => __('Disbursed out'), 'value' => InsightFormatter::money($disbursedOut)],
+                        ['label' => __('Available'), 'value' => InsightFormatter::money($balance)],
+                    ],
                 ],
-            ]],
+            ],
             'sixth_kpi' => [
                 'key' => 'available',
                 'label' => __('Available'),
@@ -382,14 +390,16 @@ final class AccountDetailInsightsService
         $netReturn = $returnsIn - $investedOut;
 
         return [
-            'panels' => [[
-                'title' => __('Investment activity'),
-                'rows' => [
-                    ['label' => __('Returns in'), 'value' => InsightFormatter::money($returnsIn)],
-                    ['label' => __('Invested out'), 'value' => InsightFormatter::money($investedOut)],
-                    ['label' => __('Net return'), 'value' => InsightFormatter::money($netReturn)],
+            'panels' => [
+                [
+                    'title' => __('Investment activity'),
+                    'rows' => [
+                        ['label' => __('Returns in'), 'value' => InsightFormatter::money($returnsIn)],
+                        ['label' => __('Invested out'), 'value' => InsightFormatter::money($investedOut)],
+                        ['label' => __('Net return'), 'value' => InsightFormatter::money($netReturn)],
+                    ],
                 ],
-            ]],
+            ],
             'sixth_kpi' => [
                 'key' => 'return',
                 'label' => __('Net return'),
@@ -410,16 +420,18 @@ final class AccountDetailInsightsService
     private function masterFeesContext(float $balance): array
     {
         return [
-            'panels' => [[
-                'title' => __('Fees reserve'),
-                'rows' => [
-                    ['label' => __('Held in fees'), 'value' => InsightFormatter::money($balance)],
+            'panels' => [
+                [
+                    'title' => __('Fees reserve'),
+                    'rows' => [
+                        ['label' => __('Held in fees'), 'value' => InsightFormatter::money($balance)],
+                    ],
+                    'url' => Account::masterCash()
+                        ? MasterAccountResource::getUrl('view', ['record' => Account::masterCash()])
+                        : null,
+                    'link_label' => __('Master cash'),
                 ],
-                'url' => Account::masterCash()
-                    ? MasterAccountResource::getUrl('view', ['record' => Account::masterCash()])
-                    : null,
-                'link_label' => __('Master cash'),
-            ]],
+            ],
             'sixth_kpi' => [
                 'key' => 'held',
                 'label' => __('Held'),
@@ -468,9 +480,9 @@ final class AccountDetailInsightsService
                 'tone' => 'amber',
                 'title' => __('No available cash'),
                 'subtitle' => $pending > 0
-                    ? __(':count fund posting pending approval.', ['count' => $pending])
+                    ? __(':count deposit pending approval.', ['count' => $pending])
                     : __('Cash balance is zero or negative.'),
-                'cta_label' => $pending > 0 ? __('Fund postings') : null,
+                'cta_label' => $pending > 0 ? __('Deposits') : null,
                 'cta_url' => $pending > 0 ? FundPostingResource::getUrl('index') : null,
             ];
         }
@@ -480,11 +492,13 @@ final class AccountDetailInsightsService
             'title' => $account->name,
             'subtitle' => $account->is_master
                 ? __('Master :type ledger', ['type' => MasterAccountResource::tabLabel($account->type)])
-                : __('Member :type account', ['type' => match ($account->type) {
-                    'cash' => __('cash'),
-                    'fund' => __('fund'),
-                    default => $account->type,
-                }]),
+                : __('Member :type account', [
+                    'type' => match ($account->type) {
+                        'cash' => __('cash'),
+                        'fund' => __('fund'),
+                        default => $account->type,
+                    },
+                ]),
         ];
     }
 

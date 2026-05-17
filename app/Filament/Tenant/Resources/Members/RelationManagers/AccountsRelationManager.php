@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Resources\Members\RelationManagers;
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberAccountTableActions;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
@@ -60,9 +61,11 @@ class AccountsRelationManager extends RelationManager
                     ->label(__('View'))
                     ->icon('heroicon-o-eye')
                     ->url(fn ($record): string => AccountResource::getUrl('view', ['record' => $record])),
+                MemberAccountTableActions::delete(),
             ]))
             ->toolbarActions([
                 BulkActionGroup::make([
+                    MemberAccountTableActions::deleteBulk(),
                     TableToolbar::refreshBulkAction(),
                 ]),
             ])

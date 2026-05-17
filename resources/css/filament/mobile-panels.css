@@ -2,6 +2,7 @@
  * Mobile-first ergonomics for all Filament panels (admin, tenant, member).
  * Imported after the Filament theme so these rules can refine layout.
  */
+@import './ui-label-capitalization.css';
 
 /* Topbar height matches the legacy app: Filament min-h-16 + panel brandLogoHeight (5rem). */
 .fi-body .fi-topbar .fi-logo,

@@ -14,7 +14,7 @@ class ListMyFundPostings extends ListRecords
     {
         return [
             CreateAction::make()
-                ->label('Post funds'),
+                ->label(__('New deposit')),
         ];
     }
 }

@@ -5,6 +5,7 @@ namespace App\Filament\Member\Pages;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\Tenant\HouseholdAccessService;
+use App\Support\AppLocale;
 use App\Support\StorageFilename;
 use BackedEnum;
 use Filament\Forms\Components\FileUpload;
@@ -81,7 +82,7 @@ class EditMyProfilePage extends Page implements HasForms
             'email' => $user->email,
             'preferred_locale' => in_array((string) $user->preferred_locale, ['en', 'ar'], true)
                 ? $user->preferred_locale
-                : config('app.locale', 'en'),
+                : config('app.locale', AppLocale::DEFAULT),
             'avatar' => filled($user->avatar_path)
                 ? (User::normalizePublicDiskRelativePath($user->avatar_path) ?? $user->avatar_path)
                 : null,
