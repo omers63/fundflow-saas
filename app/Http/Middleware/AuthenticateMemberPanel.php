@@ -23,6 +23,14 @@ class AuthenticateMemberPanel extends Authenticate
                 $impersonatedUser = User::find($impersonatedUserId);
                 if ($impersonatedUser instanceof User && $panel !== null && $impersonatedUser->canAccessPanel($panel)) {
                     $guard->login($impersonatedUser);
+
+                    $impersonatedMemberId = (int) $request->session()->get('impersonated_member_id');
+
+                    if ($impersonatedMemberId > 0) {
+                        $request->session()->put('active_member_id', $impersonatedMemberId);
+                    } elseif ($impersonatedUser->member !== null) {
+                        $request->session()->put('active_member_id', $impersonatedUser->member->id);
+                    }
                 }
             }
         }
@@ -36,10 +44,10 @@ class AuthenticateMemberPanel extends Authenticate
             if (
                 $panel->getId() === 'member'
                 && $authUser instanceof User
-                && $authUser->member !== null
-                && in_array($authUser->member->status, Member::PORTAL_BLOCKED_STATUSES, true)
+                && ($member = $authUser->activeMember()) !== null
+                && in_array($member->status, Member::PORTAL_BLOCKED_STATUSES, true)
             ) {
-                $memberStatus = $authUser->member->status;
+                $memberStatus = $member->status;
                 $guard->logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();

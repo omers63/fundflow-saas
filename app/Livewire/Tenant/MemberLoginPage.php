@@ -4,6 +4,7 @@ namespace App\Livewire\Tenant;
 
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
+use App\Services\Tenant\HouseholdMemberService;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -207,6 +208,18 @@ class MemberLoginPage extends Component
             return;
         }
 
+        if (! app(HouseholdMemberService::class)->memberCanUsePortal($selected)) {
+            $this->addError('selectedMemberId', __('This profile is not available for portal access.'));
+
+            return;
+        }
+
+        if ($selected->user === null) {
+            $this->addError('selectedMemberId', __('This profile does not have a login account yet.'));
+
+            return;
+        }
+
         if ($selected->id === $this->householdParentId) {
             $pinHash = (string) ($selected->portal_pin ?? '');
             $isValidParentSecret = $pinHash !== ''
@@ -227,7 +240,7 @@ class MemberLoginPage extends Component
         }
 
         RateLimiter::clear($this->throttleKey('profile_verification'));
-        $this->completeLogin($selected->user);
+        $this->completeLogin($selected->user->fresh(), $selected);
     }
 
     public function backToEmailStep(): void
@@ -237,6 +250,7 @@ class MemberLoginPage extends Component
         $this->selectedMemberId = null;
         $this->availableProfiles = [];
         $this->verificationSecret = '';
+        session()->forget('active_member_id');
     }
 
     public function render(): View
@@ -244,15 +258,15 @@ class MemberLoginPage extends Component
         return view('livewire.tenant.member-login-page');
     }
 
-    protected function completeLogin(User $user): void
+    protected function completeLogin(User $user, ?Member $authenticatedMember = null): void
     {
         $memberPanel = Filament::getPanel('member');
         $tenantPanel = Filament::getPanel('tenant');
 
-        if ($user->canAccessPanel($memberPanel)) {
-            $member = $user->member;
+        $member = $authenticatedMember ?? $user->member;
 
-            if ($member === null) {
+        if ($member !== null) {
+            if ((int) $member->user_id !== (int) $user->id) {
                 throw ValidationException::withMessages([
                     'email' => __('No member account is linked to this login.'),
                 ]);
@@ -289,6 +303,7 @@ class MemberLoginPage extends Component
             Auth::guard('tenant')->login($user, $this->remember);
             session()->regenerate();
             session()->put('locale', $user->preferredLocale());
+            session()->put('active_member_id', $member->id);
 
             $this->redirectIntended($memberPanel->getUrl());
 

@@ -6,6 +6,7 @@ use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Models\Tenant\Member;
+use App\Support\Tenant\CurrentMember;
 use Filament\Pages\Dashboard;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -14,7 +15,7 @@ class MyFundOverview extends BaseWidget
 {
     protected function getMember(): ?Member
     {
-        return auth('tenant')->user()?->member;
+        return CurrentMember::get();
     }
 
     protected function getStats(): array

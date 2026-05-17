@@ -51,6 +51,9 @@ class MembershipApplicationImportService
 
         $lineBase = 2;
 
+        /** @var array<string, int> $parentApplicationIdsByHouseholdEmail */
+        $parentApplicationIdsByHouseholdEmail = [];
+
         /** @var list<array{line: int, row: array<string, string>}> */
         $rowsWithLines = [];
         foreach ($rows as $index => $row) {
@@ -62,7 +65,7 @@ class MembershipApplicationImportService
             $row = $item['row'];
 
             try {
-                $this->importRow($row, $defaultPassword);
+                $this->importRow($row, $defaultPassword, $parentApplicationIdsByHouseholdEmail);
                 $created++;
             } catch (Throwable $e) {
                 $failed++;
@@ -78,7 +81,10 @@ class MembershipApplicationImportService
         ];
     }
 
-    private function importRow(array $row, string $defaultPassword): void
+    /**
+     * @param  array<string, int>  $parentApplicationIdsByHouseholdEmail
+     */
+    private function importRow(array $row, string $defaultPassword, array &$parentApplicationIdsByHouseholdEmail): void
     {
         $name = trim((string) $this->cell($row, 'name'));
         $email = strtolower(trim($this->cell($row, 'email')));
@@ -96,6 +102,9 @@ class MembershipApplicationImportService
             throw new \InvalidArgumentException('name is required.');
         }
 
+        $householdEmail = $this->resolveHouseholdLoginEmail($row, $email);
+        $parentApplicationId = $parentApplicationIdsByHouseholdEmail[$householdEmail] ?? null;
+
         $attrs = $this->buildMembershipApplicationAttributes($row);
 
         $password = $this->cell($row, 'password');
@@ -103,12 +112,28 @@ class MembershipApplicationImportService
 
         $mobile = (string) $attrs['mobile_phone'];
 
-        MembershipApplication::create(array_merge($attrs, [
+        $application = MembershipApplication::create(array_merge($attrs, [
             'name' => $name,
             'email' => $email,
+            'household_email' => $householdEmail,
+            'parent_application_id' => $parentApplicationId,
             'password' => $plain,
             'phone' => $mobile !== '' ? $mobile : null,
         ]));
+
+        if ($parentApplicationId === null) {
+            $parentApplicationIdsByHouseholdEmail[$householdEmail] = $application->id;
+        }
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     */
+    private function resolveHouseholdLoginEmail(array $row, string $email): string
+    {
+        $householdEmail = strtolower(trim($this->cell($row, 'household_email')));
+
+        return $householdEmail !== '' ? $householdEmail : $email;
     }
 
     /**

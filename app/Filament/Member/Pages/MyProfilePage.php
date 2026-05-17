@@ -43,9 +43,13 @@ class MyProfilePage extends Page
     {
         $user = auth('tenant')->user();
 
-        return $user instanceof User
-            ? Member::query()->where('user_id', $user->id)->with(['user', 'parent', 'dependents.user'])->first()
-            : null;
+        if (! $user instanceof User) {
+            return null;
+        }
+
+        $member = $user->activeMember();
+
+        return $member?->load(['user', 'parent', 'dependents.user']);
     }
 
     protected function getViewData(): array

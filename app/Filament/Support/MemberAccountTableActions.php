@@ -20,7 +20,9 @@ final class MemberAccountTableActions
         return DeleteAction::make()
             ->visible(fn (Account $record): bool => MemberAccountDeletion::canDelete($record))
             ->modalDescription(fn (Account $record): string => MemberAccountDeletion::modalDescription($record))
-            ->before(fn (Account $record): void => MemberAccountDeletion::ensureCanDelete($record))
+            ->before(function (Account $record): void {
+                MemberAccountDeletion::ensureCanDelete($record);
+            })
             ->after(fn (Component $livewire): mixed => AccountResource::dispatchInsightsRefresh($livewire));
     }
 

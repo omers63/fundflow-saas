@@ -6,6 +6,7 @@ namespace App\Providers;
 
 use App\Models\Tenant\User;
 use App\Support\AppLocale;
+use App\Support\ShowsFundPublicShell;
 use BezhanSalleh\LanguageSwitch\Enums\Placement;
 use BezhanSalleh\LanguageSwitch\Events\LocaleChanged;
 use BezhanSalleh\LanguageSwitch\LanguageSwitch;
@@ -36,7 +37,11 @@ class LocalizationServiceProvider extends ServiceProvider
                 ])
                 ->flagsOnly()
                 ->circular()
-                ->visible(insidePanels: true, outsidePanels: true)
+                ->visible(
+                    insidePanels: true,
+                    outsidePanels: fn (): bool => ! ShowsFundPublicShell::onTenantFilamentAuthPage()
+                    && ! ShowsFundPublicShell::onCentralFilamentAuthPage(),
+                )
                 ->outsidePanelRoutes([
                     'auth.login',
                     'auth.register',
@@ -64,7 +69,7 @@ class LocalizationServiceProvider extends ServiceProvider
 
             $user = auth()->user();
 
-            if (!$user instanceof User || !AppLocale::isSupported($event->locale)) {
+            if (! $user instanceof User || ! AppLocale::isSupported($event->locale)) {
                 return;
             }
 

@@ -33,6 +33,7 @@ class MemberForm
                             ->maxLength(255),
                         TextInput::make('email')
                             ->email()
+                            ->required()
                             ->maxLength(255),
                         TextInput::make('phone')
                             ->tel()
@@ -57,11 +58,21 @@ class MemberForm
                         Select::make('parent_member_id')
                             ->label(__('Parent member'))
                             ->options(fn (?Member $record) => Member::query()
-                                ->where('id', '!=', $record?->id)
+                                ->whereNull('parent_member_id')
+                                ->when($record !== null, fn ($query) => $query->whereKeyNot($record->getKey()))
+                                ->orderBy('name')
                                 ->pluck('name', 'id'))
                             ->searchable()
                             ->nullable()
-                            ->helperText(__('If set, this member is a dependent of the selected parent.')),
+                            ->helperText(__('Only fund administrators can link a member to a household parent. Applicants cannot choose a parent themselves.')),
+                        TextInput::make('portal_password')
+                            ->label(__('Portal password'))
+                            ->password()
+                            ->revealable()
+                            ->required()
+                            ->visible(fn (string $operation): bool => $operation === 'create')
+                            ->dehydrated(false)
+                            ->helperText(__('Initial password for this member\'s own login account.')),
                     ]),
                 Section::make(__('Portal & household'))
                     ->icon('heroicon-o-home')
@@ -71,7 +82,9 @@ class MemberForm
                         TextInput::make('household_email')
                             ->email()
                             ->maxLength(255)
-                            ->helperText(__('Shared login email for family members.')),
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->helperText(__('Set automatically from the parent household when this member is a dependent.')),
                         TextInput::make('portal_pin')
                             ->label(__('Portal PIN'))
                             ->password()
@@ -80,10 +93,14 @@ class MemberForm
                             ->helperText(__('Optional PIN for household profile picker.')),
                         Toggle::make('is_separated')
                             ->label(__('Separated household'))
-                            ->helperText(__('Dependent uses a different email and can log in directly.')),
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->helperText(__('Automatically enabled when this member\'s email differs from the household login email.')),
                         Toggle::make('direct_login_enabled')
                             ->label(__('Direct login enabled'))
-                            ->visible(fn (callable $get): bool => (bool) $get('is_separated')),
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->helperText(__('Automatically enabled for dependents with their own email so they can sign in directly.')),
                     ]),
             ]);
     }

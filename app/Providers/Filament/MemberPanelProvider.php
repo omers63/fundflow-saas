@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Concerns\RegistersFundPublicShell;
 use App\Filament\Member\Pages\MyProfilePage;
 use App\Http\Middleware\AuthenticateMemberPanel;
 use App\Livewire\Tenant\MemberLoginPage;
@@ -28,9 +29,11 @@ use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 
 class MemberPanelProvider extends PanelProvider
 {
+    use RegistersFundPublicShell;
+
     public function panel(Panel $panel): Panel
     {
-        return $panel
+        return $this->registerFundPublicShell($panel
             ->id('member')
             ->path('member')
             ->authGuard('tenant')
@@ -84,6 +87,6 @@ class MemberPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 AuthenticateMemberPanel::class,
-            ]);
+            ]));
     }
 }

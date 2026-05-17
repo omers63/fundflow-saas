@@ -59,7 +59,7 @@ class EditMyProfilePage extends Page implements HasForms
     {
         $user = auth('tenant')->user();
 
-        return $user instanceof User && $user->member !== null;
+        return $user instanceof User && $user->activeMember() !== null;
     }
 
     public function mount(): void

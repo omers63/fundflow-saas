@@ -36,6 +36,23 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         return $this->hasOne(Member::class);
     }
 
+    public function activeMember(): ?Member
+    {
+        $member = $this->member;
+
+        if ($member === null) {
+            return null;
+        }
+
+        $sessionMemberId = session('active_member_id');
+
+        if ($sessionMemberId !== null && (int) $sessionMemberId !== (int) $member->id) {
+            return null;
+        }
+
+        return $member;
+    }
+
     public function canAccessPanel(Panel $panel): bool
     {
         if ($panel->getId() === 'tenant') {
@@ -43,8 +60,10 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         }
 
         if ($panel->getId() === 'member') {
-            return $this->member !== null
-                && ! in_array($this->member->status, Member::PORTAL_BLOCKED_STATUSES, true);
+            $member = $this->activeMember();
+
+            return $member !== null
+                && ! in_array($member->status, Member::PORTAL_BLOCKED_STATUSES, true);
         }
 
         return false;

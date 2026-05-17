@@ -7,10 +7,8 @@ use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
-use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
-use App\Models\Tenant\User;
-use App\Services\AccountingService;
+use App\Services\MembershipApplicationApprovalService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -37,6 +35,10 @@ class MembershipApplicationsTable
                         ->url(fn (MembershipApplication $record): string => MembershipApplicationResource::getUrl('edit', ['record' => $record])),
                     TextColumn::make('email')
                         ->searchable(),
+                    TextColumn::make('parentApplication.name')
+                        ->label(__('Household parent'))
+                        ->placeholder('—')
+                        ->toggleable(),
                     TextColumn::make('phone'),
                     TextColumn::make('application_type')
                         ->label(__('Type'))
@@ -73,32 +75,8 @@ class MembershipApplicationsTable
                         ->color('success')
                         ->requiresConfirmation()
                         ->hidden(fn ($record) => $record->status !== 'pending')
-                        ->action(function ($record, Component $livewire) {
-                            $user = User::create([
-                                'name' => $record->name,
-                                'email' => $record->email,
-                                'password' => $record->password,
-                                'is_admin' => false,
-                            ]);
-
-                            $member = Member::create([
-                                'user_id' => $user->id,
-                                'member_number' => Member::generateMemberNumber(),
-                                'name' => $record->name,
-                                'email' => $record->email,
-                                'household_email' => $record->email,
-                                'phone' => $record->mobile_phone ?? $record->phone,
-                                'monthly_contribution_amount' => 500,
-                                'joined_at' => now(),
-                                'status' => 'active',
-                            ]);
-
-                            app(AccountingService::class)->createMemberAccounts($member);
-
-                            $record->update([
-                                'status' => 'approved',
-                                'reviewed_at' => now(),
-                            ]);
+                        ->action(function (MembershipApplication $record, Component $livewire): void {
+                            $member = app(MembershipApplicationApprovalService::class)->approve($record);
 
                             Notification::make()
                                 ->title(__('Member :name created from application', ['name' => $member->name]))
@@ -132,41 +110,11 @@ class MembershipApplicationsTable
                             ->icon('heroicon-o-check-circle')
                             ->color('success')
                             ->requiresConfirmation()
-                            ->action(function (Collection $records, Component $livewire) {
-                                $approved = 0;
-                                foreach ($records as $record) {
-                                    if ($record->status !== 'pending') {
-                                        continue;
-                                    }
-                                    $user = User::create([
-                                        'name' => $record->name,
-                                        'email' => $record->email,
-                                        'password' => $record->password,
-                                        'is_admin' => false,
-                                    ]);
+                            ->action(function (Collection $records, Component $livewire): void {
+                                $members = app(MembershipApplicationApprovalService::class)->approveMany($records);
 
-                                    $member = Member::create([
-                                        'user_id' => $user->id,
-                                        'member_number' => Member::generateMemberNumber(),
-                                        'name' => $record->name,
-                                        'email' => $record->email,
-                                        'household_email' => $record->email,
-                                        'phone' => $record->mobile_phone ?? $record->phone,
-                                        'monthly_contribution_amount' => 500,
-                                        'joined_at' => now(),
-                                        'status' => 'active',
-                                    ]);
-
-                                    app(AccountingService::class)->createMemberAccounts($member);
-
-                                    $record->update([
-                                        'status' => 'approved',
-                                        'reviewed_at' => now(),
-                                    ]);
-                                    $approved++;
-                                }
                                 Notification::make()
-                                    ->title(__(':count application(s) approved', ['count' => $approved]))
+                                    ->title(__(':count application(s) approved', ['count' => count($members)]))
                                     ->success()
                                     ->send();
 

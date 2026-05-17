@@ -1,5 +1,6 @@
 @php
     $fundName = \App\Support\PublicPageSettings::fundName(tenant('name'));
+    $isHome = request()->routeIs('tenant.home');
 @endphp
 
 <nav x-data="{ open: false }"
@@ -18,7 +19,10 @@
             </div>
 
             <div class="tenant-public-nav__menu hidden items-center gap-2 md:flex">
-                <a href="{{ route('tenant.home') }}" class="tenant-public-nav__badge">{{ __('Home') }}</a>
+                <a href="{{ route('tenant.home') }}" @class([
+                    'tenant-public-nav__badge',
+                    'tenant-public-nav__badge--current' => $isHome,
+                ]) @if ($isHome) aria-current="page" @endif>{{ __('Home') }}</a>
                 <a href="{{ route('tenant.home') }}#features" class="tenant-public-nav__badge">{{ __('Features') }}</a>
                 <a href="{{ route('tenant.home') }}#how-it-works"
                     class="tenant-public-nav__badge">{{ __('How it works') }}</a>
@@ -52,7 +56,10 @@
             class="tenant-public-nav__mobile-menu border-t border-gray-100 py-3 md:hidden">
             <div class="grid gap-2">
                 <a href="{{ route('tenant.home') }}" @click="open = false"
-                    class="tenant-public-nav__badge">{{ __('Home') }}</a>
+                    @class([
+                        'tenant-public-nav__badge',
+                        'tenant-public-nav__badge--current' => $isHome,
+                    ]) @if ($isHome) aria-current="page" @endif>{{ __('Home') }}</a>
                 <a href="{{ route('tenant.home') }}#features" @click="open = false"
                     class="tenant-public-nav__badge">{{ __('Features') }}</a>
                 <a href="{{ route('tenant.home') }}#how-it-works" @click="open = false"

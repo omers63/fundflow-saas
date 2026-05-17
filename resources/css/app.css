@@ -976,6 +976,20 @@
     color: rgb(17 24 39);
 }
 
+.tenant-public-nav__badge:focus-visible,
+.language-switch-trigger:focus-visible,
+.language-switch-option:focus-visible {
+    outline: 2px solid rgb(13 148 136);
+    outline-offset: 2px;
+}
+
+.tenant-public-nav__badge--current {
+    border-color: rgb(153 246 228);
+    background: rgb(236 253 245);
+    color: rgb(4 120 87);
+    font-weight: 600;
+}
+
 .tenant-public-nav__badge--emphasis {
     border-color: rgb(153 246 228);
     background: rgb(236 253 245);
@@ -1095,7 +1109,51 @@ html[dir='rtl'] .landing-cta-section {
     flex-direction: column;
     gap: 0.375rem;
     margin: 0;
-    padding: 0;
+    padding: 0.25rem;
+    border-radius: 9999px;
+    background: rgb(255 255 255);
+    box-shadow:
+        0 4px 6px -1px rgb(0 0 0 / 0.1),
+        0 2px 4px -2px rgb(0 0 0 / 0.1),
+        0 0 0 1px rgb(229 231 235);
+}
+
+.tenant-auth-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgb(229 231 235);
+    background: rgb(255 255 255 / 0.95);
+    backdrop-filter: blur(8px);
+}
+
+.tenant-auth-header__brand {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    text-decoration: none;
+}
+
+.central-auth-header__logo {
+    display: block;
+    height: 3rem;
+    width: auto;
+    object-fit: contain;
+}
+
+.tenant-auth-layout__main {
+    width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tenant-public-nav__badge,
+    .language-switch-trigger,
+    .language-switch-option,
+    [data-language-tooltip]::after {
+        transition: none;
+    }
 }
 
 .language-switch-option {

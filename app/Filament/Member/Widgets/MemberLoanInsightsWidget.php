@@ -6,6 +6,7 @@ namespace App\Filament\Member\Widgets;
 
 use App\Models\Tenant\Loan;
 use App\Services\LoanInsightsService;
+use App\Support\Tenant\CurrentMember;
 use Filament\Widgets\Widget;
 
 class MemberLoanInsightsWidget extends Widget
@@ -41,7 +42,7 @@ class MemberLoanInsightsWidget extends Widget
      */
     public function getData(): array
     {
-        $memberId = auth('tenant')->user()?->member?->id;
+        $memberId = CurrentMember::id();
 
         if ($this->resolvedContext() === 'loan_detail') {
             $loan = $this->record instanceof Loan

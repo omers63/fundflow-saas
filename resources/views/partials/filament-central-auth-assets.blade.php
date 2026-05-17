@@ -5,8 +5,7 @@
         display: none !important;
     }
 
-    .fi-body.fi-panel-member,
-    .fi-body.fi-panel-tenant {
+    .fi-body.fi-panel-admin {
         background: #f9fafb !important;
     }
 
@@ -42,9 +41,5 @@
 
     .fi-body:has(.fund-auth-shell) .language-switch-dropdown:not(.fi-user-menu) {
         display: none !important;
-    }
-
-    .tenant-public-footer {
-        flex-shrink: 0;
     }
 </style>

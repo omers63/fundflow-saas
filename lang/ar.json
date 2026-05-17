@@ -192,6 +192,7 @@
     "Comprehensive oversight with statistics, delinquency handling, and bulk management tools. Every transaction is recorded and traceable with real-time balances and full history.": "إشراف شامل مع إحصاءات ومعالجة التعثر وأدوات إدارة جماعية. كل معاملة مسجّلة وقابلة للتتبع مع أرصدة فورية وسجل كامل.",
     "Confirm password": "تأكيد كلمة المرور",
     "Confirm the loan proceeds were sent to the member bank account.": "أكد أن متحصلات القرض أُرسلت إلى حساب العضو البنكي.",
+    "Change language": "تغيير اللغة",
     "Contact": "التواصل",
     "Contact details are configured in fund settings.": "تُضبط بيانات التواصل من إعدادات الصندوق.",
     "Contact numbers": "أرقام التواصل",
@@ -894,6 +895,8 @@
     "your@email.com": "your@email.com",
     "—": "—",
     "••••••••": "••••••••",
+    "Skip to content": "تخطي إلى المحتوى",
+    "A transparent family fund platform for membership, contributions, and interest-free loans.": "منصة صندوق عائلي شفافة للعضوية والمساهمات والقروض الخالية من الفوائد.",
     "Site navigation": "تنقل الموقع",
     "Site footer": "تذييل الموقع",
     ":year © :fund. All rights reserved.": ":year © :fund. جميع الحقوق محفوظة."

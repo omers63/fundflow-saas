@@ -5,8 +5,10 @@ use App\Filament\Tenant\Resources\MembershipApplications\Pages\CreateMembershipA
 use App\Filament\Tenant\Resources\MembershipApplications\Pages\EditMembershipApplication;
 use App\Filament\Tenant\Resources\MembershipApplications\Pages\ListMembershipApplications;
 use App\Models\Central\Tenant;
+use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\User;
+use App\Services\MembershipApplicationApprovalService;
 use App\Services\MembershipApplicationImportService;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
@@ -182,6 +184,96 @@ test('membership application import service creates pending applications from cs
     expect($application)->not->toBeNull()
         ->and($application->status)->toBe('pending')
         ->and($application->name)->toBe('CSV Applicant');
+
+    @unlink($path);
+});
+
+test('import links rows with the same email so the first row is the household parent application', function () {
+    $admin = User::create([
+        'name' => 'Fund Admin',
+        'email' => 'admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $csv = implode("\n", [
+        'name,email,mobile_phone,iban',
+        'Parent Applicant,household@example.test,0501000101,SA030000000000101000000101',
+        'Dependent One,household@example.test,0501000102,SA030000000000101000000102',
+        'Dependent Two,household@example.test,0501000103,SA030000000000101000000103',
+    ]);
+
+    $path = storage_path('app/testing-household-import.csv');
+    file_put_contents($path, $csv);
+
+    $this->actingAs($admin, 'tenant');
+
+    $result = app(MembershipApplicationImportService::class)->import($path, 'DefaultPass1');
+
+    expect($result['created'])->toBe(3)
+        ->and($result['failed'])->toBe(0);
+
+    $applications = MembershipApplication::query()
+        ->where('household_email', 'household@example.test')
+        ->orderBy('id')
+        ->get();
+
+    expect($applications)->toHaveCount(3)
+        ->and($applications[0]->parent_application_id)->toBeNull()
+        ->and($applications[1]->parent_application_id)->toBe($applications[0]->id)
+        ->and($applications[2]->parent_application_id)->toBe($applications[0]->id);
+
+    @unlink($path);
+});
+
+test('approving imported household applications creates one parent member and linked dependents', function () {
+    $admin = User::create([
+        'name' => 'Fund Admin',
+        'email' => 'admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $csv = implode("\n", [
+        'name,email,mobile_phone,iban',
+        'Parent Applicant,household@example.test,0501000101,SA030000000000101000000101',
+        'Dependent One,household@example.test,0501000102,SA030000000000101000000102',
+    ]);
+
+    $path = storage_path('app/testing-household-approve.csv');
+    file_put_contents($path, $csv);
+
+    $this->actingAs($admin, 'tenant');
+
+    app(MembershipApplicationImportService::class)->import($path, 'HouseholdPass1');
+
+    $applications = MembershipApplication::query()
+        ->where('household_email', 'household@example.test')
+        ->orderBy('id')
+        ->get();
+
+    $approval = app(MembershipApplicationApprovalService::class);
+    $approval->approveMany($applications->reverse());
+
+    $parentMember = Member::query()
+        ->where('name', 'Parent Applicant')
+        ->whereNull('parent_member_id')
+        ->first();
+
+    $dependentMember = Member::query()
+        ->where('name', 'Dependent One')
+        ->first();
+
+    expect($parentMember)->not->toBeNull()
+        ->and($dependentMember)->not->toBeNull()
+        ->and($dependentMember->parent_member_id)->toBe($parentMember->id)
+        ->and($dependentMember->user_id)->not->toBe($parentMember->user_id)
+        ->and($dependentMember->household_email)->toBe('household@example.test')
+        ->and($dependentMember->is_separated)->toBeFalse()
+        ->and($dependentMember->direct_login_enabled)->toBeFalse()
+        ->and(User::query()->where('email', 'household@example.test')->count())->toBe(1);
 
     @unlink($path);
 });

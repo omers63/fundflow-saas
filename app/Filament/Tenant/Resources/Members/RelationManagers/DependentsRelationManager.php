@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Resources\Members\RelationManagers;
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\Members\MemberResource;
@@ -29,20 +30,19 @@ class DependentsRelationManager extends RelationManager
         return $table
             ->recordTitleAttribute('name')
             ->columns([
-                TextColumn::make('member_number')
-                    ->label('Member #')
+                MemberTableColumns::number(label: __('Member #'))
                     ->searchable(),
-                TextColumn::make('name')
+                MemberTableColumns::name()
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('monthly_contribution_amount')
                     ->label('Monthly contribution')
-                    ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
+                    ->money(fn(): string => Setting::get('general', 'currency', 'USD'))
                     ->sortable(),
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
-                    ->color(fn (string $state): string => Member::statusBadgeColor($state)),
+                    ->formatStateUsing(fn(string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
+                    ->color(fn(string $state): string => Member::statusBadgeColor($state)),
                 TextColumn::make('joined_at')
                     ->label('Joined')
                     ->date()
@@ -57,7 +57,7 @@ class DependentsRelationManager extends RelationManager
                 Action::make('viewMember')
                     ->label(__('View'))
                     ->icon('heroicon-o-eye')
-                    ->url(fn ($record): string => MemberResource::getUrl('view', ['record' => $record])),
+                    ->url(fn($record): string => MemberResource::getUrl('view', ['record' => $record])),
             ]))
             ->toolbarActions([
                 BulkActionGroup::make([

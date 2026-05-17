@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\MonthlyStatements\Tables;
 
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
@@ -27,11 +28,9 @@ class MonthlyStatementsTable
 
         return $table
             ->columns([
-                TextColumn::make('member.member_number')
-                    ->label(__('Member #'))
+                MemberTableColumns::relationNumber()
                     ->sortable(),
-                TextColumn::make('member.name')
-                    ->label(__('Member'))
+                MemberTableColumns::relationName(label: __('Member'))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('period')
@@ -58,7 +57,7 @@ class MonthlyStatementsTable
                 Action::make('pdf')
                     ->label(__('Download PDF'))
                     ->icon('heroicon-o-arrow-down-tray')
-                    ->url(fn (MonthlyStatement $record): string => route('tenant.admin.statement.pdf', $record))
+                    ->url(fn(MonthlyStatement $record): string => route('tenant.admin.statement.pdf', $record))
                     ->openUrlInNewTab(),
                 Action::make('regenerate')
                     ->label(__('Regenerate'))

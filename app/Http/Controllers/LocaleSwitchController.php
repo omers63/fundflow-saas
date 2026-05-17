@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Support\AppLocale;
+use App\Support\LocaleSwitchUrl;
 use BezhanSalleh\LanguageSwitch\Events\LocaleChanged;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,6 +22,6 @@ class LocaleSwitchController extends Controller
 
         event(new LocaleChanged($locale));
 
-        return redirect()->back(302, [], route('tenant.home'));
+        return redirect()->back(302, [], LocaleSwitchUrl::redirectFallback());
     }
 }

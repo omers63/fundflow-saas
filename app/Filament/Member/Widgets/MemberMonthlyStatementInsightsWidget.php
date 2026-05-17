@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Member\Widgets;
 
 use App\Services\MonthlyStatementInsightsService;
+use App\Support\Tenant\CurrentMember;
 use Filament\Widgets\Widget;
 
 class MemberMonthlyStatementInsightsWidget extends Widget
@@ -22,7 +23,7 @@ class MemberMonthlyStatementInsightsWidget extends Widget
      */
     public function getData(): array
     {
-        $memberId = auth('tenant')->user()?->member?->id;
+        $memberId = CurrentMember::id();
 
         return app(MonthlyStatementInsightsService::class)->memberSnapshot($memberId);
     }

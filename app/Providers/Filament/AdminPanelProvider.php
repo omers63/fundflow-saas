@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Concerns\RegistersFundPublicShell;
 use App\Filament\Widgets\MyTenants;
 use App\Filament\Widgets\StatsOverview;
 use App\Filament\Widgets\TenantGrowthChart;
@@ -26,9 +27,11 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
 {
+    use RegistersFundPublicShell;
+
     public function panel(Panel $panel): Panel
     {
-        return $panel
+        return $this->registerFundPublicShell($panel
             ->default()
             ->id('admin')
             ->path('admin')
@@ -81,6 +84,6 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->plugins([
                 FilamentShieldPlugin::make(),
-            ]);
+            ]));
     }
 }

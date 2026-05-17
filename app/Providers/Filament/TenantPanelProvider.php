@@ -2,7 +2,7 @@
 
 namespace App\Providers\Filament;
 
-use App\Filament\Concerns\RegistersTenantPublicNavigation;
+use App\Filament\Concerns\RegistersFundPublicShell;
 use App\Filament\Tenant\Pages\Dashboard;
 use App\Livewire\Tenant\TenantAdminLoginPage;
 use App\Support\PublicPageSettings;
@@ -26,11 +26,11 @@ use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 
 class TenantPanelProvider extends PanelProvider
 {
-    use RegistersTenantPublicNavigation;
+    use RegistersFundPublicShell;
 
     public function panel(Panel $panel): Panel
     {
-        return $this->registerTenantPublicNavigation($panel)
+        return $this->registerFundPublicShell($panel
             ->id('tenant')
             ->path('admin')
             ->authGuard('tenant')
@@ -75,6 +75,6 @@ class TenantPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
-            ]);
+            ]));
     }
 }

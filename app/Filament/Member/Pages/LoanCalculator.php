@@ -11,6 +11,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanEligibilityService;
 use App\Support\LoanSettings;
+use App\Support\Tenant\CurrentMember;
 use BackedEnum;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -65,7 +66,7 @@ class LoanCalculator extends Page implements HasForms
      */
     public function getPreview(): array
     {
-        $member = auth('tenant')->user()?->member;
+        $member = CurrentMember::get();
         $amount = (float) ($this->data['amount'] ?? 0);
 
         if (! $member instanceof Member || $amount <= 0) {

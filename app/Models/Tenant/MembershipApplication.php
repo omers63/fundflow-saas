@@ -5,6 +5,8 @@ namespace App\Models\Tenant;
 use App\Support\Lang;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class MembershipApplication extends Model
 {
@@ -15,6 +17,9 @@ class MembershipApplication extends Model
     protected $fillable = [
         'name',
         'email',
+        'household_email',
+        'parent_application_id',
+        'member_id',
         'password',
         'phone',
         'application_type',
@@ -60,6 +65,26 @@ class MembershipApplication extends Model
             'membership_fee_amount' => 'decimal:2',
             'reviewed_at' => 'datetime',
         ];
+    }
+
+    public function parentApplication(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_application_id');
+    }
+
+    public function dependentApplications(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_application_id');
+    }
+
+    public function member(): BelongsTo
+    {
+        return $this->belongsTo(Member::class);
+    }
+
+    public function isHouseholdDependent(): bool
+    {
+        return $this->parent_application_id !== null;
     }
 
     public function scopePending($query)

@@ -8,6 +8,7 @@ use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Support\Tenant\CurrentMember;
 use Filament\Widgets\Widget;
 
 class MemberArrearsAlert extends Widget
@@ -22,7 +23,7 @@ class MemberArrearsAlert extends Widget
 
     public static function canView(): bool
     {
-        $member = auth('tenant')->user()?->member;
+        $member = CurrentMember::get();
 
         if (! $member instanceof Member) {
             return false;
@@ -36,7 +37,7 @@ class MemberArrearsAlert extends Widget
      */
     protected function getViewData(): array
     {
-        $member = auth('tenant')->user()?->member;
+        $member = CurrentMember::get();
         $summary = $member instanceof Member
             ? app(LoanDelinquencyService::class)->memberArrearsSummary($member)
             : ['has_arrears' => false, 'is_delinquent' => false, 'overdue_installment_count' => 0, 'unpaid_contribution_periods' => [], 'unpaid_contribution_details' => []];

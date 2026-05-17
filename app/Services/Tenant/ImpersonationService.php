@@ -33,6 +33,12 @@ class ImpersonationService
 
         $guard = $this->memberGuard();
         Auth::guard($guard)->login($impersonatedUser);
+
+        if ($impersonatedMember !== null) {
+            session(['active_member_id' => $impersonatedMember->id]);
+        } elseif ($impersonatedUser->member !== null) {
+            session(['active_member_id' => $impersonatedUser->member->id]);
+        }
     }
 
     public function stop(): bool
@@ -69,6 +75,12 @@ class ImpersonationService
             'impersonated_member_id',
             'impersonation_started_at',
         ]);
+
+        if ($impersonator->member !== null) {
+            session(['active_member_id' => $impersonator->member->id]);
+        } else {
+            session()->forget('active_member_id');
+        }
 
         return true;
     }
