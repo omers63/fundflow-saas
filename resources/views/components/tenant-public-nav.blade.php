@@ -7,37 +7,32 @@
     aria-label="{{ __('Site navigation') }}">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div class="tenant-public-nav__bar flex min-h-16 items-center justify-between gap-3 py-2">
-            <a href="{{ route('tenant.home') }}"
-                class="tenant-public-nav__brand flex min-w-0 max-w-[min(100%,20rem)] shrink items-center gap-3 sm:max-w-none">
-                <x-fund-logo variant="panel" class="shrink-0" />
-                <span class="tenant-public-nav__fund-name truncate text-base font-bold text-gray-900 sm:text-lg">
-                    {{ $fundName }}
-                </span>
-            </a>
-
-            <div class="hidden items-center gap-3 md:flex">
-                <a href="{{ route('tenant.home') }}"
-                    class="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900">{{ __('Home') }}</a>
-                <a href="{{ route('tenant.home') }}#features"
-                    class="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900">{{ __('Features') }}</a>
-                <a href="{{ route('tenant.home') }}#how-it-works"
-                    class="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900">{{ __('How it works') }}</a>
-                <a href="{{ route('tenant.application.status') }}"
-                    class="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900">{{ __('Check application status') }}</a>
-                <x-language-switcher wire-key="tenant-public-nav-desktop" class="shrink-0" />
-                <a href="{{ route('filament.member.auth.login') }}"
-                    class="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900">{{ __('Member login') }}</a>
-                <a href="{{ route('tenant.membership') }}"
-                    class="inline-flex items-center rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal-700">
-                    {{ __('Apply for membership') }}
+            <div class="tenant-public-nav__start flex min-w-0 flex-1 items-center gap-2 sm:gap-3 md:flex-none">
+                <a href="{{ route('tenant.home') }}" class="tenant-public-nav__brand flex min-w-0 items-center gap-3">
+                    <x-fund-logo variant="panel" class="shrink-0" />
+                    <span class="tenant-public-nav__fund-name truncate text-base font-bold text-gray-900 sm:text-lg">
+                        {{ $fundName }}
+                    </span>
                 </a>
+                <x-language-switcher class="tenant-public-nav__language shrink-0" />
+            </div>
+
+            <div class="tenant-public-nav__menu hidden items-center gap-2 md:flex">
+                <a href="{{ route('tenant.home') }}" class="tenant-public-nav__badge">{{ __('Home') }}</a>
+                <a href="{{ route('tenant.home') }}#features" class="tenant-public-nav__badge">{{ __('Features') }}</a>
+                <a href="{{ route('tenant.home') }}#how-it-works"
+                    class="tenant-public-nav__badge">{{ __('How it works') }}</a>
+                <a href="{{ route('tenant.application.status') }}"
+                    class="tenant-public-nav__badge">{{ __('Check application status') }}</a>
+                <a href="{{ route('filament.member.auth.login') }}"
+                    class="tenant-public-nav__badge tenant-public-nav__badge--emphasis">{{ __('Member login') }}</a>
+                <a href="{{ route('tenant.membership') }}"
+                    class="tenant-public-nav__badge tenant-public-nav__badge--primary">{{ __('Apply for membership') }}</a>
             </div>
 
             <div class="flex items-center gap-2 md:hidden">
-                <x-language-switcher wire-key="tenant-public-nav-mobile" class="shrink-0" />
-                <button type="button"
-                    class="inline-flex items-center justify-center rounded-lg border border-gray-200 p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
-                    @click="open = ! open" :aria-expanded="open.toString()" aria-controls="tenant-public-mobile-menu"
+                <button type="button" class="tenant-public-nav__badge inline-flex !p-2" @click="open = ! open"
+                    :aria-expanded="open.toString()" aria-controls="tenant-public-mobile-menu"
                     aria-label="{{ __('Toggle navigation') }}">
                     <svg x-show="! open" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
                         aria-hidden="true">
@@ -53,22 +48,23 @@
             </div>
         </div>
 
-        <div id="tenant-public-mobile-menu" x-show="open" x-cloak class="border-t border-gray-100 py-3 md:hidden">
-            <div class="grid gap-1">
+        <div id="tenant-public-mobile-menu" x-show="open" x-cloak
+            class="tenant-public-nav__mobile-menu border-t border-gray-100 py-3 md:hidden">
+            <div class="grid gap-2">
                 <a href="{{ route('tenant.home') }}" @click="open = false"
-                    class="rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">{{ __('Home') }}</a>
+                    class="tenant-public-nav__badge">{{ __('Home') }}</a>
                 <a href="{{ route('tenant.home') }}#features" @click="open = false"
-                    class="rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">{{ __('Features') }}</a>
+                    class="tenant-public-nav__badge">{{ __('Features') }}</a>
                 <a href="{{ route('tenant.home') }}#how-it-works" @click="open = false"
-                    class="rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">{{ __('How it works') }}</a>
+                    class="tenant-public-nav__badge">{{ __('How it works') }}</a>
                 <a href="{{ route('tenant.application.status') }}" @click="open = false"
-                    class="rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">{{ __('Check application status') }}</a>
+                    class="tenant-public-nav__badge">{{ __('Check application status') }}</a>
             </div>
-            <div class="mt-3 grid grid-cols-2 gap-2">
+            <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <a href="{{ route('tenant.membership') }}" @click="open = false"
-                    class="inline-flex items-center justify-center rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100">{{ __('Apply for membership') }}</a>
+                    class="tenant-public-nav__badge tenant-public-nav__badge--primary">{{ __('Apply for membership') }}</a>
                 <a href="{{ route('filament.member.auth.login') }}" @click="open = false"
-                    class="inline-flex items-center justify-center rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-700">{{ __('Member login') }}</a>
+                    class="tenant-public-nav__badge tenant-public-nav__badge--emphasis">{{ __('Member login') }}</a>
             </div>
         </div>
     </div>

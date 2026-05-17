@@ -16,7 +16,6 @@
                   <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600,700&family=noto-sans-arabic:400,500,600,700&display=swap" rel="stylesheet" />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    @include('partials.filament-language-switch-assets')
     @livewireStyles
     <style>
         [x-cloak] {
@@ -34,8 +33,7 @@
 
     <x-tenant-public-footer />
 
-    @li
-vewireScripts
+    @livewireScripts
     @include('partials.pwa-sw')
 </body>
 </html>

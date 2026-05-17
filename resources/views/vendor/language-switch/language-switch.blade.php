@@ -1,4 +1,6 @@
 @php
+    use App\Support\AppLocale;
+
     $languageSwitch = \BezhanSalleh\LanguageSwitch\LanguageSwitch::make();
     $locales = $languageSwitch->getLocales();
     $isCircular = $languageSwitch->isCircular();
@@ -6,13 +8,15 @@
     $hasFlags = filled($languageSwitch->getFlags());
     $isVisibleOutsidePanels = $languageSwitch->isVisibleOutsidePanels();
     $outsidePanelsPlacement = $languageSwitch->getOutsidePanelPlacement()->value;
+    $isRtl = AppLocale::htmlDir() === 'rtl';
 
-    $defaultPlacement = __('filament-panels::layout.direction') === 'rtl' ? 'bottom-start' : 'bottom-end';
+    $defaultPlacement = $isRtl ? 'bottom-start' : 'bottom-end';
+    $flagsOnlyPlacement = $isRtl ? 'bottom-start' : 'bottom-end';
 
     $placement = match (true) {
         $outsidePanelsPlacement === 'top-center' && $isFlagsOnly => 'bottom',
         $outsidePanelsPlacement === 'bottom-center' && $isFlagsOnly => 'top',
-        !$isVisibleOutsidePanels && $isFlagsOnly => 'bottom',
+        $isFlagsOnly => $flagsOnlyPlacement,
         default => $defaultPlacement,
     };
     $maxHeight = $languageSwitch->getMaxHeight();

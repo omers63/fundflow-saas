@@ -917,7 +917,18 @@
     object-fit: contain;
 }
 
+.tenant-public-nav__start {
+    max-width: min(100%, calc(100% - 3rem));
+}
+
+@media (width >= 48rem) {
+    .tenant-public-nav__start {
+        max-width: none;
+    }
+}
+
 .tenant-public-nav__brand {
+    min-width: 0;
     text-decoration: none;
 }
 
@@ -927,6 +938,74 @@
 
 .tenant-public-nav__fund-name {
     line-height: 1.25;
+}
+
+.tenant-public-nav__language {
+    flex-shrink: 0;
+}
+
+.tenant-public-nav__menu {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.tenant-public-nav__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 0.875rem;
+    border-radius: 9999px;
+    border: 1px solid rgb(229 231 235);
+    background: rgb(255 255 255 / 0.9);
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25;
+    color: rgb(75 85 99);
+    text-decoration: none;
+    white-space: nowrap;
+    transition:
+        border-color 0.15s ease,
+        background-color 0.15s ease,
+        color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.tenant-public-nav__badge:hover {
+    border-color: rgb(209 213 219);
+    background: rgb(249 250 251);
+    color: rgb(17 24 39);
+}
+
+.tenant-public-nav__badge--emphasis {
+    border-color: rgb(153 246 228);
+    background: rgb(236 253 245);
+    color: rgb(4 120 87);
+}
+
+.tenant-public-nav__badge--emphasis:hover {
+    border-color: rgb(94 234 212);
+    background: rgb(209 250 229);
+    color: rgb(6 95 70);
+}
+
+.tenant-public-nav__badge--primary {
+    border-color: rgb(13 148 136);
+    background: rgb(13 148 136);
+    color: rgb(255 255 255);
+    box-shadow: 0 1px 2px rgb(13 148 136 / 0.25);
+}
+
+.tenant-public-nav__badge--primary:hover {
+    border-color: rgb(15 118 110);
+    background: rgb(15 118 110);
+    color: rgb(255 255 255);
+}
+
+.tenant-public-nav__mobile-menu .tenant-public-nav__badge {
+    width: 100%;
+    justify-content: center;
+    white-space: normal;
+    text-align: center;
 }
 
 html[dir='rtl'] .tenant-public-nav__fund-name {
@@ -956,13 +1035,117 @@ html[dir='rtl'] .landing-cta-section {
     text-align: start;
 }
 
-/* Public pages — match panel language switch (circular flag + dropdown). */
-.language-switcher .language-switch-trigger {
+/* Public pages — flag-only language switch (no Filament dropdown). */
+.language-switcher {
+    --language-switch-size: 2.25rem;
+    --language-switch-flag-size: 1.75rem;
+
+    position: relative;
+    z-index: 60;
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.language-switch-trigger,
+.language-switch-option {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--language-switch-size);
+    height: var(--language-switch-size);
+    padding: 0.25rem;
+    border: 2px solid rgb(229 231 235);
+    border-radius: 9999px;
+    background: rgb(255 255 255 / 0.95);
+    cursor: pointer;
+    transition:
+        border-color 0.15s ease,
+        background-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.language-switch-trigger {
     color: rgb(13 148 136);
     background-color: rgb(20 184 166 / 0.1);
 }
 
-html[dir='rtl'] .language-switcher .fi-dropdown-trigger {
-    direction: ltr;
+.language-switch-trigger:hover,
+.language-switch-option:hover {
+    border-color: rgb(209 213 219);
+    background-color: rgb(249 250 251);
+}
+
+.language-switch-trigger__flag,
+.language-switch-option__flag {
+    display: block;
+    width: var(--language-switch-flag-size);
+    height: var(--language-switch-flag-size);
+    border-radius: 9999px;
+    object-fit: cover;
+    object-position: center;
+}
+
+.language-switch-menu {
+    position: absolute;
+    top: calc(100% + 0.375rem);
+    inset-inline-start: 0;
+    z-index: 70;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+}
+
+.language-switch-option {
+    text-decoration: none;
+}
+
+/* Tooltips (replaces Filament x-tooltip on public pages). */
+[data-language-tooltip] {
+    position: relative;
+}
+
+[data-language-tooltip]::after {
+    content: attr(data-language-tooltip);
+    position: absolute;
+    top: 50%;
+    z-index: 80;
+    padding: 0.375rem 0.625rem;
+    border-radius: 0.375rem;
+    background: rgb(17 24 39);
+    color: rgb(255 255 255);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.25;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-50%);
+    transition: opacity 0.15s ease;
+    box-shadow:
+        0 4px 6px -1px rgb(0 0 0 / 0.1),
+        0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+html[dir='ltr'] [data-language-tooltip]::after {
+    left: calc(100% + 0.5rem);
+    right: auto;
+}
+
+html[dir='rtl'] [data-language-tooltip]::after {
+    right: calc(100% + 0.5rem);
+    left: auto;
+}
+
+[data-language-tooltip]:hover::after,
+[data-language-tooltip]:focus-visible::after {
+    opacity: 1;
+}
+
+.language-switcher--open .language-switch-trigger[data-language-tooltip]:hover::after,
+.language-switcher--open .language-switch-trigger[data-language-tooltip]:focus-visible::after {
+    opacity: 0;
 }
 

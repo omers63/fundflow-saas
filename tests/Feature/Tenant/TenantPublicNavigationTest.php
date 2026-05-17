@@ -13,15 +13,16 @@ test('landing page shows shared public navigation and footer', function () {
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (! $tenant->domains()->where('domain', $domain)->exists()) {
+    if (!$tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
     app()->setLocale('ar');
 
-    $this->get('http://'.$domain)
+    $this->get('http://' . $domain)
         ->assertSuccessful()
         ->assertSee('tenant-public-nav', false)
+        ->assertSee('tenant-public-nav__badge', false)
         ->assertSee('tenant-public-brand-logo', false)
         ->assertSee(__('Member login', locale: 'ar'), false)
         ->assertSee(__('Check application status', locale: 'ar'), false)
@@ -40,11 +41,11 @@ test('member login page does not show public navigation or footer', function () 
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (! $tenant->domains()->where('domain', $domain)->exists()) {
+    if (!$tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
-    $this->get('http://'.$domain.'/member/login')
+    $this->get('http://' . $domain . '/member/login')
         ->assertSuccessful()
         ->assertDontSee('tenant-public-nav', false)
         ->assertDontSee('tenant-public-footer', false)
@@ -59,11 +60,11 @@ test('tenant admin login page does not show public navigation or footer', functi
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (! $tenant->domains()->where('domain', $domain)->exists()) {
+    if (!$tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
-    $this->get('http://'.$domain.'/admin/login')
+    $this->get('http://' . $domain . '/admin/login')
         ->assertSuccessful()
         ->assertDontSee('tenant-public-nav', false)
         ->assertDontSee('tenant-public-footer', false)

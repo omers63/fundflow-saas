@@ -11,10 +11,11 @@
     <title>{{ $title ?? \App\Support\PublicPageSettings::fundName(tenant('name')) }}</title>
     @include('partials.pwa-head')
 
-           <link rel="preconnect" href="https://fonts.bunny.net">
+
+       
+                  <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600,700&family=noto-sans-arabic:400,500,600,700&display=swap" rel="stylesheet" />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    @include('partials.filament-language-switch-assets')
     @livewireStyles
     <style>
         [x-cloak] {
@@ -25,16 +26,14 @@
 
 <body class="relative flex min-h-dvh flex-col bg-gray-50 text-gray-900 antialiased">
     <div class="absolute end-4 top-4 z-50 sm:end-6 sm:top-6">
-        <x-language-switcher
-            wire-key="tenant-auth-language-switch"
-            class="rounded-lg bg-white/90 p-1 shadow-sm ring-1 ring-gray-200 backdrop-blur"
-        />
+        <x-language-switcher />
     </div>
     <main class="flex min-h-dvh flex-1 items-center justify-center p-4 sm:p-6">
         {{ $slot }}
     </main>
 
     @livewireScripts
+
 
 
     @include('partials.pwa-sw')

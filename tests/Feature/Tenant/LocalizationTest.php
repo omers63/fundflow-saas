@@ -30,6 +30,7 @@ test('landing page shows arabic fund name when configured', function () {
     $this->get('http://' . $domain)
         ->assertSuccessful()
         ->assertSee('tenant-public-nav__fund-name', false)
+        ->assertSee('tenant-public-nav__language', false)
         ->assertSee('صندوق النور', false)
         ->assertDontSee('Al Noor Fund', false);
 });
@@ -38,7 +39,7 @@ test('public header shows english fund name when locale is english', function ()
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (! $tenant->domains()->where('domain', $domain)->exists()) {
+    if (!$tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
@@ -54,6 +55,7 @@ test('public header shows english fund name when locale is english', function ()
     $this->get('http://' . $domain)
         ->assertSuccessful()
         ->assertSee('tenant-public-nav__fund-name', false)
+        ->assertSee('tenant-public-nav__language', false)
         ->assertSee('Al Noor Fund', false)
         ->assertDontSee('صندوق النور', false);
 });
@@ -110,8 +112,7 @@ test('public nav shows flag language switcher when locale is arabic', function (
     $this->get('http://' . $domain)
         ->assertSuccessful()
         ->assertSee('language-switch-trigger', false)
-        ->assertSee('flagcdn.com/w40/sa.png', false)
-        ->assertSee(__('English', locale: 'ar'), false);
+        ->assertSee('flagcdn.com/w40/sa.png', false);
 });
 
 test('locale switch route sets session and redirects back', function () {
