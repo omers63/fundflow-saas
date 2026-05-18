@@ -24,7 +24,7 @@ class MyStatementResource extends Resource
 
     protected static ?string $navigationLabel = 'My statements';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 50;
 
     public static function getEloquentQuery(): Builder
     {

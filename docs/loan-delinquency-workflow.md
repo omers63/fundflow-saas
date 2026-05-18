@@ -204,7 +204,7 @@ On **Members → View** (`MemberDelinquencyActions` + infolist section):
 
 **Delinquency** infolist block: overdue installment count, unpaid contribution period labels.
 
-**Key files:** `app/Filament/Support/MemberDelinquencyActions.php`, `ViewMember.php`
+**Key files:** `app/Filament/Support/MemberDelinquencyActions.php`, `EditMember.php`
 
 ### 3. Admin delinquency digest
 

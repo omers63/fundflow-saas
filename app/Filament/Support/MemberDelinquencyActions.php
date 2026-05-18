@@ -17,7 +17,7 @@ final class MemberDelinquencyActions
     /**
      * @return list<Action>
      */
-    public static function forMemberView(): array
+    public static function forMemberRecord(): array
     {
         return [
             self::syncDelinquency(),

@@ -57,6 +57,8 @@ test('edit member page uses member title and combined full-width section', funct
         ->test(EditMember::class, ['record' => $member->getRouteKey()])
         ->assertSuccessful()
         ->assertSee(__('Member'))
+        ->assertSee('Jane Member')
+        ->assertSee('MEM-0042')
         ->assertSee(__('Membership'))
         ->assertSee('500')
         ->assertDontSee(__('Member Information'))

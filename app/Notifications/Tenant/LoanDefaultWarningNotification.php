@@ -6,24 +6,19 @@ namespace App\Notifications\Tenant;
 
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
+use App\Notifications\Concerns\DeliversToMemberChannels;
 use Illuminate\Notifications\Notification;
 
 class LoanDefaultWarningNotification extends Notification
 {
+    use DeliversToMemberChannels;
+
     public function __construct(
         public readonly Loan $loan,
         public readonly LoanInstallment $installment,
         public readonly int $defaultCount,
         public readonly int $graceCycles,
     ) {}
-
-    /**
-     * @return array<int, string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['database'];
-    }
 
     /**
      * @return array<string, mixed>

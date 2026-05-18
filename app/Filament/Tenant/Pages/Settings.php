@@ -8,6 +8,7 @@ use App\Models\Tenant\Setting;
 use App\Support\Lang;
 use App\Support\LoanSettings;
 use App\Support\MemberNumberSettings;
+use App\Support\NotificationSettings;
 use App\Support\PublicPageSettings;
 use BackedEnum;
 use Filament\Forms\Components\Checkbox;
@@ -58,6 +59,7 @@ class Settings extends Page implements HasForms
         $general = Setting::getGroup('general');
         $contribution = Setting::getGroup('contribution');
         $loan = LoanSettings::all();
+        $notifications = NotificationSettings::all();
         $memberNumber = MemberNumberSettings::all();
         $public = PublicPageSettings::all();
 
@@ -94,6 +96,14 @@ class Settings extends Page implements HasForms
             'loan_default_term_months' => $loan['default_term_months'] ?? 12,
             'loan_max_loan_amount' => $loan['max_loan_amount'] ?? 0,
             'loan_settlement_threshold_pct' => ($loan['settlement_threshold_pct'] ?? 0.16) * 100,
+            'loan_require_guarantor_above_fund' => (bool) ($loan['require_guarantor_above_fund_balance'] ?? true),
+            'loan_auto_allocate_repayment' => (bool) ($loan['auto_allocate_loan_repayment'] ?? false),
+            'notifications_sms_enabled' => (bool) ($notifications['sms_enabled'] ?? false),
+            'notifications_whatsapp_enabled' => (bool) ($notifications['whatsapp_enabled'] ?? false),
+            'notifications_twilio_sid' => $notifications['twilio_account_sid'] ?? '',
+            'notifications_twilio_token' => $notifications['twilio_auth_token'] ?? '',
+            'notifications_twilio_sms_from' => $notifications['twilio_sms_from'] ?? '',
+            'notifications_twilio_whatsapp_from' => $notifications['twilio_whatsapp_from'] ?? '',
             'bank_templates' => $templates,
             'fund_name_en' => filled($public['fund_name_en'] ?? null)
                 ? $public['fund_name_en']
@@ -358,6 +368,48 @@ class Settings extends Page implements HasForms
                                             ->required()
                                             ->helperText(__('Percentage of approved amount member must hold in fund for full settlement.')),
                                     ]),
+                                Section::make(__('Repayment & guarantors'))
+                                    ->columns(2)
+                                    ->schema([
+                                        Toggle::make('loan_require_guarantor_above_fund')
+                                            ->label(__('Require guarantor above fund balance'))
+                                            ->helperText(__('When the requested amount exceeds the member fund balance, a guarantor is mandatory on apply.')),
+                                        Toggle::make('loan_auto_allocate_repayment')
+                                            ->label(__('Auto-allocate posted contributions to loan'))
+                                            ->helperText(__('After a contribution is posted, apply open-period loan repayment from member cash when possible.')),
+                                    ]),
+                            ]),
+                        Tab::make(__('Notifications'))
+                            ->icon('heroicon-o-bell-alert')
+                            ->schema([
+                                Section::make(__('Member SMS & WhatsApp'))
+                                    ->description(__('Uses Twilio when enabled. Members must have a phone number on their profile.'))
+                                    ->columns(2)
+                                    ->schema([
+                                        Toggle::make('notifications_sms_enabled')
+                                            ->label(__('Enable SMS'))
+                                            ->live(),
+                                        Toggle::make('notifications_whatsapp_enabled')
+                                            ->label(__('Enable WhatsApp'))
+                                            ->live(),
+                                        TextInput::make('notifications_twilio_sid')
+                                            ->label(__('Twilio account SID'))
+                                            ->maxLength(64)
+                                            ->columnSpanFull(),
+                                        TextInput::make('notifications_twilio_token')
+                                            ->label(__('Twilio auth token'))
+                                            ->password()
+                                            ->revealable()
+                                            ->maxLength(128)
+                                            ->columnSpanFull(),
+                                        TextInput::make('notifications_twilio_sms_from')
+                                            ->label(__('SMS sender number'))
+                                            ->tel()
+                                            ->helperText(__('E.164 format, e.g. +14155552671')),
+                                        TextInput::make('notifications_twilio_whatsapp_from')
+                                            ->label(__('WhatsApp sender'))
+                                            ->helperText(__('Twilio WhatsApp-enabled number, e.g. +14155238886')),
+                                    ]),
                             ]),
                         Tab::make('Bank Templates')
                             ->icon('heroicon-o-document-arrow-up')
@@ -569,6 +621,17 @@ class Settings extends Page implements HasForms
             'default_term_months' => (int) $state['loan_default_term_months'],
             'max_loan_amount' => (float) ($state['loan_max_loan_amount'] ?? 0),
             'settlement_threshold_pct' => ((float) ($state['loan_settlement_threshold_pct'] ?? 16)) / 100,
+            'require_guarantor_above_fund_balance' => (bool) ($state['loan_require_guarantor_above_fund'] ?? true),
+            'auto_allocate_loan_repayment' => (bool) ($state['loan_auto_allocate_repayment'] ?? false),
+        ]);
+
+        NotificationSettings::save([
+            'sms_enabled' => (bool) ($state['notifications_sms_enabled'] ?? false),
+            'whatsapp_enabled' => (bool) ($state['notifications_whatsapp_enabled'] ?? false),
+            'twilio_account_sid' => $state['notifications_twilio_sid'] ?? '',
+            'twilio_auth_token' => $state['notifications_twilio_token'] ?? '',
+            'twilio_sms_from' => $state['notifications_twilio_sms_from'] ?? '',
+            'twilio_whatsapp_from' => $state['notifications_twilio_whatsapp_from'] ?? '',
         ]);
 
         PublicPageSettings::save([

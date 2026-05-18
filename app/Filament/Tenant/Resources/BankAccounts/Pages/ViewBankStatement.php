@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tenant\Resources\BankAccounts\Pages;
 
+use App\Filament\Concerns\RefreshesResourceRecord;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Widgets\BankStatementDetailInsightsWidget;
 use Filament\Resources\Pages\ViewRecord;
@@ -12,6 +13,8 @@ use Livewire\Attributes\On;
 
 class ViewBankStatement extends ViewRecord
 {
+    use RefreshesResourceRecord;
+
     protected static string $resource = BankAccountsResource::class;
 
     public function getHeading(): string
@@ -52,7 +55,7 @@ class ViewBankStatement extends ViewRecord
             return;
         }
 
-        $this->refreshRecord();
+        $this->refreshResolvedRecord();
     }
 
     public function schema(Schema $schema): Schema

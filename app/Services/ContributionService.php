@@ -7,6 +7,8 @@ namespace App\Services;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LateFeeService;
+use App\Services\Loans\LoanRepaymentService;
+use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
@@ -96,6 +98,10 @@ class ContributionService
                 'paid_at' => $contribution->paid_at ?? now(),
             ]);
         });
+
+        if (LoanSettings::autoAllocateLoanRepayment()) {
+            app(LoanRepaymentService::class)->applyOpenPeriodRepaymentForMember($contribution->member);
+        }
     }
 
     /**

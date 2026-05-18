@@ -28,7 +28,7 @@ class MyLoanResource extends Resource
 
     protected static ?string $pluralModelLabel = 'My Loans';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 40;
 
     public static function getEloquentQuery(): Builder
     {

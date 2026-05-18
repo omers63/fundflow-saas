@@ -9,7 +9,6 @@ use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
-use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
@@ -71,7 +70,7 @@ class ListDelinquency extends Page implements HasTable
 
     public function setDelinquencyTab(string $tab): void
     {
-        if (!in_array($tab, ['installments', 'contributions', 'guarantor'], true)) {
+        if (! in_array($tab, ['installments', 'contributions', 'guarantor'], true)) {
             return;
         }
 
@@ -81,7 +80,7 @@ class ListDelinquency extends Page implements HasTable
 
     protected function getTableQueryStringIdentifier(): ?string
     {
-        return 'delinquency_' . $this->delinquencyTab;
+        return 'delinquency_'.$this->delinquencyTab;
     }
 
     public function getSubheading(): ?string
@@ -204,8 +203,8 @@ class ListDelinquency extends Page implements HasTable
                     ->wrap(),
                 TextColumn::make('loan_id')
                     ->label(__('Loan'))
-                    ->formatStateUsing(fn(int $state): string => '#' . $state)
-                    ->url(fn(LoanInstallment $record): string => LoanResource::getUrl('view', ['record' => $record->loan_id])),
+                    ->formatStateUsing(fn (int $state): string => '#'.$state)
+                    ->url(fn (LoanInstallment $record): string => LoanResource::getUrl('view', ['record' => $record->loan_id])),
                 TextColumn::make('installment_number')
                     ->label(__('#'))
                     ->sortable(),
@@ -224,15 +223,15 @@ class ListDelinquency extends Page implements HasTable
                     ->toggleable(),
                 TextColumn::make('loan.guarantor_liability_transferred_at')
                     ->label(__('Liability'))
-                    ->formatStateUsing(fn($state): string => $state ? __('Guarantor') : __('Borrower'))
+                    ->formatStateUsing(fn ($state): string => $state ? __('Guarantor') : __('Borrower'))
                     ->badge()
-                    ->color(fn($state): string => $state ? 'warning' : 'gray'),
+                    ->color(fn ($state): string => $state ? 'warning' : 'gray'),
             ])
             ->defaultSort('due_date')
             ->recordActions(TableRecordActionGroups::wrap([
                 ViewAction::make()
                     ->label(__('View loan'))
-                    ->url(fn(LoanInstallment $record): string => LoanResource::getUrl('view', ['record' => $record->loan_id])),
+                    ->url(fn (LoanInstallment $record): string => LoanResource::getUrl('view', ['record' => $record->loan_id])),
             ]))
             ->toolbarActions([
                 BulkActionGroup::make([
@@ -249,7 +248,7 @@ class ListDelinquency extends Page implements HasTable
         $delinquency = app(LoanDelinquencyService::class);
 
         return $table
-            ->records(function (?string $search = null, ?string $sortColumn = null, ?string $sortDirection = null, ?array $filters = null, ) use ($delinquency): Collection {
+            ->records(function (?string $search = null, ?string $sortColumn = null, ?string $sortDirection = null, ?array $filters = null) use ($delinquency): Collection {
                 $memberId = isset($filters['member_id']['value'])
                     ? (int) $filters['member_id']['value']
                     : null;
@@ -275,13 +274,13 @@ class ListDelinquency extends Page implements HasTable
                     ->searchable()
                     ->sortable()
                     ->wrap()
-                    ->url(MemberTableColumns::memberIdViewUrl(...)),
+                    ->url(MemberTableColumns::memberIdEditUrl(...)),
                 TextColumn::make('member_number')
                     ->label(__('Number'))
                     ->searchable()
                     ->sortable()
                     ->toggleable()
-                    ->url(MemberTableColumns::memberIdViewUrl(...)),
+                    ->url(MemberTableColumns::memberIdEditUrl(...)),
                 TextColumn::make('period_label')
                     ->label(__('Period'))
                     ->searchable()
@@ -298,8 +297,8 @@ class ListDelinquency extends Page implements HasTable
                     ->label(__('Contribution'))
                     ->badge()
                     ->sortable()
-                    ->formatStateUsing(fn(string $state): string => $delinquency->contributionStatusLabel($state))
-                    ->color(fn(string $state): string => $delinquency->contributionStatusColor($state)),
+                    ->formatStateUsing(fn (string $state): string => $delinquency->contributionStatusLabel($state))
+                    ->color(fn (string $state): string => $delinquency->contributionStatusColor($state)),
                 TextColumn::make('monthly_contribution_amount')
                     ->label(__('Monthly'))
                     ->sortable()
@@ -311,15 +310,15 @@ class ListDelinquency extends Page implements HasTable
                 TextColumn::make('member_status')
                     ->label(__('Member status'))
                     ->badge()
-                    ->formatStateUsing(fn(string $state): string => Member::statusOptions()[$state] ?? $state)
-                    ->color(fn(string $state): string => Member::statusBadgeColor($state))
+                    ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? $state)
+                    ->color(fn (string $state): string => Member::statusBadgeColor($state))
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('year', 'desc')
             ->filters([
                 SelectFilter::make('member_id')
                     ->label(__('Member'))
-                    ->options(fn(): array => Member::query()
+                    ->options(fn (): array => Member::query()
                         ->whereIn('id', $delinquency->contributionArrearsMemberIds() ?: [0])
                         ->orderBy('name')
                         ->pluck('name', 'id')
@@ -329,7 +328,7 @@ class ListDelinquency extends Page implements HasTable
             ->recordActions(TableRecordActionGroups::wrap([
                 ViewAction::make()
                     ->label(__('View member'))
-                    ->url(fn(array $record): string => MemberResource::getUrl('view', ['record' => $record['member_id']])),
+                    ->url(MemberTableColumns::memberIdEditUrl(...)),
             ]))
             ->toolbarActions([
                 BulkActionGroup::make([
@@ -395,7 +394,7 @@ class ListDelinquency extends Page implements HasTable
             ->recordActions(TableRecordActionGroups::wrap([
                 ViewAction::make()
                     ->label(__('View loan'))
-                    ->url(fn(Loan $record): string => LoanResource::getUrl('view', ['record' => $record])),
+                    ->url(fn (Loan $record): string => LoanResource::getUrl('view', ['record' => $record])),
                 self::withInsightsRefresh(LoanFilamentActions::transferGuarantorLiability()),
                 self::withInsightsRefresh(LoanFilamentActions::restoreBorrowerLiability()),
             ]))
@@ -424,7 +423,7 @@ class ListDelinquency extends Page implements HasTable
     {
         return LoanInstallment::query()
             ->where('status', 'overdue')
-            ->whereHas('loan', fn(Builder $q): Builder => $q->where('status', 'active'))
+            ->whereHas('loan', fn (Builder $q): Builder => $q->where('status', 'active'))
             ->with(['loan.member', 'loan.guarantor']);
     }
 
@@ -440,12 +439,12 @@ class ListDelinquency extends Page implements HasTable
                     ->orWhere(function (Builder $inner) use ($grace): void {
                         $inner->whereNull('guarantor_liability_transferred_at')
                             ->where('late_repayment_count', '>=', $grace)
-                            ->whereHas('installments', fn(Builder $i): Builder => $i->where('status', 'overdue'));
+                            ->whereHas('installments', fn (Builder $i): Builder => $i->where('status', 'overdue'));
                     });
             })
             ->with(['member', 'guarantor'])
             ->withCount([
-                'installments as overdue_installments_count' => fn(Builder $q): Builder => $q->where('status', 'overdue'),
+                'installments as overdue_installments_count' => fn (Builder $q): Builder => $q->where('status', 'overdue'),
             ]);
     }
 
@@ -453,7 +452,7 @@ class ListDelinquency extends Page implements HasTable
     {
         $overdue = LoanInstallment::query()
             ->where('status', 'overdue')
-            ->whereHas('loan', fn(Builder $q): Builder => $q->where('status', 'active'))
+            ->whereHas('loan', fn (Builder $q): Builder => $q->where('status', 'active'))
             ->count();
 
         return $overdue > 0 ? (string) $overdue : null;
@@ -466,6 +465,6 @@ class ListDelinquency extends Page implements HasTable
 
     private static function withInsightsRefresh(Action $action): Action
     {
-        return $action->after(fn(Component $livewire): mixed => LoanResource::dispatchInsightsRefresh($livewire));
+        return $action->after(fn (Component $livewire): mixed => LoanResource::dispatchInsightsRefresh($livewire));
     }
 }

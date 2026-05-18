@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tenant\Resources\Accounts\Pages;
 
+use App\Filament\Concerns\RefreshesResourceRecord;
 use App\Filament\Support\MemberAccountTableActions;
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
 use App\Filament\Tenant\Widgets\AccountDetailInsightsWidget;
@@ -15,6 +16,8 @@ use Livewire\Attributes\On;
 
 class ViewAccount extends ViewRecord
 {
+    use RefreshesResourceRecord;
+
     protected static string $resource = AccountResource::class;
 
     public function getHeading(): string
@@ -66,7 +69,7 @@ class ViewAccount extends ViewRecord
             return;
         }
 
-        $this->refreshRecord();
+        $this->refreshResolvedRecord();
     }
 
     public function schema(Schema $schema): Schema

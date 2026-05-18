@@ -1,14 +1,22 @@
 <?php
 
+use App\Filament\Member\Pages\ApplyForLoan;
+use App\Filament\Member\Pages\MemberDashboard;
 use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
+use App\Filament\Member\Resources\MyMessages\MyMessageResource;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Support\PublicPageSettings;
+use Filament\Facades\Filament;
+use Filament\Support\Facades\FilamentView;
+use Filament\View\PanelsRenderHook;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -177,4 +185,56 @@ test('user model has member relationship', function () {
     expect($this->memberUserA->member)->not->toBeNull();
     expect($this->memberUserA->member->id)->toBe($this->memberA->id);
     expect($this->adminUser->member)->toBeNull();
+});
+
+test('member panel uses custom dashboard page', function () {
+    $panel = filament()->getPanel('member');
+
+    expect($panel->getPages())->toContain(MemberDashboard::class);
+});
+
+test('message resource scopes to member admin conversations', function () {
+    auth('tenant')->login($this->memberUserA);
+
+    DirectMessage::create([
+        'from_user_id' => $this->adminUser->id,
+        'to_user_id' => $this->memberUserA->id,
+        'subject' => 'Notice',
+        'body' => 'Please review your statement.',
+    ]);
+
+    DirectMessage::create([
+        'from_user_id' => $this->memberUserB->id,
+        'to_user_id' => $this->adminUser->id,
+        'subject' => 'Other member',
+        'body' => 'Should not appear',
+    ]);
+
+    expect(MyMessageResource::getEloquentQuery()->count())->toBe(1);
+});
+
+test('apply for loan page is registered on member panel', function () {
+    expect(ApplyForLoan::getSlug())->toBe('apply-for-loan');
+});
+
+test('member panel has database notifications enabled', function () {
+    expect(filament()->getPanel('member')->hasDatabaseNotifications())->toBeTrue();
+});
+
+test('member portal topbar shows fund name beside logo', function () {
+    PublicPageSettings::save([
+        ...PublicPageSettings::defaults(),
+        'fund_name_en' => 'Al Noor Fund',
+        'fund_name_ar' => 'صندوق النور',
+    ]);
+
+    app()->setLocale('en');
+
+    Filament::setCurrentPanel('member');
+
+    $html = FilamentView::renderHook(PanelsRenderHook::TOPBAR_LOGO_AFTER)->toHtml();
+
+    expect($html)
+        ->toContain('ff-member-topbar-fund-name')
+        ->toContain('Al Noor Fund');
 });

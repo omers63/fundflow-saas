@@ -8,6 +8,7 @@ use App\Models\Tenant\Loan;
 use App\Services\LoanInsightsService;
 use App\Support\Tenant\CurrentMember;
 use Filament\Widgets\Widget;
+use Illuminate\Support\Facades\Route;
 
 class MemberLoanInsightsWidget extends Widget
 {

@@ -6,6 +6,7 @@ namespace App\Filament\Member\Resources\MyLoans\Pages;
 
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Member\Resources\MyLoans\Widgets\MyLoanViewInsights;
+use App\Filament\Support\MemberLoanFilamentActions;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Setting;
 use Filament\Infolists\Components\TextEntry;
@@ -42,6 +43,14 @@ class ViewMyLoan extends ViewRecord
     public function getHeaderWidgetsColumns(): int|array
     {
         return 1;
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            MemberLoanFilamentActions::payOpenPeriodRepayment(),
+            MemberLoanFilamentActions::earlySettle(),
+        ];
     }
 
     /**

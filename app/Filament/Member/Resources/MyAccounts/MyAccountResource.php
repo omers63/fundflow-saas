@@ -30,7 +30,7 @@ class MyAccountResource extends Resource
 
     protected static ?string $pluralModelLabel = 'My Accounts';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 10;
 
     public static function getEloquentQuery(): Builder
     {

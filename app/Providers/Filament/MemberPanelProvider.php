@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Concerns\RegistersFundPublicShell;
+use App\Filament\Member\Pages\MemberDashboard;
 use App\Filament\Member\Pages\MyProfilePage;
 use App\Http\Middleware\AuthenticateMemberPanel;
 use App\Livewire\Tenant\MemberLoginPage;
@@ -11,7 +12,6 @@ use Filament\Actions\Action;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
@@ -65,10 +65,11 @@ class MemberPanelProvider extends PanelProvider
             ->discoverResources(in: app_path('Filament/Member/Resources'), for: 'App\\Filament\\Member\\Resources')
             ->discoverPages(in: app_path('Filament/Member/Pages'), for: 'App\\Filament\\Member\\Pages')
             ->pages([
-                Pages\Dashboard::class,
+                MemberDashboard::class,
             ])
             ->discoverWidgets(in: app_path('Filament/Member/Widgets'), for: 'App\\Filament\\Member\\Widgets')
             ->widgets([])
+            ->databaseNotifications()
             ->renderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(view('partials.pwa-head')->render()))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.livewire-session-recovery')->render()))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))

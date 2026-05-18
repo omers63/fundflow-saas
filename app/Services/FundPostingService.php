@@ -8,6 +8,8 @@ use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
+use App\Notifications\Tenant\FundPostingAcceptedNotification;
+use App\Notifications\Tenant\FundPostingRejectedNotification;
 use App\Notifications\Tenant\NewFundPostingNotification;
 use Illuminate\Support\Facades\DB;
 
@@ -103,6 +105,8 @@ class FundPostingService
             if ($posting->bankTransaction) {
                 $posting->bankTransaction->update(['status' => 'posted']);
             }
+
+            $this->notifyMemberOfReview($posting, 'accepted');
         });
     }
 
@@ -123,7 +127,25 @@ class FundPostingService
             if ($posting->bankTransaction) {
                 $posting->bankTransaction->update(['status' => 'ignored']);
             }
+
+            $this->notifyMemberOfReview($posting, 'rejected');
         });
+    }
+
+    private function notifyMemberOfReview(FundPosting $posting, string $outcome): void
+    {
+        $posting->loadMissing('member.user');
+        $memberUser = $posting->member?->user;
+
+        if ($memberUser === null) {
+            return;
+        }
+
+        $notification = $outcome === 'accepted'
+            ? new FundPostingAcceptedNotification($posting)
+            : new FundPostingRejectedNotification($posting);
+
+        $memberUser->notify($notification);
     }
 
     /**

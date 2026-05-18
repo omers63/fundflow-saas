@@ -7,6 +7,7 @@ use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
@@ -34,15 +35,15 @@ class MembersTable
                     TextColumn::make('phone')
                         ->toggleable(isToggledHiddenByDefault: true),
                     TextColumn::make('monthly_contribution_amount')
-                        ->money(fn(): string => Setting::get('general', 'currency', 'USD'))
+                        ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
                         ->sortable(),
                     TextColumn::make('parent.name')
                         ->label('Parent')
                         ->placeholder(__('Independent')),
                     TextColumn::make('status')
                         ->badge()
-                        ->formatStateUsing(fn(string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
-                        ->color(fn(string $state): string => Member::statusBadgeColor($state)),
+                        ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
+                        ->color(fn (string $state): string => Member::statusBadgeColor($state)),
                     TextColumn::make('joined_at')
                         ->date()
                         ->sortable(),
@@ -57,6 +58,7 @@ class MembersTable
                         ->preload(),
                     DateColumnRangeFilter::make('joined_at', 'Joined'),
                 ])
+                ->recordUrl(fn (Member $record): string => MemberResource::getUrl('edit', ['record' => $record]))
                 ->recordActions(TableRecordActionGroups::wrap([
                     EditAction::make(),
                 ]))

@@ -10,6 +10,7 @@ use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Setting;
+use App\Support\Loans\LoanUserFacingStage;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
@@ -40,7 +41,7 @@ class MyLoansTable
                         ->placeholder(__('—')),
                     TextColumn::make('status')
                         ->badge()
-                        ->formatStateUsing(fn (string $state): string => Loan::statusOptions()[$state] ?? $state)
+                        ->formatStateUsing(fn (string $state, Loan $record): string => LoanUserFacingStage::memberListStatusLabel($record))
                         ->color(fn (string $state): string => Loan::statusColor($state)),
                     TextColumn::make('applied_at')
                         ->dateTime()

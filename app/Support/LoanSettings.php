@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 
 final class LoanSettings
@@ -24,6 +25,8 @@ final class LoanSettings
             'max_loan_amount' => 0,
             'settlement_threshold_pct' => 0.16,
             'default_grace_cycles' => 2,
+            'require_guarantor_above_fund_balance' => true,
+            'auto_allocate_loan_repayment' => false,
         ];
     }
 
@@ -73,6 +76,25 @@ final class LoanSettings
     public static function defaultGraceCycles(): int
     {
         return (int) self::get('default_grace_cycles', 2);
+    }
+
+    public static function requireGuarantorAboveFundBalance(): bool
+    {
+        return (bool) self::get('require_guarantor_above_fund_balance', true);
+    }
+
+    public static function autoAllocateLoanRepayment(): bool
+    {
+        return (bool) self::get('auto_allocate_loan_repayment', false);
+    }
+
+    public static function guarantorRequiredForAmount(Member $member, float $amount): bool
+    {
+        if (! self::requireGuarantorAboveFundBalance()) {
+            return false;
+        }
+
+        return $amount > $member->getFundBalance() + 0.01;
     }
 
     /**

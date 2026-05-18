@@ -11,10 +11,14 @@ use App\Models\Tenant\LoanDisbursement;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\User;
+use App\Notifications\Tenant\GuarantorLoanApplicationNotification;
 use App\Notifications\Tenant\LoanApprovedNotification;
 use App\Notifications\Tenant\LoanDisbursedNotification;
 use App\Notifications\Tenant\LoanPartialDisbursementNotification;
 use App\Notifications\Tenant\LoanRejectedNotification;
+use App\Notifications\Tenant\LoanSubmittedNotification;
+use App\Notifications\Tenant\NewLoanApplicationNotification;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -73,6 +77,10 @@ final class LoanLifecycleService
         ?int $guarantorMemberId = null,
         bool $isEmergency = false,
         bool $hasGraceCycle = true,
+        ?string $witness1Name = null,
+        ?string $witness1Phone = null,
+        ?string $witness2Name = null,
+        ?string $witness2Phone = null,
     ): Loan {
         $check = $this->checkEligibility($member);
         if (! $check['eligible']) {
@@ -83,9 +91,17 @@ final class LoanLifecycleService
             throw new InvalidArgumentException($error);
         }
 
+        if (LoanSettings::guarantorRequiredForAmount($member, $amountRequested) && $guarantorMemberId === null) {
+            throw new InvalidArgumentException(__('A guarantor is required when the loan amount exceeds your fund balance.'));
+        }
+
+        if ($guarantorMemberId !== null && (int) $guarantorMemberId === (int) $member->id) {
+            throw new InvalidArgumentException(__('You cannot be your own guarantor.'));
+        }
+
         $loanTier = LoanTier::forAmount($amountRequested);
 
-        return Loan::create([
+        $loan = Loan::create([
             'member_id' => $member->id,
             'loan_tier_id' => $loanTier?->id,
             'amount' => $amountRequested,
@@ -96,11 +112,31 @@ final class LoanLifecycleService
             'total_repaid' => 0,
             'purpose' => $purpose,
             'guarantor_member_id' => $guarantorMemberId,
+            'witness1_name' => $witness1Name,
+            'witness1_phone' => $witness1Phone,
+            'witness2_name' => $witness2Name,
+            'witness2_phone' => $witness2Phone,
             'is_emergency' => $isEmergency,
             'has_grace_cycle' => $hasGraceCycle,
             'status' => 'pending',
             'applied_at' => now(),
         ]);
+
+        $this->notifyMember($loan, new LoanSubmittedNotification($loan));
+
+        if ($guarantorMemberId !== null) {
+            $loan->loadMissing('guarantor.user');
+            $guarantorUser = $loan->guarantor?->user;
+            if ($guarantorUser !== null) {
+                $this->notifyMember($loan, new GuarantorLoanApplicationNotification($loan), $guarantorUser);
+            }
+        }
+
+        User::query()->where('is_admin', true)->each(
+            fn (User $admin): mixed => $admin->notify(new NewLoanApplicationNotification($loan))
+        );
+
+        return $loan;
     }
 
     public function approveLoan(
@@ -334,11 +370,12 @@ final class LoanLifecycleService
         $this->notifyMember($loan, new LoanDisbursedNotification($loan));
     }
 
-    private function notifyMember(Loan $loan, object $notification): void
+    private function notifyMember(Loan $loan, object $notification, ?User $user = null): void
     {
         try {
             $loan->loadMissing('member.user');
-            $loan->member->user?->notify($notification);
+            $recipient = $user ?? $loan->member->user;
+            $recipient?->notify($notification);
         } catch (Throwable $e) {
             logger()->warning('LoanLifecycleService: notification failed', [
                 'loan_id' => $loan->id,

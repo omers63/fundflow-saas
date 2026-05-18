@@ -6,25 +6,20 @@ namespace App\Notifications\Tenant;
 
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
+use App\Notifications\Concerns\DeliversToMemberChannels;
 use Carbon\CarbonInterface;
 use Illuminate\Notifications\Notification;
 
 class LoanRepaymentDueNotification extends Notification
 {
+    use DeliversToMemberChannels;
+
     public function __construct(
         public readonly Loan $loan,
         public readonly LoanInstallment $installment,
         public readonly CarbonInterface $deadline,
         public readonly float $cashBalance,
     ) {}
-
-    /**
-     * @return array<int, string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['database'];
-    }
 
     /**
      * @return array<string, mixed>

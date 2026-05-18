@@ -154,6 +154,242 @@
     color: #fcd34d;
 }
 
+/* Member dashboard greeting hero */
+.fi-body.fi-panel-member .ff-member-dashboard-hero {
+    animation: ff-member-dashboard-glow 8s ease-in-out infinite alternate;
+}
+
+@keyframes ff-member-dashboard-glow {
+    from {
+        box-shadow:
+            0 10px 40px -12px rgb(5 150 105 / 0.45),
+            inset 0 1px 0 rgb(255 255 255 / 0.12);
+    }
+
+    to {
+        box-shadow:
+            0 16px 48px -10px rgb(20 184 166 / 0.5),
+            inset 0 1px 0 rgb(255 255 255 / 0.18);
+    }
+}
+
+.fi-body.fi-panel-member .ff-member-dashboard-balance {
+    animation: ff-stat-in 0.5s ease-out both;
+    backdrop-filter: blur(8px);
+}
+
+.fi-body.fi-panel-member .ff-member-dashboard-balance:nth-child(2) {
+    animation-delay: 0.08s;
+}
+
+/* Balance cards: gold/amber panels — keep readable on emerald hero */
+.fi-body.fi-panel-member .ff-member-dashboard-hero .ff-member-dashboard-balance :where([class*='text-[10px]']) {
+    font-size: 0.625rem !important;
+    font-weight: 600 !important;
+}
+
+.fi-body.fi-panel-member .ff-member-dashboard-hero .member-profile-status--warning {
+    background: rgb(251 191 36 / 0.25);
+    border-color: rgb(253 230 138 / 0.45);
+}
+
+.fi-body.fi-panel-member .ff-member-dashboard-hero .member-profile-status--inactive {
+    background: rgb(255 255 255 / 0.12);
+    border-color: rgb(255 255 255 / 0.3);
+}
+
+.fi-body.fi-panel-member .ff-member-dashboard-hero-highlight,
+.fi-body.fi-panel-member .ff-member-dashboard-pill {
+    backdrop-filter: blur(8px);
+}
+
+.fi-body.fi-panel-member .ff-member-dashboard-hero-highlight .text-sm {
+    font-size: 0.875rem !important;
+}
+
+.fi-body.fi-panel-member .ff-member-dashboard-hero-highlight .text-xs {
+    font-size: 0.75rem !important;
+}
+
+.fi-body.fi-panel-member .ff-member-dashboard-pill {
+    font-size: 0.6875rem !important;
+    line-height: 1rem;
+}
+
 .fi-body.fi-panel-member .fi-wi-stats-overview > *:nth-child(6) {
     animation-delay: 0.22s;
+}
+
+/* Member portal typography — slightly larger and heavier than admin/tenant */
+.fi-body.fi-panel-member {
+    font-size: 1.0625rem;
+    line-height: 1.5;
+}
+
+.fi-body.fi-panel-member .fi-main,
+.fi-body.fi-panel-member .fi-in-text,
+.fi-body.fi-panel-member .fi-ta-text {
+    font-weight: 500;
+}
+
+.fi-body.fi-panel-member .fi-header-heading {
+    font-size: 1.375rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.fi-body.fi-panel-member .fi-header-subheading {
+    font-size: 0.9375rem;
+    font-weight: 500;
+}
+
+.fi-body.fi-panel-member .fi-sidebar-item-label,
+.fi-body.fi-panel-member .fi-sidebar-group-label {
+    font-weight: 600;
+}
+
+.fi-body.fi-panel-member .fi-ta-header-cell .fi-ta-header-cell-label {
+    font-size: 0.8125rem;
+    font-weight: 700;
+}
+
+.fi-body.fi-panel-member .fi-wi-stats-overview-stat-label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.fi-body.fi-panel-member .fi-wi-stats-overview-stat-value {
+    font-size: 1.375rem;
+    font-weight: 700;
+}
+
+.fi-body.fi-panel-member .fi-wi-stats-overview-stat-description {
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+.fi-body.fi-panel-member .fi-fo-field-wrp-label {
+    font-weight: 600;
+}
+
+.fi-body.fi-panel-member .fi-section-header-heading {
+    font-weight: 700;
+}
+
+.fi-body.fi-panel-member .ff-app-insights,
+.fi-body.fi-panel-member .ff-member-dashboard {
+    font-size: 1rem;
+}
+
+.fi-body.fi-panel-member .ff-app-insights .text-xs,
+.fi-body.fi-panel-member .ff-member-dashboard .text-xs {
+    font-size: 0.875rem;
+}
+
+.fi-body.fi-panel-member .ff-app-insights .text-sm,
+.fi-body.fi-panel-member .ff-member-dashboard .text-sm {
+    font-size: 0.9375rem;
+}
+
+.fi-body.fi-panel-member .ff-app-insights :where([class*='text-[9px]'], [class*='text-[10px]'], [class*='text-[11px]']),
+.fi-body.fi-panel-member .ff-member-dashboard :where([class*='text-[9px]'], [class*='text-[10px]'], [class*='text-[11px]']) {
+    font-size: 0.8125rem !important;
+}
+
+.fi-body.fi-panel-member .ff-app-insights :where([class*='text-[10px]'], [class*='text-[11px]']),
+.fi-body.fi-panel-member .ff-member-dashboard :where([class*='text-[10px]'], [class*='text-[11px]']) {
+    font-weight: 600 !important;
+}
+
+/* Dashboard KPI strip — keep compact (do not inherit dashboard type scale) */
+.fi-body.fi-panel-member .ff-member-dashboard .ff-app-insights-kpi-strip .ff-app-insights-kpi :where([class*='text-[10px]'], [class*='text-[11px]']) {
+    font-size: 0.625rem !important;
+    font-weight: 500 !important;
+    line-height: 0.875rem;
+}
+
+.fi-body.fi-panel-member .ff-member-dashboard .ff-app-insights-kpi-strip .ff-app-insights-kpi :is(p.text-base, p.sm\:text-lg) {
+    font-size: 0.9375rem !important;
+    line-height: 1.125rem;
+}
+
+@media (min-width: 640px) {
+    .fi-body.fi-panel-member .ff-member-dashboard .ff-app-insights-kpi-strip .ff-app-insights-kpi :is(p.text-base, p.sm\:text-lg) {
+        font-size: 1.0625rem !important;
+        line-height: 1.25rem;
+    }
+}
+
+.fi-body.fi-panel-member .ff-member-dashboard .ff-app-insights-kpi-strip .ff-app-insights-kpi {
+    transition: background-color 0.15s ease;
+}
+
+.fi-body.fi-panel-member .member-profile-identity-card .member-profile-identity-heading {
+    font-size: 1.625rem;
+    line-height: 2.125rem;
+}
+
+.fi-body.fi-panel-member .member-profile-identity-card .member-profile-status {
+    font-size: 0.8125rem;
+}
+
+.fi-body.fi-panel-member .fi-topbar-start {
+    gap: 0.75rem;
+}
+
+.fi-body.fi-panel-member .ff-member-topbar-fund-name {
+    min-width: 0;
+    max-width: min(14rem, 28vw);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.25;
+    color: rgb(17 24 39);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-topbar-fund-name {
+    color: rgb(243 244 246);
+}
+
+@media (max-width: 1023px) {
+    .fi-body.fi-panel-member {
+        font-size: 1.0625rem;
+        line-height: 1.5;
+    }
+
+    .fi-body.fi-panel-member .fi-wi-stats-overview-stat-label {
+        font-size: 0.8125rem;
+    }
+
+    .fi-body.fi-panel-member .fi-wi-stats-overview-stat-value {
+        font-size: 1.3125rem;
+    }
+
+    .fi-body.fi-panel-member .fi-wi-stats-overview-stat-description {
+        font-size: 0.8125rem;
+    }
+
+    .fi-body.fi-panel-member .fi-fo-field-wrp-label-content,
+    .fi-body.fi-panel-member .fi-fo-field-wrp-hint,
+    .fi-body.fi-panel-member .fi-fo-field-wrp-helper-text {
+        font-size: 0.9375rem;
+    }
+
+    .fi-body.fi-panel-member .fi-sidebar-nav-item-label,
+    .fi-body.fi-panel-member .fi-sidebar-item-label {
+        font-size: 0.9375rem;
+        font-weight: 600;
+    }
+}
+
+@media (max-width: 639px) {
+    .fi-body.fi-panel-member {
+        font-size: 1rem;
+    }
+
+    .fi-body.fi-panel-member .fi-wi-stats-overview-stat-value {
+        font-size: 1.25rem;
+    }
 }

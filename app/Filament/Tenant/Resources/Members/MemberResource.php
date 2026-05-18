@@ -6,7 +6,6 @@ use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Tenant\Resources\Members\Pages\CreateMember;
 use App\Filament\Tenant\Resources\Members\Pages\EditMember;
 use App\Filament\Tenant\Resources\Members\Pages\ListMembers;
-use App\Filament\Tenant\Resources\Members\Pages\ViewMember;
 use App\Filament\Tenant\Resources\Members\RelationManagers\AccountsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\ContributionsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\DependentsRelationManager;
@@ -15,6 +14,7 @@ use App\Filament\Tenant\Resources\Members\RelationManagers\MessagesRelationManag
 use App\Filament\Tenant\Resources\Members\RelationManagers\RepaymentsRelationManager;
 use App\Filament\Tenant\Resources\Members\Schemas\MemberForm;
 use App\Filament\Tenant\Resources\Members\Tables\MembersTable;
+use App\Filament\Tenant\Widgets\MemberDetailInsightsWidget;
 use App\Filament\Tenant\Widgets\MemberInsightsWidget;
 use App\Models\Tenant\Member;
 use BackedEnum;
@@ -64,7 +64,6 @@ class MemberResource extends Resource
         return [
             'index' => ListMembers::route('/'),
             'create' => CreateMember::route('/create'),
-            'view' => ViewMember::route('/{record}'),
             'edit' => EditMember::route('/{record}/edit'),
         ];
     }
@@ -77,6 +76,22 @@ class MemberResource extends Resource
 
         $targetName = json_encode(
             app('livewire.factory')->resolveComponentName(MemberInsightsWidget::class),
+            JSON_THROW_ON_ERROR
+        );
+
+        $livewire->js(
+            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
+        );
+    }
+
+    public static function dispatchMemberDetailInsightsRefresh(?Component $livewire): void
+    {
+        if ($livewire === null) {
+            return;
+        }
+
+        $targetName = json_encode(
+            app('livewire.factory')->resolveComponentName(MemberDetailInsightsWidget::class),
             JSON_THROW_ON_ERROR
         );
 

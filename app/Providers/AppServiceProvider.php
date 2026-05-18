@@ -24,12 +24,14 @@ use App\Models\Tenant\LoanInstallment;
 use App\Observers\LoanInstallmentObserver;
 use Filament\Actions\Action as FilamentAction;
 use Filament\Auth\Http\Responses\Contracts\LogoutResponse;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\Field;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Support\Enums\TextSize;
+use Filament\Support\Facades\FilamentView;
 use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\BooleanColumn;
 use Filament\Tables\Columns\CheckboxColumn;
@@ -46,6 +48,8 @@ use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Columns\ViewColumn;
 use Filament\Tables\Filters\BaseFilter;
 use Filament\Tables\Table;
+use Filament\View\PanelsRenderHook;
+use Illuminate\Contracts\View\View;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -70,6 +74,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->registerMemberTopbarRenderHooks();
+
         LoanInstallment::observe(LoanInstallmentObserver::class);
 
         Column::configureUsing(function (Column $column): Column {
@@ -81,9 +87,13 @@ class AppServiceProvider extends ServiceProvider
                 ->wrapHeader();
 
             if ($column instanceof TextColumn) {
+                $textSize = Filament::getCurrentPanel()?->getId() === 'member'
+                    ? TextSize::Small
+                    : TextSize::ExtraSmall;
+
                 $column = $column
                     ->wrap()
-                    ->size(TextSize::ExtraSmall);
+                    ->size($textSize);
 
                 $column = TableSummaryFooter::applySummarizersToTextColumn($column);
             }
@@ -92,9 +102,13 @@ class AppServiceProvider extends ServiceProvider
         });
 
         TextEntry::configureUsing(function (TextEntry $entry): TextEntry {
+            $textSize = Filament::getCurrentPanel()?->getId() === 'member'
+                ? TextSize::Small
+                : TextSize::ExtraSmall;
+
             return $entry
                 ->wrap()
-                ->size(TextSize::ExtraSmall);
+                ->size($textSize);
         });
 
         Field::configureUsing(fn (Field $field): Field => $field->translateLabel());
@@ -126,6 +140,20 @@ class AppServiceProvider extends ServiceProvider
      *
      * @see CapitalizesTableColumnHeaderLabel
      */
+    private function registerMemberTopbarRenderHooks(): void
+    {
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::TOPBAR_LOGO_AFTER,
+            function (): View|string {
+                if (Filament::getCurrentPanel()?->getId() !== 'member') {
+                    return '';
+                }
+
+                return view('filament.member.partials.topbar-fund-name');
+            },
+        );
+    }
+
     private function registerFilamentTableColumnHeaderBindings(): void
     {
         $bindings = [

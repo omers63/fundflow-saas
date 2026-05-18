@@ -20,7 +20,7 @@ final class MemberTableColumns
             $textColumn->label($label);
         }
 
-        return $textColumn->url(self::memberRecordViewUrl(...));
+        return $textColumn->url(self::memberRecordEditUrl(...));
     }
 
     public static function name(
@@ -33,42 +33,42 @@ final class MemberTableColumns
             $textColumn->label($label);
         }
 
-        return $textColumn->url(self::memberRecordViewUrl(...));
+        return $textColumn->url(self::memberRecordEditUrl(...));
     }
 
     public static function relationNumber(?string $label = null): TextColumn
     {
         return self::number('member.member_number', $label ?? __('Member #'))
-            ->url(self::relatedMemberViewUrl(...));
+            ->url(self::relatedMemberEditUrl(...));
     }
 
     public static function relationName(?string $label = null): TextColumn
     {
         return self::name('member.name', $label)
-            ->url(self::relatedMemberViewUrl(...));
+            ->url(self::relatedMemberEditUrl(...));
     }
 
-    public static function memberRecordViewUrl(Member $record): string
+    public static function memberRecordEditUrl(Member $record): string
     {
-        return MemberResource::getUrl('view', ['record' => $record]);
+        return MemberResource::getUrl('edit', ['record' => $record]);
     }
 
-    public static function relatedMemberViewUrl(object $record): ?string
+    public static function relatedMemberEditUrl(object $record): ?string
     {
         $member = $record->member ?? null;
 
-        if (!$member instanceof Member) {
+        if (! $member instanceof Member) {
             return null;
         }
 
-        return self::memberRecordViewUrl($member);
+        return self::memberRecordEditUrl($member);
     }
 
     /**
      * @param  array{member_id: int|string}  $record
      */
-    public static function memberIdViewUrl(array $record): string
+    public static function memberIdEditUrl(array $record): string
     {
-        return MemberResource::getUrl('view', ['record' => $record['member_id']]);
+        return MemberResource::getUrl('edit', ['record' => $record['member_id']]);
     }
 }

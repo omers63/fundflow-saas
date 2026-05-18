@@ -4,19 +4,14 @@ declare(strict_types=1);
 
 namespace App\Notifications\Tenant;
 
+use App\Notifications\Concerns\DeliversToMemberChannels;
 use Illuminate\Notifications\Notification;
 
 class LoanRejectedNotification extends Notification
 {
-    public function __construct(public readonly string $reason) {}
+    use DeliversToMemberChannels;
 
-    /**
-     * @return array<int, string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['database'];
-    }
+    public function __construct(public readonly string $reason) {}
 
     /**
      * @return array<string, mixed>

@@ -5,6 +5,8 @@ use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
+use App\Notifications\Tenant\FundPostingAcceptedNotification;
+use App\Notifications\Tenant\FundPostingRejectedNotification;
 use App\Notifications\Tenant\NewFundPostingNotification;
 use App\Services\AccountingService;
 use App\Services\FundPostingService;
@@ -182,6 +184,37 @@ test('reject updates posting status and ignores bank transaction', function () {
     expect($bankTxn->status)->toBe('ignored');
 
     expect(Account::masterCash()->balance)->toBe('0.00');
+});
+
+test('accept and reject notify member user', function () {
+    Notification::fake();
+
+    $memberUser = User::create([
+        'name' => 'Member User',
+        'email' => 'member-posting@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => false,
+    ]);
+
+    $member = Member::create([
+        'user_id' => $memberUser->id,
+        'member_number' => 'MEM-N01',
+        'name' => 'Member User',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $posting = $this->service->submit($member, 1000, '2026-05-12');
+    $this->service->accept($posting);
+
+    Notification::assertSentTo($memberUser, FundPostingAcceptedNotification::class);
+
+    $posting2 = $this->service->submit($member, 500, '2026-05-13');
+    $this->service->reject($posting2, remarks: 'Duplicate');
+
+    Notification::assertSentTo($memberUser, FundPostingRejectedNotification::class);
 });
 
 test('clear transaction matches uncleared with imported', function () {

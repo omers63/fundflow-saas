@@ -1,149 +1,110 @@
-# FundFlow SaaS — Member Portal Design
+# FundFlow SaaS — Member Portal
 
 ## Overview
 
-A dedicated Filament panel ("Member Portal") at `/portal` on tenant domains where members can only see their own fund information — accounts, contributions, loans, and a personal dashboard.
+The member portal is a dedicated Filament panel at **`/member`** on tenant domains. Members sign in with the same `tenant` guard as admins but see only their own data: accounts, contributions, deposits, loans, statements, messages, and a personal dashboard.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph tenantDomain ["Tenant Domain (e.g. samman.fundflow-saas.osamman.com)"]
-        landing["/ Landing Page"]
-        admin["/manage Admin Panel (full access)"]
-        portal["/portal Member Portal (scoped)"]
+    subgraph tenantDomain ["Tenant domain"]
+        admin["/manage — Admin panel"]
+        member["/member — Member portal"]
     end
-    admin -->|"all resources"| DB[(Tenant DB)]
-    portal -->|"member-scoped queries"| DB
+    admin --> DB[(Tenant DB)]
+    member --> DB
 ```
 
-## Key Design Decisions
+## Access control
 
-- **Separate panel, same guard**: Both `/manage` (admin) and `/portal` (member) use the `tenant` auth guard. Access control is handled via `canAccessPanel()` on the `User` model — admins (`is_admin = true`) can access the admin panel, regular members with a linked member profile can access the portal.
-- **Data scoping**: Each resource in the member panel overrides `getEloquentQuery()` to apply `->where('member_id', $memberId)`, driven by the logged-in user's associated member record via the `User -> Member` HasOne relationship.
-- **Read-only**: Members can view their accounts, contributions, and loans but cannot create, edit, or delete any records. All `canCreate()` methods return `false`.
-- **Visual distinction**: The member portal uses Teal as its primary color to distinguish from the admin panel's Emerald.
+| User | Admin panel | Member portal |
+|------|-------------|---------------|
+| Admin (`is_admin`) | Yes | No |
+| Member (linked profile) | No | Yes |
+| Orphan user | No | No |
 
-## Access Control
+Implemented in `User::canAccessPanel()`.
 
-| User Type | `/manage` (Admin) | `/portal` (Member) |
-|---|---|---|
-| Admin (`is_admin = true`) | Allowed | Denied (no member profile) |
-| Member (has member profile) | Denied | Allowed |
-| Orphan user (no admin, no member) | Denied | Denied |
+## Panel configuration
 
-Controlled by `User::canAccessPanel()`:
-
-```php
-public function canAccessPanel(Panel $panel): bool
-{
-    if ($panel->getId() === 'tenant') {
-        return $this->is_admin;
-    }
-    if ($panel->getId() === 'member') {
-        return $this->member !== null;
-    }
-    return false;
-}
-```
-
-## Panel Configuration
-
-- **Panel ID**: `member`
-- **Path**: `/portal`
-- **Auth Guard**: `tenant`
-- **Color**: Teal
+- **ID**: `member`
+- **Path**: `/member`
 - **Provider**: `App\Providers\Filament\MemberPanelProvider`
-- **Middleware**: Same tenancy middleware stack as the admin panel (`InitializeTenancyByDomain`, `PreventAccessFromCentralDomains`)
+- **Primary color**: Emerald
+- **Database notifications**: enabled
+- **Dashboard**: `MemberDashboard` with `MemberPortalDashboardWidget` and `MemberArrearsAlert`
 
-## Resources
+## Navigation (sort order)
 
-### MyAccountResource (`/portal/my-accounts`)
+| Sort | Item |
+|------|------|
+| — | Dashboard |
+| 10 | My accounts |
+| 20 | My contributions |
+| 30 | Deposits |
+| 40 | My loans |
+| 50 | My statements |
+| 55 | Messages (badge: unread from admin) |
+| 45 | Guaranteed loans (where you are guarantor) |
+| 60 | Loan calculator |
 
-- Scoped to the member's own cash and fund accounts (excludes master accounts)
-- **List view**: Account name, type (badge), balance, last activity date
-- **View page**: Account details + full transaction history table (date, type, amount, balance after, description)
-- Read-only: no create, edit, or delete
+Profile is in the user menu only (`MyProfilePage` / `EditMyProfilePage`).
 
-### MyContributionResource (`/portal/my-contributions`)
+## Features
 
-- Scoped to the member's own contributions
-- **List view**: Period (month/year), amount, status (badge: pending/posted/failed), posted date
-- Filterable by status
-- Sorted by period descending (most recent first)
-- Read-only: no create or edit (contributions are managed by admins)
+### Dashboard
 
-### MyLoanResource (`/portal/my-loans`)
+`MemberPortalInsightsService` powers KPIs (cash, fund, contributions, pending deposits, loan balance, unread messages), hero call-to-action, quick links, open contribution cycle, recent deposits, and a contribution sparkline.
 
-- Scoped to the member's own loans
-- **List view**: Loan amount, interest rate, term, monthly repayment, total repaid, status (badge), applied date
-- **View page**: Loan details, timeline (applied/approved/disbursed/completed dates), repayment history table
-- Filterable by status
-- Read-only: existing loans cannot be modified
+### Accounts & contributions
 
-## Dashboard Widget — MyFundOverview
+Read-only lists scoped with `getEloquentQuery()->where('member_id', …)`. Account view includes transaction history.
 
-Displays personalized financial stats:
+### Deposits (`MyFundPostingResource`)
 
-| Stat | Description |
-|---|---|
-| Fund Balance | Accumulated fund savings |
-| Cash Balance | Available cash in member's cash account |
-| Total Contributions | Sum of all posted contributions with count |
-| Active Loan / Loan Eligibility | If active loan exists: shows amount and outstanding balance. Otherwise: shows eligibility status |
-| Dependents | Count of dependent members (only shown if > 0) |
+Members can **create** deposit requests (`FundPostingService::submit`). Admins review in the tenant panel. On accept/reject, members receive `FundPostingAcceptedNotification` / `FundPostingRejectedNotification`. List page includes `MemberFundPostingInsightsWidget`.
 
-## Data Scoping Strategy
+### Loans (`MyLoanResource`)
 
-Each resource overrides `getEloquentQuery()` to scope data:
+- List with member-friendly status labels (`LoanUserFacingStage::memberListStatusLabel`)
+- View with insights widget and installment relation manager
+- **Apply**: `ApplyForLoan` page — wizard (Amount → Purpose → Witnesses → Review); guarantor required when amount exceeds fund balance (setting)
+- **Pay this period** and **Pay off loan early** on active loan view (from member cash)
+- Cancel pending applications via shared `LoanFilamentActions::cancel()`
+- **Loan calculator** standalone page
+- **Guaranteed loans** — view loans where you are named guarantor
 
-```php
-public static function getEloquentQuery(): Builder
-{
-    $member = auth('tenant')->user()?->member;
-    return parent::getEloquentQuery()
-        ->where('member_id', $member?->id);
-}
-```
+### Notifications (SMS / WhatsApp)
 
-## Files Created
+When enabled under **Settings → Notifications** (Twilio), loan and fund alerts also go to the member phone on file. Database notifications always apply.
 
-| File | Purpose |
-|---|---|
-| `app/Providers/Filament/MemberPanelProvider.php` | Panel provider registered in `bootstrap/providers.php` |
-| `app/Filament/Member/Widgets/MyFundOverview.php` | Personal dashboard stats widget |
-| `app/Filament/Member/Resources/MyAccounts/MyAccountResource.php` | Account resource with scoped query |
-| `app/Filament/Member/Resources/MyAccounts/Tables/MyAccountsTable.php` | Account list table definition |
-| `app/Filament/Member/Resources/MyAccounts/Pages/ListMyAccounts.php` | Account list page |
-| `app/Filament/Member/Resources/MyAccounts/Pages/ViewMyAccount.php` | Account detail with transactions |
-| `app/Filament/Member/Resources/MyContributions/MyContributionResource.php` | Contribution resource with scoped query |
-| `app/Filament/Member/Resources/MyContributions/Tables/MyContributionsTable.php` | Contribution list table |
-| `app/Filament/Member/Resources/MyContributions/Pages/ListMyContributions.php` | Contribution list page |
-| `app/Filament/Member/Resources/MyLoans/MyLoanResource.php` | Loan resource with scoped query |
-| `app/Filament/Member/Resources/MyLoans/Tables/MyLoansTable.php` | Loan list table |
-| `app/Filament/Member/Resources/MyLoans/Pages/ListMyLoans.php` | Loan list page |
-| `app/Filament/Member/Resources/MyLoans/Pages/ViewMyLoan.php` | Loan detail with repayment history |
-| `database/migrations/tenant/2026_05_13_144644_add_is_admin_to_users_table.php` | Adds `is_admin` column to tenant users |
-| `tests/Feature/Tenant/MemberPortalTest.php` | 11 tests covering access control and data scoping |
+### Statements
 
-## Files Modified
+Read-only monthly statements list.
 
-| File | Change |
-|---|---|
-| `app/Models/Tenant/User.php` | Added `member()` HasOne, `is_admin` field/cast, panel-specific `canAccessPanel()` |
-| `bootstrap/providers.php` | Registered `MemberPanelProvider::class` |
-| `database/seeders/Tenant/TenantDatabaseSeeder.php` | Admin user seeded with `is_admin: true` |
-| `resources/views/tenant/landing.blade.php` | Login button changed to point to Member Portal (`/portal`) |
+### Messages (`MyMessageResource`)
 
-## Test Coverage
+Threaded direct messages between the member and fund administrators:
 
-11 Pest feature tests covering:
-- Admin can access admin panel
-- Member cannot access admin panel
-- Member can access member portal
-- User without member profile cannot access portal
-- Account/contribution/loan resources scope to authenticated member
-- Member B sees zero loans (has none)
-- Member B sees only their own contributions
-- Portal resources cannot be created
-- User model has correct member relationship
+- Inbox of root threads
+- Compose new message to admin
+- View thread and reply
+- Unread admin messages marked read on open
+- Database notifications to member (admin send) and to all admins (member send/reply)
+
+Admin counterpart: `MessagesRelationManager` on the member edit screen in the tenant panel.
+
+## Data scoping
+
+Every member resource overrides `getEloquentQuery()` to restrict rows to `auth('tenant')->user()->member`.
+
+## Related code
+
+| Area | Path |
+|------|------|
+| Panel provider | `app/Providers/Filament/MemberPanelProvider.php` |
+| Dashboard insights | `app/Services/MemberPortalInsightsService.php` |
+| Deposit insights | `app/Services/MemberFundPostingInsightsService.php` |
+| Member Filament code | `app/Filament/Member/**` |
+| Tests | `tests/Feature/Tenant/MemberPortalTest.php`, `tests/Unit/MemberPortalInsightsServiceTest.php` |

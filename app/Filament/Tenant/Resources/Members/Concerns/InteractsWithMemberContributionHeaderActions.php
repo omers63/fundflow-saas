@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\Members\Concerns;
 
+use App\Filament\Support\MemberDelinquencyActions;
+use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
 use App\Services\ContributionCycleService;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 
@@ -56,6 +59,10 @@ trait InteractsWithMemberContributionHeaderActions
                         })
                         ->color($outcome === 'applied' ? 'success' : 'warning')
                         ->send();
+
+                    if ($outcome === 'applied') {
+                        MemberResource::dispatchMemberDetailInsightsRefresh($this);
+                    }
                 }),
             Action::make('allocateDependents')
                 ->label(__('Allocate to dependents'))
@@ -86,5 +93,40 @@ trait InteractsWithMemberContributionHeaderActions
                         ->send();
                 }),
         ];
+    }
+
+    /**
+     * @return list<Action|ActionGroup>
+     */
+    protected function organizedMemberHeaderActions(): array
+    {
+        $contributionActions = $this->memberContributionHeaderActions();
+        $actions = [];
+
+        if (isset($contributionActions[0])) {
+            $actions[] = $contributionActions[0];
+        }
+
+        $householdActions = array_slice($contributionActions, 1);
+
+        if ($householdActions !== []) {
+            $actions[] = ActionGroup::make($householdActions)
+                ->label(__('Household'))
+                ->icon('heroicon-o-users')
+                ->color('gray')
+                ->button();
+        }
+
+        $delinquencyActions = MemberDelinquencyActions::forMemberRecord();
+
+        if ($delinquencyActions !== []) {
+            $actions[] = ActionGroup::make($delinquencyActions)
+                ->label(__('Delinquency'))
+                ->icon('heroicon-o-exclamation-triangle')
+                ->color('gray')
+                ->button();
+        }
+
+        return $actions;
     }
 }

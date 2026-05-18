@@ -18,6 +18,20 @@ enum LoanUserFacingStage: string
     case Repaying = 'repaying';
     case Closed = 'closed';
 
+    public static function memberListStatusLabel(Loan $loan): string
+    {
+        return match ($loan->status) {
+            'pending' => __('Application submitted'),
+            'approved' => __('Approved — awaiting disbursement'),
+            'active' => __('Active — repaying'),
+            'completed' => __('Fully repaid'),
+            'early_settled' => __('Settled early'),
+            'rejected' => __('Application rejected'),
+            'cancelled' => __('Application cancelled'),
+            default => Loan::statusOptions()[$loan->status] ?? $loan->status,
+        };
+    }
+
     public function label(): string
     {
         return match ($this) {

@@ -26,7 +26,7 @@ class MyContributionResource extends Resource
 
     protected static ?string $pluralModelLabel = 'My Contributions';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 20;
 
     public static function getEloquentQuery(): Builder
     {
