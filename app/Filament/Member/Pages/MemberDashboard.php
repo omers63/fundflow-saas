@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace App\Filament\Member\Pages;
 
-use App\Filament\Member\Widgets\MemberArrearsAlert;
+use App\Filament\Member\Support\ReturnToParentPortalAction;
 use App\Filament\Member\Widgets\MemberPortalDashboardWidget;
+use Filament\Actions\Action;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Support\Enums\Width;
 
@@ -28,7 +29,6 @@ class MemberDashboard extends BaseDashboard
     {
         return [
             MemberPortalDashboardWidget::class,
-            MemberArrearsAlert::class,
         ];
     }
 
@@ -38,5 +38,15 @@ class MemberDashboard extends BaseDashboard
     public function getColumns(): int|array
     {
         return 1;
+    }
+
+    /**
+     * @return array<Action>
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            ReturnToParentPortalAction::make($this),
+        ];
     }
 }

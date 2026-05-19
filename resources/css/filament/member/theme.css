@@ -1,5 +1,6 @@
 @import '../../../../vendor/filament/filament/resources/css/theme.css';
 @import '../mobile-panels.css';
+@import './stat-cards.css';
 
 @source '../../../../vendor/bezhansalleh/filament-language-switch/resources/views/**/*.blade.php';
 @source '../../../../app/Filament/Member/**/*';
@@ -125,52 +126,322 @@
     border-color: rgb(253 230 138 / 0.4);
 }
 
+/* Impersonation — reddish animated topbar + banner */
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) {
+    position: relative;
+    background: linear-gradient(
+        120deg,
+        #7c2d12 0%,
+        #9a3412 20%,
+        #b45309 40%,
+        #9a3412 60%,
+        #7c2d12 100%
+    );
+    background-size: 250% 250%;
+    animation: ff-impersonation-roll 5s linear infinite, ff-impersonation-topbar-flash 1.4s ease-in-out infinite;
+}
+
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) * {
+    color: #fff7ed;
+}
+
 .fi-body.fi-panel-member .ff-impersonation-banner {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    margin-inline-end: 0.75rem;
-    padding: 0.35rem 0.75rem;
+    margin-inline: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    border: 1px solid #fed7aa;
     border-radius: 9999px;
-    background: rgb(251 191 36 / 0.2);
-    border: 1px solid rgb(251 191 36 / 0.45);
+    background: linear-gradient(90deg, #7c2d12 0%, #9a3412 100%);
+    color: #fff7ed !important;
+    box-shadow:
+        0 0 0 1px rgb(254 215 170 / 0.2),
+        0 2px 10px rgb(124 45 18 / 0.35);
+    animation: ff-impersonation-pulse 1.2s ease-in-out infinite;
 }
 
 .fi-body.fi-panel-member .ff-impersonation-banner__dot {
     width: 0.5rem;
     height: 0.5rem;
     border-radius: 9999px;
-    background: #f59e0b;
-    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    background: #f97316;
+    box-shadow: 0 0 0 0 rgb(249 115 22 / 0.6);
+    animation: ff-impersonation-dot 1.2s ease-in-out infinite;
 }
 
 .fi-body.fi-panel-member .ff-impersonation-banner__text {
     font-size: 0.75rem;
-    font-weight: 600;
-    color: #b45309;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    color: #fff7ed !important;
+    text-shadow: 0 1px 1px rgb(0 0 0 / 0.3);
 }
 
-.dark .fi-body.fi-panel-member .ff-impersonation-banner__text {
-    color: #fcd34d;
+.fi-body.fi-panel-member .ff-impersonation-banner__form {
+    margin: 0;
+    padding: 0;
+    display: inline-flex;
 }
 
-/* Member dashboard greeting hero */
+.fi-body.fi-panel-member .ff-impersonation-banner__return {
+    margin-inline-start: 0.25rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 9999px;
+    border: 1px solid #fed7aa;
+    background: rgb(255 247 237 / 0.14);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: #fff7ed !important;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.fi-body.fi-panel-member .ff-impersonation-banner__return:hover {
+    background: rgb(255 247 237 / 0.28);
+}
+
+@keyframes ff-impersonation-pulse {
+    0%,
+    100% {
+        filter: brightness(1);
+    }
+
+    50% {
+        filter: brightness(1.08);
+    }
+}
+
+@keyframes ff-impersonation-roll {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    100% {
+        background-position: 100% 50%;
+    }
+}
+
+@keyframes ff-impersonation-topbar-flash {
+    0%,
+    100% {
+        box-shadow: inset 0 -1px 0 rgb(255 247 237 / 0.16);
+        filter: brightness(1);
+    }
+
+    50% {
+        box-shadow: inset 0 -1px 0 rgb(255 247 237 / 0.34);
+        filter: brightness(1.12);
+    }
+}
+
+@keyframes ff-impersonation-dot {
+    0% {
+        box-shadow: 0 0 0 0 rgb(249 115 22 / 0.6);
+    }
+
+    70% {
+        box-shadow: 0 0 0 7px rgb(249 115 22 / 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgb(249 115 22 / 0);
+    }
+}
+
+/* Member dashboard greeting hero — rich green mesh + wavy gradient */
 .fi-body.fi-panel-member .ff-member-dashboard-hero {
-    animation: ff-member-dashboard-glow 8s ease-in-out infinite alternate;
+    border: 1px solid rgb(110 231 183 / 0.65);
+    background-color: #ecfdf5;
+    box-shadow:
+        0 8px 32px -10px rgb(5 150 105 / 0.28),
+        0 2px 12px -4px rgb(16 185 129 / 0.18),
+        inset 0 1px 0 rgb(255 255 255 / 0.95);
 }
 
-@keyframes ff-member-dashboard-glow {
-    from {
-        box-shadow:
-            0 10px 40px -12px rgb(5 150 105 / 0.45),
-            inset 0 1px 0 rgb(255 255 255 / 0.12);
+.fi-body.fi-panel-member .ff-member-dashboard-hero__backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-color: #ecfdf5;
+    background-image:
+        linear-gradient(
+            115deg,
+            rgb(255 255 255 / 0.55) 0%,
+            transparent 38%,
+            rgb(255 255 255 / 0.2) 62%,
+            transparent 100%
+        ),
+        radial-gradient(ellipse 90% 70% at 8% 12%, rgb(52 211 153 / 0.62) 0%, transparent 58%),
+        radial-gradient(ellipse 75% 65% at 92% 18%, rgb(45 212 191 / 0.5) 0%, transparent 55%),
+        radial-gradient(ellipse 80% 55% at 50% 108%, rgb(74 222 128 / 0.45) 0%, transparent 52%),
+        radial-gradient(ellipse 55% 45% at 72% 62%, rgb(134 239 172 / 0.38) 0%, transparent 50%),
+        linear-gradient(
+            135deg,
+            #f0fdf4 0%,
+            #d1fae5 14%,
+            #6ee7b7 32%,
+            #34d399 48%,
+            #a7f3d0 62%,
+            #bbf7d0 78%,
+            #ecfdf5 92%,
+            #f0fdf4 100%
+        );
+    background-size:
+        100% 100%,
+        100% 100%,
+        100% 100%,
+        100% 100%,
+        100% 100%,
+        280% 280%;
+    background-position:
+        0 0,
+        0 0,
+        0 0,
+        0 0,
+        0 0,
+        0% 35%;
+    animation: ff-member-hero-gradient-shift 14s ease-in-out infinite alternate;
+}
+
+.fi-body.fi-panel-member .ff-member-dashboard-hero__waves {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+}
+
+.fi-body.fi-panel-member .ff-member-dashboard-hero__waves::before,
+.fi-body.fi-panel-member .ff-member-dashboard-hero__waves::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(1px);
+}
+
+.fi-body.fi-panel-member .ff-member-dashboard-hero__waves::before {
+    top: -38%;
+    left: -18%;
+    width: 78%;
+    height: 92%;
+    background: radial-gradient(ellipse at center, rgb(16 185 129 / 0.42) 0%, rgb(52 211 153 / 0.22) 42%, transparent 72%);
+    animation: ff-member-hero-wave-a 10s ease-in-out infinite;
+}
+
+.fi-body.fi-panel-member .ff-member-dashboard-hero__waves::after {
+    right: -22%;
+    bottom: -48%;
+    width: 82%;
+    height: 95%;
+    background: radial-gradient(ellipse at center, rgb(20 184 166 / 0.38) 0%, rgb(45 212 191 / 0.2) 45%, transparent 72%);
+    animation: ff-member-hero-wave-b 12s ease-in-out infinite reverse;
+}
+
+@keyframes ff-member-hero-gradient-shift {
+    0% {
+        background-position:
+            0 0,
+            0 0,
+            0 0,
+            0 0,
+            0 0,
+            0% 30%;
     }
 
-    to {
-        box-shadow:
-            0 16px 48px -10px rgb(20 184 166 / 0.5),
-            inset 0 1px 0 rgb(255 255 255 / 0.18);
+    100% {
+        background-position:
+            0 0,
+            0 0,
+            0 0,
+            0 0,
+            0 0,
+            100% 70%;
     }
+}
+
+@keyframes ff-member-hero-wave-a {
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+        opacity: 0.92;
+    }
+
+    50% {
+        transform: translate(7%, 9%) scale(1.08);
+        opacity: 1;
+    }
+}
+
+@keyframes ff-member-hero-wave-b {
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+        opacity: 0.88;
+    }
+
+    50% {
+        transform: translate(-6%, -7%) scale(1.07);
+        opacity: 1;
+    }
+}
+
+.dark .fi-body.fi-panel-member .ff-member-dashboard-hero {
+    border-color: rgb(52 211 153 / 0.28);
+    background-color: rgb(2 44 34);
+    box-shadow:
+        0 10px 36px -12px rgb(0 0 0 / 0.55),
+        0 0 0 1px rgb(16 185 129 / 0.12) inset,
+        inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-dashboard-hero__backdrop {
+    background-color: rgb(2 44 34);
+    background-image:
+        linear-gradient(
+            125deg,
+            rgb(255 255 255 / 0.07) 0%,
+            transparent 42%,
+            rgb(255 255 255 / 0.03) 100%
+        ),
+        radial-gradient(ellipse 85% 70% at 10% 8%, rgb(16 185 129 / 0.45) 0%, transparent 58%),
+        radial-gradient(ellipse 70% 60% at 88% 22%, rgb(20 184 166 / 0.35) 0%, transparent 55%),
+        radial-gradient(ellipse 75% 50% at 48% 110%, rgb(5 150 105 / 0.4) 0%, transparent 54%),
+        linear-gradient(
+            140deg,
+            rgb(2 44 34) 0%,
+            rgb(4 47 46) 18%,
+            rgb(6 78 59) 38%,
+            rgb(5 150 105 / 0.55) 52%,
+            rgb(6 95 70) 68%,
+            rgb(4 47 46) 84%,
+            rgb(2 44 34) 100%
+        );
+    background-size:
+        100% 100%,
+        100% 100%,
+        100% 100%,
+        100% 100%,
+        260% 260%;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-dashboard-hero__waves::before {
+    background: radial-gradient(ellipse at center, rgb(52 211 153 / 0.35) 0%, rgb(16 185 129 / 0.18) 45%, transparent 72%);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-dashboard-hero__waves::after {
+    background: radial-gradient(ellipse at center, rgb(45 212 191 / 0.32) 0%, rgb(20 184 166 / 0.16) 45%, transparent 72%);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-dashboard-hero__title {
+    color: rgb(236 253 245);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-dashboard-hero__date {
+    color: rgb(167 243 208 / 0.9);
 }
 
 .fi-body.fi-panel-member .ff-member-dashboard-balance {
@@ -182,10 +453,16 @@
     animation-delay: 0.08s;
 }
 
-/* Balance cards: gold/amber panels — keep readable on emerald hero */
-.fi-body.fi-panel-member .ff-member-dashboard-hero .ff-member-dashboard-balance :where([class*='text-[10px]']) {
-    font-size: 0.625rem !important;
-    font-weight: 600 !important;
+/* Balance cards: gold/amber panels on light hero */
+.fi-body.fi-panel-member .ff-member-dashboard-hero .ff-member-dashboard-balance .text-xs {
+    font-size: 0.75rem !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.05em;
+}
+
+.fi-body.fi-panel-member .ff-member-dashboard-hero .ff-member-dashboard-balance .text-xl {
+    font-size: 1.25rem !important;
+    font-weight: 700 !important;
 }
 
 .fi-body.fi-panel-member .ff-member-dashboard-hero .member-profile-status--warning {
@@ -212,8 +489,23 @@
 }
 
 .fi-body.fi-panel-member .ff-member-dashboard-pill {
-    font-size: 0.6875rem !important;
+    font-size: 0.75rem !important;
     line-height: 1rem;
+}
+
+/* List-page insight heroes — legacy text-sm / text-xs sizing */
+.fi-body.fi-panel-member .ff-app-insights-hero p.text-xs {
+    font-size: 0.875rem !important;
+    line-height: 1.25rem;
+}
+
+.fi-body.fi-panel-member .ff-app-insights-hero p.text-\[11px\] {
+    font-size: 0.75rem !important;
+    line-height: 1rem;
+}
+
+.fi-body.fi-panel-member .ff-app-insights-hero a.text-\[11px\] {
+    font-size: 0.75rem !important;
 }
 
 .fi-body.fi-panel-member .fi-wi-stats-overview > *:nth-child(6) {
@@ -301,27 +593,40 @@
     font-weight: 600 !important;
 }
 
-/* Dashboard KPI strip — keep compact (do not inherit dashboard type scale) */
-.fi-body.fi-panel-member .ff-member-dashboard .ff-app-insights-kpi-strip .ff-app-insights-kpi :where([class*='text-[10px]'], [class*='text-[11px]']) {
+/* Dashboard / contributions KPI strip — keep compact (do not inherit panel type scale) */
+.fi-body.fi-panel-member .ff-member-dashboard .ff-app-insights-kpi-strip .ff-app-insights-kpi :where([class*='text-[10px]'], [class*='text-[11px]']),
+.fi-body.fi-panel-member .ff-member-contributions-insights .ff-app-insights-kpi-strip .ff-app-insights-kpi :where([class*='text-[10px]'], [class*='text-[11px]']),
+.fi-body.fi-panel-member .ff-member-accounts-insights .ff-app-insights-kpi-strip .ff-app-insights-kpi :where([class*='text-[10px]'], [class*='text-[11px]']),
+.fi-body.fi-panel-member .ff-member-account-detail-insights .ff-app-insights-kpi-strip .ff-app-insights-kpi :where([class*='text-[10px]'], [class*='text-[11px]']) {
     font-size: 0.625rem !important;
     font-weight: 500 !important;
     line-height: 0.875rem;
 }
 
-.fi-body.fi-panel-member .ff-member-dashboard .ff-app-insights-kpi-strip .ff-app-insights-kpi :is(p.text-base, p.sm\:text-lg) {
+.fi-body.fi-panel-member .ff-member-dashboard .ff-app-insights-kpi-strip .ff-app-insights-kpi :is(p.text-base, p.sm\:text-lg),
+.fi-body.fi-panel-member .ff-member-contributions-insights .ff-app-insights-kpi-strip .ff-app-insights-kpi :is(p.text-base, p.sm\:text-lg),
+.fi-body.fi-panel-member .ff-member-accounts-insights .ff-app-insights-kpi-strip .ff-app-insights-kpi :is(p.text-base, p.sm\:text-lg),
+.fi-body.fi-panel-member .ff-member-account-detail-insights .ff-app-insights-kpi-strip .ff-app-insights-kpi :is(p.text-base, p.sm\:text-lg) {
     font-size: 0.9375rem !important;
     line-height: 1.125rem;
 }
 
 @media (min-width: 640px) {
-    .fi-body.fi-panel-member .ff-member-dashboard .ff-app-insights-kpi-strip .ff-app-insights-kpi :is(p.text-base, p.sm\:text-lg) {
+    .fi-body.fi-panel-member .ff-member-dashboard .ff-app-insights-kpi-strip .ff-app-insights-kpi :is(p.text-base, p.sm\:text-lg),
+    .fi-body.fi-panel-member .ff-member-contributions-insights .ff-app-insights-kpi-strip .ff-app-insights-kpi :is(p.text-base, p.sm\:text-lg),
+    .fi-body.fi-panel-member .ff-member-accounts-insights .ff-app-insights-kpi-strip .ff-app-insights-kpi :is(p.text-base, p.sm\:text-lg),
+    .fi-body.fi-panel-member .ff-member-account-detail-insights .ff-app-insights-kpi-strip .ff-app-insights-kpi :is(p.text-base, p.sm\:text-lg) {
         font-size: 1.0625rem !important;
         line-height: 1.25rem;
     }
 }
 
-.fi-body.fi-panel-member .ff-member-dashboard .ff-app-insights-kpi-strip .ff-app-insights-kpi {
-    transition: background-color 0.15s ease;
+.fi-body.fi-panel-member .ff-member-dashboard .ff-app-insights-kpi-strip .ff-app-insights-kpi,
+.fi-body.fi-panel-member .ff-member-contributions-insights .ff-app-insights-kpi-strip .ff-app-insights-kpi,
+.fi-body.fi-panel-member .ff-member-accounts-insights .ff-app-insights-kpi-strip .ff-app-insights-kpi,
+.fi-body.fi-panel-member .ff-member-account-detail-insights .ff-app-insights-kpi-strip .ff-app-insights-kpi,
+.fi-body.fi-panel-member .ff-member-dependents-insights .ff-app-insights-kpi-strip .ff-app-insights-kpi {
+    background-clip: padding-box;
 }
 
 .fi-body.fi-panel-member .member-profile-identity-card .member-profile-identity-heading {
@@ -392,4 +697,62 @@
     .fi-body.fi-panel-member .fi-wi-stats-overview-stat-value {
         font-size: 1.25rem;
     }
+}
+
+@keyframes ff-journey-pulse {
+    0%,
+    100% {
+        box-shadow:
+            0 0 0 0 rgb(16 185 129 / 0.4),
+            0 4px 6px -4px rgb(5 150 105 / 0.35);
+    }
+
+    50% {
+        box-shadow:
+            0 0 0 8px rgb(16 185 129 / 0),
+            0 4px 6px -4px rgb(5 150 105 / 0.35);
+    }
+}
+
+@keyframes ff-journey-pulse-warning {
+    0%,
+    100% {
+        box-shadow:
+            0 0 0 0 rgb(244 63 94 / 0.45),
+            0 4px 6px -4px rgb(225 29 72 / 0.35);
+    }
+
+    50% {
+        box-shadow:
+            0 0 0 8px rgb(244 63 94 / 0),
+            0 4px 6px -4px rgb(225 29 72 / 0.35);
+    }
+}
+
+@keyframes ff-journey-step-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fi-body.fi-panel-member .ff-member-journey__step {
+    animation: ff-journey-step-in 0.5s ease-out both;
+}
+
+.fi-body.fi-panel-member .ff-member-journey__node--pulse {
+    animation: ff-journey-pulse 2.2s ease-in-out infinite;
+}
+
+.fi-body.fi-panel-member .ff-member-journey__node--pulse-warning {
+    animation-name: ff-journey-pulse-warning;
+}
+
+.fi-body.fi-panel-member .ff-member-journey__connector {
+    transition: background-color 0.35s ease;
 }

@@ -28,12 +28,12 @@ class LateFeeService
 
     public function contributionLateFeeForDays(int $daysPast): float
     {
-        return $this->tieredAmount($daysPast, 'late_fee.contribution_day');
+        return $this->tieredAmount($daysPast, 'contribution_day');
     }
 
     public function repaymentLateFeeForDays(int $daysPast): float
     {
-        return $this->tieredAmount($daysPast, 'late_fee.repayment_day');
+        return $this->tieredAmount($daysPast, 'repayment_day');
     }
 
     private function tieredAmount(int $daysPast, string $keyPrefix): float

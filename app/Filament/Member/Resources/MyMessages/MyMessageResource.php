@@ -8,8 +8,10 @@ use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Member\Resources\MyMessages\Pages\ListMyMessages;
 use App\Filament\Member\Resources\MyMessages\Pages\ViewMyMessage;
 use App\Filament\Member\Resources\MyMessages\Tables\MyMessagesTable;
+use App\Filament\Member\Support\MemberNavigation;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\User;
+use App\Services\Tenant\DirectMessagingService;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
@@ -30,7 +32,7 @@ class MyMessageResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Messages';
 
-    protected static ?int $navigationSort = 55;
+    protected static ?int $navigationSort = MemberNavigation::SORT_MESSAGES;
 
     public static function getNavigationBadge(): ?string
     {
@@ -92,6 +94,12 @@ class MyMessageResource extends Resource
 
     public static function resolveAdminRecipient(): ?User
     {
-        return User::query()->where('is_admin', true)->orderBy('id')->first();
+        $memberUserId = auth('tenant')->id();
+
+        if ($memberUserId === null) {
+            return null;
+        }
+
+        return app(DirectMessagingService::class)->resolveAdminRecipientForMember((int) $memberUserId);
     }
 }

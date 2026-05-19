@@ -1,9 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Member\Resources\MyAccounts\Pages;
 
 use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
+use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
+use App\Filament\Member\Widgets\MemberMyAccountsInsightsWidget;
 use App\Models\Tenant\Loan;
+use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
 use Illuminate\Contracts\Support\Htmlable;
@@ -47,6 +52,37 @@ class ListMyAccounts extends ListRecords
     public function getTitle(): string|Htmlable
     {
         return __('My Accounts');
+    }
+
+    public function getSubheading(): ?string
+    {
+        return __('Cash, fund balances, ledger activity, and loans in one place.');
+    }
+
+    /**
+     * @return array<class-string>
+     */
+    protected function getHeaderWidgets(): array
+    {
+        return [
+            MemberMyAccountsInsightsWidget::class,
+        ];
+    }
+
+    public function getHeaderWidgetsColumns(): int|array
+    {
+        return 1;
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('newDeposit')
+                ->label(__('New deposit'))
+                ->icon('heroicon-o-plus-circle')
+                ->color('primary')
+                ->url(MyFundPostingResource::getUrl('create')),
+        ];
     }
 
     public function getTabs(): array

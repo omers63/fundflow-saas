@@ -102,10 +102,63 @@
         <li class="font-semibold text-gray-900">
             {{ __('Fee') }}: {{ $feeFormatted }}
         </li>
+        @if (filled($membership_fee_transfer_date))
+            <li>{{ __('Transfer Date') }}: {{ $membership_fee_transfer_date }}</li>
+        @endif
+        @if (filled($membership_fee_transfer_amount))
+            <li>{{ __('Transfer Amount') }}: {{ $currency }} {{ number_format((float) $membership_fee_transfer_amount, 2) }}
+            </li>
+        @endif
     </ul>
 </div>
 
 <div class="space-y-4">
+    <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+            <label for="membership_fee_transfer_date" class="mb-1.5 block text-sm font-medium text-gray-700">
+                {{ __('Transfer Date') }} <span class="text-red-500">*</span>
+            </label>
+            <input wire:model="membership_fee_transfer_date" type="date" id="membership_fee_transfer_date"
+                max="{{ now()->toDateString() }}"
+                class="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+            @error('membership_fee_transfer_date') <p class="mt-1 text-sm text-red-500">{{ $message }}</p> @enderror
+        </div>
+        <div>
+            <label for="membership_fee_transfer_amount" class="mb-1.5 block text-sm font-medium text-gray-700">
+                {{ __('Transfer Amount') }} <span class="text-red-500">*</span>
+            </label>
+            <div class="relative">
+                <span
+                    class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-4 text-sm text-gray-500">{{ $currency }}</span>
+                <input wire:model="membership_fee_transfer_amount" type="number" id="membership_fee_transfer_amount"
+                    min="0.01" step="0.01" inputmode="decimal"
+                    class="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 ps-14 pe-4 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+            </div>
+            @error('membership_fee_transfer_amount') <p class="mt-1 text-sm text-red-500">{{ $message }}</p> @enderror
+            <p class="mt-1 text-xs text-gray-500">
+                {{ __('Expected fee for :type: :amount', ['type' => $typeLabel, 'amount' => $feeFormatted]) }}
+            </p>
+        </div>
+    </div>
+
+    <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700">
+            {{ __('Transfer receipt') }}
+            <span class="text-xs font-normal text-gray-500">({{ __('optional') }})</span>
+        </label>
+        <label
+            class="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 px-4 py-6 transition hover:border-emerald-400 hover:bg-emerald-50/30">
+            <input wire:model="membership_fee_receipt" type="file" class="hidden" accept=".pdf,.jpg,.jpeg,.png">
+            @if ($membership_fee_receipt)
+                <p class="text-sm font-medium text-gray-900">{{ $membership_fee_receipt->getClientOriginalName() }}</p>
+                <p class="mt-1 text-xs text-gray-500">{{ __('Tap to replace') }}</p>
+            @else
+                <p class="text-sm text-gray-600">{{ __('Upload a photo or PDF of your bank transfer receipt') }}</p>
+            @endif
+        </label>
+        @error('membership_fee_receipt') <p class="mt-1 text-sm text-red-500">{{ $message }}</p> @enderror
+    </div>
+
     <div>
         <label for="membership_fee_transfer_reference" class="mb-1.5 block text-sm font-medium text-gray-700">
             {{ __('Your transfer reference / note') }} <span class="text-red-500">*</span>

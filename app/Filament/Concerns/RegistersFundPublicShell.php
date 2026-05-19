@@ -43,6 +43,13 @@ trait RegistersFundPublicShell
                 }
 
                 return new HtmlString(view('partials.filament-tenant-public-chrome-start')->render());
+            })
+            ->renderHook(PanelsRenderHook::BODY_END, function (): HtmlString {
+                if (! ShowsFundPublicShell::onTenantFilamentAuthPage()) {
+                    return new HtmlString('');
+                }
+
+                return new HtmlString(view('components.tenant-public-footer')->render());
             });
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Concerns;
 
+use App\Filament\Member\Support\MemberNavigation;
 use App\Support\Lang;
 use UnitEnum;
 
@@ -16,6 +17,14 @@ trait TranslatesFilamentNavigationLabels
     {
         $group = parent::getNavigationGroup();
 
-        return is_string($group) ? Lang::formatUiLabel(__($group)) : $group;
+        if (! is_string($group)) {
+            return $group;
+        }
+
+        if (MemberNavigation::isGroupKey($group)) {
+            return $group;
+        }
+
+        return Lang::formatUiLabel(__($group));
     }
 }

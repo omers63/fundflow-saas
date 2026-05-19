@@ -35,21 +35,24 @@ Implemented in `User::canAccessPanel()`.
 - **Database notifications**: enabled
 - **Dashboard**: `MemberDashboard` with `MemberPortalDashboardWidget` and `MemberArrearsAlert`
 
-## Navigation (sort order)
+## Navigation (legacy-aligned groups and order)
 
-| Sort | Item |
-|------|------|
-| — | Dashboard |
-| 10 | My accounts |
-| 20 | My contributions |
-| 30 | Deposits |
-| 40 | My loans |
-| 50 | My statements |
-| 55 | Messages (badge: unread from admin) |
-| 45 | Guaranteed loans (where you are guarantor) |
-| 60 | Loan calculator |
+Sidebar structure matches the legacy member panel (`MemberNavigation` + `MemberPanelProvider`).
 
-Profile is in the user menu only (`MyProfilePage` / `EditMyProfilePage`).
+| Group | Sort | Item |
+|-------|------|------|
+| *(ungrouped)* | — | Dashboard |
+| *(ungrouped)* | -1 | Messages (badge: unread from admin) |
+| **My Finance** | 1 | My contributions |
+| **My Finance** | 2 | My Deposits |
+| **My Finance** | 3 | My statements |
+| **My Finance** | 4 | My dependents (household heads with dependents only) |
+| **My Finance** | 5 | My accounts |
+| **My Loans** | 1 | My loans |
+| **My Loans** | 3 | Guaranteed loans (where you are guarantor) |
+| **My Loans** | 4 | Loan calculator |
+
+Profile is in the user menu only (`MyProfilePage` / `EditMyProfilePage`). Apply for loan is not in the sidebar (opened from loans UI).
 
 ## Features
 
@@ -61,7 +64,7 @@ Profile is in the user menu only (`MyProfilePage` / `EditMyProfilePage`).
 
 Read-only lists scoped with `getEloquentQuery()->where('member_id', …)`. Account view includes transaction history.
 
-### Deposits (`MyFundPostingResource`)
+### My Deposits (`MyFundPostingResource`)
 
 Members can **create** deposit requests (`FundPostingService::submit`). Admins review in the tenant panel. On accept/reject, members receive `FundPostingAcceptedNotification` / `FundPostingRejectedNotification`. List page includes `MemberFundPostingInsightsWidget`.
 

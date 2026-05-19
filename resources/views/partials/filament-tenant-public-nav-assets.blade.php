@@ -13,34 +13,22 @@
     .fi-body .fi-simple-layout {
         display: flex;
         flex-direction: column;
-        min-height: 100vh;
+        min-height: 100dvh;
         background: transparent;
     }
 
     .fi-body .fi-simple-main-ctn {
         flex: 1 1 auto;
-        padding-top: 4rem;
-        padding-bottom: 2rem;
+        padding-top: var(--tenant-public-topbar-offset, 6rem);
+        padding-bottom: 1.25rem;
         background: transparent;
     }
 
-    .fund-auth-shell {
-        position: relative;
-        z-index: 60;
-    }
-
-    .fund-auth-header--filament {
-        position: fixed;
-        top: 0;
-        inset-inline: 0;
-        z-index: 60;
-    }
-
-    .fi-body:has(.fund-auth-shell) .fi-simple-header .fi-logo {
+    .fi-body:has(.tenant-public-nav) .fi-simple-header .fi-logo {
         visibility: hidden;
     }
 
-    .fi-body:has(.fund-auth-shell) .language-switch-dropdown:not(.fi-user-menu) {
+    .fi-body:has(.tenant-public-nav) .language-switch-dropdown:not(.fi-user-menu) {
         display: none !important;
     }
 

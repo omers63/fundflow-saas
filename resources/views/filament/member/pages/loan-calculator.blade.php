@@ -12,10 +12,11 @@
 
         @if ($preview !== [])
             <div @class([
-                'ff-app-insights-kpi rounded-xl border px-4 py-4 space-y-3',
-                'border-emerald-200 bg-emerald-50/50 dark:border-emerald-500/30 dark:bg-emerald-500/10' => $preview['eligible'],
-                'border-amber-200 bg-amber-50/50 dark:border-amber-500/30 dark:bg-amber-500/10' => ! $preview['eligible'],
-            ])>
+                'ff-app-insights-kpi ff-member-stat-card rounded-xl border px-4 py-4 space-y-3',
+                'border-emerald-200/80 dark:border-emerald-500/30' => $preview['eligible'],
+                'border-amber-200/80 dark:border-amber-500/30' => ! $preview['eligible'],
+            ])
+                data-accent="{{ $preview['eligible'] ? 'emerald' : 'amber' }}">
                 <h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('Estimate') }}</h2>
                 <dl class="grid grid-cols-2 gap-2 text-sm">
                     <dt class="text-gray-500 dark:text-gray-400">{{ __('Maximum you may request') }}</dt>

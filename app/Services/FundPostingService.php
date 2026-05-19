@@ -163,6 +163,7 @@ class FundPostingService
                 'is_cleared' => true,
                 'cleared_at' => now(),
                 'fund_posting_id' => $uncleared->fund_posting_id,
+                'membership_application_id' => $uncleared->membership_application_id,
             ]);
         });
     }

@@ -7,6 +7,7 @@ namespace App\Filament\Member\Resources\MyStatements;
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Member\Resources\MyStatements\Pages\ListMyStatements;
 use App\Filament\Member\Resources\MyStatements\Tables\MyStatementsTable;
+use App\Filament\Member\Support\MemberNavigation;
 use App\Models\Tenant\MonthlyStatement;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -24,7 +25,9 @@ class MyStatementResource extends Resource
 
     protected static ?string $navigationLabel = 'My statements';
 
-    protected static ?int $navigationSort = 50;
+    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_MY_FINANCE;
+
+    protected static ?int $navigationSort = MemberNavigation::SORT_STATEMENTS;
 
     public static function getEloquentQuery(): Builder
     {

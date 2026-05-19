@@ -7,6 +7,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Setting;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
@@ -109,6 +110,8 @@ test('member with overdue installments is marked delinquent', function () {
         'due_date' => now()->subMonth(),
         'status' => 'overdue',
     ]);
+
+    Setting::set('delinquency', 'consecutive_miss_threshold', 1);
 
     $result = $this->delinquency->syncMemberDelinquencyStatus();
 

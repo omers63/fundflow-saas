@@ -4,7 +4,7 @@
 
         <div class="mt-6 flex justify-end">
             <x-filament::button type="submit" size="lg">
-                Save Settings
+                {{ __('Save settings') }}
             </x-filament::button>
         </div>
     </form>

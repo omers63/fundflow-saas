@@ -69,7 +69,25 @@ test('member portal insights snapshot includes greeting and kpis', function () {
 
     $snapshot = app(MemberPortalInsightsService::class)->snapshot(CurrentMember::get());
 
-    expect($snapshot)->toHaveKeys(['greeting', 'hero', 'kpis', 'member', 'quick_actions', 'sparkline'])
+    expect($snapshot)->toHaveKeys([
+        'greeting',
+        'hero',
+        'kpis',
+        'member',
+        'quick_actions',
+        'sparkline',
+        'steps',
+        'cycle',
+        'arrears',
+        'fund_summary',
+        'trend',
+        'trend_max',
+        'recent_activity',
+        'recent_contributions',
+        'relation_summaries',
+        'household',
+        'quick_links',
+    ])
         ->and($snapshot['member']['number'])->toBe('MEM-INS01')
         ->and($snapshot['kpis'])->toHaveCount(6)
         ->and($snapshot['greeting'])->toHaveKeys([
@@ -81,7 +99,9 @@ test('member portal insights snapshot includes greeting and kpis', function () {
             'balances',
             'pills',
         ])
-        ->and($snapshot['greeting']['balances'])->toHaveCount(2);
+        ->and($snapshot['greeting']['balances'])->toHaveCount(2)
+        ->and($snapshot['steps'])->not->toBeEmpty()
+        ->and($snapshot['trend'])->toHaveCount(6);
 });
 
 test('member portal insights counts unread admin messages', function () {

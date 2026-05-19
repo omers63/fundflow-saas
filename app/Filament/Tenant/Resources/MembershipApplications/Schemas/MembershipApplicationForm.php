@@ -53,7 +53,7 @@ class MembershipApplicationForm
                 ->label(__('Password'))
                 ->password()
                 ->revealable()
-                ->dehydrated(fn (?string $state): bool => filled($state))
+                ->dehydrated(fn(?string $state): bool => filled($state))
                 ->helperText(__('Leave blank to keep the stored password unchanged.'));
             $accountFields[] = TextInput::make('phone')
                 ->label(__('Phone (legacy)'))
@@ -171,15 +171,32 @@ class MembershipApplicationForm
 
             Section::make(__('Application fee'))
                 ->icon('heroicon-o-banknotes')
+                ->description(__('Review declared transfer details before approving. Approval is blocked when the transfer is below the required subscription fee. The master cash credit stays uncleared until matched to a bank import.'))
                 ->schema([
+                    TextInput::make('membership_fee_required_amount')
+                        ->label(__('Required subscription fee'))
+                        ->numeric()
+                        ->prefix(__('SAR'))
+                        ->disabled()
+                        ->dehydrated(false),
                     TextInput::make('membership_fee_amount')
-                        ->label(__('Fee amount (SAR)'))
+                        ->label(__('Declared transfer amount'))
                         ->numeric()
                         ->prefix(__('SAR'))
                         ->minValue(0),
+                    DatePicker::make('membership_fee_transfer_date')
+                        ->label(__('Transfer date'))
+                        ->maxDate(now()),
                     TextInput::make('membership_fee_transfer_reference')
                         ->label(__('Transfer reference'))
                         ->maxLength(255),
+                    FileUpload::make('membership_fee_receipt_path')
+                        ->label(__('Transfer receipt'))
+                        ->disk('public')
+                        ->directory('applications/receipts')
+                        ->downloadable()
+                        ->openable()
+                        ->columnSpanFull(),
                 ])->columns(2),
 
             Section::make(__('Notes'))
@@ -191,7 +208,7 @@ class MembershipApplicationForm
                 ]),
         ];
 
-        if (! $forCreate) {
+        if (!$forCreate) {
             $detailsSchema[] = Section::make(__('Review status'))
                 ->icon('heroicon-o-clipboard-document-check')
                 ->description(__('Use Approve / Reject on the list for workflow actions. You can correct the rejection reason here.'))
@@ -244,11 +261,11 @@ class MembershipApplicationForm
                                             ->disk('public')
                                             ->directory('applications')
                                             ->getUploadedFileNameForStorageUsing(
-                                                fn (TemporaryUploadedFile $file): string => StorageFilename::make(
+                                                fn(TemporaryUploadedFile $file): string => StorageFilename::make(
                                                     'application-form',
                                                     $file->getClientOriginalName(),
                                                     [
-                                                        auth('tenant')->id() ? 'admin-'.auth('tenant')->id() : null,
+                                                        auth('tenant')->id() ? 'admin-' . auth('tenant')->id() : null,
                                                     ],
                                                 ),
                                             )

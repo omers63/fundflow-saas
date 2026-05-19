@@ -48,7 +48,10 @@ class MembershipEnrollmentService
      *     message?: string|null,
      *     application_form?: UploadedFile|null,
      *     membership_fee_amount?: float,
+     *     membership_fee_transfer_date?: string|null,
      *     membership_fee_transfer_reference?: string|null,
+     *     membership_fee_receipt?: UploadedFile|null,
+     *     membership_fee_required_amount?: float|null,
      * }  $data
      */
     public function submitApplication(array $data): MembershipApplication
@@ -56,12 +59,20 @@ class MembershipEnrollmentService
         $this->assertEnrollmentOpen();
 
         $feeAmount = (float) ($data['membership_fee_amount'] ?? 0);
+        $requiredFee = (float) ($data['membership_fee_required_amount'] ?? 0);
 
         $applicationFormPath = null;
         if ($data['application_form'] instanceof UploadedFile) {
             $extension = $data['application_form']->getClientOriginalExtension();
-            $filename = Str::slug($data['name']).'-'.Str::slug($data['national_id']).'-'.Str::uuid().'.'.$extension;
+            $filename = Str::slug($data['name']).'-'.Str::slug($data['national_id']).'-form-'.Str::uuid().'.'.$extension;
             $applicationFormPath = $data['application_form']->storeAs('applications', $filename, 'public');
+        }
+
+        $feeReceiptPath = null;
+        if ($data['membership_fee_receipt'] instanceof UploadedFile) {
+            $extension = $data['membership_fee_receipt']->getClientOriginalExtension();
+            $filename = Str::slug($data['name']).'-'.Str::slug($data['national_id']).'-receipt-'.Str::uuid().'.'.$extension;
+            $feeReceiptPath = $data['membership_fee_receipt']->storeAs('applications/receipts', $filename, 'public');
         }
 
         return MembershipApplication::create([
@@ -92,9 +103,16 @@ class MembershipEnrollmentService
             'message' => $data['message'] ?? null,
             'application_form_path' => $applicationFormPath,
             'membership_fee_amount' => $feeAmount > 0 ? $feeAmount : null,
+            'membership_fee_transfer_date' => $feeAmount > 0
+                ? ($data['membership_fee_transfer_date'] ?? null)
+                : null,
             'membership_fee_transfer_reference' => $feeAmount > 0
                 ? ($data['membership_fee_transfer_reference'] ?? null)
                 : null,
+            'membership_fee_required_amount' => $feeAmount > 0 && $requiredFee > 0
+                ? $requiredFee
+                : null,
+            'membership_fee_receipt_path' => $feeAmount > 0 ? $feeReceiptPath : null,
             'status' => 'pending',
         ]);
     }

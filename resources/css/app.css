@@ -1027,15 +1027,200 @@ html[dir='rtl'] .tenant-public-nav__fund-name {
 }
 
 .tenant-public-layout {
-    --tenant-public-topbar-offset: calc(var(--tenant-public-brand-logo-height, 5rem) + 1rem);
+    /* Fixed nav bar: 5rem logo + py-2 on .tenant-public-nav__bar */
+    --tenant-public-nav-height: calc(var(--tenant-public-brand-logo-height, 5rem) + 1rem);
+    --tenant-public-topbar-offset: var(--tenant-public-nav-height);
+    --tenant-centered-gutter: 1.5rem;
 }
 
+@media (width >= 40rem) {
+    .tenant-public-layout {
+        --tenant-centered-gutter: 2rem;
+    }
+}
+
+.tenant-auth-layout {
+    --tenant-auth-gutter: 1.5rem;
+}
+
+@media (width >= 40rem) {
+    .tenant-auth-layout {
+        --tenant-auth-gutter: 2rem;
+    }
+}
+
+.tenant-public-layout__main,
 .tenant-public-layout > main {
     padding-top: var(--tenant-public-topbar-offset);
 }
 
+.tenant-auth-layout__main {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 0;
+    padding-top: var(--tenant-public-nav-height);
+    padding-bottom: 0;
+}
+
+.tenant-auth-layout__lead,
+.tenant-auth-layout__trail {
+    flex: 1 1 0;
+    width: 100%;
+    min-height: var(--tenant-auth-gutter);
+}
+
+.tenant-auth-layout .member-login-shell {
+    flex-shrink: 0;
+}
+
+/* Centered confirmation panels (e.g. application submitted) — same rhythm as login pages */
+.tenant-public-layout__main:has(.tenant-centered-page) {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding-top: var(--tenant-public-nav-height);
+    padding-bottom: 0;
+}
+
+.tenant-centered-page {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    min-height: 0;
+}
+
+.tenant-centered-page::before,
+.tenant-centered-page::after {
+    content: '';
+    flex: 1 1 0;
+    width: 100%;
+    min-height: var(--tenant-centered-gutter);
+}
+
+.tenant-centered-page__panel {
+    flex-shrink: 0;
+    width: min(100%, 36rem);
+}
+
+/* Compact public footer — same brand logo scale as topbar */
+.tenant-public-footer {
+    border-top: 1px solid rgb(15 118 110 / 0.35);
+    background: linear-gradient(180deg, rgb(17 24 39) 0%, rgb(3 7 18) 100%);
+    color: rgb(209 213 219);
+}
+
+.tenant-public-footer__inner {
+    padding-block: 1.5rem 1.25rem;
+}
+
+@media (width >= 40rem) {
+    .tenant-public-footer__inner {
+        padding-block: 1.75rem 1.375rem;
+    }
+}
+
+.tenant-public-footer__grid {
+    display: grid;
+    gap: 1.5rem 2rem;
+}
+
+@media (width >= 48rem) {
+    .tenant-public-footer__grid {
+        grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr));
+        align-items: start;
+        gap: 1.25rem 2.5rem;
+    }
+}
+
+.tenant-public-footer__brand-link {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 0.875rem;
+    text-decoration: none;
+}
+
+.tenant-public-footer__brand-link:hover .tenant-public-footer__fund-name {
+    color: rgb(255 255 255);
+}
+
 .tenant-public-footer__logo {
-    --tenant-public-brand-logo-height: 3.5rem;
+    height: var(--tenant-public-brand-logo-height, 5rem);
+    width: auto;
+    max-width: min(14rem, 42vw);
+}
+
+.tenant-public-footer__fund-name {
+    font-size: 1.125rem;
+    font-weight: 700;
+    line-height: 1.25;
+    color: rgb(255 255 255);
+}
+
+.tenant-public-footer__tagline {
+    margin-top: 0.625rem;
+    max-width: 28rem;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    color: rgb(156 163 175);
+}
+
+.tenant-public-footer__heading {
+    margin-bottom: 0.5rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgb(110 231 183);
+}
+
+.tenant-public-footer__links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.9375rem;
+    line-height: 1.45;
+}
+
+.tenant-public-footer__links a {
+    color: rgb(229 231 235);
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.tenant-public-footer__links a:hover {
+    color: rgb(94 234 212);
+}
+
+.tenant-public-footer__muted {
+    color: rgb(107 114 128);
+}
+
+.tenant-public-footer__bar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgb(55 65 81 / 0.85);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: rgb(107 114 128);
+}
+
+@media (width >= 40rem) {
+    .tenant-public-footer__bar {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+    }
 }
 
 html[dir='rtl'] body {
@@ -1141,10 +1326,6 @@ html[dir='rtl'] .landing-cta-section {
     height: 3rem;
     width: auto;
     object-fit: contain;
-}
-
-.tenant-auth-layout__main {
-    width: 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {

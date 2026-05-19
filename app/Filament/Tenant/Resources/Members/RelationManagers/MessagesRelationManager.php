@@ -1,13 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Tenant\Resources\Members\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
+use App\Services\Tenant\DirectMessagingService;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
@@ -34,27 +38,21 @@ class MessagesRelationManager extends RelationManager
         return $schema->schema([]);
     }
 
+    protected function messaging(): DirectMessagingService
+    {
+        return app(DirectMessagingService::class);
+    }
+
     public function table(Table $table): Table
     {
         return $table
             ->modifyQueryUsing(function (Builder $query): Builder {
                 /** @var Member $member */
                 $member = $this->getOwnerRecord();
-                $memberUserId = (int) $member->user_id;
 
                 return $query
-                    ->where(function (Builder $q) use ($memberUserId): void {
-                        $q->where('from_user_id', $memberUserId)
-                            ->orWhere('to_user_id', $memberUserId);
-                    })
-                    ->where(function (Builder $q) use ($memberUserId): void {
-                        $q->where(function (Builder $q2) use ($memberUserId): void {
-                            $q2->where('from_user_id', $memberUserId)
-                                ->whereHas('recipient', fn (Builder $r) => $r->where('is_admin', true));
-                        })->orWhere(function (Builder $q2) use ($memberUserId): void {
-                            $q2->where('to_user_id', $memberUserId)
-                                ->whereHas('sender', fn (Builder $s) => $s->where('is_admin', true));
-                        });
+                    ->where(function (Builder $q) use ($member): void {
+                        $this->messaging()->applyMemberAdminConversationScope($q, $member);
                     })
                     ->with(['sender', 'recipient']);
             })
@@ -69,6 +67,7 @@ class MessagesRelationManager extends RelationManager
                     ->modalWidth('lg')
                     ->schema([
                         TextInput::make('subject')
+                            ->label(__('Subject'))
                             ->required()
                             ->maxLength(150),
                         Textarea::make('body')
@@ -89,7 +88,8 @@ class MessagesRelationManager extends RelationManager
                         /** @var Member $member */
                         $member = $this->getOwnerRecord();
                         $admin = auth('tenant')->user();
-                        if ($admin === null || $member->user_id === null) {
+
+                        if (! $admin instanceof User || $member->user_id === null) {
                             return;
                         }
 
@@ -97,53 +97,13 @@ class MessagesRelationManager extends RelationManager
                             ? array_values(array_filter($data['attachments'], fn ($file): bool => filled($file)))
                             : [];
 
-                        $root = DirectMessage::query()
-                            ->root()
-                            ->where(function (Builder $q) use ($member): void {
-                                $q->where(function (Builder $sq) use ($member): void {
-                                    $sq->where('from_user_id', $member->user_id)
-                                        ->whereHas('recipient', fn (Builder $admin): Builder => $admin->where('is_admin', true));
-                                })->orWhere(function (Builder $sq) use ($member): void {
-                                    $sq->where('to_user_id', $member->user_id)
-                                        ->whereHas('sender', fn (Builder $admin): Builder => $admin->where('is_admin', true));
-                                });
-                            })
-                            ->orderBy('created_at')
-                            ->first();
-
-                        if ($root === null) {
-                            DirectMessage::create([
-                                'from_user_id' => $admin->id,
-                                'to_user_id' => $member->user_id,
-                                'subject' => $data['subject'],
-                                'body' => $data['body'],
-                                'attachments' => $attachments,
-                            ]);
-                        } else {
-                            DirectMessage::create([
-                                'from_user_id' => $admin->id,
-                                'to_user_id' => $member->user_id,
-                                'parent_id' => $root->id,
-                                'subject' => $root->subject ?: $data['subject'],
-                                'body' => $data['body'],
-                                'attachments' => $attachments,
-                            ]);
-                        }
-
-                        $memberUser = $member->user;
-                        if ($memberUser !== null) {
-                            Notification::make()
-                                ->title(__('New message from administration'))
-                                ->body($data['subject'].': '.mb_strimwidth($data['body'], 0, 100, '...'))
-                                ->icon('heroicon-o-chat-bubble-left-right')
-                                ->iconColor('info')
-                                ->sendToDatabase($memberUser);
-                        }
-
-                        Notification::make()
-                            ->title(__('Message sent to :name', ['name' => $member->user->name ?? __('member')]))
-                            ->success()
-                            ->send();
+                        $this->messaging()->sendAdminToMember(
+                            $member,
+                            $admin,
+                            $data['body'],
+                            $attachments,
+                            subject: $data['subject'],
+                        );
                     }),
             ])
             ->columns([
@@ -226,31 +186,35 @@ class MessagesRelationManager extends RelationManager
                             ->maxFiles(5),
                     ])
                     ->action(function (DirectMessage $record, array $data): void {
+                        /** @var Member $member */
                         $member = $this->getOwnerRecord();
                         $admin = auth('tenant')->user();
-                        if ($admin === null || $member->user_id === null) {
+
+                        if (! $admin instanceof User || $member->user_id === null) {
                             return;
                         }
 
-                        $toUserId = (int) $member->user_id;
                         $attachments = is_array($data['attachments'] ?? null)
                             ? array_values(array_filter($data['attachments'], fn ($file): bool => filled($file)))
                             : [];
 
+                        $root = $record->parent_id ? $record->parent : $record;
+
                         DirectMessage::create([
                             'from_user_id' => $admin->id,
-                            'to_user_id' => $toUserId,
-                            'parent_id' => $record->parent_id ?: $record->id,
-                            'subject' => $record->subject,
+                            'to_user_id' => $member->user_id,
+                            'parent_id' => $root->id,
+                            'subject' => $root->subject ?: $record->subject,
                             'body' => $data['body'],
                             'attachments' => $attachments,
                         ]);
 
-                        $recipient = User::find($toUserId);
+                        $recipient = $member->user;
+
                         if ($recipient !== null) {
                             Notification::make()
-                                ->title(__('Reply: :subject', ['subject' => $record->subject ?: __('Message')]))
-                                ->body($admin->name.': '.mb_strimwidth($data['body'], 0, 100, '...'))
+                                ->title(__('Reply: :subject', ['subject' => $root->subject ?: __('Message')]))
+                                ->body($admin->name.': '.mb_strimwidth($data['body'], 0, 100, '…'))
                                 ->icon('heroicon-o-chat-bubble-left-right')
                                 ->iconColor('info')
                                 ->sendToDatabase($recipient);
@@ -261,6 +225,9 @@ class MessagesRelationManager extends RelationManager
                             ->success()
                             ->send();
                     }),
+            ]))
+            ->toolbarActions(TableToolbar::bulkGroup([
+                TableToolbar::refreshBulkAction(),
             ]))
             ->emptyStateHeading(__('No direct messages'))
             ->emptyStateDescription(__('No messages have been exchanged with this member yet.'));

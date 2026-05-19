@@ -23,7 +23,7 @@
                     <ul class="mt-2 space-y-1 text-xs">
                         @foreach ($message->attachments as $file)
                             <li>
-                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($file) }}"
+                                <a href="{{ route('tenant.direct-messages.attachment', ['message' => $message->id, 'index' => $loop->index]) }}"
                                     class="text-emerald-600 hover:underline dark:text-emerald-400" target="_blank" rel="noopener">
                                     {{ basename($file) }}
                                 </a>

@@ -5,13 +5,17 @@ namespace App\Providers\Filament;
 use App\Filament\Concerns\RegistersFundPublicShell;
 use App\Filament\Member\Pages\MemberDashboard;
 use App\Filament\Member\Pages\MyProfilePage;
+use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Member\Support\ReturnToParentPortalAction;
 use App\Http\Middleware\AuthenticateMemberPanel;
+use App\Http\Middleware\SetFilamentPanelAuthGuard;
 use App\Livewire\Tenant\MemberLoginPage;
 use App\Support\PublicPageSettings;
 use Filament\Actions\Action;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Navigation\NavigationGroup;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
@@ -51,7 +55,17 @@ class MemberPanelProvider extends PanelProvider
             ->brandLogoHeight(PublicPageSettings::BRAND_LOGO_HEIGHT)
             ->sidebarCollapsibleOnDesktop()
             ->sidebarFullyCollapsibleOnDesktop()
+            ->navigationGroups([
+                MemberNavigation::GROUP_MY_FINANCE => NavigationGroup::make()
+                    ->label(fn (): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_MY_FINANCE)),
+                MemberNavigation::GROUP_LOANS => NavigationGroup::make()
+                    ->label(fn (): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_LOANS)),
+                MemberNavigation::GROUP_SETTINGS => NavigationGroup::make()
+                    ->label(fn (): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_SETTINGS)),
+            ])
             ->userMenuItems([
+                ReturnToParentPortalAction::make()
+                    ->sort(-20),
                 Action::make('profile')
                     ->label(fn (): string => __('My profile'))
                     ->icon('heroicon-o-user-circle')
@@ -77,6 +91,7 @@ class MemberPanelProvider extends PanelProvider
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
+                SetFilamentPanelAuthGuard::class,
                 AuthenticateSession::class,
                 ShareErrorsFromSession::class,
                 VerifyCsrfToken::class,

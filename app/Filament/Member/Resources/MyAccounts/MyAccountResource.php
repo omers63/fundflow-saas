@@ -8,6 +8,7 @@ use App\Filament\Member\Resources\MyAccounts\Pages\ViewMyAccount;
 use App\Filament\Member\Resources\MyAccounts\RelationManagers\TransactionsRelationManager;
 use App\Filament\Member\Resources\MyAccounts\Tables\MyMemberAccountsLoansTable;
 use App\Filament\Member\Resources\MyAccounts\Tables\MyMemberAccountsTable;
+use App\Filament\Member\Support\MemberNavigation;
 use App\Models\Tenant\Account;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -30,7 +31,9 @@ class MyAccountResource extends Resource
 
     protected static ?string $pluralModelLabel = 'My Accounts';
 
-    protected static ?int $navigationSort = 10;
+    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_MY_FINANCE;
+
+    protected static ?int $navigationSort = MemberNavigation::SORT_ACCOUNTS;
 
     public static function getEloquentQuery(): Builder
     {

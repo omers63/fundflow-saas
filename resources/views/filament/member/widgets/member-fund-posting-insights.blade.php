@@ -34,12 +34,12 @@
                 class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 lg:col-span-2">
                 <div class="grid grid-cols-4 divide-x divide-gray-100 dark:divide-gray-700">
                     @foreach ([
-                        ['label' => __('Total'), 'value' => $d['total']],
-                        ['label' => __('Pending'), 'value' => $d['pending']],
-                        ['label' => __('Accepted'), 'value' => $d['accepted']],
-                        ['label' => __('Rejected'), 'value' => $d['rejected']],
+                        ['label' => __('Total'), 'value' => $d['total'], 'accent' => 'sky'],
+                        ['label' => __('Pending'), 'value' => $d['pending'], 'accent' => 'amber'],
+                        ['label' => __('Accepted'), 'value' => $d['accepted'], 'accent' => 'emerald'],
+                        ['label' => __('Rejected'), 'value' => $d['rejected'], 'accent' => 'rose'],
                     ] as $card)
-                        <div class="px-3 py-2.5 text-center">
+                        <div class="ff-app-insights-kpi ff-member-stat-card px-3 py-2.5 text-center" data-accent="{{ $card['accent'] }}">
                             <p class="text-lg font-bold tabular-nums text-gray-900 dark:text-white">{{ $card['value'] }}</p>
                             <p class="text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ $card['label'] }}</p>
                         </div>

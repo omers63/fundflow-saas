@@ -20,6 +20,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Collection;
+use InvalidArgumentException;
 use Livewire\Component;
 
 class MembershipApplicationsTable
@@ -76,7 +77,17 @@ class MembershipApplicationsTable
                         ->requiresConfirmation()
                         ->hidden(fn ($record) => $record->status !== 'pending')
                         ->action(function (MembershipApplication $record, Component $livewire): void {
-                            $member = app(MembershipApplicationApprovalService::class)->approve($record);
+                            try {
+                                $member = app(MembershipApplicationApprovalService::class)->approve($record);
+                            } catch (InvalidArgumentException $exception) {
+                                Notification::make()
+                                    ->title(__('Approval blocked'))
+                                    ->body($exception->getMessage())
+                                    ->danger()
+                                    ->send();
+
+                                return;
+                            }
 
                             Notification::make()
                                 ->title(__('Member :name created from application', ['name' => $member->name]))

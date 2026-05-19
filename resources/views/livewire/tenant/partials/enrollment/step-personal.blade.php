@@ -17,7 +17,7 @@
                 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/20' => $applicationType === $type,
                 'border-gray-200 hover:border-gray-300 hover:bg-gray-50' => $applicationType !== $type,
             ])>
-                <input type="radio" wire:model.live="applicationType" value="{{ $type }}" class="sr-only">
+                <input type="radio" wire:model="applicationType" value="{{ $type }}" class="sr-only">
                 @if ($fee <= 0)
                     <span
                         class="mb-2 inline-flex w-fit rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">

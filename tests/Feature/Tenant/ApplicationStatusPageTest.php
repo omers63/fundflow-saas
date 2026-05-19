@@ -23,7 +23,8 @@ test('application status page is available on the tenant domain', function () {
 
     $this->get('http://'.$domain.'/application-status')
         ->assertSuccessful()
-        ->assertSee(__('Check Application Status'), false);
+        ->assertSee(__('Check Application Status'), false)
+        ->assertSee('tenant-centered-page', false);
 });
 
 test('application status lookup returns pending application details', function () {

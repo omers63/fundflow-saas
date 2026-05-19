@@ -8,6 +8,7 @@ use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Member\Resources\MyGuaranteedLoans\Pages\ListMyGuaranteedLoans;
 use App\Filament\Member\Resources\MyGuaranteedLoans\Pages\ViewMyGuaranteedLoan;
 use App\Filament\Member\Resources\MyGuaranteedLoans\Tables\MyGuaranteedLoansTable;
+use App\Filament\Member\Support\MemberNavigation;
 use App\Models\Tenant\Loan;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
@@ -30,7 +31,9 @@ class MyGuaranteedLoanResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Guaranteed loans';
 
-    protected static ?int $navigationSort = 45;
+    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_LOANS;
+
+    protected static ?int $navigationSort = MemberNavigation::SORT_GUARANTEED_LOANS;
 
     public static function getEloquentQuery(): Builder
     {

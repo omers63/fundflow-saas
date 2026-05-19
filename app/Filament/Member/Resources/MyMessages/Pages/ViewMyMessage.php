@@ -6,7 +6,7 @@ namespace App\Filament\Member\Resources\MyMessages\Pages;
 
 use App\Filament\Member\Resources\MyMessages\MyMessageResource;
 use App\Models\Tenant\DirectMessage;
-use App\Models\Tenant\User;
+use App\Services\Tenant\DirectMessagingService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Textarea;
@@ -24,16 +24,11 @@ class ViewMyMessage extends ViewRecord
     {
         parent::mount($record);
 
-        $memberUserId = (int) auth('tenant')->id();
-        $rootId = $this->record->parent_id ?? $this->record->id;
+        $memberUserId = auth('tenant')->id();
 
-        DirectMessage::query()
-            ->where(function ($query) use ($rootId): void {
-                $query->where('id', $rootId)->orWhere('parent_id', $rootId);
-            })
-            ->where('to_user_id', $memberUserId)
-            ->whereNull('read_at')
-            ->update(['read_at' => now()]);
+        if ($memberUserId !== null) {
+            app(DirectMessagingService::class)->markMemberThreadRead($this->record, (int) $memberUserId);
+        }
     }
 
     public function getHeading(): string
@@ -75,10 +70,22 @@ class ViewMyMessage extends ViewRecord
                 ])
                 ->action(function (array $data): void {
                     $memberUser = auth('tenant')->user();
-                    $admin = MyMessageResource::resolveAdminRecipient();
                     $root = $this->record->parent_id ? $this->record->parent : $this->record;
+                    $messaging = app(DirectMessagingService::class);
 
-                    if ($memberUser === null || $admin === null) {
+                    if ($memberUser === null) {
+                        return;
+                    }
+
+                    $admin = $messaging->resolveAdminRecipientForThread($root, (int) $memberUser->id);
+
+                    if ($admin === null) {
+                        Notification::make()
+                            ->title(__('Unable to send reply'))
+                            ->body(__('No administrator is available to receive messages.'))
+                            ->danger()
+                            ->send();
+
                         return;
                     }
 
@@ -86,23 +93,19 @@ class ViewMyMessage extends ViewRecord
                         ? array_values(array_filter($data['attachments'], fn ($file): bool => filled($file)))
                         : [];
 
-                    DirectMessage::create([
-                        'from_user_id' => $memberUser->id,
-                        'to_user_id' => $admin->id,
-                        'parent_id' => $root->id,
-                        'subject' => $root->subject,
-                        'body' => $data['body'],
-                        'attachments' => $attachments,
-                    ]);
+                    $messaging->sendMemberToAdmin(
+                        $memberUser,
+                        $admin,
+                        $data['body'],
+                        $attachments,
+                        replyToRoot: $root,
+                    );
 
-                    User::query()->where('is_admin', true)->each(function (User $adminUser) use ($memberUser, $root, $data): void {
-                        Notification::make()
-                            ->title(__('Reply from :name', ['name' => $memberUser->name]))
-                            ->body(($root->subject ?: __('Message')).': '.mb_strimwidth($data['body'], 0, 100, '...'))
-                            ->icon('heroicon-o-chat-bubble-left-right')
-                            ->iconColor('info')
-                            ->sendToDatabase($adminUser);
-                    });
+                    $messaging->notifyAdminsOfMemberReply(
+                        $memberUser,
+                        $root->subject ?: __('Message'),
+                        $data['body'],
+                    );
 
                     Notification::make()
                         ->title(__('Reply sent'))

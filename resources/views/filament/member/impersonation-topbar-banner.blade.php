@@ -9,5 +9,11 @@
         <span class="ff-impersonation-banner__text">
             {{ __('Impersonating: :name', ['name' => $name ?: __('Member')]) }}
         </span>
+        <form method="post" action="{{ route('tenant.member.impersonation.stop') }}" class="ff-impersonation-banner__form">
+            @csrf
+            <button type="submit" class="ff-impersonation-banner__return">
+                {{ __('Return to parent portal') }}
+            </button>
+        </form>
     </div>
 @endif

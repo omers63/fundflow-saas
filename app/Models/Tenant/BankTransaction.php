@@ -25,6 +25,7 @@ class BankTransaction extends Model
         'is_cleared',
         'cleared_at',
         'fund_posting_id',
+        'membership_application_id',
         'duplicate_of_id',
         'master_cash_transaction_id',
     ];
@@ -52,6 +53,11 @@ class BankTransaction extends Model
     public function fundPosting(): BelongsTo
     {
         return $this->belongsTo(FundPosting::class);
+    }
+
+    public function membershipApplication(): BelongsTo
+    {
+        return $this->belongsTo(MembershipApplication::class);
     }
 
     public function duplicateOf(): BelongsTo

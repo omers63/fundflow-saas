@@ -13,10 +13,10 @@
     ])
 </head>
 
-<body class="tenant-public-layout flex min-h-screen flex-col bg-gray-50 text-gray-900 antialiased">
+<body class="tenant-public-layout flex min-h-dvh flex-col bg-gray-50 text-gray-900 antialiased">
     <x-tenant-public-nav />
 
-    <main class="flex-1 pb-16">
+    <main class="tenant-public-layout__main flex-1">
         {{ $slot }}
     </main>
 

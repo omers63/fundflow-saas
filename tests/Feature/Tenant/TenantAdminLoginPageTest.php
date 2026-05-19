@@ -44,8 +44,8 @@ test('tenant admin login page renders styled auth card', function () {
         ->assertSee('member-login-card--admin', false)
         ->assertSee(__('Sign in to the fund administration dashboard'), false)
         ->assertSee(__('Member portal'), false)
-        ->assertDontSee('tenant-public-nav', false)
-        ->assertDontSee('tenant-public-footer', false)
+        ->assertSee('tenant-public-nav', false)
+        ->assertSee('tenant-public-footer', false)
         ->assertDontSee('fi-simple-header', false);
 });
 

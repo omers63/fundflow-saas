@@ -3,9 +3,11 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\LocaleSwitchController;
+use App\Http\Controllers\Tenant\DirectMessageAttachmentController;
 use App\Http\Controllers\Tenant\MembershipApplicationImportSampleController;
 use App\Http\Controllers\Tenant\StartDependentImpersonationController;
 use App\Http\Controllers\Tenant\StatementPdfController;
+use App\Http\Controllers\Tenant\StopImpersonationController;
 use App\Http\Controllers\Tenant\TenantManifestController;
 use App\Http\Controllers\Tenant\TermsConditionsDownloadController;
 use App\Livewire\Tenant\ApplicationStatusPage;
@@ -58,7 +60,7 @@ Route::middleware([
     Route::get('/manifest.json', TenantManifestController::class)
         ->name('tenant.manifest');
 
-    Route::get('/offline', fn() => view('offline'));
+    Route::get('/offline', fn () => view('offline'));
 
     Route::get('/storage/{path}', function (string $path) {
         return redirect(tenant_asset($path), 301);
@@ -68,10 +70,17 @@ Route::middleware([
         Route::get('/member/dependents/{dependent}/impersonate', StartDependentImpersonationController::class)
             ->name('tenant.member.dependents.impersonate');
 
+        Route::post('/member/impersonation/stop', StopImpersonationController::class)
+            ->name('tenant.member.impersonation.stop');
+
         Route::get('/member/statements/{statement}/pdf', [StatementPdfController::class, '__invoke'])
             ->name('tenant.member.statement.pdf');
 
         Route::get('/admin/statements/{statement}/pdf', [StatementPdfController::class, 'admin'])
             ->name('tenant.admin.statement.pdf');
+
+        Route::get('/direct-messages/{message}/attachment/{index}', DirectMessageAttachmentController::class)
+            ->whereNumber('index')
+            ->name('tenant.direct-messages.attachment');
     });
 });

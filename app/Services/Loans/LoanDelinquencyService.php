@@ -10,6 +10,7 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\ContributionCycleService;
+use App\Services\MemberDelinquencyEvaluator;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
@@ -25,6 +26,7 @@ class LoanDelinquencyService
         protected ContributionCycleService $cycles,
         protected LateFeeService $lateFees,
         protected LoanDefaultService $defaults,
+        protected MemberDelinquencyEvaluator $delinquencyEvaluator,
     ) {}
 
     /**
@@ -167,16 +169,16 @@ class LoanDelinquencyService
         Member::query()
             ->whereIn('status', ['active', 'delinquent'])
             ->each(function (Member $member) use (&$markedDelinquent, &$restoredActive): void {
-                $hasArrears = $this->memberHasArrears($member);
+                $breach = $this->memberBreachesDelinquencyPolicy($member);
 
-                if ($member->status === 'active' && $hasArrears) {
+                if ($member->status === 'active' && $breach) {
                     $member->update(['status' => 'delinquent']);
                     $markedDelinquent++;
 
                     return;
                 }
 
-                if ($member->status === 'delinquent' && ! $hasArrears) {
+                if ($member->status === 'delinquent' && ! $breach) {
                     $member->update(['status' => 'active']);
                     $restoredActive++;
                 }
@@ -194,18 +196,28 @@ class LoanDelinquencyService
     public function syncMemberDelinquencyStatusForMember(Member $member): array
     {
         $member->refresh();
-        $hasArrears = $this->memberHasArrears($member);
+        $breach = $this->memberBreachesDelinquencyPolicy($member);
         $result = ['marked_delinquent' => 0, 'restored_active' => 0];
 
-        if ($member->status === 'active' && $hasArrears) {
+        if ($member->status === 'active' && $breach) {
             $member->update(['status' => 'delinquent']);
             $result['marked_delinquent'] = 1;
-        } elseif ($member->status === 'delinquent' && ! $hasArrears) {
+        } elseif ($member->status === 'delinquent' && ! $breach) {
             $member->update(['status' => 'active']);
             $result['restored_active'] = 1;
         }
 
         return $result;
+    }
+
+    public function memberBreachesDelinquencyPolicy(Member $member): bool
+    {
+        $stats = $this->delinquencyEvaluator->evaluate($member);
+
+        return $this->delinquencyEvaluator->shouldSuspend(
+            $stats['trailing_consecutive'],
+            $stats['rolling_total'],
+        );
     }
 
     public function markMemberDelinquent(Member $member): void

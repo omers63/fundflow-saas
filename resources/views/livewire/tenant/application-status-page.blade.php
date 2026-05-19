@@ -1,12 +1,15 @@
-<div class="mx-auto max-w-lg px-4 sm:px-6">
-    <div class="mb-8 text-center sm:mb-10">
-        <h1 class="text-2xl font-bold text-gray-900 sm:text-3xl">{{ __('Check Application Status') }}</h1>
-        <p class="mt-2 text-gray-600">
-            {{ __('Enter your email and National ID to check the status of your membership application.') }}
-        </p>
-    </div>
+<div class="application-status-page">
+    <div class="tenant-centered-page px-4 sm:px-6">
+        <div class="tenant-centered-page__panel">
+            <div class="application-status-page__inner w-full max-w-lg">
+                <header class="mb-6 text-center sm:mb-8">
+                    <h1 class="text-2xl font-bold text-gray-900 sm:text-3xl">{{ __('Check Application Status') }}</h1>
+                    <p class="mt-2 text-gray-600">
+                        {{ __('Enter your email and National ID to check the status of your membership application.') }}
+                    </p>
+                </header>
 
-    <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
         <div class="enrollment-status-card-header">
             <div class="flex items-center gap-3 text-white">
                 <svg class="h-6 w-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -37,10 +40,9 @@
                     @error('national_id') <p class="mt-1 text-sm text-red-500">{{ $message }}</p> @enderror
                 </div>
 
-                <button type="submit" wire:loading.attr="disabled"
-                    class="enrollment-status-submit-btn w-full disabled:opacity-50">
-                    <span wire:loading.remove wire:target="check">{{ __('Check status') }}</span>
-                    <span wire:loading wire:target="check">{{ __('Checking…') }}</span>
+                <button type="submit" wire:loading.attr="disabled" wire:target="check"
+                    class="enrollment-status-submit-btn w-full disabled:cursor-not-allowed disabled:opacity-50">
+                    {{ __('Check status') }}
                 </button>
             </form>
 
@@ -172,6 +174,9 @@
                     @endif
                 </div>
             @endif
+        </div>
+    </div>
+            </div>
         </div>
     </div>
 </div>

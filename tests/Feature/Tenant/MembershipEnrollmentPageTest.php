@@ -34,15 +34,29 @@ test('membership wizard shows download application form button when document url
         ->assertSee('https://example.com/membership-form.pdf', false);
 });
 
+test('membership enrollment page binds livewire root around navigation buttons', function () {
+    $tenant = Tenant::find('testing');
+    $domain = 'testing.localhost';
+
+    if (!$tenant->domains()->where('domain', $domain)->exists()) {
+        $tenant->domains()->create(['domain' => $domain]);
+    }
+
+    $html = $this->get('http://' . $domain . '/membership')->assertSuccessful()->getContent();
+
+    expect($html)->toMatch('/wire:id="[^"]+"[^>]*class="membership-enrollment-wizard"/');
+    expect($html)->toContain('wire:click="nextStep"');
+});
+
 test('membership enrollment page is available on the tenant domain', function () {
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (! $tenant->domains()->where('domain', $domain)->exists()) {
+    if (!$tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
-    $this->get('http://'.$domain.'/membership')
+    $this->get('http://' . $domain . '/membership')
         ->assertSuccessful()
         ->assertSee(__('Apply for membership'), false);
 });
@@ -51,11 +65,11 @@ test('apply route serves the same enrollment wizard', function () {
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (! $tenant->domains()->where('domain', $domain)->exists()) {
+    if (!$tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
-    $this->get('http://'.$domain.'/apply')
+    $this->get('http://' . $domain . '/apply')
         ->assertSuccessful()
         ->assertSee(__('Information'), false)
         ->assertSee(__('Personal details'), false);
@@ -65,11 +79,11 @@ test('landing page links to membership enrollment instead of embedding the form'
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (! $tenant->domains()->where('domain', $domain)->exists()) {
+    if (!$tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
-    $response = $this->get('http://'.$domain);
+    $response = $this->get('http://' . $domain);
 
     $response->assertSuccessful();
     $response->assertSee(route('tenant.membership', absolute: false), false);
@@ -93,6 +107,26 @@ test('membership wizard shows fees step when selected application type has a fee
         ->assertSee(__('Membership fees'), false);
 
     expect($component->instance()->lastStep())->toBe(5);
+});
+
+test('membership wizard advances from step one after selecting application type', function () {
+    PublicPageSettings::save([
+        ...PublicPageSettings::defaults(),
+        'fee_new' => '100',
+        'fee_resume' => '50',
+    ]);
+
+    $this->withEnrollmentPassword(
+        Livewire::test(MembershipEnrollmentWizard::class)
+            ->set('applicationType', 'resume')
+            ->set('name', 'Jane Applicant')
+            ->set('email', 'jane@example.com')
+    )
+        ->set('applicationType', 'new')
+        ->call('nextStep')
+        ->assertHasNoErrors()
+        ->assertSet('step', 2)
+        ->assertSet('membership_fee_transfer_amount', '100.00');
 });
 
 test('membership wizard validates step one before advancing', function () {
@@ -153,7 +187,7 @@ test('membership wizard shows fee transfer bank details on fees step when fee ap
             ->set('email', 'jane@example.com')
     )
         ->call('nextStep')
-        ->tap(fn ($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
+        ->tap(fn($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
         ->call('nextStep')
         ->assertSet('step', 5)
         ->assertSee(__('Membership fees'), false)
@@ -170,10 +204,11 @@ test('membership wizard stores a hashed password and profile on the application'
             ->set('email', 'jane@example.com')
     )
         ->call('nextStep')
-        ->tap(fn ($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
+        ->tap(fn($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
         ->call('nextStep')
         ->call('submit')
-        ->assertSet('submitted', true);
+        ->assertSet('submitted', true)
+        ->assertSee('tenant-centered-page', false);
 
     $application = MembershipApplication::query()->first();
 
@@ -192,10 +227,11 @@ test('membership wizard does not require next of kin', function () {
             ->set('email', 'jane@example.com')
     )
         ->call('nextStep')
-        ->tap(fn ($test) => $this->withEnrollmentProfile($test, withNextOfKin: false)->call('nextStep')->call('nextStep'))
+        ->tap(fn($test) => $this->withEnrollmentProfile($test, withNextOfKin: false)->call('nextStep')->call('nextStep'))
         ->assertSet('step', 4)
         ->call('submit')
-        ->assertSet('submitted', true);
+        ->assertSet('submitted', true)
+        ->assertSee('tenant-centered-page', false);
 
     $application = MembershipApplication::query()->first();
 
@@ -212,10 +248,11 @@ test('membership wizard submits from document step when no fee applies', functio
             ->set('email', 'jane@example.com')
     )
         ->call('nextStep')
-        ->tap(fn ($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
+        ->tap(fn($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
         ->assertSet('step', 4)
         ->call('submit')
-        ->assertSet('submitted', true);
+        ->assertSet('submitted', true)
+        ->assertSee('tenant-centered-page', false);
 
     $application = MembershipApplication::query()->first();
 
@@ -240,18 +277,59 @@ test('membership wizard submits from fees step when a fee applies', function () 
             ->set('email', 'jane@example.com')
     )
         ->call('nextStep')
-        ->tap(fn ($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
+        ->tap(fn($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
         ->call('nextStep')
         ->assertSet('step', 5)
-        ->tap(fn ($test) => $this->withEnrollmentFeePayment($test))
+        ->tap(fn($test) => $this->withEnrollmentFeePayment($test))
         ->call('submit')
-        ->assertSet('submitted', true);
+        ->assertSet('submitted', true)
+        ->assertSee('tenant-centered-page', false);
 
     $application = MembershipApplication::query()->first();
 
     expect($application)->not->toBeNull()
         ->and((float) $application->membership_fee_amount)->toBe(50.0)
+        ->and((float) $application->membership_fee_required_amount)->toBe(50.0)
+        ->and($application->membership_fee_transfer_date?->toDateString())->toBe(now()->toDateString())
         ->and($application->membership_fee_transfer_reference)->toBe('TXN-REF-12345');
+});
+
+test('membership wizard defaults transfer amount from application type fee', function () {
+    PublicPageSettings::save([
+        ...PublicPageSettings::defaults(),
+        'fee_new' => '100',
+        'fee_resume' => '50',
+        'fee_renew' => '75',
+    ]);
+
+    $component = Livewire::test(MembershipEnrollmentWizard::class)
+        ->assertSet('membership_fee_transfer_date', now()->toDateString())
+        ->assertSet('membership_fee_transfer_amount', '100.00');
+
+    $component->set('applicationType', 'renew')
+        ->assertSet('membership_fee_transfer_amount', '75.00');
+});
+
+test('membership wizard requires transfer date and amount on fees step', function () {
+    PublicPageSettings::save([
+        ...PublicPageSettings::defaults(),
+        'fee_new' => '100',
+    ]);
+
+    $this->withEnrollmentPassword(
+        Livewire::test(MembershipEnrollmentWizard::class)
+            ->set('applicationType', 'new')
+            ->set('name', 'Jane Applicant')
+            ->set('email', 'jane@example.com')
+    )
+        ->call('nextStep')
+        ->tap(fn($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
+        ->call('nextStep')
+        ->set('membership_fee_transfer_date', '')
+        ->set('membership_fee_transfer_amount', '')
+        ->set('membership_fee_transfer_reference', 'TXN-REF')
+        ->call('submit')
+        ->assertHasErrors(['membership_fee_transfer_date', 'membership_fee_transfer_amount']);
 });
 
 test('membership wizard requires fee acknowledgment when fee applies', function () {
@@ -267,7 +345,7 @@ test('membership wizard requires fee acknowledgment when fee applies', function 
             ->set('email', 'jane@example.com')
     )
         ->call('nextStep')
-        ->tap(fn ($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
+        ->tap(fn($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
         ->call('nextStep')
         ->set('membership_fee_transfer_reference', 'TXN-REF')
         ->call('submit')

@@ -15,6 +15,7 @@ class MembershipApplicationApprovalService
 {
     public function __construct(
         private readonly HouseholdMemberService $householdMembers,
+        private readonly MembershipSubscriptionFeeService $subscriptionFees,
     ) {}
 
     public function approve(MembershipApplication $application): Member
@@ -52,6 +53,8 @@ class MembershipApplicationApprovalService
 
     private function approveParent(MembershipApplication $application): Member
     {
+        $this->subscriptionFees->assertCanApprove($application);
+
         $member = $this->householdMembers->createFromApplication($application);
 
         $application->update([
@@ -60,6 +63,8 @@ class MembershipApplicationApprovalService
             'member_id' => $member->id,
             'household_email' => $member->household_email,
         ]);
+
+        $this->subscriptionFees->postOnApproval($application->fresh(), $member);
 
         return $member;
     }

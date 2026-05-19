@@ -76,9 +76,15 @@ class MembershipEnrollmentWizard extends Component
 
     public $application_form = null;
 
+    public string $membership_fee_transfer_date = '';
+
+    public string $membership_fee_transfer_amount = '';
+
     public string $membership_fee_transfer_reference = '';
 
     public bool $membership_fee_acknowledged = false;
+
+    public $membership_fee_receipt = null;
 
     public bool $submitted = false;
 
@@ -86,7 +92,8 @@ class MembershipEnrollmentWizard extends Component
 
     public function mount(): void
     {
-        $this->enrollmentClosed = ! PublicPageSettings::enrollmentIsOpen();
+        $this->enrollmentClosed = !PublicPageSettings::enrollmentIsOpen();
+        $this->resetMembershipFeeTransferFields();
     }
 
     /**
@@ -150,6 +157,22 @@ class MembershipEnrollmentWizard extends Component
         if ($this->step > $this->lastStep()) {
             $this->step = $this->lastStep();
         }
+
+        $this->syncMembershipFeeTransferAmount();
+    }
+
+    protected function resetMembershipFeeTransferFields(): void
+    {
+        $this->membership_fee_transfer_date = now()->toDateString();
+        $this->syncMembershipFeeTransferAmount();
+    }
+
+    protected function syncMembershipFeeTransferAmount(): void
+    {
+        $fee = $this->currentApplicationFeeAmount();
+        $this->membership_fee_transfer_amount = $fee > 0
+            ? number_format($fee, 2, '.', '')
+            : '';
     }
 
     /**
@@ -191,7 +214,15 @@ class MembershipEnrollmentWizard extends Component
         ];
 
         if ($this->requiresFeePayment()) {
+            $requiredFee = $this->currentApplicationFeeAmount();
+            $rules['membership_fee_transfer_date'] = ['required', 'date', 'before_or_equal:today'];
+            $rules['membership_fee_transfer_amount'] = [
+                'required',
+                'numeric',
+                'min:' . $requiredFee,
+            ];
             $rules['membership_fee_transfer_reference'] = ['required', 'string', 'min:3', 'max:120'];
+            $rules['membership_fee_receipt'] = ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'];
             $rules['membership_fee_acknowledged'] = ['accepted'];
         }
 
@@ -239,7 +270,10 @@ class MembershipEnrollmentWizard extends Component
             ],
             'payment' => $this->requiresFeePayment()
             ? [
+                'membership_fee_transfer_date' => $this->rules()['membership_fee_transfer_date'],
+                'membership_fee_transfer_amount' => $this->rules()['membership_fee_transfer_amount'],
                 'membership_fee_transfer_reference' => $this->rules()['membership_fee_transfer_reference'],
+                'membership_fee_receipt' => $this->rules()['membership_fee_receipt'],
                 'membership_fee_acknowledged' => $this->rules()['membership_fee_acknowledged'],
             ]
             : [],
@@ -253,6 +287,10 @@ class MembershipEnrollmentWizard extends Component
 
         if ($rules !== []) {
             $this->validate($rules);
+        }
+
+        if ($this->step === 1) {
+            $this->syncMembershipFeeTransferAmount();
         }
 
         if ($this->step < $this->lastStep()) {
@@ -302,9 +340,20 @@ class MembershipEnrollmentWizard extends Component
             'next_of_kin_phone' => filled($this->next_of_kin_phone) ? $this->next_of_kin_phone : null,
             'message' => $validated['message'] ?? null,
             'application_form' => $this->application_form,
-            'membership_fee_amount' => $this->currentApplicationFeeAmount(),
+            'membership_fee_amount' => $this->requiresFeePayment()
+                ? (float) $this->membership_fee_transfer_amount
+                : 0,
+            'membership_fee_transfer_date' => $this->requiresFeePayment()
+                ? $this->membership_fee_transfer_date
+                : null,
             'membership_fee_transfer_reference' => $this->requiresFeePayment()
                 ? $this->membership_fee_transfer_reference
+                : null,
+            'membership_fee_receipt' => $this->requiresFeePayment()
+                ? $this->membership_fee_receipt
+                : null,
+            'membership_fee_required_amount' => $this->requiresFeePayment()
+                ? $this->currentApplicationFeeAmount()
                 : null,
         ]);
 

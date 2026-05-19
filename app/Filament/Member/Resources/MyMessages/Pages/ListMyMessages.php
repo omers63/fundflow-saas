@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyMessages\Pages;
 
 use App\Filament\Member\Resources\MyMessages\MyMessageResource;
-use App\Models\Tenant\DirectMessage;
-use App\Models\Tenant\User;
+use App\Services\Tenant\DirectMessagingService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Textarea;
@@ -54,6 +53,7 @@ class ListMyMessages extends ListRecords
                 ->action(function (array $data): void {
                     $memberUser = auth('tenant')->user();
                     $admin = MyMessageResource::resolveAdminRecipient();
+                    $messaging = app(DirectMessagingService::class);
 
                     if ($memberUser === null || $admin === null) {
                         Notification::make()
@@ -69,15 +69,15 @@ class ListMyMessages extends ListRecords
                         ? array_values(array_filter($data['attachments'], fn ($file): bool => filled($file)))
                         : [];
 
-                    DirectMessage::create([
-                        'from_user_id' => $memberUser->id,
-                        'to_user_id' => $admin->id,
-                        'subject' => $data['subject'],
-                        'body' => $data['body'],
-                        'attachments' => $attachments,
-                    ]);
+                    $messaging->sendMemberToAdmin(
+                        $memberUser,
+                        $admin,
+                        $data['body'],
+                        $attachments,
+                        $data['subject'],
+                    );
 
-                    $this->notifyAdmins($admin, $memberUser, $data['subject'], $data['body']);
+                    $messaging->notifyAdminsOfMemberMessage($memberUser, $data['subject'], $data['body']);
 
                     Notification::make()
                         ->title(__('Message sent'))
@@ -85,23 +85,5 @@ class ListMyMessages extends ListRecords
                         ->send();
                 }),
         ];
-    }
-
-    /**
-     * @param  array{subject: string, body: string}  $data
-     */
-    private function notifyAdmins(User $primaryAdmin, User $memberUser, string $subject, string $body): void
-    {
-        $title = __('New message from :name', ['name' => $memberUser->name]);
-        $preview = mb_strimwidth($body, 0, 100, '...');
-
-        User::query()->where('is_admin', true)->each(function (User $admin) use ($title, $subject, $preview): void {
-            Notification::make()
-                ->title($title)
-                ->body($subject.': '.$preview)
-                ->icon('heroicon-o-chat-bubble-left-right')
-                ->iconColor('info')
-                ->sendToDatabase($admin);
-        });
     }
 }

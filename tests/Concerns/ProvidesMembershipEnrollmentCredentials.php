@@ -36,6 +36,8 @@ trait ProvidesMembershipEnrollmentCredentials
     protected function withEnrollmentFeePayment(Testable $test): Testable
     {
         return $test
+            ->set('membership_fee_transfer_date', now()->toDateString())
+            ->set('membership_fee_transfer_amount', '50.00')
             ->set('membership_fee_transfer_reference', 'TXN-REF-12345')
             ->set('membership_fee_acknowledged', true);
     }

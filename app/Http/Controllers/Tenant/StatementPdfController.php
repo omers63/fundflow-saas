@@ -6,7 +6,7 @@ namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\MonthlyStatement;
-use App\Models\Tenant\Setting;
+use App\Support\StatementSettings;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -35,13 +35,13 @@ class StatementPdfController extends Controller
         $statement->load('member');
 
         $cfg = [
-            'brand' => Setting::get('statement', 'brand_name', config('app.name')),
-            'tagline' => Setting::get('statement', 'tagline', __('Member fund statement')),
-            'accent_color' => Setting::get('statement', 'accent_color', '#0284c7'),
-            'footer_disclaimer' => Setting::get('statement', 'footer_disclaimer', __('Computer-generated statement. Confidential.')),
-            'signature_line' => Setting::get('statement', 'signature_line', __('Fund administration')),
-            'include_txns' => (bool) Setting::get('statement', 'include_transactions', true),
-            'include_loan' => (bool) Setting::get('statement', 'include_loan_section', true),
+            'brand' => StatementSettings::brandName(),
+            'tagline' => StatementSettings::tagline(),
+            'accent_color' => StatementSettings::accentColor(),
+            'footer_disclaimer' => StatementSettings::footerDisclaimer(),
+            'signature_line' => StatementSettings::signatureLine(),
+            'include_txns' => StatementSettings::includeTransactions(),
+            'include_loan' => StatementSettings::includeLoanSection(),
         ];
 
         $pdf = Pdf::loadView('pdf.monthly-statement', [

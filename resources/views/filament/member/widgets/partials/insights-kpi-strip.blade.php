@@ -43,8 +43,9 @@
                     href="{{ $card['url'] }}"
                 @endif
                 @class([
-                    'ff-app-insights-kpi relative min-w-0 px-2 py-1.5 transition hover:bg-gray-50/80 dark:hover:bg-gray-800/60 sm:px-2.5 sm:py-2',
+                    'ff-app-insights-kpi ff-member-stat-card relative min-w-0 px-2 py-1.5 transition sm:px-2.5 sm:py-2',
                 ])
+                data-accent="{{ $accent }}"
                 style="animation: ff-stat-in 0.35s ease-out {{ 0.02 + ($i * 0.03) }}s forwards">
                 <div @class(['absolute inset-y-0 left-0 w-0.5 opacity-100', $barClass])></div>
                 <div class="flex items-center justify-between gap-0.5 pl-1">

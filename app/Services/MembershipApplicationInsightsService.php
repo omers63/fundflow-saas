@@ -67,6 +67,8 @@ final class MembershipApplicationInsightsService
             ->where('created_at', '<', $now->copy()->subDays(7))
             ->count();
 
+        $subscriptionFees = app(MembershipSubscriptionFeeService::class);
+
         $oldestPending = MembershipApplication::query()
             ->where('status', 'pending')
             ->orderBy('created_at')
@@ -78,7 +80,9 @@ final class MembershipApplicationInsightsService
                 'email' => $application->email,
                 'days_waiting' => (int) Carbon::parse($application->created_at)->diffInDays($now),
                 'type' => $application->application_type ?? 'new',
-                'has_receipt' => filled($application->application_form_path),
+                'has_receipt' => $subscriptionFees->applicationRequiresSubscriptionFee($application)
+                    ? filled($application->membership_fee_receipt_path)
+                    : filled($application->application_form_path),
                 'edit_url' => MembershipApplicationResource::getUrl('edit', ['record' => $application]),
             ])
             ->all();

@@ -3,13 +3,18 @@
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
+use App\Filament\Tenant\Resources\LoanTiers\LoanTierResource;
 use App\Models\Tenant\BankTemplate;
 use App\Models\Tenant\Setting;
+use App\Support\CommunicationSettings;
+use App\Support\ContributionPolicySettings;
 use App\Support\Lang;
 use App\Support\LoanSettings;
 use App\Support\MemberNumberSettings;
 use App\Support\NotificationSettings;
 use App\Support\PublicPageSettings;
+use App\Support\StatementSettings;
 use BackedEnum;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\CheckboxList;
@@ -18,6 +23,7 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -98,6 +104,10 @@ class Settings extends Page implements HasForms
             'loan_settlement_threshold_pct' => ($loan['settlement_threshold_pct'] ?? 0.16) * 100,
             'loan_require_guarantor_above_fund' => (bool) ($loan['require_guarantor_above_fund_balance'] ?? true),
             'loan_auto_allocate_repayment' => (bool) ($loan['auto_allocate_loan_repayment'] ?? false),
+            'loan_default_grace_cycles' => $loan['default_grace_cycles'] ?? 2,
+            ...ContributionPolicySettings::allForForm(),
+            ...StatementSettings::allForForm(),
+            ...CommunicationSettings::allForForm(),
             'notifications_sms_enabled' => (bool) ($notifications['sms_enabled'] ?? false),
             'notifications_whatsapp_enabled' => (bool) ($notifications['whatsapp_enabled'] ?? false),
             'notifications_twilio_sid' => $notifications['twilio_account_sid'] ?? '',
@@ -311,6 +321,83 @@ class Settings extends Page implements HasForms
                                             ->required()
                                             ->helperText(__('Day of month when the contribution cycle starts (1-28). Default: 6th.')),
                                     ]),
+                                Section::make(__('Delinquency policy'))
+                                    ->description(__('Daily delinquency sync marks members delinquent when consecutive or rolling miss thresholds are breached.'))
+                                    ->columns(3)
+                                    ->schema([
+                                        TextInput::make('delinquency_consecutive')
+                                            ->label(__('Consecutive missed cycles'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(36)
+                                            ->required(),
+                                        TextInput::make('delinquency_total')
+                                            ->label(__('Total misses (rolling window)'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(240)
+                                            ->required(),
+                                        TextInput::make('delinquency_lookback_months')
+                                            ->label(__('Rolling window (months)'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(240)
+                                            ->required(),
+                                    ]),
+                                Section::make(__('Late fees (days after cycle deadline)'))
+                                    ->description(__('Highest non-zero tier reached applies (30+ → 20+ → 10+ → 1+).'))
+                                    ->columns(3)
+                                    ->schema([
+                                        TextInput::make('late_fee_contribution_1d')
+                                            ->label(__('Contribution — 1+ days late'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->required(),
+                                        TextInput::make('late_fee_contribution_10d')
+                                            ->label(__('Contribution — 10+ days late'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->required(),
+                                        TextInput::make('late_fee_contribution_20d')
+                                            ->label(__('Contribution — 20+ days late'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->required(),
+                                        TextInput::make('late_fee_contribution_30d')
+                                            ->label(__('Contribution — 30+ days late'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->required(),
+                                        TextInput::make('late_fee_repayment_1d')
+                                            ->label(__('Repayment — 1+ days late'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->required(),
+                                        TextInput::make('late_fee_repayment_10d')
+                                            ->label(__('Repayment — 10+ days late'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->required(),
+                                        TextInput::make('late_fee_repayment_20d')
+                                            ->label(__('Repayment — 20+ days late'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->required(),
+                                        TextInput::make('late_fee_repayment_30d')
+                                            ->label(__('Repayment — 30+ days late'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->required(),
+                                    ]),
+                                Section::make(__('Annual subscription fee'))
+                                    ->schema([
+                                        TextInput::make('annual_subscription_fee')
+                                            ->label(__('Annual subscription fee'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->required()
+                                            ->helperText(__('Charged on join-date anniversary; set to 0 to disable.')),
+                                    ]),
                             ]),
                         Tab::make(__('Loans'))
                             ->icon('heroicon-o-banknotes')
@@ -371,12 +458,85 @@ class Settings extends Page implements HasForms
                                 Section::make(__('Repayment & guarantors'))
                                     ->columns(2)
                                     ->schema([
+                                        TextInput::make('loan_default_grace_cycles')
+                                            ->label(__('Grace cycles before guarantor debit'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(24)
+                                            ->required()
+                                            ->helperText(__('Missed repayment cycles before guarantor liability steps apply.')),
                                         Toggle::make('loan_require_guarantor_above_fund')
                                             ->label(__('Require guarantor above fund balance'))
                                             ->helperText(__('When the requested amount exceeds the member fund balance, a guarantor is mandatory on apply.')),
                                         Toggle::make('loan_auto_allocate_repayment')
                                             ->label(__('Auto-allocate posted contributions to loan'))
                                             ->helperText(__('After a contribution is posted, apply open-period loan repayment from member cash when possible.')),
+                                    ]),
+                                Section::make(__('Loan & fund tiers'))
+                                    ->description(__('Interest rates and fund multipliers are managed in dedicated resources.'))
+                                    ->schema([
+                                        Placeholder::make('loan_tiers_link')
+                                            ->label(__('Loan tiers'))
+                                            ->content(fn (): string => LoanTierResource::getUrl('index')),
+                                        Placeholder::make('fund_tiers_link')
+                                            ->label(__('Fund tiers'))
+                                            ->content(fn (): string => FundTierResource::getUrl('index')),
+                                    ]),
+                            ]),
+                        Tab::make(__('Statements'))
+                            ->icon('heroicon-o-document-text')
+                            ->schema([
+                                Section::make(__('Branding'))
+                                    ->columns(3)
+                                    ->schema([
+                                        TextInput::make('statement_brand_name')
+                                            ->label(__('Organization name'))
+                                            ->required()
+                                            ->maxLength(80),
+                                        TextInput::make('statement_tagline')
+                                            ->label(__('Tagline'))
+                                            ->maxLength(120),
+                                        TextInput::make('statement_accent_color')
+                                            ->label(__('Header accent color (hex)'))
+                                            ->required()
+                                            ->maxLength(7)
+                                            ->placeholder('#059669'),
+                                    ]),
+                                Section::make(__('Footer & signature'))
+                                    ->schema([
+                                        Textarea::make('statement_footer_disclaimer')
+                                            ->label(__('Footer disclaimer'))
+                                            ->rows(2)
+                                            ->columnSpanFull(),
+                                        TextInput::make('statement_signature_line')
+                                            ->label(__('Authorized signature line'))
+                                            ->maxLength(100),
+                                    ]),
+                                Section::make(__('Delivery & content'))
+                                    ->columns(2)
+                                    ->schema([
+                                        Toggle::make('statement_auto_email')
+                                            ->label(__('Auto-email members on generation'))
+                                            ->helperText(__('When enabled, statement notifications may include email when the email channel is on.')),
+                                        Toggle::make('statement_include_transactions')
+                                            ->label(__('Include transaction detail table')),
+                                        Toggle::make('statement_include_loan_section')
+                                            ->label(__('Include loan standing section')),
+                                        Toggle::make('statement_include_compliance')
+                                            ->label(__('Include compliance snapshot')),
+                                    ]),
+                            ]),
+                        Tab::make(__('Communication'))
+                            ->icon('heroicon-o-chat-bubble-left-right')
+                            ->schema([
+                                Section::make(__('Communication channels'))
+                                    ->description(__('When disabled, no notifications are sent through that channel. SMS and WhatsApp credentials are configured under Notifications.'))
+                                    ->columns(2)
+                                    ->schema([
+                                        Toggle::make('communication_in_app_enabled')
+                                            ->label(__('In-app inbox')),
+                                        Toggle::make('communication_email_enabled')
+                                            ->label(__('Email')),
                                     ]),
                             ]),
                         Tab::make(__('Notifications'))
@@ -621,9 +781,14 @@ class Settings extends Page implements HasForms
             'default_term_months' => (int) $state['loan_default_term_months'],
             'max_loan_amount' => (float) ($state['loan_max_loan_amount'] ?? 0),
             'settlement_threshold_pct' => ((float) ($state['loan_settlement_threshold_pct'] ?? 16)) / 100,
+            'default_grace_cycles' => (int) ($state['loan_default_grace_cycles'] ?? 2),
             'require_guarantor_above_fund_balance' => (bool) ($state['loan_require_guarantor_above_fund'] ?? true),
             'auto_allocate_loan_repayment' => (bool) ($state['loan_auto_allocate_repayment'] ?? false),
         ]);
+
+        ContributionPolicySettings::saveFromForm($state);
+        StatementSettings::saveFromForm($state);
+        CommunicationSettings::saveFromForm($state);
 
         NotificationSettings::save([
             'sms_enabled' => (bool) ($state['notifications_sms_enabled'] ?? false),

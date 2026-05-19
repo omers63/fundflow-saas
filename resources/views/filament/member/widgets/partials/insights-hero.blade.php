@@ -32,12 +32,12 @@
         <div class="flex min-w-0 items-center gap-2">
             <x-dynamic-component :component="$icon" @class(['h-4 w-4 shrink-0', $iconColor]) />
             <div class="min-w-0">
-                <p class="truncate text-xs font-semibold text-gray-900 dark:text-white">{{ $hero['title'] }}</p>
-                <p class="truncate text-[11px] text-gray-600 dark:text-gray-400">{{ $hero['subtitle'] }}</p>
+                <p class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ $hero['title'] }}</p>
+                <p class="truncate text-xs text-gray-600 dark:text-gray-400">{{ $hero['subtitle'] }}</p>
             </div>
         </div>
         @if (!empty($hero['cta_url'] ?? null))
-            <a href="{{ $hero['cta_url'] }}" @class(['shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-white', $ctaClass])>
+            <a href="{{ $hero['cta_url'] }}" @class(['shrink-0 rounded-lg px-4 py-2 text-xs font-semibold text-white', $ctaClass])>
                 {{ $hero['cta_label'] }}
             </a>
         @endif

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Member\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Member\Support\MemberNavigation;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
@@ -29,7 +30,9 @@ class LoanCalculator extends Page implements HasForms
 
     protected static ?string $navigationLabel = 'Loan calculator';
 
-    protected static ?int $navigationSort = 60;
+    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_LOANS;
+
+    protected static ?int $navigationSort = MemberNavigation::SORT_LOAN_CALCULATOR;
 
     protected string $view = 'filament.member.pages.loan-calculator';
 

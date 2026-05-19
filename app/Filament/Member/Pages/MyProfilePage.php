@@ -2,12 +2,11 @@
 
 namespace App\Filament\Member\Pages;
 
+use App\Filament\Member\Support\ReturnToParentPortalAction;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
-use App\Services\Tenant\ImpersonationService;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 
@@ -82,15 +81,8 @@ class MyProfilePage extends Page
                 ->color('primary'),
         ];
 
-        if (session()->has('impersonator_user_id')) {
-            $actions[] = Action::make('stop_impersonation')
-                ->label(__('Return to parent portal'))
-                ->icon('heroicon-o-arrow-uturn-left')
-                ->color('warning')
-                ->action(function (): void {
-                    app(ImpersonationService::class)->stop();
-                    $this->redirect(Filament::getPanel('member')->getUrl());
-                });
+        if (ReturnToParentPortalAction::isImpersonating()) {
+            $actions[] = ReturnToParentPortalAction::make($this);
         }
 
         return $actions;

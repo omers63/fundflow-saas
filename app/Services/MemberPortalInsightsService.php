@@ -10,6 +10,7 @@ use App\Filament\Member\Pages\MyProfilePage;
 use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
+use App\Filament\Member\Resources\MyGuaranteedLoans\MyGuaranteedLoanResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Member\Resources\MyMessages\MyMessageResource;
 use App\Filament\Member\Resources\MyStatements\MyStatementResource;
@@ -19,6 +20,7 @@ use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MonthlyStatement;
+use App\Services\Concerns\EnrichesMemberPortalDashboard;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Support\Insights\InsightFormatter;
 use App\Support\LoanSettings;
@@ -28,6 +30,8 @@ use Carbon\Carbon;
 
 final class MemberPortalInsightsService
 {
+    use EnrichesMemberPortalDashboard;
+
     /**
      * @return array<string, mixed>
      */
@@ -39,7 +43,7 @@ final class MemberPortalInsightsService
             return [];
         }
 
-        $member->loadMissing(['cashAccount', 'fundAccount', 'user']);
+        $member->loadMissing(['cashAccount', 'fundAccount', 'user', 'parent', 'dependents']);
         $member = $member->fresh() ?? $member;
 
         $currency = InsightFormatter::currency();
@@ -57,6 +61,7 @@ final class MemberPortalInsightsService
 
         $installmentsTotal = $activeLoan?->installments->count() ?? 0;
         $installmentsPaid = $activeLoan?->installments->where('status', 'paid')->count() ?? 0;
+        $installmentsOverdue = $activeLoan?->installments->where('status', 'overdue')->count() ?? 0;
         $repayPercent = $installmentsTotal > 0
             ? (int) round(($installmentsPaid / $installmentsTotal) * 100)
             : 0;
@@ -69,7 +74,7 @@ final class MemberPortalInsightsService
         $unreadMessages = (int) DirectMessage::query()
             ->where('to_user_id', $member->user_id)
             ->whereNull('read_at')
-            ->whereHas('sender', fn($q) => $q->where('is_admin', true))
+            ->whereHas('sender', fn ($q) => $q->where('is_admin', true))
             ->count();
 
         $contributionsPosted = (int) Contribution::query()
@@ -89,6 +94,28 @@ final class MemberPortalInsightsService
             ->forPeriod($curMonth, $curYear)
             ->posted()
             ->exists();
+
+        $monthly = (float) $member->monthly_contribution_amount;
+        $contributionsPostedTotal = (float) Contribution::query()
+            ->where('member_id', $member->id)
+            ->posted()
+            ->sum('amount');
+        $dependentsCount = $member->dependents()->count();
+        $guaranteedLoansCount = (int) Loan::query()
+            ->where('guarantor_member_id', $member->id)
+            ->whereIn('status', ['pending', 'approved', 'disbursed', 'repaying', 'defaulted'])
+            ->count();
+
+        $cycleStatus = $this->resolveMemberCycleStatus(
+            $member,
+            $postedThisCycle,
+            $cycles,
+            $curMonth,
+            $curYear,
+        );
+        $requiredCash = $cycles->requiredCashForMemberPeriod($member, $curMonth, $curYear);
+        $sparkline = $this->contributionSparkline($member);
+        $trend = $this->sixMonthContributionTrend($member);
 
         $firstName = trim(explode(' ', $member->name)[0] ?: $member->name);
 
@@ -128,9 +155,13 @@ final class MemberPortalInsightsService
             ),
             'loan_card' => $activeLoan ? [
                 'id' => $activeLoan->id,
+                'status_label' => Loan::statusOptions()[$activeLoan->status] ?? $activeLoan->status,
                 'outstanding' => InsightFormatter::money($loanOutstanding),
                 'repay_percent' => $repayPercent,
-                'installments' => $installmentsPaid . '/' . $installmentsTotal,
+                'installments' => $installmentsPaid.'/'.$installmentsTotal,
+                'installments_paid' => $installmentsPaid,
+                'installments_total' => $installmentsTotal,
+                'overdue_count' => $installmentsOverdue,
                 'view_url' => MyLoanResource::getUrl('view', ['record' => $activeLoan]),
             ] : null,
             'eligibility' => [
@@ -139,21 +170,64 @@ final class MemberPortalInsightsService
                 'max_amount' => InsightFormatter::money(LoanSettings::maxLoanAmountForMember($fundBalance)),
             ],
             'cycle' => [
+                'period_label' => $cycles->periodLabel($curMonth, $curYear),
                 'period' => $cycles->periodLabel($curMonth, $curYear),
                 'posted' => $postedThisCycle,
+                'status_key' => $cycleStatus['key'],
+                'status_label' => $cycleStatus['label'],
+                'status_tone' => $cycleStatus['tone'],
+                'required_cash' => InsightFormatter::money($requiredCash),
+                'contributions_url' => MyContributionResource::getUrl('index'),
             ],
+            'steps' => $this->memberLifecycleSteps($member, $postedThisCycle, $activeLoan, $arrears),
+            'arrears' => [
+                'visible' => $arrears['has_arrears'] || $arrears['is_delinquent'],
+                'is_delinquent' => $arrears['is_delinquent'],
+                'overdue_installments' => $arrears['overdue_installment_count'],
+                'unpaid_periods' => $arrears['unpaid_contribution_periods'],
+                'loans_url' => MyLoanResource::getUrl('index'),
+                'contributions_url' => MyContributionResource::getUrl('index'),
+            ],
+            'fund_summary' => [
+                'contributions_count' => $contributionsPosted,
+                'contributions_total' => InsightFormatter::money($contributionsPostedTotal),
+                'pending_postings' => $pendingDeposits,
+                'fund_minimum_pct' => $monthly > 0
+                    ? min(100, (int) round(($fundBalance / $monthly) * 100))
+                    : null,
+                'monthly_contribution' => InsightFormatter::money($monthly),
+            ],
+            'trend' => $trend,
+            'trend_max' => max(1, (int) collect($trend)->max('posted')),
+            'recent_activity' => $this->recentMemberTransactions($member),
+            'recent_contributions' => $this->recentMemberContributions($member),
+            'relation_summaries' => $this->memberRelationSummaries(
+                $member,
+                $contributionsPosted,
+                $contributionsPostedTotal,
+                $pendingDeposits,
+                $activeLoan,
+                $loanOutstanding,
+                $dependentsCount,
+                $guaranteedLoansCount,
+                $unreadMessages,
+                $latestStatement !== null,
+            ),
+            'household' => $this->memberHousehold($member),
+            'latest_statement' => $this->latestStatementCard($latestStatement),
             'quick_actions' => $this->quickActions(
                 $member,
                 $eligibility['eligible'],
                 $pendingLoan,
                 $latestStatement !== null,
+                $guaranteedLoansCount > 0,
             ),
             'recent_deposits' => FundPosting::query()
                 ->where('member_id', $member->id)
                 ->latest()
                 ->limit(4)
                 ->get()
-                ->map(fn(FundPosting $posting): array => [
+                ->map(fn (FundPosting $posting): array => [
                     'amount' => InsightFormatter::money((float) $posting->amount),
                     'status' => $posting->status,
                     'status_label' => match ($posting->status) {
@@ -166,8 +240,25 @@ final class MemberPortalInsightsService
                     'url' => MyFundPostingResource::getUrl('index'),
                 ])
                 ->all(),
-            'sparkline' => $this->contributionSparkline($member),
-            'sparkline_max' => 1,
+            'sparkline' => $sparkline,
+            'sparkline_max' => max(1, max($sparkline)),
+            'quick_links' => [
+                [
+                    'label' => __('Contributions'),
+                    'url' => MyContributionResource::getUrl('index'),
+                    'icon' => 'heroicon-o-banknotes',
+                ],
+                [
+                    'label' => __('Deposits'),
+                    'url' => MyFundPostingResource::getUrl('index'),
+                    'icon' => 'heroicon-o-inbox-arrow-down',
+                ],
+                [
+                    'label' => __('Loans'),
+                    'url' => MyLoanResource::getUrl('index'),
+                    'icon' => 'heroicon-o-currency-dollar',
+                ],
+            ],
         ];
     }
 
@@ -204,7 +295,7 @@ final class MemberPortalInsightsService
 
         $attentionCount = ($unreadMessages > 0 ? 1 : 0)
             + ($pendingDeposits > 0 ? 1 : 0)
-            + (!$postedThisCycle ? 1 : 0)
+            + (! $postedThisCycle ? 1 : 0)
             + (($arrears['has_arrears'] ?? false) || ($arrears['is_delinquent'] ?? false) ? 1 : 0);
 
         $defaultSubtitle = $attentionCount > 0
@@ -258,7 +349,7 @@ final class MemberPortalInsightsService
             ];
         }
 
-        if (!$postedThisCycle) {
+        if (! $postedThisCycle) {
             $pills[] = [
                 'label' => __('Contribution not posted :period', [
                     'period' => $cycles->periodLabel($curMonth, $curYear),
@@ -462,8 +553,13 @@ final class MemberPortalInsightsService
     /**
      * @return list<array{label: string, url: string, icon: string, accent: string, visible: bool}>
      */
-    private function quickActions(Member $member, bool $eligible, bool $pendingLoan, bool $hasStatement): array
-    {
+    private function quickActions(
+        Member $member,
+        bool $eligible,
+        bool $pendingLoan,
+        bool $hasStatement,
+        bool $hasGuaranteedLoans = false,
+    ): array {
         return [
             [
                 'label' => __('New deposit'),
@@ -477,7 +573,7 @@ final class MemberPortalInsightsService
                 'url' => ApplyForLoan::getUrl(),
                 'icon' => 'heroicon-o-document-plus',
                 'accent' => 'violet',
-                'visible' => $eligible && !$pendingLoan,
+                'visible' => $eligible && ! $pendingLoan,
             ],
             [
                 'label' => __('Loan calculator'),
@@ -499,6 +595,20 @@ final class MemberPortalInsightsService
                 'icon' => 'heroicon-o-rectangle-stack',
                 'accent' => 'teal',
                 'visible' => true,
+            ],
+            [
+                'label' => __('Messages'),
+                'url' => MyMessageResource::getUrl('index'),
+                'icon' => 'heroicon-o-chat-bubble-left-right',
+                'accent' => 'amber',
+                'visible' => true,
+            ],
+            [
+                'label' => __('Guaranteed loans'),
+                'url' => MyGuaranteedLoanResource::getUrl('index'),
+                'icon' => 'heroicon-o-shield-check',
+                'accent' => 'rose',
+                'visible' => $hasGuaranteedLoans,
             ],
         ];
     }

@@ -38,19 +38,34 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
 
     public function activeMember(): ?Member
     {
-        $member = $this->member;
+        $impersonatedUserId = (int) session('impersonated_user_id', 0);
+        $impersonatedMemberId = (int) session('impersonated_member_id', 0);
 
-        if ($member === null) {
-            return null;
+        if ($impersonatedUserId === (int) $this->id && $impersonatedMemberId > 0) {
+            $impersonatedMember = Member::query()
+                ->whereKey($impersonatedMemberId)
+                ->where('user_id', $this->id)
+                ->first();
+
+            if ($impersonatedMember !== null) {
+                return $impersonatedMember;
+            }
         }
 
         $sessionMemberId = session('active_member_id');
 
-        if ($sessionMemberId !== null && (int) $sessionMemberId !== (int) $member->id) {
-            return null;
+        if ($sessionMemberId !== null) {
+            $sessionMember = Member::query()
+                ->whereKey((int) $sessionMemberId)
+                ->where('user_id', $this->id)
+                ->first();
+
+            if ($sessionMember !== null) {
+                return $sessionMember;
+            }
         }
 
-        return $member;
+        return $this->member;
     }
 
     public function canAccessPanel(Panel $panel): bool

@@ -15,10 +15,18 @@ final class MemberNotificationChannels
      */
     public static function resolve(object $notifiable): array
     {
-        $channels = ['database'];
+        $channels = [];
+
+        if (CommunicationSettings::inAppEnabled()) {
+            $channels[] = 'database';
+        }
 
         if (! $notifiable instanceof User) {
             return $channels;
+        }
+
+        if (CommunicationSettings::emailEnabled() && filled($notifiable->email)) {
+            $channels[] = 'mail';
         }
 
         $phone = self::phoneFor($notifiable);

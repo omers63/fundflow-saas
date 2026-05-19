@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
@@ -20,8 +21,15 @@ class StartDependentImpersonationController extends Controller
             abort(403);
         }
 
-        $parentMember = Member::query()->where('user_id', $actor->id)->first();
-        if ($parentMember === null || (int) $dependent->parent_member_id !== (int) $parentMember->id) {
+        $parentMember = Member::query()
+            ->where('user_id', $actor->id)
+            ->whereNull('parent_member_id')
+            ->first();
+
+        if (
+            $parentMember === null
+            || (int) $dependent->parent_member_id !== (int) $parentMember->id
+        ) {
             abort(403);
         }
 
@@ -32,12 +40,11 @@ class StartDependentImpersonationController extends Controller
 
         $memberPanel = Filament::getPanel('member');
         if ($memberPanel !== null && ! $dependentUser->canAccessPanel($memberPanel)) {
-            return redirect(Filament::getPanel('member')->getUrl());
+            return redirect(MyDependentResource::getUrl('index'));
         }
 
         app(ImpersonationService::class)->start($actor, $dependentUser, $dependent);
-        request()->session()->save();
 
-        return redirect('/member');
+        return redirect($memberPanel?->getUrl() ?? '/member');
     }
 }

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class MembershipApplication extends Model
 {
@@ -45,7 +46,10 @@ class MembershipApplication extends Model
         'message',
         'application_form_path',
         'membership_fee_amount',
+        'membership_fee_transfer_date',
         'membership_fee_transfer_reference',
+        'membership_fee_required_amount',
+        'membership_fee_receipt_path',
         'status',
         'reviewed_at',
         'rejection_reason',
@@ -63,6 +67,8 @@ class MembershipApplication extends Model
             'membership_date' => 'date',
             'monthly_income' => 'decimal:2',
             'membership_fee_amount' => 'decimal:2',
+            'membership_fee_required_amount' => 'decimal:2',
+            'membership_fee_transfer_date' => 'date',
             'reviewed_at' => 'datetime',
         ];
     }
@@ -80,6 +86,11 @@ class MembershipApplication extends Model
     public function member(): BelongsTo
     {
         return $this->belongsTo(Member::class);
+    }
+
+    public function subscriptionFeeBankTransaction(): HasOne
+    {
+        return $this->hasOne(BankTransaction::class, 'membership_application_id');
     }
 
     public function isHouseholdDependent(): bool

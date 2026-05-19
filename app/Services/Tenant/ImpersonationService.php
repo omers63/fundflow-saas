@@ -5,6 +5,7 @@ namespace App\Services\Tenant;
 use App\Models\Tenant\ImpersonationAudit;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
+use App\Support\AuthSessionPasswordHash;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Auth;
 
@@ -13,11 +14,13 @@ class ImpersonationService
     public function start(User $impersonator, User $impersonatedUser, ?Member $impersonatedMember = null): void
     {
         $originalUserId = session('impersonator_user_id', $impersonator->id);
+
         session([
             'impersonator_user_id' => $originalUserId,
             'impersonated_user_id' => $impersonatedUser->id,
             'impersonated_member_id' => $impersonatedMember?->id,
             'impersonation_started_at' => now()->toDateTimeString(),
+            'active_member_id' => $impersonatedMember?->id ?? $impersonatedUser->member?->id,
         ]);
 
         ImpersonationAudit::create([
@@ -32,13 +35,10 @@ class ImpersonationService
         ]);
 
         $guard = $this->memberGuard();
-        Auth::guard($guard)->login($impersonatedUser);
 
-        if ($impersonatedMember !== null) {
-            session(['active_member_id' => $impersonatedMember->id]);
-        } elseif ($impersonatedUser->member !== null) {
-            session(['active_member_id' => $impersonatedUser->member->id]);
-        }
+        Auth::shouldUse($guard);
+        Auth::guard($guard)->login($impersonatedUser);
+        AuthSessionPasswordHash::syncForUser($impersonatedUser, $guard);
     }
 
     public function stop(): bool
@@ -68,7 +68,11 @@ class ImpersonationService
         ]);
 
         $guard = $this->memberGuard();
+
+        Auth::shouldUse($guard);
         Auth::guard($guard)->login($impersonator);
+        AuthSessionPasswordHash::syncForUser($impersonator, $guard);
+
         session()->forget([
             'impersonator_user_id',
             'impersonated_user_id',

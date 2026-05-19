@@ -5,6 +5,7 @@ namespace App\Filament\Member\Resources\MyContributions;
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Member\Resources\MyContributions\Pages\ListMyContributions;
 use App\Filament\Member\Resources\MyContributions\Tables\MyContributionsTable;
+use App\Filament\Member\Support\MemberNavigation;
 use App\Models\Tenant\Contribution;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -26,7 +27,9 @@ class MyContributionResource extends Resource
 
     protected static ?string $pluralModelLabel = 'My Contributions';
 
-    protected static ?int $navigationSort = 20;
+    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_MY_FINANCE;
+
+    protected static ?int $navigationSort = MemberNavigation::SORT_CONTRIBUTIONS;
 
     public static function getEloquentQuery(): Builder
     {

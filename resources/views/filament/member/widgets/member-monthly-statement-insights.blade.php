@@ -65,7 +65,8 @@
                         $iconClass = $accentIcon[$card['accent']] ?? 'text-gray-400';
                         $barOpacity = $card['active'] ? 'opacity-100' : 'opacity-25';
                     @endphp
-                    <div class="ff-app-insights-kpi relative px-2.5 py-2 transition hover:bg-gray-50/80 dark:hover:bg-gray-800/60"
+                    <div class="ff-app-insights-kpi ff-member-stat-card relative px-2.5 py-2 transition"
+                        data-accent="{{ $card['accent'] }}"
                         style="animation: ff-stat-in 0.35s ease-out {{ 0.02 + ($i * 0.03) }}s both">
                         <div @class(['absolute inset-y-0 left-0 w-0.5', $barClass, $barOpacity])></div>
                         <div class="flex items-center justify-between gap-1 pl-1">

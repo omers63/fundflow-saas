@@ -7,6 +7,7 @@ use App\Filament\Member\Resources\MyLoans\Pages\ListMyLoans;
 use App\Filament\Member\Resources\MyLoans\Pages\ViewMyLoan;
 use App\Filament\Member\Resources\MyLoans\RelationManagers\InstallmentsRelationManager;
 use App\Filament\Member\Resources\MyLoans\Tables\MyLoansTable;
+use App\Filament\Member\Support\MemberNavigation;
 use App\Models\Tenant\Loan;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -28,7 +29,9 @@ class MyLoanResource extends Resource
 
     protected static ?string $pluralModelLabel = 'My Loans';
 
-    protected static ?int $navigationSort = 40;
+    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_LOANS;
+
+    protected static ?int $navigationSort = MemberNavigation::SORT_LOANS;
 
     public static function getEloquentQuery(): Builder
     {
