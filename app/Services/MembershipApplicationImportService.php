@@ -17,7 +17,7 @@ class MembershipApplicationImportService
      * Optional: national_id, date_of_birth, city, address, bank_account_number, next_of_kin_name, next_of_kin_phone,
      * password (≥8 chars overrides default on first row only), application_type, gender, marital_status, membership_date,
      * home_phone, work_phone, work_place, residency_place, occupation, employer, monthly_income,
-     * cutoff_cash_balance, cutoff_fund_balance (default 0)
+     * cutoff_cash_balance, cutoff_fund_balance (default 0), transfer_amount (default 0), transfer_date (default today)
      *
      * @return array{created: int, skipped: int, failed: int, errors: array<int, string>}
      */
@@ -129,6 +129,8 @@ class MembershipApplicationImportService
             'import_arrears_cutoff_date' => $arrearsCutoffDate,
             'import_cutoff_cash_balance' => $this->parseCutoffBalance($row, 'cutoff_cash_balance'),
             'import_cutoff_fund_balance' => $this->parseCutoffBalance($row, 'cutoff_fund_balance'),
+            'membership_fee_amount' => $this->parseTransferAmount($row),
+            'membership_fee_transfer_date' => $this->parseTransferDate($row),
         ]));
 
         if ($parentApplicationId === null) {
@@ -322,8 +324,40 @@ class MembershipApplicationImportService
             'kin_phone', 'emergency_contact_phone', 'nok_phone' => 'next_of_kin_phone',
             'cut_off_cash_balance', 'opening_cash_balance', 'cash_cutoff_balance' => 'cutoff_cash_balance',
             'cut_off_fund_balance', 'opening_fund_balance', 'fund_cutoff_balance' => 'cutoff_fund_balance',
+            'transfer_amount', 'subscription_fee_amount', 'membership_fee_amount', 'fee_amount',
+            'subscription_transfer_amount', 'membership_fee_transfer_amount' => 'transfer_amount',
+            'transfer_date', 'subscription_fee_date', 'membership_fee_transfer_date', 'fee_transfer_date',
+            'subscription_transfer_date' => 'transfer_date',
             default => $h,
         };
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     */
+    private function parseTransferAmount(array $row): float
+    {
+        return $this->parseCutoffBalance($row, 'transfer_amount');
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     */
+    private function parseTransferDate(array $row): string
+    {
+        $raw = $this->cell($row, 'transfer_date');
+
+        if ($raw === '') {
+            return now()->toDateString();
+        }
+
+        $date = $this->parseFlexibleDateToDateString($raw, 'transfer_date');
+
+        if ($date > now()->toDateString()) {
+            throw new \InvalidArgumentException(__('Transfer date cannot be in the future.'));
+        }
+
+        return $date;
     }
 
     private function normalizeArrearsCutoffDate(?string $value): ?string

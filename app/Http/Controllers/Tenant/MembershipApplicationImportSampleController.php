@@ -37,10 +37,12 @@ class MembershipApplicationImportSampleController extends Controller
             'next_of_kin_phone',
             'cutoff_cash_balance',
             'cutoff_fund_balance',
+            'transfer_amount',
+            'transfer_date',
         ];
 
         $rows = [
-            ['Ahmed Al Saud', 'sample.applicant01@example.test', 'TempPass@01', 'new', 'male', 'married', '1000000001', '1989-01-14', '2026-01-10', 'King Fahd Rd, Building 12', 'Riyadh', '0114000101', '0114001101', '0501000101', 'Aramco HQ', 'Riyadh', 'Engineer', 'Aramco', '18500', '101000000001', 'SA030000000000101000000001', 'Mona Al Saud', '0503000101', '500', '1200'],
+            ['Ahmed Al Saud', 'sample.applicant01@example.test', 'TempPass@01', 'new', 'male', 'married', '1000000001', '1989-01-14', '2026-01-10', 'King Fahd Rd, Building 12', 'Riyadh', '0114000101', '0114001101', '0501000101', 'Aramco HQ', 'Riyadh', 'Engineer', 'Aramco', '18500', '101000000001', 'SA030000000000101000000001', 'Mona Al Saud', '0503000101', '500', '1200', '75', '2026-01-15'],
             ['Fatimah Hassan', 'sample.applicant02@example.test', '', 'renew', 'female', 'married', '1000000002', '1991-03-22', '2026-02-01', 'Olaya St, Apt 8', 'Riyadh', '', '', '0501000102', 'King Faisal Hospital', 'Riyadh', 'Doctor', 'KFSH', '24000', '101000000002', 'SA030000000000101000000002', 'Hassan Ali', '0503000102'],
             ['Yousef Nasser', 'sample.applicant03@example.test', '', 'resume', 'male', 'single', '1000000003', '1995-06-17', '', 'Prince Sultan St', 'Jeddah', '', '0124500103', '0501000103', '', 'Jeddah', '', '', '', '101000000003', 'SA030000000000101000000003', 'Nasser Yousef', '0503000103'],
             ['Aisha Omar', 'sample.applicant04@example.test', 'StrongPass#04', 'new', 'female', 'single', '1000000004', '1998-02-10', '', 'Al Malaz District', 'Riyadh', '', '', '0501000104', '', 'Riyadh', 'Teacher', 'Public School', '9500', '101000000004', 'SA030000000000101000000004', 'Omar Saeed', '0503000104'],

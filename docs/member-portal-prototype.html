@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FundAdmin — Member Portal Prototype</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{colors:{primary:{'50':'#EEEDFE','100':'#DDD9FC','600':'#534AB7','700':'#3C3489'},success:{'50':'#E1F5EE','600':'#1D9E75','700':'#0F6E56'},warning:{'50':'#FAEEDA','600':'#EF9F27','700':'#854F0B'},danger:{'50':'#FCEBEB','600':'#E24B4A','700':'#A32D2D'},info:{'50':'#E6F1FB','600':'#378ADD','700':'#185FA5'}}}}}</script>
+<style>
+[x-cloak]{display:none!important}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px}
+.sidebar{width:192px;min-height:100vh;background:#fff;border-right:1px solid #e5e7eb;display:flex;flex-direction:column}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;color:#6b7280;font-size:12px;margin-bottom:1px;transition:all .15s}
+.nav-item:hover,.nav-item.active{background:#f3f4f6;color:#111827;font-weight:500}
+.nav-group{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9ca3af;padding:8px 10px 3px;margin-top:4px}
+.badge-amber{background:#FAEEDA;color:#854F0B;font-size:10px;font-weight:600;padding:1px 5px;border-radius:10px;margin-left:auto}
+.panel{background:#fff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;margin-bottom:14px}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #e5e7eb}
+.panel-title{font-size:13px;font-weight:600}
+.panel-link{font-size:11px;color:#378ADD;cursor:pointer}
+.panel-body{padding:12px 16px}
+.chip{display:inline-block;font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600}
+.chip-green{background:#E1F5EE;color:#0F6E56}
+.chip-amber{background:#FAEEDA;color:#854F0B}
+.chip-red{background:#FCEBEB;color:#A32D2D}
+.chip-blue{background:#E6F1FB;color:#185FA5}
+.chip-purple{background:#EEEDFE;color:#3C3489}
+.chip-gray{background:#f3f4f6;color:#6b7280}
+.notice{display:flex;align-items:flex-start;gap:8px;padding:10px 14px;border-radius:10px;font-size:12px;margin-bottom:14px}
+.notice-amber{background:#FAEEDA;border:1px solid #EF9F27;color:#854F0B}
+.notice-blue{background:#E6F1FB;border:1px solid #378ADD;color:#185FA5}
+.notice-green{background:#E1F5EE;border:1px solid #1D9E75;color:#0F6E56}
+.notice-red{background:#FCEBEB;border:1px solid #E24B4A;color:#A32D2D}
+.prog-bar{height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden}
+.prog-fill{height:100%;border-radius:4px;background:#1D9E75}
+input,select,textarea{font-size:12px;padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;width:100%;box-sizing:border-box;background:#fff;color:#111827;outline:none}
+input:focus,select:focus,textarea:focus{border-color:#534AB7}
+input[readonly]{background:#f9fafb;color:#9ca3af}
+label{font-size:11px;font-weight:600;color:#6b7280;display:block;margin-bottom:4px}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:9px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid transparent;transition:all .15s}
+.btn-primary{background:#534AB7;color:#fff;border-color:#534AB7}
+.btn-primary:hover{background:#3C3489}
+.btn-outline{background:#fff;color:#534AB7;border-color:#AFA9EC}
+.btn-outline:hover{background:#EEEDFE}
+.btn-gray{background:#fff;color:#6b7280;border-color:#e5e7eb}
+.btn-gray:hover{background:#f3f4f6}
+.btn-success{background:#E1F5EE;color:#0F6E56;border-color:#1D9E75}
+.btn-danger{background:#FCEBEB;color:#A32D2D;border-color:#E24B4A}
+.tab-bar{display:flex;gap:1px;border-bottom:1px solid #e5e7eb;margin-bottom:16px}
+.tab-btn{font-size:12px;padding:8px 16px;cursor:pointer;color:#9ca3af;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
+.tab-btn.on{color:#111827;font-weight:600;border-bottom-color:#534AB7}
+.sub-pane{display:none}.sub-pane.on{display:block}
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{text-align:left;font-size:10px;font-weight:600;color:#9ca3af;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#f9fafb}
+.tbl td{padding:9px 10px;border-bottom:1px solid #f3f4f6;vertical-align:middle}
+.tbl tr:last-child td{border:none}
+.tbl tr:hover td{background:#fafafa}
+.qa{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:12px;cursor:pointer;margin-bottom:8px;transition:background .15s}
+.qa:hover{background:#f9fafb}
+.qa-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:17px}
+.settle-card{padding:14px;border:2px solid #e5e7eb;border-radius:12px;cursor:pointer;transition:all .15s}
+.settle-card.on{border-color:#534AB7;background:#EEEDFE}
+.settle-card:hover{border-color:#AFA9EC}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.detail-item{padding:8px 0;border-bottom:1px solid #f3f4f6}
+.detail-item:nth-last-child(-n+2){border:none}
+.detail-label{font-size:10px;color:#9ca3af;margin-bottom:2px}
+.detail-val{font-size:12px;font-weight:600}
+.chip-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.chip-cell{background:#f9fafb;border-radius:10px;padding:10px 12px}
+.chip-cell-label{font-size:10px;color:#9ca3af;margin-bottom:2px}
+.chip-cell-val{font-size:13px;font-weight:600}
+.filter-chip{display:inline-block;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid #e5e7eb;cursor:pointer;margin:0 4px 4px 0;transition:all .15s}
+.filter-chip.on{background:#534AB7;color:#fff;border-color:#534AB7}
+.filter-chip:not(.on):hover{border-color:#AFA9EC;color:#534AB7}
+.stat-card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px}
+</style>
+</head>
+<body class="bg-gray-50" x-data="memberApp()">
+<div class="flex">
+
+<!-- ── SIDEBAR ── -->
+<div class="sidebar fixed top-0 left-0 z-10" style="height:100vh;overflow-y:auto">
+  <!-- Profile block -->
+  <div style="padding:18px 14px 14px;border-bottom:1px solid #e5e7eb">
+    <div style="width:42px;height:42px;border-radius:50%;background:#E1F5EE;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#085041;margin-bottom:10px">YA</div>
+    <div style="font-size:13px;font-weight:600">Youssef Al-Amin</div>
+    <div style="font-size:10px;color:#9ca3af;margin-top:1px">Member #1047 · since Mar 2018</div>
+    <div style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;background:#E1F5EE;color:#085041;margin-top:6px">
+      <div style="width:6px;height:6px;border-radius:50%;background:#1D9E75"></div>Active
+    </div>
+  </div>
+  <nav style="padding:8px 8px;flex:1">
+    <div class="nav-item" :class="page==='overview'?'active':''" @click="go('overview')">🏠 Overview</div>
+    <div class="nav-group">My Accounts</div>
+    <div class="nav-item" :class="page==='cash'?'active':''" @click="go('cash')">👜 Cash account</div>
+    <div class="nav-item" :class="page==='fund'?'active':''" @click="go('fund')">🏦 Fund account</div>
+    <div class="nav-group">Loans</div>
+    <div class="nav-item" :class="page==='loans'?'active':''" @click="go('loans')">💰 My loans <span class="badge-amber">1 active</span></div>
+    <div class="nav-item" :class="page==='loan-request'?'active':''" @click="go('loan-request')">📄 Request a loan</div>
+    <div class="nav-group">History</div>
+    <div class="nav-item" :class="page==='contributions'?'active':''" @click="go('contributions')">📅 Contributions</div>
+    <div class="nav-item" :class="page==='transactions'?'active':''" @click="go('transactions')">🕐 Transactions</div>
+    <div class="nav-group">Self-Service</div>
+    <div class="nav-item" :class="page==='cashout'?'active':''" @click="go('cashout')">💵 Cash out</div>
+    <div class="nav-item" :class="page==='statements'?'active':''" @click="go('statements')">📥 Statements</div>
+    <div class="nav-item" :class="page==='settings'?'active':''" @click="go('settings')">⚙️ Settings</div>
+    <div class="nav-item" :class="page==='help'?'active':''" @click="go('help')">❓ Help & FAQ</div>
+  </nav>
+  <div style="padding:10px 8px;border-top:1px solid #e5e7eb">
+    <div class="nav-item">🚪 Sign out</div>
+  </div>
+</div>
+
+<!-- ── MAIN CONTENT ── -->
+<div style="margin-left:192px;flex:1;min-height:100vh;display:flex;flex-direction:column">
+  <!-- Topbar -->
+  <div style="height:50px;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;padding:0 20px;gap:10px;position:sticky;top:0;z-index:5">
+    <span style="font-size:14px;font-weight:600;flex:1" x-text="pageTitle()"></span>
+    <button class="btn btn-gray">🔔</button>
+    <button class="btn btn-gray" x-text="topAction()"></button>
+  </div>
+
+  <div style="padding:20px;flex:1">
+
+  <!-- ── OVERVIEW ── -->
+  <div x-show="page==='overview'">
+    <div class="notice notice-amber">⏰ Your next EMI of <strong>SAR 1,500</strong> is due in <strong>6 days</strong> (1 Jun 2026). Ensure your cash account is funded. <span style="cursor:pointer;text-decoration:underline" @click="go('loans')">View loan →</span></div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      <!-- Cash account card -->
+      <div class="panel" style="margin:0">
+        <div class="panel-head"><span class="panel-title">👜 Cash account</span><span class="panel-link" @click="go('cash')">Details →</span></div>
+        <div class="panel-body">
+          <div style="font-size:28px;font-weight:700;color:#111827;margin-bottom:2px">SAR 3,240.00</div>
+          <div style="font-size:11px;color:#9ca3af;margin-bottom:14px">Available balance</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-gray" @click="go('cash')">⬇ Deposit</button>
+            <button class="btn btn-gray" @click="go('cashout')">💵 Cash out</button>
+            <button class="btn btn-gray" @click="go('transactions')">🕐 History</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fund account card (purple) -->
+      <div class="panel" style="margin:0;background:linear-gradient(135deg,#EEEDFE,#DDD9FC);border-color:#AFA9EC">
+        <div class="panel-head" style="border-color:#AFA9EC"><span class="panel-title" style="color:#3C3489">🏦 Fund account</span><span class="panel-link" @click="go('fund')">Details →</span></div>
+        <div class="panel-body">
+          <div style="font-size:28px;font-weight:700;color:#26215C;margin-bottom:2px">SAR 18,500.00</div>
+          <div style="font-size:11px;color:#534AB7;margin-bottom:14px">Accumulated · loan cap: SAR 55,500</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline" @click="go('fund')">📊 History</button>
+            <button class="btn btn-outline" @click="go('statements')">📄 Statement</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:3fr 2fr;gap:14px;margin-bottom:14px">
+      <!-- Active loan panel -->
+      <div class="panel" style="margin:0">
+        <div class="panel-head"><span class="panel-title">💰 Active loan — #L-0034</span><span class="chip chip-green">In repayment</span></div>
+        <div class="panel-body">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+            <div style="font-size:22px;font-weight:700">SAR 22,000</div>
+            <div style="font-size:11px;color:#9ca3af">5 of 18 EMIs</div>
+          </div>
+          <div class="prog-bar" style="margin-bottom:5px"><div class="prog-fill" style="width:33%"></div></div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:#9ca3af;margin-bottom:14px">
+            <span>SAR 7,260 repaid (33%)</span><span>SAR 5,060 to threshold</span>
+          </div>
+          <div class="chip-row">
+            <div class="chip-cell"><div class="chip-cell-label">EMIs completed</div><div class="chip-cell-val">5 of 18</div></div>
+            <div class="chip-cell"><div class="chip-cell-label">Threshold</div><div class="chip-cell-val">SAR 12,320</div></div>
+            <div class="chip-cell"><div class="chip-cell-label">Guarantor</div><div class="chip-cell-val">A. Malik</div></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;background:#f9fafb;border-radius:10px;padding:10px 14px;margin-bottom:12px">
+            <div><div style="font-size:10px;color:#9ca3af">Next EMI due</div><div style="font-size:13px;font-weight:600">1 Jun 2026</div></div>
+            <div style="font-size:15px;font-weight:700;color:#3C3489">SAR 1,500</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-gray" style="flex:1" @click="go('loans')">Partial settle</button>
+            <button class="btn btn-outline" style="flex:1" @click="go('loans')">Full settle</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick actions -->
+      <div class="panel" style="margin:0">
+        <div class="panel-head"><span class="panel-title">⚡ Quick actions</span></div>
+        <div class="panel-body" style="padding:10px 12px">
+          <div class="qa" @click="go('cash')"><div class="qa-icon" style="background:#E1F5EE">⬇</div><div style="flex:1"><div style="font-size:12px;font-weight:600">Deposit funds</div><div style="font-size:11px;color:#9ca3af">Bank transfer or direct cash</div></div><span style="color:#e5e7eb">›</span></div>
+          <div class="qa" @click="go('loan-request')"><div class="qa-icon" style="background:#EEEDFE">📄</div><div style="flex:1"><div style="font-size:12px;font-weight:600">Request a loan</div><div style="font-size:11px;color:#9ca3af">Max eligible: SAR 55,500</div></div><span style="color:#e5e7eb">›</span></div>
+          <div class="qa" @click="go('cashout')"><div class="qa-icon" style="background:#E6F1FB">💵</div><div style="flex:1"><div style="font-size:12px;font-weight:600">Cash out</div><div style="font-size:11px;color:#9ca3af">Available: SAR 3,240</div></div><span style="color:#e5e7eb">›</span></div>
+          <div class="qa" @click="go('statements')"><div class="qa-icon" style="background:#FAEEDA">📥</div><div style="flex:1"><div style="font-size:12px;font-weight:600">Download statement</div><div style="font-size:11px;color:#9ca3af">Cash, fund, or loan history</div></div><span style="color:#e5e7eb">›</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent transactions -->
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">🕐 Recent transactions</span><span class="panel-link" @click="go('transactions')">All →</span></div>
+      <table class="tbl">
+        <thead><tr><th>Description</th><th>Date</th><th>Credit</th><th>Debit</th><th>Type</th></tr></thead>
+        <tbody>
+          <tr><td>Contribution collected — May 2026</td><td>1 May 2026</td><td style="color:#d1d5db">—</td><td style="color:#E24B4A;font-weight:600">−SAR 500</td><td><span class="chip chip-gray">DR</span></td></tr>
+          <tr><td>EMI collected — loan #L-0034 · cycle 5</td><td>1 May 2026</td><td style="color:#d1d5db">—</td><td style="color:#E24B4A;font-weight:600">−SAR 1,500</td><td><span class="chip chip-gray">DR</span></td></tr>
+          <tr><td>Bank deposit received</td><td>28 Apr 2026</td><td style="color:#1D9E75;font-weight:600">+SAR 2,000</td><td style="color:#d1d5db">—</td><td><span class="chip chip-green">CR</span></td></tr>
+          <tr><td>Late fee applied — Apr 2026 (Tier 1)</td><td>5 Apr 2026</td><td style="color:#d1d5db">—</td><td style="color:#E24B4A;font-weight:600">−SAR 50</td><td><span class="chip chip-gray">DR</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── CASH ACCOUNT ── -->
+  <div x-show="page==='cash'">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      <div class="panel" style="margin:0">
+        <div class="panel-head"><span class="panel-title">Cash account balance</span></div>
+        <div class="panel-body">
+          <div style="font-size:32px;font-weight:700;margin-bottom:2px">SAR 3,240.00</div>
+          <div style="font-size:11px;color:#9ca3af;margin-bottom:14px">Available · last updated today</div>
+          <div class="detail-grid">
+            <div class="detail-item"><div class="detail-label">Pending clearance</div><div class="detail-val">SAR 0.00</div></div>
+            <div class="detail-item"><div class="detail-label">Reserved (next EMI)</div><div class="detail-val" style="color:#EF9F27">SAR 1,500.00</div></div>
+            <div class="detail-item"><div class="detail-label">Last deposit</div><div class="detail-val">SAR 2,000 · 28 Apr</div></div>
+            <div class="detail-item"><div class="detail-label">Last debit</div><div class="detail-val">SAR 1,500 · 1 May</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel" style="margin:0">
+        <div class="panel-head"><span class="panel-title">Deposit funds</span></div>
+        <div class="panel-body">
+          <div class="notice notice-blue" style="margin-bottom:12px">ℹ Direct cash deposits credited immediately. Bank transfers credited after import matching (1–2 business days).</div>
+          <div style="margin-bottom:10px"><label>Deposit method</label><select><option>Bank transfer (IBAN)</option><option>Direct cash deposit</option></select></div>
+          <div style="margin-bottom:10px"><label>Amount (SAR)</label><input type="number" placeholder="0.00"></div>
+          <div style="margin-bottom:14px"><label>Reference / notes (optional)</label><input placeholder="e.g. salary transfer ref…"></div>
+          <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary">✓ Confirm deposit</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Transaction history</span></div>
+      <table class="tbl">
+        <thead><tr><th>Description</th><th>Date</th><th>Credit</th><th>Debit</th><th>Balance</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Contribution debit — May 2026</td><td>1 May 2026</td><td style="color:#d1d5db">—</td><td style="color:#E24B4A;font-weight:600">−500</td><td>3,240</td><td><span class="chip chip-green">Cleared</span></td></tr>
+          <tr><td>EMI debit — loan #L-0034 cycle 5</td><td>1 May 2026</td><td style="color:#d1d5db">—</td><td style="color:#E24B4A;font-weight:600">−1,500</td><td>3,740</td><td><span class="chip chip-green">Cleared</span></td></tr>
+          <tr><td>Bank transfer deposit</td><td>28 Apr 2026</td><td style="color:#1D9E75;font-weight:600">+2,000</td><td style="color:#d1d5db">—</td><td>5,240</td><td><span class="chip chip-green">Cleared</span></td></tr>
+          <tr><td>Late fee — Apr 2026 Tier 1</td><td>5 Apr 2026</td><td style="color:#d1d5db">—</td><td style="color:#E24B4A;font-weight:600">−50</td><td>3,240</td><td><span class="chip chip-green">Cleared</span></td></tr>
+          <tr><td>EMI debit — loan #L-0034 cycle 4</td><td>1 Apr 2026</td><td style="color:#d1d5db">—</td><td style="color:#E24B4A;font-weight:600">−1,500</td><td>3,290</td><td><span class="chip chip-green">Cleared</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── FUND ACCOUNT ── -->
+  <div x-show="page==='fund'">
+    <div class="panel" style="background:linear-gradient(135deg,#EEEDFE,#DDD9FC);border-color:#AFA9EC;margin-bottom:14px">
+      <div class="panel-head" style="border-color:#AFA9EC"><span class="panel-title" style="color:#3C3489;display:flex;align-items:center;gap:6px">🏦 Fund account balance</span></div>
+      <div class="panel-body">
+        <div style="font-size:34px;font-weight:700;color:#26215C;margin-bottom:2px">SAR 18,500.00</div>
+        <div style="font-size:12px;color:#534AB7;margin-bottom:18px">Accumulated since Mar 2018</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;border-top:1px solid #AFA9EC;padding-top:14px">
+          <div><div style="font-size:10px;color:#534AB7;margin-bottom:2px">Monthly contribution</div><div style="font-weight:600;color:#26215C">SAR 500/cycle</div></div>
+          <div><div style="font-size:10px;color:#534AB7;margin-bottom:2px">Borrow multiplier</div><div style="font-weight:600;color:#26215C">×3 → max SAR 55,500</div></div>
+          <div><div style="font-size:10px;color:#534AB7;margin-bottom:2px">Total contributions</div><div style="font-weight:600;color:#26215C">SAR 18,500</div></div>
+          <div><div style="font-size:10px;color:#534AB7;margin-bottom:2px">Loan deductions</div><div style="font-weight:600;color:#26215C">SAR 0 (member portion)</div></div>
+          <div><div style="font-size:10px;color:#534AB7;margin-bottom:2px">Contribution status</div><div><span style="font-size:11px;padding:2px 8px;border-radius:20px;background:#EDE4FC;color:#534AB7;font-weight:600">Exempt (active loan)</span></div></div>
+          <div><div style="font-size:10px;color:#534AB7;margin-bottom:2px">Exemption ends</div><div style="font-weight:600;color:#26215C">When loan repaid</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Fund account history</span></div>
+      <table class="tbl">
+        <thead><tr><th>Description</th><th>Cycle</th><th>Amount</th><th>Balance</th></tr></thead>
+        <tbody>
+          <tr><td>Contribution — Mar 2025</td><td>Mar 2025</td><td style="color:#1D9E75;font-weight:600">+SAR 500</td><td>18,500</td></tr>
+          <tr><td>Contribution — Feb 2025</td><td>Feb 2025</td><td style="color:#1D9E75;font-weight:600">+SAR 500</td><td>18,000</td></tr>
+          <tr><td>Contribution — Jan 2025</td><td>Jan 2025</td><td style="color:#1D9E75;font-weight:600">+SAR 500</td><td>17,500</td></tr>
+          <tr><td>Loan disbursement memo — #L-0034</td><td>Apr 2025</td><td style="color:#9ca3af">Memo only</td><td>17,000</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── MY LOANS ── -->
+  <div x-show="page==='loans'" x-data="{loanTab:'active',settleType:'full',scheduleOpt:'rollup'}">
+    <div class="tab-bar">
+      <span class="tab-btn" :class="loanTab==='active'?'on':''" @click="loanTab='active'">Active loans (1)</span>
+      <span class="tab-btn" :class="loanTab==='history'?'on':''" @click="loanTab='history'">Loan history</span>
+      <span class="tab-btn" :class="loanTab==='settle'?'on':''" @click="loanTab='settle'">Settle loan</span>
+    </div>
+
+    <!-- Active loans -->
+    <div x-show="loanTab==='active'">
+      <div class="panel">
+        <div class="panel-head">
+          <div><span class="panel-title">Loan #L-0034</span> <span style="font-size:11px;color:#9ca3af;font-weight:400">Approved Apr 2025 · Tier B · EMI SAR 1,500/cycle</span></div>
+          <button class="btn btn-outline" @click="loanTab='settle'">Settle loan</button>
+        </div>
+        <div class="panel-body">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+            <div style="font-size:22px;font-weight:700">SAR 22,000</div>
+            <div style="font-size:11px;color:#9ca3af">5 of 18 EMIs completed</div>
+          </div>
+          <div class="prog-bar" style="margin-bottom:5px"><div class="prog-fill" style="width:33%"></div></div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:#9ca3af;margin-bottom:14px">
+            <span>SAR 7,260 repaid (33%)</span><span>SAR 5,060 to threshold</span>
+          </div>
+          <div class="chip-row">
+            <div class="chip-cell"><div class="chip-cell-label">EMIs completed</div><div class="chip-cell-val">5 of 18</div></div>
+            <div class="chip-cell"><div class="chip-cell-label">Repayment threshold</div><div class="chip-cell-val">SAR 12,320</div></div>
+            <div class="chip-cell"><div class="chip-cell-label">Guarantor</div><div class="chip-cell-val">A. Malik</div></div>
+            <div class="chip-cell"><div class="chip-cell-label">Grace period</div><div class="chip-cell-val">0 cycles</div></div>
+            <div class="chip-cell"><div class="chip-cell-label">Fund tier</div><div class="chip-cell-val">Tier B</div></div>
+            <div class="chip-cell"><div class="chip-cell-label">Next EMI</div><div class="chip-cell-val">1 Jun 2026</div></div>
+          </div>
+          <div style="border-top:1px solid #e5e7eb;padding-top:14px">
+            <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Repayment schedule</div>
+            <table class="tbl">
+              <thead><tr><th>Cycle</th><th>EMI due</th><th>Status</th><th>Collected</th></tr></thead>
+              <tbody>
+                <tr><td>Jan 2026</td><td>1,500</td><td><span class="chip chip-green">Collected</span></td><td>SAR 1,500</td></tr>
+                <tr><td>Feb 2026</td><td>1,500</td><td><span class="chip chip-green">Collected</span></td><td>SAR 1,500</td></tr>
+                <tr><td>Mar 2026</td><td>1,500</td><td><span class="chip chip-green">Collected</span></td><td>SAR 1,500</td></tr>
+                <tr><td>Apr 2026</td><td>1,500</td><td><span class="chip chip-green">Collected</span></td><td>SAR 1,500</td></tr>
+                <tr><td>May 2026</td><td>1,500</td><td><span class="chip chip-green">Collected</span></td><td>SAR 1,500</td></tr>
+                <tr><td>Jun 2026</td><td>1,500</td><td><span class="chip chip-blue">Pending</span></td><td>—</td></tr>
+                <tr><td>Jul 2026</td><td>1,500</td><td><span class="chip chip-gray">Scheduled</span></td><td>—</td></tr>
+                <tr><td>Aug 2026</td><td>1,500</td><td><span class="chip chip-gray">Scheduled</span></td><td>—</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div x-show="loanTab==='history'">
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">Loan history</span></div>
+        <table class="tbl">
+          <thead><tr><th>Loan #</th><th>Amount</th><th>Status</th><th>Approved</th><th>Repaid</th></tr></thead>
+          <tbody>
+            <tr><td>#L-0034</td><td>22,000</td><td><span class="chip chip-green">Active</span></td><td>Apr 2025</td><td>In progress</td></tr>
+            <tr><td>#L-0021</td><td>8,000</td><td><span class="chip chip-gray">Repaid</span></td><td>Jun 2022</td><td>Mar 2023</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Settle -->
+    <div x-show="loanTab==='settle'">
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">Settle loan — #L-0034</span></div>
+        <div class="panel-body">
+          <div class="notice notice-blue" style="margin-bottom:16px">ℹ Outstanding threshold balance: <strong>SAR 5,060</strong>. Full settlement clears the loan and releases your guarantor. Partial settlement adjusts the remaining schedule.</div>
+          <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Settlement type</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+            <div class="settle-card" :class="settleType==='full'?'on':''" @click="settleType='full'">
+              <div style="font-size:13px;font-weight:600;margin-bottom:4px">Full settlement</div>
+              <div style="font-size:11px;color:#9ca3af">Pay remaining SAR 5,060 now — loan closed immediately</div>
+            </div>
+            <div class="settle-card" :class="settleType==='partial'?'on':''" @click="settleType='partial'">
+              <div style="font-size:13px;font-weight:600;margin-bottom:4px">Partial settlement</div>
+              <div style="font-size:11px;color:#9ca3af">Pay a partial amount and adjust the schedule</div>
+            </div>
+          </div>
+
+          <!-- Full settlement form -->
+          <div x-show="settleType==='full'">
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:12px"><span style="color:#6b7280">Settlement amount</span><strong>SAR 5,060</strong></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f3f4f6;font-size:12px"><span style="color:#6b7280">Cash account balance</span><span>SAR 3,240</span></div>
+            <div class="notice notice-amber" style="margin:12px 0">⚠ Your balance (SAR 3,240) is below required SAR 5,060. Please deposit SAR 1,820 first.</div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn btn-gray" @click="go('cash')">⬇ Deposit funds first</button>
+              <button class="btn btn-primary" style="opacity:.4" disabled>✓ Confirm full settlement</button>
+            </div>
+          </div>
+
+          <!-- Partial settlement form -->
+          <div x-show="settleType==='partial'" x-cloak>
+            <div style="margin-bottom:12px"><label>Partial amount (SAR) — min 1 EMI (SAR 1,500)</label><input type="number" placeholder="1500" min="1500"></div>
+            <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Schedule treatment</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+              <div class="settle-card" :class="scheduleOpt==='rollup'?'on':''" @click="scheduleOpt='rollup'">
+                <div style="font-size:12px;font-weight:600;margin-bottom:3px">Roll-up (compress)</div>
+                <div style="font-size:11px;color:#9ca3af">Covered cycles marked settled — schedule shortens</div>
+              </div>
+              <div class="settle-card" :class="scheduleOpt==='skip'?'on':''" @click="scheduleOpt='skip'">
+                <div style="font-size:12px;font-weight:600;margin-bottom:3px">Skip cycles</div>
+                <div style="font-size:11px;color:#9ca3af">Covered cycles skipped — EMIs resume after gap</div>
+              </div>
+            </div>
+            <button class="btn btn-primary">✓ Confirm partial settlement</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── LOAN REQUEST WIZARD ── -->
+  <div x-show="page==='loan-request'" x-data="{step:1,loanType:'standard',amount:'',grace:0,purpose:'',guarantor:'',schedOpt:'rollup',emi(){const a=parseFloat(this.amount)||0;if(a>=1000&&a<=10000)return{label:'Tier 1',emi:1000};if(a>=11000&&a<=30000)return{label:'Tier 2',emi:1500};if(a>=31000&&a<=60000)return{label:'Tier 3',emi:2500};return{label:'—',emi:0}},thresh(){return(parseFloat(this.amount)||0)*1.05},cyc(){const e=this.emi().emi;return e?Math.ceil(this.thresh()/e):0}}">
+    <!-- Step indicator -->
+    <div style="display:flex;align-items:center;gap:0;margin-bottom:20px">
+      <template x-for="(s,i) in ['Eligibility','Loan details','Guarantor','Review & submit']" :key="i">
+        <div style="display:flex;align-items:center;flex:1">
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+            <div :style="step>i+1?'background:#1D9E75;color:#fff':step===i+1?'background:#534AB7;color:#fff':'background:#e5e7eb;color:#9ca3af'" style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0" x-text="i+1"></div>
+            <span :style="step===i+1?'color:#111827;font-weight:600':'color:#9ca3af'" style="font-size:11px;white-space:nowrap" x-text="s"></span>
+          </div>
+          <template x-if="i<3"><div :style="step>i+1?'background:#1D9E75':'background:#e5e7eb'" style="flex:1;height:1px;margin:0 8px;transition:background .3s"></div></template>
+        </div>
+      </template>
+    </div>
+
+    <!-- Step 1: Eligibility -->
+    <div x-show="step===1">
+      <div class="notice notice-green" style="margin-bottom:14px">✅ All eligibility checks passed. You may proceed with your loan request.</div>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">Eligibility checks</span></div>
+        <div class="panel-body">
+          <div style="padding:10px;border-radius:8px;background:#E1F5EE;border:1px solid #1D9E75;display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px"><span style="font-size:16px">✅</span><span style="flex:1;font-weight:500">Membership tenure</span><span style="color:#6b7280">8 yrs 2 mo — meets minimum (2 yrs)</span></div>
+          <div style="padding:10px;border-radius:8px;background:#E1F5EE;border:1px solid #1D9E75;display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px"><span style="font-size:16px">✅</span><span style="flex:1;font-weight:500">Fund balance</span><span style="color:#6b7280">SAR 18,500 — meets minimum (SAR 5,000)</span></div>
+          <div style="padding:10px;border-radius:8px;background:#E1F5EE;border:1px solid #1D9E75;display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px"><span style="font-size:16px">✅</span><span style="flex:1;font-weight:500">No delinquency</span><span style="color:#6b7280">Status: Active</span></div>
+          <div style="padding:10px;border-radius:8px;background:#E1F5EE;border:1px solid #1D9E75;display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px"><span style="font-size:16px">✅</span><span style="flex:1;font-weight:500">Active loan count</span><span style="color:#6b7280">1 active — within limit (max 2)</span></div>
+          <div style="padding:10px;border-radius:8px;background:#FAEEDA;border:1px solid #EF9F27;display:flex;align-items:center;gap:10px;font-size:12px"><span style="font-size:16px">⚠️</span><span style="flex:1;font-weight:500">Borrow limit</span><span style="color:#6b7280">Max SAR 55,500 · 1 active reduces headroom</span></div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" @click="step=2">Continue →</button></div>
+    </div>
+
+    <!-- Step 2: Loan details -->
+    <div x-show="step===2" x-cloak>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">Loan details</span></div>
+        <div class="panel-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div><label>Loan type</label><select x-model="loanType"><option value="standard">Standard</option><option value="emergency">Emergency</option></select></div>
+            <div><label>Requested amount (SAR) — max SAR 55,500</label><input type="number" x-model="amount" placeholder="e.g. 15000" min="1000" max="55500"></div>
+            <div><label>EMI tier (auto-assigned)</label><input :value="emi().label + ' — SAR ' + emi().emi.toLocaleString() + '/cycle'" readonly></div>
+            <div><label>Grace period</label><select x-model="grace"><option value="0">0 cycles — start immediately</option><option value="1">1 cycle grace</option><option value="2">2 cycles grace</option></select></div>
+            <div style="grid-column:1/-1"><label>Purpose (optional)</label><textarea x-model="purpose" placeholder="Brief description…" style="height:55px"></textarea></div>
+          </div>
+          <div style="background:#f9fafb;border-radius:10px;padding:14px">
+            <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Loan summary</div>
+            <div style="font-size:12px">
+              <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e5e7eb"><span style="color:#6b7280">Requested amount</span><span x-text="'SAR ' + (parseFloat(amount)||0).toLocaleString()"></span></div>
+              <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e5e7eb"><span style="color:#6b7280">Repayment threshold (5%)</span><span x-text="'SAR ' + thresh().toLocaleString(undefined,{maximumFractionDigits:0})"></span></div>
+              <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e5e7eb"><span style="color:#6b7280">EMI per cycle</span><span x-text="'SAR ' + emi().emi.toLocaleString()"></span></div>
+              <div style="display:flex;justify-content:space-between;padding:4px 0;font-weight:600"><span>Estimated cycles</span><span x-text="cyc() + ' cycles'"></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between"><button class="btn btn-gray" @click="step=1">← Back</button><button class="btn btn-primary" :disabled="!amount||emi().emi===0" @click="step=3">Continue →</button></div>
+    </div>
+
+    <!-- Step 3: Guarantor -->
+    <div x-show="step===3" x-cloak>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">Guarantor details</span></div>
+        <div class="panel-body">
+          <div class="notice notice-blue" style="margin-bottom:14px">ℹ Your guarantor must be an active member in good standing. They will be notified on submission and agree to be liable for the master fund portion + 5% threshold if you miss 6 consecutive EMIs.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div><label>Guarantor member ID</label><input x-model="guarantor" placeholder="e.g. #1038"></div>
+            <div><label>Guarantor name (auto-filled)</label><input placeholder="Will fill after ID entry" readonly></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between"><button class="btn btn-gray" @click="step=2">← Back</button><button class="btn btn-primary" :disabled="!guarantor" @click="step=4">Continue →</button></div>
+    </div>
+
+    <!-- Step 4: Review & submit -->
+    <div x-show="step===4" x-cloak>
+      <div class="notice notice-green" style="margin-bottom:14px">✅ All checks passed. Your request will be placed in the approval queue. Emergency requests are prioritised at the front.</div>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">Request summary</span></div>
+        <div class="panel-body">
+          <div style="background:#f9fafb;border-radius:10px;padding:14px;font-size:12px">
+            <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e5e7eb"><span style="color:#6b7280">Loan type</span><span x-text="loanType.charAt(0).toUpperCase()+loanType.slice(1)"></span></div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e5e7eb"><span style="color:#6b7280">Amount</span><span x-text="'SAR ' + (parseFloat(amount)||0).toLocaleString()"></span></div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e5e7eb"><span style="color:#6b7280">Grace period</span><span x-text="grace + ' cycle' + (grace==1?'':'s')"></span></div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e5e7eb"><span style="color:#6b7280">EMI per cycle</span><span x-text="'SAR ' + emi().emi.toLocaleString()"></span></div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e5e7eb"><span style="color:#6b7280">Threshold</span><span x-text="'SAR ' + thresh().toLocaleString(undefined,{maximumFractionDigits:0})"></span></div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e5e7eb"><span style="color:#6b7280">Estimated cycles</span><span x-text="cyc()"></span></div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0;font-weight:600"><span>Guarantor</span><span x-text="'Member ' + guarantor"></span></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between"><button class="btn btn-gray" @click="step=3">← Back</button><button class="btn btn-primary" @click="go('overview')">✈ Submit loan request</button></div>
+    </div>
+  </div>
+
+  <!-- ── CONTRIBUTIONS ── -->
+  <div x-show="page==='contributions'">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">Total contributed</div><div style="font-size:20px;font-weight:700">SAR 18,500</div><div style="font-size:11px;color:#9ca3af">since Mar 2018</div></div>
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">This cycle</div><div><span class="chip chip-green" style="font-size:12px">Collected</span></div><div style="font-size:11px;color:#9ca3af">SAR 500 · May 2026</div></div>
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">Cycles missed</div><div style="font-size:20px;font-weight:700;color:#E24B4A">2</div><div style="font-size:11px;color:#E24B4A">fees applied</div></div>
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">Cycles exempt</div><div style="font-size:20px;font-weight:700;color:#9ca3af">13</div><div style="font-size:11px;color:#9ca3af">active loan periods</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Contribution history</span></div>
+      <table class="tbl">
+        <thead><tr><th>Cycle</th><th>Status</th><th>Due</th><th>Collected</th><th>Late fee</th><th>Days late</th></tr></thead>
+        <tbody>
+          <tr><td>May 2026</td><td><span class="chip chip-green">Collected</span></td><td>500</td><td style="color:#1D9E75;font-weight:600">500</td><td style="color:#d1d5db">—</td><td style="color:#d1d5db">—</td></tr>
+          <tr><td>Apr 2026</td><td><span class="chip chip-green">Collected</span></td><td>500</td><td style="color:#1D9E75;font-weight:600">500</td><td style="color:#E24B4A;font-weight:600">SAR 50 (T1)</td><td style="color:#E24B4A">4 days</td></tr>
+          <tr><td>Mar 2026</td><td><span class="chip chip-green">Collected</span></td><td>500</td><td style="color:#1D9E75;font-weight:600">500</td><td style="color:#d1d5db">—</td><td style="color:#d1d5db">—</td></tr>
+          <tr><td>Feb 2026</td><td><span class="chip chip-gray">Exempt</span></td><td style="color:#d1d5db">—</td><td style="color:#d1d5db">—</td><td style="color:#d1d5db">—</td><td style="color:#d1d5db">—</td></tr>
+          <tr><td>Jan 2026</td><td><span class="chip chip-gray">Exempt</span></td><td style="color:#d1d5db">—</td><td style="color:#d1d5db">—</td><td style="color:#d1d5db">—</td><td style="color:#d1d5db">—</td></tr>
+          <tr><td>Dec 2025</td><td><span class="chip chip-gray">Exempt</span></td><td style="color:#d1d5db">—</td><td style="color:#d1d5db">—</td><td style="color:#d1d5db">—</td><td style="color:#d1d5db">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── TRANSACTIONS ── -->
+  <div x-show="page==='transactions'" x-data="{filter:'all'}">
+    <div style="margin-bottom:14px">
+      <span class="filter-chip" :class="filter==='all'?'on':''" @click="filter='all'">All</span>
+      <span class="filter-chip" :class="filter==='contribution'?'on':''" @click="filter='contribution'">Contributions</span>
+      <span class="filter-chip" :class="filter==='emi'?'on':''" @click="filter='emi'">EMI</span>
+      <span class="filter-chip" :class="filter==='deposit'?'on':''" @click="filter='deposit'">Deposits</span>
+      <span class="filter-chip" :class="filter==='fee'?'on':''" @click="filter='fee'">Late fees</span>
+      <span class="filter-chip" :class="filter==='loan'?'on':''" @click="filter='loan'">Loan events</span>
+      <span class="filter-chip" :class="filter==='cashout'?'on':''" @click="filter='cashout'">Cash outs</span>
+    </div>
+    <div class="panel">
+      <table class="tbl">
+        <thead><tr><th>Description</th><th>Date</th><th>Credit</th><th>Debit</th><th>Account</th><th>Type</th></tr></thead>
+        <tbody>
+          <tr x-show="filter==='all'||filter==='contribution'"><td>Contribution — May 2026</td><td>1 May 2026</td><td style="color:#d1d5db">—</td><td style="color:#E24B4A;font-weight:600">−SAR 500</td><td><span class="chip chip-gray">Cash</span></td><td><span class="chip chip-green">CONTRIBUTION</span></td></tr>
+          <tr x-show="filter==='all'||filter==='emi'"><td>EMI — loan #L-0034 cycle 5</td><td>1 May 2026</td><td style="color:#d1d5db">—</td><td style="color:#E24B4A;font-weight:600">−SAR 1,500</td><td><span class="chip chip-gray">Cash</span></td><td><span class="chip chip-purple">EMI</span></td></tr>
+          <tr x-show="filter==='all'||filter==='deposit'"><td>Bank transfer deposit</td><td>28 Apr 2026</td><td style="color:#1D9E75;font-weight:600">+SAR 2,000</td><td style="color:#d1d5db">—</td><td><span class="chip chip-gray">Cash</span></td><td><span class="chip chip-blue">DEPOSIT</span></td></tr>
+          <tr x-show="filter==='all'||filter==='fee'"><td>Late fee — Apr 2026 Tier 1</td><td>5 Apr 2026</td><td style="color:#d1d5db">—</td><td style="color:#E24B4A;font-weight:600">−SAR 50</td><td><span class="chip chip-gray">Cash</span></td><td><span class="chip chip-amber">LATE_FEE</span></td></tr>
+          <tr x-show="filter==='all'||filter==='loan'"><td>Loan disbursement — #L-0034</td><td>1 Apr 2025</td><td style="color:#1D9E75;font-weight:600">+SAR 22,000</td><td style="color:#d1d5db">—</td><td><span class="chip chip-gray">Cash</span></td><td><span class="chip chip-purple">LOAN</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── CASH OUT ── -->
+  <div x-show="page==='cashout'">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="panel" style="margin:0">
+        <div class="panel-head"><span class="panel-title">Cash out request</span></div>
+        <div class="panel-body">
+          <div class="notice notice-blue">ℹ Cash out draws from your cash account. Pending EMI debits are reserved before withdrawal.</div>
+          <div class="detail-grid" style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #e5e7eb">
+            <div class="detail-item"><div class="detail-label">Cash account balance</div><div class="detail-val">SAR 3,240.00</div></div>
+            <div class="detail-item"><div class="detail-label">Reserved (next EMI)</div><div class="detail-val" style="color:#EF9F27">SAR 1,500.00</div></div>
+            <div class="detail-item"><div class="detail-label">Available to withdraw</div><div class="detail-val" style="color:#1D9E75;font-size:16px">SAR 1,740.00</div></div>
+            <div class="detail-item"><div class="detail-label">Processing time</div><div class="detail-val">1–2 business days</div></div>
+          </div>
+          <div style="margin-bottom:10px"><label>Withdrawal amount (SAR) — max SAR 1,740</label><input type="number" placeholder="0.00" max="1740"></div>
+          <div style="margin-bottom:10px"><label>Destination</label><select><option>Registered IBAN — SA44 0000 1234 5678 9012</option><option>Other bank account</option></select></div>
+          <div style="margin-bottom:14px"><label>Reference (optional)</label><input placeholder="Reference…"></div>
+          <button class="btn btn-primary" style="width:100%">↑ Submit cash out request</button>
+        </div>
+      </div>
+      <div class="panel" style="margin:0">
+        <div class="panel-head"><span class="panel-title">Cash out history</span></div>
+        <table class="tbl">
+          <thead><tr><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>12 Feb 2026</td><td style="color:#E24B4A;font-weight:600">−SAR 1,000</td><td><span class="chip chip-green">Processed</span></td></tr>
+            <tr><td>4 Nov 2025</td><td style="color:#E24B4A;font-weight:600">−SAR 2,500</td><td><span class="chip chip-green">Processed</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STATEMENTS ── -->
+  <div x-show="page==='statements'">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="panel" style="margin:0">
+        <div class="panel-head"><span class="panel-title">Generate statement</span></div>
+        <div class="panel-body">
+          <div style="margin-bottom:10px"><label>Statement type</label><select><option>Combined (cash + fund)</option><option>Cash account only</option><option>Fund account only</option><option>Active loan schedule</option><option>Contribution history</option></select></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <div><label>From</label><input type="date" value="2026-01-01"></div>
+            <div><label>To</label><input type="date" value="2026-05-21"></div>
+          </div>
+          <div style="margin-bottom:14px"><label>Format</label><select><option>PDF</option><option>Excel (.xlsx)</option><option>CSV</option></select></div>
+          <button class="btn btn-primary" style="width:100%">⬇ Download statement</button>
+        </div>
+      </div>
+      <div class="panel" style="margin:0">
+        <div class="panel-head"><span class="panel-title">Recent statements</span></div>
+        <table class="tbl">
+          <thead><tr><th>Statement</th><th>Period</th><th></th></tr></thead>
+          <tbody>
+            <tr><td style="font-weight:500">Combined — Q1 2026</td><td style="color:#9ca3af;font-size:11px">Jan–Mar 2026</td><td style="text-align:right"><button class="btn btn-gray">⬇ PDF</button></td></tr>
+            <tr><td style="font-weight:500">Loan schedule — #L-0034</td><td style="color:#9ca3af;font-size:11px">All time</td><td style="text-align:right"><button class="btn btn-gray">⬇ PDF</button></td></tr>
+            <tr><td style="font-weight:500">Combined — 2025</td><td style="color:#9ca3af;font-size:11px">Full year</td><td style="text-align:right"><button class="btn btn-gray">⬇ PDF</button></td></tr>
+            <tr><td style="font-weight:500">Contribution history</td><td style="color:#9ca3af;font-size:11px">All time</td><td style="text-align:right"><button class="btn btn-gray">⬇ PDF</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SETTINGS ── -->
+  <div x-show="page==='settings'" x-data="{settingsTab:'profile'}">
+    <div class="tab-bar">
+      <span class="tab-btn" :class="settingsTab==='profile'?'on':''" @click="settingsTab='profile'">Profile</span>
+      <span class="tab-btn" :class="settingsTab==='notifications'?'on':''" @click="settingsTab='notifications'">Notifications</span>
+      <span class="tab-btn" :class="settingsTab==='bank'?'on':''" @click="settingsTab='bank'">Bank details</span>
+      <span class="tab-btn" :class="settingsTab==='security'?'on':''" @click="settingsTab='security'">Security</span>
+    </div>
+    <div x-show="settingsTab==='profile'" class="panel">
+      <div class="panel-head"><span class="panel-title">Personal information</span></div>
+      <div class="panel-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+          <div><label>Full name</label><input value="Youssef Al-Amin"></div>
+          <div><label>Member ID</label><input value="#1047" readonly></div>
+          <div><label>Phone</label><input value="+966 50 123 4567"></div>
+          <div><label>Email</label><input value="y.alamin@email.com"></div>
+        </div>
+        <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary">Save changes</button></div>
+      </div>
+    </div>
+    <div x-show="settingsTab==='notifications'" class="panel">
+      <div class="panel-head"><span class="panel-title">Notification preferences</span></div>
+      <div class="panel-body">
+        <div style="border-bottom:1px solid #f3f4f6;padding:10px 0;display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px">EMI due reminder (6 days before)</span><select style="width:130px"><option>SMS + Email</option><option>Email only</option><option>SMS only</option><option>Off</option></select></div>
+        <div style="border-bottom:1px solid #f3f4f6;padding:10px 0;display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px">Contribution debit notification</span><select style="width:130px"><option>SMS + Email</option><option>Email only</option></select></div>
+        <div style="border-bottom:1px solid #f3f4f6;padding:10px 0;display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px">Late fee applied</span><select style="width:130px"><option>SMS + Email</option><option>Email only</option></select></div>
+        <div style="border-bottom:1px solid #f3f4f6;padding:10px 0;display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px">Loan status updates</span><select style="width:130px"><option>SMS + Email</option><option>Email only</option></select></div>
+        <div style="padding:10px 0;display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px">Deposit received</span><select style="width:130px"><option>Email only</option><option>SMS + Email</option></select></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb"><button class="btn btn-primary">Save preferences</button></div>
+      </div>
+    </div>
+    <div x-show="settingsTab==='bank'" class="panel">
+      <div class="panel-head"><span class="panel-title">Registered bank account</span><button class="btn btn-outline">Edit</button></div>
+      <div class="panel-body">
+        <div class="detail-grid">
+          <div class="detail-item"><div class="detail-label">Bank name</div><div class="detail-val">Al Rajhi Bank</div></div>
+          <div class="detail-item"><div class="detail-label">Account name</div><div class="detail-val">Youssef Al-Amin</div></div>
+          <div class="detail-item"><div class="detail-label">IBAN</div><div class="detail-val">SA44 0000 1234 5678 9012</div></div>
+          <div class="detail-item"><div class="detail-label">Verified</div><div class="detail-val" style="color:#1D9E75">✓ Verified</div></div>
+        </div>
+      </div>
+    </div>
+    <div x-show="settingsTab==='security'" class="panel">
+      <div class="panel-head"><span class="panel-title">Change password</span></div>
+      <div class="panel-body" style="max-width:400px">
+        <div style="margin-bottom:10px"><label>Current password</label><input type="password" placeholder="••••••••"></div>
+        <div style="margin-bottom:10px"><label>New password</label><input type="password" placeholder="••••••••"></div>
+        <div style="margin-bottom:14px"><label>Confirm new password</label><input type="password" placeholder="••••••••"></div>
+        <button class="btn btn-primary">Update password</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── HELP & FAQ ── -->
+  <div x-show="page==='help'" x-data="{open:null}">
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Frequently asked questions</span></div>
+      <div class="panel-body">
+        <template x-for="(faq,i) in faqs" :key="i">
+          <div style="border-bottom:1px solid #f3f4f6;padding:12px 0">
+            <button @click="open=open===i?null:i" style="display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;background:none;border:none;cursor:pointer;font-size:12px;font-weight:600;color:#111827">
+              <span x-text="faq.q"></span>
+              <span style="font-size:14px;color:#9ca3af;flex-shrink:0;margin-left:12px" x-text="open===i?'▲':'▼'"></span>
+            </button>
+            <div x-show="open===i" x-cloak style="font-size:12px;color:#6b7280;line-height:1.6;margin-top:8px;padding-right:20px" x-text="faq.a"></div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- end pages -->
+</div><!-- end main -->
+</div><!-- end flex -->
+
+<script src="https://unpkg.com/alpinejs@3/dist/cdn.min.js" defer></script>
+<script>
+function memberApp(){return{
+  page:'overview',
+  faqs:[
+    {q:'When is my contribution collected?',a:'Your contribution is auto-debited from your cash account on Day 1 of the collection window each month. If your balance is insufficient, a partial debit is posted and the remainder is collected when funds arrive.'},
+    {q:'Why am I exempt from contributions?',a:'Members with an active loan — including those in a grace period — are automatically exempt from the monthly contribution. This prevents double-charging. The exemption lifts in the cycle after your loan is fully repaid.'},
+    {q:'How is my loan repayment threshold calculated?',a:'Your loan is fully repaid when the master fund portion plus 5% of the original loan amount has been repaid. You can see your specific threshold on the My Loans page.'},
+    {q:'What happens if I miss EMI payments?',a:'Missed EMIs follow the same late fee tiers as contributions. After a configured number of consecutive missed EMIs, your guarantor is formally notified. After a further threshold, the loan is transferred to your guarantor and your account is suspended.'},
+    {q:'How do I partially settle my loan?',a:'Go to My Loans → Settle loan. Enter a partial amount (minimum 1 EMI) and choose whether to roll up your schedule or skip upcoming cycles.'},
+    {q:'How do I add funds to my cash account?',a:'Go to Cash Account and use the Deposit form. Bank transfers are credited after import matching (1–2 business days). Direct cash deposits are credited immediately.'},
+    {q:'What is my guarantor responsible for?',a:'Your guarantor is responsible for the master fund portion of your loan plus the 5% settlement threshold, only if you miss the configured number of consecutive EMI payments.'},
+    {q:'How do I request a cash out?',a:'Go to Cash Out. You can withdraw up to your available balance (cash balance minus reserved EMI). Withdrawals are processed to your registered IBAN within 1–2 business days.'},
+  ],
+  go(p){this.page=p;window.scrollTo(0,0)},
+  pageTitle(){const m={overview:'Overview',cash:'Cash account',fund:'Fund account',loans:'My loans','loan-request':'Request a loan',contributions:'Contribution history',transactions:'Transactions',cashout:'Cash out',statements:'Statements',settings:'Settings',help:'Help & FAQ'};return m[this.page]||this.page},
+  topAction(){const m={overview:'Statement',cash:'Download',fund:'Download',loans:'Download schedule','loan-request':'Save draft',contributions:'Export',transactions:'Export',cashout:'History',statements:'Download all',settings:'Save all',help:'Contact support'};return m[this.page]||'Export'},
+}}
+</script>
+</body>
+</html>

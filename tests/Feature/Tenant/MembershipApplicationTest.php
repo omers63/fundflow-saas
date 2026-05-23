@@ -10,6 +10,7 @@ use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\User;
 use App\Services\MembershipApplicationApprovalService;
 use App\Services\MembershipApplicationImportService;
+use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
@@ -184,6 +185,48 @@ test('membership application import service creates pending applications from cs
     expect($application)->not->toBeNull()
         ->and($application->status)->toBe('pending')
         ->and($application->name)->toBe('CSV Applicant');
+
+    @unlink($path);
+});
+
+test('membership application import sets subscription fee transfer fields from csv or defaults', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+
+    $admin = User::create([
+        'name' => 'Fund Admin',
+        'email' => 'admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $csv = implode("\n", [
+        'name,email,mobile_phone,iban,transfer_amount,transfer_date',
+        'Fee Applicant,fee.csv@example.test,0501000777,SA030000000000101000000077,150,2026-03-01',
+        'Default Fee,default.fee@example.test,0501000778,SA030000000000101000000078,,',
+    ]);
+
+    $path = storage_path('app/testing-membership-fee-import.csv');
+    file_put_contents($path, $csv);
+
+    $this->actingAs($admin, 'tenant');
+
+    $result = app(MembershipApplicationImportService::class)->import($path, 'DefaultPass1', '2024-06-01');
+
+    expect($result['created'])->toBe(2)
+        ->and($result['failed'])->toBe(0);
+
+    $explicit = MembershipApplication::query()->where('email', 'fee.csv@example.test')->first();
+    $defaults = MembershipApplication::query()->where('email', 'default.fee@example.test')->first();
+
+    expect($explicit)->not->toBeNull()
+        ->and((float) $explicit->membership_fee_amount)->toBe(150.0)
+        ->and($explicit->membership_fee_transfer_date?->toDateString())->toBe('2026-03-01')
+        ->and($defaults)->not->toBeNull()
+        ->and((float) $defaults->membership_fee_amount)->toBe(0.0)
+        ->and($defaults->membership_fee_transfer_date?->toDateString())->toBe('2026-05-20');
+
+    Carbon::setTestNow();
 
     @unlink($path);
 });

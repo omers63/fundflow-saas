@@ -83,6 +83,8 @@
                     'monthly_income' => __('Monthly income (numeric, >= 0)'),
                     'cutoff_cash_balance' => __('Cut-off cash balance (optional, default 0; credited on approval)'),
                     'cutoff_fund_balance' => __('Cut-off fund balance (optional, default 0; credited on approval)'),
+                    'transfer_amount' => __('Subscription fee transfer amount (optional, default 0)'),
+                    'transfer_date' => __('Subscription fee transfer date (optional, default today; YYYY-MM-DD or DD/MM/YYYY)'),
                 ] as $col => $hint)
                     <tr>
                         <td class="px-3 py-2 align-top">

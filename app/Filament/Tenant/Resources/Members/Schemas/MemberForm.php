@@ -115,7 +115,7 @@ class MemberForm
                             ->disabled()
                             ->dehydrated(false)
                             ->placeholder(__('Not started'))
-                            ->helperText(__('Use System → Migrations or the Migration menu on this member to generate stubs and clear migration.')),
+                            ->helperText(__('Use the Migration cycles tab on this member to generate stubs and clear migration.')),
                         DatePicker::make('migration_cutoff_date')
                             ->label(__('Migration cutoff'))
                             ->disabled()

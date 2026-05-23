@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FundAdmin — Admin Portal Prototype</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config={theme:{extend:{colors:{primary:{'50':'#EEEDFE','100':'#DDD9FC','600':'#534AB7','700':'#3C3489'},success:{'50':'#E1F5EE','600':'#1D9E75','700':'#0F6E56'},warning:{'50':'#FAEEDA','600':'#EF9F27','700':'#854F0B'},danger:{'50':'#FCEBEB','600':'#E24B4A','700':'#A32D2D'},info:{'50':'#E6F1FB','600':'#378ADD','700':'#185FA5'}}}}}
+</script>
+<style>
+[x-cloak]{display:none!important}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;}
+.sidebar{width:192px;min-height:100vh;background:#fff;border-right:1px solid #e5e7eb;display:flex;flex-direction:column;}
+.main{flex:1;min-height:100vh;background:#f9fafb;display:flex;flex-direction:column;}
+.page{display:none}.page.active{display:block}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;color:#6b7280;font-size:12px;margin-bottom:1px;transition:all .15s}
+.nav-item:hover,.nav-item.active{background:#f3f4f6;color:#111827;font-weight:500}
+.nav-group{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9ca3af;padding:8px 10px 3px;margin-top:4px}
+.badge{margin-left:auto;font-size:10px;font-weight:600;padding:1px 5px;border-radius:10px}
+.badge-red{background:#FCEBEB;color:#A32D2D}
+.badge-amber{background:#FAEEDA;color:#854F0B}
+.stat-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px}
+.panel{background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-bottom:12px}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid #e5e7eb}
+.panel-title{font-size:12px;font-weight:600;color:#111827}
+.panel-link{font-size:11px;color:#378ADD;cursor:pointer}
+.panel-body{padding:10px 14px}
+.chip{display:inline-block;font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600}
+.chip-green{background:#E1F5EE;color:#0F6E56}
+.chip-amber{background:#FAEEDA;color:#854F0B}
+.chip-red{background:#FCEBEB;color:#A32D2D}
+.chip-blue{background:#E6F1FB;color:#185FA5}
+.chip-purple{background:#EEEDFE;color:#3C3489}
+.chip-gray{background:#f3f4f6;color:#6b7280}
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{text-align:left;font-size:10px;font-weight:600;color:#9ca3af;padding:6px 10px;border-bottom:1px solid #e5e7eb;background:#f9fafb}
+.tbl td{padding:8px 10px;border-bottom:1px solid #f3f4f6;vertical-align:middle}
+.tbl tr:last-child td{border:none}
+.tbl tr:hover td{background:#f9fafb}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:8px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid transparent;transition:all .15s}
+.btn-primary{background:#534AB7;color:#fff;border-color:#534AB7}
+.btn-primary:hover{background:#3C3489}
+.btn-gray{background:#fff;color:#6b7280;border-color:#e5e7eb}
+.btn-gray:hover{background:#f3f4f6}
+.btn-success{background:#E1F5EE;color:#0F6E56;border-color:#1D9E75}
+.btn-danger{background:#FCEBEB;color:#A32D2D;border-color:#E24B4A}
+.notice{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:10px;font-size:12px;margin-bottom:12px}
+.notice-red{background:#FCEBEB;border:1px solid #E24B4A;color:#A32D2D}
+.notice-amber{background:#FAEEDA;border:1px solid #EF9F27;color:#854F0B}
+.notice-blue{background:#E6F1FB;border:1px solid #378ADD;color:#185FA5}
+.notice-green{background:#E1F5EE;border:1px solid #1D9E75;color:#0F6E56}
+.prog-bar{height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden}
+.prog-fill{height:100%;border-radius:3px}
+input,select,textarea{font-size:12px;padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;width:100%;box-sizing:border-box;background:#fff;color:#111827;outline:none}
+input:focus,select:focus,textarea:focus{border-color:#534AB7}
+label{font-size:11px;font-weight:600;color:#6b7280;display:block;margin-bottom:4px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tab-bar{display:flex;gap:2px;border-bottom:1px solid #e5e7eb;margin-bottom:14px}
+.tab-btn{font-size:12px;padding:8px 14px;cursor:pointer;color:#9ca3af;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
+.tab-btn.on{color:#111827;font-weight:600;border-bottom-color:#534AB7}
+.sub{display:none}.sub.on{display:block}
+.check-row{display:flex;align-items:center;gap:10px;padding:10px;border-radius:8px;margin-bottom:6px}
+.check-pass{background:#E1F5EE;border:1px solid #1D9E75}
+.check-fail{background:#FCEBEB;border:1px solid #E24B4A}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.detail-item{padding:8px 0;border-bottom:1px solid #f3f4f6}
+.detail-item:nth-last-child(-n+2){border:none}
+.detail-label{font-size:10px;color:#9ca3af;margin-bottom:2px}
+.detail-val{font-size:12px;font-weight:600}
+</style>
+</head>
+<body class="bg-gray-50" x-data="adminApp()">
+
+<div class="flex">
+<!-- ── SIDEBAR ── -->
+<div class="sidebar fixed top-0 left-0 z-10" style="height:100vh;overflow-y:auto">
+  <div style="padding:14px 12px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:8px">
+    <div style="width:26px;height:26px;border-radius:7px;background:#534AB7;display:flex;align-items:center;justify-content:center">
+      <span style="color:#fff;font-size:13px">⬡</span>
+    </div>
+    <div>
+      <div style="font-size:12px;font-weight:600">FundAdmin</div>
+      <div style="font-size:10px;color:#9ca3af">Admin portal</div>
+    </div>
+  </div>
+  <nav style="padding:8px 8px;flex:1">
+    <div class="nav-group">Operations</div>
+    <div class="nav-item" :class="page==='dashboard'?'active':''" @click="go('dashboard')">📊 Dashboard</div>
+    <div class="nav-item" :class="page==='members'?'active':''" @click="go('members')">👥 Members <span class="badge badge-amber">3</span></div>
+    <div class="nav-item" :class="page==='loanq'?'active':''" @click="go('loanq')">💰 Loan queue <span class="badge badge-red">7</span></div>
+    <div class="nav-item" :class="page==='cycles'?'active':''" @click="go('cycles')">📅 Collection cycles</div>
+    <div class="nav-item" :class="page==='disburse'?'active':''" @click="go('disburse')">💳 Disbursements</div>
+    <div class="nav-group">Finance</div>
+    <div class="nav-item" :class="page==='recon'?'active':''" @click="go('recon')">🔄 Reconciliation <span class="badge badge-red">2</span></div>
+    <div class="nav-item" :class="page==='bank'?'active':''" @click="go('bank')">🏦 Bank clearing</div>
+    <div class="nav-item" :class="page==='reports'?'active':''" @click="go('reports')">📈 Reports</div>
+    <div class="nav-group">System</div>
+    <div class="nav-item" :class="page==='migration'?'active':''" @click="go('migration')">🗄 Migration</div>
+    <div class="nav-item" :class="page==='config'?'active':''" @click="go('config')">⚙️ Configuration</div>
+    <div class="nav-item" :class="page==='audit'?'active':''" @click="go('audit')">📋 Audit log</div>
+  </nav>
+  <div style="padding:10px 8px;border-top:1px solid #e5e7eb">
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer" class="hover:bg-gray-50">
+      <div style="width:26px;height:26px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#3C3489">AD</div>
+      <div><div style="font-size:11px;font-weight:600">Admin User</div><div style="font-size:10px;color:#9ca3af">System admin</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MAIN CONTENT ── -->
+<div class="main" style="margin-left:192px">
+  <!-- Topbar -->
+  <div style="height:50px;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;padding:0 20px;gap:10px;position:sticky;top:0;z-index:5">
+    <span style="font-size:14px;font-weight:600;flex:1" x-text="pageTitle()"></span>
+    <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:#E6F1FB;color:#185FA5;font-weight:600">📅 Cycle: May 2026</span>
+    <button class="btn btn-gray">🔔</button>
+    <button class="btn btn-primary" x-text="primaryAction()" @click="primaryActionFn()"></button>
+    <button class="btn btn-gray">⬇ Export</button>
+  </div>
+
+  <!-- Pages container -->
+  <div style="padding:20px;overflow-y:auto;flex:1">
+
+  <!-- DASHBOARD -->
+  <div x-show="page==='dashboard'">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af;margin-bottom:4px">👥 Total members</div><div style="font-size:22px;font-weight:700">248</div><div style="font-size:11px;color:#1D9E75">↑ +3 this cycle</div></div>
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af;margin-bottom:4px">✅ Collected this cycle</div><div style="font-size:22px;font-weight:700">83%</div><div style="font-size:11px;color:#6b7280">187 of 248 members</div></div>
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af;margin-bottom:4px">💰 Active loans</div><div style="font-size:22px;font-weight:700">34</div><div style="font-size:11px;color:#EF9F27">7 in queue</div></div>
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af;margin-bottom:4px">⚠️ Recon exceptions</div><div style="font-size:22px;font-weight:700">2</div><div style="font-size:11px;color:#E24B4A">1 critical, 1 high</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:12px;margin-bottom:12px">
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">💰 Loan queue — top requests</span><span class="panel-link" @click="go('loanq')">View all →</span></div>
+        <table class="tbl">
+          <thead><tr><th>#</th><th>Member</th><th>Amount</th><th>Type</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>Khalid Al-Rashidi</td><td>SAR 8,000</td><td><span class="chip chip-red">Emergency</span></td><td><button class="btn btn-primary" @click="go('loan-review')">Review</button></td></tr>
+            <tr><td>2</td><td>Sara Rahman</td><td>SAR 22,000</td><td><span class="chip chip-blue">Standard</span></td><td><button class="btn btn-primary" @click="go('loan-review')">Review</button></td></tr>
+            <tr><td>3</td><td>Faisal Nasser</td><td>SAR 7,500</td><td><span class="chip chip-blue">Standard</span></td><td><button class="btn btn-primary" @click="go('loan-review')">Review</button></td></tr>
+            <tr><td>4</td><td>Layla Mohammed</td><td>SAR 45,000</td><td><span class="chip chip-blue">Standard</span></td><td><button class="btn btn-primary" @click="go('loan-review')">Review</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">🔄 Reconciliation alerts</span><span class="panel-link" @click="go('recon')">Open queue →</span></div>
+        <div class="panel-body">
+          <div class="notice notice-red">⛔ Master fund imbalance SAR 0.40 — batch halted</div>
+          <div class="notice notice-amber">⚠ Unmatched bank line SAR 1,200 — same-day SLA</div>
+          <div class="notice notice-blue">ℹ Wrong fee tier auto-reversed — pending confirmation</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">📅 Cycle collection progress</span></div>
+        <div class="panel-body">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px"><span style="font-size:11px;width:80px;color:#6b7280">Collected</span><div class="prog-bar" style="flex:1"><div class="prog-fill" style="width:83%;background:#1D9E75"></div></div><span style="font-size:11px;font-weight:600;width:28px;text-align:right">83%</span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px"><span style="font-size:11px;width:80px;color:#6b7280">Partial</span><div class="prog-bar" style="flex:1"><div class="prog-fill" style="width:9%;background:#EF9F27"></div></div><span style="font-size:11px;font-weight:600;width:28px;text-align:right">9%</span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px"><span style="font-size:11px;width:80px;color:#6b7280">Overdue</span><div class="prog-bar" style="flex:1"><div class="prog-fill" style="width:5%;background:#E24B4A"></div></div><span style="font-size:11px;font-weight:600;width:28px;text-align:right">5%</span></div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;width:80px;color:#6b7280">Exempt</span><div class="prog-bar" style="flex:1"><div class="prog-fill" style="width:3%;background:#d1d5db"></div></div><span style="font-size:11px;font-weight:600;width:28px;text-align:right">3%</span></div>
+          <div style="border-top:1px solid #e5e7eb;margin-top:10px;padding-top:8px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px"><span style="color:#6b7280">Late Tier 1 (day 3+)</span><span style="font-weight:600">8 members</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px"><span style="color:#6b7280">Late Tier 2 (day 10+)</span><span style="font-weight:600">3 members</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#6b7280">Late Tier 3 (day 20+)</span><span style="font-weight:600;color:#E24B4A">1 — flagged</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">⚡ Recent member activity</span><span class="panel-link">All →</span></div>
+        <div class="panel-body" style="padding:6px 10px">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6"><div style="width:24px;height:24px;border-radius:50%;background:#E1F5EE;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#085041;flex-shrink:0">YA</div><div style="flex:1;font-size:11px">Youssef Al-Amin — contribution</div><span class="chip chip-green">OK</span></div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6"><div style="width:24px;height:24px;border-radius:50%;background:#FAEEDA;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#633806;flex-shrink:0">HK</div><div style="flex:1;font-size:11px">Hana Khalil — day 4 overdue</div><span class="chip chip-amber">T1</span></div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6"><div style="width:24px;height:24px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#3C3489;flex-shrink:0">OM</div><div style="flex:1;font-size:11px">Omar Mansour — migration cleared</div><span class="chip chip-purple">Mig</span></div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0"><div style="width:24px;height:24px;border-radius:50%;background:#E6F1FB;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#185FA5;flex-shrink:0">NQ</div><div style="flex:1;font-size:11px">Nadia Qasim — loan disbursed</div><span class="chip chip-blue">Loan</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">📊 Fund tier utilisation</span></div>
+        <div class="panel-body">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:11px;width:90px;color:#6b7280">Tier A (1K–10K)</span><div class="prog-bar" style="flex:1"><div class="prog-fill" style="width:44%;background:#1D9E75"></div></div><span style="font-size:11px;font-weight:600;width:28px;text-align:right">44%</span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:11px;width:90px;color:#6b7280">Tier B (11K–30K)</span><div class="prog-bar" style="flex:1"><div class="prog-fill" style="width:71%;background:#EF9F27"></div></div><span style="font-size:11px;font-weight:600;width:28px;text-align:right">71%</span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:11px;width:90px;color:#6b7280">Tier C (31K–60K)</span><div class="prog-bar" style="flex:1"><div class="prog-fill" style="width:88%;background:#E24B4A"></div></div><span style="font-size:11px;font-weight:600;width:28px;text-align:right">88%</span></div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;width:90px;color:#6b7280">Tier E (Emerg.)</span><div class="prog-bar" style="flex:1"><div class="prog-fill" style="width:22%;background:#1D9E75"></div></div><span style="font-size:11px;font-weight:600;width:28px;text-align:right">22%</span></div>
+          <div style="font-size:10px;color:#EF9F27;margin-top:10px;padding-top:8px;border-top:1px solid #e5e7eb">⚠ Tier C near capacity · 2 pending requests</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MEMBERS -->
+  <div x-show="page==='members'">
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input placeholder="Search by name, ID, or status…" style="flex:1;max-width:340px">
+      <button class="btn btn-primary" @click="go('member-new')">+ Add member</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;background:#534AB7;color:#fff;cursor:pointer">All (248)</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb;cursor:pointer">Active (231)</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb;cursor:pointer">Migration pending (9)</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb;cursor:pointer">Delinquent (5)</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb;cursor:pointer">Suspended (3)</span>
+    </div>
+    <div class="panel">
+      <table class="tbl">
+        <thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Cash bal.</th><th>Fund bal.</th><th>Active loans</th><th>Actions</th></tr></thead>
+        <tbody>
+          <tr><td>#1047</td><td>Youssef Al-Amin</td><td><span class="chip chip-green">Active</span></td><td>3,240</td><td>18,500</td><td>1</td><td><button class="btn btn-primary" @click="go('member-detail')" style="margin-right:4px">View</button><button class="btn btn-gray">Edit</button></td></tr>
+          <tr><td>#1048</td><td>Sara Rahman</td><td><span class="chip chip-green">Active</span></td><td>8,100</td><td>24,000</td><td>0</td><td><button class="btn btn-primary" @click="go('member-detail')" style="margin-right:4px">View</button><button class="btn btn-gray">Edit</button></td></tr>
+          <tr><td>#1049</td><td>Hana Khalil</td><td><span class="chip chip-amber">Overdue</span></td><td>200</td><td>11,000</td><td>0</td><td><button class="btn btn-primary" @click="go('member-detail')" style="margin-right:4px">View</button><button class="btn btn-gray">Edit</button></td></tr>
+          <tr><td>#1050</td><td>Omar Mansour</td><td><span class="chip chip-purple">Mig. pending</span></td><td>0</td><td>6,500</td><td>0</td><td><button class="btn btn-primary" @click="go('member-detail')" style="margin-right:4px">View</button><button class="btn btn-gray">Edit</button></td></tr>
+          <tr><td>#1051</td><td>Khalid Al-Rashidi</td><td><span class="chip chip-red">Delinquent</span></td><td>500</td><td>9,000</td><td>1</td><td><button class="btn btn-primary" @click="go('member-detail')" style="margin-right:4px">View</button><button class="btn btn-gray">Edit</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- MEMBER DETAIL -->
+  <div x-show="page==='member-detail'">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:14px;font-size:12px">
+      <span style="color:#378ADD;cursor:pointer" @click="go('members')">← Members</span>
+      <span style="color:#9ca3af">/ Youssef Al-Amin</span>
+      <div style="margin-left:auto;display:flex;gap:6px">
+        <button class="btn btn-danger">Suspend</button>
+        <button class="btn btn-gray">Admin override</button>
+        <button class="btn btn-primary">Edit profile</button>
+      </div>
+    </div>
+    <div class="tab-bar">
+      <span class="tab-btn on" @click="subTab($event,'mdt-profile')">Profile</span>
+      <span class="tab-btn" @click="subTab($event,'mdt-accounts')">Accounts</span>
+      <span class="tab-btn" @click="subTab($event,'mdt-loans')">Loans</span>
+      <span class="tab-btn" @click="subTab($event,'mdt-cycles')">Cycle history</span>
+      <span class="tab-btn" @click="subTab($event,'mdt-txns')">Transactions</span>
+    </div>
+    <div id="mdt-profile" class="sub on">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="panel"><div class="panel-head"><span class="panel-title">Member details</span></div><div class="panel-body">
+          <div class="detail-grid">
+            <div class="detail-item"><div class="detail-label">Full name</div><div class="detail-val">Youssef Al-Amin</div></div>
+            <div class="detail-item"><div class="detail-label">Member ID</div><div class="detail-val">#1047</div></div>
+            <div class="detail-item"><div class="detail-label">Join date</div><div class="detail-val">14 Mar 2018</div></div>
+            <div class="detail-item"><div class="detail-label">Status</div><div class="detail-val"><span class="chip chip-green">Active</span></div></div>
+            <div class="detail-item"><div class="detail-label">Phone</div><div class="detail-val">+966 50 123 4567</div></div>
+            <div class="detail-item"><div class="detail-label">Email</div><div class="detail-val">y.alamin@email.com</div></div>
+            <div class="detail-item"><div class="detail-label">Tenure</div><div class="detail-val">8 years, 2 months</div></div>
+            <div class="detail-item"><div class="detail-label">Guarantor for</div><div class="detail-val">F. Nasser (#1050)</div></div>
+          </div>
+        </div></div>
+        <div class="panel"><div class="panel-head"><span class="panel-title">Activity timeline</span></div><div class="panel-body">
+          <div style="font-size:12px;border-left:2px solid #e5e7eb;padding-left:12px">
+            <div style="margin-bottom:10px"><div style="font-weight:600">Contribution collected — May 2026</div><div style="color:#9ca3af;font-size:11px">SAR 500 · auto-debited · 1 May 2026</div></div>
+            <div style="margin-bottom:10px"><div style="font-weight:600">EMI collected — loan #L-0034 cycle 5</div><div style="color:#9ca3af;font-size:11px">SAR 1,500 · 1 May 2026</div></div>
+            <div style="margin-bottom:10px"><div style="font-weight:600">Bank deposit received</div><div style="color:#9ca3af;font-size:11px">SAR 2,000 · bank matched · 28 Apr 2026</div></div>
+            <div><div style="font-weight:600">Late fee applied — Apr 2026</div><div style="color:#9ca3af;font-size:11px">SAR 50 · Tier 1 · day 4 overdue</div></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+    <div id="mdt-accounts" class="sub">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="panel"><div class="panel-head"><span class="panel-title">Cash account</span><button class="btn btn-primary">Post manual entry</button></div><div class="panel-body">
+          <div class="detail-grid">
+            <div class="detail-item"><div class="detail-label">Balance</div><div class="detail-val" style="font-size:18px">SAR 3,240.00</div></div>
+            <div class="detail-item"><div class="detail-label">Pending clearance</div><div class="detail-val">SAR 0.00</div></div>
+            <div class="detail-item"><div class="detail-label">Last deposit</div><div class="detail-val">SAR 2,000 · 28 Apr</div></div>
+            <div class="detail-item"><div class="detail-label">Last debit</div><div class="detail-val">SAR 1,500 · 1 May</div></div>
+          </div>
+        </div></div>
+        <div class="panel"><div class="panel-head"><span class="panel-title">Fund account</span></div><div class="panel-body">
+          <div class="detail-grid">
+            <div class="detail-item"><div class="detail-label">Balance</div><div class="detail-val" style="font-size:18px">SAR 18,500.00</div></div>
+            <div class="detail-item"><div class="detail-label">Loan multiplier (×3)</div><div class="detail-val">Max SAR 55,500</div></div>
+            <div class="detail-item"><div class="detail-label">Total contributions</div><div class="detail-val">SAR 18,500</div></div>
+            <div class="detail-item"><div class="detail-label">Opening balance</div><div class="detail-val">SAR 0 (joined 2018)</div></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+    <div id="mdt-loans" class="sub">
+      <div class="panel"><div class="panel-head"><span class="panel-title">Active loan — #L-0034</span><span class="chip chip-green">In repayment</span></div><div class="panel-body">
+        <div class="detail-grid">
+          <div class="detail-item"><div class="detail-label">Approved amount</div><div class="detail-val">SAR 22,000</div></div>
+          <div class="detail-item"><div class="detail-label">EMI</div><div class="detail-val">SAR 1,500/cycle</div></div>
+          <div class="detail-item"><div class="detail-label">Repayment threshold</div><div class="detail-val">SAR 12,320</div></div>
+          <div class="detail-item"><div class="detail-label">Repaid to date</div><div class="detail-val">SAR 7,260 (5 of 18)</div></div>
+          <div class="detail-item"><div class="detail-label">Fund tier</div><div class="detail-val">Tier B</div></div>
+          <div class="detail-item"><div class="detail-label">Guarantor</div><div class="detail-val">A. Malik (#1038)</div></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;justify-content:flex-end">
+          <button class="btn btn-gray">View schedule</button>
+          <button class="btn btn-gray">Partial settle</button>
+          <button class="btn btn-primary">Full settle</button>
+        </div>
+      </div></div>
+    </div>
+    <div id="mdt-cycles" class="sub">
+      <div class="panel"><table class="tbl"><thead><tr><th>Cycle</th><th>Due</th><th>Status</th><th>Collected</th><th>Fee applied</th></tr></thead><tbody>
+        <tr><td>May 2026</td><td>SAR 500</td><td><span class="chip chip-green">Collected</span></td><td>SAR 500</td><td>—</td></tr>
+        <tr><td>Apr 2026</td><td>SAR 500</td><td><span class="chip chip-green">Collected</span></td><td>SAR 500</td><td>SAR 50 (T1)</td></tr>
+        <tr><td>Mar 2026</td><td>SAR 500</td><td><span class="chip chip-green">Collected</span></td><td>SAR 500</td><td>—</td></tr>
+        <tr><td>Feb 2026</td><td>—</td><td><span class="chip chip-gray">Exempt</span></td><td>—</td><td>—</td></tr>
+        <tr><td>Jan 2026</td><td>—</td><td><span class="chip chip-gray">Exempt</span></td><td>—</td><td>—</td></tr>
+      </tbody></table></div>
+    </div>
+    <div id="mdt-txns" class="sub">
+      <div class="panel"><table class="tbl"><thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Type</th></tr></thead><tbody>
+        <tr><td>1 May 2026</td><td>Contribution — May 2026</td><td style="color:#E24B4A">−SAR 500</td><td><span class="chip chip-gray">DR</span></td></tr>
+        <tr><td>1 May 2026</td><td>EMI — loan #L-0034 cycle 5</td><td style="color:#E24B4A">−SAR 1,500</td><td><span class="chip chip-gray">DR</span></td></tr>
+        <tr><td>28 Apr 2026</td><td>Bank deposit received</td><td style="color:#1D9E75">+SAR 2,000</td><td><span class="chip chip-green">CR</span></td></tr>
+        <tr><td>5 Apr 2026</td><td>Late fee — Apr 2026 (T1)</td><td style="color:#E24B4A">−SAR 50</td><td><span class="chip chip-gray">DR</span></td></tr>
+      </tbody></table></div>
+    </div>
+  </div>
+
+  <!-- MEMBER NEW -->
+  <div x-show="page==='member-new'">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:14px;font-size:12px"><span style="color:#378ADD;cursor:pointer" @click="go('members')">← Members</span><span style="color:#9ca3af">/ New member</span></div>
+    <div class="panel"><div class="panel-head"><span class="panel-title">Add new member</span></div><div class="panel-body">
+      <div class="form-grid" style="margin-bottom:12px">
+        <div><label>Full name</label><input placeholder="e.g. Ahmed Al-Hassan"></div>
+        <div><label>National ID / Iqama</label><input placeholder="ID number"></div>
+        <div><label>Phone</label><input placeholder="+966 5x xxx xxxx"></div>
+        <div><label>Email</label><input placeholder="member@email.com"></div>
+        <div><label>Join date</label><input type="date" value="2026-05-21"></div>
+        <div><label>Migration cutoff date (if migrated)</label><input type="date"></div>
+      </div>
+      <div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:8px">Opening balances (leave blank for new members)</div>
+      <div class="form-grid">
+        <div><label>Cash account opening balance (SAR)</label><input type="number" placeholder="0.00"></div>
+        <div><label>Fund account opening balance (SAR)</label><input type="number" placeholder="0.00"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb">
+        <button class="btn btn-gray" @click="go('members')">Cancel</button>
+        <button class="btn btn-primary" @click="go('members')">✓ Save member</button>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- LOAN QUEUE -->
+  <div x-show="page==='loanq'">
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;background:#534AB7;color:#fff">All (7)</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb">Emergency (1)</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb">Standard (6)</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb">Pending approval</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb">Partially disbursed</span>
+    </div>
+    <div class="panel"><table class="tbl"><thead><tr><th>#</th><th>Member</th><th>Amount</th><th>Fund tier</th><th>Available</th><th>Type</th><th>Actions</th></tr></thead><tbody>
+      <tr><td>1</td><td>Khalid Al-Rashidi</td><td>SAR 8,000</td><td>Tier E</td><td style="color:#1D9E75">SAR 42K</td><td><span class="chip chip-red">Emergency</span></td><td><button class="btn btn-success" @click="go('loan-review')" style="margin-right:4px">Approve</button><button class="btn btn-danger">Reject</button></td></tr>
+      <tr><td>2</td><td>Sara Rahman</td><td>SAR 22,000</td><td>Tier B</td><td style="color:#1D9E75">SAR 61K</td><td><span class="chip chip-blue">Standard</span></td><td><button class="btn btn-success" @click="go('loan-review')" style="margin-right:4px">Approve</button><button class="btn btn-danger">Reject</button></td></tr>
+      <tr><td>3</td><td>Faisal Nasser</td><td>SAR 7,500</td><td>Tier A</td><td style="color:#1D9E75">SAR 88K</td><td><span class="chip chip-blue">Standard</span></td><td><button class="btn btn-success" @click="go('loan-review')" style="margin-right:4px">Approve</button><button class="btn btn-danger">Reject</button></td></tr>
+      <tr><td>4</td><td>Layla Mohammed</td><td>SAR 45,000</td><td>Tier C</td><td style="color:#E24B4A">SAR 18K</td><td><span class="chip chip-blue">Standard</span></td><td><button class="btn btn-gray" @click="go('loan-review')" style="margin-right:4px">Partial</button><button class="btn btn-danger">Reject</button></td></tr>
+    </tbody></table></div>
+  </div>
+
+  <!-- LOAN REVIEW -->
+  <div x-show="page==='loan-review'">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:14px;font-size:12px">
+      <span style="color:#378ADD;cursor:pointer" @click="go('loanq')">← Loan queue</span>
+      <span style="color:#9ca3af">/ Review — Khalid Al-Rashidi</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      <div class="panel"><div class="panel-head"><span class="panel-title">Request details</span></div><div class="panel-body">
+        <div class="detail-grid">
+          <div class="detail-item"><div class="detail-label">Requested amount</div><div class="detail-val">SAR 8,000</div></div>
+          <div class="detail-item"><div class="detail-label">Type</div><div class="detail-val"><span class="chip chip-red">Emergency</span></div></div>
+          <div class="detail-item"><div class="detail-label">Fund tier</div><div class="detail-val">Tier E (emergency)</div></div>
+          <div class="detail-item"><div class="detail-label">Tier available</div><div class="detail-val" style="color:#1D9E75">SAR 42,000</div></div>
+          <div class="detail-item"><div class="detail-label">Member portion</div><div class="detail-val">SAR 9,000</div></div>
+          <div class="detail-item"><div class="detail-label">Master portion</div><div class="detail-val">SAR 0</div></div>
+          <div class="detail-item"><div class="detail-label">Threshold (5%)</div><div class="detail-val">SAR 8,400</div></div>
+          <div class="detail-item"><div class="detail-label">Guarantor</div><div class="detail-val">M. Hassan (#1029)</div></div>
+          <div class="detail-item"><div class="detail-label">Grace period</div><div class="detail-val">1 cycle</div></div>
+          <div class="detail-item"><div class="detail-label">EMI tier</div><div class="detail-val">Tier 1 — SAR 1,000/cycle</div></div>
+        </div>
+      </div></div>
+      <div class="panel"><div class="panel-head"><span class="panel-title">Eligibility checks</span></div><div class="panel-body">
+        <div class="check-row check-pass">✅ <strong>Tenure:</strong> 6 years — meets minimum (2 yrs)</div>
+        <div class="check-row check-pass">✅ <strong>Fund balance:</strong> SAR 9,000 — meets minimum</div>
+        <div class="check-row check-pass">✅ <strong>No delinquency</strong> — clean record</div>
+        <div class="check-row check-pass">✅ <strong>Active loans:</strong> 0 — within limit</div>
+        <div class="check-row check-pass">✅ <strong>Borrow limit:</strong> SAR 27,000 — within range</div>
+        <div class="check-row check-pass">✅ <strong>Guarantor M. Hassan</strong> — valid and active</div>
+      </div></div>
+    </div>
+    <div class="panel"><div class="panel-head"><span class="panel-title">Admin decision</span></div><div class="panel-body">
+      <div class="form-grid" style="margin-bottom:12px">
+        <div><label>Disbursement amount (SAR)</label><input type="number" value="8000"></div>
+        <div><label>Decision</label><select><option>Approve — full disbursement</option><option>Approve — partial</option><option>Reject</option></select></div>
+        <div style="grid-column:1/-1"><label>Admin notes</label><textarea placeholder="Optional notes for audit record…" style="height:60px"></textarea></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:12px;border-top:1px solid #e5e7eb">
+        <button class="btn btn-gray" @click="go('loanq')">Cancel</button>
+        <button class="btn btn-danger">Reject request</button>
+        <button class="btn btn-primary" @click="go('loanq')">✓ Confirm disbursement</button>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- COLLECTION CYCLES -->
+  <div x-show="page==='cycles'">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">Due</div><div style="font-size:20px;font-weight:700">248</div><div style="font-size:11px;color:#6b7280">members this cycle</div></div>
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">Collected</div><div style="font-size:20px;font-weight:700">187</div><div style="font-size:11px;color:#1D9E75">SAR 93,500</div></div>
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">Overdue</div><div style="font-size:20px;font-weight:700;color:#E24B4A">12</div><div style="font-size:11px;color:#E24B4A">SAR 6,000</div></div>
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">Exempt</div><div style="font-size:20px;font-weight:700;color:#9ca3af">34</div><div style="font-size:11px;color:#9ca3af">active loans</div></div>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;background:#534AB7;color:#fff">May 2026 (active)</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb">Apr 2026</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb">All cycles</span>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Member collection status</span><button class="btn btn-success">▶ Run debit batch</button></div>
+      <table class="tbl"><thead><tr><th>Member</th><th>Due</th><th>Status</th><th>Collected</th><th>Days late</th><th>Fee tier</th><th>Actions</th></tr></thead><tbody>
+        <tr><td>Youssef Al-Amin</td><td>500</td><td><span class="chip chip-green">Collected</span></td><td>500</td><td>—</td><td>—</td><td><button class="btn btn-gray">View</button></td></tr>
+        <tr><td>Sara Rahman</td><td>500</td><td><span class="chip chip-green">Collected</span></td><td>500</td><td>—</td><td>—</td><td><button class="btn btn-gray">View</button></td></tr>
+        <tr><td>Hana Khalil</td><td>500</td><td><span class="chip chip-amber">Overdue</span></td><td>0</td><td style="color:#E24B4A">4 days</td><td><span class="chip chip-amber">Tier 1</span></td><td><button class="btn btn-primary">Post manual</button></td></tr>
+        <tr><td>Faisal Nasser</td><td>500</td><td><span class="chip chip-blue">Partial</span></td><td>200</td><td>2 days</td><td>—</td><td><button class="btn btn-gray">View</button></td></tr>
+        <tr><td>Nadia Qasim</td><td>—</td><td><span class="chip chip-gray">Exempt</span></td><td>—</td><td>—</td><td>—</td><td><button class="btn btn-gray">View</button></td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <!-- DISBURSEMENTS -->
+  <div x-show="page==='disburse'">
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Active disbursements</span></div>
+      <table class="tbl"><thead><tr><th>Member / Loan</th><th>Approved</th><th>Disbursed</th><th>Remaining</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+        <tr><td>Nadia Qasim — #L-0035</td><td>22,000</td><td>22,000</td><td>0</td><td><span class="chip chip-green">Active</span></td><td><button class="btn btn-gray">View loan</button></td></tr>
+        <tr><td>Bilal Saeed — #L-0036</td><td>15,000</td><td>10,000</td><td>5,000</td><td><span class="chip chip-amber">Partial</span></td><td><button class="btn btn-primary" @click="go('disburse-tranche')">Disburse</button></td></tr>
+        <tr><td>Layla Mohammed — #L-0037</td><td>18,000</td><td>0</td><td>18,000</td><td><span class="chip chip-blue">Pending</span></td><td><button class="btn btn-primary" @click="go('disburse-tranche')">Disburse</button></td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <!-- DISBURSE TRANCHE -->
+  <div x-show="page==='disburse-tranche'">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:14px;font-size:12px"><span style="color:#378ADD;cursor:pointer" @click="go('disburse')">← Disbursements</span><span style="color:#9ca3af">/ Post tranche — Bilal Saeed #L-0036</span></div>
+    <div class="panel"><div class="panel-head"><span class="panel-title">Disbursement tranche</span></div><div class="panel-body">
+      <div class="notice notice-blue">ℹ Loan activates and repayment schedule is built only after full approved amount (SAR 15,000) is disbursed.</div>
+      <div class="form-grid">
+        <div><label>Loan ID</label><input value="#L-0036" readonly></div>
+        <div><label>Member</label><input value="Bilal Saeed" readonly></div>
+        <div><label>Approved amount (SAR)</label><input value="15,000" readonly></div>
+        <div><label>Previously disbursed</label><input value="10,000" readonly></div>
+        <div><label>Tranche amount (SAR)</label><input type="number" value="5000"></div>
+        <div><label>Fund tier</label><input value="Tier B" readonly></div>
+        <div style="grid-column:1/-1"><label>Notes</label><textarea placeholder="Optional notes…" style="height:50px"></textarea></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb">
+        <button class="btn btn-gray" @click="go('disburse')">Cancel</button>
+        <button class="btn btn-primary" @click="go('disburse')">✓ Post disbursement</button>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- RECONCILIATION -->
+  <div x-show="page==='recon'">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">Open exceptions</div><div style="font-size:20px;font-weight:700;color:#E24B4A">2</div><div style="font-size:11px;color:#E24B4A">1 critical — batch halted</div></div>
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">Auto-resolved</div><div style="font-size:20px;font-weight:700;color:#1D9E75">6</div><div style="font-size:11px;color:#6b7280">overnight</div></div>
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">Last batch run</div><div style="font-size:20px;font-weight:700">00:01</div><div style="font-size:11px;color:#6b7280">21 May 2026</div></div>
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">Next batch</div><div style="font-size:20px;font-weight:700">00:01</div><div style="font-size:11px;color:#6b7280">22 May 2026</div></div>
+    </div>
+    <div class="notice notice-red">⛔ CRITICAL: Master fund imbalance SAR 0.40 — all batch posting is halted until resolved.</div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Exception queue</span><button class="btn btn-primary">▶ Run batch now</button></div>
+      <table class="tbl"><thead><tr><th>Type</th><th>Domain</th><th>Severity</th><th>Delta</th><th>SLA</th><th>Actions</th></tr></thead><tbody>
+        <tr><td>MASTER_IMBALANCE_UNRESOLVED</td><td>Master account</td><td><span class="chip chip-red">Critical</span></td><td>SAR 0.40</td><td style="color:#E24B4A">Immediate</td><td><button class="btn btn-primary" @click="go('recon-resolve')">Resolve</button></td></tr>
+        <tr><td>RECON_UNMATCHED_BANK_LINE</td><td>Bank clearing</td><td><span class="chip chip-amber">High</span></td><td>SAR 1,200</td><td style="color:#EF9F27">Today</td><td><button class="btn btn-primary" @click="go('recon-resolve')">Resolve</button></td></tr>
+      </tbody></table>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Auto-resolved — last batch</span></div>
+      <table class="tbl"><thead><tr><th>Type</th><th>Domain</th><th>Resolution</th><th>Time</th></tr></thead><tbody>
+        <tr><td>RECON_AUTO_FEE_TIER_CORRECTION</td><td>Late fee</td><td><span class="chip chip-green">Auto</span></td><td>00:01 today</td></tr>
+        <tr><td>RECON_AUTO_CONTRIBUTION_CR_FIX</td><td>Contribution</td><td><span class="chip chip-green">Auto</span></td><td>00:01 today</td></tr>
+        <tr><td>RECON_EXEMPT_REVERSAL</td><td>Contribution</td><td><span class="chip chip-green">Auto</span></td><td>00:01 today</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <!-- RECON RESOLVE -->
+  <div x-show="page==='recon-resolve'">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:14px;font-size:12px"><span style="color:#378ADD;cursor:pointer" @click="go('recon')">← Reconciliation</span><span style="color:#9ca3af">/ Resolve — MASTER_IMBALANCE_UNRESOLVED</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="panel"><div class="panel-head"><span class="panel-title">Exception details</span></div><div class="panel-body">
+        <div class="detail-grid">
+          <div class="detail-item"><div class="detail-label">Exception ID</div><div class="detail-val">EXC-2026-0512</div></div>
+          <div class="detail-item"><div class="detail-label">Domain</div><div class="detail-val">Master account</div></div>
+          <div class="detail-item"><div class="detail-label">Severity</div><div class="detail-val"><span class="chip chip-red">Critical</span></div></div>
+          <div class="detail-item"><div class="detail-label">Delta</div><div class="detail-val">SAR 0.40</div></div>
+          <div class="detail-item"><div class="detail-label">Raised at</div><div class="detail-val">00:01 · 21 May 2026</div></div>
+          <div class="detail-item"><div class="detail-label">Batch status</div><div class="detail-val" style="color:#E24B4A">Halted</div></div>
+        </div>
+      </div></div>
+      <div class="panel"><div class="panel-head"><span class="panel-title">Resolution action</span></div><div class="panel-body">
+        <div style="margin-bottom:10px"><label>Action</label><select><option>Post rounding adjustment to suspense account</option><option>Reverse transaction</option><option>Reclassify</option><option>Escalate to supervisor</option></select></div>
+        <div style="margin-bottom:10px"><label>Correction amount (SAR)</label><input type="number" value="0.40"></div>
+        <div style="margin-bottom:10px"><label>Reason code</label><select><option>Rounding difference — EMI last instalment</option><option>FX conversion residual</option><option>Manual posting error</option><option>Other</option></select></div>
+        <div style="margin-bottom:12px"><label>Notes (mandatory for critical)</label><textarea placeholder="Describe root cause and corrective action…" style="height:60px"></textarea></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:10px;border-top:1px solid #e5e7eb">
+          <button class="btn btn-gray" @click="go('recon')">Cancel</button>
+          <button class="btn btn-primary" @click="go('recon')">✓ Post resolution & resume batch</button>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- BANK CLEARING -->
+  <div x-show="page==='bank'">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">Imported today</div><div style="font-size:20px;font-weight:700">14</div><div style="font-size:11px;color:#6b7280">bank lines</div></div>
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">Auto-matched</div><div style="font-size:20px;font-weight:700;color:#1D9E75">11</div><div style="font-size:11px;color:#1D9E75">SAR 28,400</div></div>
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">Unmatched</div><div style="font-size:20px;font-weight:700;color:#E24B4A">2</div><div style="font-size:11px;color:#E24B4A">require action</div></div>
+      <div class="stat-card"><div style="font-size:10px;color:#9ca3af">Stale pending (&gt;30d)</div><div style="font-size:20px;font-weight:700;color:#EF9F27">1</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Unmatched bank lines</span><button class="btn btn-primary">⬆ Import statement</button></div>
+      <table class="tbl"><thead><tr><th>Date</th><th>Reference</th><th>Amount</th><th>Exception</th><th>Actions</th></tr></thead><tbody>
+        <tr><td>21 May 2026</td><td>TRF-8821-KSA</td><td>SAR 1,200</td><td><span class="chip chip-red">Unmatched</span></td><td><button class="btn btn-primary">Match manually</button></td></tr>
+        <tr><td>20 May 2026</td><td>DEP-0091</td><td>SAR 450</td><td><span class="chip chip-amber">Amount diff.</span></td><td><button class="btn btn-primary">Adjust & clear</button></td></tr>
+      </tbody></table>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Matched — today</span></div>
+      <table class="tbl"><thead><tr><th>Bank line</th><th>Matched to</th><th>Amount</th><th>Status</th></tr></thead><tbody>
+        <tr><td>TRF-7741 · Youssef Al-Amin</td><td>Cash entry CE-4421</td><td>SAR 2,000</td><td><span class="chip chip-green">Cleared</span></td></tr>
+        <tr><td>TRF-7742 · Sara Rahman</td><td>Cash entry CE-4422</td><td>SAR 5,000</td><td><span class="chip chip-green">Cleared</span></td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <!-- REPORTS -->
+  <div x-show="page==='reports'">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="panel"><div class="panel-head"><span class="panel-title">Standard reports</span></div><div class="panel-body">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid #e5e7eb;border-radius:10px;cursor:pointer;margin-bottom:8px">
+          <div style="width:32px;height:32px;border-radius:9px;background:#E1F5EE;display:flex;align-items:center;justify-content:center;flex-shrink:0">📅</div>
+          <div style="flex:1"><div style="font-size:12px;font-weight:600">Monthly collection report</div><div style="font-size:11px;color:#9ca3af">Per-member collection status, fees, exemptions</div></div>
+          <button class="btn btn-gray">⬇ PDF</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid #e5e7eb;border-radius:10px;cursor:pointer;margin-bottom:8px">
+          <div style="width:32px;height:32px;border-radius:9px;background:#EEEDFE;display:flex;align-items:center;justify-content:center;flex-shrink:0">💰</div>
+          <div style="flex:1"><div style="font-size:12px;font-weight:600">Loan portfolio report</div><div style="font-size:11px;color:#9ca3af">Active, repaid, delinquent — all tiers</div></div>
+          <button class="btn btn-gray">⬇ PDF</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid #e5e7eb;border-radius:10px;cursor:pointer;margin-bottom:8px">
+          <div style="width:32px;height:32px;border-radius:9px;background:#FAEEDA;display:flex;align-items:center;justify-content:center;flex-shrink:0">⚠️</div>
+          <div style="flex:1"><div style="font-size:12px;font-weight:600">Reconciliation summary</div><div style="font-size:11px;color:#9ca3af">Exceptions, resolutions, auto-resolve log</div></div>
+          <button class="btn btn-gray">⬇ PDF</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid #e5e7eb;border-radius:10px;cursor:pointer">
+          <div style="width:32px;height:32px;border-radius:9px;background:#E6F1FB;display:flex;align-items:center;justify-content:center;flex-shrink:0">📊</div>
+          <div style="flex:1"><div style="font-size:12px;font-weight:600">Fund tier utilisation</div><div style="font-size:11px;color:#9ca3af">Availability, committed, disbursed per tier</div></div>
+          <button class="btn btn-gray">⬇ PDF</button>
+        </div>
+      </div></div>
+      <div class="panel"><div class="panel-head"><span class="panel-title">Custom report</span></div><div class="panel-body">
+        <div style="margin-bottom:10px"><label>Report type</label><select><option>Collection cycle</option><option>Loan portfolio</option><option>Member statement</option><option>Reconciliation log</option><option>Audit trail</option></select></div>
+        <div class="form-grid" style="margin-bottom:10px">
+          <div><label>Date from</label><input type="date" value="2026-01-01"></div>
+          <div><label>Date to</label><input type="date" value="2026-05-21"></div>
+        </div>
+        <div style="margin-bottom:10px"><label>Member (optional)</label><input placeholder="Search name or ID…"></div>
+        <div style="margin-bottom:14px"><label>Format</label><select><option>PDF</option><option>Excel (.xlsx)</option><option>CSV</option></select></div>
+        <button class="btn btn-primary" style="width:100%">⬇ Generate report</button>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- MIGRATION -->
+  <div x-show="page==='migration'">
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;background:#534AB7;color:#fff">All (9)</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb">Unresolved stubs</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb">Pending clearance</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb">Cleared</span>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Migration members</span><button class="btn btn-primary">Batch classify</button></div>
+      <table class="tbl"><thead><tr><th>Member</th><th>Join date</th><th>Cutoff</th><th>Stubs</th><th>Unresolved</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+        <tr><td>Omar Mansour</td><td>Jan 2015</td><td>Apr 2026</td><td>136</td><td>0</td><td><span class="chip chip-green">Cleared</span></td><td><button class="btn btn-gray">View</button></td></tr>
+        <tr><td>Hassan Karim</td><td>Mar 2012</td><td>Apr 2026</td><td>169</td><td>12</td><td><span class="chip chip-amber">Pending</span></td><td><button class="btn btn-primary">Resolve</button></td></tr>
+        <tr><td>Rania Aziz</td><td>Jun 2019</td><td>Apr 2026</td><td>82</td><td>82</td><td><span class="chip chip-red">Unresolved</span></td><td><button class="btn btn-primary">Classify</button></td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <!-- CONFIGURATION -->
+  <div x-show="page==='config'" x-data="{cfgTab:'collection'}">
+    <div class="tab-bar">
+      <span class="tab-btn" :class="cfgTab==='collection'?'on':''" @click="cfgTab='collection'">Collection</span>
+      <span class="tab-btn" :class="cfgTab==='loans'?'on':''" @click="cfgTab='loans'">Loans</span>
+      <span class="tab-btn" :class="cfgTab==='tiers'?'on':''" @click="cfgTab='tiers'">Fund tiers</span>
+      <span class="tab-btn" :class="cfgTab==='recon'?'on':''" @click="cfgTab='recon'">Reconciliation</span>
+      <span class="tab-btn" :class="cfgTab==='guarantor'?'on':''" @click="cfgTab='guarantor'">Guarantor rules</span>
+    </div>
+    <div x-show="cfgTab==='collection'" class="panel"><div class="panel-body">
+      <div class="form-grid">
+        <div><label>Collection window (days)</label><input type="number" value="5"></div>
+        <div><label>Late fee model</label><select><option>Replacement</option><option>Cumulative</option></select></div>
+        <div><label>Tier 1 threshold (days overdue)</label><input type="number" value="3"></div>
+        <div><label>Tier 1 fee amount (SAR)</label><input type="number" value="50"></div>
+        <div><label>Tier 2 threshold (days)</label><input type="number" value="10"></div>
+        <div><label>Tier 2 fee amount (SAR)</label><input type="number" value="100"></div>
+        <div><label>Tier 3 threshold (days)</label><input type="number" value="20"></div>
+        <div><label>Tier 3 fee amount (SAR)</label><input type="number" value="200"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-primary">Save changes</button></div>
+    </div></div>
+    <div x-show="cfgTab==='loans'" class="panel"><div class="panel-body">
+      <div class="form-grid">
+        <div><label>Min. membership years</label><input type="number" value="2"></div>
+        <div><label>Min. fund balance (SAR)</label><input type="number" value="5000"></div>
+        <div><label>Borrow multiplier (×)</label><input type="number" value="3"></div>
+        <div><label>Max active loans per member</label><input type="number" value="2"></div>
+        <div><label>Settlement threshold (%)</label><input type="number" value="5"></div>
+        <div><label>Grace period options</label><select><option>0, 1, 2 cycles</option><option>0, 1 cycles</option></select></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-primary">Save changes</button></div>
+    </div></div>
+    <div x-show="cfgTab==='tiers'" class="panel"><div class="panel-body">
+      <div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:8px">Fund tier allocations (% of master fund)</div>
+      <div class="form-grid" style="margin-bottom:14px">
+        <div><label>Tier A allocation (%)</label><input type="number" value="30"></div>
+        <div><label>Tier B allocation (%)</label><input type="number" value="40"></div>
+        <div><label>Tier C allocation (%)</label><input type="number" value="50"></div>
+        <div><label>Tier E emergency (%)</label><input type="number" value="20"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary">Save changes</button></div>
+    </div></div>
+    <div x-show="cfgTab==='recon'" class="panel"><div class="panel-body">
+      <div class="form-grid">
+        <div><label>Auto-resolve tolerance (SAR)</label><input type="number" value="0.01" step="0.01"></div>
+        <div><label>Timing diff. defer (hours)</label><input type="number" value="48"></div>
+        <div><label>Bank match date range (± days)</label><input type="number" value="3"></div>
+        <div><label>Stale pending threshold (days)</label><input type="number" value="30"></div>
+        <div><label>Unbanked cash alert (days)</label><input type="number" value="7"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-primary">Save changes</button></div>
+    </div></div>
+    <div x-show="cfgTab==='guarantor'" class="panel"><div class="panel-body">
+      <div class="form-grid">
+        <div><label>Missed EMIs before warning (X)</label><input type="number" value="3"></div>
+        <div><label>Missed EMIs before transfer (Y)</label><input type="number" value="6"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-primary">Save changes</button></div>
+    </div></div>
+  </div>
+
+  <!-- AUDIT LOG -->
+  <div x-show="page==='audit'">
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;background:#534AB7;color:#fff">All events</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb">Admin actions</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb">Overrides</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb">Recon events</span>
+      <span style="padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e5e7eb">Loan events</span>
+    </div>
+    <div class="panel"><table class="tbl"><thead><tr><th>Timestamp</th><th>Event</th><th>Actor</th><th>Entity</th><th>Tag</th></tr></thead><tbody>
+      <tr><td>00:01 21 May</td><td>Recon batch completed — 6 auto-resolved, 2 escalated</td><td>System</td><td>Global</td><td><span class="chip chip-blue">Recon</span></td></tr>
+      <tr><td>23:44 20 May</td><td>Late fee reversed — RECON_AUTO_FEE_EXEMPTION_REVERSAL member #1047</td><td>System</td><td>#1047</td><td><span class="chip chip-green">Auto</span></td></tr>
+      <tr><td>16:20 20 May</td><td>Loan approved — #L-0035 SAR 22,000 · Nadia Qasim</td><td>Admin</td><td>#L-0035</td><td><span class="chip chip-purple">Loan</span></td></tr>
+      <tr><td>14:05 20 May</td><td>Migration clearance granted — Omar Mansour #1050</td><td>Admin</td><td>#1050</td><td><span class="chip chip-purple">Migration</span></td></tr>
+      <tr><td>09:30 20 May</td><td>Admin override — delinquency gate bypassed for #1051 · "Director waiver"</td><td>Admin</td><td>#1051</td><td><span class="chip chip-amber">Override</span></td></tr>
+    </tbody></table></div>
+  </div>
+
+  </div><!-- end pages container -->
+</div><!-- end main -->
+</div><!-- end flex -->
+
+<script src="https://unpkg.com/alpinejs@3/dist/cdn.min.js" defer></script>
+<script>
+function adminApp(){return{
+  page:'dashboard',
+  go(p){this.page=p;document.querySelectorAll('.sub').forEach(s=>s.classList.remove('on'));const first=document.querySelector(`#${p}-profile,#mdt-profile`);if(first)first.classList.add('on');window.scrollTo(0,0)},
+  pageTitle(){const m={dashboard:'Dashboard',members:'Members',loanq:'Loan queue','member-detail':'Member — Youssef Al-Amin','member-new':'New member','loan-review':'Review loan request',cycles:'Collection cycles',disburse:'Disbursements','disburse-tranche':'Post disbursement tranche',recon:'Reconciliation','recon-resolve':'Resolve exception',bank:'Bank clearing',reports:'Reports',migration:'Migration',config:'Configuration',audit:'Audit log'};return m[this.page]||this.page},
+  primaryAction(){const m={dashboard:'Run batch',members:'Add member',loanq:'Process next',cycles:'Run debit batch',recon:'Run batch now',bank:'Import statement',reports:'Generate',config:'Save all',audit:'Export log'};return m[this.page]||'Action'},
+  primaryActionFn(){if(this.page==='members')this.go('member-new')},
+  subTab(e,id){const p=e.target.closest('.main');p.querySelectorAll('.tab-btn').forEach(t=>t.classList.remove('on'));e.target.classList.add('on');document.querySelectorAll('.sub').forEach(s=>s.classList.remove('on'));const el=document.getElementById(id);if(el)el.classList.add('on')},
+}}
+</script>
+</body>
+</html>
