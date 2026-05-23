@@ -4,6 +4,7 @@ namespace App\Filament\Member\Resources\MyAccounts\Tables;
 
 use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Setting;
@@ -41,7 +42,7 @@ class MyMemberAccountsTable
             ->dateTime()
             ->sortable();
 
-        return $table
+        return TableGrouping::apply($table
             ->columns($columns)
             ->filters([
                 DateColumnRangeFilter::make('updated_at', 'Last activity'),
@@ -54,6 +55,6 @@ class MyMemberAccountsTable
                 BulkActionGroup::make([
                     TableToolbar::refreshBulkAction(),
                 ]),
-            ]);
+            ]), TableGrouping::memberAccounts(includeType: $showTypeColumn));
     }
 }

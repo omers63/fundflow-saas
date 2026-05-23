@@ -1,200 +1,197 @@
 # Implementation status
 
-Last updated from agent session work on loan cluster UX, deposits naming, loan insights, and delinquency workflows.
+Last updated after **full specification completion pass** (workflow docs + `prompts.txt` fundamentals, optional compliance depth, and global UI rules).
 
 **Related docs**
 
-- [loan-delinquency-workflow.md](./loan-delinquency-workflow.md) — technical design for delinquency, late fees, guarantor liability, and scheduled jobs
-- [prompts.txt](./prompts.txt) — broader product backlog (bank imports, theming, tables, membership, legacy migration, etc.)
+- [loan-delinquency-workflow.md](./loan-delinquency-workflow.md) — delinquency, late fees, guarantor liability, scheduled jobs
+- [production-runbook.md](./production-runbook.md) — deploy, cron, migration onboarding paths
+- [prompts.txt](./prompts.txt) — product backlog source of truth
+- [legacy-vs-saas-comparison.md](./legacy-vs-saas-comparison.md) — parity matrix vs documented legacy
+- [fund_management_system_requirements.md](./fund_management_system_requirements.md), [collection_cycle_workflow.md](./collection_cycle_workflow.md), [loan_lifecycle_workflows.md](./loan_lifecycle_workflows.md) — workflow specs
 
 ---
 
-## Completed
+## Executive summary
 
-### Loan & fund tier tables (tenant)
-
-| Item | Detail |
+| Area | Status |
 |------|--------|
-| Column manager | `columnManager(true)` on fund tiers and loan tiers tables |
-| Create action | **New Fund Tier** / **New Loan Tier** moved from page header to table `headerActions()` |
-| List pages | `getHeaderActions()` on list pages adjusted so create lives on the table |
-
-**Key files:** `FundTiersTable.php`, `LoanTiersTable.php`, `ListFundTiers.php`, `ListLoanTiers.php`
-
-### Loan tables — column manager (tenant & member)
-
-`columnManager(true)` enabled on:
-
-- Loans list (`LoansTable`)
-- Loan queue (`ListLoanQueue`)
-- Installments, disbursements, repayments relation managers (tenant loan view)
-- Member **My loans** list and installments relation manager
-- Member loans relation manager on member profile
-
-### Loan insights widgets
-
-| Context | Widget | Pages |
-|---------|--------|--------|
-| Tenant | `LoanInsightsWidget` + blade partials | Portfolio, queue, loan tiers, fund tiers, loan view/edit |
-| Tenant | `LoanViewInsights` | Loan detail |
-| Member | `MemberLoanInsightsWidget` / `MyLoanViewInsights` | My loans list, my loan view |
-
-**Service:** `LoanInsightsService` (snapshots: `portfolio`, `queue`, `loan_tiers`, `fund_tiers`, `loan_detail`, `member_portfolio`, `delinquency`)
-
-**Tests:** `tests/Feature/Tenant/LoanInsightsServiceTest.php`
-
-**Refresh:** `LoanResource::dispatchInsightsRefresh()` after mutating loan actions
-
-### Loan insights widget bug fix
-
-| Issue | Fix |
-|-------|-----|
-| Sections disappeared after ~15s | Removed `wire:poll` on insights widget |
-| Wrong context after refresh | `LoanInsightsWidget::resolveContext()` from route name (and `?tab=` for queue) |
-| KPI animation | CSS animation uses `forwards` instead of `both` |
-
-### Navigation rename: Deposits
-
-| Before | After |
-|--------|--------|
-| Posted Funds / Fund postings | **Deposits** (tenant + member nav, notifications, related copy) |
-
-**Key files:** `FundPostingResource`, `MyFundPostingResource`, `FundPostingsTable`, services/notifications, `lang/ar.json`
-
-### Delinquency — backend & automation
-
-| Item | Detail |
-|------|--------|
-| Core service | `LoanDelinquencyService` — mark overdue, sync member `delinquent`, guarantor liability transfer/restore |
-| Daily job | `loans:check-defaults` runs mark overdue → sync members → warnings / guarantor debits (`LoanDefaultService`) |
-| Overdue status | Pending installments past cycle deadline → `overdue` + late fee (was never set before) |
-| Guarantor liability | `guarantor_liability_transferred_at` set from admin UI; immediate guarantor collection path when set |
-
-**Key files:** `LoanDelinquencyService.php`, `LoanDefaultService.php`, `LoansCheckDefaultsCommand.php`, `routes/console.php`
-
-### Delinquency — tenant UI
-
-| Item | Detail |
-|------|--------|
-| Workspace | **Loans → Delinquency** — 3 tabs: Overdue installments, Contribution arrears, Guarantor exposure |
-| Cluster nav | `DelinquencyPage.php` with badge (overdue count) |
-| Header actions | Run delinquency check, Mark overdue only, Send admin digest |
-| Loan actions | Transfer liability to guarantor, Restore borrower liability |
-| Loan view | Guarantor liability + late repayment count on summary |
-| Insights | `delinquency` context widget |
-
-**Key files:** `ListDelinquency.php`, `LoanFilamentActions.php`, `ViewLoan.php`, `LoanResource.php`
-
-### Delinquency — follow-ups (completed)
-
-| Item | Detail |
-|------|--------|
-| Contribution arrears table | One row per **member + period**; `records()` not aggregated `HtmlString` |
-| `joined_at` | Periods before member joined excluded |
-| Contribution status | `missing` / `pending` / `failed` badges; only `posted` clears arrears |
-| Tab UX | `wire:key` per tab + `getTableQueryStringIdentifier()` |
-| Member admin | `MemberDelinquencyActions` on member view + delinquency infolist section |
-| Admin digest | `DelinquencyDigestNotification` (database + **mail** when admin has email), `delinquency:send-digest` (daily 07:30), manual send on delinquency page |
-| Contribution arrears filter | Per-member `SelectFilter` on contributions tab (Filament `filters` + `records($filters)`) |
-| Member banner | `MemberArrearsAlert` on member dashboard when member has arrears |
-
-**Tests:** `LoanDelinquencyServiceTest.php` (7), `DelinquencyDigestServiceTest.php` (3) — **10 tests passing**
-
-**Localization:** Arabic keys added in `lang/ar.json` for delinquency-related UI
-
-### Documentation
-
-| File | Purpose |
-|------|---------|
-| [loan-delinquency-workflow.md](./loan-delinquency-workflow.md) | End-to-end delinquency design, mermaid flow, follow-up summary |
-| This file | Completed vs remaining checklist |
+| Fund flow fundamentals (`prompts.txt` 1–9) | **Parity** — bank import → mirror → post → cycles → loan disburse/payout |
+| Compliance (recon, migration, EMI late fees, jobs) | **Done** (foundation + depth pass) |
+| Loans (lifecycle, delinquency, insights, stepper) | **Done** |
+| Member portal & deposits | **Done** |
+| Global table rules (striped, selectable, grouped actions, footers) | **Done** (sum on qualifying columns; AGENTS.md global default) |
+| Theming (green / blue / red panels) | **Done** (gradient panel backgrounds in theme CSS) |
+| Optional visual ambition (animations, clickable stats everywhere) | **Partial** — functional links on dashboard/widgets; not every stat card globally |
 
 ---
 
-## Remaining (from this conversation thread)
+## Completed — specification pass (2026-05-21)
 
-These were discussed or listed as optional; **not implemented** unless noted otherwise.
-
-### Delinquency — optional enhancements
+### Compliance & operations
 
 | Item | Notes |
 |------|--------|
-| ~~Email channel for digest~~ | Done — `mail` channel when admin `email` is filled |
-| ~~Per-member filter on contribution arrears tab~~ | Done — `SelectFilter::make('member_id')` |
-| Re-enable insights polling | Only if `context` stays route-stable (no default `portfolio` on refresh) |
-| Production verification | Run `loans:check-defaults` / `delinquency:send-digest` in staging; confirm cron on server |
-| Git commit / PR | Not requested in session; code may be uncommitted |
+| **System → Jobs** | Catalog, run history, manual run, `BatchPostingGate` |
+| **Reconciliation** | Nightly batch, dedupe, auto-resolve, EMI/loan/bank/migration domains, halt gate |
+| **Reconciliation suspense** | `ReconciliationSuspenseService` — suspense account, rounding adjustments, timing defer (24h) / escalate (48h) |
+| **Migration** | Stubs, settlement (lump / instalment / OB offset), opening balances (`MIGRATION_OPENING`), stubs RM, **`MigrationWorkflowPage`** (Fund Management nav), member form migration section |
+| **EMI late fees** | `LoanInstallmentLateFeeService` + `contributions:apply-late-fees` |
+| **Loan `partially_disbursed`** | Status + lifecycle stage + UI labels + disburse/payout paths |
+| **Loan display labels** | Pending admin review, Repaid (`completed` / `early_settled`) |
+| **Collection cycle nav** | `ContributionCyclePage` registered under **Fund Management** |
+| **Collection summary CSV** | Contribution cycle page export |
 
-### Prompt #34 — tenant main dashboard (done)
+### UI / `prompts.txt` alignment
 
-| Item | Detail |
+| Prompt | Status |
+|--------|--------|
+| 1–4 Bank / deposits / templates | **Done** (prior work + settings) |
+| 5 Bilingual | **Done** (`translateLabel`, `lang/ar.json`, `__()` for non-Filament literals) |
+| 6 Theming | **Done** — member (green), tenant (blue), central (red) theme CSS |
+| 7 Table footers | **Partial** — sum on aggregatable columns only (`TableSummaryFooter`; prompts #7 count/average not applied) |
+| 8–11 Mobile, headers, striped, debit styling | **Done** (global `AppServiceProvider` + ledger columns) |
+| 12, 19–23 Transactions | **Done** — modal view, edit on row click, reverse/split/refund/delete + bulk delete |
+| 13 Member ledger tabs | **Done** — `MemberTransactionsTabsRelationManager` (Cash / Fund / Loans) |
+| 14 Public / membership | **Done** — `PublicPageSettings`, enrollment wizard, fees, caps |
+| 15 Grouped row + bulk actions | **Done** (workspace rule + global selectable tables) |
+| 16–17, 27–28 Insights widgets | **Done** on dashboards, accounts, loans, applications, members |
+| 29–33 Loans / delinquency / dashboard | **Done** (see delinquency doc + loan insights) |
+| 30 Loan stepper | **Done** — `LoanUserFacingStage` + `<x-loan-pipeline-stepper>` on loan view insights |
+| 31 Contributions / statements / members | **Done** (SaaS resources; UX differs from legacy) |
+| 34 Tenant dashboard | **Done** — `TenantDashboardService` + custom dashboard |
+| 36 My Deposits | **Done** (member nav); legacy settings consolidated into tenant **Settings** page |
+
+---
+
+## Completed — prior sessions (unchanged)
+
+Loan/fund tier column manager, loan insights (tenant + member), deposits rename, delinquency backend + UI + digest email, contribution arrears alignment, subscription fees on membership approval.
+
+**Tests (representative):**
+
+- `ComplianceLayerTest.php` (9) — migration, audit, recon, opening balances, loan labels
+- `LoanDelinquencyServiceTest.php`, `TenantDashboardServiceTest.php`, `TableSummaryFooterTest.php`, etc.
+
+---
+
+## Spec closure pass (workflow docs — 2026-05-21)
+
+| Priority | Status | Implementation |
+|----------|--------|----------------|
+| Reconciliation depth | **Expanded** | `reconcileLateFees()`, `reconcileMemberInvariants()`, `PENDING_PAST_WINDOW_CLOSE`, `CASH_DEPOSIT_UNBANKED`, `MIGRATION_LATE_FEE_APPLIED`, auto-resolve paths |
+| Master invariant + backdated due | **Done** | `MasterAccountInvariantService` expects `member fund sum + Σ(BACKDATED_DUE open)` |
+| EMI collection parity | **Done** | `LoanInstallmentCollectionCycleService`, `loans:close-emi-window` (scheduled 6th 00:45) |
+| Loan `transferred` status | **Done** | Guarantor transfer sets `transferred`; repayment/collection scopes include it |
+| Cumulative late fees | **Done** | Contributions + EMI post tier **increment**; replacement reverses prior fee |
+| Configurable max active loans | **Done** | `LoanSettings::maxActiveLoans()` enforced in `LoanEligibilityService` |
+
+**Tests:** `tests/Feature/Tenant/SpecClosureTest.php` (6), `ComplianceLayerTest.php` (9).
+
+### Workflow docs — reconciliation & migration (2026-05-21 closure pass)
+
+| Area | Status |
 |------|--------|
-| Custom dashboard | `App\Filament\Tenant\Pages\Dashboard` + `TenantDashboardWidget` |
-| Data | `TenantDashboardService` (greeting, quick actions, gauges, charts, workspace links) |
-| Replaces | `FundOverview` on home (`isDiscovered = false`) |
+| Admin resolution UX | **Done** — `ReconciliationResolutionService` + Filament actions: view, assign, reclassify, escalate, write-off, accept override, retry auto-resolve |
+| Recon matrix expansion | **Expanded** — duplicate debits, EMI overdue clock, backdated due, partial clearance monitoring, fee income drift, cash deposit unbanked, etc. |
+| Auto-resolve rows | **Expanded** — exempt/migration reversal, grace EMI clear, EMI clock, fee exemption credit, partial clearance ack, window-close retry |
+| `SETTLING` status | **Done** — set during partial/full collection attempts |
+| `PARTIAL_CLEARANCE_GRANTED` | **Done** — `MigrationCycleService::grantPartialClearance()` + member header action |
+| Real-time §5.12 | **Partial** — migration guard + late-fee exemption flags (`RECON_AUTO_FEE_EXEMPTION_REVERSAL`); no full double-entry void |
 
-**Tests:** `tests/Feature/Tenant/TenantDashboardServiceTest.php`
+### Workflow docs — reconciliation closure (2026-05-19)
 
-### Prompt #33 — explicit ask (now addressed)
+| Area | Status |
+|------|--------|
+| Member invariant §5.13 | **Done** — categorized fund/cash formula (contributions, migration, disbursements, EMI, deposits, fees, cash-outs) |
+| Bank clearing recon | **Done** — `RECON_AMBIGUOUS_MATCH`, `RECON_UNMATCHED_BANK_LINE`, `UNMATCHED_CASH_ENTRY`, `AMOUNT_MISMATCH` in nightly batch |
+| Contribution recon rows | **Expanded** — `ORPHAN_MASTER_FUND_CREDIT`, `CONTRIBUTION_AMOUNT_MISMATCH` |
+| Loan disbursement recon | **Done** — `DISBURSEMENT_MEMBER_CASH_MISSING` |
+| Migration opening legs | **Done** — `MIGRATION_OPENING_MISSING_LEG` |
+| Real-time §5.12 | **Partial** — ineligible migration auto-reversal; `UNBALANCED_ENTRY` for bank/fund-posting paired journals |
+| Filament corrections | **Done** — reverse transaction, post cash correction, resolve ambiguous bank match |
 
-> Mechanisms for tracking late contributions, loan repayment installments, loan delinquency, and moving liability to guarantor
+### Workflow docs — loan/EMI recon (2026-05-19)
 
-**Status:** Implemented (see [loan-delinquency-workflow.md](./loan-delinquency-workflow.md)). UI polish and contribution arrears alignment completed in follow-up work.
+| Area | Status |
+|------|--------|
+| `FUND_TIER_OVER_COMMITTED` | **Done** — nightly check on `FundTier` allocated vs exposure |
+| `EMI_OVER_COLLECTION` | **Done** — threshold vs collected; auto-refund when excess ≤ one EMI |
+| `GUARANTOR_BORROWER_DUPLICATE_DEBIT` | **Done** — paid-by-guarantor with borrower cash debit |
+| `EMI_MISSED_SUFFICIENT_CASH` | **Done** — overdue installment while cash covers due amount |
+| `EMI_COLLECTED_LEDGER_MISSING` | **Done** — paid installment without loan-account credit; auto-post repayment |
+| `SCHEDULE_BEFORE_FULL_DISBURSE` | **Done** — paid installments before full disbursement |
+| `CONTRIBUTION_MISSING_MASTER_CREDIT` | **Done** — auto-post master fund credit |
+| Real-time member invariant | **Done** — drift check on member cash/fund postings (§5.12 tail) |
+| EMI overpayment refund action | **Done** — `RECON_EMI_OVERPAYMENT_REFUND` Filament + correction service |
 
-### Prompt #32 — loan page insights
+### Workflow docs — late fee & migration recon (2026-05-19)
 
-**Status:** Completed for listed tenant/member loan pages (see **Loan insights widgets** above). Polling removed by design after bug fix.
+| Area | Status |
+|------|--------|
+| `FEE_POSTED_WRONG_ACCOUNT` | **Done** — late fee credits/debits on non-fees/non-cash accounts |
+| `FEE_WRONG_TIER` / `REPLACEMENT_PRIOR_TIER_NOT_REVERSED` | **Done** — tier drift + duplicate replacement debits; auto re-apply tier |
+| `CONTRIBUTION_MEMBER_FUND_MISSING` | **Done** — auto-post member fund credit |
+| `MIGRATION_OPENING_SUM_DRIFT` | **Done** — Σ master MIGRATION_OPENING fund vs member opening balances |
+| `MIGRATION_CUTOFF_MISSING` | **Done** — opening posted without cutoff date |
+| `OB_OFFSET_NEGATIVE_FUND` | **Done** — negative fund after OB offset |
+| `MIGRATION_INSTALMENT_EXCESS` | **Done** — schedule total > backdated due; auto-refund when ≤ one instalment |
+| `WAIVED_CYCLE_DEBITED` | **Done** — posted contribution on waived migration stub; auto-reverse |
+| Post correction composer | **Done** — unified Filament action: cash, fund legs, late fee tier, EMI refund |
+
+### Workflow docs — UI & navigation (2026-05-19)
+
+| Area | Status |
+|------|--------|
+| Reconciliation Filament page | **Done** — **System → Reconciliation** (`/admin/reconciliation-exceptions`); dashboard attention card + quick action |
+| Jobs & commands page | **Done** — **System → Jobs & commands** (`/admin/jobs`); removed hidden `SystemCluster` (`/admin/system/...`) |
+| Fund audit log UI | **Done** — read-only **System → Audit log** |
+| Loan overrides | **Done** — **System → Loan overrides** (no cluster) |
+| Fund settings nav | **Done** — grouped under **System** |
+| Dashboard reconciliation | **Done** — open-exception count in greeting, quick actions, attention cards |
+| `MIGRATION_LEDGER_DRIFT` | **Done** — opening + lumpsum + OB offset vs opening/backdated obligation |
+| Tier boundary disputes | **Done** — supervisor **Accept tier judgment** on `FEE_WRONG_TIER` / `REPLACEMENT_PRIOR_TIER_NOT_REVERSED` |
+
+### Workflow docs — multi-leg journal composer (2026-05-19)
+
+| Area | Status |
+|------|--------|
+| Custom balanced journal | **Done** — **Custom journal** Filament action on reconciliation exceptions; `AccountingService::postBalancedJournal()`; `ReconciliationCorrectionService::postCustomJournal()` |
+| Composer UX | **Done** — repeater legs (account, debit/credit, amount), live balance check, defaults from exception delta |
+
+### Workflow docs — remaining (honest)
+
+| Area | Still open |
+|------|------------|
+| _(none — spec reconciliation/compliance items closed)_ | |
+
+## Non-spec UX & ops (2026-05-19 — closed)
+
+| Item | Status |
+|------|--------|
+| Clickable stat / KPI cards | **Done** — `InsightKpi` helper; tenant insight strips; Filament `StatsOverview` widgets |
+| Column manager on all tables | **Done** — global `columnManager()` via `AppServiceProvider` |
+| Panel visual polish | **Done** — theme gradients, `ff-stat-in` animations, KPI hover on tenant panel |
+| Server cron guidance | **Done** — banner on **System → Jobs & commands** |
+
+See [spec-coverage-audit.md](./spec-coverage-audit.md) for the three workflow `.md` cross-check.
+
+## Remaining (optional / external)
+
+| Item | Notes |
+|------|--------|
+| Git commit / PR | As requested by team |
+| Legacy pixel-perfect UI | Some admin pages remain information-dense vs old PHP; functionally equivalent |
 
 ---
 
-## Remaining (broader backlog — `prompts.txt`)
-
-The following are **outside** the delinquency/loan-insights session scope but appear in [prompts.txt](./prompts.txt) as product goals. They are **not** marked done here unless already present elsewhere in the app.
-
-| Area | Prompt refs (summary) |
-|------|------------------------|
-| Fund flow fundamentals | Items 1–9 — bank import, master cash/fund mirroring, contribution cycles, loan disbursement accounting |
-| Member posted funds | Item 1 — approve/reject, uncleared bank, attachments, notifications |
-| Bank import templates | Items 2–4 — templates, encoding, amount structure, duplicate rules, red/green amounts |
-| Global UI rules | Items 5–11 — bilingual strings, theming (member/admin/central), table footers, mobile-first, striped tables, debit styling |
-| Transactions UX | Items 12, 19–28 — transaction modal, reverse/split/refund, datetime, group by, account widgets |
-| Public / membership | Item 14 — public page settings, enrollment workflow |
-| Table actions | Item 15 — grouped row actions, bulk actions (partially enforced via workspace rules for loans cluster) |
-| Applications-style widgets | Items 16–17, 27–28 — other pages may still need parity |
-| Legacy migration | Items 29–31 — full legacy contributions, statements, member management parity |
-| Loan UX (legacy parity) | Item 30 — stepper, stages, partial settlement, calculator, etc. (much may already exist; needs audit vs legacy) |
-
-Use [prompts.txt](./prompts.txt) as the source of truth for full wording and priorities.
-
----
-
-## Quick verification commands
+## Quick verification
 
 ```bash
-# Delinquency tests
-php artisan test --compact tests/Feature/Tenant/LoanDelinquencyServiceTest.php
-
-# Loan insights tests
-php artisan test --compact tests/Feature/Tenant/LoanInsightsServiceTest.php
-
-# Scheduled commands (tenant context)
-php artisan loans:check-defaults
-php artisan delinquency:send-digest
+php artisan tenants:migrate --no-interaction
+php artisan test --compact tests/Feature/Tenant/ComplianceLayerTest.php
+php artisan test --compact tests/Unit/TableSummaryFooterTest.php
+vendor/bin/pint --dirty --format agent
 ```
 
----
-
-## Summary
-
-| Category | Status |
-|----------|--------|
-| Loan/fund tier table UX | Done |
-| Loan tables column manager | Done |
-| Loan insights (tenant + member) | Done |
-| Insights polling bug | Fixed |
-| Deposits rename | Done |
-| Delinquency backend + UI + follow-ups | Done |
-| Contribution arrears alignment | Done |
-| Delinquency docs | Done |
-| Delinquency optional (email, filters) | Not done |
-| Broader `prompts.txt` backlog | Not done (separate initiatives) |
+Scheduled (tenant): `fund:nightly-reconciliation`, `contributions:init-cycle`, `contributions:close-window`, `contributions:apply-late-fees`, `loans:check-defaults`, `delinquency:send-digest`, `fund:assert-master-invariants`, `bank:auto-match`, etc. — see **System → Jobs**.

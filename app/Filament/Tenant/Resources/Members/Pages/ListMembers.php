@@ -2,8 +2,10 @@
 
 namespace App\Filament\Tenant\Resources\Members\Pages;
 
+use App\Filament\Tenant\Pages\MigrationWorkflowPage;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Widgets\MemberInsightsWidget;
+use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
@@ -14,6 +16,10 @@ class ListMembers extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('migrationWorkflow')
+                ->label(__('Migrations'))
+                ->icon('heroicon-o-clock')
+                ->url(MigrationWorkflowPage::getUrl()),
             CreateAction::make(),
         ];
     }

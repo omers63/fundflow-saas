@@ -8,6 +8,7 @@ use App\Filament\Tenant\Resources\BankAccounts\Pages\ViewBankStatement;
 use App\Filament\Tenant\Resources\BankAccounts\RelationManagers\BankTransactionsRelationManager;
 use App\Filament\Tenant\Resources\BankAccounts\Tables\BankStatementsTable;
 use App\Filament\Tenant\Resources\BankAccounts\Tables\BankTransactionsTable;
+use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\BankStatement;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -24,7 +25,7 @@ class BankAccountsResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Accounts';
+    protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_ACCOUNTS;
 
     protected static ?string $navigationLabel = 'Bank Accounts';
 

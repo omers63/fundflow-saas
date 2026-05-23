@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\Loans\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Setting;
@@ -25,7 +26,7 @@ class InstallmentsRelationManager extends RelationManager
     {
         $currency = Setting::get('general', 'currency', 'USD');
 
-        return $table
+        return TableGrouping::apply($table
             ->columnManager(true)
             ->columns([
                 TextColumn::make('installment_number')
@@ -70,6 +71,6 @@ class InstallmentsRelationManager extends RelationManager
                 ]),
             ])
             ->emptyStateHeading(__('No installments'))
-            ->emptyStateDescription(__('Installments are created when the loan is fully disbursed.'));
+            ->emptyStateDescription(__('Installments are created when the loan is fully disbursed.')), TableGrouping::loanInstallments());
     }
 }

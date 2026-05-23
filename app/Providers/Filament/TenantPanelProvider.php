@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Concerns\RegistersFundPublicShell;
 use App\Filament\Tenant\Pages\Dashboard;
+use App\Filament\Tenant\Support\TenantNavigation;
 use App\Livewire\Tenant\TenantAdminLoginPage;
 use App\Support\PublicPageSettings;
 use Filament\Http\Middleware\Authenticate;
@@ -48,6 +49,7 @@ class TenantPanelProvider extends PanelProvider
             ->brandLogoHeight(PublicPageSettings::BRAND_LOGO_HEIGHT)
             ->sidebarCollapsibleOnDesktop()
             ->sidebarFullyCollapsibleOnDesktop()
+            ->navigationGroups(TenantNavigation::navigationGroups())
             ->discoverResources(in: app_path('Filament/Tenant/Resources'), for: 'App\\Filament\\Tenant\\Resources')
             ->discoverClusters(in: app_path('Filament/Tenant/Clusters'), for: 'App\\Filament\\Tenant\\Clusters')
             ->discoverPages(in: app_path('Filament/Tenant/Pages'), for: 'App\\Filament\\Tenant\\Pages')

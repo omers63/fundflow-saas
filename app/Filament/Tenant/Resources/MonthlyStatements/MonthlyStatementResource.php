@@ -7,6 +7,7 @@ namespace App\Filament\Tenant\Resources\MonthlyStatements;
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Tenant\Resources\MonthlyStatements\Pages\ListMonthlyStatements;
 use App\Filament\Tenant\Resources\MonthlyStatements\Tables\MonthlyStatementsTable;
+use App\Filament\Tenant\Support\TenantNavigation;
 use App\Filament\Tenant\Widgets\MonthlyStatementInsightsWidget;
 use App\Models\Tenant\MonthlyStatement;
 use BackedEnum;
@@ -26,9 +27,9 @@ class MonthlyStatementResource extends Resource
 
     protected static ?string $navigationLabel = 'Statements';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Fund Management';
+    protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = TenantNavigation::SORT_STATEMENTS;
 
     public static function table(Table $table): Table
     {

@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Tenants\Tables;
 
 use App\Filament\Resources\Tenants\TenantResource;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Central\Tenant;
@@ -28,7 +29,7 @@ class TenantsTable
 {
     public static function configure(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('id')
                     ->label('ID / Subdomain')
@@ -122,6 +123,6 @@ class TenantsTable
                         ->visible(fn () => auth()->user()->hasRole('super_admin')),
                     TableToolbar::refreshBulkAction(),
                 ]),
-            ]);
+            ]), TableGrouping::centralTenants());
     }
 }

@@ -68,6 +68,9 @@ class FundFlowService
                 'status' => 'posted',
                 'member_id' => $member->id,
             ]);
+
+            $member->unsetRelation('accounts');
+            app(ContributionCollectionCycleService::class)->onMemberCashIncreased($member);
         });
     }
 

@@ -2,6 +2,7 @@
 
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\ReconciliationException;
 use App\Services\AccountingService;
 use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
@@ -138,6 +139,50 @@ test('mirror debits for negative amounts', function () {
     expect($account->fresh()->balance)->toBe('7000.00');
     expect($transaction->type)->toBe('debit');
     expect($transaction->amount)->toBe('3000.00');
+});
+
+test('post balanced journal posts multiple legs with shared reference', function () {
+    $cash = Account::masterCash();
+    $fund = Account::masterFund();
+    $cash->update(['balance' => 5000]);
+    $fund->update(['balance' => 1000]);
+
+    $exception = new ReconciliationException([
+        'exception_code' => 'TEST',
+        'domain' => 'contribution',
+        'severity' => 'low',
+        'status' => 'open',
+        'raised_at' => now(),
+    ]);
+    $exception->save();
+
+    $posted = $this->service->postBalancedJournal(
+        [
+            ['account_id' => $cash->id, 'type' => 'debit', 'amount' => 250],
+            ['account_id' => $fund->id, 'type' => 'credit', 'amount' => 250],
+        ],
+        'Test balanced journal',
+        $exception,
+    );
+
+    expect($posted)->toHaveCount(2)
+        ->and($cash->fresh()->balance)->toBe('4750.00')
+        ->and($fund->fresh()->balance)->toBe('1250.00')
+        ->and($posted[0]->reference_type)->toBe(ReconciliationException::class)
+        ->and($posted[0]->reference_id)->toBe($exception->id);
+});
+
+test('post balanced journal rejects unbalanced legs', function () {
+    $cash = Account::masterCash();
+    $fund = Account::masterFund();
+
+    expect(fn () => $this->service->postBalancedJournal(
+        [
+            ['account_id' => $cash->id, 'type' => 'debit', 'amount' => 100],
+            ['account_id' => $fund->id, 'type' => 'credit', 'amount' => 50],
+        ],
+        'Unbalanced',
+    ))->toThrow(InvalidArgumentException::class);
 });
 
 test('creating member accounts creates cash and fund accounts', function () {

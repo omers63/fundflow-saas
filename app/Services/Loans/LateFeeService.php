@@ -1,19 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Loans;
 
 use App\Models\Tenant\Setting;
+use App\Support\ContributionPolicySettings;
 use Carbon\Carbon;
 
 /**
- * Tiered late fees by calendar days after the cycle deadline (contributions & repayments share the same day-count rules).
- * Tiers: ≥1, ≥10, ≥20, ≥30 days — the first matching tier with a non-zero SAR amount wins (highest threshold first); if that tier is 0, falls back to the next lower threshold.
+ * Tiered late fees after the collection window closes.
+ * Days 1–N (reminder window): no fee. Tier thresholds default to 3 / 10 / 20 days overdue.
  */
 class LateFeeService
 {
-    /** @var list<int> Highest threshold first */
-    private const DAY_THRESHOLDS = [30, 20, 10, 1];
-
     /**
      * Calendar whole days after the due instant: 0 if $at is on or before $dueEnd.
      */
@@ -28,38 +28,59 @@ class LateFeeService
 
     public function contributionLateFeeForDays(int $daysPast): float
     {
-        return $this->tieredAmount($daysPast, 'contribution_day');
+        return $this->tieredAmount($daysPast, 'contribution');
     }
 
     public function repaymentLateFeeForDays(int $daysPast): float
     {
-        return $this->tieredAmount($daysPast, 'repayment_day');
+        return $this->tieredAmount($daysPast, 'repayment');
     }
 
-    private function tieredAmount(int $daysPast, string $keyPrefix): float
+    public function contributionLateFeeForTier(int $tier): float
     {
-        if ($daysPast < 1) {
+        return $this->feeForTier($tier, 'contribution');
+    }
+
+    private function tieredAmount(int $daysPast, string $prefix): float
+    {
+        if ($daysPast <= ContributionPolicySettings::lateFeeReminderDays()) {
             return 0.0;
         }
 
-        foreach (self::DAY_THRESHOLDS as $minDays) {
-            if ($daysPast < $minDays) {
-                continue;
-            }
-            $key = "{$keyPrefix}_{$minDays}";
+        $tier = match (true) {
+            $daysPast >= ContributionPolicySettings::lateFeeTier3Day() => 3,
+            $daysPast >= ContributionPolicySettings::lateFeeTier2Day() => 2,
+            $daysPast > ContributionPolicySettings::lateFeeReminderDays() => 1,
+            default => 0,
+        };
+
+        if ($tier === 0) {
+            return 0.0;
+        }
+
+        return $this->feeForTier($tier, $prefix);
+    }
+
+    private function feeForTier(int $tier, string $prefix): float
+    {
+        $dayKey = match ($tier) {
+            3 => 20,
+            2 => 10,
+            default => 3,
+        };
+
+        $keys = [
+            "{$prefix}_day_{$dayKey}",
+            "{$prefix}_day_{$dayKey}d",
+            $tier === 1 ? "{$prefix}_day_1" : null,
+            $tier === 1 ? "{$prefix}_day_3" : null,
+        ];
+
+        foreach (array_filter($keys) as $key) {
             $fee = max(0.0, (float) Setting::get('late_fee', $key, 0));
             if ($fee > 0.00001) {
                 return $fee;
             }
-        }
-
-        foreach (self::DAY_THRESHOLDS as $minDays) {
-            if ($daysPast < $minDays) {
-                continue;
-            }
-            $key = "{$keyPrefix}_{$minDays}";
-
-            return max(0.0, (float) Setting::get('late_fee', $key, 0));
         }
 
         return 0.0;

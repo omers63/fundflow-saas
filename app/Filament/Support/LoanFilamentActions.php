@@ -20,6 +20,7 @@ use Filament\Actions\BulkAction;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -42,6 +43,7 @@ final class LoanFilamentActions
                 'amount_approved' => $record->amount_requested,
                 'is_emergency' => $record->is_emergency,
                 'has_grace_cycle' => $record->has_grace_cycle ?? true,
+                'grace_cycles' => $record->grace_cycles ?? ($record->has_grace_cycle ? 1 : 0),
                 'approved_at' => now(),
             ])
             ->schema(fn (Loan $record): array => [
@@ -54,9 +56,22 @@ final class LoanFilamentActions
                     ->label(__('Emergency loan'))
                     ->live()
                     ->helperText(__('Bypasses standard queue; uses emergency fund tier.')),
+                Select::make('grace_cycles')
+                    ->label(__('Grace cycles before first repayment'))
+                    ->options([
+                        0 => __('None'),
+                        1 => __('One cycle'),
+                        2 => __('Two cycles'),
+                    ])
+                    ->default(1)
+                    ->required()
+                    ->live()
+                    ->afterStateUpdated(fn ($state, callable $set) => $set('has_grace_cycle', ((int) $state) > 0)),
                 Toggle::make('has_grace_cycle')
-                    ->label(__('One-cycle grace before first installment'))
-                    ->default(true),
+                    ->label(__('Grace enabled'))
+                    ->dehydrated()
+                    ->default(true)
+                    ->hidden(),
                 DateTimePicker::make('approved_at')
                     ->label(__('Approval date'))
                     ->seconds(false)
@@ -73,11 +88,13 @@ final class LoanFilamentActions
             ])
             ->action(function (Loan $record, array $data, LoanLifecycleService $lifecycle): void {
                 try {
+                    $graceCycles = (int) ($data['grace_cycles'] ?? 1);
                     $lifecycle->approveLoan(
                         $record,
                         (float) $data['amount_approved'],
                         (bool) ($data['is_emergency'] ?? false),
-                        (bool) ($data['has_grace_cycle'] ?? true),
+                        $graceCycles > 0,
+                        $graceCycles,
                         isset($data['approved_at']) ? Carbon::parse((string) $data['approved_at']) : now(),
                     );
                     Notification::make()->title(__('Loan approved'))->success()->send();
@@ -221,6 +238,42 @@ final class LoanFilamentActions
             });
     }
 
+    public static function partialEarlySettle(): Action
+    {
+        return Action::make('partialEarlySettle')
+            ->label(__('Partial early settlement'))
+            ->icon('heroicon-o-banknotes')
+            ->color('info')
+            ->visible(fn (Loan $record): bool => $record->status === 'active')
+            ->schema([
+                TextInput::make('amount')
+                    ->label(__('Amount'))
+                    ->numeric()
+                    ->required()
+                    ->minValue(0.01),
+                Select::make('option')
+                    ->label(__('Schedule option'))
+                    ->options([
+                        'roll_up' => __('Roll remaining into last installment'),
+                        'skip_future' => __('Skip future installments'),
+                    ])
+                    ->default('roll_up')
+                    ->required(),
+            ])
+            ->action(function (Loan $record, array $data, LoanEarlySettlementService $service): void {
+                try {
+                    $service->partialEarlySettle(
+                        $record,
+                        (float) $data['amount'],
+                        (string) ($data['option'] ?? 'roll_up'),
+                    );
+                    Notification::make()->title(__('Partial settlement applied'))->success()->send();
+                } catch (Throwable $e) {
+                    Notification::make()->title(__('Partial settlement failed'))->body($e->getMessage())->danger()->send();
+                }
+            });
+    }
+
     public static function earlySettle(): Action
     {
         return Action::make('earlySettle')
@@ -268,6 +321,25 @@ final class LoanFilamentActions
                         ->body($e->getMessage())
                         ->danger()
                         ->send();
+                }
+            });
+    }
+
+    public static function reinstateSuspendedBorrower(): Action
+    {
+        return Action::make('reinstateSuspendedBorrower')
+            ->label(__('Reinstate suspended borrower'))
+            ->icon('heroicon-o-user-plus')
+            ->color('success')
+            ->visible(fn (Loan $record): bool => $record->transferred_to_guarantor_at !== null
+                && $record->original_borrower_member_id !== null)
+            ->requiresConfirmation()
+            ->action(function (Loan $record, LoanDelinquencyService $delinquency): void {
+                try {
+                    $delinquency->reinstateSuspendedBorrower($record);
+                    Notification::make()->title(__('Borrower reinstated'))->success()->send();
+                } catch (Throwable $e) {
+                    Notification::make()->title(__('Cannot reinstate'))->body($e->getMessage())->danger()->send();
                 }
             });
     }
@@ -339,10 +411,12 @@ final class LoanFilamentActions
                 self::reject(),
                 self::disburse(),
                 self::markBankPayout(),
+                self::partialEarlySettle(),
                 self::earlySettle(),
                 self::applyOpenRepayment(),
                 self::transferGuarantorLiability(),
                 self::restoreBorrowerLiability(),
+                self::reinstateSuspendedBorrower(),
                 self::cancel(),
             ],
         );

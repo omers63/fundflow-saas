@@ -9,7 +9,9 @@ use Tests\TestCase;
 uses(TestCase::class);
 
 it('attaches a single sum summarizer to qualifying money columns', function (): void {
-    $column = TextColumn::make('amount')->money('USD');
+    $column = TableSummaryFooter::applySummarizersToTextColumn(
+        TextColumn::make('amount')->money('USD'),
+    );
 
     $summarizers = $column->getSummarizers();
 

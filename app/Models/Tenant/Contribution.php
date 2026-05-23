@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models\Tenant;
 
+use App\Support\ContributionCollectionStatus;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -36,6 +37,12 @@ class Contribution extends Model
         'notes',
         'is_late',
         'late_fee_amount',
+        'collection_status',
+        'amount_due',
+        'amount_collected',
+        'overdue_since',
+        'late_fee_tier',
+        'cycle_open_cash_balance',
     ];
 
     protected function casts(): array
@@ -44,6 +51,10 @@ class Contribution extends Model
             'period' => 'date',
             'amount' => 'decimal:2',
             'late_fee_amount' => 'decimal:2',
+            'amount_due' => 'decimal:2',
+            'amount_collected' => 'decimal:2',
+            'cycle_open_cash_balance' => 'decimal:2',
+            'overdue_since' => 'datetime',
             'posted_at' => 'datetime',
             'paid_at' => 'datetime',
             'is_late' => 'boolean',
@@ -70,9 +81,11 @@ class Contribution extends Model
 
             if (static::activePeriodExists((int) $contribution->member_id, $month, $year)) {
                 throw ValidationException::withMessages([
-                    'period' => [__('A contribution already exists for :period.', [
-                        'period' => Carbon::create($year, $month, 1)->translatedFormat('F Y'),
-                    ])],
+                    'period' => [
+                        __('A contribution already exists for :period.', [
+                            'period' => Carbon::create($year, $month, 1)->translatedFormat('F Y'),
+                        ]),
+                    ],
                 ]);
             }
         });
@@ -113,7 +126,10 @@ class Contribution extends Model
         return static::query()
             ->where('member_id', $memberId)
             ->forPeriod($month, $year)
-            ->where('status', 'posted')
+            ->where(function ($query): void {
+                $query->where('status', 'posted')
+                    ->orWhere('collection_status', ContributionCollectionStatus::COLLECTED);
+            })
             ->exists();
     }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\Loans\Pages;
 
 use App\Filament\Support\LoanFilamentActions;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
@@ -124,7 +125,7 @@ class ListLoanQueue extends ListRecords
     {
         $currency = Setting::get('general', 'currency', 'USD');
 
-        return $table
+        return TableGrouping::apply($table
             ->columnManager(true)
             ->columns([
                 TextColumn::make('queue_position')
@@ -168,6 +169,6 @@ class ListLoanQueue extends ListRecords
                 BulkActionGroup::make(LoanFilamentActions::bulkActions()),
             ])
             ->paginated([10, 25, 50])
-            ->defaultPaginationPageOption(25);
+            ->defaultPaginationPageOption(25), TableGrouping::loanQueue());
     }
 }

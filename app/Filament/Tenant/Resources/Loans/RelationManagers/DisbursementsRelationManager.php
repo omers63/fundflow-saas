@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\Loans\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Setting;
@@ -25,7 +26,7 @@ class DisbursementsRelationManager extends RelationManager
     {
         $currency = Setting::get('general', 'currency', 'USD');
 
-        return $table
+        return TableGrouping::apply($table
             ->columnManager(true)
             ->columns([
                 TextColumn::make('disbursed_at')
@@ -57,6 +58,6 @@ class DisbursementsRelationManager extends RelationManager
                 ]),
             ])
             ->emptyStateHeading(__('No disbursements yet'))
-            ->emptyStateDescription(__('Partial disbursements appear here until the approved amount is fully posted to the ledger.'));
+            ->emptyStateDescription(__('Partial disbursements appear here until the approved amount is fully posted to the ledger.')), TableGrouping::loanDisbursements());
     }
 }

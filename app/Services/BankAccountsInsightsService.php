@@ -13,6 +13,7 @@ use App\Models\Tenant\BankTemplate;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\FundPosting;
 use App\Support\Insights\InsightFormatter;
+use App\Support\Insights\InsightKpi;
 use Carbon\Carbon;
 
 final class BankAccountsInsightsService
@@ -136,7 +137,7 @@ final class BankAccountsInsightsService
                     ? MasterAccountResource::getUrl('view', ['record' => Account::masterCash()])
                     : MasterAccountResource::getUrl('index', ['tab' => 'cash']),
             ],
-            'kpis' => [
+            'kpis' => InsightKpi::linkMany([
                 [
                     'key' => 'pending',
                     'label' => __('To post'),
@@ -185,7 +186,14 @@ final class BankAccountsInsightsService
                     'icon' => 'heroicon-o-user-minus',
                     'accent' => $unassignedCredits > 0 ? 'amber' : 'teal',
                 ],
-            ],
+            ], [
+                'pending' => $indexUrl.'?tab=transactions&tableFilters[status][value]=imported',
+                'posted' => $indexUrl.'?tab=transactions&tableFilters[status][value]=posted',
+                'dupes' => $indexUrl.'?tab=transactions&tableFilters[status][value]=duplicate',
+                'templates' => $indexUrl.'?tab=templates',
+                'statements' => $indexUrl.'?tab=statements',
+                'unassigned' => $indexUrl.'?tab=transactions',
+            ]),
             'hero' => $this->buildHero(
                 $pendingPost,
                 $unassignedCredits,

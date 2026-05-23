@@ -107,6 +107,9 @@ class FundPostingService
             }
 
             $this->notifyMemberOfReview($posting, 'accepted');
+
+            $member->unsetRelation('accounts');
+            app(ContributionCollectionCycleService::class)->onMemberCashIncreased($member);
         });
     }
 

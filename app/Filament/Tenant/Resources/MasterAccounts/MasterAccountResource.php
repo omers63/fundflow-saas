@@ -7,6 +7,7 @@ use App\Filament\Tenant\Resources\MasterAccounts\Pages\ListMasterAccounts;
 use App\Filament\Tenant\Resources\MasterAccounts\Pages\ViewMasterAccount;
 use App\Filament\Tenant\Resources\MasterAccounts\RelationManagers\TransactionsRelationManager;
 use App\Filament\Tenant\Resources\MasterAccounts\Tables\MasterAccountsTable;
+use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\Account;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -24,7 +25,7 @@ class MasterAccountResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBuildingLibrary;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Accounts';
+    protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_ACCOUNTS;
 
     protected static ?string $navigationLabel = 'Master Accounts';
 

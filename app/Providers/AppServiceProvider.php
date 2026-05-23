@@ -20,8 +20,11 @@ use App\Filament\Tables\Columns\ToggleColumn as AppToggleColumn;
 use App\Filament\Tables\Columns\ViewColumn as AppViewColumn;
 use App\Filament\Tables\Concerns\CapitalizesTableColumnHeaderLabel;
 use App\Http\Responses\FilamentLogoutResponse;
+use App\Listeners\RecordSystemJobRunListener;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\Transaction;
 use App\Observers\LoanInstallmentObserver;
+use App\Observers\TransactionObserver;
 use Filament\Actions\Action as FilamentAction;
 use Filament\Auth\Http\Responses\Contracts\LogoutResponse;
 use Filament\Facades\Filament;
@@ -49,7 +52,10 @@ use Filament\Tables\Columns\ViewColumn;
 use Filament\Tables\Filters\BaseFilter;
 use Filament\Tables\Table;
 use Filament\View\PanelsRenderHook;
+use Illuminate\Console\Events\CommandFinished;
+use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -77,6 +83,10 @@ class AppServiceProvider extends ServiceProvider
         $this->registerMemberTopbarRenderHooks();
 
         LoanInstallment::observe(LoanInstallmentObserver::class);
+        Transaction::observe(TransactionObserver::class);
+
+        Event::listen(CommandStarting::class, [RecordSystemJobRunListener::class, 'handleStarting']);
+        Event::listen(CommandFinished::class, [RecordSystemJobRunListener::class, 'handleFinished']);
 
         Column::configureUsing(function (Column $column): Column {
             $column = $column
@@ -131,7 +141,9 @@ class AppServiceProvider extends ServiceProvider
         Tabs::configureUsing(fn (Tabs $tabs): Tabs => $tabs->translateLabel());
 
         Table::configureUsing(function (Table $table): Table {
-            return TableSummaryFooter::applyToTable($table->striped()->selectable());
+            return TableSummaryFooter::applyToTable(
+                $table->striped()->selectable()->columnManager(),
+            );
         });
     }
 

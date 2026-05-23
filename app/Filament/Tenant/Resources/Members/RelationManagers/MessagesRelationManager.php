@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\Members\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\DirectMessage;
@@ -45,7 +46,7 @@ class MessagesRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->modifyQueryUsing(function (Builder $query): Builder {
                 /** @var Member $member */
                 $member = $this->getOwnerRecord();
@@ -230,6 +231,6 @@ class MessagesRelationManager extends RelationManager
                 TableToolbar::refreshBulkAction(),
             ]))
             ->emptyStateHeading(__('No direct messages'))
-            ->emptyStateDescription(__('No messages have been exchanged with this member yet.'));
+            ->emptyStateDescription(__('No messages have been exchanged with this member yet.')), TableGrouping::directMessages());
     }
 }

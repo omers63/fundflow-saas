@@ -18,8 +18,7 @@ class MembershipSubscriptionFeeService
 {
     public function __construct(
         private readonly AccountingService $accounting,
-    ) {
-    }
+    ) {}
 
     public function applicationRequiresSubscriptionFee(MembershipApplication $application): bool
     {
@@ -43,7 +42,7 @@ class MembershipSubscriptionFeeService
 
     public function assertCanApprove(MembershipApplication $application): void
     {
-        if (!$this->applicationRequiresSubscriptionFee($application)) {
+        if (! $this->applicationRequiresSubscriptionFee($application)) {
             return;
         }
 
@@ -73,7 +72,7 @@ class MembershipSubscriptionFeeService
      */
     public function postOnApproval(MembershipApplication $application, Member $member): void
     {
-        if (!$this->applicationRequiresSubscriptionFee($application)) {
+        if (! $this->applicationRequiresSubscriptionFee($application)) {
             return;
         }
 
@@ -126,6 +125,8 @@ class MembershipSubscriptionFeeService
 
             $mirrorDescription = __('Posted: :description', ['description' => $receiptDescription]);
             $this->accounting->mirror($memberCash, $transferred, $mirrorDescription, $application);
+
+            app(ContributionCollectionCycleService::class)->onMemberCashIncreased($member);
 
             $feeDescription = __('Subscription fee — :name', ['name' => $member->name]);
             $this->accounting->transfer(
@@ -189,7 +190,7 @@ class MembershipSubscriptionFeeService
         return Transaction::query()
             ->where('reference_type', MembershipApplication::class)
             ->where('reference_id', $application->id)
-            ->whereHas('account', fn($query) => $query->where('is_master', true)->where('type', 'cash'))
+            ->whereHas('account', fn ($query) => $query->where('is_master', true)->where('type', 'cash'))
             ->where('type', 'credit')
             ->orderBy('id')
             ->first();

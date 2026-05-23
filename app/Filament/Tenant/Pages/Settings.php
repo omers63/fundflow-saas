@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Pages;
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
 use App\Filament\Tenant\Resources\LoanTiers\LoanTierResource;
+use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\BankTemplate;
 use App\Models\Tenant\Setting;
 use App\Support\CommunicationSettings;
@@ -49,15 +50,17 @@ class Settings extends Page implements HasForms
 
     protected static ?string $slug = 'settings';
 
-    protected static ?int $navigationSort = 99;
+    protected static string|\UnitEnum|null $navigationGroup = TenantNavigation::GROUP_SYSTEM;
+
+    protected static ?int $navigationSort = TenantNavigation::SORT_SETTINGS;
 
     protected string $view = 'filament.tenant.pages.settings';
 
     public ?array $data = [];
 
-    public static function getNavigationGroup(): ?string
+    public static function canAccess(): bool
     {
-        return null;
+        return auth()->guard('tenant')->check();
     }
 
     public function mount(): void

@@ -6,10 +6,13 @@ use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Resources\Subscriptions\SubscriptionResource;
 use App\Filament\Resources\Tenants\TenantResource;
 use App\Filament\Tenant\Pages\Dashboard as TenantDashboard;
+use App\Filament\Tenant\Pages\JobsPage;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
+use App\Filament\Tenant\Resources\FundAuditLogs\FundAuditLogResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
+use App\Filament\Tenant\Resources\ReconciliationExceptions\ReconciliationExceptionResource;
 use Filament\Facades\Filament;
 use Filament\Pages\Dashboard;
 
@@ -27,7 +30,10 @@ it('resolves tenant panel dashboard and resource link targets', function () {
         ->and(MasterAccountResource::getUrl('index'))->toBeString()->not->toBeEmpty()
         ->and(MemberResource::getUrl('index'))->toBeString()->not->toBeEmpty()
         ->and(ContributionResource::getUrl('index'))->toBeString()->not->toBeEmpty()
-        ->and(LoanResource::getUrl('index'))->toBeString()->not->toBeEmpty();
+        ->and(LoanResource::getUrl('index'))->toBeString()->not->toBeEmpty()
+        ->and(ReconciliationExceptionResource::getUrl('index'))->toContain('reconciliation-exceptions')
+        ->and(FundAuditLogResource::getUrl('index'))->toContain('fund-audit-logs')
+        ->and(JobsPage::getUrl())->toContain('/admin/jobs');
 });
 
 it('resolves member panel dashboard stat link targets', function () {

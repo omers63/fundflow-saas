@@ -10,10 +10,13 @@ use App\Filament\Tenant\Resources\Members\RelationManagers\AccountsRelationManag
 use App\Filament\Tenant\Resources\Members\RelationManagers\ContributionsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\DependentsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\LoansRelationManager;
+use App\Filament\Tenant\Resources\Members\RelationManagers\MemberTransactionsTabsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\MessagesRelationManager;
+use App\Filament\Tenant\Resources\Members\RelationManagers\MigrationStubsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\RepaymentsRelationManager;
 use App\Filament\Tenant\Resources\Members\Schemas\MemberForm;
 use App\Filament\Tenant\Resources\Members\Tables\MembersTable;
+use App\Filament\Tenant\Support\TenantNavigation;
 use App\Filament\Tenant\Widgets\MemberDetailInsightsWidget;
 use App\Filament\Tenant\Widgets\MemberInsightsWidget;
 use App\Models\Tenant\Member;
@@ -33,9 +36,9 @@ class MemberResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Fund Management';
+    protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = TenantNavigation::SORT_MEMBERS;
 
     public static function form(Schema $schema): Schema
     {
@@ -51,11 +54,13 @@ class MemberResource extends Resource
     {
         return [
             AccountsRelationManager::class,
+            MemberTransactionsTabsRelationManager::class,
             ContributionsRelationManager::class,
             RepaymentsRelationManager::class,
             LoansRelationManager::class,
             DependentsRelationManager::class,
             MessagesRelationManager::class,
+            MigrationStubsRelationManager::class,
         ];
     }
 
@@ -66,6 +71,23 @@ class MemberResource extends Resource
             'create' => CreateMember::route('/create'),
             'edit' => EditMember::route('/{record}/edit'),
         ];
+    }
+
+    /**
+     * Edit URL with a specific relation manager tab active (uses Filament's `relation` query param).
+     */
+    public static function editUrlWithRelationManager(Member|int|string $record, string $relationManagerClass): string
+    {
+        $recordKey = $record instanceof Member ? $record->getKey() : $record;
+        $parameters = ['record' => $recordKey];
+
+        $managerIndex = array_search($relationManagerClass, static::getRelations(), true);
+
+        if ($managerIndex !== false) {
+            $parameters['relation'] = (string) $managerIndex;
+        }
+
+        return static::getUrl('edit', $parameters);
     }
 
     public static function dispatchInsightsRefresh(?Component $livewire): void

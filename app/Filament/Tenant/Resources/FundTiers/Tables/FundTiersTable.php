@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tenant\Resources\FundTiers\Tables;
 
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\FundTier;
@@ -22,7 +23,7 @@ class FundTiersTable
     {
         $currency = Setting::get('general', 'currency', 'USD');
 
-        return $table
+        return TableGrouping::apply($table
             ->columnManager(true)
             ->columns([
                 TextColumn::make('tier_number')
@@ -68,6 +69,6 @@ class FundTiersTable
                 BulkActionGroup::make([
                     TableToolbar::refreshBulkAction(),
                 ]),
-            ]);
+            ]), TableGrouping::configurationTiers());
     }
 }

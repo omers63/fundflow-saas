@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\Loans\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Setting;
@@ -29,7 +30,7 @@ class RepaymentsRelationManager extends RelationManager
     {
         $currency = Setting::get('general', 'currency', 'USD');
 
-        return $table
+        return TableGrouping::apply($table
             ->columnManager(true)
             ->columns([
                 TextColumn::make('paid_at')
@@ -67,6 +68,6 @@ class RepaymentsRelationManager extends RelationManager
                 ]),
             ])
             ->emptyStateHeading(__('No manual repayment rows'))
-            ->emptyStateDescription(__('Scheduled repayments post via installments when marked paid.'));
+            ->emptyStateDescription(__('Scheduled repayments post via installments when marked paid.')), TableGrouping::loanRepayments());
     }
 }

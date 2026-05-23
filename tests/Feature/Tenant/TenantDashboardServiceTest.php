@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Filament\Tenant\Pages\ContributionCyclePage;
 use App\Filament\Tenant\Pages\Dashboard;
+use App\Filament\Tenant\Pages\JobsPage;
+use App\Filament\Tenant\Pages\MigrationWorkflowPage;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Account;
@@ -50,7 +52,7 @@ test('tenant dashboard snapshot includes greeting and workspace links', function
 
     expect($snapshot['greeting']['name'])->toBe('Fund Admin')
         ->and($snapshot['greeting']['fund_name'])->toBeString()->not->toBeEmpty()
-        ->and($snapshot['quick_actions'])->toHaveCount(6)
+        ->and($snapshot['quick_actions'])->toHaveCount(9)
         ->and($snapshot['gauges'])->toHaveCount(4)
         ->and($snapshot['balances'])->toHaveCount(3)
         ->and($snapshot['workspace_sections'])->not->toBeEmpty()
@@ -68,6 +70,25 @@ test('tenant dashboard resolves filament page urls', function () {
 
     expect(Dashboard::getUrl())->toBeString()->not->toBeEmpty()
         ->and(ContributionCyclePage::getUrl())->toBeString()->not->toBeEmpty()
+        ->and(JobsPage::getUrl())->toContain('jobs')
+        ->and(MigrationWorkflowPage::getUrl())->toContain('migration-workflow')
         ->and(LoanResource::getUrl('delinquency'))->toBeString()->not->toBeEmpty()
         ->and(MemberResource::getUrl('index'))->toBeString()->not->toBeEmpty();
+});
+
+test('jobs page registers in tenant panel navigation', function () {
+    $admin = User::create([
+        'name' => 'Jobs Admin',
+        'email' => 'jobs-admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+    $this->actingAs($admin, 'tenant');
+
+    expect(JobsPage::canAccess())->toBeTrue()
+        ->and(JobsPage::shouldRegisterNavigation())->toBeTrue()
+        ->and(JobsPage::getUrl())->toContain('/admin/jobs');
 });

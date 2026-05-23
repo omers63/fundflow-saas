@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyGuaranteedLoans\Tables;
 
 use App\Filament\Member\Resources\MyGuaranteedLoans\MyGuaranteedLoanResource;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Loan;
@@ -22,7 +23,7 @@ class MyGuaranteedLoansTable
     {
         $currency = Setting::get('general', 'currency', 'USD');
 
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('member.name')
                     ->label(__('Borrower'))
@@ -52,6 +53,6 @@ class MyGuaranteedLoansTable
                     TableToolbar::refreshBulkAction(),
                 ]),
             ])
-            ->defaultSort('applied_at', 'desc');
+            ->defaultSort('applied_at', 'desc'), TableGrouping::loans());
     }
 }

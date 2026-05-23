@@ -6,6 +6,7 @@ use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MemberTableColumns;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Member;
@@ -25,7 +26,7 @@ class DependentsRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->recordTitleAttribute('name')
             ->columns([
                 MemberTableColumns::number(label: __('Member #'))
@@ -57,6 +58,6 @@ class DependentsRelationManager extends RelationManager
                     TableToolbar::refreshBulkAction(),
                 ]),
             ])
-            ->defaultSort('name');
+            ->defaultSort('name'), TableGrouping::members());
     }
 }

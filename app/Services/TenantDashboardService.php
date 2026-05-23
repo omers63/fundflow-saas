@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Filament\Tenant\Pages\ContributionCyclePage;
+use App\Filament\Tenant\Pages\JobsPage;
+use App\Filament\Tenant\Pages\MigrationWorkflowPage;
 use App\Filament\Tenant\Pages\Settings;
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
@@ -17,12 +19,14 @@ use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
+use App\Filament\Tenant\Resources\ReconciliationExceptions\ReconciliationExceptionResource;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
+use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\User;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Support\Insights\InsightFormatter;
@@ -31,6 +35,7 @@ use App\Support\PublicPageSettings;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 final class TenantDashboardService
 {
@@ -65,9 +70,12 @@ final class TenantDashboardService
         $pendingDeposits = FundPosting::query()->where('status', 'pending')->count();
         $pendingApplications = MembershipApplication::query()->where('status', 'pending')->count();
         $loanQueueCount = Loan::query()->inQueue()->count();
+        $openReconciliationCount = $this->openReconciliationCount();
+        $migrationPendingCount = app(MigrationWorkflowService::class)->pendingMemberCount();
         $attentionTotal = $pendingContributions + $pendingDeposits + $pendingApplications + $loanQueueCount
             + ($delinquencyCounts['overdue_installments'] ?? 0)
-            + ($delinquencyCounts['contribution_arrears_periods'] ?? 0);
+            + ($delinquencyCounts['contribution_arrears_periods'] ?? 0)
+            + $openReconciliationCount;
 
         [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
         $openPeriodLabel = $this->cycles->periodLabel($openMonth, $openYear);
@@ -83,6 +91,8 @@ final class TenantDashboardService
                 $loanQueueCount,
                 $delinquencyCounts,
                 $openPeriodLabel,
+                $openReconciliationCount,
+                $migrationPendingCount,
             ),
             'balances' => $this->balances($masters, $masterBalance, $currency),
             'gauges' => [
@@ -97,6 +107,7 @@ final class TenantDashboardService
                 $loanQueueCount,
                 $delinquencyCounts,
                 $bankSnapshot,
+                $openReconciliationCount,
             ),
             'contribution_trend' => $this->contributionTrend($now),
             'loan_trend' => $loanPortfolio['trend'] ?? [],
@@ -184,6 +195,8 @@ final class TenantDashboardService
         int $loanQueueCount,
         array $delinquencyCounts,
         string $openPeriodLabel,
+        int $openReconciliationCount,
+        int $migrationPendingCount,
     ): array {
         $delinquencyTotal = ($delinquencyCounts['overdue_installments'] ?? 0)
             + ($delinquencyCounts['contribution_arrears_periods'] ?? 0)
@@ -197,6 +210,14 @@ final class TenantDashboardService
                 'url' => ContributionCyclePage::getUrl(),
                 'tone' => 'cycle',
                 'badge' => $pendingContributions > 0 ? (string) $pendingContributions : null,
+            ],
+            [
+                'label' => Lang::ui('Migrations'),
+                'description' => Lang::ui('Historical cycle clearance'),
+                'icon' => 'heroicon-o-clock',
+                'url' => MigrationWorkflowPage::getUrl(),
+                'tone' => 'migration',
+                'badge' => $migrationPendingCount > 0 ? (string) $migrationPendingCount : null,
             ],
             [
                 'label' => Lang::ui('Loan queue'),
@@ -236,6 +257,22 @@ final class TenantDashboardService
                 'icon' => 'heroicon-o-building-library',
                 'url' => BankAccountsResource::getUrl('index'),
                 'tone' => 'bank',
+                'badge' => null,
+            ],
+            [
+                'label' => Lang::ui('Reconciliation'),
+                'description' => Lang::ui('Exception queue'),
+                'icon' => 'heroicon-o-shield-exclamation',
+                'url' => ReconciliationExceptionResource::getUrl('index'),
+                'tone' => 'reconciliation',
+                'badge' => $openReconciliationCount > 0 ? (string) $openReconciliationCount : null,
+            ],
+            [
+                'label' => Lang::ui('Jobs & commands'),
+                'description' => Lang::ui('Scheduled fund operations'),
+                'icon' => 'heroicon-o-cpu-chip',
+                'url' => JobsPage::getUrl(),
+                'tone' => 'jobs',
                 'badge' => null,
             ],
         ]);
@@ -351,14 +388,42 @@ final class TenantDashboardService
      * @param  array<string, int>  $delinquencyCounts
      * @return list<array<string, mixed>>
      */
+    private function openReconciliationCount(): int
+    {
+        if (! Schema::hasTable('reconciliation_exceptions')) {
+            return 0;
+        }
+
+        try {
+            return (int) ReconciliationException::query()->open()->count();
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
     private function attentionCards(
         int $pendingDeposits,
         int $pendingApplications,
         int $loanQueueCount,
         array $delinquencyCounts,
         array $bankSnapshot,
+        int $openReconciliationCount,
     ): array {
         $cards = [];
+
+        if ($openReconciliationCount > 0) {
+            $cards[] = [
+                'title' => Lang::ui('Reconciliation'),
+                'body' => Lang::uiText(trans_choice(
+                    ':count open exception|:count open exceptions',
+                    $openReconciliationCount,
+                    ['count' => $openReconciliationCount],
+                )),
+                'tone' => 'rose',
+                'icon' => 'heroicon-o-shield-exclamation',
+                'url' => ReconciliationExceptionResource::getUrl('index'),
+            ];
+        }
 
         if ($loanQueueCount > 0) {
             $cards[] = [
@@ -470,6 +535,7 @@ final class TenantDashboardService
                     ['label' => Lang::ui('Member accounts'), 'icon' => 'heroicon-o-wallet', 'url' => AccountResource::getUrl('index')],
                     ['label' => Lang::ui('Contributions'), 'icon' => 'heroicon-o-calendar-days', 'url' => ContributionResource::getUrl('index')],
                     ['label' => Lang::ui('Contribution cycle'), 'icon' => 'heroicon-o-arrow-path-rounded-square', 'url' => ContributionCyclePage::getUrl()],
+                    ['label' => Lang::ui('Migrations'), 'icon' => 'heroicon-o-clock', 'url' => MigrationWorkflowPage::getUrl()],
                     ['label' => Lang::ui('Monthly statements'), 'icon' => 'heroicon-o-document-text', 'url' => MonthlyStatementResource::getUrl('index')],
                     ['label' => Lang::ui('Applications'), 'icon' => 'heroicon-o-user-plus', 'url' => MembershipApplicationResource::getUrl('index')],
                 ],
@@ -493,8 +559,10 @@ final class TenantDashboardService
                 ],
             ],
             [
-                'title' => Lang::ui('Administration'),
+                'title' => Lang::ui('System'),
                 'links' => [
+                    ['label' => Lang::ui('Jobs & commands'), 'icon' => 'heroicon-o-cpu-chip', 'url' => JobsPage::getUrl()],
+                    ['label' => Lang::ui('Reconciliation'), 'icon' => 'heroicon-o-shield-exclamation', 'url' => ReconciliationExceptionResource::getUrl('index')],
                     ['label' => Lang::ui('Fund settings'), 'icon' => 'heroicon-o-cog-6-tooth', 'url' => Settings::getUrl()],
                 ],
             ],

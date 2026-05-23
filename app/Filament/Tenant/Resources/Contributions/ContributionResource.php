@@ -7,6 +7,7 @@ use App\Filament\Tenant\Resources\Contributions\Pages\CreateContribution;
 use App\Filament\Tenant\Resources\Contributions\Pages\ListContributions;
 use App\Filament\Tenant\Resources\Contributions\Schemas\ContributionForm;
 use App\Filament\Tenant\Resources\Contributions\Tables\ContributionsTable;
+use App\Filament\Tenant\Support\TenantNavigation;
 use App\Filament\Tenant\Widgets\ContributionInsightsWidget;
 use App\Models\Tenant\Contribution;
 use BackedEnum;
@@ -25,9 +26,9 @@ class ContributionResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCurrencyDollar;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Fund Management';
+    protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = TenantNavigation::SORT_CONTRIBUTIONS;
 
     public static function form(Schema $schema): Schema
     {

@@ -10,7 +10,9 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\ContributionCycleService;
+use App\Services\FundAuditLogService;
 use App\Services\MemberDelinquencyEvaluator;
+use App\Support\InstallmentCollectionStatus;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
@@ -39,6 +41,7 @@ class LoanDelinquencyService
         $markedOverdue = $this->markOverdueInstallments();
         $memberSync = $this->syncMemberDelinquencyStatus();
         $defaults = $this->defaults->processDefaults();
+        $transferred = $this->evaluateMissedEmiTransfers();
 
         return [
             'marked_overdue' => $markedOverdue,
@@ -46,7 +49,60 @@ class LoanDelinquencyService
             'restored_active' => $memberSync['restored_active'],
             'warned' => $defaults['warned'] ?? 0,
             'debited_from_guarantor' => $defaults['debited_from_guarantor'] ?? 0,
+            'transferred_to_guarantor' => $transferred,
         ];
+    }
+
+    /**
+     * Auto-transfer loans to guarantor when missed EMI threshold is reached (spec Y).
+     */
+    public function evaluateMissedEmiTransfers(): int
+    {
+        $threshold = Setting::loanGuarantorTransferMissedThreshold();
+        $transferred = 0;
+
+        Loan::query()
+            ->where('status', 'active')
+            ->whereNotNull('guarantor_member_id')
+            ->whereNull('transferred_to_guarantor_at')
+            ->where('late_repayment_count', '>=', $threshold)
+            ->whereHas('installments', fn ($q) => $q->where('status', 'overdue'))
+            ->each(function (Loan $loan) use (&$transferred): void {
+                try {
+                    app(LoanGuarantorTransferService::class)->transferToGuarantor($loan);
+                    $transferred++;
+                } catch (InvalidArgumentException) {
+                    // Skip loans that fail validation (already transferred, no guarantor, etc.)
+                }
+            });
+
+        return $transferred;
+    }
+
+    public function reinstateSuspendedBorrower(Loan $loan): void
+    {
+        $originalId = $loan->original_borrower_member_id;
+
+        if ($originalId === null) {
+            throw new InvalidArgumentException(__('This loan has no suspended original borrower on record.'));
+        }
+
+        $borrower = Member::query()->find($originalId);
+
+        if ($borrower === null) {
+            throw new InvalidArgumentException(__('Original borrower member not found.'));
+        }
+
+        if ($borrower->status !== 'suspended') {
+            throw new InvalidArgumentException(__('Borrower is not suspended.'));
+        }
+
+        if ($loan->installments()->whereIn('status', ['pending', 'overdue'])->exists()) {
+            throw new InvalidArgumentException(__('Clear guarantor loan installments before reinstating the borrower.'));
+        }
+
+        $borrower->update(['status' => 'active']);
+        app(FundAuditLogService::class)->log('BORROWER_REINSTATED', 'loan', $loan, $borrower);
     }
 
     /**
@@ -150,6 +206,8 @@ class LoanDelinquencyService
                     'status' => 'overdue',
                     'is_late' => true,
                     'late_fee_amount' => $feeAmt > 0.00001 ? $feeAmt : 0,
+                    'collection_status' => InstallmentCollectionStatus::OVERDUE,
+                    'overdue_since' => $deadline,
                 ]);
 
                 $marked++;
@@ -439,27 +497,7 @@ class LoanDelinquencyService
 
     public function transferGuarantorLiability(Loan $loan): void
     {
-        if ($loan->status !== 'active') {
-            throw new InvalidArgumentException(__('Only active loans can transfer liability to the guarantor.'));
-        }
-
-        if (! $loan->guarantor_member_id) {
-            throw new InvalidArgumentException(__('This loan has no guarantor assigned.'));
-        }
-
-        if ($loan->isGuarantorReleased()) {
-            throw new InvalidArgumentException(__('The guarantor has already been released for this loan.'));
-        }
-
-        if ($loan->guarantor_liability_transferred_at !== null) {
-            throw new InvalidArgumentException(__('Guarantor liability is already active for this loan.'));
-        }
-
-        if (! $loan->installments()->where('status', 'overdue')->exists()) {
-            throw new InvalidArgumentException(__('Mark installments overdue before transferring liability (run delinquency check or wait for the daily job).'));
-        }
-
-        $loan->update(['guarantor_liability_transferred_at' => now()]);
+        app(LoanGuarantorTransferService::class)->transferToGuarantor($loan);
     }
 
     public function restoreBorrowerLiability(Loan $loan): void

@@ -25,14 +25,21 @@
         'teal' => 'text-teal-500',
     ];
 
-    $kpis = [
+    $kpis = \App\Support\Insights\InsightKpi::linkMany([
         ['key' => 'pending', 'label' => __('Pending'), 'value' => $d['pending'], 'sub' => __('Awaiting'), 'icon' => 'heroicon-o-clock', 'accent' => 'amber', 'active' => $d['pending'] > 0],
         ['key' => 'accepted', 'label' => __('Accepted'), 'value' => $d['accepted'], 'sub' => __(':count/mo', ['count' => $d['accepted_this_month']]), 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => true],
         ['key' => 'rejected', 'label' => __('Rejected'), 'value' => $d['rejected'], 'sub' => __(':count/mo', ['count' => $d['rejected_this_month']]), 'icon' => 'heroicon-o-x-circle', 'accent' => 'rose', 'active' => $d['rejected'] > 0],
         ['key' => 'new', 'label' => __('New/mo'), 'value' => $d['new_this_month'], 'sub' => $d['mom_change'] !== null ? __(':percent%', ['percent' => $d['mom_change']]) : now()->format('M'), 'icon' => 'heroicon-o-sparkles', 'accent' => 'sky', 'active' => true, 'mom' => $d['mom_change']],
         ['key' => 'rate', 'label' => __('Acceptance'), 'value' => $d['acceptance_rate'] !== null ? $d['acceptance_rate'] . '%' : '—', 'sub' => __('Decided'), 'icon' => 'heroicon-o-chart-pie', 'accent' => 'violet', 'active' => $d['acceptance_rate'] !== null],
         ['key' => 'review', 'label' => __('Avg review'), 'value' => $d['avg_review_days'], 'sub' => __('days'), 'icon' => 'heroicon-o-arrow-path', 'accent' => 'teal', 'active' => true, 'suffix' => __('d')],
-    ];
+    ], [
+        'pending' => $pipeline['deposits_url'].'?tableFilters[status][value]=pending',
+        'accepted' => $pipeline['deposits_url'].'?tableFilters[status][value]=accepted',
+        'rejected' => $pipeline['deposits_url'].'?tableFilters[status][value]=rejected',
+        'new' => $pipeline['deposits_url'],
+        'rate' => $pipeline['deposits_url'],
+        'review' => $pipeline['deposits_url'],
+    ]);
 @endphp
 
 <div class="ff-app-insights w-full max-w-none space-y-3 mb-1">
@@ -72,47 +79,11 @@
             </div>
         </div>
 
-        <div
-            class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 lg:col-span-2">
-            <div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-6">
-                @foreach ($kpis as $i => $card)
-                    @php
-                        $barClass = $accentBar[$card['accent']] ?? 'bg-gray-400';
-                        $iconClass = $accentIcon[$card['accent']] ?? 'text-gray-400';
-                        $barOpacity = $card['active'] ? 'opacity-100' : 'opacity-25';
-                    @endphp
-                    <div class="ff-app-insights-kpi relative px-2.5 py-2 transition hover:bg-gray-50/80 dark:hover:bg-gray-800/60"
-                        style="animation: ff-stat-in 0.35s ease-out {{ 0.02 + ($i * 0.03) }}s both">
-                        <div @class(['absolute inset-y-0 left-0 w-0.5', $barClass, $barOpacity])></div>
-                        <div class="flex items-center justify-between gap-1 pl-1">
-                            <x-dynamic-component :component="$card['icon']" @class(['h-3.5 w-3.5', $iconClass]) />
-                            @if ($card['key'] === 'new' && isset($card['mom']) && $card['mom'] !== null)
-                                <span @class([
-                                    'text-[9px] font-bold',
-                                    'text-emerald-600 dark:text-emerald-400' => $card['mom'] >= 0,
-                                    'text-rose-600 dark:text-rose-400' => $card['mom'] < 0,
-                                ])>{{ $card['mom'] >= 0 ? '↑' : '↓' }}{{ abs($card['mom']) }}%</span>
-                            @endif
-                        </div>
-                        <p class="mt-0.5 pl-1 text-[10px] font-medium uppercase tracking-wide text-gray-500">
-                            {{ ui_label($card['label']) }}</p>
-                        <p class="pl-1 text-lg font-bold tabular-nums leading-tight text-gray-900 dark:text-white">
-                            {{ $card['value'] }}@if (!empty($card['suffix'] ?? null))<span
-                            class="text-[10px] font-normal text-gray-400">{{ $card['suffix'] }}</span>@endif
-                        </p>
-                        <p class="pl-1 text-[10px] text-gray-400">{{ ui_label($card['sub']) }}</p>
-                    </div>
-                @endforeach
-            </div>
-            @if ($d['pending'] > 0)
-                <div class="flex h-5 items-end gap-px border-t border-gray-100 px-2 py-1 dark:border-gray-700">
-                    @foreach ($d['sparkline'] as $point)
-                        @php $h = max(20, (int) round(($point / $sparkMax) * 100)); @endphp
-                        <div class="flex-1 rounded-sm bg-amber-400/70 dark:bg-amber-500/60" style="height: {{ $h }}%"></div>
-                    @endforeach
-                </div>
-            @endif
-        </div>
+        @include('filament.tenant.widgets.partials.insights-kpi-strip', [
+            'kpis' => $kpis,
+            'sparkline' => $d['pending'] > 0 ? $d['sparkline'] : null,
+            'sparklineMax' => $sparkMax,
+        ])
     </div>
 
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">

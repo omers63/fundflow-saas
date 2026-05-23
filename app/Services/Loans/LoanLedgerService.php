@@ -175,14 +175,20 @@ final class LoanLedgerService
         });
     }
 
-    public function debitCashForRepayment(Member $member, LoanInstallment $installment, float $lateFee = 0.0, ?CarbonInterface $transactedAt = null): void
-    {
+    public function debitCashForRepayment(
+        Member $member,
+        LoanInstallment $installment,
+        float $lateFee = 0.0,
+        ?CarbonInterface $transactedAt = null,
+        ?float $principalAmount = null,
+    ): void {
         $cash = $member->cashAccount;
         if ($cash === null) {
             throw new RuntimeException(__('Member cash account is missing.'));
         }
 
-        $total = (float) $installment->amount + $lateFee;
+        $principal = $principalAmount ?? (float) $installment->amount;
+        $total = $principal + $lateFee;
         $description = __('Loan #:id installment #:num', [
             'id' => $installment->loan_id,
             'num' => $installment->installment_number,

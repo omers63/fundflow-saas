@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Plans\Tables;
 
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Central\Plan;
@@ -18,7 +19,7 @@ class PlansTable
 {
     public static function configure(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('name')
                     ->searchable(),
@@ -76,6 +77,6 @@ class PlansTable
                     DeleteBulkAction::make(),
                     TableToolbar::refreshBulkAction(),
                 ]),
-            ]);
+            ]), TableGrouping::centralPlans());
     }
 }

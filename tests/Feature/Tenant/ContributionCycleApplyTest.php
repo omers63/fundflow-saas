@@ -22,6 +22,7 @@ beforeEach(function () {
 
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 0, 'is_master' => true]);
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 0, 'is_master' => true]);
+    Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
 });
 
 test('apply for period posts contribution when cash is sufficient', function () {

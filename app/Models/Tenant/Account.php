@@ -13,7 +13,12 @@ class Account extends Model
 
     public const TYPE_LOAN = 'loan';
 
-    public const TYPES = ['cash', 'fund', 'bank', 'expense', 'fees', 'invest', 'loan'];
+    public const TYPES = ['cash', 'fund', 'bank', 'expense', 'fees', 'invest', 'loan', 'suspense'];
+
+    public static function masterSuspense(): ?self
+    {
+        return static::where('is_master', true)->where('type', 'suspense')->first();
+    }
 
     protected $fillable = [
         'member_id',

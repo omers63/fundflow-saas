@@ -3,9 +3,13 @@
 namespace App\Services;
 
 use App\Models\Tenant\Account;
+use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\FundPosting;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
+use App\Support\ContributionPolicySettings;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use DateTimeInterface;
@@ -35,6 +39,98 @@ class AccountingService
         DB::transaction(function () use ($from, $to, $amount, $description, $reference) {
             $this->debit($from, $amount, $description, $reference);
             $this->credit($to, $amount, $description, $reference);
+        });
+    }
+
+    /**
+     * Post a balanced multi-leg journal (§5.10 manual correction composer).
+     *
+     * @param  array<int, array{account_id: int, type: string, amount: float|int|string}>  $legs
+     * @return list<Transaction>
+     */
+    public function postBalancedJournal(
+        array $legs,
+        string $description,
+        ?Model $reference = null,
+        ?DateTimeInterface $transactedAt = null,
+    ): array {
+        if (count($legs) < 2) {
+            throw new InvalidArgumentException(__('A journal must have at least two legs.'));
+        }
+
+        $trimmed = trim($description);
+
+        if ($trimmed === '') {
+            throw new InvalidArgumentException(__('A description is required for the journal.'));
+        }
+
+        $tolerance = ContributionPolicySettings::reconTolerance();
+        $debitTotal = 0.0;
+        $creditTotal = 0.0;
+        $normalized = [];
+
+        foreach ($legs as $index => $leg) {
+            $accountId = (int) ($leg['account_id'] ?? 0);
+            $type = (string) ($leg['type'] ?? '');
+            $amount = round((float) ($leg['amount'] ?? 0), 2);
+
+            if ($accountId <= 0) {
+                throw new InvalidArgumentException(__('Leg :n requires an account.', ['n' => $index + 1]));
+            }
+
+            if (! in_array($type, ['debit', 'credit'], true)) {
+                throw new InvalidArgumentException(__('Leg :n type must be debit or credit.', ['n' => $index + 1]));
+            }
+
+            if ($amount <= 0) {
+                throw new InvalidArgumentException(__('Leg :n amount must be greater than zero.', ['n' => $index + 1]));
+            }
+
+            if ($type === 'debit') {
+                $debitTotal += $amount;
+            } else {
+                $creditTotal += $amount;
+            }
+
+            $normalized[] = [
+                'account_id' => $accountId,
+                'type' => $type,
+                'amount' => $amount,
+            ];
+        }
+
+        if (abs($debitTotal - $creditTotal) > $tolerance) {
+            throw new InvalidArgumentException(__('Journal is not balanced (debits :debits, credits :credits).', [
+                'debits' => number_format($debitTotal, 2),
+                'credits' => number_format($creditTotal, 2),
+            ]));
+        }
+
+        $accountIds = collect($normalized)->pluck('account_id')->unique()->values()->all();
+        $accounts = Account::query()->whereIn('id', $accountIds)->get()->keyBy('id');
+
+        if ($accounts->count() !== count($accountIds)) {
+            throw new InvalidArgumentException(__('One or more accounts were not found.'));
+        }
+
+        return DB::transaction(function () use ($normalized, $trimmed, $reference, $transactedAt, $accounts): array {
+            $posted = [];
+
+            foreach ($normalized as $leg) {
+                $account = $accounts->get($leg['account_id']);
+
+                if ($account === null) {
+                    throw new InvalidArgumentException(__('Account :id was not found.', ['id' => $leg['account_id']]));
+                }
+
+                $posted[] = match ($leg['type']) {
+                    'debit' => $this->debit($account, $leg['amount'], $trimmed, $reference, $transactedAt),
+                    'credit' => $this->credit($account, $leg['amount'], $trimmed, $reference, $transactedAt),
+                    default => throw new InvalidArgumentException(__('Invalid leg type.')),
+                };
+            }
+
+            return $posted;
         });
     }
 
@@ -425,6 +521,58 @@ class AccountingService
     }
 
     /**
+     * Validates paired master journal legs (bank clearing, etc.) per §5.12.
+     *
+     * @return null|string Error message when debits and credits on the reference do not balance.
+     */
+    public function validateBalancedJournalForReference(Transaction $transaction): ?string
+    {
+        if (! $this->shouldValidateBalancedReference($transaction)) {
+            return null;
+        }
+
+        if (blank($transaction->reference_type) || blank($transaction->reference_id)) {
+            return null;
+        }
+
+        $siblings = Transaction::query()
+            ->where('reference_type', $transaction->reference_type)
+            ->where('reference_id', $transaction->reference_id)
+            ->get();
+
+        if ($siblings->count() < 2) {
+            return null;
+        }
+
+        $debits = (float) $siblings->where('type', 'debit')->sum('amount');
+        $credits = (float) $siblings->where('type', 'credit')->sum('amount');
+        $tolerance = ContributionPolicySettings::reconTolerance();
+
+        if (abs($debits - $credits) > $tolerance) {
+            return __('Unbalanced journal for reference :type #:id (debits :debits, credits :credits).', [
+                'type' => class_basename($transaction->reference_type),
+                'id' => $transaction->reference_id,
+                'debits' => number_format($debits, 2),
+                'credits' => number_format($credits, 2),
+            ]);
+        }
+
+        return null;
+    }
+
+    protected function shouldValidateBalancedReference(Transaction $transaction): bool
+    {
+        if ($transaction->reference_type === Transaction::class) {
+            return false;
+        }
+
+        return in_array($transaction->reference_type, [
+            BankTransaction::class,
+            FundPosting::class,
+        ], true);
+    }
+
+    /**
      * Debit a member cash account and master cash to record a refund paid to the member.
      */
     public function refundMemberCash(
@@ -659,39 +807,165 @@ class AccountingService
 
     public function postContribution(Contribution $contribution): void
     {
+        $amount = (float) $contribution->amount;
+        $lateFee = (float) ($contribution->late_fee_amount ?? 0);
+
+        DB::transaction(function () use ($contribution, $amount, $lateFee): void {
+            $this->postContributionPrincipal($contribution, $amount);
+
+            if ($lateFee > 0.00001) {
+                $this->postContributionLateFee($contribution, $lateFee);
+            }
+        });
+    }
+
+    public function postContributionPrincipal(Contribution $contribution, float $amount): void
+    {
+        if ($amount <= 0.00001) {
+            return;
+        }
+
         $contribution->loadMissing('member');
         $member = $contribution->member;
         $memberCash = $member->cashAccount;
         $memberFund = $member->fundAccount;
         $masterFund = Account::masterFund();
 
-        if ($memberCash === null || $memberFund === null) {
+        if ($memberCash === null || $memberFund === null || $masterFund === null) {
             throw new InvalidArgumentException(__('Member accounts are not configured.'));
         }
 
-        $amount = (float) $contribution->amount;
-        $lateFee = (float) ($contribution->late_fee_amount ?? 0);
         $periodLabel = $contribution->period?->format('M Y') ?? '';
         $description = __('Contribution — :period', ['period' => $periodLabel]);
 
-        DB::transaction(function () use ($contribution, $memberCash, $memberFund, $masterFund, $amount, $lateFee, $description): void {
-            if ($contribution->payment_method === Contribution::PAYMENT_METHOD_CASH_ACCOUNT) {
-                $this->debit($memberCash, $amount + $lateFee, $description, $contribution);
-            }
+        if ($contribution->payment_method === Contribution::PAYMENT_METHOD_CASH_ACCOUNT) {
+            $this->debit($memberCash, $amount, $description, $contribution);
+        }
 
-            $this->credit($masterFund, $amount, $description, $contribution);
-            $this->credit($memberFund, $amount, $description, $contribution);
+        $this->credit($masterFund, $amount, $description, $contribution);
+        $this->credit($memberFund, $amount, $description, $contribution);
+    }
 
-            if ($lateFee > 0.00001) {
-                $masterCash = Account::masterCash();
-                $this->credit(
-                    $masterCash,
-                    $lateFee,
-                    __('Contribution late fee — :period', ['period' => $contribution->period?->format('M Y') ?? '']),
-                    $contribution,
-                );
-            }
-        });
+    public function postContributionLateFee(Contribution $contribution, float $lateFee): void
+    {
+        if ($lateFee <= 0.00001) {
+            return;
+        }
+
+        $contribution->loadMissing('member');
+        $memberCash = $contribution->member->cashAccount;
+        $masterFees = Account::masterFees();
+
+        if ($memberCash === null) {
+            throw new InvalidArgumentException(__('Member cash account is not configured.'));
+        }
+
+        if ($masterFees === null) {
+            throw new InvalidArgumentException(__('Master fees account is not configured.'));
+        }
+
+        $description = __('Contribution late fee — :period', [
+            'period' => $contribution->period?->format('M Y') ?? '',
+        ]);
+
+        $this->debit($memberCash, $lateFee, $description, $contribution);
+        $this->credit($masterFees, $lateFee, $description, $contribution);
+    }
+
+    public function reverseContributionLateFee(Contribution $contribution, float $lateFee): void
+    {
+        if ($lateFee <= 0.00001) {
+            return;
+        }
+
+        $contribution->loadMissing('member');
+        $memberCash = $contribution->member->cashAccount;
+        $masterFees = Account::masterFees();
+
+        if ($memberCash === null || $masterFees === null) {
+            throw new InvalidArgumentException(__('Accounts are not configured for late fee reversal.'));
+        }
+
+        $description = __('Late fee reversal — :period', [
+            'period' => $contribution->period?->format('M Y') ?? '',
+        ]);
+
+        $this->credit($memberCash, $lateFee, $description, $contribution);
+        $this->debit($masterFees, $lateFee, $description, $contribution);
+    }
+
+    public function postInstallmentLateFee(LoanInstallment $installment, float $lateFee): void
+    {
+        if ($lateFee <= 0.00001) {
+            return;
+        }
+
+        $installment->loadMissing('loan.member');
+        $member = $installment->loan->member;
+        $memberCash = $member->cashAccount;
+        $masterFees = Account::masterFees();
+
+        if ($memberCash === null || $masterFees === null) {
+            throw new InvalidArgumentException(__('Accounts are not configured for installment late fee.'));
+        }
+
+        $description = __('EMI late fee — loan #:id inst. :num', [
+            'id' => $installment->loan_id,
+            'num' => $installment->installment_number,
+        ]);
+
+        $this->debit($memberCash, $lateFee, $description, $installment, now(), $member->id);
+        $this->credit($masterFees, $lateFee, $description, $installment, now(), $member->id);
+    }
+
+    public function reverseInstallmentLateFee(LoanInstallment $installment, float $lateFee): void
+    {
+        if ($lateFee <= 0.00001) {
+            return;
+        }
+
+        $installment->loadMissing('loan.member');
+        $memberCash = $installment->loan->member->cashAccount;
+        $masterFees = Account::masterFees();
+
+        if ($memberCash === null || $masterFees === null) {
+            throw new InvalidArgumentException(__('Accounts are not configured for installment late fee reversal.'));
+        }
+
+        $description = __('EMI late fee reversal — loan #:id inst. :num', [
+            'id' => $installment->loan_id,
+            'num' => $installment->installment_number,
+        ]);
+
+        $this->credit($memberCash, $lateFee, $description, $installment);
+        $this->debit($masterFees, $lateFee, $description, $installment);
+    }
+
+    public function reverseContributionPrincipal(Contribution $contribution, float $amount): void
+    {
+        if ($amount <= 0.00001) {
+            return;
+        }
+
+        $contribution->loadMissing('member');
+        $member = $contribution->member;
+        $memberCash = $member->cashAccount;
+        $memberFund = $member->fundAccount;
+        $masterFund = Account::masterFund();
+
+        if ($memberCash === null || $memberFund === null || $masterFund === null) {
+            throw new InvalidArgumentException(__('Member accounts are not configured.'));
+        }
+
+        $periodLabel = $contribution->period?->format('M Y') ?? '';
+        $description = __('Contribution reversal — :period', ['period' => $periodLabel]);
+
+        if ($contribution->payment_method === Contribution::PAYMENT_METHOD_CASH_ACCOUNT) {
+            $this->credit($memberCash, $amount, $description, $contribution);
+        }
+
+        $this->debit($masterFund, $amount, $description, $contribution);
+        $this->debit($memberFund, $amount, $description, $contribution);
     }
 
     public function fundDependentCashAccount(

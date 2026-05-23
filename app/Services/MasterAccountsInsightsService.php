@@ -12,6 +12,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Support\Insights\InsightFormatter;
+use App\Support\Insights\InsightKpi;
 use Carbon\Carbon;
 
 final class MasterAccountsInsightsService
@@ -23,7 +24,7 @@ final class MasterAccountsInsightsService
     {
         $currency = InsightFormatter::currency();
         $masters = Account::query()->where('is_master', true)->get()->keyBy('type');
-        $balance = fn(string $type): float => (float) ($masters->get($type)?->balance ?? 0);
+        $balance = fn (string $type): float => (float) ($masters->get($type)?->balance ?? 0);
 
         $masterCash = $balance('cash');
         $masterFund = $balance('fund');
@@ -32,7 +33,7 @@ final class MasterAccountsInsightsService
         $masterInvest = $balance('invest');
 
         $loanExposure = (float) Loan::active()->get()->sum(
-            fn(Loan $loan): float => $loan->getOutstandingBalance()
+            fn (Loan $loan): float => $loan->getOutstandingBalance()
         );
         $activeLoanCount = Loan::active()->count();
         $coverage = $loanExposure > 0.01 ? round($masterFund / $loanExposure, 2) : null;
@@ -40,7 +41,7 @@ final class MasterAccountsInsightsService
 
         $since = Carbon::now()->subDays(30);
         $activity = Transaction::query()
-            ->whereHas('account', fn($query) => $query->where('is_master', true))
+            ->whereHas('account', fn ($query) => $query->where('is_master', true))
             ->where('transacted_at', '>=', $since)
             ->selectRaw("
                 SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END) as credits,
@@ -73,7 +74,7 @@ final class MasterAccountsInsightsService
 
         $zeroCashMembers = Member::query()
             ->active()
-            ->whereHas('accounts', fn($query) => $query
+            ->whereHas('accounts', fn ($query) => $query
                 ->where('type', 'cash')
                 ->where('is_master', false)
                 ->where('balance', '<=', 0))
@@ -83,7 +84,7 @@ final class MasterAccountsInsightsService
         for ($i = 6; $i >= 0; $i--) {
             $day = Carbon::now()->subDays($i)->startOfDay();
             $sparkline[] = Transaction::query()
-                ->whereHas('account', fn($query) => $query->where('is_master', true))
+                ->whereHas('account', fn ($query) => $query->where('is_master', true))
                 ->whereDate('transacted_at', $day)
                 ->count();
         }
@@ -212,7 +213,10 @@ final class MasterAccountsInsightsService
         float $activityNet,
         int $activityTxCount,
     ): array {
-        return [
+        $indexUrl = MasterAccountResource::getUrl('index');
+        $investAccount = Account::query()->where('is_master', true)->where('type', 'invest')->first();
+
+        return InsightKpi::linkMany([
             [
                 'key' => 'cash',
                 'label' => __('Cash'),
@@ -256,7 +260,7 @@ final class MasterAccountsInsightsService
             [
                 'key' => 'activity',
                 'label' => __('30d net'),
-                'value' => ($activityNet >= 0 ? '+' : '−') . InsightFormatter::compactAmount($activityNet),
+                'value' => ($activityNet >= 0 ? '+' : '−').InsightFormatter::compactAmount($activityNet),
                 'sub' => trans_choice(':count txn|:count txns', $activityTxCount, ['count' => $activityTxCount]),
                 'icon' => 'heroicon-o-arrows-right-left',
                 'accent' => $activityNet >= 0 ? 'teal' : 'amber',
@@ -264,6 +268,23 @@ final class MasterAccountsInsightsService
                     ? 'text-emerald-600 dark:text-emerald-400'
                     : 'text-amber-600 dark:text-amber-400',
             ],
-        ];
+        ], [
+            'cash' => Account::masterCash()
+                ? MasterAccountResource::getUrl('view', ['record' => Account::masterCash()])
+                : $indexUrl.'?tab=cash',
+            'fund' => Account::masterFund()
+                ? MasterAccountResource::getUrl('view', ['record' => Account::masterFund()])
+                : $indexUrl.'?tab=fund',
+            'bank' => Account::masterBank()
+                ? MasterAccountResource::getUrl('view', ['record' => Account::masterBank()])
+                : $indexUrl.'?tab=bank',
+            'expense' => Account::masterExpense()
+                ? MasterAccountResource::getUrl('view', ['record' => Account::masterExpense()])
+                : $indexUrl.'?tab=expense',
+            'invest' => $investAccount
+                ? MasterAccountResource::getUrl('view', ['record' => $investAccount])
+                : $indexUrl.'?tab=invest',
+            'activity' => $indexUrl,
+        ]);
     }
 }

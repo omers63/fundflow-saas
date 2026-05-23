@@ -6,10 +6,12 @@ namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Support\MemberTableColumns;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Services\CollectionSummaryExportService;
 use App\Services\ContributionCycleService;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -25,6 +27,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use UnitEnum;
 
 class ContributionCyclePage extends Page implements HasTable
 {
@@ -35,6 +38,10 @@ class ContributionCyclePage extends Page implements HasTable
 
     protected static ?string $navigationLabel = 'Contribution cycles';
 
+    protected static string|UnitEnum|null $navigationGroup = 'Fund Management';
+
+    protected static ?int $navigationSort = 4;
+
     protected static bool $shouldRegisterNavigation = false;
 
     protected string $view = 'filament.tenant.pages.contribution-cycle';
@@ -43,7 +50,7 @@ class ContributionCyclePage extends Page implements HasTable
 
     public function setContributionTab(string $tab): void
     {
-        if (!in_array($tab, ['pending', 'paid'], true)) {
+        if (! in_array($tab, ['pending', 'paid'], true)) {
             return;
         }
 
@@ -53,7 +60,7 @@ class ContributionCyclePage extends Page implements HasTable
 
     protected function getTableQueryStringIdentifier(): ?string
     {
-        return 'contribution_cycle_' . $this->contributionPeriodTab;
+        return 'contribution_cycle_'.$this->contributionPeriodTab;
     }
 
     public function getTitle(): string
@@ -84,7 +91,7 @@ class ContributionCyclePage extends Page implements HasTable
                 ->icon('heroicon-o-bell')
                 ->color('warning')
                 ->schema($this->periodFormSchema())
-                ->fillForm(fn(): array => $this->defaultPeriod())
+                ->fillForm(fn (): array => $this->defaultPeriod())
                 ->action(function (array $data): void {
                     [$month, $year] = $this->resolvePeriodFromForm($data);
                     $count = app(ContributionCycleService::class)
@@ -99,12 +106,23 @@ class ContributionCyclePage extends Page implements HasTable
                         ->success()
                         ->send();
                 }),
+            Action::make('export_summary')
+                ->label(__('Export collection summary'))
+                ->icon('heroicon-o-arrow-down-tray')
+                ->color('gray')
+                ->schema($this->periodFormSchema())
+                ->fillForm(fn (): array => $this->defaultPeriod())
+                ->action(function (array $data): mixed {
+                    [$month, $year] = $this->resolvePeriodFromForm($data);
+
+                    return app(CollectionSummaryExportService::class)->downloadCsv($month, $year);
+                }),
             Action::make('run_cycle')
                 ->label(__('Run contribution cycle'))
                 ->icon('heroicon-o-play')
                 ->color('primary')
                 ->schema($this->periodFormSchema())
-                ->fillForm(fn(): array => $this->defaultPeriod())
+                ->fillForm(fn (): array => $this->defaultPeriod())
                 ->action(function (array $data): void {
                     $service = app(ContributionCycleService::class);
                     [$month, $year] = $this->resolvePeriodFromForm($data);
@@ -139,8 +157,8 @@ class ContributionCyclePage extends Page implements HasTable
         $currency = Setting::get('general', 'currency', 'USD');
         $cycles = app(ContributionCycleService::class);
 
-        return $table
-            ->query(fn(): Builder => $cycles->pendingMembersQueryForPeriod($month, $year))
+        return TableGrouping::apply($table
+            ->query(fn (): Builder => $cycles->pendingMembersQueryForPeriod($month, $year))
             ->heading(__('Pending members – :period', ['period' => $this->periodLabel($month, $year)]))
             ->columns([
                 MemberTableColumns::number(label: __('Member #'))
@@ -156,7 +174,7 @@ class ContributionCyclePage extends Page implements HasTable
                     ->money($currency),
                 TextColumn::make('available_cash')
                     ->label(__('Cash balance'))
-                    ->state(fn(Member $record): float => $record->getCashBalance())
+                    ->state(fn (Member $record): float => $record->getCashBalance())
                     ->money($currency)
                     ->alignEnd(),
                 TextColumn::make('coverage')
@@ -169,7 +187,7 @@ class ContributionCyclePage extends Page implements HasTable
                             : __('Insufficient');
                     })
                     ->badge()
-                    ->color(fn(string $state): string => $state === __('Yes') ? 'success' : 'warning'),
+                    ->color(fn (string $state): string => $state === __('Yes') ? 'success' : 'warning'),
                 TextColumn::make('parent.name')
                     ->label(__('Parent'))
                     ->placeholder(__('—'))
@@ -203,7 +221,7 @@ class ContributionCyclePage extends Page implements HasTable
             ]))
             ->toolbarActions([
                 BulkActionGroup::make([]),
-            ]);
+            ]), TableGrouping::members());
     }
 
     private function paidTable(Table $table, int $month, int $year): Table
@@ -211,8 +229,8 @@ class ContributionCyclePage extends Page implements HasTable
         $currency = Setting::get('general', 'currency', 'USD');
         $cycles = app(ContributionCycleService::class);
 
-        return $table
-            ->query(fn(): Builder => $cycles->postedContributionsQueryForPeriod($month, $year))
+        return TableGrouping::apply($table
+            ->query(fn (): Builder => $cycles->postedContributionsQueryForPeriod($month, $year))
             ->heading(__('Paid – :period', ['period' => $this->periodLabel($month, $year)]))
             ->columns([
                 MemberTableColumns::relationNumber(),
@@ -220,10 +238,10 @@ class ContributionCyclePage extends Page implements HasTable
                 TextColumn::make('amount')->money($currency),
                 TextColumn::make('is_late')
                     ->label(__('Late'))
-                    ->formatStateUsing(fn(bool $state): string => $state ? __('Yes') : __('No')),
+                    ->formatStateUsing(fn (bool $state): string => $state ? __('Yes') : __('No')),
                 TextColumn::make('posted_at')->dateTime()->placeholder(__('—')),
             ])
-            ->recordActions(TableRecordActionGroups::wrap([]));
+            ->recordActions(TableRecordActionGroups::wrap([])), TableGrouping::contributions(includeMember: false));
     }
 
     /**
@@ -241,7 +259,7 @@ class ContributionCyclePage extends Page implements HasTable
                 ->required()
                 ->live()
                 ->afterStateUpdated(function ($state, callable $set) use ($cycles): void {
-                    if (!is_string($state)) {
+                    if (! is_string($state)) {
                         return;
                     }
                     [$m, $y] = $cycles->parseContributionCycleKey($state);
@@ -276,11 +294,11 @@ class ContributionCyclePage extends Page implements HasTable
      */
     private function resolvePeriodFromForm(array $data): array
     {
-        if (!empty($data['month']) && !empty($data['year'])) {
+        if (! empty($data['month']) && ! empty($data['year'])) {
             return [(int) $data['month'], (int) $data['year']];
         }
 
-        if (!empty($data['cycle'])) {
+        if (! empty($data['cycle'])) {
             return app(ContributionCycleService::class)->parseContributionCycleKey((string) $data['cycle']);
         }
 

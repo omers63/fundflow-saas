@@ -21,14 +21,17 @@ class LoanEligibilityService
             return 'Your membership status is not active.';
         }
 
-        // A member may not start a second loan request while another one is in-flight
-        // (pending review or already active and not fully paid).
-        $hasPendingOrActiveLoan = Loan::query()
+        $maxActive = LoanSettings::maxActiveLoans();
+        $activeLoanCount = Loan::query()
             ->where('member_id', $member->id)
-            ->whereIn('status', ['pending', 'approved', 'active'])
-            ->exists();
-        if ($hasPendingOrActiveLoan) {
-            return 'You already have a pending or active loan. Cancel the pending loan or fully settle the active loan before applying again.';
+            ->whereIn('status', ['pending', 'approved', 'partially_disbursed', 'active', 'transferred'])
+            ->count();
+
+        if ($activeLoanCount >= $maxActive) {
+            return __('You already have :count loan(s) in progress (maximum :max). Cancel a pending loan or fully settle an active loan before applying again.', [
+                'count' => $activeLoanCount,
+                'max' => $maxActive,
+            ]);
         }
 
         $start = $member->loanEligibilityStartDate();

@@ -8,6 +8,7 @@ use App\Filament\Tenant\Resources\Accounts\Pages\ViewAccount;
 use App\Filament\Tenant\Resources\Accounts\RelationManagers\TransactionsRelationManager;
 use App\Filament\Tenant\Resources\Accounts\Tables\MemberAccountsLoansTable;
 use App\Filament\Tenant\Resources\Accounts\Tables\MemberAccountsTable;
+use App\Filament\Tenant\Support\TenantNavigation;
 use App\Filament\Tenant\Widgets\MemberAccountsInsightsWidget;
 use App\Models\Tenant\Account;
 use BackedEnum;
@@ -27,7 +28,7 @@ class AccountResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Accounts';
+    protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_ACCOUNTS;
 
     protected static ?string $navigationLabel = 'Member Accounts';
 

@@ -23,6 +23,10 @@ class LoanInstallment extends Model
         'late_fee_amount',
         'paid_by_guarantor',
         'show_as_loan_repayment_in_collections',
+        'collection_status',
+        'amount_collected',
+        'overdue_since',
+        'late_fee_tier',
     ];
 
     protected function casts(): array
@@ -33,6 +37,9 @@ class LoanInstallment extends Model
             'paid_at' => 'datetime',
             'is_late' => 'boolean',
             'late_fee_amount' => 'decimal:2',
+            'amount_collected' => 'decimal:2',
+            'overdue_since' => 'datetime',
+            'late_fee_tier' => 'integer',
             'paid_by_guarantor' => 'boolean',
             'show_as_loan_repayment_in_collections' => 'boolean',
         ];

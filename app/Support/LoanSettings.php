@@ -25,6 +25,8 @@ final class LoanSettings
             'max_loan_amount' => 0,
             'settlement_threshold_pct' => 0.16,
             'default_grace_cycles' => 2,
+            'guarantor_transfer_missed_threshold' => 3,
+            'max_active_loans' => 1,
             'require_guarantor_above_fund_balance' => true,
             'auto_allocate_loan_repayment' => false,
         ];
@@ -86,6 +88,11 @@ final class LoanSettings
     public static function autoAllocateLoanRepayment(): bool
     {
         return (bool) self::get('auto_allocate_loan_repayment', false);
+    }
+
+    public static function maxActiveLoans(): int
+    {
+        return max(1, (int) self::get('max_active_loans', 1));
     }
 
     public static function guarantorRequiredForAmount(Member $member, float $amount): bool

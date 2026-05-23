@@ -3,6 +3,7 @@
 namespace App\Filament\Concerns;
 
 use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Tenant\Support\TenantNavigation;
 use App\Support\Lang;
 use UnitEnum;
 
@@ -21,7 +22,7 @@ trait TranslatesFilamentNavigationLabels
             return $group;
         }
 
-        if (MemberNavigation::isGroupKey($group)) {
+        if (MemberNavigation::isGroupKey($group) || TenantNavigation::isGroupKey($group)) {
             return $group;
         }
 

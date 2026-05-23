@@ -77,6 +77,7 @@ final class LoanLifecycleService
         ?int $guarantorMemberId = null,
         bool $isEmergency = false,
         bool $hasGraceCycle = true,
+        ?int $graceCycles = null,
         ?string $witness1Name = null,
         ?string $witness1Phone = null,
         ?string $witness2Name = null,
@@ -118,6 +119,7 @@ final class LoanLifecycleService
             'witness2_phone' => $witness2Phone,
             'is_emergency' => $isEmergency,
             'has_grace_cycle' => $hasGraceCycle,
+            'grace_cycles' => max(0, min(2, $graceCycles ?? ($hasGraceCycle ? 1 : 0))),
             'status' => 'pending',
             'applied_at' => now(),
         ]);
@@ -144,6 +146,7 @@ final class LoanLifecycleService
         float $amountApproved,
         bool $isEmergency = false,
         bool $hasGraceCycle = true,
+        ?int $graceCycles = null,
         ?CarbonInterface $approvedAt = null,
         ?int $approvedById = null,
     ): void {
@@ -187,6 +190,7 @@ final class LoanLifecycleService
             'approved_by_id' => $approvedById ?? auth()->id(),
             'settlement_threshold' => $threshold,
             'has_grace_cycle' => $hasGraceCycle,
+            'grace_cycles' => max(0, min(2, $graceCycles ?? ($hasGraceCycle ? 1 : 0))),
         ]);
 
         LoanQueueOrderingService::resequenceFundTier($fundTier->id);
@@ -235,8 +239,8 @@ final class LoanLifecycleService
         bool $force = false,
         bool $allowNegativeMasterFundBalance = false,
     ): void {
-        if ($loan->status !== 'approved') {
-            throw new InvalidArgumentException(__('Only approved loans can be disbursed.'));
+        if (! in_array($loan->status, ['approved', 'partially_disbursed'], true)) {
+            throw new InvalidArgumentException(__('Only approved or partially disbursed loans can receive disbursements.'));
         }
 
         $loan->loadMissing(['fundTier', 'member.accounts', 'loanTier']);
@@ -293,6 +297,11 @@ final class LoanLifecycleService
         if ($loan->isFullyDisbursed()) {
             $this->activateAfterFullDisbursement($loan, $at, $memberFundBalanceBefore);
         } else {
+            $loan->update([
+                'status' => 'partially_disbursed',
+                'lifecycle_stage' => 'partially_disbursed',
+            ]);
+
             $this->notifyMember($loan, new LoanPartialDisbursementNotification(
                 disbursement: $disbursement,
                 totalDisbursed: (float) $loan->amount_disbursed,
@@ -307,7 +316,7 @@ final class LoanLifecycleService
 
     public function markBankPayout(Loan $loan, ?CarbonInterface $payoutAt = null): void
     {
-        if (! in_array($loan->status, ['approved', 'active'], true)) {
+        if (! in_array($loan->status, ['approved', 'partially_disbursed', 'active'], true)) {
             throw new InvalidArgumentException(__('Bank payout can only be recorded for approved or active loans.'));
         }
 
@@ -328,7 +337,8 @@ final class LoanLifecycleService
         $threshold = (float) $loan->settlement_threshold;
         $count = Loan::computeInstallmentsCount($amountApproved, $memberFundBalanceBefore, $minInstall, $threshold);
 
-        $exemption = Loan::computeExemptionAndFirstRepayment(Carbon::parse($disbursedAt), (bool) $loan->has_grace_cycle);
+        $graceCycles = $loan->grace_cycles ?? ($loan->has_grace_cycle ? 1 : 0);
+        $exemption = Loan::computeExemptionAndFirstRepayment(Carbon::parse($disbursedAt), (int) $graceCycles);
         $exemption = Loan::finalizeExemptionForDisbursement($loan->member, $exemption, Carbon::parse($disbursedAt));
 
         DB::transaction(function () use ($loan, $disbursedAt, $exemption, $count, $minInstall, $amountApproved, $memberFundBalanceBefore): void {
@@ -337,6 +347,7 @@ final class LoanLifecycleService
 
             $loan->update([
                 'status' => 'active',
+                'lifecycle_stage' => 'active',
                 'installments_count' => $count,
                 'disbursed_at' => $disbursedAt,
                 'due_date' => Carbon::parse($disbursedAt)->addMonths($count)->toDateString(),

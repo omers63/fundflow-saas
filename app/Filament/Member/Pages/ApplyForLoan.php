@@ -19,7 +19,6 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
@@ -134,9 +133,16 @@ class ApplyForLoan extends Page implements HasForms
                                 ->searchable()
                                 ->required(fn (Get $get): bool => $member && LoanSettings::guarantorRequiredForAmount($member, (float) ($get('amount') ?? 0)))
                                 ->nullable(fn (Get $get): bool => ! $member || ! LoanSettings::guarantorRequiredForAmount($member, (float) ($get('amount') ?? 0))),
-                            Toggle::make('has_grace_cycle')
-                                ->label(__('Request grace cycle'))
-                                ->default(true),
+                            Select::make('grace_cycles')
+                                ->label(__('Grace cycles before first repayment'))
+                                ->options([
+                                    0 => __('None'),
+                                    1 => __('One cycle'),
+                                    2 => __('Two cycles'),
+                                ])
+                                ->default(1)
+                                ->required()
+                                ->native(false),
                         ]),
                     Step::make(__('Purpose'))
                         ->icon(Heroicon::OutlinedChatBubbleLeftEllipsis)
@@ -224,7 +230,8 @@ class ApplyForLoan extends Page implements HasForms
                 (string) $data['purpose'],
                 filled($data['guarantor_member_id'] ?? null) ? (int) $data['guarantor_member_id'] : null,
                 false,
-                (bool) ($data['has_grace_cycle'] ?? true),
+                ((int) ($data['grace_cycles'] ?? 1)) > 0,
+                (int) ($data['grace_cycles'] ?? 1),
                 filled($data['witness1_name'] ?? null) ? (string) $data['witness1_name'] : null,
                 filled($data['witness1_phone'] ?? null) ? (string) $data['witness1_phone'] : null,
                 filled($data['witness2_name'] ?? null) ? (string) $data['witness2_name'] : null,

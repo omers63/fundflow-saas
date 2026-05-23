@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
@@ -36,7 +38,7 @@ class MessagesInboxPage extends Page implements HasTable
 
     protected static ?string $navigationLabel = 'Messages';
 
-    protected static ?int $navigationSort = 90;
+    protected static ?int $navigationSort = TenantNavigation::SORT_MESSAGES;
 
     protected static ?string $slug = 'messages';
 
@@ -103,7 +105,7 @@ class MessagesInboxPage extends Page implements HasTable
     {
         $adminId = (int) auth('tenant')->id();
 
-        return $table
+        return TableGrouping::apply($table
             ->query(
                 Member::query()
                     ->with('user')
@@ -297,7 +299,7 @@ class MessagesInboxPage extends Page implements HasTable
                 TableToolbar::refreshBulkAction(),
             ]))
             ->emptyStateHeading(__('No members found'))
-            ->emptyStateDescription(__('Members will appear here once they have portal accounts.'));
+            ->emptyStateDescription(__('Members will appear here once they have portal accounts.')), TableGrouping::members());
     }
 
     /**

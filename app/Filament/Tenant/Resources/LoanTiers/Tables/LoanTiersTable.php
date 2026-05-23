@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tenant\Resources\LoanTiers\Tables;
 
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Setting;
@@ -18,7 +19,7 @@ class LoanTiersTable
     {
         $currency = Setting::get('general', 'currency', 'USD');
 
-        return $table
+        return TableGrouping::apply($table
             ->columnManager(true)
             ->columns([
                 TextColumn::make('tier_number')
@@ -45,6 +46,6 @@ class LoanTiersTable
                 BulkActionGroup::make([
                     TableToolbar::refreshBulkAction(),
                 ]),
-            ]);
+            ]), TableGrouping::configurationTiers());
     }
 }

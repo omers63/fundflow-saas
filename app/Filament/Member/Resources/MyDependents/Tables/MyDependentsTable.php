@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyDependents\Tables;
 
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Contribution;
@@ -25,7 +26,7 @@ class MyDependentsTable
         $currency = Setting::get('general', 'currency', 'USD');
         [$openMonth, $openYear] = app(ContributionCycleService::class)->currentOpenPeriod();
 
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('member_number')
                     ->label('Member #')
@@ -101,6 +102,6 @@ class MyDependentsTable
                     TableToolbar::refreshBulkAction(),
                 ]),
             ])
-            ->defaultSort('name');
+            ->defaultSort('name'), TableGrouping::members());
     }
 }

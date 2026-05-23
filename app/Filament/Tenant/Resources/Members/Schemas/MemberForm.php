@@ -4,6 +4,7 @@ namespace App\Filament\Tenant\Resources\Members\Schemas;
 
 use App\Models\Tenant\Member;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -101,6 +102,34 @@ class MemberForm
                             ->disabled()
                             ->dehydrated(false)
                             ->helperText(__('Automatically enabled for dependents with their own email so they can sign in directly.')),
+                    ]),
+                Section::make(__('Historical migration'))
+                    ->icon('heroicon-o-clock')
+                    ->columnSpanFull()
+                    ->columns(2)
+                    ->visible(fn (string $operation): bool => $operation === 'edit')
+                    ->schema([
+                        Select::make('migration_status')
+                            ->label(__('Migration status'))
+                            ->options(Member::migrationStatusOptions())
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->placeholder(__('Not started'))
+                            ->helperText(__('Use System → Migrations or the Migration menu on this member to generate stubs and clear migration.')),
+                        DatePicker::make('migration_cutoff_date')
+                            ->label(__('Migration cutoff'))
+                            ->disabled()
+                            ->dehydrated(false),
+                        Placeholder::make('opening_balances_posted_at')
+                            ->label(__('Opening balances posted'))
+                            ->content(fn (?Member $record): string => $record?->opening_balances_posted_at !== null
+                                ? $record->opening_balances_posted_at->toDateTimeString()
+                                : __('Not posted')),
+                        Placeholder::make('partial_clearance_granted_at')
+                            ->label(__('Partial clearance'))
+                            ->content(fn (?Member $record): string => $record?->partial_clearance_granted_at !== null
+                                ? $record->partial_clearance_granted_at->toDateTimeString()
+                                : __('—')),
                     ]),
             ]);
     }

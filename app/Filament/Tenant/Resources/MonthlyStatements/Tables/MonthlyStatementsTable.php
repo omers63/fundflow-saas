@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\MonthlyStatements\Tables;
 
 use App\Filament\Support\MemberTableColumns;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
@@ -26,7 +27,7 @@ class MonthlyStatementsTable
     {
         $currency = Setting::get('general', 'currency', 'USD');
 
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 MemberTableColumns::relationNumber()
                     ->sortable(),
@@ -57,7 +58,7 @@ class MonthlyStatementsTable
                 Action::make('pdf')
                     ->label(__('Download PDF'))
                     ->icon('heroicon-o-arrow-down-tray')
-                    ->url(fn(MonthlyStatement $record): string => route('tenant.admin.statement.pdf', $record))
+                    ->url(fn (MonthlyStatement $record): string => route('tenant.admin.statement.pdf', $record))
                     ->openUrlInNewTab(),
                 Action::make('regenerate')
                     ->label(__('Regenerate'))
@@ -106,6 +107,6 @@ class MonthlyStatementsTable
                         }),
                     TableToolbar::refreshBulkAction(),
                 ]),
-            ]);
+            ]), TableGrouping::monthlyStatements());
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyMessages\Tables;
 
 use App\Filament\Member\Resources\MyMessages\MyMessageResource;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\DirectMessage;
@@ -22,7 +23,7 @@ class MyMessagesTable
     {
         $memberUserId = auth('tenant')->id();
 
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('subject')
                     ->label(__('Subject'))
@@ -72,6 +73,6 @@ class MyMessagesTable
                     TableToolbar::refreshBulkAction(),
                 ]),
             ])
-            ->defaultSort('created_at', 'desc');
+            ->defaultSort('created_at', 'desc'), TableGrouping::directMessages());
     }
 }

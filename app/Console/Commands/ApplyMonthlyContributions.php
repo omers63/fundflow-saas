@@ -4,17 +4,23 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\EnsuresBatchPostingAllowed;
 use App\Services\ContributionCycleService;
 use Illuminate\Console\Command;
 
 class ApplyMonthlyContributions extends Command
 {
+    use EnsuresBatchPostingAllowed;
+
     protected $signature = 'contributions:apply {--month=} {--year=}';
 
     protected $description = 'Apply cycle contributions for all eligible members';
 
     public function handle(ContributionCycleService $cycles): int
     {
+        if ($this->ensureBatchPostingAllowed() !== self::SUCCESS) {
+            return self::FAILURE;
+        }
         $month = $this->option('month') ? (int) $this->option('month') : null;
         $year = $this->option('year') ? (int) $this->option('year') : null;
 

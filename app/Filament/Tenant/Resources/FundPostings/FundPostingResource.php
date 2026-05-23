@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Resources\FundPostings;
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Tenant\Resources\FundPostings\Pages\ListFundPostings;
 use App\Filament\Tenant\Resources\FundPostings\Tables\FundPostingsTable;
+use App\Filament\Tenant\Support\TenantNavigation;
 use App\Filament\Tenant\Widgets\FundPostingInsightsWidget;
 use App\Models\Tenant\FundPosting;
 use BackedEnum;
@@ -22,7 +23,7 @@ class FundPostingResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedInboxArrowDown;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Fund Management';
+    protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
 
     protected static ?string $navigationLabel = 'Deposits';
 
@@ -30,7 +31,7 @@ class FundPostingResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Deposits';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = TenantNavigation::SORT_DEPOSITS;
 
     public static function canCreate(): bool
     {

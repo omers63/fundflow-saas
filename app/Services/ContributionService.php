@@ -8,6 +8,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LateFeeService;
 use App\Services\Loans\LoanRepaymentService;
+use App\Support\ContributionCollectionStatus;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -22,6 +23,7 @@ class ContributionService
         public AccountingService $accounting,
         public ContributionCycleService $cycles,
         public LateFeeService $lateFees,
+        public ContributionCollectionCycleService $collectionCycle,
     ) {}
 
     public function getCycleStartDay(): int
@@ -52,11 +54,16 @@ class ContributionService
 
     public function recordContribution(Member $member, string $period, ?float $amount = null): Contribution
     {
+        $due = (float) ($amount ?? $member->monthly_contribution_amount);
+
         return Contribution::create([
             'member_id' => $member->id,
             'period' => $period,
-            'amount' => $amount ?? $member->monthly_contribution_amount,
+            'amount' => $due,
+            'amount_due' => $due,
+            'amount_collected' => 0,
             'status' => 'pending',
+            'collection_status' => ContributionCollectionStatus::PENDING,
             'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
         ]);
     }
@@ -111,13 +118,13 @@ class ContributionService
      */
     public function applyForPeriod(Member $member, int $month, int $year, array &$results = []): string
     {
-        if (Contribution::query()->where('member_id', $member->id)->forPeriod($month, $year)->exists()) {
+        if (Contribution::activePeriodExists($member->id, $month, $year)) {
             $results['skipped'][] = $member;
 
             return 'already_contributed';
         }
 
-        if ($member->isExemptFromContributions()) {
+        if ($member->isExemptFromContributions($month, $year)) {
             $results['skipped'][] = $member;
 
             return 'exempt';
@@ -131,56 +138,71 @@ class ContributionService
             return 'exempt';
         }
 
+        $period = Contribution::periodDate($month, $year);
+        $contribution = Contribution::query()
+            ->where('member_id', $member->id)
+            ->where('period', $period)
+            ->first();
+
+        if ($contribution === null) {
+            $contribution = Contribution::create([
+                'member_id' => $member->id,
+                'period' => $period,
+                'amount' => $amount,
+                'amount_due' => $amount,
+                'amount_collected' => 0,
+                'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+                'status' => 'pending',
+                'collection_status' => ContributionCollectionStatus::PENDING,
+                'cycle_open_cash_balance' => $member->getCashBalance(),
+            ]);
+        }
+
         $deadline = $this->cycles->deadline($month, $year);
-        $days = $this->lateFees->daysPastDue($deadline, now());
-        $lateFee = $this->lateFees->contributionLateFeeForDays($days);
-        $required = $amount + $lateFee;
 
-        $member->unsetRelation('accounts');
-        $cashBalance = $member->getCashBalance();
-
-        if ($cashBalance < $required) {
-            $results['insufficient'][] = [
-                'member' => $member,
-                'balance' => $cashBalance,
-                'required' => $required,
-            ];
-
-            return 'insufficient';
+        if (now()->greaterThan($deadline) && $contribution->overdue_since === null) {
+            $contribution->update([
+                'collection_status' => ContributionCollectionStatus::OVERDUE,
+                'overdue_since' => $deadline,
+                'is_late' => true,
+            ]);
+            $this->collectionCycle->applyLateFeeTierForContribution($contribution->fresh());
+            $contribution = $contribution->fresh();
         }
 
         try {
-            DB::transaction(function () use ($member, $month, $year, $amount, $lateFee, $days): void {
-                $contribution = Contribution::create([
-                    'member_id' => $member->id,
-                    'period' => Contribution::periodDate($month, $year),
-                    'amount' => $amount,
-                    'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
-                    'is_late' => $days >= 1,
-                    'late_fee_amount' => $lateFee > 0 ? $lateFee : null,
-                    'paid_at' => now(),
-                    'status' => 'pending',
-                ]);
-
-                $this->postContribution($contribution);
-            });
+            $outcome = $this->collectionCycle->attemptCollection($contribution);
         } catch (UniqueConstraintViolationException|ValidationException) {
             $results['skipped'][] = $member;
 
             return 'already_contributed';
-        } catch (InvalidArgumentException) {
+        } catch (InvalidArgumentException $exception) {
             $results['insufficient'][] = [
                 'member' => $member,
                 'balance' => $member->getCashBalance(),
-                'required' => $required,
+                'required' => (float) ($contribution->amount_due ?? $amount),
             ];
 
             return 'insufficient';
         }
 
-        $results['applied'][] = $member;
+        if ($outcome === 'collected' || $outcome === 'partial') {
+            $results['applied'][] = $member;
 
-        return 'applied';
+            return $outcome === 'partial' ? 'partial' : 'applied';
+        }
+
+        if ($outcome === 'insufficient') {
+            $results['insufficient'][] = [
+                'member' => $member,
+                'balance' => $member->getCashBalance(),
+                'required' => max(0, (float) ($contribution->amount_due ?? 0) - (float) ($contribution->amount_collected ?? 0)),
+            ];
+
+            return 'insufficient';
+        }
+
+        return 'skipped';
     }
 
     /**
@@ -221,7 +243,7 @@ class ContributionService
                 ->where('period', $period)
                 ->exists();
 
-            if (! $exists && (float) $member->monthly_contribution_amount > 0 && ! $member->isExemptFromContributions()) {
+            if (! $exists && (float) $member->monthly_contribution_amount > 0 && ! $member->isExemptFromContributions((int) date('m', strtotime($period)), (int) date('Y', strtotime($period)))) {
                 $this->recordContribution($member, $period);
                 $count++;
             }

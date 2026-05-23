@@ -12,6 +12,8 @@ final class ContributionPolicySettings
 
     public const GROUP_LATE_FEE = 'late_fee';
 
+    public const GROUP_COLLECTION = 'collection';
+
     public const GROUP_SUBSCRIPTION = 'subscription';
 
     /**
@@ -29,18 +31,101 @@ final class ContributionPolicySettings
     /**
      * @return array<string, mixed>
      */
+    public static function collectionDefaults(): array
+    {
+        return [
+            'late_fee_reminder_days' => 3,
+            'late_fee_tier_1_day' => 3,
+            'late_fee_tier_2_day' => 10,
+            'late_fee_tier_3_day' => 20,
+            'late_fee_model' => 'replacement',
+            'recon_tolerance' => 0.01,
+            'bank_match_date_range_days' => 3,
+            'stale_pending_days' => 30,
+            'cash_deposit_unbanked_days' => 14,
+            'migration_instalment_cycles' => 6,
+            'timing_diff_defer_hours' => 24,
+            'timing_diff_escalate_hours' => 48,
+        ];
+    }
+
+    public static function timingDiffDeferHours(): int
+    {
+        return max(1, (int) self::collectionGet('timing_diff_defer_hours', 24));
+    }
+
+    public static function timingDiffEscalateHours(): int
+    {
+        return max(1, (int) self::collectionGet('timing_diff_escalate_hours', 48));
+    }
+
+    public static function stalePendingDays(): int
+    {
+        return max(1, (int) self::collectionGet('stale_pending_days', 30));
+    }
+
+    public static function cashDepositUnbankedDays(): int
+    {
+        return max(1, (int) self::collectionGet('cash_deposit_unbanked_days', 14));
+    }
+
+    public static function migrationInstalmentCycles(): int
+    {
+        return max(1, (int) self::collectionGet('migration_instalment_cycles', 6));
+    }
+
     public static function lateFeeDefaults(): array
     {
         return [
-            'contribution_day_1' => 0,
+            'contribution_day_3' => 0,
             'contribution_day_10' => 0,
             'contribution_day_20' => 0,
             'contribution_day_30' => 0,
-            'repayment_day_1' => 0,
+            'repayment_day_3' => 0,
             'repayment_day_10' => 0,
             'repayment_day_20' => 0,
             'repayment_day_30' => 0,
+            // Legacy keys (read fallback)
+            'contribution_day_1' => 0,
+            'repayment_day_1' => 0,
         ];
+    }
+
+    public static function lateFeeReminderDays(): int
+    {
+        return max(0, (int) self::collectionGet('late_fee_reminder_days', 3));
+    }
+
+    public static function lateFeeTier1Day(): int
+    {
+        return max(1, (int) self::collectionGet('late_fee_tier_1_day', 3));
+    }
+
+    public static function lateFeeTier2Day(): int
+    {
+        return max(1, (int) self::collectionGet('late_fee_tier_2_day', 10));
+    }
+
+    public static function lateFeeTier3Day(): int
+    {
+        return max(1, (int) self::collectionGet('late_fee_tier_3_day', 20));
+    }
+
+    public static function lateFeeModel(): string
+    {
+        $model = (string) self::collectionGet('late_fee_model', 'replacement');
+
+        return in_array($model, ['replacement', 'cumulative'], true) ? $model : 'replacement';
+    }
+
+    public static function reconTolerance(): float
+    {
+        return max(0.0, (float) self::collectionGet('recon_tolerance', 0.01));
+    }
+
+    public static function bankMatchDateRangeDays(): int
+    {
+        return max(0, (int) self::collectionGet('bank_match_date_range_days', 3));
     }
 
     public static function consecutiveMissThreshold(): int
@@ -122,6 +207,13 @@ final class ContributionPolicySettings
     private static function delinquencyGet(string $key, mixed $default): mixed
     {
         $value = Setting::get(self::GROUP_DELINQUENCY, $key);
+
+        return $value !== null ? $value : $default;
+    }
+
+    private static function collectionGet(string $key, mixed $default): mixed
+    {
+        $value = Setting::get(self::GROUP_COLLECTION, $key);
 
         return $value !== null ? $value : $default;
     }

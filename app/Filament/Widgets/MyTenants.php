@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Filament\Resources\Tenants\TenantResource;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Central\Tenant;
@@ -23,7 +24,7 @@ class MyTenants extends BaseWidget
 
     public function table(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->query(Tenant::query()->where('central_user_id', auth()->id()))
             ->columns([
                 Tables\Columns\TextColumn::make('name')
@@ -55,6 +56,6 @@ class MyTenants extends BaseWidget
                 BulkActionGroup::make([
                     TableToolbar::refreshBulkAction(),
                 ]),
-            ]);
+            ]), TableGrouping::centralTenants());
     }
 }

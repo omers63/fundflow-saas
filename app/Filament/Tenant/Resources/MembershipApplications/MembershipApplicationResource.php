@@ -8,6 +8,7 @@ use App\Filament\Tenant\Resources\MembershipApplications\Pages\EditMembershipApp
 use App\Filament\Tenant\Resources\MembershipApplications\Pages\ListMembershipApplications;
 use App\Filament\Tenant\Resources\MembershipApplications\Schemas\MembershipApplicationForm;
 use App\Filament\Tenant\Resources\MembershipApplications\Tables\MembershipApplicationsTable;
+use App\Filament\Tenant\Support\TenantNavigation;
 use App\Filament\Tenant\Widgets\MembershipApplicationInsightsWidget;
 use App\Models\Tenant\MembershipApplication;
 use BackedEnum;
@@ -25,9 +26,9 @@ class MembershipApplicationResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Fund Management';
+    protected static string|\UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = TenantNavigation::SORT_APPLICATIONS;
 
     protected static ?string $navigationLabel = 'Applications';
 

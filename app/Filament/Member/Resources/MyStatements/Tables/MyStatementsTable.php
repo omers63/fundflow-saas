@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Member\Resources\MyStatements\Tables;
 
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\MonthlyStatement;
@@ -19,7 +20,7 @@ class MyStatementsTable
     {
         $currency = Setting::get('general', 'currency', 'USD');
 
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('period')
                     ->label(__('Period'))
@@ -49,6 +50,6 @@ class MyStatementsTable
                 BulkActionGroup::make([
                     TableToolbar::refreshBulkAction(),
                 ]),
-            ]);
+            ]), TableGrouping::monthlyStatements(includeMember: false));
     }
 }

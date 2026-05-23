@@ -23,9 +23,10 @@ enum LoanUserFacingStage: string
         return match ($loan->status) {
             'pending' => __('Application submitted'),
             'approved' => __('Approved — awaiting disbursement'),
+            'partially_disbursed' => __('Partially disbursed'),
             'active' => __('Active — repaying'),
-            'completed' => __('Fully repaid'),
-            'early_settled' => __('Settled early'),
+            'completed' => __('Repaid'),
+            'early_settled' => __('Repaid early'),
             'rejected' => __('Application rejected'),
             'cancelled' => __('Application cancelled'),
             default => Loan::statusOptions()[$loan->status] ?? $loan->status,
@@ -66,7 +67,7 @@ enum LoanUserFacingStage: string
             ];
         }
 
-        $approved = $loan->approved_at !== null || in_array($loan->status, ['approved', 'active', 'completed', 'early_settled'], true);
+        $approved = $loan->approved_at !== null || in_array($loan->status, ['approved', 'partially_disbursed', 'active', 'completed', 'early_settled'], true);
         $allocated = (float) $loan->amount_disbursed > 0 || $loan->status === 'active';
         $fullyAllocated = $loan->isFullyDisbursed();
         $payoutDone = $loan->payout_at !== null || $loan->status === 'active';
@@ -106,7 +107,7 @@ enum LoanUserFacingStage: string
             ];
         }
 
-        if ($loan->status === 'approved' && ! $fullyAllocated) {
+        if (in_array($loan->status, ['approved', 'partially_disbursed'], true) && ! $fullyAllocated) {
             $result[2]['description'] = __(':disbursed of :approved disbursed', [
                 'disbursed' => number_format((float) $loan->amount_disbursed, 2),
                 'approved' => number_format((float) $loan->amount_approved, 2),

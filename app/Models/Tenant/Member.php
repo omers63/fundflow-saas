@@ -38,6 +38,13 @@ class Member extends Model
         'portal_pin',
         'monthly_contribution_amount',
         'joined_at',
+        'migration_cutoff_date',
+        'migration_status',
+        'partial_clearance_granted_at',
+        'partial_clearance_notes',
+        'opening_cash_balance',
+        'opening_fund_balance',
+        'opening_balances_posted_at',
         'status',
     ];
 
@@ -46,6 +53,11 @@ class Member extends Model
         return [
             'monthly_contribution_amount' => 'decimal:2',
             'joined_at' => 'date',
+            'migration_cutoff_date' => 'date',
+            'partial_clearance_granted_at' => 'datetime',
+            'opening_cash_balance' => 'decimal:2',
+            'opening_fund_balance' => 'decimal:2',
+            'opening_balances_posted_at' => 'datetime',
             'is_separated' => 'boolean',
             'direct_login_enabled' => 'boolean',
         ];
@@ -94,6 +106,11 @@ class Member extends Model
     public function fundPostings(): HasMany
     {
         return $this->hasMany(FundPosting::class);
+    }
+
+    public function migrationInstalmentSchedules(): HasMany
+    {
+        return $this->hasMany(MigrationInstalmentSchedule::class);
     }
 
     public function repayments(): HasManyThrough
@@ -213,13 +230,97 @@ class Member extends Model
         return (float) ($this->cashAccount?->balance ?? 0);
     }
 
-    public function isExemptFromContributions(): bool
+    public function isExemptFromContributions(?int $month = null, ?int $year = null): bool
+    {
+        if ($this->migration_status === 'migration_pending') {
+            return true;
+        }
+
+        if ($this->hasActiveLoanRepaymentObligation()) {
+            return true;
+        }
+
+        if ($this->hasPartiallyDisbursedLoan()) {
+            return true;
+        }
+
+        if ($month !== null && $year !== null && $this->isInLoanGracePeriodForCycle($month, $year)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    public function hasActiveLoanRepaymentObligation(): bool
     {
         return Loan::query()
             ->where('member_id', $this->id)
-            ->where('status', 'active')
+            ->whereIn('status', ['active', 'transferred'])
             ->whereHas('installments', fn ($q) => $q->whereIn('status', ['pending', 'overdue']))
             ->exists();
+    }
+
+    public function hasPartiallyDisbursedLoan(): bool
+    {
+        return Loan::query()
+            ->where('member_id', $this->id)
+            ->whereIn('status', ['approved', 'partially_disbursed'])
+            ->whereRaw('COALESCE(amount_disbursed, 0) < COALESCE(amount_approved, amount_requested, 0)')
+            ->exists();
+    }
+
+    public function isInLoanGracePeriodForCycle(int $month, int $year): bool
+    {
+        $cycleStart = \Carbon\Carbon::create($year, $month, 1)->startOfMonth();
+
+        return Loan::query()
+            ->where('member_id', $this->id)
+            ->whereIn('status', ['active', 'approved'])
+            ->where('has_grace_cycle', true)
+            ->where(function ($query) use ($cycleStart): void {
+                $query->whereNull('first_repayment_month')
+                    ->orWhere('first_repayment_year', '>', (int) $cycleStart->year)
+                    ->orWhere(function ($inner) use ($cycleStart): void {
+                        $inner->where('first_repayment_year', (int) $cycleStart->year)
+                            ->where('first_repayment_month', '>', (int) $cycleStart->month);
+                    });
+            })
+            ->exists();
+    }
+
+    public function transactions(): HasMany
+    {
+        return $this->hasMany(Transaction::class);
+    }
+
+    public function migrationStubs(): HasMany
+    {
+        return $this->hasMany(MigrationCycleStub::class);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function migrationStatusOptions(): array
+    {
+        return [
+            'migration_pending' => __('Migration pending'),
+            'active' => __('Cleared for active operation'),
+        ];
+    }
+
+    public static function migrationStatusBadgeColor(?string $state): string
+    {
+        return match ($state) {
+            'migration_pending' => 'warning',
+            'active' => 'success',
+            default => 'gray',
+        };
+    }
+
+    public function isMigrationPending(): bool
+    {
+        return $this->migration_status === 'migration_pending';
     }
 
     public function monthlyStatements(): HasMany

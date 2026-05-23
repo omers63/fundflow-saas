@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Subscriptions\Tables;
 
 use App\Filament\Resources\Subscriptions\SubscriptionResource;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use Filament\Actions\BulkActionGroup;
@@ -19,7 +20,7 @@ class SubscriptionsTable
 {
     public static function configure(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('tenant.name')
                     ->label('Tenant')
@@ -80,6 +81,6 @@ class SubscriptionsTable
                         ->visible(fn () => auth()->user()->hasRole('super_admin')),
                     TableToolbar::refreshBulkAction(),
                 ]),
-            ]);
+            ]), TableGrouping::centralSubscriptions());
     }
 }

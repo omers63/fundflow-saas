@@ -143,4 +143,117 @@ class LoanEarlySettlementService
             }
         }
     }
+
+    /**
+     * Apply a partial early settlement: pay down principal with optional schedule roll-up or skip.
+     *
+     * @param  'roll_up'|'skip_future'  $option
+     *
+     * @throws \InvalidArgumentException|\RuntimeException
+     */
+    public function partialEarlySettle(Loan $loan, float $amount, string $option = 'roll_up'): void
+    {
+        if ($loan->status !== 'active') {
+            throw new \InvalidArgumentException(__('Only active loans can receive partial early settlement.'));
+        }
+
+        if ($amount <= 0.00001) {
+            throw new \InvalidArgumentException(__('Settlement amount must be greater than zero.'));
+        }
+
+        if (! in_array($option, ['roll_up', 'skip_future'], true)) {
+            throw new \InvalidArgumentException(__('Invalid partial settlement option.'));
+        }
+
+        $loan->loadMissing(['member', 'installments']);
+        $member = $loan->member;
+        $member->unsetRelation('accounts');
+        $cash = (float) $member->cash_balance;
+
+        if ($cash < $amount - 0.00001) {
+            throw new \RuntimeException(__('Insufficient cash for partial settlement.'));
+        }
+
+        $pending = $this->pendingInstallments($loan);
+        if ($pending->isEmpty()) {
+            throw new \InvalidArgumentException(__('This loan has no unpaid installments.'));
+        }
+
+        DB::transaction(function () use ($loan, $member, $amount, $option, $pending): void {
+            $remaining = $amount;
+
+            foreach ($pending as $installment) {
+                if ($remaining <= 0.00001) {
+                    break;
+                }
+
+                $required = $this->installmentCashRequired($installment);
+                $pay = min($remaining, $required);
+
+                if ($pay <= 0.00001) {
+                    continue;
+                }
+
+                $lateFee = min($this->lateFeeForInstallment($installment), $pay);
+                $principal = $pay - $lateFee;
+
+                $this->ledger->debitCashForRepayment($member, $installment, $lateFee, null, $principal);
+
+                $newCollected = (float) ($installment->amount_collected ?? 0) + $principal;
+
+                if ($newCollected >= (float) $installment->amount - 0.00001) {
+                    $installment->update([
+                        'status' => 'paid',
+                        'paid_at' => now(),
+                        'amount_collected' => (float) $installment->amount,
+                        'collection_status' => 'collected',
+                        'late_fee_amount' => $lateFee > 0 ? $lateFee : null,
+                    ]);
+                } else {
+                    $installment->update([
+                        'amount_collected' => $newCollected,
+                        'collection_status' => 'partially_pending',
+                    ]);
+                }
+
+                $remaining -= $pay;
+            }
+
+            if ($option === 'roll_up' && $remaining > 0.00001) {
+                $last = $loan->installments()
+                    ->whereIn('status', ['pending', 'overdue'])
+                    ->orderByDesc('due_date')
+                    ->first();
+
+                if ($last) {
+                    $last->update([
+                        'amount' => round((float) $last->amount + $remaining, 2),
+                    ]);
+                }
+            } elseif ($option === 'skip_future' && $remaining > 0.00001) {
+                $toRemove = $loan->installments()
+                    ->whereIn('status', ['pending', 'overdue'])
+                    ->orderBy('due_date')
+                    ->get()
+                    ->reverse()
+                    ->values();
+
+                foreach ($toRemove as $installment) {
+                    if ($remaining <= 0.00001) {
+                        break;
+                    }
+
+                    $instAmount = (float) $installment->amount - (float) ($installment->amount_collected ?? 0);
+
+                    if ($instAmount <= $remaining + 0.00001) {
+                        $installment->delete();
+                        $remaining -= $instAmount;
+                    }
+                }
+            }
+
+            $loan->refresh();
+            $loan->syncPaidOffStatusFromInstallments();
+        });
+    }
 }

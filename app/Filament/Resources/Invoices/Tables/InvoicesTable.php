@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Invoices\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Central\Invoice;
@@ -22,7 +23,7 @@ class InvoicesTable
 {
     public static function configure(Table $table): Table
     {
-        return $table
+        return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('invoice_number')
                     ->searchable()
@@ -131,6 +132,6 @@ class InvoicesTable
                     DeleteBulkAction::make(),
                     TableToolbar::refreshBulkAction(),
                 ]),
-            ]);
+            ]), TableGrouping::centralInvoices());
     }
 }

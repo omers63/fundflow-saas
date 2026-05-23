@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\Loans\Pages;
 
 use App\Filament\Support\LoanFilamentActions;
 use App\Filament\Support\MemberTableColumns;
+use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
@@ -20,7 +21,6 @@ use App\Services\Loans\LoanDelinquencyService;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -193,7 +193,7 @@ class ListDelinquency extends Page implements HasTable
     {
         $currency = Setting::get('general', 'currency', 'USD');
 
-        return $table
+        return TableGrouping::apply($table
             ->query($this->getTableQuery())
             ->columnManager(true)
             ->columns([
@@ -229,9 +229,11 @@ class ListDelinquency extends Page implements HasTable
             ])
             ->defaultSort('due_date')
             ->recordActions(TableRecordActionGroups::wrap([
-                ViewAction::make()
-                    ->label(__('View loan'))
-                    ->url(fn (LoanInstallment $record): string => LoanResource::getUrl('view', ['record' => $record->loan_id])),
+                self::tableNavigationAction(
+                    'view_loan',
+                    __('View loan'),
+                    fn (LoanInstallment $record): string => LoanResource::getUrl('view', ['record' => $record->loan_id]),
+                ),
             ]))
             ->toolbarActions([
                 BulkActionGroup::make([
@@ -239,7 +241,7 @@ class ListDelinquency extends Page implements HasTable
                 ]),
             ])
             ->emptyStateHeading(__('No overdue installments'))
-            ->emptyStateDescription(__('Installments appear here after their cycle deadline passes and the delinquency check runs.'));
+            ->emptyStateDescription(__('Installments appear here after their cycle deadline passes and the delinquency check runs.')), TableGrouping::loanInstallments(includeLoanMember: true));
     }
 
     protected function contributionsTable(Table $table): Table
@@ -247,7 +249,7 @@ class ListDelinquency extends Page implements HasTable
         $currency = Setting::get('general', 'currency', 'USD');
         $delinquency = app(LoanDelinquencyService::class);
 
-        return $table
+        return TableGrouping::apply($table
             ->records(function (?string $search = null, ?string $sortColumn = null, ?string $sortDirection = null, ?array $filters = null) use ($delinquency): Collection {
                 $memberId = isset($filters['member_id']['value'])
                     ? (int) $filters['member_id']['value']
@@ -326,9 +328,11 @@ class ListDelinquency extends Page implements HasTable
                     ->searchable(),
             ])
             ->recordActions(TableRecordActionGroups::wrap([
-                ViewAction::make()
-                    ->label(__('View member'))
-                    ->url(MemberTableColumns::memberIdEditUrl(...)),
+                self::tableNavigationAction(
+                    'view_member',
+                    __('View member'),
+                    MemberTableColumns::memberIdEditUrl(...),
+                ),
             ]))
             ->toolbarActions([
                 BulkActionGroup::make([
@@ -336,14 +340,14 @@ class ListDelinquency extends Page implements HasTable
                 ]),
             ])
             ->emptyStateHeading(__('No contribution arrears'))
-            ->emptyStateDescription(__('Each row is one period after the deadline without a posted contribution (since the member joined).'));
+            ->emptyStateDescription(__('Each row is one period after the deadline without a posted contribution (since the member joined).')), TableGrouping::delinquencyContributionArrears());
     }
 
     protected function guarantorTable(Table $table): Table
     {
         $currency = Setting::get('general', 'currency', 'USD');
 
-        return $table
+        return TableGrouping::apply($table
             ->query($this->getTableQuery())
             ->columnManager(true)
             ->columns([
@@ -392,9 +396,11 @@ class ListDelinquency extends Page implements HasTable
                     ->placeholder(__('—')),
             ])
             ->recordActions(TableRecordActionGroups::wrap([
-                ViewAction::make()
-                    ->label(__('View loan'))
-                    ->url(fn (Loan $record): string => LoanResource::getUrl('view', ['record' => $record])),
+                self::tableNavigationAction(
+                    'view_loan',
+                    __('View loan'),
+                    fn (Loan $record): string => LoanResource::getUrl('view', ['record' => $record]),
+                ),
                 self::withInsightsRefresh(LoanFilamentActions::transferGuarantorLiability()),
                 self::withInsightsRefresh(LoanFilamentActions::restoreBorrowerLiability()),
             ]))
@@ -404,7 +410,7 @@ class ListDelinquency extends Page implements HasTable
                 ]),
             ])
             ->emptyStateHeading(__('No guarantor exposure'))
-            ->emptyStateDescription(__('Loans at warning stage or with liability transferred to the guarantor appear here.'));
+            ->emptyStateDescription(__('Loans at warning stage or with liability transferred to the guarantor appear here.')), TableGrouping::delinquencyGuarantorLoans());
     }
 
     protected function getTableQuery(): Builder
@@ -466,5 +472,17 @@ class ListDelinquency extends Page implements HasTable
     private static function withInsightsRefresh(Action $action): Action
     {
         return $action->after(fn (Component $livewire): mixed => LoanResource::dispatchInsightsRefresh($livewire));
+    }
+
+    /**
+     * Link-only row action (not {@see ViewAction}) so custom table records (arrays) do not hit
+     * {@see LoanResource::getViewAuthorizationResponse()} with a non-model record.
+     */
+    private static function tableNavigationAction(string $name, string $label, callable $urlResolver): Action
+    {
+        return Action::make($name)
+            ->label($label)
+            ->icon(Heroicon::OutlinedEye)
+            ->url($urlResolver);
     }
 }

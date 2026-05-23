@@ -40,6 +40,9 @@ class Loan extends Model
         'approved_by_id',
         'disbursed_at',
         'has_grace_cycle',
+        'grace_cycles',
+        'original_borrower_member_id',
+        'transferred_to_guarantor_at',
         'settled_at',
         'due_date',
         'guarantor_member_id',
@@ -83,6 +86,8 @@ class Loan extends Model
             'settled_at' => 'datetime',
             'guarantor_released_at' => 'datetime',
             'guarantor_liability_transferred_at' => 'datetime',
+            'transferred_to_guarantor_at' => 'datetime',
+            'grace_cycles' => 'integer',
             'due_date' => 'date',
             'payout_at' => 'datetime',
             'rejected_at' => 'datetime',
@@ -150,7 +155,12 @@ class Loan extends Model
 
     public function isApproved(): bool
     {
-        return $this->status === 'approved';
+        return in_array($this->status, ['approved', 'partially_disbursed'], true);
+    }
+
+    public function isPartiallyDisbursed(): bool
+    {
+        return $this->status === 'partially_disbursed';
     }
 
     public function isActive(): bool
@@ -234,6 +244,52 @@ class Loan extends Model
         $required = (float) $this->amount_approved * (float) $this->settlement_threshold;
 
         return $fundBalance >= $required;
+    }
+
+    /**
+     * Cumulative repayment target (master slice + settlement portion) per schedule build.
+     */
+    public function fullRepaymentThreshold(): float
+    {
+        return round(
+            (float) $this->master_portion + ((float) $this->amount_approved * (float) $this->settlement_threshold),
+            2,
+        );
+    }
+
+    /**
+     * Sum of principal collected on paid installments (cash debits / amount_collected).
+     */
+    public function totalPrincipalCollected(): float
+    {
+        return (float) $this->installments()
+            ->where('status', 'paid')
+            ->get()
+            ->sum(fn (LoanInstallment $installment): float => (float) ($installment->amount_collected > 0
+                ? $installment->amount_collected
+                : $installment->amount));
+    }
+
+    /**
+     * Representative EMI amount for over-collection comparisons (first unpaid or last paid).
+     */
+    public function representativeEmiAmount(): float
+    {
+        $pending = $this->installments()
+            ->whereIn('status', ['pending', 'overdue'])
+            ->orderBy('installment_number')
+            ->value('amount');
+
+        if ($pending !== null) {
+            return (float) $pending;
+        }
+
+        $paid = $this->installments()
+            ->where('status', 'paid')
+            ->orderByDesc('installment_number')
+            ->value('amount');
+
+        return (float) ($paid ?? $this->monthly_repayment ?? 0);
     }
 
     // -----------------------------------------------------------------------
@@ -355,8 +411,17 @@ class Loan extends Model
      * skipped cycle). Apply {@see finalizeExemptionForDisbursement()} after this so an existing
      * contribution for the grace period shifts grace and first repayment together.
      */
-    public static function computeExemptionAndFirstRepayment(Carbon $disbursedAt, bool $hasGraceCycle = true): array
+    /**
+     * @param  bool|int  $grace  Legacy bool (true = 1 cycle) or explicit grace_cycles 0–2
+     * @return array{exempted_month: int|null, exempted_year: int|null, first_repayment_month: int, first_repayment_year: int}
+     */
+    public static function computeExemptionAndFirstRepayment(Carbon $disbursedAt, bool|int $grace = true): array
     {
+        $graceCycles = is_int($grace)
+            ? max(0, min(2, $grace))
+            : ($grace ? 1 : 0);
+        $hasGraceCycle = $graceCycles > 0;
+
         $cutoffDay = max(1, Setting::contributionCycleStartDay() - 1);
 
         if ($disbursedAt->day <= $cutoffDay) {
@@ -373,12 +438,18 @@ class Loan extends Model
             $first = $first->copy()->addMonthNoOverflow();
         }
 
-        return [
+        $result = [
             'exempted_month' => $exempted ? (int) $exempted->month : null,
             'exempted_year' => $exempted ? (int) $exempted->year : null,
             'first_repayment_month' => (int) $first->month,
             'first_repayment_year' => (int) $first->year,
         ];
+
+        for ($i = 1; $i < $graceCycles; $i++) {
+            $result = static::shiftGraceAndFirstRepaymentOneMonth($result);
+        }
+
+        return $result;
     }
 
     /**
@@ -485,7 +556,12 @@ class Loan extends Model
 
     public function scopeInProgress($query)
     {
-        return $query->whereIn('status', ['pending', 'approved', 'active']);
+        return $query->whereIn('status', ['pending', 'approved', 'partially_disbursed', 'active', 'transferred']);
+    }
+
+    public function scopeInRepayment($query)
+    {
+        return $query->whereIn('status', ['active', 'transferred']);
     }
 
     /** Pending review or approved but not yet fully disbursed. */
@@ -493,10 +569,7 @@ class Loan extends Model
     {
         return $query->where(function ($q): void {
             $q->where('status', 'pending')
-                ->orWhere(function ($q2): void {
-                    $q2->where('status', 'approved')
-                        ->whereRaw('COALESCE(amount_disbursed, 0) < COALESCE(amount_approved, amount_requested, 0)');
-                });
+                ->orWhereIn('status', ['approved', 'partially_disbursed']);
         });
     }
 
@@ -507,7 +580,7 @@ class Loan extends Model
 
     public function scopeReadyToDisburse($query)
     {
-        return $query->where('status', 'approved')
+        return $query->whereIn('status', ['approved', 'partially_disbursed'])
             ->whereRaw('COALESCE(amount_disbursed, 0) < COALESCE(amount_approved, amount_requested, 0)');
     }
 
@@ -524,11 +597,13 @@ class Loan extends Model
     public static function statusOptions(): array
     {
         return [
-            'pending' => __('Pending'),
+            'pending' => __('Pending admin review'),
             'approved' => __('Approved'),
+            'partially_disbursed' => __('Partially disbursed'),
             'active' => __('Active'),
-            'completed' => __('Completed'),
-            'early_settled' => __('Early settled'),
+            'transferred' => __('Transferred to guarantor'),
+            'completed' => __('Repaid'),
+            'early_settled' => __('Repaid early'),
             'rejected' => __('Rejected'),
             'cancelled' => __('Cancelled'),
         ];
@@ -538,8 +613,9 @@ class Loan extends Model
     {
         return match ($status) {
             'pending' => 'warning',
-            'approved' => 'info',
+            'approved', 'partially_disbursed' => 'info',
             'active' => 'success',
+            'transferred' => 'warning',
             'completed', 'early_settled' => 'gray',
             'rejected', 'cancelled' => 'danger',
             default => 'gray',
