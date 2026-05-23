@@ -1007,5 +1007,18 @@
     "Classification": "التصنيف",
     "Notes": "ملاحظات",
     ":count cycle(s) classified": "تم تصنيف :count دورة(دورات)",
+    "Approval blocked for :count application(s)": "تم حظر الموافقة على :count طلب(طلبات)",
+    "…and :count more.": "…و :count أخرى.",
+    "No pending applications were selected": "لم يتم تحديد طلبات قيد الانتظار",
+    "Cut-off date": "تاريخ القطع",
+    "Contribution cycles before this date are not treated as arrears on approval. Optional CSV columns post cut-off cash and fund balances to master and member accounts.": "دورات الاشتراك قبل هذا التاريخ لا تُحسب متأخرات عند الموافقة. أعمدة CSV الاختيارية تنشر أرصدة النقد والصندوق عند القطع إلى حسابات الصندوق والعضو.",
+    "Cut-off cash balance (optional, default 0; credited on approval)": "رصيد النقد عند القطع (اختياري، افتراضي 0؛ يُقيد عند الموافقة)",
+    "Cut-off fund balance (optional, default 0; credited on approval)": "رصيد الصندوق عند القطع (اختياري، افتراضي 0؛ يُقيد عند الموافقة)",
+    "Set in this modal for the whole import. Cycles before that date are not arrears when you approve. Cash and fund cut-off columns post opening balances on approval.": "يُحدَّد في هذه النافذة للاستيراد كاملاً. الدورات قبل ذلك التاريخ ليست متأخرات عند الموافقة. أعمدة النقد والصندوق عند القطع تنشر الأرصدة الافتتاحية عند الموافقة.",
+    "CSV import cut-off": "قطع الاستيراد من CSV",
+    "Applied when this application was imported from CSV. On approval, cycles before the cut-off date are excluded from contribution arrears; balances are posted to master and member accounts.": "يُطبَّق عند استيراد هذا الطلب من CSV. عند الموافقة، تُستثنى الدورات قبل تاريخ القطع من متأخرات الاشتراك؛ وتُقيد الأرصدة في حسابات الصندوق والعضو.",
+    "Cut-off cash balance": "رصيد النقد عند القطع",
+    "Cut-off fund balance": "رصيد الصندوق عند القطع",
+    "Cut-off date cannot be in the future.": "لا يمكن أن يكون تاريخ القطع في المستقبل.",
     "Classify historical cycle stubs, post opening balances, apply settlements, then clear each member from the member profile (Migration menu) or from this page.": "صنّف سجلات الدورات التاريخية، انشر الأرصدة الافتتاحية، طبّق التسويات، ثم أقفل كل عضو من ملف العضو (قائمة الترحيل) أو من هذه الصفحة."
 }

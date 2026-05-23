@@ -24,7 +24,7 @@ class ReconciliationExceptionResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldExclamation;
 
-    protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_SYSTEM;
+    protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
 
     protected static ?string $navigationLabel = 'Reconciliation';
 

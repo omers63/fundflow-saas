@@ -16,11 +16,12 @@ class MembershipApplicationImportService
      * Required: name, email, mobile_phone, iban
      * Optional: national_id, date_of_birth, city, address, bank_account_number, next_of_kin_name, next_of_kin_phone,
      * password (≥8 chars overrides default on first row only), application_type, gender, marital_status, membership_date,
-     * home_phone, work_phone, work_place, residency_place, occupation, employer, monthly_income
+     * home_phone, work_phone, work_place, residency_place, occupation, employer, monthly_income,
+     * cutoff_cash_balance, cutoff_fund_balance (default 0)
      *
      * @return array{created: int, skipped: int, failed: int, errors: array<int, string>}
      */
-    public function import(string $absolutePath, string $defaultPassword): array
+    public function import(string $absolutePath, string $defaultPassword, ?string $arrearsCutoffDate = null): array
     {
         $created = 0;
         $skipped = 0;
@@ -37,6 +38,8 @@ class MembershipApplicationImportService
         }
 
         $this->authorizeCsvImport();
+
+        $arrearsCutoffDate = $this->normalizeArrearsCutoffDate($arrearsCutoffDate);
 
         $rows = $this->parseAssociativeCsv($absolutePath);
 
@@ -65,7 +68,7 @@ class MembershipApplicationImportService
             $row = $item['row'];
 
             try {
-                $this->importRow($row, $defaultPassword, $parentApplicationIdsByHouseholdEmail);
+                $this->importRow($row, $defaultPassword, $parentApplicationIdsByHouseholdEmail, $arrearsCutoffDate);
                 $created++;
             } catch (Throwable $e) {
                 $failed++;
@@ -84,8 +87,12 @@ class MembershipApplicationImportService
     /**
      * @param  array<string, int>  $parentApplicationIdsByHouseholdEmail
      */
-    private function importRow(array $row, string $defaultPassword, array &$parentApplicationIdsByHouseholdEmail): void
-    {
+    private function importRow(
+        array $row,
+        string $defaultPassword,
+        array &$parentApplicationIdsByHouseholdEmail,
+        ?string $arrearsCutoffDate,
+    ): void {
         $name = trim((string) $this->cell($row, 'name'));
         $email = strtolower(trim($this->cell($row, 'email')));
 
@@ -119,6 +126,9 @@ class MembershipApplicationImportService
             'parent_application_id' => $parentApplicationId,
             'password' => $plain,
             'phone' => $mobile !== '' ? $mobile : null,
+            'import_arrears_cutoff_date' => $arrearsCutoffDate,
+            'import_cutoff_cash_balance' => $this->parseCutoffBalance($row, 'cutoff_cash_balance'),
+            'import_cutoff_fund_balance' => $this->parseCutoffBalance($row, 'cutoff_fund_balance'),
         ]));
 
         if ($parentApplicationId === null) {
@@ -310,8 +320,52 @@ class MembershipApplicationImportService
             'bank_account', 'account_number', 'bank_acc' => 'bank_account_number',
             'kin_name', 'emergency_contact_name', 'nok_name' => 'next_of_kin_name',
             'kin_phone', 'emergency_contact_phone', 'nok_phone' => 'next_of_kin_phone',
+            'cut_off_cash_balance', 'opening_cash_balance', 'cash_cutoff_balance' => 'cutoff_cash_balance',
+            'cut_off_fund_balance', 'opening_fund_balance', 'fund_cutoff_balance' => 'cutoff_fund_balance',
             default => $h,
         };
+    }
+
+    private function normalizeArrearsCutoffDate(?string $value): ?string
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        $date = $this->parseFlexibleDateToDateString(trim($value), 'cut-off date');
+
+        if ($date > now()->toDateString()) {
+            throw new \InvalidArgumentException(__('Cut-off date cannot be in the future.'));
+        }
+
+        return $date;
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     */
+    private function parseCutoffBalance(array $row, string $key): float
+    {
+        $raw = $this->cell($row, $key);
+
+        if ($raw === '') {
+            return 0.0;
+        }
+
+        if (! is_numeric($raw)) {
+            throw new \InvalidArgumentException(__(':column must be numeric (got: :value)', [
+                'column' => $key,
+                'value' => $raw,
+            ]));
+        }
+
+        $amount = (float) $raw;
+
+        if ($amount < 0) {
+            throw new \InvalidArgumentException(__(':column cannot be negative.', ['column' => $key]));
+        }
+
+        return $amount;
     }
 
     /**

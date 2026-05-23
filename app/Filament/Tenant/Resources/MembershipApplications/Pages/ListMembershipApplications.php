@@ -8,6 +8,7 @@ use App\Services\MembershipApplicationImportService;
 use App\Support\FilamentStoredUploadPath;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -48,6 +49,12 @@ class ListMembershipApplications extends ListRecords
                         ->required()
                         ->minLength(8)
                         ->helperText(__('Used when the password column is empty or shorter than 8 characters. Applicants should change it after first login.')),
+                    DatePicker::make('arrears_cutoff_date')
+                        ->label(__('Cut-off date'))
+                        ->required()
+                        ->maxDate(now())
+                        ->native(false)
+                        ->helperText(__('Contribution cycles before this date are not treated as arrears on approval. Optional CSV columns post cut-off cash and fund balances to master and member accounts.')),
                 ])
                 ->action(function (array $data, Component $livewire): void {
                     $mounted = collect($livewire->mountedActions ?? [])->last();
@@ -77,7 +84,15 @@ class ListMembershipApplications extends ListRecords
                         $deleteRelative = $resolved['relativePathForDeletion'];
 
                         try {
-                            $result = app(MembershipApplicationImportService::class)->import($fullPath, $defaultPassword);
+                            $cutoffDate = filled($data['arrears_cutoff_date'] ?? null)
+                                ? (string) $data['arrears_cutoff_date']
+                                : (string) ($mountedData['arrears_cutoff_date'] ?? '');
+
+                            $result = app(MembershipApplicationImportService::class)->import(
+                                $fullPath,
+                                $defaultPassword,
+                                $cutoffDate !== '' ? $cutoffDate : null,
+                            );
                         } finally {
                             if ($deleteRelative !== null) {
                                 try {

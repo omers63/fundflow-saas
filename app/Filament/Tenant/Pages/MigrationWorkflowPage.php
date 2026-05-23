@@ -58,7 +58,7 @@ class MigrationWorkflowPage extends Page implements HasTable
 
     protected static ?string $slug = 'migration-workflow';
 
-    protected static bool $shouldRegisterNavigation = true;
+    protected static bool $shouldRegisterNavigation = false;
 
     protected string $view = 'filament.tenant.pages.migration-workflow';
 
@@ -75,7 +75,7 @@ class MigrationWorkflowPage extends Page implements HasTable
 
     public function setMigrationTab(string $tab): void
     {
-        if (!in_array($tab, ['queue', 'stubs', 'not_started'], true)) {
+        if (! in_array($tab, ['queue', 'stubs', 'not_started'], true)) {
             return;
         }
 
@@ -102,7 +102,7 @@ class MigrationWorkflowPage extends Page implements HasTable
     {
         $table = $table->persistColumnsInSession(false);
 
-        if (!$withExplorerControls) {
+        if (! $withExplorerControls) {
             $table->columnManager(false);
         }
 
@@ -111,7 +111,7 @@ class MigrationWorkflowPage extends Page implements HasTable
 
     protected function getTableQueryStringIdentifier(): ?string
     {
-        return 'migration_workflow_' . $this->migrationWorkflowTab;
+        return 'migration_workflow_'.$this->migrationWorkflowTab;
     }
 
     public function getTitle(): string
@@ -157,7 +157,7 @@ class MigrationWorkflowPage extends Page implements HasTable
 
         return TableGrouping::apply(
             $this->configureMigrationWorkflowTable($table, withExplorerControls: true)
-                ->query(fn(): Builder => $workflow->pendingMembersQuery())
+                ->query(fn (): Builder => $workflow->pendingMembersQuery())
                 ->heading(__('Members in migration'))
                 ->columns([
                     MemberTableColumns::number(label: __('Member #'))
@@ -174,11 +174,11 @@ class MigrationWorkflowPage extends Page implements HasTable
                         ->placeholder(__('—')),
                     TextColumn::make('unresolved_stubs')
                         ->label(__('Open stubs'))
-                        ->state(fn(Member $record): int => $workflow->unresolvedStubCountForMember($record))
+                        ->state(fn (Member $record): int => $workflow->unresolvedStubCountForMember($record))
                         ->alignEnd()
                         ->sortable(query: function (Builder $query, string $direction): Builder {
                             return $query->withCount([
-                                'migrationStubs as unresolved_stubs_count' => fn(Builder $stub): Builder => $stub->unresolved(),
+                                'migrationStubs as unresolved_stubs_count' => fn (Builder $stub): Builder => $stub->unresolved(),
                             ])->orderBy('unresolved_stubs_count', $direction);
                         }),
                     TextColumn::make('opening_balances_posted_at')
@@ -228,9 +228,9 @@ class MigrationWorkflowPage extends Page implements HasTable
                         ->falseLabel(__('Not granted')),
                     Filter::make('has_unresolved_stubs')
                         ->label(__('Has open stubs'))
-                        ->query(fn(Builder $query): Builder => $query->whereHas(
+                        ->query(fn (Builder $query): Builder => $query->whereHas(
                             'migrationStubs',
-                            fn(Builder $stub): Builder => $stub->unresolved(),
+                            fn (Builder $stub): Builder => $stub->unresolved(),
                         ))
                         ->toggle(),
                     SelectFilter::make('parent_member_id')
@@ -246,14 +246,14 @@ class MigrationWorkflowPage extends Page implements HasTable
                     Action::make('openMember')
                         ->label(__('Open member'))
                         ->icon('heroicon-o-user')
-                        ->url(fn(Member $record): string => MemberResource::getUrl('edit', ['record' => $record])),
+                        ->url(fn (Member $record): string => MemberResource::getUrl('edit', ['record' => $record])),
                     Action::make('grantPartialClearance')
                         ->label(__('Grant partial clearance'))
                         ->icon('heroicon-o-shield-check')
                         ->color('warning')
                         ->requiresConfirmation()
                         ->modalDescription(__('Allows active operation while escalated historical cycles remain under investigation.'))
-                        ->visible(fn(Member $record): bool => $record->partial_clearance_granted_at === null)
+                        ->visible(fn (Member $record): bool => $record->partial_clearance_granted_at === null)
                         ->schema([
                             Textarea::make('notes')
                                 ->label(__('Reason'))
@@ -312,7 +312,7 @@ class MigrationWorkflowPage extends Page implements HasTable
 
         return TableGrouping::apply(
             $this->configureMigrationWorkflowTable($table, withExplorerControls: true)
-                ->query(fn(): Builder => $workflow->openStubsQuery())
+                ->query(fn (): Builder => $workflow->openStubsQuery())
                 ->heading(__('Open migration cycle stubs'))
                 ->columns([
                     TextColumn::make('member.member_number')
@@ -333,7 +333,7 @@ class MigrationWorkflowPage extends Page implements HasTable
                         ->sortable(),
                     TextColumn::make('status')
                         ->badge()
-                        ->formatStateUsing(fn(string $state): string => match ($state) {
+                        ->formatStateUsing(fn (string $state): string => match ($state) {
                             'unresolved' => __('Unresolved'),
                             'closed' => __('Closed'),
                             'escalated' => __('Escalated'),
@@ -342,7 +342,7 @@ class MigrationWorkflowPage extends Page implements HasTable
                     TextColumn::make('classification')
                         ->badge()
                         ->placeholder(__('—'))
-                        ->formatStateUsing(fn(?string $state): string => match ($state) {
+                        ->formatStateUsing(fn (?string $state): string => match ($state) {
                             MigrationCycleStub::CLASS_WAIVED => __('Waived'),
                             MigrationCycleStub::CLASS_BACKDATED_PAID => __('Backdated paid'),
                             MigrationCycleStub::CLASS_BACKDATED_DUE => __('Backdated due'),
@@ -379,7 +379,7 @@ class MigrationWorkflowPage extends Page implements HasTable
                         ])),
                     Filter::make('unclassified')
                         ->label(__('Unclassified only'))
-                        ->query(fn(Builder $query): Builder => $query->whereNull('classification'))
+                        ->query(fn (Builder $query): Builder => $query->whereNull('classification'))
                         ->toggle(),
                     SelectFilter::make('member_id')
                         ->label(__('Member'))
@@ -423,7 +423,7 @@ class MigrationWorkflowPage extends Page implements HasTable
                     Action::make('openMember')
                         ->label(__('Open member'))
                         ->icon('heroicon-o-user')
-                        ->url(fn(MigrationCycleStub $record): string => MemberResource::editUrlWithRelationManager(
+                        ->url(fn (MigrationCycleStub $record): string => MemberResource::editUrlWithRelationManager(
                             (int) $record->member_id,
                             MigrationStubsRelationManager::class,
                         )),
@@ -439,7 +439,7 @@ class MigrationWorkflowPage extends Page implements HasTable
                             ->modalDescription(__('Permanently removes the selected open migration cycle stubs.'))
                             ->action(function (Collection $records, MigrationCycleService $migration): void {
                                 $byMember = $records
-                                    ->filter(fn($record): bool => $record instanceof MigrationCycleStub)
+                                    ->filter(fn ($record): bool => $record instanceof MigrationCycleStub)
                                     ->groupBy('member_id');
 
                                 $deleted = 0;
@@ -474,7 +474,7 @@ class MigrationWorkflowPage extends Page implements HasTable
 
         return TableGrouping::apply(
             $this->configureMigrationWorkflowTable($table, withExplorerControls: true)
-                ->query(fn(): Builder => $workflow->notStartedMembersQuery())
+                ->query(fn (): Builder => $workflow->notStartedMembersQuery())
                 ->heading(__('Members not yet in migration'))
                 ->columns([
                     MemberTableColumns::number(label: __('Member #'))
@@ -503,8 +503,8 @@ class MigrationWorkflowPage extends Page implements HasTable
                         ->toggleable(isToggledHiddenByDefault: true),
                     TextColumn::make('status')
                         ->badge()
-                        ->formatStateUsing(fn(string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
-                        ->color(fn(string $state): string => Member::statusBadgeColor($state))
+                        ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
+                        ->color(fn (string $state): string => Member::statusBadgeColor($state))
                         ->toggleable(isToggledHiddenByDefault: true),
                 ])
                 ->filters([
@@ -515,11 +515,11 @@ class MigrationWorkflowPage extends Page implements HasTable
                         ->preload(),
                     Filter::make('dependents_only')
                         ->label(__('Dependents only'))
-                        ->query(fn(Builder $query): Builder => $query->whereNotNull('parent_member_id'))
+                        ->query(fn (Builder $query): Builder => $query->whereNotNull('parent_member_id'))
                         ->toggle(),
                     Filter::make('independent_only')
                         ->label(__('Independent only'))
-                        ->query(fn(Builder $query): Builder => $query->whereNull('parent_member_id'))
+                        ->query(fn (Builder $query): Builder => $query->whereNull('parent_member_id'))
                         ->toggle(),
                     DateColumnRangeFilter::make('joined_at', __('Joined')),
                 ])
@@ -536,7 +536,7 @@ class MigrationWorkflowPage extends Page implements HasTable
                                 ->label(__('Cutoff date'))
                                 ->required(),
                         ])
-                        ->fillForm(fn(Member $record): array => [
+                        ->fillForm(fn (Member $record): array => [
                             'member_id' => $record->getKey(),
                             'cutoff' => $record->joined_at?->toDateString()
                                 ?? now()->startOfMonth()->toDateString(),
@@ -575,7 +575,7 @@ class MigrationWorkflowPage extends Page implements HasTable
                     Action::make('openMember')
                         ->label(__('Open member'))
                         ->icon('heroicon-o-user')
-                        ->url(fn(Member $record): string => MemberResource::getUrl('edit', ['record' => $record])),
+                        ->url(fn (Member $record): string => MemberResource::getUrl('edit', ['record' => $record])),
                 ]))
                 ->toolbarActions([
                     BulkActionGroup::make([

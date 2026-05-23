@@ -415,7 +415,7 @@ test('jobs page registers in tenant panel navigation', function () {
 });
 
 test('loan eligibility overrides resource is in system navigation', function () {
-    expect(LoanEligibilityOverrideResource::shouldRegisterNavigation())->toBeTrue();
+    expect(LoanEligibilityOverrideResource::shouldRegisterNavigation())->toBeFalse();
 });
 
 test('reconciliation resource registers in tenant panel navigation', function () {

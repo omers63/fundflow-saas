@@ -174,7 +174,7 @@ test('membership application import service creates pending applications from cs
 
     $this->actingAs($admin, 'tenant');
 
-    $result = app(MembershipApplicationImportService::class)->import($path, 'DefaultPass1');
+    $result = app(MembershipApplicationImportService::class)->import($path, 'DefaultPass1', '2024-06-01');
 
     expect($result['created'])->toBe(1)
         ->and($result['failed'])->toBe(0);
@@ -209,7 +209,7 @@ test('import links rows with the same email so the first row is the household pa
 
     $this->actingAs($admin, 'tenant');
 
-    $result = app(MembershipApplicationImportService::class)->import($path, 'DefaultPass1');
+    $result = app(MembershipApplicationImportService::class)->import($path, 'DefaultPass1', '2024-06-01');
 
     expect($result['created'])->toBe(3)
         ->and($result['failed'])->toBe(0);
@@ -255,7 +255,7 @@ test('approving imported household applications creates one parent member and li
         ->get();
 
     $approval = app(MembershipApplicationApprovalService::class);
-    $approval->approveMany($applications->reverse());
+    $approval->approveMany($applications->reverse())['members'];
 
     $parentMember = Member::query()
         ->where('name', 'Parent Applicant')

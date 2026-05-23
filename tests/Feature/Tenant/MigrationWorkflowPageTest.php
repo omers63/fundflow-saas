@@ -7,7 +7,6 @@ use App\Filament\Tenant\Pages\MigrationWorkflowPage;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\Members\Pages\EditMember;
 use App\Filament\Tenant\Resources\Members\RelationManagers\MigrationStubsRelationManager;
-use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MigrationCycleStub;
 use App\Models\Tenant\User;
@@ -41,8 +40,7 @@ test('migration workflow page registers and resolves url', function () {
 
     $this->actingAs($admin, 'tenant');
 
-    expect(MigrationWorkflowPage::shouldRegisterNavigation())->toBeTrue()
-        ->and(MigrationWorkflowPage::getNavigationGroup())->toBe(TenantNavigation::GROUP_SYSTEM)
+    expect(MigrationWorkflowPage::shouldRegisterNavigation())->toBeFalse()
         ->and(MigrationWorkflowPage::getNavigationLabel())->toBe(Lang::ui('Migrations'))
         ->and(MigrationWorkflowPage::canAccess())->toBeTrue()
         ->and(MigrationWorkflowPage::getUrl())->toContain('/admin/migration-workflow')

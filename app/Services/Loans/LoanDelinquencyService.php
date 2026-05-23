@@ -567,12 +567,12 @@ class LoanDelinquencyService
             return false;
         }
 
-        if ($member->joined_at === null) {
+        $periodStart = Carbon::create($year, $month, 1)->startOfMonth();
+        $joinedStart = $member->contributionLiabilityStartMonth();
+
+        if ($joinedStart === null) {
             return true;
         }
-
-        $periodStart = Carbon::create($year, $month, 1)->startOfMonth();
-        $joinedStart = $member->joined_at->copy()->startOfMonth();
 
         return $periodStart->greaterThanOrEqualTo($joinedStart);
     }

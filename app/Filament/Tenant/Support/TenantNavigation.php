@@ -32,9 +32,10 @@ final class TenantNavigation
 
     public const SORT_STATEMENTS = 6;
 
-    public const SORT_JOBS = 1;
+    /** Last item in Fund Management (after statements, loans cluster, etc.). */
+    public const SORT_RECONCILIATION = 7;
 
-    public const SORT_RECONCILIATION = 2;
+    public const SORT_JOBS = 1;
 
     public const SORT_AUDIT_LOGS = 3;
 
@@ -61,6 +62,16 @@ final class TenantNavigation
         return in_array($group, self::groupKeys(), true);
     }
 
+    public static function groupLabel(string $key): string
+    {
+        return match ($key) {
+            self::GROUP_ACCOUNTS => __('Accounts'),
+            self::GROUP_FUND_MANAGEMENT => __('Fund Management'),
+            self::GROUP_SYSTEM => __('System'),
+            default => $key,
+        };
+    }
+
     /**
      * Keys must match {@see static::$navigationGroup} on resources/pages so Filament can order groups.
      * Numeric array keys break ordering (PHP loose `array_search`: `'System' == 0`).
@@ -70,9 +81,12 @@ final class TenantNavigation
     public static function navigationGroups(): array
     {
         return [
-            self::GROUP_ACCOUNTS => NavigationGroup::make()->label(__('Accounts')),
-            self::GROUP_FUND_MANAGEMENT => NavigationGroup::make()->label(__('Fund Management')),
-            self::GROUP_SYSTEM => NavigationGroup::make()->label(__('System')),
+            self::GROUP_ACCOUNTS => NavigationGroup::make()
+                ->label(fn (): string => self::groupLabel(self::GROUP_ACCOUNTS)),
+            self::GROUP_FUND_MANAGEMENT => NavigationGroup::make()
+                ->label(fn (): string => self::groupLabel(self::GROUP_FUND_MANAGEMENT)),
+            self::GROUP_SYSTEM => NavigationGroup::make()
+                ->label(fn (): string => self::groupLabel(self::GROUP_SYSTEM)),
         ];
     }
 }

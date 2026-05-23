@@ -38,6 +38,7 @@ class Member extends Model
         'portal_pin',
         'monthly_contribution_amount',
         'joined_at',
+        'contribution_arrears_cutoff_date',
         'migration_cutoff_date',
         'migration_status',
         'partial_clearance_granted_at',
@@ -53,6 +54,7 @@ class Member extends Model
         return [
             'monthly_contribution_amount' => 'decimal:2',
             'joined_at' => 'date',
+            'contribution_arrears_cutoff_date' => 'date',
             'migration_cutoff_date' => 'date',
             'partial_clearance_granted_at' => 'datetime',
             'opening_cash_balance' => 'decimal:2',
@@ -139,6 +141,16 @@ class Member extends Model
     public function loanEligibilityStartDate(): ?Carbon
     {
         return $this->joined_at;
+    }
+
+    /**
+     * First calendar month for which contribution arrears may apply (cut-off import or join date).
+     */
+    public function contributionLiabilityStartMonth(): ?Carbon
+    {
+        $date = $this->contribution_arrears_cutoff_date ?? $this->joined_at;
+
+        return $date?->copy()->startOfMonth();
     }
 
     public function scopeActive($query)

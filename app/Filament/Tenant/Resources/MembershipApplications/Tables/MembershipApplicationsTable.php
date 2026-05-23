@@ -122,12 +122,42 @@ class MembershipApplicationsTable
                             ->color('success')
                             ->requiresConfirmation()
                             ->action(function (Collection $records, Component $livewire): void {
-                                $members = app(MembershipApplicationApprovalService::class)->approveMany($records);
+                                $result = app(MembershipApplicationApprovalService::class)->approveMany($records);
 
-                                Notification::make()
-                                    ->title(__(':count application(s) approved', ['count' => count($members)]))
-                                    ->success()
-                                    ->send();
+                                $approvedCount = count($result['members']);
+                                $failureCount = count($result['failures']);
+
+                                if ($approvedCount > 0) {
+                                    Notification::make()
+                                        ->title(__(':count application(s) approved', ['count' => $approvedCount]))
+                                        ->success()
+                                        ->send();
+                                }
+
+                                if ($failureCount > 0) {
+                                    $summary = collect($result['failures'])
+                                        ->take(3)
+                                        ->map(fn (array $failure): string => "{$failure['name']}: {$failure['message']}")
+                                        ->implode("\n");
+
+                                    if ($failureCount > 3) {
+                                        $summary .= "\n".__('…and :count more.', ['count' => $failureCount - 3]);
+                                    }
+
+                                    Notification::make()
+                                        ->title(__('Approval blocked for :count application(s)', ['count' => $failureCount]))
+                                        ->body($summary)
+                                        ->danger()
+                                        ->persistent()
+                                        ->send();
+                                }
+
+                                if ($approvedCount === 0 && $failureCount === 0) {
+                                    Notification::make()
+                                        ->title(__('No pending applications were selected'))
+                                        ->warning()
+                                        ->send();
+                                }
 
                                 MembershipApplicationResource::dispatchInsightsRefresh($livewire);
                             }),

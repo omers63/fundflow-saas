@@ -81,6 +81,8 @@
                     'occupation' => __('Occupation'),
                     'employer' => __('Employer'),
                     'monthly_income' => __('Monthly income (numeric, >= 0)'),
+                    'cutoff_cash_balance' => __('Cut-off cash balance (optional, default 0; credited on approval)'),
+                    'cutoff_fund_balance' => __('Cut-off fund balance (optional, default 0; credited on approval)'),
                 ] as $col => $hint)
                     <tr>
                         <td class="px-3 py-2 align-top">
@@ -102,6 +104,10 @@
                 <tr>
                     <td class="px-3 py-2 font-semibold text-gray-700 dark:text-gray-200 w-56">{{ __('Password fallback') }}</td>
                     <td class="px-3 py-2">{!! __('Empty or short <code class="font-mono text-[11px]">password</code> uses the default password set in this modal.') !!}</td>
+                </tr>
+                <tr>
+                    <td class="px-3 py-2 font-semibold text-gray-700 dark:text-gray-200">{{ __('Cut-off date') }}</td>
+                    <td class="px-3 py-2">{{ __('Set in this modal for the whole import. Cycles before that date are not arrears when you approve. Cash and fund cut-off columns post opening balances on approval.') }}</td>
                 </tr>
                 <tr>
                     <td class="px-3 py-2 font-semibold text-gray-700 dark:text-gray-200">{{ __('Each row') }}</td>

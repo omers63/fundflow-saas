@@ -16,6 +16,7 @@ class MembershipApplicationApprovalService
     public function __construct(
         private readonly HouseholdMemberService $householdMembers,
         private readonly MembershipSubscriptionFeeService $subscriptionFees,
+        private readonly MembershipApplicationImportCutoffService $importCutoffs,
     ) {}
 
     public function approve(MembershipApplication $application): Member
@@ -33,7 +34,10 @@ class MembershipApplicationApprovalService
 
     /**
      * @param  Collection<int, MembershipApplication>  $applications
-     * @return list<Member>
+     * @return array{
+     *     members: list<Member>,
+     *     failures: list<array{application_id: int, name: string, message: string}>
+     * }
      */
     public function approveMany(Collection $applications): array
     {
@@ -43,12 +47,24 @@ class MembershipApplicationApprovalService
             ->values();
 
         $members = [];
+        $failures = [];
 
         foreach ($ordered as $application) {
-            $members[] = $this->approve($application->fresh());
+            try {
+                $members[] = $this->approve($application->fresh());
+            } catch (InvalidArgumentException $exception) {
+                $failures[] = [
+                    'application_id' => (int) $application->id,
+                    'name' => (string) $application->name,
+                    'message' => $exception->getMessage(),
+                ];
+            }
         }
 
-        return $members;
+        return [
+            'members' => $members,
+            'failures' => $failures,
+        ];
     }
 
     private function approveParent(MembershipApplication $application): Member
@@ -66,7 +82,9 @@ class MembershipApplicationApprovalService
 
         $this->subscriptionFees->postOnApproval($application->fresh(), $member);
 
-        return $member;
+        $this->importCutoffs->applyOnApproval($application, $member);
+
+        return $member->fresh();
     }
 
     private function approveDependent(MembershipApplication $application): Member
@@ -101,6 +119,8 @@ class MembershipApplicationApprovalService
             'household_email' => $member->household_email,
         ]);
 
-        return $member;
+        $this->importCutoffs->applyOnApproval($application, $member);
+
+        return $member->fresh();
     }
 }

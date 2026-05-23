@@ -35,10 +35,12 @@ class MembershipApplicationImportSampleController extends Controller
             'iban',
             'next_of_kin_name',
             'next_of_kin_phone',
+            'cutoff_cash_balance',
+            'cutoff_fund_balance',
         ];
 
         $rows = [
-            ['Ahmed Al Saud', 'sample.applicant01@example.test', 'TempPass@01', 'new', 'male', 'married', '1000000001', '1989-01-14', '2026-01-10', 'King Fahd Rd, Building 12', 'Riyadh', '0114000101', '0114001101', '0501000101', 'Aramco HQ', 'Riyadh', 'Engineer', 'Aramco', '18500', '101000000001', 'SA030000000000101000000001', 'Mona Al Saud', '0503000101'],
+            ['Ahmed Al Saud', 'sample.applicant01@example.test', 'TempPass@01', 'new', 'male', 'married', '1000000001', '1989-01-14', '2026-01-10', 'King Fahd Rd, Building 12', 'Riyadh', '0114000101', '0114001101', '0501000101', 'Aramco HQ', 'Riyadh', 'Engineer', 'Aramco', '18500', '101000000001', 'SA030000000000101000000001', 'Mona Al Saud', '0503000101', '500', '1200'],
             ['Fatimah Hassan', 'sample.applicant02@example.test', '', 'renew', 'female', 'married', '1000000002', '1991-03-22', '2026-02-01', 'Olaya St, Apt 8', 'Riyadh', '', '', '0501000102', 'King Faisal Hospital', 'Riyadh', 'Doctor', 'KFSH', '24000', '101000000002', 'SA030000000000101000000002', 'Hassan Ali', '0503000102'],
             ['Yousef Nasser', 'sample.applicant03@example.test', '', 'resume', 'male', 'single', '1000000003', '1995-06-17', '', 'Prince Sultan St', 'Jeddah', '', '0124500103', '0501000103', '', 'Jeddah', '', '', '', '101000000003', 'SA030000000000101000000003', 'Nasser Yousef', '0503000103'],
             ['Aisha Omar', 'sample.applicant04@example.test', 'StrongPass#04', 'new', 'female', 'single', '1000000004', '1998-02-10', '', 'Al Malaz District', 'Riyadh', '', '', '0501000104', '', 'Riyadh', 'Teacher', 'Public School', '9500', '101000000004', 'SA030000000000101000000004', 'Omar Saeed', '0503000104'],
@@ -59,6 +61,15 @@ class MembershipApplicationImportSampleController extends Controller
             ['Omar Yasser', 'sample.applicant19@example.test', 'TempPass@19', 'resume', 'male', 'married', '1000000019', '1985-12-02', '2026-01-05', 'Al Worood', 'Riyadh', '', '', '0501000119', 'Riyadh Metro', 'Riyadh', 'Technician', 'RCRC', '14950', '101000000019', 'SA030000000000101000000019', 'Yasser Omar', '0503000119'],
             ['Shahad Rami', 'sample.applicant20@example.test', '', 'new', 'female', 'widowed', '1000000020', '1990-04-15', '', 'Al Yasmin', 'Riyadh', '', '', '0501000120', '', 'Riyadh', 'HR Specialist', 'Private Co', '13300', '101000000020', 'SA030000000000101000000020', 'Rami Shahad', '0503000120'],
         ];
+
+        $columnCount = count($headers);
+        $rows = array_map(function (array $row) use ($columnCount): array {
+            while (count($row) < $columnCount) {
+                $row[] = '0';
+            }
+
+            return $row;
+        }, $rows);
 
         return response()->streamDownload(function () use ($headers, $rows): void {
             $out = fopen('php://output', 'w');

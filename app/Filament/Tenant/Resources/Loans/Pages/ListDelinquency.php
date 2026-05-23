@@ -75,12 +75,66 @@ class ListDelinquency extends Page implements HasTable
         }
 
         $this->delinquencyTab = $tab;
+        $this->tableColumns = [];
         $this->resetTable();
+        $this->resetTableColumnManager();
+    }
+
+    public function isTableColumnToggledHidden(string $name): bool
+    {
+        if ($this->delinquencyTab === 'contributions') {
+            return false;
+        }
+
+        foreach ($this->tableColumns as $item) {
+            if ($item['type'] === self::TABLE_COLUMN_MANAGER_COLUMN_TYPE && $item['name'] === $name) {
+                return ! $item['isToggled'];
+            }
+
+            if ($item['type'] === self::TABLE_COLUMN_MANAGER_GROUP_TYPE && isset($item['columns'])) {
+                foreach ($item['columns'] as $column) {
+                    if ($column['name'] === $name) {
+                        return ! $column['isToggled'];
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public function getTableColumnsSessionKey(): string
+    {
+        $table = md5(static::class.'|'.$this->delinquencyTab);
+
+        return "tables.{$table}_columns";
+    }
+
+    public function getHasReorderedTableColumnsSessionKey(): string
+    {
+        $table = md5(static::class.'|'.$this->delinquencyTab);
+
+        return "tables.{$table}_has_reordered_columns";
     }
 
     protected function getTableQueryStringIdentifier(): ?string
     {
-        return 'delinquency_'.$this->delinquencyTab;
+        return 'delinquency-'.$this->delinquencyTab;
+    }
+
+    public function getFilteredTableQuery(): ?Builder
+    {
+        if (! $this->getTable()->hasQuery()) {
+            return null;
+        }
+
+        $query = $this->getTable()->getQuery();
+
+        if ($query === null) {
+            return null;
+        }
+
+        return $this->filterTableQuery($query);
     }
 
     public function getSubheading(): ?string
@@ -249,8 +303,16 @@ class ListDelinquency extends Page implements HasTable
         $currency = Setting::get('general', 'currency', 'USD');
         $delinquency = app(LoanDelinquencyService::class);
 
-        return TableGrouping::apply($table
-            ->records(function (?string $search = null, ?string $sortColumn = null, ?string $sortDirection = null, ?array $filters = null) use ($delinquency): Collection {
+        return $table
+            ->query(null)
+            ->records(function (
+                ?string $search,
+                ?string $sortColumn,
+                ?string $sortDirection,
+                ?array $filters,
+            ) use ($delinquency): Collection {
+                $filters ??= [];
+
                 $memberId = isset($filters['member_id']['value'])
                     ? (int) $filters['member_id']['value']
                     : null;
@@ -269,52 +331,55 @@ class ListDelinquency extends Page implements HasTable
                     $memberId,
                 );
             })
-            ->columnManager(true)
+            ->summaries(pageCondition: false, allTableCondition: false)
+            ->columnManager(false)
             ->columns([
                 TextColumn::make('member_name')
                     ->label(__('Member'))
-                    ->searchable()
-                    ->sortable()
+                    ->searchable(false)
+                    ->sortable(false)
                     ->wrap()
                     ->url(MemberTableColumns::memberIdEditUrl(...)),
                 TextColumn::make('member_number')
                     ->label(__('Number'))
-                    ->searchable()
-                    ->sortable()
-                    ->toggleable()
+                    ->searchable(false)
+                    ->sortable(false)
                     ->url(MemberTableColumns::memberIdEditUrl(...)),
                 TextColumn::make('period_label')
                     ->label(__('Period'))
-                    ->searchable()
-                    ->sortable(),
+                    ->searchable(false)
+                    ->sortable(false),
                 TextColumn::make('year')
                     ->label(__('Year'))
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->sortable(false)
+                    ->toggleable(false),
                 TextColumn::make('month')
                     ->label(__('Month'))
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->sortable(false)
+                    ->toggleable(false),
                 TextColumn::make('contribution_status')
                     ->label(__('Contribution'))
                     ->badge()
-                    ->sortable()
-                    ->formatStateUsing(fn (string $state): string => $delinquency->contributionStatusLabel($state))
-                    ->color(fn (string $state): string => $delinquency->contributionStatusColor($state)),
+                    ->sortable(false)
+                    ->formatStateUsing(fn (?string $state): string => $delinquency->contributionStatusLabel((string) $state))
+                    ->color(fn (?string $state): string => $delinquency->contributionStatusColor((string) $state)),
                 TextColumn::make('monthly_contribution_amount')
                     ->label(__('Monthly'))
-                    ->sortable()
-                    ->money($currency),
+                    ->sortable(false)
+                    ->money($currency)
+                    ->summarize([]),
                 TextColumn::make('late_fee')
                     ->label(__('Late fee'))
-                    ->sortable()
-                    ->money($currency),
+                    ->sortable(false)
+                    ->money($currency)
+                    ->summarize([]),
                 TextColumn::make('member_status')
                     ->label(__('Member status'))
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? $state)
-                    ->color(fn (string $state): string => Member::statusBadgeColor($state))
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->sortable(false)
+                    ->formatStateUsing(fn (?string $state): string => Member::statusOptions()[(string) $state] ?? (string) $state)
+                    ->color(fn (?string $state): string => Member::statusBadgeColor((string) $state))
+                    ->toggleable(false),
             ])
             ->defaultSort('year', 'desc')
             ->filters([
@@ -340,7 +405,7 @@ class ListDelinquency extends Page implements HasTable
                 ]),
             ])
             ->emptyStateHeading(__('No contribution arrears'))
-            ->emptyStateDescription(__('Each row is one period after the deadline without a posted contribution (since the member joined).')), TableGrouping::delinquencyContributionArrears());
+            ->emptyStateDescription(__('Each row is one period after the deadline without a posted contribution (since the member joined).'));
     }
 
     protected function guarantorTable(Table $table): Table
@@ -415,10 +480,6 @@ class ListDelinquency extends Page implements HasTable
 
     protected function getTableQuery(): Builder
     {
-        if ($this->delinquencyTab === 'contributions') {
-            return Member::query()->whereRaw('0 = 1');
-        }
-
         return match ($this->delinquencyTab) {
             'guarantor' => $this->guarantorQuery(),
             default => $this->installmentsQuery(),

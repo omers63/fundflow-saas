@@ -19,6 +19,7 @@
 /public/storage
 /storage/*.key
 /storage/pail
+/storage/tenant*/app/livewire-tmp/
 /vendor
 Homestead.json
 Homestead.yaml

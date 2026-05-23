@@ -53,7 +53,7 @@ class MembershipApplicationForm
                 ->label(__('Password'))
                 ->password()
                 ->revealable()
-                ->dehydrated(fn(?string $state): bool => filled($state))
+                ->dehydrated(fn (?string $state): bool => filled($state))
                 ->helperText(__('Leave blank to keep the stored password unchanged.'));
             $accountFields[] = TextInput::make('phone')
                 ->label(__('Phone (legacy)'))
@@ -169,6 +169,25 @@ class MembershipApplicationForm
                         ->maxLength(30),
                 ])->columns(2),
 
+            Section::make(__('CSV import cut-off'))
+                ->icon('heroicon-o-calendar-days')
+                ->description(__('Applied when this application was imported from CSV. On approval, cycles before the cut-off date are excluded from contribution arrears; balances are posted to master and member accounts.'))
+                ->visible(fn (?MembershipApplication $record): bool => $record?->import_arrears_cutoff_date !== null)
+                ->schema([
+                    DatePicker::make('import_arrears_cutoff_date')
+                        ->label(__('Cut-off date'))
+                        ->disabled()
+                        ->dehydrated(false),
+                    TextInput::make('import_cutoff_cash_balance')
+                        ->label(__('Cut-off cash balance'))
+                        ->disabled()
+                        ->dehydrated(false),
+                    TextInput::make('import_cutoff_fund_balance')
+                        ->label(__('Cut-off fund balance'))
+                        ->disabled()
+                        ->dehydrated(false),
+                ])->columns(3),
+
             Section::make(__('Application fee'))
                 ->icon('heroicon-o-banknotes')
                 ->description(__('Review declared transfer details before approving. Approval is blocked when the transfer is below the required subscription fee. The master cash credit stays uncleared until matched to a bank import.'))
@@ -208,7 +227,7 @@ class MembershipApplicationForm
                 ]),
         ];
 
-        if (!$forCreate) {
+        if (! $forCreate) {
             $detailsSchema[] = Section::make(__('Review status'))
                 ->icon('heroicon-o-clipboard-document-check')
                 ->description(__('Use Approve / Reject on the list for workflow actions. You can correct the rejection reason here.'))
@@ -261,11 +280,11 @@ class MembershipApplicationForm
                                             ->disk('public')
                                             ->directory('applications')
                                             ->getUploadedFileNameForStorageUsing(
-                                                fn(TemporaryUploadedFile $file): string => StorageFilename::make(
+                                                fn (TemporaryUploadedFile $file): string => StorageFilename::make(
                                                     'application-form',
                                                     $file->getClientOriginalName(),
                                                     [
-                                                        auth('tenant')->id() ? 'admin-' . auth('tenant')->id() : null,
+                                                        auth('tenant')->id() ? 'admin-'.auth('tenant')->id() : null,
                                                     ],
                                                 ),
                                             )

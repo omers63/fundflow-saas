@@ -25,6 +25,7 @@ class MigrationOpeningBalanceService
         float $cashBalance,
         float $fundBalance,
         ?Carbon $effectiveDate = null,
+        string $entryLabel = 'MIGRATION_OPENING',
     ): void {
         if ($member->opening_balances_posted_at !== null) {
             throw new InvalidArgumentException(__('Opening balances were already posted for this member.'));
@@ -44,15 +45,15 @@ class MigrationOpeningBalanceService
             throw new InvalidArgumentException(__('Member and master accounts must exist before posting opening balances.'));
         }
 
-        DB::transaction(function () use ($member, $cashBalance, $fundBalance, $effectiveDate, $memberCash, $memberFund, $masterCash, $masterFund): void {
+        DB::transaction(function () use ($member, $cashBalance, $fundBalance, $effectiveDate, $memberCash, $memberFund, $masterCash, $masterFund, $entryLabel): void {
             if ($cashBalance > 0.00001) {
-                $desc = __('MIGRATION_OPENING — cash — :name', ['name' => $member->name]);
+                $desc = __(':label — cash — :name', ['label' => $entryLabel, 'name' => $member->name]);
                 $this->accounting->credit($masterCash, $cashBalance, $desc, null, $effectiveDate, $member->id);
                 $this->accounting->credit($memberCash, $cashBalance, $desc, null, $effectiveDate, $member->id);
             }
 
             if ($fundBalance > 0.00001) {
-                $desc = __('MIGRATION_OPENING — fund — :name', ['name' => $member->name]);
+                $desc = __(':label — fund — :name', ['label' => $entryLabel, 'name' => $member->name]);
                 $this->accounting->credit($masterFund, $fundBalance, $desc, null, $effectiveDate, $member->id);
                 $this->accounting->credit($memberFund, $fundBalance, $desc, null, $effectiveDate, $member->id);
             }
@@ -64,10 +65,11 @@ class MigrationOpeningBalanceService
             ]);
         });
 
-        $this->audit->log('MIGRATION_OPENING_POSTED', 'migration', $member, $member, [
+        $this->audit->log($entryLabel === 'MIGRATION_OPENING' ? 'MIGRATION_OPENING_POSTED' : 'IMPORT_CUTOFF_POSTED', 'membership', $member, $member, [
             'cash' => $cashBalance,
             'fund' => $fundBalance,
             'effective' => $effectiveDate->toDateString(),
+            'entry_label' => $entryLabel,
         ]);
     }
 }

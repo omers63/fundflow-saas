@@ -60,7 +60,7 @@ test('approval is blocked when transfer amount is below required subscription fe
         'membership_fee_required_amount' => 50,
     ]);
 
-    expect(fn() => $this->approval->approve($application))
+    expect(fn () => $this->approval->approve($application))
         ->toThrow(InvalidArgumentException::class);
 });
 
@@ -147,4 +147,18 @@ test('dependent applications skip subscription fee posting', function () {
     expect(BankTransaction::query()->where('membership_application_id', $dependent->id)->exists())->toBeFalse()
         ->and((float) $childMember->cashAccount->fresh()->balance)->toBe(0.0)
         ->and((float) $parentMember->cashAccount->fresh()->balance)->toBe(25.0);
+});
+
+test('approve many collects subscription fee validation failures instead of throwing', function () {
+    $application = makePendingFeeApplication([
+        'membership_fee_transfer_reference' => null,
+    ]);
+
+    $result = $this->approval->approveMany(collect([$application]));
+
+    expect($result['members'])->toBeEmpty()
+        ->and($result['failures'])->toHaveCount(1)
+        ->and($result['failures'][0]['name'])->toBe('Jane Applicant')
+        ->and($result['failures'][0]['message'])->toContain('transfer reference')
+        ->and($application->fresh()->status)->toBe('pending');
 });

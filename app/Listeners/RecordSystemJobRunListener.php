@@ -8,13 +8,20 @@ use App\Models\Tenant\SystemJobRun;
 use App\Support\ScheduledJobRegistry;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
-use Illuminate\Support\Facades\Cache;
 
 class RecordSystemJobRunListener
 {
+    /**
+     * In-process handoff between CommandStarting and CommandFinished.
+     * Avoids the tenant cache wrapper, which requires a tag-capable store (e.g. Redis).
+     *
+     * @var array<string, array{job_key: string, command: string, started_at: float}>
+     */
+    private static array $pendingCommandRuns = [];
+
     public function handleStarting(CommandStarting $event): void
     {
-        if (! tenancy()->initialized) {
+        if (!tenancy()->initialized) {
             return;
         }
 
@@ -24,20 +31,22 @@ class RecordSystemJobRunListener
             return;
         }
 
-        Cache::put($this->cacheKey($event->command), [
+        self::$pendingCommandRuns[$this->runKey($event->command)] = [
             'job_key' => $definition['key'],
             'command' => $definition['command'],
             'started_at' => microtime(true),
-        ], 3600);
+        ];
     }
 
     public function handleFinished(CommandFinished $event): void
     {
-        if (! tenancy()->initialized) {
+        if (!tenancy()->initialized) {
             return;
         }
 
-        $payload = Cache::pull($this->cacheKey($event->command));
+        $runKey = $this->runKey($event->command);
+        $payload = self::$pendingCommandRuns[$runKey] ?? null;
+        unset(self::$pendingCommandRuns[$runKey]);
 
         if ($payload === null) {
             return;
@@ -75,8 +84,8 @@ class RecordSystemJobRunListener
         return null;
     }
 
-    protected function cacheKey(string $commandName): string
+    protected function runKey(string $commandName): string
     {
-        return 'system_job_run:'.tenant('id').':'.$commandName;
+        return tenant('id') . ':' . $commandName;
     }
 }

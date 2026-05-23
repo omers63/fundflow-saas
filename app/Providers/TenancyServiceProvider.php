@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Stancl\JobPipeline\JobPipeline;
+use Stancl\Tenancy\Bootstrappers\CacheTenancyBootstrapper;
 use Stancl\Tenancy\Events;
 use Stancl\Tenancy\Jobs;
 use Stancl\Tenancy\Listeners;
@@ -23,7 +24,7 @@ class TenancyServiceProvider extends ServiceProvider
     public function events()
     {
         return [
-            // Tenant events
+                // Tenant events
             Events\CreatingTenant::class => [],
             Events\TenantCreated::class => [
                 JobPipeline::make([
@@ -51,7 +52,7 @@ class TenancyServiceProvider extends ServiceProvider
                 })->shouldBeQueued(false), // `false` by default, but you probably want to make this `true` for production.
             ],
 
-            // Domain events
+                // Domain events
             Events\CreatingDomain::class => [],
             Events\DomainCreated::class => [],
             Events\SavingDomain::class => [],
@@ -61,14 +62,14 @@ class TenancyServiceProvider extends ServiceProvider
             Events\DeletingDomain::class => [],
             Events\DomainDeleted::class => [],
 
-            // Database events
+                // Database events
             Events\DatabaseCreated::class => [],
             Events\DatabaseMigrated::class => [],
             Events\DatabaseSeeded::class => [],
             Events\DatabaseRolledBack::class => [],
             Events\DatabaseDeleted::class => [],
 
-            // Tenancy events
+                // Tenancy events
             Events\InitializingTenancy::class => [],
             Events\TenancyInitialized::class => [
                 Listeners\BootstrapTenancy::class,
@@ -81,19 +82,19 @@ class TenancyServiceProvider extends ServiceProvider
 
             Events\BootstrappingTenancy::class => [],
             Events\TenancyBootstrapped::class => [
-                ConfigureTenantFilesystemUrls::class.'@handleTenancyBootstrapped',
+                ConfigureTenantFilesystemUrls::class . '@handleTenancyBootstrapped',
             ],
             Events\RevertingToCentralContext::class => [],
             Events\RevertedToCentralContext::class => [
-                ConfigureTenantFilesystemUrls::class.'@handleRevertedToCentralContext',
+                ConfigureTenantFilesystemUrls::class . '@handleRevertedToCentralContext',
             ],
 
-            // Resource syncing
+                // Resource syncing
             Events\SyncedResourceSaved::class => [
                 Listeners\UpdateSyncedResource::class,
             ],
 
-            // Fired only when a synced resource is changed in a different DB than the origin DB (to avoid infinite loops)
+                // Fired only when a synced resource is changed in a different DB than the origin DB (to avoid infinite loops)
             Events\SyncedResourceChangedInForeignDatabase::class => [],
         ];
     }
@@ -103,12 +104,34 @@ class TenancyServiceProvider extends ServiceProvider
         //
     }
 
-    public function boot()
+    public function boot(): void
     {
+        $this->disableCacheTenancyBootstrapperWhenStoreDoesNotSupportTags();
+
         $this->bootEvents();
         $this->mapRoutes();
 
         $this->makeTenancyMiddlewareHighestPriority();
+    }
+
+    protected function disableCacheTenancyBootstrapperWhenStoreDoesNotSupportTags(): void
+    {
+        if ($this->app->runningUnitTests() && config('cache.default') === 'array') {
+            return;
+        }
+
+        if ($this->app['cache']->store()->supportsTags()) {
+            return;
+        }
+
+        $bootstrappers = config('tenancy.bootstrappers', []);
+
+        config([
+            'tenancy.bootstrappers' => array_values(array_filter(
+                $bootstrappers,
+                fn(string $bootstrapper): bool => $bootstrapper !== CacheTenancyBootstrapper::class,
+            )),
+        ]);
     }
 
     protected function bootEvents()
@@ -137,7 +160,7 @@ class TenancyServiceProvider extends ServiceProvider
     protected function makeTenancyMiddlewareHighestPriority()
     {
         $tenancyMiddleware = [
-            // Even higher priority than the initialization middleware
+                // Even higher priority than the initialization middleware
             Middleware\PreventAccessFromCentralDomains::class,
 
             Middleware\InitializeTenancyByDomain::class,

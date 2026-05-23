@@ -31,7 +31,7 @@ class LoanEligibilityOverrideResource extends Resource
 
     protected static ?int $navigationSort = TenantNavigation::SORT_LOAN_OVERRIDES;
 
-    protected static bool $shouldRegisterNavigation = true;
+    protected static bool $shouldRegisterNavigation = false;
 
     public static function canAccess(): bool
     {

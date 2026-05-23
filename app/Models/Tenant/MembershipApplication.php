@@ -50,6 +50,9 @@ class MembershipApplication extends Model
         'membership_fee_transfer_reference',
         'membership_fee_required_amount',
         'membership_fee_receipt_path',
+        'import_arrears_cutoff_date',
+        'import_cutoff_cash_balance',
+        'import_cutoff_fund_balance',
         'status',
         'reviewed_at',
         'rejection_reason',
@@ -69,6 +72,9 @@ class MembershipApplication extends Model
             'membership_fee_amount' => 'decimal:2',
             'membership_fee_required_amount' => 'decimal:2',
             'membership_fee_transfer_date' => 'date',
+            'import_arrears_cutoff_date' => 'date',
+            'import_cutoff_cash_balance' => 'decimal:2',
+            'import_cutoff_fund_balance' => 'decimal:2',
             'reviewed_at' => 'datetime',
         ];
     }
