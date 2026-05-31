@@ -26,6 +26,15 @@
             : 0;
     @endphp
 
+    @if($this->allocationChangeBlocked)
+        <x-filament::section class="mb-6" icon="heroicon-o-exclamation-triangle" icon-color="danger">
+            <x-slot name="heading">{{ __('Allocation locked') }}</x-slot>
+            <x-slot name="description">
+                {{ $this->allocationChangeBlockedMessage }}
+            </x-slot>
+        </x-filament::section>
+    @endif
+
     @if($isDependent)
         <x-filament::section class="mb-6" icon="heroicon-o-information-circle" icon-color="warning">
             <x-slot name="heading">{{ __('Sponsored member') }}</x-slot>

@@ -4,6 +4,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\FundPostingAcceptedNotification;
 use App\Notifications\Tenant\FundPostingRejectedNotification;
@@ -116,14 +117,17 @@ test('accept credits master cash and member cash', function () {
     $member = Member::create([
         'member_number' => 'MEM-0001',
         'name' => 'John Doe',
-        'monthly_contribution_amount' => 5000,
+        'monthly_contribution_amount' => 0,
         'joined_at' => now()->subYear(),
         'status' => 'active',
     ]);
     $this->accounting->createMemberAccounts($member);
 
     $posting = $this->service->submit($member, 5000, '2026-05-10');
-    $this->service->accept($posting, reviewedBy: $admin->id, remarks: 'Looks good');
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->service->accept($posting, reviewedBy: $admin->id, remarks: 'Looks good'),
+    );
 
     $posting->refresh();
     expect($posting->status)->toBe('accepted');
@@ -132,6 +136,21 @@ test('accept credits master cash and member cash', function () {
 
     expect(Account::masterCash()->balance)->toBe('5000.00');
     expect($member->cashAccount->fresh()->balance)->toBe('5000.00');
+
+    $postingLines = Transaction::query()
+        ->where('reference_type', FundPosting::class)
+        ->where('reference_id', $posting->id)
+        ->get();
+
+    expect($postingLines)->toHaveCount(1)
+        ->and($postingLines->first()->type)->toBe('credit')
+        ->and($postingLines->first()->account_id)->toBe($member->cashAccount->id)
+        ->and(
+            Transaction::query()
+                ->where('reference_type', Transaction::class)
+                ->whereIn('reference_id', $postingLines->pluck('id'))
+                ->exists(),
+        )->toBeFalse();
 });
 
 test('accept marks bank transaction as posted', function () {

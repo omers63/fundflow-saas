@@ -221,6 +221,7 @@ final class MemberPortalInsightsService
                 $pendingLoan,
                 $latestStatement !== null,
                 $guaranteedLoansCount > 0,
+                $unreadMessages,
             ),
             'recent_deposits' => FundPosting::query()
                 ->where('member_id', $member->id)
@@ -375,7 +376,7 @@ final class MemberPortalInsightsService
             'status' => $member->status,
             'status_label' => Member::statusOptions()[$member->status] ?? $member->status,
             'status_tone' => $statusTone,
-            'initials' => mb_strtoupper(mb_substr($member->name, 0, 1)),
+            'initials' => $this->memberDisplayInitials($member),
             'avatar_url' => $user?->avatarPublicUrl(),
             'profile_url' => MyProfilePage::getUrl(),
             'joined_label' => $member->joined_at
@@ -405,6 +406,22 @@ final class MemberPortalInsightsService
             ],
             'pills' => $pills,
         ];
+    }
+
+    private function memberDisplayInitials(Member $member): string
+    {
+        $parts = preg_split('/\s+/u', trim($member->name), -1, PREG_SPLIT_NO_EMPTY);
+
+        if ($parts === false || $parts === []) {
+            return '?';
+        }
+
+        $first = mb_substr($parts[0], 0, 1);
+        $last = count($parts) > 1
+            ? mb_substr($parts[array_key_last($parts)], 0, 1)
+            : '';
+
+        return mb_strtoupper($first.$last);
     }
 
     /**
@@ -551,7 +568,15 @@ final class MemberPortalInsightsService
     }
 
     /**
-     * @return list<array{label: string, url: string, icon: string, accent: string, visible: bool}>
+     * @return list<array{
+     *     label: string,
+     *     description: string,
+     *     url: string,
+     *     icon: string,
+     *     tone: string,
+     *     badge: ?string,
+     *     visible: bool
+     * }>
      */
     private function quickActions(
         Member $member,
@@ -559,55 +584,70 @@ final class MemberPortalInsightsService
         bool $pendingLoan,
         bool $hasStatement,
         bool $hasGuaranteedLoans = false,
+        int $unreadMessages = 0,
     ): array {
         return [
             [
                 'label' => __('New deposit'),
+                'description' => __('Submit a fund posting'),
                 'url' => MyFundPostingResource::getUrl('create'),
                 'icon' => 'heroicon-o-plus-circle',
-                'accent' => 'emerald',
+                'tone' => 'deposit',
+                'badge' => null,
                 'visible' => true,
             ],
             [
                 'label' => __('Apply for loan'),
+                'description' => __('Check eligibility and apply'),
                 'url' => ApplyForLoan::getUrl(),
                 'icon' => 'heroicon-o-document-plus',
-                'accent' => 'violet',
+                'tone' => 'loan',
+                'badge' => null,
                 'visible' => $eligible && ! $pendingLoan,
             ],
             [
                 'label' => __('Loan calculator'),
+                'description' => __('Estimate repayments'),
                 'url' => LoanCalculator::getUrl(),
                 'icon' => 'heroicon-o-calculator',
-                'accent' => 'sky',
+                'tone' => 'calculator',
+                'badge' => null,
                 'visible' => true,
             ],
             [
                 'label' => __('Statements'),
+                'description' => __('Monthly account summaries'),
                 'url' => MyStatementResource::getUrl('index'),
                 'icon' => 'heroicon-o-document-text',
-                'accent' => 'indigo',
+                'tone' => 'statements',
+                'badge' => null,
                 'visible' => $hasStatement,
             ],
             [
                 'label' => __('My accounts'),
+                'description' => __('Cash, fund, and loans'),
                 'url' => MyAccountResource::getUrl('index'),
                 'icon' => 'heroicon-o-rectangle-stack',
-                'accent' => 'teal',
+                'tone' => 'accounts',
+                'badge' => null,
                 'visible' => true,
             ],
             [
                 'label' => __('Messages'),
+                'description' => __('Inbox from administrators'),
                 'url' => MyMessageResource::getUrl('index'),
                 'icon' => 'heroicon-o-chat-bubble-left-right',
-                'accent' => 'amber',
+                'tone' => 'messages',
+                'badge' => $unreadMessages > 0 ? (string) $unreadMessages : null,
                 'visible' => true,
             ],
             [
                 'label' => __('Guaranteed loans'),
+                'description' => __('Loans you guarantee'),
                 'url' => MyGuaranteedLoanResource::getUrl('index'),
                 'icon' => 'heroicon-o-shield-check',
-                'accent' => 'rose',
+                'tone' => 'guaranteed',
+                'badge' => null,
                 'visible' => $hasGuaranteedLoans,
             ],
         ];

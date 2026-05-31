@@ -11,6 +11,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\FundFlowService;
 use App\Services\FundPostingService;
+use App\Services\MemberCashOutService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -128,6 +129,7 @@ class BankTransactionsTable
                 ])
                 ->recordUrl(fn (): ?string => null)
                 ->recordAction(ViewAction::getDefaultName())
+                ->emptyStateDescription(__('Imported bank statement lines. Manual master bank credits and debits are on the Master bank ledger tab.'))
                 ->recordActions(TableRecordActionGroups::wrap([
                     ViewBankTransactionAction::make(),
                     Action::make('mirrorToCash')
@@ -165,7 +167,7 @@ class BankTransactionsTable
                         ->color('primary')
                         ->requiresConfirmation()
                         ->modalDescription(__('Match this uncleared transaction against an imported bank transaction to clear both.'))
-                        ->hidden(fn ($record) => $record->is_cleared || (! $record->fund_posting_id && ! $record->membership_application_id))
+                        ->hidden(fn ($record) => $record->is_cleared || (! $record->fund_posting_id && ! $record->membership_application_id && ! $record->cash_out_request_id))
                         ->form([
                             Select::make('imported_transaction_id')
                                 ->label('Match with imported transaction')
@@ -189,9 +191,15 @@ class BankTransactionsTable
                                 ->searchable()
                                 ->required(),
                         ])
-                        ->action(function ($record, array $data, FundPostingService $service) {
+                        ->action(function ($record, array $data, FundPostingService $fundPostings, MemberCashOutService $cashOuts) {
                             $imported = BankTransaction::findOrFail($data['imported_transaction_id']);
-                            $service->clearTransaction($record, $imported);
+
+                            if ($record->cash_out_request_id) {
+                                $cashOuts->clearTransaction($record, $imported);
+                            } else {
+                                $fundPostings->clearTransaction($record, $imported);
+                            }
+
                             Notification::make()->title(__('Transactions matched and cleared'))->success()->send();
                         }),
                     Action::make('ignore')

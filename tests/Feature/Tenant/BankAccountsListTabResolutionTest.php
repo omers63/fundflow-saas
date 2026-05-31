@@ -2,14 +2,26 @@
 
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 
-it('resolves the transactions tab from the tab query string when Livewire is not bound', function () {
-    request()->replace(['tab' => 'transactions']);
+it('defaults to the statement lines tab when no tab query is present', function () {
+    request()->replace([]);
 
-    expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('transactions');
+    expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('imports');
 });
 
-it('falls back to statements for an invalid tab query', function () {
+it('resolves the statement lines tab from the legacy transactions tab query', function () {
+    request()->replace(['tab' => 'transactions']);
+
+    expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('imports');
+});
+
+it('resolves the master bank ledger tab from the tab query string', function () {
+    request()->replace(['tab' => 'ledger']);
+
+    expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('ledger');
+});
+
+it('falls back to statement lines for an invalid tab query', function () {
     request()->replace(['tab' => 'invalid']);
 
-    expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('statements');
+    expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('imports');
 });

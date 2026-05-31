@@ -1,10 +1,13 @@
 <?php
 
+use App\Filament\Tenant\Clusters\LoanQueuePage;
+use App\Filament\Tenant\Clusters\LoansCluster;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
+use App\Services\Loans\LoanLifecycleService;
 use App\Services\LoanService;
 use Tests\Concerns\InitializesTenancy;
 
@@ -28,7 +31,7 @@ beforeEach(function () {
 function createEligibleLoanMember(AccountingService $accounting, float $fundBalance = 15000): Member
 {
     $member = Member::create([
-        'member_number' => 'MEM-'.uniqid(),
+        'member_number' => 'MEM-' . uniqid(),
         'name' => 'Test Member',
         'monthly_contribution_amount' => 5000,
         'joined_at' => now()->subMonths(18),
@@ -111,6 +114,16 @@ test('loan application creates a pending loan with amount requested', function (
         ->and($loan->purpose)->toBe('Education');
 });
 
+test('loans navigation badges show pending queue count', function () {
+    $member = createEligibleLoanMember($this->accounting, 25000);
+
+    $this->service->applyForLoan($member, 20000);
+
+    expect(LoansCluster::getNavigationBadge())->toBe('1')
+        ->and(LoansCluster::getNavigationBadgeColor())->toBe('warning')
+        ->and(LoanQueuePage::getNavigationBadge())->toBe('1');
+});
+
 test('approve and full disburse activates loan with installments', function () {
     $member = createEligibleLoanMember($this->accounting, 30000);
     Account::masterFund()->update(['balance' => 100000]);
@@ -125,6 +138,21 @@ test('approve and full disburse activates loan with installments', function () {
         ->and($loan->isFullyDisbursed())->toBeTrue()
         ->and($loan->installments()->count())->toBeGreaterThan(0)
         ->and($loan->disbursements()->count())->toBeGreaterThan(0);
+});
+
+test('partial disbursement sets partially_disbursed status', function () {
+    $member = createEligibleLoanMember($this->accounting, 30000);
+    Account::masterFund()->update(['balance' => 100000]);
+    Account::masterCash()->update(['balance' => 100000]);
+
+    $loan = $this->service->applyForLoan($member, 20000);
+    $this->service->approveLoan($loan, 20000);
+    app(LoanLifecycleService::class)->disbursePartial($loan, 5000);
+
+    $loan->refresh();
+
+    expect($loan->status)->toBe('partially_disbursed')
+        ->and((float) $loan->amount_disbursed)->toBe(5000.0);
 });
 
 test('pending loan can be rejected with reason', function () {
@@ -142,7 +170,7 @@ test('pending loan can be rejected with reason', function () {
 test('loan amount cannot exceed configured maximum for member', function () {
     $member = createEligibleLoanMember($this->accounting, 10000);
 
-    expect(fn () => $this->service->applyForLoan($member, 50000))
+    expect(fn() => $this->service->applyForLoan($member, 50000))
         ->toThrow(InvalidArgumentException::class);
 });
 

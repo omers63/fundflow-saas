@@ -79,8 +79,12 @@ class FundPostingService
 
     /**
      * Accept a fund posting.
-     * Credits Master Cash, then posts to the member's cash account.
-     * The associated bank transaction stays uncleared until matched.
+     *
+     * Increases the master cash pool and credits the member's cash account (see
+     * fund_management_system_requirements.md — direct cash deposit). Only the
+     * member line uses the FundPosting reference so paired-journal validation does
+     * not treat the pool credit as an unbalanced second leg. The associated bank
+     * transaction stays uncleared until matched.
      */
     public function accept(FundPosting $posting, ?int $reviewedBy = null, ?string $remarks = null): void
     {
@@ -91,9 +95,16 @@ class FundPostingService
             $amount = (float) $posting->amount;
             $description = __('Deposit #:id by :name', ['id' => $posting->id, 'name' => $member->name]);
 
-            $this->accounting->credit($masterCash, $amount, $description, $posting);
+            $this->accounting->credit($masterCash, $amount, $description);
 
-            $this->accounting->mirror($memberCash, $amount, "Posted: {$description}", $posting);
+            $this->accounting->credit(
+                $memberCash,
+                $amount,
+                __('Posted: :description', ['description' => $description]),
+                $posting,
+                null,
+                $member->id,
+            );
 
             $posting->update([
                 'status' => 'accepted',
@@ -107,9 +118,6 @@ class FundPostingService
             }
 
             $this->notifyMemberOfReview($posting, 'accepted');
-
-            $member->unsetRelation('accounts');
-            app(ContributionCollectionCycleService::class)->onMemberCashIncreased($member);
         });
     }
 

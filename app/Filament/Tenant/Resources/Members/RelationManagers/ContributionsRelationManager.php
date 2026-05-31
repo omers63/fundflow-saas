@@ -5,18 +5,17 @@ namespace App\Filament\Tenant\Resources\Members\RelationManagers;
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\LateSettledArrearsTableStyling;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tables\Columns\TextColumn;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\ViewAction;
-use Filament\Forms\Components\TextInput;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
-use Illuminate\Support\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 
 class ContributionsRelationManager extends RelationManager
 {
@@ -28,69 +27,70 @@ class ContributionsRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return TableGrouping::apply($table
-            ->recordTitleAttribute('period')
-            ->columns([
-                TextColumn::make('period')
-                    ->date('M Y')
-                    ->sortable(),
-                TextColumn::make('amount')
-                    ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
-                    ->sortable(),
-                TextColumn::make('status')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'pending' => 'warning',
-                        'posted' => 'success',
-                        default => 'gray',
-                    }),
-                TextColumn::make('posted_at')
-                    ->label('Posted')
-                    ->dateTime()
-                    ->placeholder(__('—'))
-                    ->sortable(),
-            ])
-            ->filters([
-                SelectFilter::make('status')
-                    ->options([
-                        'pending' => 'Pending',
-                        'posted' => 'Posted',
-                        'failed' => 'Failed',
+        $currency = fn (): string => Setting::get('general', 'currency', 'USD');
+        $lateFeeDescriptionPrefix = __('Contribution late fee —');
+
+        return TableGrouping::apply(
+            $table
+                ->recordTitleAttribute('period')
+                ->modifyQueryUsing(function (Builder $query) use ($lateFeeDescriptionPrefix): void {
+                    $query->withSum([
+                        'transactions as late_fee_collected_amount' => static function (Builder $transactionQuery) use ($lateFeeDescriptionPrefix): void {
+                            $transactionQuery
+                                ->where('type', 'debit')
+                                ->where('description', 'like', $lateFeeDescriptionPrefix.'%');
+                        },
+                    ], 'amount');
+                })
+                ->columns([
+                    TextColumn::make('period')
+                        ->date('M Y')
+                        ->sortable(),
+                    TextColumn::make('amount')
+                        ->money($currency)
+                        ->sortable(),
+                    TextColumn::make('amount_collected')
+                        ->label('Partially settled')
+                        ->money($currency)
+                        ->sortable()
+                        ->placeholder(__('—')),
+                    TextColumn::make('late_fee_collected_amount')
+                        ->label('Late fees settled')
+                        ->money($currency)
+                        ->sortable()
+                        ->placeholder(__('—')),
+                    TextColumn::make('status')
+                        ->badge()
+                        ->formatStateUsing(fn (string $state, Contribution $record): string => LateSettledArrearsTableStyling::contributionStatusLabel($record))
+                        ->color(fn (string $state, Contribution $record): string => LateSettledArrearsTableStyling::contributionStatusColor($record))
+                        ->tooltip(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionWasSettledLate($record)
+                            ? LateSettledArrearsTableStyling::eligibilityHint()
+                            : null),
+                    TextColumn::make('posted_at')
+                        ->label('Posted')
+                        ->dateTime()
+                        ->placeholder(__('—'))
+                        ->sortable(),
+                ])
+                ->filters([
+                    SelectFilter::make('status')
+                        ->options([
+                            'pending' => 'Pending',
+                            'posted' => 'Posted',
+                            'failed' => 'Failed',
+                        ]),
+                    DateColumnRangeFilter::make('period', 'Contribution period'),
+                    DateColumnRangeFilter::make('posted_at', 'Posted'),
+                ])
+                ->recordClasses(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionRecordClasses($record))
+                ->recordActions(TableRecordActionGroups::wrap([]))
+                ->toolbarActions([
+                    BulkActionGroup::make([
+                        TableToolbar::refreshBulkAction(),
                     ]),
-                DateColumnRangeFilter::make('period', 'Contribution period'),
-                DateColumnRangeFilter::make('posted_at', 'Posted'),
-            ])
-            ->recordActions(TableRecordActionGroups::wrap([
-                ViewAction::make()
-                    ->modalHeading(fn (Contribution $record): string => __('Contribution — :period', [
-                        'period' => Carbon::parse($record->period)->format('M Y'),
-                    ]))
-                    ->mutateRecordDataUsing(fn (Contribution $record): array => [
-                        'amount_display' => number_format((float) $record->amount, 2),
-                        'status_display' => $record->status,
-                        'posted_display' => $record->posted_at?->format('Y-m-d H:i') ?? __('—'),
-                    ])
-                    ->schema([
-                        TextInput::make('amount_display')
-                            ->label(__('Amount'))
-                            ->disabled()
-                            ->dehydrated(false),
-                        TextInput::make('status_display')
-                            ->label(__('Status'))
-                            ->disabled()
-                            ->dehydrated(false),
-                        TextInput::make('posted_display')
-                            ->label(__('Posted'))
-                            ->disabled()
-                            ->dehydrated(false),
-                    ]),
-            ]))
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    TableToolbar::refreshBulkAction(),
-                ]),
-            ])
-            ->defaultSort('period', 'desc'),
-            TableGrouping::contributions(includeMember: false));
+                ])
+                ->defaultSort('period', 'desc'),
+            TableGrouping::contributions(includeMember: false)
+        );
     }
 }

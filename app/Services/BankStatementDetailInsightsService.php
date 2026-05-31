@@ -98,21 +98,21 @@ final class BankStatementDetailInsightsService
                 'subtitle' => __('This statement has not finished importing yet.'),
             ],
             default => $pendingPost > 0
-                ? [
-                    'tone' => 'warning',
-                    'title' => __('Lines ready to post'),
-                    'subtitle' => trans_choice(':count line needs ledger posting|:count lines need ledger posting', $pendingPost, ['count' => $pendingPost]),
-                    'cta_label' => __('Bank queue'),
-                    'cta_url' => BankAccountsResource::getUrl('index', ['tab' => 'transactions']),
-                ]
-                : [
-                    'tone' => 'success',
-                    'title' => $statement->filename,
-                    'subtitle' => __(':bank · :date', [
-                        'bank' => $statement->bank_name ?: __('Bank statement'),
-                        'date' => $statement->statement_date?->format('M j, Y') ?? '—',
-                    ]),
-                ],
+            ? [
+                'tone' => 'warning',
+                'title' => __('Lines ready to post'),
+                'subtitle' => trans_choice(':count line needs ledger posting|:count lines need ledger posting', $pendingPost, ['count' => $pendingPost]),
+                'cta_label' => __('Bank queue'),
+                'cta_url' => BankAccountsResource::getUrl('index', ['tab' => 'imports']),
+            ]
+            : [
+                'tone' => 'success',
+                'title' => $statement->filename,
+                'subtitle' => __(':bank · :date', [
+                    'bank' => $statement->bank_name ?: __('Bank statement'),
+                    'date' => $statement->statement_date?->format('M j, Y') ?? '—',
+                ]),
+            ],
         };
 
         return [

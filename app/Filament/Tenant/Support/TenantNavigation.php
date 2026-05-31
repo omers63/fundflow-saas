@@ -26,14 +26,16 @@ final class TenantNavigation
 
     public const SORT_DEPOSITS = 3;
 
-    public const SORT_CONTRIBUTIONS = 4;
+    public const SORT_CASH_OUTS = 4;
 
-    public const SORT_LOANS = 5;
+    public const SORT_CONTRIBUTIONS = 5;
 
-    public const SORT_STATEMENTS = 6;
+    public const SORT_LOANS = 6;
+
+    public const SORT_STATEMENTS = 7;
 
     /** Last item in Fund Management (after statements, loans cluster, etc.). */
-    public const SORT_RECONCILIATION = 7;
+    public const SORT_RECONCILIATION = 8;
 
     public const SORT_JOBS = 1;
 

@@ -68,7 +68,7 @@ test('migration workflow service queues pending members and open stubs', functio
         ->and($workflow->pendingMembersQuery()->pluck('id'))->toContain($member->id);
 });
 
-test('tenant dashboard quick actions include migration workflow', function () {
+test('tenant dashboard quick actions omit migration reconciliation and jobs', function () {
     $user = User::create([
         'name' => 'Dash Admin',
         'email' => 'dash-mig@fund.test',
@@ -82,7 +82,9 @@ test('tenant dashboard quick actions include migration workflow', function () {
         ->pluck('label')
         ->all();
 
-    expect($labels)->toContain(Lang::ui('Migrations'));
+    expect($labels)->not->toContain(Lang::ui('Migrations'))
+        ->and($labels)->not->toContain(Lang::ui('Reconciliation'))
+        ->and($labels)->not->toContain(Lang::ui('Jobs & commands'));
 });
 
 test('members in migration tab exposes column manager filters and grouping', function () {

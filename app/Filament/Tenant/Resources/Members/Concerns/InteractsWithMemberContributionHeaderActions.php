@@ -7,6 +7,7 @@ namespace App\Filament\Tenant\Resources\Members\Concerns;
 use App\Filament\Support\MemberDelinquencyActions;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
+use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -41,7 +42,7 @@ trait InteractsWithMemberContributionHeaderActions
                         ? $cycles->defaultContributionCycleKeyForMember($this->record)
                         : null,
                 ])
-                ->action(function (array $data): void {
+                ->action(function (array $data) use ($cycles): void {
                     if (! $this->record instanceof Member) {
                         return;
                     }
@@ -78,13 +79,21 @@ trait InteractsWithMemberContributionHeaderActions
                             : [])
                         ->required(),
                 ])
-                ->action(function (array $data): void {
+                ->action(function (array $data) use ($cycles): void {
                     if (! $this->record instanceof Member) {
                         return;
                     }
 
                     [$month, $year] = $cycles->parseContributionCycleKey($data['cycle']);
                     $result = $cycles->applyDependentAllocationForParentForPeriod($this->record, $month, $year);
+
+                    foreach ($result['allocated_dependent_ids'] as $dependentId) {
+                        $dependent = Member::query()->find($dependentId);
+
+                        if ($dependent !== null) {
+                            app(AccountingService::class)->triggerMemberCashCollection($dependent);
+                        }
+                    }
 
                     Notification::make()
                         ->title(__(':count transfer(s) completed', ['count' => $result['transfers']]))

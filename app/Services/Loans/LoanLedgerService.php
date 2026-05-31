@@ -88,10 +88,8 @@ final class LoanLedgerService
             $this->accounting->debit($loanAccount, $amount, $label, $loan, $at, $member->id);
             $this->accounting->debit($masterFund, $amount, $label.' '.__('(master funded)'), $loan, $at, $member->id);
             $this->accounting->debit($memberFund, $amount, $label.' '.__('(member mirror)'), $loan, $at, $member->id);
+            $this->accounting->credit($masterCash, $amount, $label.' '.__('(cash payout mirror)'), $loan, $at);
             $this->accounting->credit($memberCash, $amount, $label.' '.__('(cash payout)'), $loan, $at, $member->id);
-            $this->accounting->debit($memberCash, $amount, $label.' '.__('(cash clearing to master cash)'), $loan, $at, $member->id);
-            $this->accounting->credit($masterCash, $amount, $label.' '.__('(cash clearing from member cash)'), $loan, $at, $member->id);
-            $this->accounting->debit($masterCash, $amount, $label.' '.__('(check disbursement out)'), $loan, $at, $member->id);
 
             $disbursementRecord->update([
                 'member_portion' => 0,

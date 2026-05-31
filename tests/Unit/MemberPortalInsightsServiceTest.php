@@ -93,9 +93,13 @@ test('member portal insights snapshot includes greeting and kpis', function () {
         ->and($snapshot['greeting'])->toHaveKeys([
             'period_label',
             'first_name',
+            'name',
             'fund_name',
             'date',
             'subtitle',
+            'avatar_url',
+            'initials',
+            'profile_url',
             'balances',
             'pills',
         ])

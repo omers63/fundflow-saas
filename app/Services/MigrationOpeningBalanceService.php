@@ -46,24 +46,30 @@ class MigrationOpeningBalanceService
         }
 
         DB::transaction(function () use ($member, $cashBalance, $fundBalance, $effectiveDate, $memberCash, $memberFund, $masterCash, $masterFund, $entryLabel): void {
-            if ($cashBalance > 0.00001) {
-                $desc = __(':label — cash — :name', ['label' => $entryLabel, 'name' => $member->name]);
-                $this->accounting->credit($masterCash, $cashBalance, $desc, null, $effectiveDate, $member->id);
-                $this->accounting->credit($memberCash, $cashBalance, $desc, null, $effectiveDate, $member->id);
-            }
+            AccountingService::withoutMemberCashCollection(function () use ($member, $cashBalance, $fundBalance, $effectiveDate, $memberCash, $memberFund, $masterCash, $masterFund, $entryLabel): void {
+                if ($cashBalance > 0.00001) {
+                    $desc = __(':label — cash — :name', ['label' => $entryLabel, 'name' => $member->name]);
+                    $this->accounting->credit($masterCash, $cashBalance, $desc, null, $effectiveDate, $member->id);
+                    $this->accounting->credit($memberCash, $cashBalance, $desc, null, $effectiveDate, $member->id);
+                }
 
-            if ($fundBalance > 0.00001) {
-                $desc = __(':label — fund — :name', ['label' => $entryLabel, 'name' => $member->name]);
-                $this->accounting->credit($masterFund, $fundBalance, $desc, null, $effectiveDate, $member->id);
-                $this->accounting->credit($memberFund, $fundBalance, $desc, null, $effectiveDate, $member->id);
-            }
+                if ($fundBalance > 0.00001) {
+                    $desc = __(':label — fund — :name', ['label' => $entryLabel, 'name' => $member->name]);
+                    $this->accounting->credit($masterFund, $fundBalance, $desc, null, $effectiveDate, $member->id);
+                    $this->accounting->credit($memberFund, $fundBalance, $desc, null, $effectiveDate, $member->id);
+                }
 
-            $member->update([
-                'opening_cash_balance' => $cashBalance,
-                'opening_fund_balance' => $fundBalance,
-                'opening_balances_posted_at' => now(),
-            ]);
+                $member->update([
+                    'opening_cash_balance' => $cashBalance,
+                    'opening_fund_balance' => $fundBalance,
+                    'opening_balances_posted_at' => now(),
+                ]);
+            });
         });
+
+        if ($cashBalance > 0.00001) {
+            $this->accounting->triggerMemberCashCollection($member->fresh() ?? $member);
+        }
 
         $this->audit->log($entryLabel === 'MIGRATION_OPENING' ? 'MIGRATION_OPENING_POSTED' : 'IMPORT_CUTOFF_POSTED', 'membership', $member, $member, [
             'cash' => $cashBalance,

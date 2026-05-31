@@ -35,7 +35,6 @@ class LocalizationServiceProvider extends ServiceProvider
                     'en' => 'https://flagcdn.com/w40/gb.png',
                     'ar' => 'https://flagcdn.com/w40/sa.png',
                 ])
-                ->flagsOnly()
                 ->circular()
                 ->visible(
                     insidePanels: true,

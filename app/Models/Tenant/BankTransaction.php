@@ -26,6 +26,7 @@ class BankTransaction extends Model
         'cleared_at',
         'fund_posting_id',
         'membership_application_id',
+        'cash_out_request_id',
         'duplicate_of_id',
         'master_cash_transaction_id',
     ];
@@ -58,6 +59,11 @@ class BankTransaction extends Model
     public function membershipApplication(): BelongsTo
     {
         return $this->belongsTo(MembershipApplication::class);
+    }
+
+    public function cashOutRequest(): BelongsTo
+    {
+        return $this->belongsTo(CashOutRequest::class);
     }
 
     public function duplicateOf(): BelongsTo

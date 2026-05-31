@@ -28,7 +28,8 @@
         visibility: hidden;
     }
 
-    .fi-body:has(.tenant-public-nav) .language-switch-dropdown:not(.fi-user-menu) {
+    .fi-body:has(.tenant-public-nav) .language-switch-dropdown,
+    .fi-body:has(.tenant-public-nav) livewire\\:language-switch-component {
         display: none !important;
     }
 

@@ -269,6 +269,43 @@ class ContributionCycleService
         return $this->lateFees->contributionLateFeeForDays($days);
     }
 
+    /**
+     * Cash required to settle a member's open or not-yet-created contribution for a period.
+     */
+    public function requiredCollectionCashForMemberPeriod(Member $member, int $month, int $year): float
+    {
+        if ($member->isExemptFromContributions($month, $year) || (float) $member->monthly_contribution_amount <= 0) {
+            return 0.0;
+        }
+
+        $contribution = Contribution::query()
+            ->where('member_id', $member->id)
+            ->forPeriod($month, $year)
+            ->where('status', 'pending')
+            ->first();
+
+        if ($contribution !== null) {
+            app(ContributionCollectionCycleService::class)
+                ->syncContributionLateFeesBeforeCollection($contribution);
+
+            $contribution = $contribution->fresh();
+            $principalShortfall = max(
+                0.0,
+                (float) ($contribution->amount_due ?? $contribution->amount) - (float) ($contribution->amount_collected ?? 0),
+            );
+            $lateFeeAssessed = (float) ($contribution->late_fee_amount ?? 0);
+            $lateFeeDue = max(0.0, $lateFeeAssessed - $this->accounting->contributionLateFeeCollectedAmount($contribution));
+
+            return $principalShortfall + $lateFeeDue;
+        }
+
+        if (! $this->memberCanApplyContributionForPeriod($member, $month, $year)) {
+            return 0.0;
+        }
+
+        return $this->requiredCashForMemberPeriod($member, $month, $year);
+    }
+
     public function sendDueNotifications(int $month, int $year): int
     {
         $deadline = $this->deadline($month, $year);
@@ -335,53 +372,60 @@ class ContributionCycleService
     }
 
     /**
-     * @return array{transfers: int, details: list<string>}
+     * @return array{transfers: int, details: list<string>, allocated_dependent_ids: list<int>}
      */
     public function applyDependentAllocationForParentForPeriod(Member $parent, int $month, int $year): array
     {
         $details = [];
         $transfers = 0;
+        $allocatedDependentIds = [];
         $periodLabel = $this->periodLabel($month, $year);
 
         if (! $parent->dependents()->where('status', 'active')->exists()) {
-            return ['transfers' => 0, 'details' => [__('This member has no active dependents.')]];
+            return [
+                'transfers' => 0,
+                'details' => [__('This member has no active dependents.')],
+                'allocated_dependent_ids' => [],
+            ];
         }
 
         $parent->load(['dependents']);
 
         foreach ($parent->dependents()->where('status', 'active')->orderBy('member_number')->get() as $dependent) {
+            if ($dependent->isExemptFromContributions($month, $year) || (float) $dependent->monthly_contribution_amount <= 0) {
+                continue;
+            }
+
+            $required = $this->requiredCollectionCashForMemberPeriod($dependent, $month, $year);
+
+            if ($required <= 0.00001) {
+                continue;
+            }
+
+            if ($dependent->getCashBalance() >= $required - 0.00001) {
+                continue;
+            }
+
             if ($this->dependentAllocationExistsForPeriod($dependent, $month, $year)) {
-                $details[] = "{$dependent->name}: ".__('Allocation already completed for :period.', ['period' => $periodLabel]);
+                $details[] = "{$dependent->name}: ".__('Allocation already completed for :period; collect from dependent cash.', ['period' => $periodLabel]);
 
                 continue;
             }
 
-            if ($dependent->isExemptFromContributions() || (float) $dependent->monthly_contribution_amount <= 0) {
-                continue;
-            }
-
-            $needed = (float) $dependent->monthly_contribution_amount;
-            $lateFee = $this->lateFeeForContributionPeriod($month, $year);
-            $required = $needed + $lateFee;
-            $cash = $dependent->getCashBalance();
-            $shortfall = max(0, $required - $cash);
-
-            if ($shortfall <= 0) {
-                continue;
-            }
-
-            if ($parent->getCashBalance() < $shortfall) {
-                $details[] = "{$dependent->name}: ".__('Parent cash insufficient.');
+            if ($parent->getCashBalance() < $required - 0.00001) {
+                $details[] = "{$dependent->name}: ".__('Parent cash insufficient for full allocation (:amount).', [
+                    'amount' => number_format($required, 2),
+                ]);
 
                 continue;
             }
 
             try {
-                DB::transaction(function () use ($parent, $dependent, $shortfall, $periodLabel, $month, $year): void {
+                DB::transaction(function () use ($parent, $dependent, $required, $periodLabel, $month, $year): void {
                     $this->accounting->fundDependentCashAccount(
                         $parent,
                         $dependent,
-                        $shortfall,
+                        $required,
                         __('Allocation — :period', ['period' => $periodLabel]),
                     );
 
@@ -390,12 +434,13 @@ class ContributionCycleService
                         'dependent_member_id' => $dependent->id,
                         'allocation_month' => $month,
                         'allocation_year' => $year,
-                        'amount' => $shortfall,
+                        'amount' => $required,
                     ]);
                 });
                 $transfers++;
+                $allocatedDependentIds[] = $dependent->id;
                 $details[] = "{$dependent->name}: ".__('Transferred :amount for :period.', [
-                    'amount' => number_format($shortfall, 2),
+                    'amount' => number_format($required, 2),
                     'period' => $periodLabel,
                 ]);
             } catch (RuntimeException $e) {
@@ -403,6 +448,10 @@ class ContributionCycleService
             }
         }
 
-        return ['transfers' => $transfers, 'details' => $details];
+        return [
+            'transfers' => $transfers,
+            'details' => $details,
+            'allocated_dependent_ids' => $allocatedDependentIds,
+        ];
     }
 }

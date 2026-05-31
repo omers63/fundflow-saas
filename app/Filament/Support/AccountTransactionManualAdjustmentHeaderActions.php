@@ -38,19 +38,30 @@ final class AccountTransactionManualAdjustmentHeaderActions
             ->color('success')
             ->visible(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
             ->modalHeading(__('Manual credit'))
-            ->modalDescription(__('Post a credit to this account. Use a clear description for the audit trail.'))
+            ->modalDescription(fn (): string => self::creditModalDescription($resolveAccount()))
             ->modalWidth('md')
             ->schema(fn (): array => self::formSchema($resolveAccount))
             ->action(function (array $data, AccountingService $accounting) use ($resolveAccount): void {
                 $account = $resolveAccount();
-                $accounting->credit(
-                    $account,
-                    (float) $data['amount'],
-                    (string) $data['description'],
-                    null,
-                    Carbon::parse($data['transacted_at']),
-                    filled($data['member_id'] ?? null) ? (int) $data['member_id'] : null,
-                );
+
+                try {
+                    $accounting->postManualCredit(
+                        $account,
+                        (float) $data['amount'],
+                        (string) $data['description'],
+                        Carbon::parse($data['transacted_at']),
+                        filled($data['member_id'] ?? null) ? (int) $data['member_id'] : null,
+                    );
+                } catch (Throwable $exception) {
+                    Notification::make()
+                        ->title(__('Credit failed'))
+                        ->body($exception->getMessage())
+                        ->danger()
+                        ->send();
+
+                    return;
+                }
+
                 Notification::make()
                     ->title(__('Credit posted'))
                     ->success()
@@ -63,19 +74,30 @@ final class AccountTransactionManualAdjustmentHeaderActions
             ->color('danger')
             ->visible(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
             ->modalHeading(__('Manual debit'))
-            ->modalDescription(__('Post a debit to this account. Use a clear description for the audit trail.'))
+            ->modalDescription(fn (): string => self::debitModalDescription($resolveAccount()))
             ->modalWidth('md')
             ->schema(fn (): array => self::formSchema($resolveAccount))
             ->action(function (array $data, AccountingService $accounting) use ($resolveAccount): void {
                 $account = $resolveAccount();
-                $accounting->debit(
-                    $account,
-                    (float) $data['amount'],
-                    (string) $data['description'],
-                    null,
-                    Carbon::parse($data['transacted_at']),
-                    filled($data['member_id'] ?? null) ? (int) $data['member_id'] : null,
-                );
+
+                try {
+                    $accounting->postManualDebit(
+                        $account,
+                        (float) $data['amount'],
+                        (string) $data['description'],
+                        Carbon::parse($data['transacted_at']),
+                        filled($data['member_id'] ?? null) ? (int) $data['member_id'] : null,
+                    );
+                } catch (Throwable $exception) {
+                    Notification::make()
+                        ->title(__('Debit failed'))
+                        ->body($exception->getMessage())
+                        ->danger()
+                        ->send();
+
+                    return;
+                }
+
                 Notification::make()
                     ->title(__('Debit posted'))
                     ->success()
@@ -139,6 +161,22 @@ final class AccountTransactionManualAdjustmentHeaderActions
         return [$credit, $debit, $refund];
     }
 
+    private static function creditModalDescription(Account $account): string
+    {
+        return match ($account->type) {
+            'bank' => __('Credits the master bank and mirrors the same amount to master cash. With a member tag, also credits that member’s cash and runs collection for contributions, allocations, and repayments.'),
+            default => __('Post a credit to this account. Use a clear description for the audit trail.'),
+        };
+    }
+
+    private static function debitModalDescription(Account $account): string
+    {
+        return match ($account->type) {
+            'bank' => __('Debits the master bank and mirrors the same amount from master cash. With a member tag, also debits that member’s cash (same amount).'),
+            default => __('Post a debit to this account. Use a clear description for the audit trail.'),
+        };
+    }
+
     /**
      * @param  Closure(): Account  $resolveAccount
      * @return array<int, DateTimePicker|TextInput|Textarea|Select>
@@ -167,7 +205,9 @@ final class AccountTransactionManualAdjustmentHeaderActions
         ];
 
         if ($account->is_master) {
-            $fields[] = MemberLedgerTagSelect::make();
+            $fields[] = $account->type === 'bank'
+                ? MemberLedgerTagSelect::make()->helperText(__('Optional — also credits or debits the member’s cash and runs auto-collection on credit.'))
+                : MemberLedgerTagSelect::make();
         }
 
         return $fields;

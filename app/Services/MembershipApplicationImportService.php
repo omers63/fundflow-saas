@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Tenant\MembershipApplication;
+use App\Support\PublicPageSettings;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Validator;
@@ -119,6 +120,9 @@ class MembershipApplicationImportService
 
         $mobile = (string) $attrs['mobile_phone'];
 
+        $transferAmount = $this->parseTransferAmount($row);
+        $applicationType = (string) ($attrs['application_type'] ?? 'new');
+
         $application = MembershipApplication::create(array_merge($attrs, [
             'name' => $name,
             'email' => $email,
@@ -129,7 +133,10 @@ class MembershipApplicationImportService
             'import_arrears_cutoff_date' => $arrearsCutoffDate,
             'import_cutoff_cash_balance' => $this->parseCutoffBalance($row, 'cutoff_cash_balance'),
             'import_cutoff_fund_balance' => $this->parseCutoffBalance($row, 'cutoff_fund_balance'),
-            'membership_fee_amount' => $this->parseTransferAmount($row),
+            'membership_fee_amount' => $transferAmount,
+            'membership_fee_required_amount' => $transferAmount > 0
+                ? PublicPageSettings::feeForType($applicationType)
+                : null,
             'membership_fee_transfer_date' => $this->parseTransferDate($row),
         ]));
 

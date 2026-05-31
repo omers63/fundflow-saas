@@ -4,8 +4,10 @@ namespace App\Filament\Tenant\Resources\BankAccounts\Pages;
 
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Widgets\BankAccountsInsightsWidget;
+use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTemplate;
 use App\Models\Tenant\BankTransaction;
+use App\Models\Tenant\Transaction;
 use App\Services\BankImportService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
@@ -85,15 +87,23 @@ class ListBankAccounts extends ListRecords
     public function getTabs(): array
     {
         return [
+            'imports' => Tab::make(__('Statement lines')),
+            'ledger' => Tab::make(__('Master bank ledger')),
             'statements' => Tab::make(__('Statements')),
-            'transactions' => Tab::make(__('Transactions')),
         ];
     }
 
     protected function getTableQuery(): Builder
     {
+        $masterBankId = Account::masterBank()?->id;
+
         return match (BankAccountsResource::resolveListBankAccountsTab()) {
-            'transactions' => BankTransaction::query(),
+            'ledger' => Transaction::query()->when(
+                $masterBankId !== null,
+                fn (Builder $query): Builder => $query->where('account_id', $masterBankId),
+                fn (Builder $query): Builder => $query->whereRaw('0 = 1'),
+            ),
+            'imports' => BankTransaction::query(),
             default => static::getResource()::getEloquentQuery(),
         };
     }
@@ -105,7 +115,6 @@ class ListBankAccounts extends ListRecords
                 ->label(__('Import statement'))
                 ->icon('heroicon-o-document-arrow-up')
                 ->color('primary')
-                ->hidden(fn (): bool => ($this->activeTab ?? 'statements') !== 'statements')
                 ->form([
                     FileUpload::make('csv_file')
                         ->label(__('CSV file'))

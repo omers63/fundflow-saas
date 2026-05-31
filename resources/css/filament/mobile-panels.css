@@ -17,6 +17,55 @@
     margin-block: auto;
 }
 
+/* Topbar actions — profile, language switch, notifications (admin, tenant, member) */
+.fi-body .fi-topbar-end {
+    gap: 0.625rem;
+}
+
+.fi-body .fi-topbar .fi-topbar-database-notifications-btn {
+    width: 2.75rem;
+    height: 2.75rem;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    margin: 0;
+    border-radius: 0.5rem;
+}
+
+.fi-body .fi-topbar .fi-topbar-database-notifications-btn .fi-icon {
+    width: 1.375rem;
+    height: 1.375rem;
+}
+
+.fi-body .fi-topbar .fi-user-menu-trigger .fi-user-avatar,
+.fi-body .fi-topbar .fi-user-menu-trigger .fi-avatar {
+    width: 2.75rem;
+    height: 2.75rem;
+    max-width: 2.75rem;
+    max-height: 2.75rem;
+}
+
+.fi-body .fi-topbar .language-switch-dropdown .language-switch-trigger {
+    width: auto !important;
+    height: 2.75rem !important;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    max-width: min(10rem, 28vw);
+    padding-inline: 0.5rem;
+}
+
+.fi-body .fi-topbar .language-switch-dropdown .language-switch-trigger img {
+    width: 1.75rem !important;
+    height: 1.75rem !important;
+    max-width: 1.75rem;
+    max-height: 1.75rem;
+    flex-shrink: 0;
+}
+
+/* Keep language menu below the topbar trigger (do not flip upward). */
+.fi-body .fi-topbar .language-switch-dropdown .fi-dropdown-panel {
+    z-index: 50;
+}
+
 /* Table cells: allow flex children to shrink so wrapped text can use full width */
 .fi-body .fi-ta-cell .fi-ta-col {
     min-width: 0;

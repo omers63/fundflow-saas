@@ -8,9 +8,11 @@ use App\Filament\Tenant\Resources\BankAccounts\Pages\ViewBankStatement;
 use App\Filament\Tenant\Resources\BankAccounts\RelationManagers\BankTransactionsRelationManager;
 use App\Filament\Tenant\Resources\BankAccounts\Tables\BankStatementsTable;
 use App\Filament\Tenant\Resources\BankAccounts\Tables\BankTransactionsTable;
+use App\Filament\Tenant\Resources\BankAccounts\Tables\MasterBankLedgerTable;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\BankStatement;
 use BackedEnum;
+use Filament\Resources\Pages\ListRecords;
 use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
@@ -44,9 +46,17 @@ class BankAccountsResource extends Resource
 
     public static function table(Table $table): Table
     {
+        $afterLedgerMutation = Livewire::current() instanceof ListRecords
+            ? fn (): mixed => Livewire::current()->resetTable()
+            : null;
+
         return match (self::resolveListBankAccountsTab()) {
-            'transactions' => BankTransactionsTable::configure(
-                $table->pluralModelLabel(__('Transactions')),
+            'ledger' => MasterBankLedgerTable::configure(
+                $table->pluralModelLabel(__('Master bank ledger')),
+                $afterLedgerMutation,
+            ),
+            'imports', 'transactions' => BankTransactionsTable::configure(
+                $table->pluralModelLabel(__('Statement lines')),
             ),
             default => BankStatementsTable::configure(
                 $table->pluralModelLabel(__('Statements')),
@@ -64,10 +74,14 @@ class BankAccountsResource extends Resource
         if ($livewire instanceof ListBankAccounts && filled($livewire->activeTab)) {
             $tab = $livewire->activeTab;
         } else {
-            $tab = request()->string('tab')->toString() ?: 'statements';
+            $tab = request()->string('tab')->toString() ?: 'imports';
         }
 
-        return in_array($tab, ['statements', 'transactions'], true) ? $tab : 'statements';
+        return match ($tab) {
+            'transactions' => 'imports',
+            'ledger', 'statements', 'imports' => $tab,
+            default => 'imports',
+        };
     }
 
     public static function getRelations(): array

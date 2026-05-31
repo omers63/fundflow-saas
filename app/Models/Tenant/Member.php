@@ -3,6 +3,7 @@
 namespace App\Models\Tenant;
 
 use App\Services\LoanService;
+use App\Services\MemberMonthlyAllocationService;
 use App\Support\MemberNumberSettings;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -65,6 +66,17 @@ class Member extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::updating(function (Member $member): void {
+            if (! $member->isDirty('monthly_contribution_amount')) {
+                return;
+            }
+
+            app(MemberMonthlyAllocationService::class)->assertCanChangeMonthlyContribution($member);
+        });
+    }
+
     public function isParent(): bool
     {
         return $this->parent_member_id === null;
@@ -118,6 +130,15 @@ class Member extends Model
     public function repayments(): HasManyThrough
     {
         return $this->hasManyThrough(LoanRepayment::class, Loan::class);
+    }
+
+    /**
+     * Paid installments across all member loans (member repayments tab).
+     */
+    public function paidLoanInstallments(): HasManyThrough
+    {
+        return $this->hasManyThrough(LoanInstallment::class, Loan::class)
+            ->where('loan_installments.status', 'paid');
     }
 
     /**

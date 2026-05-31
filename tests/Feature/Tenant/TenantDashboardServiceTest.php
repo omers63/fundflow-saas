@@ -52,7 +52,7 @@ test('tenant dashboard snapshot includes greeting and workspace links', function
 
     expect($snapshot['greeting']['name'])->toBe('Fund Admin')
         ->and($snapshot['greeting']['fund_name'])->toBeString()->not->toBeEmpty()
-        ->and($snapshot['quick_actions'])->toHaveCount(9)
+        ->and($snapshot['quick_actions'])->toHaveCount(6)
         ->and($snapshot['gauges'])->toHaveCount(4)
         ->and($snapshot['balances'])->toHaveCount(3)
         ->and($snapshot['workspace_sections'])->not->toBeEmpty()

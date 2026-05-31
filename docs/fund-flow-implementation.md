@@ -57,24 +57,29 @@ Only one contribution or repayment per member per cycle is allowed.
 
 ### 5. Loan Disbursement
 
-When a loan is disbursed to a member:
+When a loan is disbursed to a member (ledger only — no bank payout yet):
 
-1. **Debit** Master Fund (full disbursement amount)
-2. **Debit** Member Fund (same amount — can go negative, indicating outstanding loan)
-3. **Credit** Member Cash
+1. **Debit** Loan account (principal)
+2. **Debit** Master Fund `(master funded)`
+3. **Debit** Member Fund `(member mirror)` — may go negative
+4. **Credit** Master Cash `(cash payout mirror)`
+5. **Credit** Member Cash `(cash payout)`
 
-**Service:** `LoanService::disburseLoan()`
+Proceeds stay in the member cash account until the member submits a **cash-out request**. Master Cash and Member Cash must move together so `MasterAccountInvariantService` stays balanced.
 
-### 6. Loan Payout
+**Service:** `LoanService::disburseLoan()` → `LoanLedgerService::postPartialLoanDisbursement()`
 
-When the loan amount is actually paid out (bank transfer to member):
+### 6. Member Cash-Out
 
-1. **Debit** Member Cash
-2. **Debit** Master Cash (mirror)
+When a member requests withdrawal and admin **accepts**:
 
-This is matched by a future bank statement import showing the outgoing transfer.
+1. **Debit** Member Cash `(cash out)`
+2. **Debit** Master Cash `(cash out mirror)`
+3. Create an **uncleared** `BankTransaction` (negative amount) linked to the request
 
-**Service:** `LoanService::payoutLoan()`
+**Clearance (later):** Admin matches the uncleared line to an imported bank statement row (**Bank Accounts → Statement lines → Clear / Match**). No extra ledger entries on match — only `is_cleared` flags update.
+
+**Services:** `MemberCashOutService::submit()` / `accept()` / `clearTransaction()`
 
 ### 7. Loan Repayment
 
@@ -89,10 +94,11 @@ Repayments are processed via the contribution cycle:
 
 ## Account Balance Rules
 
-- **Master Fund** = sum of all contributions + repayments − loan disbursements
-- **Master Cash** = sum of all member cash accounts (increases/decreases with bank imports)
+- **Master Fund** = sum of all contributions + repayments − loan disbursements (fund leg)
+- **Master Cash** = sum of all member cash account balances (keep member/master cash credits and debits paired)
 - **Member Fund** may go negative (indicates outstanding loan to be repaid)
 - Members may have only one active loan at any given time
+- **Bank clearance** reconciles ledger intent to imported bank lines; it does not replace paired master/member postings
 
 ## Database Tables
 
@@ -137,10 +143,13 @@ Individual transactions from imported bank statements.
 
 ## Admin Workflow (Filament UI)
 
-### Banking → Bank Statements
+See also [master-bank-manual-credits-and-fund-flow.md](./master-bank-manual-credits-and-fund-flow.md) for manual master bank ledger entries vs statement import / fund posting workflows.
 
-- **Import Statement** action: upload CSV, optionally specify bank name
-- View statement details and its transactions
+### Banking → Bank Accounts
+
+- **Import statement** (page header, any tab): upload CSV, choose template, optionally specify bank name
+- **Statements** tab: view past imports and open statement details
+- **Statement lines** tab: work imported rows (mirror, post to member)
 
 ### Banking → Bank Transactions
 
@@ -153,7 +162,13 @@ Individual transactions from imported bank statements.
 - **Generate Monthly**: create pending contributions for all active members
 - **Post** (row/bulk): run the contribution cycle transfer
 
+### Fund Management → Deposits / Cash outs
+
+- **Deposits**: member submits → admin accept credits **master cash + member cash** → uncleared bank line until matched
+- **Cash outs**: member submits → admin accept debits **master cash + member cash** → uncleared bank line until matched
+
 ### Loans
 
-- **Approve** → **Disburse** → **Payout**: three-step loan lifecycle
-- Loan payout is a separate step from disbursement to separate the accounting entry from the actual bank transfer
+- **Approve** → **Disburse**: fund debits + paired cash credits (member + master)
+- **Cash out** (member portal): separate step when the member wants funds sent to their bank
+- **Mark bank payout** (`payoutLoan()`): optional timestamp only; ledger payout is via cash-out + bank clearance

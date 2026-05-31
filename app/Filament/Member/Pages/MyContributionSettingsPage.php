@@ -9,6 +9,7 @@ use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Member\Support\MemberNavigation;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
+use App\Services\MemberMonthlyAllocationService;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -35,6 +36,10 @@ class MyContributionSettingsPage extends Page
 
     public int $monthly_contribution_amount = 500;
 
+    public bool $allocationChangeBlocked = false;
+
+    public ?string $allocationChangeBlockedMessage = null;
+
     public static function canAccess(): bool
     {
         return CurrentMember::get() !== null;
@@ -49,16 +54,27 @@ class MyContributionSettingsPage extends Page
     {
         $member = CurrentMember::get();
         $this->monthly_contribution_amount = (int) ($member?->monthly_contribution_amount ?? 500);
+
+        if ($member !== null) {
+            $allocations = app(MemberMonthlyAllocationService::class);
+            $this->allocationChangeBlocked = ! $allocations->canChangeMonthlyContribution($member);
+            $this->allocationChangeBlockedMessage = $this->allocationChangeBlocked
+                ? $allocations->allocationChangeBlockedMessage($member)
+                : null;
+        }
     }
 
     protected function getHeaderActions(): array
     {
         $member = CurrentMember::get();
+        $allocations = app(MemberMonthlyAllocationService::class);
         $actions = [
             Action::make('save_allocation')
                 ->label(__('Save allocation'))
                 ->icon('heroicon-o-check-circle')
                 ->color('primary')
+                ->disabled($this->allocationChangeBlocked)
+                ->tooltip($this->allocationChangeBlockedMessage)
                 ->fillForm(['monthly_contribution_amount' => $this->monthly_contribution_amount])
                 ->schema([
                     Select::make('monthly_contribution_amount')
@@ -95,6 +111,18 @@ class MyContributionSettingsPage extends Page
                         Notification::make()
                             ->title(__('No changes detected'))
                             ->info()
+                            ->send();
+
+                        return;
+                    }
+
+                    try {
+                        app(MemberMonthlyAllocationService::class)->assertCanChangeMonthlyContribution($member);
+                    } catch (\InvalidArgumentException $exception) {
+                        Notification::make()
+                            ->title(__('Allocation cannot be changed'))
+                            ->body($exception->getMessage())
+                            ->danger()
                             ->send();
 
                         return;

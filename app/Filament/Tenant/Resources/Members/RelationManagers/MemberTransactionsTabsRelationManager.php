@@ -11,6 +11,7 @@ use App\Filament\Support\AccountTransactionManualAdjustmentHeaderActions;
 use App\Filament\Support\ViewActions\ViewAccountTransactionAction;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Setting;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -59,7 +60,10 @@ class MemberTransactionsTabsRelationManager extends RelationManager
                 TextColumn::make('transacted_at')->dateTime()->sortable(),
                 AccountTransactionAmountColumn::make(),
                 TextColumn::make('description')->wrap(),
-                TextColumn::make('balance_after')->money(),
+                TextColumn::make('balance_after')
+                    ->label(__('Balance after'))
+                    ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
+                    ->sortable(),
             ]);
 
         if ($this->ledgerTab === 'cash') {

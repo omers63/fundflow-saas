@@ -16,11 +16,15 @@
                         <p class="text-[10px] text-gray-400">
                             {{ $row['posted_at'] }}
                             @if ($row['late'] ?? false)
-                                · <span class="text-amber-600 dark:text-amber-400">{{ __('Late') }}</span>
+                                · <span class="text-rose-600 dark:text-rose-400">{{ __('Late') }}</span>
                             @endif
                         </p>
                     </div>
-                    <span class="shrink-0 font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    <span @class([
+                        'shrink-0 font-semibold tabular-nums',
+                        'text-rose-600 dark:text-rose-400' => $row['late'] ?? false,
+                        'text-emerald-600 dark:text-emerald-400' => !($row['late'] ?? false),
+                    ])>
                         {{ $row['amount'] }}
                     </span>
                 </li>

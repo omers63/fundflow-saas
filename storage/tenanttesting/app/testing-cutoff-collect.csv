@@ -1,0 +1,2 @@
+name,email,mobile_phone,iban,membership_date,cutoff_cash_balance,cutoff_fund_balance
+Cutoff Collect Member,cutoff-collect@example.test,0501000999,SA030000000000101000000099,2026-03-01,550,0

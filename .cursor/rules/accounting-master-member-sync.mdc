@@ -1,0 +1,41 @@
+---
+description: Paired master/member ledger postings, bank clearance, and reconciliation
+alwaysApply: true
+---
+
+# Accounting — master / member sync & clearance
+
+Keep **member** and **master** ledger legs in sync wherever they represent the same economic event. Reconciliation (`MasterAccountInvariantService`, `MemberInvariantService`, bank clearing) assumes this.
+
+## Core rules
+
+1. **Master Cash ↔ Member Cash**
+   - When member cash is **credited** for pool inflows (deposit accepted, loan disbursement cash payout, manual tagged credit), **credit master cash** by the same amount in the same transaction.
+   - When member cash is **debited** for pool outflows (cash-out approved), **debit master cash** by the same amount.
+   - Post **master cash first**, then **member cash** (see `FundPostingService::accept()`, `LoanLedgerService::postPartialLoanDisbursement()`).
+   - Do **not** pass `member_id` on **master cash** legs unless there is an explicit, documented reason — it triggers `ContributionCollectionCycleService::onMemberCashIncreased()` and can drain member cash unexpectedly.
+
+2. **Master Fund ↔ Member Fund**
+   - Contributions and loan fund-side entries mirror master fund when member fund moves (see `ContributionService`, loan disbursement fund debits).
+
+3. **Bank clearance is a separate step**
+   - Ledger posting records intent (e.g. cash-out approval debits cash; deposit accept credits cash).
+   - Create an **uncleared** `BankTransaction` when the bank line is not yet matched (`FundPostingService`, `MemberCashOutService`).
+   - **Clear / Match** against an imported statement line later (`FundPostingService::clearTransaction()`, `MemberCashOutService::clearTransaction()`). Do not post additional ledger entries on clearance unless fixing a reconciliation exception.
+
+4. **Do not combine lifecycle stages**
+   - **Loan disbursement**: fund debits + credit member cash + credit master cash mirror. Do **not** auto debit for bank payout or “check disbursement out”.
+   - **Cash-out**: member request → admin accept → dual debit (member + master cash) + uncleared bank line. Bank transfer clearance comes later.
+
+5. **New flows**
+   - Before adding a member cash credit/debit, check sibling services and update invariants/tests if descriptions or reference types change.
+   - Prefer shared patterns in `AccountingService` (`pairManualCredit` / `pairManualDebit`, `postManualMasterBankShadow`) over one-off legs.
+
+## Reference implementations
+
+| Flow | Service | Pattern |
+|------|---------|---------|
+| Member deposit accept | `FundPostingService::accept()` | CR master cash + CR member cash |
+| Loan disbursement | `LoanLedgerService::postPartialLoanDisbursement()` | DR funds + CR master cash + CR member cash |
+| Cash-out approve | `MemberCashOutService::accept()` | DR member cash + DR master cash + uncleared bank txn |
+| Bank import mirror | `FundFlowService::mirrorToCash()` | Master bank ↔ master cash |

@@ -258,7 +258,7 @@ class LoanRepaymentService
     /** Whether to show one-click repayment for the current open period (active loan, unpaid installment for that period). */
     public function shouldOfferOpenPeriodRepayment(Member $member): bool
     {
-        if ($member->trashed() || $member->status !== 'active') {
+        if ($member->status !== 'active') {
             return false;
         }
 

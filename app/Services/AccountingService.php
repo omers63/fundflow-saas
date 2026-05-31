@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\InsufficientMemberCashForCollectionException;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Contribution;
@@ -20,6 +21,34 @@ use RuntimeException;
 
 class AccountingService
 {
+    private static int $memberCashCollectionDepth = 0;
+
+    private static bool $memberCashSettlementActive = false;
+
+    /**
+     * Run a callback without dispatching member cash collection (for tests and internal transfers).
+     *
+     * @template TReturn
+     *
+     * @param  callable(): TReturn  $callback
+     * @return TReturn
+     */
+    public static function withoutMemberCashCollection(callable $callback): mixed
+    {
+        self::$memberCashCollectionDepth++;
+
+        try {
+            return $callback();
+        } finally {
+            self::$memberCashCollectionDepth--;
+        }
+    }
+
+    public static function memberCashCollectionInProgress(): bool
+    {
+        return self::$memberCashSettlementActive;
+    }
+
     /**
      * Transfer money between two accounts with transaction logging.
      *
@@ -35,10 +64,11 @@ class AccountingService
         float $amount,
         string $description,
         ?Model $reference = null,
+        ?DateTimeInterface $transactedAt = null,
     ): void {
-        DB::transaction(function () use ($from, $to, $amount, $description, $reference) {
-            $this->debit($from, $amount, $description, $reference);
-            $this->credit($to, $amount, $description, $reference);
+        DB::transaction(function () use ($from, $to, $amount, $description, $reference, $transactedAt): void {
+            $this->debit($from, $amount, $description, $reference, $transactedAt);
+            $this->credit($to, $amount, $description, $reference, $transactedAt);
         });
     }
 
@@ -147,7 +177,7 @@ class AccountingService
     ): Transaction {
         $memberId = $this->resolveTransactionMemberId($account, $memberId);
 
-        return DB::transaction(function () use ($account, $amount, $description, $reference, $transactedAt, $memberId) {
+        $transaction = DB::transaction(function () use ($account, $amount, $description, $reference, $transactedAt, $memberId) {
             $account->lockForUpdate();
             $account->refresh();
 
@@ -166,6 +196,10 @@ class AccountingService
                 'transacted_at' => $transactedAt ?? now(),
             ]);
         });
+
+        $this->dispatchMemberCashIncreasedIfApplicable($account, $memberId);
+
+        return $transaction;
     }
 
     /**
@@ -184,6 +218,8 @@ class AccountingService
         return DB::transaction(function () use ($account, $amount, $description, $reference, $transactedAt, $memberId) {
             $account->lockForUpdate();
             $account->refresh();
+
+            $this->guardMemberCashDebitDuringAutoCollection($account, $amount);
 
             $newBalance = (float) $account->balance - $amount;
             $account->update(['balance' => $newBalance]);
@@ -619,6 +655,448 @@ class AccountingService
     }
 
     /**
+     * Post a manual ledger credit using global pairing rules (member cash/fund, reserve accounts).
+     */
+    public function postManualCredit(
+        Account $account,
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt = null,
+        ?int $memberId = null,
+    ): Transaction {
+        return $this->postManualAdjustment($account, 'credit', $amount, $description, $transactedAt, $memberId);
+    }
+
+    /**
+     * Post a manual ledger debit using global pairing rules (member cash/fund, reserve accounts).
+     */
+    public function postManualDebit(
+        Account $account,
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt = null,
+        ?int $memberId = null,
+    ): Transaction {
+        return $this->postManualAdjustment($account, 'debit', $amount, $description, $transactedAt, $memberId);
+    }
+
+    /**
+     * @param  'credit'|'debit'  $direction
+     */
+    protected function postManualAdjustment(
+        Account $account,
+        string $direction,
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt = null,
+        ?int $memberId = null,
+    ): Transaction {
+        if ($amount <= 0) {
+            throw new InvalidArgumentException(__('Amount must be greater than zero.'));
+        }
+
+        $description = trim($description);
+
+        if ($description === '') {
+            throw new InvalidArgumentException(__('Description is required.'));
+        }
+
+        $memberId = $this->resolveTransactionMemberId($account, $memberId);
+        $kind = $this->manualAdjustmentKind($account, $memberId);
+        $memberForCollection = null;
+        $primaryTransaction = null;
+
+        if ($kind === 'member_cash') {
+            $memberForCollection = Member::query()->find((int) $account->member_id);
+        } elseif (in_array($kind, ['master_cash_tagged', 'master_bank_shadow'], true) && $memberId !== null) {
+            $memberForCollection = Member::query()->find($memberId);
+        }
+
+        DB::transaction(function () use ($account, $direction, $amount, $description, $transactedAt, $memberId, $kind, &$memberForCollection, &$primaryTransaction): void {
+            self::withoutMemberCashCollection(function () use ($account, $direction, $amount, $description, $transactedAt, $memberId, $kind, &$memberForCollection, &$primaryTransaction): void {
+                $primaryTransaction = match ($kind) {
+                    'member_cash' => $this->postManualMemberCashPair(
+                        $account,
+                        $direction,
+                        $amount,
+                        $description,
+                        $transactedAt,
+                        $memberId,
+                    ),
+                    'member_fund' => $this->postManualMemberFundPair(
+                        $account,
+                        $direction,
+                        $amount,
+                        $description,
+                        $transactedAt,
+                        $memberId,
+                    ),
+                    'master_cash_tagged' => $this->postManualMasterCashTaggedPair(
+                        $direction,
+                        $amount,
+                        $description,
+                        $transactedAt,
+                        $memberId,
+                    ),
+                    'master_fund_tagged' => $this->postManualMasterFundTaggedPair(
+                        $direction,
+                        $amount,
+                        $description,
+                        $transactedAt,
+                        $memberId,
+                    ),
+                    'reserve_vs_cash' => $this->postManualReserveVsCash(
+                        $account,
+                        $direction,
+                        $amount,
+                        $description,
+                        $transactedAt,
+                    ),
+                    'reserve_vs_fund' => $this->postManualReserveVsFund(
+                        $account,
+                        $direction,
+                        $amount,
+                        $description,
+                        $transactedAt,
+                    ),
+                    'master_bank_shadow' => $this->postManualMasterBankShadow(
+                        $direction,
+                        $amount,
+                        $description,
+                        $transactedAt,
+                        $memberId,
+                    ),
+                    default => $direction === 'credit'
+                    ? $this->credit($account, $amount, $description, null, $transactedAt, $memberId)
+                    : $this->debit($account, $amount, $description, null, $transactedAt, $memberId),
+                };
+            });
+        });
+
+        if ($memberForCollection !== null) {
+            $this->triggerMemberCashCollection($memberForCollection);
+        }
+
+        return $primaryTransaction;
+    }
+
+    /**
+     * @return 'member_cash'|'member_fund'|'master_cash_tagged'|'master_fund_tagged'|'master_bank_shadow'|'reserve_vs_cash'|'reserve_vs_fund'|'single'
+     */
+    protected function manualAdjustmentKind(Account $account, ?int $memberId): string
+    {
+        if (! $account->is_master) {
+            return match ($account->type) {
+                'cash' => 'member_cash',
+                'fund' => 'member_fund',
+                default => 'single',
+            };
+        }
+
+        return match ($account->type) {
+            'bank' => 'master_bank_shadow',
+            'cash' => $memberId !== null ? 'master_cash_tagged' : 'single',
+            'fund' => $memberId !== null ? 'master_fund_tagged' : 'single',
+            'expense', 'fees' => 'reserve_vs_cash',
+            'invest' => 'reserve_vs_fund',
+            default => 'single',
+        };
+    }
+
+    /**
+     * Manual master bank credit/debit mirrored to master cash; optional member tag mirrors to member cash.
+     *
+     * @param  'credit'|'debit'  $direction
+     */
+    protected function postManualMasterBankShadow(
+        string $direction,
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt,
+        ?int $memberId,
+    ): Transaction {
+        $masterBank = Account::masterBank();
+
+        if ($masterBank === null) {
+            throw new InvalidArgumentException(__('Master bank account is not configured.'));
+        }
+
+        $masterCash = Account::masterCash();
+
+        if ($masterCash === null) {
+            throw new InvalidArgumentException(__('Master cash account is not configured.'));
+        }
+
+        if ($memberId !== null) {
+            $memberCash = $this->resolveMemberCashAccount($memberId);
+
+            if ($direction === 'debit' && $amount > (float) $memberCash->balance) {
+                throw new InvalidArgumentException(__('Debit amount exceeds the member cash balance.'));
+            }
+
+            if ($direction === 'debit') {
+                $this->debit($memberCash, $amount, $description, null, $transactedAt, $memberId);
+            } else {
+                $this->credit($memberCash, $amount, $description, null, $transactedAt, $memberId);
+            }
+        }
+
+        if ($direction === 'debit' && $amount > (float) $masterCash->balance) {
+            throw new InvalidArgumentException(__('Debit amount exceeds the master cash balance.'));
+        }
+
+        return $direction === 'credit'
+            ? $this->pairManualCredit($masterBank, $masterCash, $amount, $description, $transactedAt, $memberId)
+            : $this->pairManualDebit($masterBank, $masterCash, $amount, $description, $transactedAt, $memberId);
+    }
+
+    /**
+     * @param  'credit'|'debit'  $direction
+     */
+    protected function postManualMemberCashPair(
+        Account $memberCash,
+        string $direction,
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt,
+        ?int $memberId,
+    ): Transaction {
+        if ($memberCash->is_master || $memberCash->type !== 'cash') {
+            throw new InvalidArgumentException(__('Manual adjustment must target a member cash account.'));
+        }
+
+        $masterCash = Account::masterCash();
+
+        if ($masterCash === null) {
+            throw new InvalidArgumentException(__('Master cash account is not configured.'));
+        }
+
+        if ($direction === 'debit' && $amount > (float) $memberCash->balance) {
+            throw new InvalidArgumentException(__('Debit amount exceeds the available cash balance.'));
+        }
+
+        return $direction === 'credit'
+            ? $this->pairManualCredit($memberCash, $masterCash, $amount, $description, $transactedAt, $memberId)
+            : $this->pairManualDebit($memberCash, $masterCash, $amount, $description, $transactedAt, $memberId);
+    }
+
+    /**
+     * @param  'credit'|'debit'  $direction
+     */
+    protected function postManualMemberFundPair(
+        Account $memberFund,
+        string $direction,
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt,
+        ?int $memberId,
+    ): Transaction {
+        if ($memberFund->is_master || $memberFund->type !== 'fund') {
+            throw new InvalidArgumentException(__('Manual adjustment must target a member fund account.'));
+        }
+
+        $masterFund = Account::masterFund();
+
+        if ($masterFund === null) {
+            throw new InvalidArgumentException(__('Master fund account is not configured.'));
+        }
+
+        return $direction === 'credit'
+            ? $this->pairManualCredit($memberFund, $masterFund, $amount, $description, $transactedAt, $memberId)
+            : $this->pairManualDebit($memberFund, $masterFund, $amount, $description, $transactedAt, $memberId);
+    }
+
+    /**
+     * @param  'credit'|'debit'  $direction
+     */
+    protected function postManualMasterCashTaggedPair(
+        string $direction,
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt,
+        ?int $memberId,
+    ): Transaction {
+        $masterCash = Account::masterCash();
+
+        if ($masterCash === null) {
+            throw new InvalidArgumentException(__('Master cash account is not configured.'));
+        }
+
+        $memberCash = $this->resolveMemberCashAccount($memberId);
+
+        if ($direction === 'debit' && $amount > (float) $memberCash->balance) {
+            throw new InvalidArgumentException(__('Debit amount exceeds the member cash balance.'));
+        }
+
+        return $direction === 'credit'
+            ? $this->pairManualCredit($masterCash, $memberCash, $amount, $description, $transactedAt, $memberId)
+            : $this->pairManualDebit($masterCash, $memberCash, $amount, $description, $transactedAt, $memberId);
+    }
+
+    /**
+     * @param  'credit'|'debit'  $direction
+     */
+    protected function postManualMasterFundTaggedPair(
+        string $direction,
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt,
+        ?int $memberId,
+    ): Transaction {
+        $masterFund = Account::masterFund();
+
+        if ($masterFund === null) {
+            throw new InvalidArgumentException(__('Master fund account is not configured.'));
+        }
+
+        $memberFund = $this->resolveMemberFundAccount($memberId);
+
+        return $direction === 'credit'
+            ? $this->pairManualCredit($masterFund, $memberFund, $amount, $description, $transactedAt, $memberId)
+            : $this->pairManualDebit($masterFund, $memberFund, $amount, $description, $transactedAt, $memberId);
+    }
+
+    /**
+     * Credit/debit expense or fees against master cash.
+     *
+     * @param  'credit'|'debit'  $direction
+     */
+    protected function postManualReserveVsCash(
+        Account $reserveAccount,
+        string $direction,
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt,
+    ): Transaction {
+        $this->assertMasterReserveCashCounterpart($reserveAccount);
+
+        if ($direction === 'debit' && $amount > (float) $reserveAccount->balance) {
+            throw new InvalidArgumentException(__('Debit amount exceeds the available reserve balance.'));
+        }
+
+        $masterCash = Account::masterCash();
+
+        if ($masterCash === null) {
+            throw new InvalidArgumentException(__('Master cash account is not configured.'));
+        }
+
+        if ($direction === 'credit') {
+            $this->debit($masterCash, $amount, $description, null, $transactedAt);
+
+            return $this->credit($reserveAccount, $amount, $description, null, $transactedAt);
+        }
+
+        $this->credit($masterCash, $amount, $description, null, $transactedAt);
+
+        return $this->debit($reserveAccount, $amount, $description, null, $transactedAt);
+    }
+
+    /**
+     * Credit/debit invest against master fund.
+     *
+     * @param  'credit'|'debit'  $direction
+     */
+    protected function postManualReserveVsFund(
+        Account $investAccount,
+        string $direction,
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt,
+    ): Transaction {
+        $this->assertMasterInvestAccount($investAccount);
+
+        if ($direction === 'debit' && $amount > (float) $investAccount->balance) {
+            throw new InvalidArgumentException(__('Debit amount exceeds the available invest balance.'));
+        }
+
+        $masterFund = Account::masterFund();
+
+        if ($masterFund === null) {
+            throw new InvalidArgumentException(__('Master fund account is not configured.'));
+        }
+
+        if ($direction === 'credit') {
+            $this->debit($masterFund, $amount, $description, null, $transactedAt);
+
+            return $this->credit($investAccount, $amount, $description, null, $transactedAt);
+        }
+
+        $this->credit($masterFund, $amount, $description, null, $transactedAt);
+
+        return $this->debit($investAccount, $amount, $description, null, $transactedAt);
+    }
+
+    protected function pairManualCredit(
+        Account $primary,
+        Account $counterpart,
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt,
+        ?int $memberId,
+    ): Transaction {
+        $this->credit($counterpart, $amount, $description, null, $transactedAt, $memberId);
+
+        return $this->credit($primary, $amount, $description, null, $transactedAt, $memberId);
+    }
+
+    protected function pairManualDebit(
+        Account $primary,
+        Account $counterpart,
+        float $amount,
+        string $description,
+        ?DateTimeInterface $transactedAt,
+        ?int $memberId,
+    ): Transaction {
+        $this->debit($counterpart, $amount, $description, null, $transactedAt, $memberId);
+
+        return $this->debit($primary, $amount, $description, null, $transactedAt, $memberId);
+    }
+
+    protected function resolveMemberCashAccount(?int $memberId): Account
+    {
+        if ($memberId === null) {
+            throw new InvalidArgumentException(__('A member must be selected for this adjustment.'));
+        }
+
+        $member = Member::query()->with('cashAccount')->find($memberId);
+
+        if ($member?->cashAccount === null) {
+            throw new InvalidArgumentException(__('Member cash account is not configured.'));
+        }
+
+        return $member->cashAccount;
+    }
+
+    protected function resolveMemberFundAccount(?int $memberId): Account
+    {
+        if ($memberId === null) {
+            throw new InvalidArgumentException(__('A member must be selected for this adjustment.'));
+        }
+
+        $member = Member::query()->with('fundAccount')->find($memberId);
+
+        if ($member?->fundAccount === null) {
+            throw new InvalidArgumentException(__('Member fund account is not configured.'));
+        }
+
+        return $member->fundAccount;
+    }
+
+    protected function assertMasterReserveCashCounterpart(Account $account): void
+    {
+        if (! $account->is_master || ! in_array($account->type, ['expense', 'fees'], true)) {
+            throw new InvalidArgumentException(__('Reserve account must be a master expense or fees account.'));
+        }
+    }
+
+    protected function assertMasterInvestAccount(Account $account): void
+    {
+        if (! $account->is_master || $account->type !== 'invest') {
+            throw new InvalidArgumentException(__('Account must be the master invest account.'));
+        }
+    }
+
+    /**
      * Fund a master reserve account (expense or investment) from master fund.
      */
     public function fundReserveAccountFromMasterFund(
@@ -751,18 +1229,116 @@ class AccountingService
         float $amount,
         string $description,
         ?Model $reference = null,
+        ?DateTimeInterface $transactedAt = null,
     ): Transaction {
         if ($amount >= 0) {
-            return $this->credit($account, $amount, $description, $reference);
+            return $this->credit($account, $amount, $description, $reference, $transactedAt);
         }
 
-        return $this->debit($account, abs($amount), $description, $reference);
+        return $this->debit($account, abs($amount), $description, $reference, $transactedAt);
     }
 
     private function assertMasterReserveAccount(Account $account): void
     {
-        if (! $account->is_master || ! in_array($account->type, ['expense', 'invest'], true)) {
-            throw new InvalidArgumentException(__('Reserve account must be a master expense or investment account.'));
+        if (! $account->is_master || ! in_array($account->type, ['expense', 'fees', 'invest'], true)) {
+            throw new InvalidArgumentException(__('Reserve account must be a master expense, fees, or investment account.'));
+        }
+    }
+
+    /**
+     * Run contribution and loan settlement after member cash increases outside ledger posting.
+     */
+    public function triggerMemberCashCollection(Member $member): void
+    {
+        $member = $member->fresh() ?? $member;
+        $member->unsetRelation('accounts');
+
+        if (self::$memberCashCollectionDepth > 0) {
+            return;
+        }
+
+        self::$memberCashCollectionDepth++;
+        self::$memberCashSettlementActive = true;
+
+        try {
+            app(ContributionCollectionCycleService::class)->onMemberCashIncreased($member);
+        } finally {
+            self::$memberCashSettlementActive = false;
+            self::$memberCashCollectionDepth--;
+        }
+    }
+
+    private function dispatchMemberCashIncreasedIfApplicable(Account $account, ?int $resolvedMemberId = null): void
+    {
+        $memberId = $account->member_id ?? $resolvedMemberId;
+
+        if ($memberId === null) {
+            return;
+        }
+
+        if ($account->is_master) {
+            if ($account->type !== 'cash') {
+                return;
+            }
+
+            $member = Member::query()->find($memberId);
+
+            if ($member === null) {
+                return;
+            }
+
+            if (self::$memberCashCollectionDepth > 0) {
+                return;
+            }
+
+            self::$memberCashCollectionDepth++;
+            self::$memberCashSettlementActive = true;
+
+            try {
+                app(ContributionCollectionCycleService::class)->onMemberCashIncreased($member);
+            } finally {
+                self::$memberCashSettlementActive = false;
+                self::$memberCashCollectionDepth--;
+            }
+
+            return;
+        }
+
+        if ($account->type !== 'cash') {
+            return;
+        }
+
+        $member = Member::query()->find($memberId);
+
+        if ($member === null) {
+            return;
+        }
+
+        if (self::$memberCashCollectionDepth > 0) {
+            return;
+        }
+
+        self::$memberCashCollectionDepth++;
+        self::$memberCashSettlementActive = true;
+
+        try {
+            app(ContributionCollectionCycleService::class)->onMemberCashIncreased($member);
+        } finally {
+            self::$memberCashSettlementActive = false;
+            self::$memberCashCollectionDepth--;
+        }
+    }
+
+    private function guardMemberCashDebitDuringAutoCollection(Account $account, float $amount): void
+    {
+        if (! self::$memberCashSettlementActive || $account->is_master || $account->type !== 'cash') {
+            return;
+        }
+
+        if ($amount > (float) $account->balance + 0.00001) {
+            throw new InsufficientMemberCashForCollectionException(
+                __('Insufficient member cash balance for auto-collection.'),
+            );
         }
     }
 
@@ -788,21 +1364,29 @@ class AccountingService
      */
     public function createMemberAccounts(Member $member): void
     {
-        Account::create([
-            'member_id' => $member->id,
-            'type' => 'cash',
-            'name' => $member->name.' - Cash',
-            'balance' => 0,
-            'is_master' => false,
-        ]);
+        Account::query()->firstOrCreate(
+            [
+                'member_id' => $member->id,
+                'type' => 'cash',
+                'is_master' => false,
+            ],
+            [
+                'name' => $member->name.' - Cash',
+                'balance' => 0,
+            ],
+        );
 
-        Account::create([
-            'member_id' => $member->id,
-            'type' => 'fund',
-            'name' => $member->name.' - Fund',
-            'balance' => 0,
-            'is_master' => false,
-        ]);
+        Account::query()->firstOrCreate(
+            [
+                'member_id' => $member->id,
+                'type' => 'fund',
+                'is_master' => false,
+            ],
+            [
+                'name' => $member->name.' - Fund',
+                'balance' => 0,
+            ],
+        );
     }
 
     public function postContribution(Contribution $contribution): void
@@ -870,6 +1454,30 @@ class AccountingService
 
         $this->debit($memberCash, $lateFee, $description, $contribution);
         $this->credit($masterFees, $lateFee, $description, $contribution);
+    }
+
+    /**
+     * Cash already debited for this contribution's late fee (tier accrual or prior partial collection).
+     */
+    public function contributionLateFeeCollectedAmount(Contribution $contribution): float
+    {
+        $contribution->loadMissing('member.cashAccount');
+
+        $cashAccountId = $contribution->member?->cashAccount?->id;
+
+        if ($cashAccountId === null) {
+            return 0.0;
+        }
+
+        $descriptionPrefix = __('Contribution late fee —');
+
+        return (float) Transaction::query()
+            ->where('account_id', $cashAccountId)
+            ->where('reference_type', Contribution::class)
+            ->where('reference_id', $contribution->id)
+            ->where('type', 'debit')
+            ->where('description', 'like', $descriptionPrefix.'%')
+            ->sum('amount');
     }
 
     public function reverseContributionLateFee(Contribution $contribution, float $lateFee): void
@@ -973,6 +1581,7 @@ class AccountingService
         Member $dependent,
         float $amount,
         string $note = '',
+        bool $triggerCollection = false,
     ): void {
         if ($amount <= 0) {
             throw new InvalidArgumentException(__('Amount must be greater than zero.'));
@@ -992,9 +1601,15 @@ class AccountingService
         $debitDesc = trim(__('Transfer to :name', ['name' => $dependent->name]).($note ? " — {$note}" : ''));
         $creditDesc = trim(__('Transfer from :name', ['name' => $parent->name]).($note ? " — {$note}" : ''));
 
-        DB::transaction(function () use ($parentCash, $dependentCash, $amount, $debitDesc, $creditDesc, $parent, $dependent): void {
-            $this->debit($parentCash, $amount, $debitDesc, $parent);
-            $this->credit($dependentCash, $amount, $creditDesc, $dependent);
+        DB::transaction(function () use ($parentCash, $dependentCash, $amount, $debitDesc, $creditDesc): void {
+            self::withoutMemberCashCollection(function () use ($parentCash, $dependentCash, $amount, $debitDesc, $creditDesc): void {
+                $this->debit($parentCash, $amount, $debitDesc);
+                $this->credit($dependentCash, $amount, $creditDesc);
+            });
         });
+
+        if ($triggerCollection) {
+            $this->triggerMemberCashCollection($dependent->fresh() ?? $dependent);
+        }
     }
 }

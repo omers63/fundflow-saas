@@ -106,7 +106,11 @@ final class BankAccountsInsightsService
         return [
             'currency' => $currency,
             'active_tab' => $activeTab,
-            'active_tab_label' => $activeTab === 'transactions' ? __('Transactions') : __('Statements'),
+            'active_tab_label' => match ($activeTab) {
+                'ledger' => __('Master bank ledger'),
+                'statements' => __('Statements'),
+                default => __('Statement lines'),
+            },
             'pending_post' => $pendingPost,
             'unassigned_credits' => $unassignedCredits,
             'pending_fund_postings' => $pendingFundPostings,
@@ -131,7 +135,9 @@ final class BankAccountsInsightsService
             ],
             'urls' => [
                 'index' => $indexUrl,
-                'transactions' => $indexUrl.'?tab=transactions',
+                'imports' => $indexUrl.'?tab=imports',
+                'ledger' => $indexUrl.'?tab=ledger',
+                'transactions' => $indexUrl.'?tab=imports',
                 'fund_postings' => FundPostingResource::getUrl('index'),
                 'master_cash' => Account::masterCash()
                     ? MasterAccountResource::getUrl('view', ['record' => Account::masterCash()])
@@ -187,12 +193,12 @@ final class BankAccountsInsightsService
                     'accent' => $unassignedCredits > 0 ? 'amber' : 'teal',
                 ],
             ], [
-                'pending' => $indexUrl.'?tab=transactions&tableFilters[status][value]=imported',
-                'posted' => $indexUrl.'?tab=transactions&tableFilters[status][value]=posted',
-                'dupes' => $indexUrl.'?tab=transactions&tableFilters[status][value]=duplicate',
+                'pending' => $indexUrl.'?tab=imports&tableFilters[status][value]=imported',
+                'posted' => $indexUrl.'?tab=imports&tableFilters[status][value]=posted',
+                'dupes' => $indexUrl.'?tab=imports&tableFilters[status][value]=duplicate',
                 'templates' => $indexUrl.'?tab=templates',
                 'statements' => $indexUrl.'?tab=statements',
-                'unassigned' => $indexUrl.'?tab=transactions',
+                'unassigned' => $indexUrl.'?tab=imports',
             ]),
             'hero' => $this->buildHero(
                 $pendingPost,
@@ -222,7 +228,7 @@ final class BankAccountsInsightsService
                     'count' => $failedStatements,
                 ]),
                 'cta_label' => __('Statements'),
-                'cta_url' => $indexUrl,
+                'cta_url' => $indexUrl.'?tab=statements',
             ];
         }
 
@@ -241,8 +247,8 @@ final class BankAccountsInsightsService
                     ? trans_choice(':count deposit pending|:count deposits pending', $pendingFundPostings, ['count' => $pendingFundPostings])
                     : null,
                 ])->filter()->implode(' · '),
-                'cta_label' => __('Transactions'),
-                'cta_url' => $indexUrl.'?tab=transactions',
+                'cta_label' => __('Statement lines'),
+                'cta_url' => $indexUrl.'?tab=imports',
             ];
         }
 
@@ -251,7 +257,7 @@ final class BankAccountsInsightsService
             'title' => __('Banking is up to date'),
             'subtitle' => __('Imports are posted and the queue is clear.'),
             'cta_label' => __('Import statement'),
-            'cta_url' => $indexUrl,
+            'cta_url' => $indexUrl.'?tab=statements',
         ];
     }
 }

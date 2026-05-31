@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models\Tenant;
 
+use App\Services\AccountingService;
 use App\Support\ContributionCollectionStatus;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -99,6 +100,26 @@ class Contribution extends Model
     public function transactions(): MorphMany
     {
         return $this->morphMany(Transaction::class, 'reference');
+    }
+
+    /**
+     * Principal collected from member cash toward amount_due (partial or full settlement).
+     */
+    public function principalCollectedAmount(): float
+    {
+        return (float) ($this->amount_collected ?? 0);
+    }
+
+    /**
+     * Late fees already debited from member cash for this contribution cycle.
+     */
+    public function lateFeeCollectedAmount(): float
+    {
+        if (array_key_exists('late_fee_collected_amount', $this->attributes)) {
+            return (float) $this->attributes['late_fee_collected_amount'];
+        }
+
+        return app(AccountingService::class)->contributionLateFeeCollectedAmount($this);
     }
 
     public function scopePending(Builder $query): Builder

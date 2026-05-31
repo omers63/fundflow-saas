@@ -71,7 +71,6 @@ final class TenantDashboardService
         $pendingApplications = MembershipApplication::query()->where('status', 'pending')->count();
         $loanQueueCount = Loan::query()->inQueue()->count();
         $openReconciliationCount = $this->openReconciliationCount();
-        $migrationPendingCount = app(MigrationWorkflowService::class)->pendingMemberCount();
         $attentionTotal = $pendingContributions + $pendingDeposits + $pendingApplications + $loanQueueCount
             + ($delinquencyCounts['overdue_installments'] ?? 0)
             + ($delinquencyCounts['contribution_arrears_periods'] ?? 0)
@@ -91,8 +90,6 @@ final class TenantDashboardService
                 $loanQueueCount,
                 $delinquencyCounts,
                 $openPeriodLabel,
-                $openReconciliationCount,
-                $migrationPendingCount,
             ),
             'balances' => $this->balances($masters, $masterBalance, $currency),
             'gauges' => [
@@ -195,8 +192,6 @@ final class TenantDashboardService
         int $loanQueueCount,
         array $delinquencyCounts,
         string $openPeriodLabel,
-        int $openReconciliationCount,
-        int $migrationPendingCount,
     ): array {
         $delinquencyTotal = ($delinquencyCounts['overdue_installments'] ?? 0)
             + ($delinquencyCounts['contribution_arrears_periods'] ?? 0)
@@ -210,14 +205,6 @@ final class TenantDashboardService
                 'url' => ContributionCyclePage::getUrl(),
                 'tone' => 'cycle',
                 'badge' => $pendingContributions > 0 ? (string) $pendingContributions : null,
-            ],
-            [
-                'label' => Lang::ui('Migrations'),
-                'description' => Lang::ui('Historical cycle clearance'),
-                'icon' => 'heroicon-o-clock',
-                'url' => MigrationWorkflowPage::getUrl(),
-                'tone' => 'migration',
-                'badge' => $migrationPendingCount > 0 ? (string) $migrationPendingCount : null,
             ],
             [
                 'label' => Lang::ui('Loan queue'),
@@ -257,22 +244,6 @@ final class TenantDashboardService
                 'icon' => 'heroicon-o-building-library',
                 'url' => BankAccountsResource::getUrl('index'),
                 'tone' => 'bank',
-                'badge' => null,
-            ],
-            [
-                'label' => Lang::ui('Reconciliation'),
-                'description' => Lang::ui('Exception queue'),
-                'icon' => 'heroicon-o-shield-exclamation',
-                'url' => ReconciliationExceptionResource::getUrl('index'),
-                'tone' => 'reconciliation',
-                'badge' => $openReconciliationCount > 0 ? (string) $openReconciliationCount : null,
-            ],
-            [
-                'label' => Lang::ui('Jobs & commands'),
-                'description' => Lang::ui('Scheduled fund operations'),
-                'icon' => 'heroicon-o-cpu-chip',
-                'url' => JobsPage::getUrl(),
-                'tone' => 'jobs',
                 'badge' => null,
             ],
         ]);

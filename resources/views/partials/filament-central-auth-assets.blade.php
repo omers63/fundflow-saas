@@ -33,13 +33,22 @@
         top: 0;
         inset-inline: 0;
         z-index: 60;
+        max-width: 100vw;
+        overflow: hidden;
+    }
+
+    .fund-auth-header--filament .tenant-auth-header__brand {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: calc(100% - 9rem);
     }
 
     .fi-body:has(.fund-auth-shell) .fi-simple-header .fi-logo {
         visibility: hidden;
     }
 
-    .fi-body:has(.fund-auth-shell) .language-switch-dropdown:not(.fi-user-menu) {
+    .fi-body:has(.fund-auth-shell) .language-switch-dropdown,
+    .fi-body:has(.fund-auth-shell) livewire\\:language-switch-component {
         display: none !important;
     }
 </style>

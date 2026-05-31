@@ -12,7 +12,8 @@ test('central admin login shows auth header and language switcher', function () 
         ->assertSee('fund-auth-shell', false)
         ->assertSee('central-auth-header', false)
         ->assertSee('language-switch-trigger', false)
-        ->assertSee('data-language-tooltip', false);
+        ->assertSee('language-switch-trigger__label', false)
+        ->assertSee('language-switch-option__label', false);
 });
 
 test('central locale switch route sets session and redirects back', function () {

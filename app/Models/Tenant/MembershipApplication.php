@@ -104,6 +104,14 @@ class MembershipApplication extends Model
         return $this->parent_application_id !== null;
     }
 
+    /**
+     * Applications created via the CSV importer always store an arrears cut-off date.
+     */
+    public function wasImportedFromCsv(): bool
+    {
+        return $this->import_arrears_cutoff_date !== null;
+    }
+
     public function scopePending($query)
     {
         return $query->where('status', 'pending');

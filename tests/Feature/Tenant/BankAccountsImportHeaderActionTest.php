@@ -8,7 +8,7 @@ it('always registers the import statement header action', function () {
     $method = new ReflectionMethod(ListBankAccounts::class, 'getHeaderActions');
     $method->setAccessible(true);
 
-    $page->activeTab = 'transactions';
+    $page->activeTab = 'imports';
 
     $actions = $method->invoke($page);
 
@@ -16,9 +16,8 @@ it('always registers the import statement header action', function () {
         ->and($actions[0]->getName())->toBe('import');
 });
 
-it('hides the import statement action on the transactions tab', function () {
+it('shows the import statement action on every bank accounts tab', function () {
     $page = new ListBankAccounts;
-    $page->activeTab = 'transactions';
 
     $method = new ReflectionMethod(ListBankAccounts::class, 'getHeaderActions');
     $method->setAccessible(true);
@@ -26,9 +25,9 @@ it('hides the import statement action on the transactions tab', function () {
     $import = $method->invoke($page)[0];
     $import->livewire($page);
 
-    expect($import->isHidden())->toBeTrue();
+    foreach (['imports', 'ledger', 'statements'] as $tab) {
+        $page->activeTab = $tab;
 
-    $page->activeTab = 'statements';
-
-    expect($import->isHidden())->toBeFalse();
+        expect($import->isHidden())->toBeFalse("import should be visible on tab {$tab}");
+    }
 });

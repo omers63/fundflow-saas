@@ -80,9 +80,13 @@ class MembershipApplicationApprovalService
             'household_email' => $member->household_email,
         ]);
 
+        if ($application->wasImportedFromCsv()) {
+            $this->importCutoffs->prepareCutoffOnApproval($application, $member);
+        }
+
         $this->subscriptionFees->postOnApproval($application->fresh(), $member);
 
-        $this->importCutoffs->applyOnApproval($application, $member);
+        $this->importCutoffs->postOpeningBalancesOnApproval($application, $member);
 
         return $member->fresh();
     }
@@ -110,6 +114,8 @@ class MembershipApplicationApprovalService
             throw new RuntimeException(__('Parent member record could not be found.'));
         }
 
+        $this->subscriptionFees->assertCanApprove($application);
+
         $member = $this->householdMembers->createFromApplication($application, $parentMember);
 
         $application->update([
@@ -119,7 +125,13 @@ class MembershipApplicationApprovalService
             'household_email' => $member->household_email,
         ]);
 
-        $this->importCutoffs->applyOnApproval($application, $member);
+        if ($application->wasImportedFromCsv()) {
+            $this->importCutoffs->prepareCutoffOnApproval($application, $member);
+        }
+
+        $this->subscriptionFees->postOnApproval($application->fresh(), $member);
+
+        $this->importCutoffs->postOpeningBalancesOnApproval($application, $member);
 
         return $member->fresh();
     }

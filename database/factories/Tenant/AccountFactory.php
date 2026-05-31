@@ -54,6 +54,14 @@ class AccountFactory extends Factory
         ]);
     }
 
+    public function masterBank(): static
+    {
+        return $this->master()->state(fn (array $attributes) => [
+            'type' => 'bank',
+            'name' => 'Master Bank',
+        ]);
+    }
+
     public function masterFund(): static
     {
         return $this->master()->state(fn (array $attributes) => [

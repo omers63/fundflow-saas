@@ -349,7 +349,7 @@ class Settings extends Page implements HasForms
                                     ]),
                                 Section::make(__('Late fees (days after cycle deadline)'))
                                     ->description(__('Highest non-zero tier reached applies (30+ → 20+ → 10+ → 1+).'))
-                                    ->columns(3)
+                                    ->columns(4)
                                     ->schema([
                                         TextInput::make('late_fee_contribution_1d')
                                             ->label(__('Contribution — 1+ days late'))

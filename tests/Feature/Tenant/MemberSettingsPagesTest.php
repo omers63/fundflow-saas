@@ -52,7 +52,7 @@ test('member can view contribution settings page', function () {
         ->assertSee('1,000');
 });
 
-test('member can update monthly contribution amount', function () {
+test('member can update monthly contribution amount when there are no arrears', function () {
     Livewire::test(MyContributionSettingsPage::class)
         ->mountAction('save_allocation')
         ->setActionData(['monthly_contribution_amount' => 1500])

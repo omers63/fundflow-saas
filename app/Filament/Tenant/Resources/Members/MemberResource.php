@@ -10,7 +10,6 @@ use App\Filament\Tenant\Resources\Members\RelationManagers\AccountsRelationManag
 use App\Filament\Tenant\Resources\Members\RelationManagers\ContributionsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\DependentsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\LoansRelationManager;
-use App\Filament\Tenant\Resources\Members\RelationManagers\MemberTransactionsTabsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\MessagesRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\MigrationStubsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\RepaymentsRelationManager;
@@ -54,7 +53,6 @@ class MemberResource extends Resource
     {
         return [
             AccountsRelationManager::class,
-            MemberTransactionsTabsRelationManager::class,
             ContributionsRelationManager::class,
             RepaymentsRelationManager::class,
             LoansRelationManager::class,

@@ -22,11 +22,13 @@ final class MemberNavigation
 
     public const SORT_DEPOSITS = 2;
 
-    public const SORT_STATEMENTS = 3;
+    public const SORT_CASH_OUTS = 3;
 
-    public const SORT_DEPENDENTS = 4;
+    public const SORT_STATEMENTS = 4;
 
-    public const SORT_ACCOUNTS = 5;
+    public const SORT_DEPENDENTS = 5;
+
+    public const SORT_ACCOUNTS = 6;
 
     public const SORT_LOANS = 1;
 

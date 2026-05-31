@@ -248,7 +248,7 @@ final class AccountDetailInsightsService
                         ['label' => __('Deposits'), 'value' => (string) $pendingPostings],
                         ['label' => __('On hand'), 'value' => InsightFormatter::money($balance)],
                     ],
-                    'url' => BankAccountsResource::getUrl('index', ['tab' => 'transactions']),
+                    'url' => BankAccountsResource::getUrl('index', ['tab' => 'imports']),
                     'link_label' => __('Bank transactions'),
                 ],
             ],
@@ -465,7 +465,7 @@ final class AccountDetailInsightsService
                     'title' => __('Bank lines awaiting posting'),
                     'subtitle' => trans_choice(':count transaction needs ledger posting|:count transactions need ledger posting', $pending, ['count' => $pending]),
                     'cta_label' => __('Bank queue'),
-                    'cta_url' => BankAccountsResource::getUrl('index', ['tab' => 'transactions']),
+                    'cta_url' => BankAccountsResource::getUrl('index', ['tab' => 'imports']),
                 ];
             }
         }

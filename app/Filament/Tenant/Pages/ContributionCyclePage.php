@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Support\LateSettledArrearsTableStyling;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
+use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\CollectionSummaryExportService;
@@ -236,11 +238,17 @@ class ContributionCyclePage extends Page implements HasTable
                 MemberTableColumns::relationNumber(),
                 MemberTableColumns::relationName(),
                 TextColumn::make('amount')->money($currency),
-                TextColumn::make('is_late')
-                    ->label(__('Late'))
-                    ->formatStateUsing(fn (bool $state): string => $state ? __('Yes') : __('No')),
+                TextColumn::make('status')
+                    ->label(__('Status'))
+                    ->badge()
+                    ->formatStateUsing(fn (string $state, Contribution $record): string => LateSettledArrearsTableStyling::contributionStatusLabel($record))
+                    ->color(fn (string $state, Contribution $record): string => LateSettledArrearsTableStyling::contributionStatusColor($record))
+                    ->tooltip(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionWasSettledLate($record)
+                        ? LateSettledArrearsTableStyling::eligibilityHint()
+                        : null),
                 TextColumn::make('posted_at')->dateTime()->placeholder(__('—')),
             ])
+            ->recordClasses(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionRecordClasses($record))
             ->recordActions(TableRecordActionGroups::wrap([])), TableGrouping::contributions(includeMember: false));
     }
 

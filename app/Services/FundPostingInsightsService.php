@@ -152,14 +152,14 @@ final class FundPostingInsightsService
                 'uncleared' => $acceptedUncleared,
                 'cleared' => $clearedCount,
                 'clearance_rate' => $clearanceRate,
-                'workspace_url' => BankAccountsResource::getUrl('index', ['tab' => 'transactions']),
+                'workspace_url' => BankAccountsResource::getUrl('index', ['tab' => 'imports']),
             ],
             'pipeline' => [
                 'pending_deposits' => $pending,
                 'accepted_deposits' => $accepted,
                 'uncleared_bank' => $acceptedUncleared,
                 'deposits_url' => $depositsUrl,
-                'bank_url' => BankAccountsResource::getUrl('index', ['tab' => 'transactions']),
+                'bank_url' => BankAccountsResource::getUrl('index', ['tab' => 'imports']),
             ],
         ];
     }

@@ -22,8 +22,12 @@ class MembershipSubscriptionFeeService
 
     public function applicationRequiresSubscriptionFee(MembershipApplication $application): bool
     {
-        if ($application->isHouseholdDependent()) {
+        if ($application->isHouseholdDependent() && ! $application->wasImportedFromCsv()) {
             return false;
+        }
+
+        if ((float) ($application->membership_fee_amount ?? 0) > 0) {
+            return true;
         }
 
         return $this->requiredFeeAmount($application) > 0;
@@ -46,7 +50,10 @@ class MembershipSubscriptionFeeService
             return;
         }
 
-        if (blank($application->membership_fee_transfer_reference)) {
+        if (
+            blank($application->membership_fee_transfer_reference)
+            && ! $application->wasImportedFromCsv()
+        ) {
             throw new InvalidArgumentException(__('A transfer reference is required before this application can be approved.'));
         }
 
@@ -101,42 +108,55 @@ class MembershipSubscriptionFeeService
             throw new InvalidArgumentException(__('Member cash account is not configured.'));
         }
 
-        DB::transaction(function () use ($application, $member, $transferred, $required, $masterCash, $masterFees, $memberCash): void {
-            $bankTxn = $this->createUnclearedBankTransaction($application, $member, $transferred);
+        $transferDate = $application->membership_fee_transfer_date ?? now();
 
-            $receiptDescription = __('Subscription fees — :name (application #:id)', [
-                'name' => $member->name,
-                'id' => $application->id,
-            ]);
+        $postSubscriptionFee = function () use ($application, $member, $transferred, $required, $masterCash, $masterFees, $memberCash, $transferDate): void {
+            DB::transaction(function () use ($application, $member, $transferred, $required, $masterCash, $masterFees, $memberCash, $transferDate): void {
+                $bankTxn = $this->createUnclearedBankTransaction($application, $member, $transferred);
 
-            $masterCredit = $this->accounting->credit(
-                $masterCash,
-                $transferred,
-                $receiptDescription,
-                $application,
-                $application->membership_fee_transfer_date,
-                $member->id,
-            );
+                $receiptDescription = __('Subscription fees — :name (application #:id)', [
+                    'name' => $member->name,
+                    'id' => $application->id,
+                ]);
 
-            $bankTxn->forceFill([
-                'master_cash_transaction_id' => $masterCredit->id,
-                'status' => 'posted',
-            ])->save();
+                $masterCredit = $this->accounting->credit(
+                    $masterCash,
+                    $transferred,
+                    $receiptDescription,
+                    $application,
+                    $transferDate,
+                    $member->id,
+                );
 
-            $mirrorDescription = __('Posted: :description', ['description' => $receiptDescription]);
-            $this->accounting->mirror($memberCash, $transferred, $mirrorDescription, $application);
+                $bankTxn->forceFill([
+                    'master_cash_transaction_id' => $masterCredit->id,
+                    'status' => 'posted',
+                ])->save();
 
-            app(ContributionCollectionCycleService::class)->onMemberCashIncreased($member);
+                $mirrorDescription = __('Posted: :description', ['description' => $receiptDescription]);
+                $this->accounting->mirror($memberCash, $transferred, $mirrorDescription, $application, $transferDate);
 
-            $feeDescription = __('Subscription fee — :name', ['name' => $member->name]);
-            $this->accounting->transfer(
-                $memberCash,
-                $masterFees,
-                $required,
-                $feeDescription,
-                $application,
-            );
-        });
+                if ($required > 0) {
+                    $feeDescription = __('Subscription fee — :name', ['name' => $member->name]);
+                    $this->accounting->transfer(
+                        $memberCash,
+                        $masterFees,
+                        $required,
+                        $feeDescription,
+                        $application,
+                        $transferDate,
+                    );
+                }
+            });
+        };
+
+        if ($application->wasImportedFromCsv()) {
+            AccountingService::withoutMemberCashCollection($postSubscriptionFee);
+
+            return;
+        }
+
+        $postSubscriptionFee();
     }
 
     private function createUnclearedBankTransaction(
@@ -162,7 +182,9 @@ class MembershipSubscriptionFeeService
             'transaction_date' => $transferDate,
             'description' => __('Subscription fees — :name', ['name' => $member->name]),
             'amount' => $amount,
-            'reference' => $application->membership_fee_transfer_reference,
+            'reference' => filled($application->membership_fee_transfer_reference)
+                ? $application->membership_fee_transfer_reference
+                : __('Application #:id', ['id' => $application->id]),
             'status' => 'imported',
             'member_id' => $member->id,
             'hash' => md5("membership-fee-{$application->id}-{$transferDate}-{$amount}"),

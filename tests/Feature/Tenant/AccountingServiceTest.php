@@ -4,6 +4,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
 use App\Services\AccountingService;
+use App\Services\Loans\LoanLedgerService;
 use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
 
@@ -202,4 +203,26 @@ test('creating member accounts creates cash and fund accounts', function () {
     expect($member->fundAccount)->not->toBeNull();
     expect($member->cashAccount->type)->toBe('cash');
     expect($member->fundAccount->type)->toBe('fund');
+});
+
+test('creating member accounts is idempotent', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-TEST',
+        'name' => 'Test Member',
+        'email' => 'test@example.com',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now(),
+        'status' => 'active',
+    ]);
+
+    $this->service->createMemberAccounts($member);
+    $cashId = $member->cashAccount->id;
+    $fundId = $member->fundAccount->id;
+
+    $this->service->createMemberAccounts($member);
+    app(LoanLedgerService::class)->ensureMemberAccounts($member);
+
+    expect($member->accounts()->count())->toBe(2)
+        ->and($member->fresh()->cashAccount->id)->toBe($cashId)
+        ->and($member->fresh()->fundAccount->id)->toBe($fundId);
 });

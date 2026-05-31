@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
@@ -188,7 +189,9 @@ class MemberInvariantService
 
     protected function sumCashOuts(int $accountId, int $memberId): float
     {
-        return (float) Transaction::query()
+        $fromRequests = $this->sumByReference($accountId, $memberId, CashOutRequest::class, 'debit');
+
+        $legacy = (float) Transaction::query()
             ->where('account_id', $accountId)
             ->where('member_id', $memberId)
             ->where('type', 'debit')
@@ -196,9 +199,11 @@ class MemberInvariantService
                 $query->where('description', 'like', 'MIGRATION_LUMPSUM%')
                     ->orWhere('description', 'like', '%refund%')
                     ->orWhere('description', 'like', '%Refund%')
-                    ->orWhere('description', 'like', '%cash out%')
-                    ->orWhere('description', 'like', '%(check disbursement out)%');
+                    ->orWhere('description', 'like', '%(cash out)%')
+                    ->orWhere('description', 'like', '%(cash clearing to master cash)%');
             })
             ->sum('amount');
+
+        return $fromRequests + $legacy;
     }
 }

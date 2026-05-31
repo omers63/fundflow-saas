@@ -6,9 +6,11 @@ namespace App\Filament\Member\Resources\MyLoans\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
+use App\Filament\Support\LateSettledArrearsTableStyling;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
 use Filament\Tables\Columns\TextColumn;
@@ -44,22 +46,17 @@ class InstallmentsRelationManager extends RelationManager
                     ->placeholder(__('—')),
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'pending' => __('Pending'),
-                        'paid' => __('Paid'),
-                        'overdue' => __('Overdue'),
-                        default => $state,
-                    })
-                    ->color(fn (string $state): string => match ($state) {
-                        'paid' => 'success',
-                        'overdue' => 'danger',
-                        default => 'warning',
-                    }),
+                    ->formatStateUsing(fn (string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusLabel($record))
+                    ->color(fn (string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusColor($record))
+                    ->tooltip(fn (LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentWasSettledLate($record)
+                        ? LateSettledArrearsTableStyling::eligibilityHint()
+                        : null),
                 TextColumn::make('paid_at')
                     ->dateTime()
                     ->placeholder(__('—')),
             ])
             ->defaultSort('installment_number')
+            ->recordClasses(fn (LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentRecordClasses($record))
             ->recordActions(TableRecordActionGroups::wrap([]))
             ->toolbarActions([
                 BulkActionGroup::make([

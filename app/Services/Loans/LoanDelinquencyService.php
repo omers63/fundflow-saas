@@ -383,7 +383,7 @@ class LoanDelinquencyService
                 ->forPeriod($month, $year)
                 ->first();
 
-            if ($contribution?->status === 'posted') {
+            if (in_array($contribution?->status, ['posted', 'failed'], true)) {
                 $cursor->subMonthNoOverflow();
 
                 continue;

@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyAccounts\Pages;
 
 use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
+use App\Filament\Member\Resources\MyCashOutRequests\MyCashOutRequestResource;
 use App\Filament\Member\Widgets\MemberMyAccountDetailInsightsWidget;
 use App\Models\Tenant\Setting;
 use App\Support\Tenant\CurrentMember;
+use Filament\Actions\Action;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\TextEntry;
@@ -65,6 +67,20 @@ class ViewMyAccount extends ViewRecord
     public function getHeading(): string
     {
         return $this->record->name;
+    }
+
+    protected function getHeaderActions(): array
+    {
+        if ($this->record->type !== 'cash') {
+            return [];
+        }
+
+        return [
+            Action::make('requestCashOut')
+                ->label(__('Request cash out'))
+                ->icon('heroicon-o-arrow-up-tray')
+                ->url(MyCashOutRequestResource::getUrl('create')),
+        ];
     }
 
     public function schema(Schema $schema): Schema

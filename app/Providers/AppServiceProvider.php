@@ -34,7 +34,6 @@ use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Support\Enums\TextSize;
-use Filament\Support\Facades\FilamentView;
 use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\BooleanColumn;
 use Filament\Tables\Columns\CheckboxColumn;
@@ -51,10 +50,8 @@ use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Columns\ViewColumn;
 use Filament\Tables\Filters\BaseFilter;
 use Filament\Tables\Table;
-use Filament\View\PanelsRenderHook;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
-use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
@@ -80,8 +77,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        $this->registerMemberTopbarRenderHooks();
-
         LoanInstallment::observe(LoanInstallmentObserver::class);
         Transaction::observe(TransactionObserver::class);
 
@@ -152,20 +147,6 @@ class AppServiceProvider extends ServiceProvider
      *
      * @see CapitalizesTableColumnHeaderLabel
      */
-    private function registerMemberTopbarRenderHooks(): void
-    {
-        FilamentView::registerRenderHook(
-            PanelsRenderHook::TOPBAR_LOGO_AFTER,
-            function (): View|string {
-                if (Filament::getCurrentPanel()?->getId() !== 'member') {
-                    return '';
-                }
-
-                return view('filament.member.partials.topbar-fund-name');
-            },
-        );
-    }
-
     private function registerFilamentTableColumnHeaderBindings(): void
     {
         $bindings = [

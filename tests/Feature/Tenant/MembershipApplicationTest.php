@@ -10,6 +10,7 @@ use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\User;
 use App\Services\MembershipApplicationApprovalService;
 use App\Services\MembershipApplicationImportService;
+use App\Support\PublicPageSettings;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
@@ -192,6 +193,11 @@ test('membership application import service creates pending applications from cs
 test('membership application import sets subscription fee transfer fields from csv or defaults', function () {
     Carbon::setTestNow(Carbon::create(2026, 5, 20));
 
+    PublicPageSettings::save([
+        ...PublicPageSettings::defaults(),
+        'fee_new' => '50',
+    ]);
+
     $admin = User::create([
         'name' => 'Fund Admin',
         'email' => 'admin@fund.test',
@@ -221,6 +227,7 @@ test('membership application import sets subscription fee transfer fields from c
 
     expect($explicit)->not->toBeNull()
         ->and((float) $explicit->membership_fee_amount)->toBe(150.0)
+        ->and((float) $explicit->membership_fee_required_amount)->toBeGreaterThan(0)
         ->and($explicit->membership_fee_transfer_date?->toDateString())->toBe('2026-03-01')
         ->and($defaults)->not->toBeNull()
         ->and((float) $defaults->membership_fee_amount)->toBe(0.0)

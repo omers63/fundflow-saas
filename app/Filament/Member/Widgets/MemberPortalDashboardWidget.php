@@ -18,6 +18,13 @@ class MemberPortalDashboardWidget extends Widget
 
     protected int|string|array $columnSpan = 'full';
 
+    protected ?string $pollingInterval = '60s';
+
+    public function getPollingInterval(): ?string
+    {
+        return $this->pollingInterval;
+    }
+
     /**
      * @return array<string, mixed>
      */

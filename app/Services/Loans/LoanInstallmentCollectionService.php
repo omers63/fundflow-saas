@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Services\Loans;
 
+use App\Exceptions\InsufficientMemberCashForCollectionException;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Services\ContributionCycleService;
 use App\Support\InstallmentCollectionStatus;
 use Illuminate\Support\Facades\DB;
 
@@ -24,7 +26,17 @@ class LoanInstallmentCollectionService
 
     public function onMemberCashIncreased(Member $member): void
     {
-        LoanInstallment::query()
+        $this->collectOpenInstallments($member);
+    }
+
+    public function onMemberCashIncreasedForPeriod(Member $member, int $month, int $year): void
+    {
+        $this->collectOpenInstallments($member, $month, $year);
+    }
+
+    protected function collectOpenInstallments(Member $member, ?int $month = null, ?int $year = null): void
+    {
+        $query = LoanInstallment::query()
             ->whereIn('status', ['pending', 'overdue'])
             ->where(function ($q): void {
                 $q->whereNull('collection_status')
@@ -33,12 +45,22 @@ class LoanInstallmentCollectionService
             ->whereHas('loan', function ($q) use ($member): void {
                 $q->whereIn('status', ['active', 'transferred'])
                     ->where('member_id', $member->id);
-            })
-            ->orderBy('due_date')
-            ->each(fn (LoanInstallment $installment) => $this->attemptCollection($installment));
+            });
+
+        if ($month !== null && $year !== null) {
+            $query->whereYear('due_date', $year)->whereMonth('due_date', $month);
+        }
+
+        $query->orderBy('due_date')
+            ->each(function (LoanInstallment $installment) use ($member): void {
+                $member = $member->fresh() ?? $member;
+                $member->unsetRelation('accounts');
+
+                $this->attemptCollection($installment, $member);
+            });
     }
 
-    public function attemptCollection(LoanInstallment $installment): string
+    public function attemptCollection(LoanInstallment $installment, ?Member $member = null): string
     {
         if ($installment->isPaid()) {
             return 'paid';
@@ -46,7 +68,8 @@ class LoanInstallmentCollectionService
 
         $installment->loadMissing('loan.member');
         $loan = $installment->loan;
-        $member = $loan->member;
+        $member = $member?->fresh() ?? $loan->member;
+        $member->unsetRelation('accounts');
 
         if (! $loan instanceof Loan || ! in_array($loan->status, ['active', 'transferred'], true)) {
             return 'inactive';
@@ -77,7 +100,19 @@ class LoanInstallmentCollectionService
             return $this->postPartialCollection($installment, $member, $cash, $principalRemaining);
         }
 
-        return $this->postFullCollection($installment, $loan, $member, $principalRemaining, $lateFee);
+        try {
+            return $this->postFullCollection($installment, $loan, $member, $principalRemaining, $lateFee);
+        } catch (InsufficientMemberCashForCollectionException) {
+            $member = $member->fresh() ?? $member;
+            $member->unsetRelation('accounts');
+            $cash = $member->getCashBalance();
+
+            if ($cash <= 0.00001) {
+                return 'no_cash';
+            }
+
+            return $this->postPartialCollection($installment, $member, $cash, $principalRemaining);
+        }
     }
 
     protected function outstandingLateFee(LoanInstallment $installment): float
