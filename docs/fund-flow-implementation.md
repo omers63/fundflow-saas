@@ -48,8 +48,9 @@ A contribution cycle starts on a configurable day of the month (default: 6th, vi
 When the admin runs the contribution cycle collection:
 
 1. **Debit** Member Cash account
-2. **Credit** Member Fund account
-3. **Mirror (credit)** Master Fund account
+2. **Debit** Master Cash `(contribution mirror)`
+3. **Credit** Member Fund account
+4. **Mirror (credit)** Master Fund account
 
 Only one contribution or repayment per member per cycle is allowed.
 

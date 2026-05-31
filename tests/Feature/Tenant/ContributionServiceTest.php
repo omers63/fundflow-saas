@@ -50,6 +50,7 @@ test('posting contribution debits member cash and credits member fund and master
     ]);
     $this->accounting->createMemberAccounts($member);
 
+    Account::masterCash()->update(['balance' => 5000]);
     $member->cashAccount->update(['balance' => 5000]);
 
     $contribution = $this->service->recordContribution($member, '2026-05-01');
@@ -64,6 +65,7 @@ test('posting contribution debits member cash and credits member fund and master
     expect($member->cashAccount->fresh()->balance)->toBe('0.00');
     expect($member->fundAccount->fresh()->balance)->toBe('5000.00');
     expect(Account::masterFund()->balance)->toBe('5000.00');
+    expect(Account::masterCash()->balance)->toBe('0.00');
 });
 
 test('contribution cycle uses configurable start day', function () {

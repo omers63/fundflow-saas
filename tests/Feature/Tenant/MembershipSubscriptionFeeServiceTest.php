@@ -64,7 +64,7 @@ test('approval is blocked when transfer amount is below required subscription fe
         'membership_fee_required_amount' => 50,
     ]);
 
-    expect(fn () => $this->approval->approve($application))
+    expect(fn() => $this->approval->approve($application))
         ->toThrow(InvalidArgumentException::class);
 });
 
@@ -93,7 +93,7 @@ test('approving application posts subscription fee accounting and leaves excess 
     $masterFees = Account::masterFees();
     $memberCash = $member->cashAccount;
 
-    expect((float) $masterCash->fresh()->balance)->toBe(75.0)
+    expect((float) $masterCash->fresh()->balance)->toBe(25.0)
         ->and((float) $masterFees->fresh()->balance)->toBe(50.0)
         ->and((float) $memberCash->fresh()->balance)->toBe(25.0);
 

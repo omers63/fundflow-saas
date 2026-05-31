@@ -138,8 +138,16 @@ class MembershipSubscriptionFeeService
 
                 if ($required > 0) {
                     $feeDescription = __('Subscription fee — :name', ['name' => $member->name]);
-                    $this->accounting->transfer(
+                    $this->accounting->debitMemberCashWithMasterMirror(
                         $memberCash,
+                        $required,
+                        $feeDescription,
+                        __('(subscription fee mirror)'),
+                        $application,
+                        $transferDate,
+                        $member->id,
+                    );
+                    $this->accounting->credit(
                         $masterFees,
                         $required,
                         $feeDescription,

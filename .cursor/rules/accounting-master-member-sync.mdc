@@ -11,7 +11,7 @@ Keep **member** and **master** ledger legs in sync wherever they represent the s
 
 1. **Master Cash ↔ Member Cash**
    - When member cash is **credited** for pool inflows (deposit accepted, loan disbursement cash payout, manual tagged credit), **credit master cash** by the same amount in the same transaction.
-   - When member cash is **debited** for pool outflows (cash-out approved), **debit master cash** by the same amount.
+   - When member cash is **debited** for pool outflows (cash-out approved, contribution principal, contribution late fee, subscription fee), **debit master cash** by the same amount.
    - Post **master cash first**, then **member cash** (see `FundPostingService::accept()`, `LoanLedgerService::postPartialLoanDisbursement()`).
    - Do **not** pass `member_id` on **master cash** legs unless there is an explicit, documented reason — it triggers `ContributionCollectionCycleService::onMemberCashIncreased()` and can drain member cash unexpectedly.
 
@@ -38,4 +38,5 @@ Keep **member** and **master** ledger legs in sync wherever they represent the s
 | Member deposit accept | `FundPostingService::accept()` | CR master cash + CR member cash |
 | Loan disbursement | `LoanLedgerService::postPartialLoanDisbursement()` | DR funds + CR master cash + CR member cash |
 | Cash-out approve | `MemberCashOutService::accept()` | DR member cash + DR master cash + uncleared bank txn |
+| Contribution / late fee / subscription fee | `AccountingService::postContribution*()`, `MembershipSubscriptionFeeService` | DR member cash + DR master cash mirror; fund/fees legs unchanged |
 | Bank import mirror | `FundFlowService::mirrorToCash()` | Master bank ↔ master cash |

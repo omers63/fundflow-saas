@@ -177,7 +177,7 @@ test('post balanced journal rejects unbalanced legs', function () {
     $cash = Account::masterCash();
     $fund = Account::masterFund();
 
-    expect(fn () => $this->service->postBalancedJournal(
+    expect(fn() => $this->service->postBalancedJournal(
         [
             ['account_id' => $cash->id, 'type' => 'debit', 'amount' => 100],
             ['account_id' => $fund->id, 'type' => 'credit', 'amount' => 50],
@@ -225,4 +225,33 @@ test('creating member accounts is idempotent', function () {
     expect($member->accounts()->count())->toBe(2)
         ->and($member->fresh()->cashAccount->id)->toBe($cashId)
         ->and($member->fresh()->fundAccount->id)->toBe($fundId);
+});
+
+test('debit member cash with master mirror keeps cash pool balanced', function () {
+    Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
+
+    $member = Member::create([
+        'member_number' => 'MEM-MIRROR',
+        'name' => 'Mirror Member',
+        'email' => 'mirror@example.com',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now(),
+        'status' => 'active',
+    ]);
+    $this->service->createMemberAccounts($member);
+
+    Account::masterCash()->update(['balance' => 1000]);
+    $member->cashAccount->update(['balance' => 1000]);
+
+    AccountingService::withoutMemberCashCollection(function () use ($member): void {
+        $this->service->debitMemberCashWithMasterMirror(
+            $member->cashAccount,
+            250,
+            'Test outflow',
+            '(test mirror)',
+        );
+    });
+
+    expect((float) $member->cashAccount->fresh()->balance)->toBe(750.0)
+        ->and((float) Account::masterCash()->fresh()->balance)->toBe(750.0);
 });

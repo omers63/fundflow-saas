@@ -1238,6 +1238,75 @@ class AccountingService
         return $this->debit($account, abs($amount), $description, $reference, $transactedAt);
     }
 
+    /**
+     * Debit member cash and mirror the same amount on master cash (pool outflow).
+     * Master cash leg omits member_id to avoid auto-collection side effects.
+     */
+    public function debitMemberCashWithMasterMirror(
+        Account $memberCash,
+        float $amount,
+        string $description,
+        string $mirrorSuffix,
+        ?Model $reference = null,
+        ?DateTimeInterface $transactedAt = null,
+        ?int $memberId = null,
+    ): void {
+        if ($amount <= 0.00001) {
+            return;
+        }
+
+        $masterCash = Account::masterCash();
+
+        if ($masterCash === null) {
+            throw new InvalidArgumentException(__('Master cash account is not configured.'));
+        }
+
+        $resolvedMemberId = $this->resolveTransactionMemberId($memberCash, $memberId);
+
+        $this->debit($memberCash, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
+        $this->debit(
+            $masterCash,
+            $amount,
+            trim($description).' '.$mirrorSuffix,
+            $reference,
+            $transactedAt,
+        );
+    }
+
+    /**
+     * Credit member cash and mirror the same amount on master cash (reversal of pool outflow).
+     */
+    public function creditMemberCashWithMasterMirror(
+        Account $memberCash,
+        float $amount,
+        string $description,
+        string $mirrorSuffix,
+        ?Model $reference = null,
+        ?DateTimeInterface $transactedAt = null,
+        ?int $memberId = null,
+    ): void {
+        if ($amount <= 0.00001) {
+            return;
+        }
+
+        $masterCash = Account::masterCash();
+
+        if ($masterCash === null) {
+            throw new InvalidArgumentException(__('Master cash account is not configured.'));
+        }
+
+        $resolvedMemberId = $this->resolveTransactionMemberId($memberCash, $memberId);
+
+        $this->credit($memberCash, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
+        $this->credit(
+            $masterCash,
+            $amount,
+            trim($description).' '.$mirrorSuffix,
+            $reference,
+            $transactedAt,
+        );
+    }
+
     private function assertMasterReserveAccount(Account $account): void
     {
         if (! $account->is_master || ! in_array($account->type, ['expense', 'fees', 'invest'], true)) {
@@ -1423,7 +1492,13 @@ class AccountingService
         $description = __('Contribution — :period', ['period' => $periodLabel]);
 
         if ($contribution->payment_method === Contribution::PAYMENT_METHOD_CASH_ACCOUNT) {
-            $this->debit($memberCash, $amount, $description, $contribution);
+            $this->debitMemberCashWithMasterMirror(
+                $memberCash,
+                $amount,
+                $description,
+                __('(contribution mirror)'),
+                $contribution,
+            );
         }
 
         $this->credit($masterFund, $amount, $description, $contribution);
@@ -1452,7 +1527,13 @@ class AccountingService
             'period' => $contribution->period?->format('M Y') ?? '',
         ]);
 
-        $this->debit($memberCash, $lateFee, $description, $contribution);
+        $this->debitMemberCashWithMasterMirror(
+            $memberCash,
+            $lateFee,
+            $description,
+            __('(contribution late fee mirror)'),
+            $contribution,
+        );
         $this->credit($masterFees, $lateFee, $description, $contribution);
     }
 
@@ -1498,7 +1579,13 @@ class AccountingService
             'period' => $contribution->period?->format('M Y') ?? '',
         ]);
 
-        $this->credit($memberCash, $lateFee, $description, $contribution);
+        $this->creditMemberCashWithMasterMirror(
+            $memberCash,
+            $lateFee,
+            $description,
+            __('(contribution late fee mirror)'),
+            $contribution,
+        );
         $this->debit($masterFees, $lateFee, $description, $contribution);
     }
 
