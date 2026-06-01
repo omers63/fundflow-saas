@@ -16,16 +16,16 @@ final class LoanDelinquencyHeaderActions
     /**
      * @return list<Action>
      */
-    public static function make(?Component $livewire = null): array
+    public static function make(): array
     {
         return [
-            self::runMaintenance($livewire),
-            self::markOverdueOnly($livewire),
+            self::runMaintenance(),
+            self::markOverdueOnly(),
             self::sendDigest(),
         ];
     }
 
-    public static function runMaintenance(?Component $livewire = null): Action
+    public static function runMaintenance(): Action
     {
         return Action::make('runDelinquencyMaintenance')
             ->label(__('Run delinquency check'))
@@ -34,7 +34,7 @@ final class LoanDelinquencyHeaderActions
             ->requiresConfirmation()
             ->modalHeading(__('Run delinquency check'))
             ->modalDescription(__('Marks overdue installments, updates member delinquency status, and processes default warnings or guarantor debits per fund rules.'))
-            ->action(function (LoanDelinquencyService $delinquency) use ($livewire): void {
+            ->action(function (LoanDelinquencyService $delinquency, Component $livewire): void {
                 $result = $delinquency->runDailyMaintenance();
 
                 Notification::make()
@@ -49,24 +49,22 @@ final class LoanDelinquencyHeaderActions
                     ->success()
                     ->send();
 
-                if ($livewire !== null) {
-                    LoanResource::dispatchInsightsRefresh($livewire);
+                LoanResource::dispatchInsightsRefresh($livewire);
 
-                    if (method_exists($livewire, 'resetTable')) {
-                        $livewire->resetTable();
-                    }
+                if (method_exists($livewire, 'resetTable')) {
+                    $livewire->resetTable();
                 }
             });
     }
 
-    public static function markOverdueOnly(?Component $livewire = null): Action
+    public static function markOverdueOnly(): Action
     {
         return Action::make('markOverdueInstallments')
             ->label(__('Mark overdue only'))
             ->icon('heroicon-o-clock')
             ->color('gray')
             ->requiresConfirmation()
-            ->action(function (LoanDelinquencyService $delinquency) use ($livewire): void {
+            ->action(function (LoanDelinquencyService $delinquency, Component $livewire): void {
                 $count = $delinquency->markOverdueInstallments();
 
                 Notification::make()
@@ -75,12 +73,10 @@ final class LoanDelinquencyHeaderActions
                     ->success()
                     ->send();
 
-                if ($livewire !== null) {
-                    LoanResource::dispatchInsightsRefresh($livewire);
+                LoanResource::dispatchInsightsRefresh($livewire);
 
-                    if (method_exists($livewire, 'resetTable')) {
-                        $livewire->resetTable();
-                    }
+                if (method_exists($livewire, 'resetTable')) {
+                    $livewire->resetTable();
                 }
             });
     }

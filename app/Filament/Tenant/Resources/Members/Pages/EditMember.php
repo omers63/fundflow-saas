@@ -8,8 +8,6 @@ use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Widgets\MemberDetailInsightsWidget;
 use App\Models\Tenant\Member;
 use App\Services\Tenant\HouseholdMemberService;
-use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
 use Livewire\Attributes\On;
@@ -41,14 +39,6 @@ class EditMember extends EditRecord
             'number' => $this->record->member_number,
             'status' => $status,
         ]);
-    }
-
-    /**
-     * @return list<Action|ActionGroup>
-     */
-    protected function getHeaderActions(): array
-    {
-        return $this->organizedMemberHeaderActions();
     }
 
     /**

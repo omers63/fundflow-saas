@@ -23,7 +23,8 @@ final class MemberContributionInsightsService
     public function __construct(
         protected ContributionCycleService $cycles,
         protected LoanDelinquencyService $delinquency,
-    ) {}
+    ) {
+    }
 
     /**
      * @return array<string, mixed>
@@ -38,7 +39,7 @@ final class MemberContributionInsightsService
 
         $member->loadMissing(['cashAccount', 'fundAccount']);
         $currency = Setting::get('general', 'currency', 'USD');
-        $baseUrl = MyContributionResource::getUrl('index');
+        $baseUrl = MyContributionResource::listUrl();
 
         [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
         $openPeriodLabel = $this->cycles->periodLabel($openMonth, $openYear);
@@ -84,7 +85,7 @@ final class MemberContributionInsightsService
 
         $trend = $this->sixMonthAmountTrend($member);
         $trendMax = max(1, (int) collect($trend)->max('posted_amount'));
-        $sparkline = collect($trend)->pluck('posted_amount')->map(fn (float $amount): int => (int) round($amount))->all();
+        $sparkline = collect($trend)->pluck('posted_amount')->map(fn(float $amount): int => (int) round($amount))->all();
 
         $methodBreakdown = $this->paymentMethodBreakdown($member);
         $streak = $this->postedStreakMonths($member);
@@ -166,9 +167,9 @@ final class MemberContributionInsightsService
                 'late_fees' => InsightFormatter::money($lateFeesTotal),
             ],
             'filters' => [
-                'posted' => $baseUrl.'?tableFilters[status][value]=posted',
-                'pending' => $baseUrl.'?tableFilters[status][value]=pending',
-                'failed' => $baseUrl.'?tableFilters[status][value]=failed',
+                'posted' => MyContributionResource::listUrl(['status' => ['value' => 'posted']]),
+                'pending' => MyContributionResource::listUrl(['status' => ['value' => 'pending']]),
+                'failed' => MyContributionResource::listUrl(['status' => ['value' => 'failed']]),
             ],
         ];
     }
@@ -221,14 +222,16 @@ final class MemberContributionInsightsService
                     ? __('Late — awaiting fund posting')
                     : __('Awaiting processing by the fund office'),
                 'cta_label' => __('View pending'),
-                'cta_url' => MyContributionResource::getUrl('index').'?tableFilters[status][value]=pending',
+                'cta_url' => MyContributionResource::listUrl(['status' => ['value' => 'pending']]),
             ];
         }
 
-        if (! $cashReady
+        if (
+            !$cashReady
             && $member->status === 'active'
             && (float) $member->monthly_contribution_amount > 0
-            && ! $member->isExemptFromContributions()) {
+            && !$member->isExemptFromContributions()
+        ) {
             return [
                 'tone' => 'amber',
                 'title' => __('Top up cash for :period', ['period' => $openPeriodLabel]),
@@ -288,7 +291,7 @@ final class MemberContributionInsightsService
                 'sub' => InsightFormatter::money($totalPostedAmount),
                 'icon' => 'heroicon-o-check-circle',
                 'accent' => 'emerald',
-                'url' => $baseUrl.'?tableFilters[status][value]=posted',
+                'url' => MyContributionResource::listUrl(['status' => ['value' => 'posted']]),
             ],
             [
                 'label' => __('Pending'),
@@ -296,7 +299,7 @@ final class MemberContributionInsightsService
                 'sub' => $pendingCount > 0 ? __('Awaiting post') : __('None'),
                 'icon' => 'heroicon-o-clock',
                 'accent' => $pendingCount > 0 ? 'amber' : 'gray',
-                'url' => $baseUrl.'?tableFilters[status][value]=pending',
+                'url' => MyContributionResource::listUrl(['status' => ['value' => 'pending']]),
             ],
             [
                 'label' => __('Failed'),
@@ -304,7 +307,7 @@ final class MemberContributionInsightsService
                 'sub' => __('All time'),
                 'icon' => 'heroicon-o-x-circle',
                 'accent' => $failedCount > 0 ? 'rose' : 'gray',
-                'url' => $baseUrl.'?tableFilters[status][value]=failed',
+                'url' => MyContributionResource::listUrl(['status' => ['value' => 'failed']]),
             ],
             [
                 'label' => __('Streak'),
@@ -346,7 +349,7 @@ final class MemberContributionInsightsService
             $m = (int) $month->month;
             $y = (int) $month->year;
 
-            if (! $this->cycles->memberCanApplyContributionForPeriod($member, $m, $y)) {
+            if (!$this->cycles->memberCanApplyContributionForPeriod($member, $m, $y)) {
                 continue;
             }
 
@@ -358,7 +361,7 @@ final class MemberContributionInsightsService
                 ->posted()
                 ->first();
 
-            if ($row !== null && ! $row->is_late) {
+            if ($row !== null && !$row->is_late) {
                 $onTime++;
             }
         }
@@ -366,7 +369,7 @@ final class MemberContributionInsightsService
         $percent = $liable > 0 ? (int) round(($onTime / $liable) * 100) : 100;
 
         return [
-            'display' => $percent.'%',
+            'display' => $percent . '%',
             'percent' => $percent,
             'posted' => $onTime,
             'liable' => $liable,
@@ -382,7 +385,7 @@ final class MemberContributionInsightsService
             $m = (int) $month->month;
             $y = (int) $month->year;
 
-            if (! $this->cycles->memberCanApplyContributionForPeriod($member, $m, $y)) {
+            if (!$this->cycles->memberCanApplyContributionForPeriod($member, $m, $y)) {
                 continue;
             }
 
@@ -392,7 +395,7 @@ final class MemberContributionInsightsService
                 ->posted()
                 ->exists();
 
-            if (! $hasPosted) {
+            if (!$hasPosted) {
                 break;
             }
 
@@ -450,12 +453,12 @@ final class MemberContributionInsightsService
             ->pluck('total', 'payment_method');
 
         return collect(Contribution::paymentMethodOptions())
-            ->map(fn (string $label, string $method): array => [
+            ->map(fn(string $label, string $method): array => [
                 'method' => $method,
                 'label' => $label,
                 'count' => (int) ($methodCounts[$method] ?? 0),
             ])
-            ->filter(fn (array $row): bool => $row['count'] > 0)
+            ->filter(fn(array $row): bool => $row['count'] > 0)
             ->values()
             ->all();
     }

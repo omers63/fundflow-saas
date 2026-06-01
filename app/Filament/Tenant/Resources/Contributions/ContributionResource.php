@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\Contributions;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
+use App\Filament\Support\ContributionCycleTables;
 use App\Filament\Support\LoanDelinquencyTables;
 use App\Filament\Support\UiLabelIcons;
 use App\Filament\Tenant\Resources\Contributions\Pages\CreateContribution;
@@ -12,6 +13,8 @@ use App\Filament\Tenant\Resources\Contributions\Tables\ContributionsTable;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Filament\Tenant\Widgets\ContributionInsightsWidget;
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\Member;
+use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -39,12 +42,14 @@ class ContributionResource extends Resource
      */
     public static function listTabKeys(): array
     {
-        return ['ledger', 'arrears'];
+        return ['collect', 'collected', 'ledger', 'arrears'];
     }
 
     public static function listTabLabel(string $tab): string
     {
         return match ($tab) {
+            'collect' => __('To collect'),
+            'collected' => __('Collected'),
             'arrears' => __('Arrears'),
             default => __('Ledger'),
         };
@@ -52,11 +57,51 @@ class ContributionResource extends Resource
 
     public static function listTabUrl(string $tab): string
     {
-        if ($tab === 'ledger') {
-            return static::getUrl('index');
+        return static::listUrl($tab);
+    }
+
+    /**
+     * Contributions list URL with optional tab and Filament table filter state (URL key `filters`).
+     *
+     * @param  array<string, array<string, mixed>>  $filters
+     */
+    public static function listUrl(string $tab = 'ledger', array $filters = []): string
+    {
+        $parameters = [];
+
+        if ($tab !== 'ledger') {
+            $parameters['tab'] = $tab;
         }
 
-        return static::getUrl('index', ['tab' => $tab]);
+        if ($filters !== []) {
+            $parameters['filters'] = $filters;
+        }
+
+        return static::getUrl('index', $parameters);
+    }
+
+    /**
+     * @return array<string, array<string, string>>
+     */
+    public static function memberFilter(int|Member $member): array
+    {
+        $memberId = $member instanceof Member ? $member->getKey() : $member;
+
+        return [
+            'member_id' => [
+                'value' => (string) $memberId,
+            ],
+        ];
+    }
+
+    public static function arrearsUrlForMember(int|Member $member): string
+    {
+        return static::listUrl('arrears', static::memberFilter($member));
+    }
+
+    public static function ledgerUrlForMember(int|Member $member): string
+    {
+        return static::listUrl('ledger', static::memberFilter($member));
     }
 
     public static function resolveListTab(): string
@@ -72,6 +117,14 @@ class ContributionResource extends Resource
         return in_array($tab, self::listTabKeys(), true) ? $tab : 'ledger';
     }
 
+    public static function openCyclePendingCount(): int
+    {
+        $cycles = app(ContributionCycleService::class);
+        [$month, $year] = $cycles->currentOpenPeriod();
+
+        return $cycles->pendingMembersQueryForPeriod($month, $year)->count();
+    }
+
     public static function form(Schema $schema): Schema
     {
         return ContributionForm::configure($schema);
@@ -79,13 +132,14 @@ class ContributionResource extends Resource
 
     public static function table(Table $table): Table
     {
-        if (self::resolveListTab() === 'arrears') {
-            return LoanDelinquencyTables::configureContributionArrearsTable(
+        return match (self::resolveListTab()) {
+            'collect' => ContributionCycleTables::configurePendingMembersTable($table),
+            'collected' => ContributionCycleTables::configureCollectedTable($table),
+            'arrears' => LoanDelinquencyTables::configureContributionArrearsTable(
                 $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Contribution arrears'), UiLabelIcons::forKey('contributions'))),
-            );
-        }
-
-        return ContributionsTable::configure($table);
+            ),
+            default => ContributionsTable::configure($table),
+        };
     }
 
     public static function contributionArrearsPeriodCount(): int
@@ -113,7 +167,7 @@ class ContributionResource extends Resource
         );
 
         $livewire->js(
-            'setTimeout(() => window.Livewire.getByName(' . $targetName . ').forEach(w => w.$refresh()), 0)'
+            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
         );
     }
 }

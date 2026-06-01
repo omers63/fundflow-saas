@@ -89,7 +89,7 @@ final class BankAccountsInsightsService
             ->orderByDesc('imported_at')
             ->limit(5)
             ->get()
-            ->map(fn (BankStatement $statement): array => [
+            ->map(fn(BankStatement $statement): array => [
                 'id' => $statement->id,
                 'filename' => $statement->filename,
                 'bank_name' => $statement->bank_name,
@@ -135,10 +135,10 @@ final class BankAccountsInsightsService
             ],
             'urls' => [
                 'index' => $indexUrl,
-                'imports' => $indexUrl.'?tab=imports',
-                'ledger' => $indexUrl.'?tab=ledger',
-                'transactions' => $indexUrl.'?tab=imports',
-                'fund_postings' => FundPostingResource::getUrl('index'),
+                'imports' => BankAccountsResource::listUrl('imports'),
+                'ledger' => BankAccountsResource::listUrl('ledger'),
+                'transactions' => BankAccountsResource::listUrl('imports'),
+                'fund_postings' => FundPostingResource::listUrl(),
                 'master_cash' => Account::masterCash()
                     ? MasterAccountResource::getUrl('view', ['record' => Account::masterCash()])
                     : MasterAccountResource::getUrl('index', ['tab' => 'cash']),
@@ -193,12 +193,12 @@ final class BankAccountsInsightsService
                     'accent' => $unassignedCredits > 0 ? 'amber' : 'teal',
                 ],
             ], [
-                'pending' => $indexUrl.'?tab=imports&tableFilters[status][value]=imported',
-                'posted' => $indexUrl.'?tab=imports&tableFilters[status][value]=posted',
-                'dupes' => $indexUrl.'?tab=imports&tableFilters[status][value]=duplicate',
-                'templates' => $indexUrl.'?tab=templates',
-                'statements' => $indexUrl.'?tab=statements',
-                'unassigned' => $indexUrl.'?tab=imports',
+                'pending' => BankAccountsResource::listUrl('imports', ['status' => ['value' => 'imported']]),
+                'posted' => BankAccountsResource::listUrl('imports', ['status' => ['value' => 'posted']]),
+                'dupes' => BankAccountsResource::listUrl('imports', ['status' => ['value' => 'duplicate']]),
+                'templates' => BankAccountsResource::listUrl('statements'),
+                'statements' => BankAccountsResource::listUrl('statements'),
+                'unassigned' => BankAccountsResource::listUrl('imports'),
             ]),
             'hero' => $this->buildHero(
                 $pendingPost,
@@ -228,7 +228,7 @@ final class BankAccountsInsightsService
                     'count' => $failedStatements,
                 ]),
                 'cta_label' => __('Statements'),
-                'cta_url' => $indexUrl.'?tab=statements',
+                'cta_url' => BankAccountsResource::listUrl('statements'),
             ];
         }
 
@@ -248,7 +248,7 @@ final class BankAccountsInsightsService
                     : null,
                 ])->filter()->implode(' · '),
                 'cta_label' => __('Statement lines'),
-                'cta_url' => $indexUrl.'?tab=imports',
+                'cta_url' => BankAccountsResource::listUrl('imports'),
             ];
         }
 
@@ -257,7 +257,7 @@ final class BankAccountsInsightsService
             'title' => __('Banking is up to date'),
             'subtitle' => __('Imports are posted and the queue is clear.'),
             'cta_label' => __('Import statement'),
-            'cta_url' => $indexUrl.'?tab=statements',
+            'cta_url' => BankAccountsResource::listUrl('statements'),
         ];
     }
 }

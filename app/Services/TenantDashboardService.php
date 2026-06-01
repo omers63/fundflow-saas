@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Filament\Tenant\Pages\ContributionCyclePage;
 use App\Filament\Tenant\Pages\JobsPage;
 use App\Filament\Tenant\Pages\Settings;
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
@@ -44,8 +43,7 @@ final class TenantDashboardService
         protected MasterAccountsInsightsService $masterAccounts,
         protected BankAccountsInsightsService $bankAccounts,
         protected LoanDelinquencyService $delinquency,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -58,7 +56,7 @@ final class TenantDashboardService
         assert($user instanceof User);
 
         $masters = Account::master()->get()->keyBy('type');
-        $masterBalance = fn(string $type): float => (float) ($masters->get($type)?->balance ?? 0);
+        $masterBalance = fn (string $type): float => (float) ($masters->get($type)?->balance ?? 0);
 
         $loanPortfolio = $this->loanInsights->portfolioSnapshot();
         $masterSnapshot = $this->masterAccounts->snapshot();
@@ -202,7 +200,7 @@ final class TenantDashboardService
                 'label' => Lang::ui('Contribution cycle'),
                 'description' => Lang::uiText($openPeriodLabel),
                 'icon' => 'heroicon-o-arrow-path-rounded-square',
-                'url' => ContributionCyclePage::getUrl(),
+                'url' => ContributionResource::listTabUrl('collect'),
                 'tone' => 'cycle',
                 'badge' => $pendingContributions > 0 ? (string) $pendingContributions : null,
             ],
@@ -288,7 +286,7 @@ final class TenantDashboardService
                 'percent' => 0,
                 'sub' => Lang::ui('No active members'),
                 'tone' => 'sky',
-                'url' => ContributionCyclePage::getUrl(),
+                'url' => ContributionResource::listTabUrl('collect'),
             ]);
         }
 
@@ -308,7 +306,7 @@ final class TenantDashboardService
             'percent' => $percent,
             'sub' => Lang::ui(':posted of :total posted', ['posted' => $posted, 'total' => $activeMembers]),
             'tone' => $percent >= 85 ? 'emerald' : ($percent >= 50 ? 'amber' : 'rose'),
-            'url' => ContributionCyclePage::getUrl(),
+            'url' => ContributionResource::listTabUrl('collect'),
         ]);
     }
 
@@ -361,7 +359,7 @@ final class TenantDashboardService
      */
     private function openReconciliationCount(): int
     {
-        if (!Schema::hasTable('reconciliation_exceptions')) {
+        if (! Schema::hasTable('reconciliation_exceptions')) {
             return 0;
         }
 
@@ -505,7 +503,7 @@ final class TenantDashboardService
                     ['label' => Lang::ui('Members'), 'icon' => 'heroicon-o-users', 'url' => MemberResource::getUrl('index')],
                     ['label' => Lang::ui('Member accounts'), 'icon' => 'heroicon-o-wallet', 'url' => AccountResource::getUrl('index')],
                     ['label' => Lang::ui('Contributions'), 'icon' => 'heroicon-o-calendar-days', 'url' => ContributionResource::getUrl('index')],
-                    ['label' => Lang::ui('Contribution cycle'), 'icon' => 'heroicon-o-arrow-path-rounded-square', 'url' => ContributionCyclePage::getUrl()],
+                    ['label' => Lang::ui('Open cycle'), 'icon' => 'heroicon-o-arrow-path-rounded-square', 'url' => ContributionResource::listTabUrl('collect')],
                     ['label' => Lang::ui('Monthly statements'), 'icon' => 'heroicon-o-document-text', 'url' => MonthlyStatementResource::getUrl('index')],
                     ['label' => Lang::ui('Applications'), 'icon' => 'heroicon-o-user-plus', 'url' => MembershipApplicationResource::getUrl('index')],
                 ],
@@ -541,7 +539,7 @@ final class TenantDashboardService
         ];
 
         return array_map(
-            fn(array $section): array => [
+            fn (array $section): array => [
                 ...$section,
                 'links' => Lang::formatLabeledRows($section['links']),
             ],

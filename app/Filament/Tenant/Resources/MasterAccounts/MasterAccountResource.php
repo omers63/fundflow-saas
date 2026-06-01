@@ -113,6 +113,17 @@ class MasterAccountResource extends Resource
         ];
     }
 
+    public static function listUrl(string $tab = 'all'): string
+    {
+        $parameters = [];
+
+        if ($tab !== 'all') {
+            $parameters['tab'] = $tab;
+        }
+
+        return static::getUrl('index', $parameters);
+    }
+
     public static function getPages(): array
     {
         return [

@@ -17,12 +17,13 @@
         ['key' => 'rate', 'label' => __('Collection'), 'value' => $open['collection_rate'] . '%', 'sub' => $open['label'], 'icon' => 'heroicon-o-chart-pie', 'accent' => 'violet', 'active' => true],
         ['key' => 'late', 'label' => __('Late'), 'value' => $d['late_count'], 'sub' => __('Pending'), 'icon' => 'heroicon-o-exclamation-triangle', 'accent' => 'teal', 'active' => $d['late_count'] > 0],
     ], [
-        'pending' => $pipeline['contributions_url'].'?tableFilters[status][value]=pending',
-        'posted' => $pipeline['contributions_url'].'?tableFilters[status][value]=posted',
-        'failed' => $pipeline['contributions_url'].'?tableFilters[status][value]=failed',
+        'pending' => $pipeline['contributions_pending_url'],
+        'posted' => $pipeline['contributions_posted_url'],
+        'failed' => $pipeline['contributions_failed_url'],
         'new' => $pipeline['contributions_url'],
         'rate' => $pipeline['cycle_url'],
-        'late' => $pipeline['contributions_url'].'?tableFilters[status][value]=pending',
+        'missing' => $pipeline['cycle_url'],
+        'late' => $pipeline['contributions_pending_url'],
     ]);
 @endphp
 
@@ -50,7 +51,7 @@
                             </p>
                         </div>
                     </div>
-                    <a href="{{ $pipeline['contributions_url'] }}?tableFilters[status][value]=pending"
+                    <a href="{{ $pipeline['contributions_pending_url'] }}"
                         class="shrink-0 rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-500 dark:bg-amber-500">
                         {{ __('Review') }}
                     </a>
@@ -87,13 +88,13 @@
                 @endif
             </div>
             <div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-700">
-                <a href="{{ $pipeline['contributions_url'] }}?tableFilters[status][value]=pending"
+                <a href="{{ $pipeline['contributions_pending_url'] }}"
                     class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-amber-50/70 dark:hover:bg-amber-950/20">
                     <span
                         class="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ $pipeline['pending_contributions'] }}</span>
                     <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Pending') }}</span>
                 </a>
-                <a href="{{ $pipeline['contributions_url'] }}?tableFilters[status][value]=posted"
+                <a href="{{ $pipeline['contributions_posted_url'] }}"
                     class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-emerald-50/70 dark:hover:bg-emerald-950/20">
                     <span
                         class="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{{ $pipeline['posted_contributions'] }}</span>

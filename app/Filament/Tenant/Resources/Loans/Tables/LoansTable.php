@@ -44,12 +44,12 @@ class LoansTable
                         ->placeholder(__('—')),
                     TextColumn::make('outstanding')
                         ->label(__('Outstanding'))
-                        ->state(fn (Loan $record): float => $record->getOutstandingBalance())
+                        ->state(fn(Loan $record): float => $record->getOutstandingBalance())
                         ->money($currency),
                     TextColumn::make('status')
                         ->badge()
-                        ->formatStateUsing(fn (string $state): string => Loan::statusOptions()[$state] ?? $state)
-                        ->color(fn (string $state): string => Loan::statusColor($state)),
+                        ->formatStateUsing(fn(string $state): string => Loan::statusOptions()[$state] ?? $state)
+                        ->color(fn(string $state): string => Loan::statusColor($state)),
                     TextColumn::make('applied_at')
                         ->dateTime()
                         ->sortable(),
@@ -57,12 +57,17 @@ class LoansTable
                 ->filters([
                     SelectFilter::make('status')
                         ->options(Loan::statusOptions()),
+                    SelectFilter::make('member_id')
+                        ->label('Member')
+                        ->relationship('member', 'name')
+                        ->searchable()
+                        ->preload(),
                     DateColumnRangeFilter::make('applied_at', 'Applied'),
                 ])
                 ->recordActions(TableRecordActionGroups::wrap([
                     ViewAction::make(),
                     EditAction::make()
-                        ->hidden(fn (Loan $record): bool => ! in_array($record->status, ['pending', 'approved'], true)),
+                        ->hidden(fn(Loan $record): bool => !in_array($record->status, ['pending', 'approved'], true)),
                     ...LoanFilamentActions::workflowActions(),
                 ]))
                 ->toolbarActions([

@@ -137,12 +137,12 @@ final class LoanInsightsService
                 ['key' => 'new', 'label' => __('New/mo'), 'value' => (string) $newThisMonth, 'sub' => $this->monthOverMonthChange($newThisMonth, $newLastMonth) !== null ? __(':percent%', ['percent' => $this->monthOverMonthChange($newThisMonth, $newLastMonth)]) : now()->format('M'), 'icon' => 'heroicon-o-sparkles', 'accent' => 'sky', 'active' => true, 'mom' => $this->monthOverMonthChange($newThisMonth, $newLastMonth)],
                 ['key' => 'disbursed', 'label' => __('Disbursed'), 'value' => $this->formatMoneyCompact($disbursedThisMonth, $currency), 'sub' => __('This month'), 'icon' => 'heroicon-o-arrow-trending-up', 'accent' => 'teal', 'active' => true],
             ], [
-                'pending' => LoanResource::getUrl('index') . '?tableFilters[status][value]=pending',
-                'active' => LoanResource::getUrl('index') . '?tableFilters[status][value]=active',
-                'outstanding' => LoanResource::getUrl('index'),
+                'pending' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'pending']]),
+                'active' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'active']]),
+                'outstanding' => LoanResource::listUrl(),
                 'overdue' => LoanResource::listTabUrl('overdue_installments'),
-                'new' => LoanResource::getUrl('index'),
-                'disbursed' => LoanResource::getUrl('index'),
+                'new' => LoanResource::listUrl(),
+                'disbursed' => LoanResource::listUrl(),
             ]),
             'sparkline' => $this->weeklyApplicationSparkline(),
             'pipeline' => [
@@ -153,7 +153,12 @@ final class LoanInsightsService
                 'completed' => $completed,
                 'approved_month' => $approvedThisMonth,
                 'queue_url' => LoanResource::getUrl('queue'),
-                'loans_url' => LoanResource::getUrl('index'),
+                'queue_needs_decision_url' => LoanResource::queueUrl('needs_decision'),
+                'queue_ready_to_disburse_url' => LoanResource::queueUrl('ready_to_disburse'),
+                'queue_awaiting_payout_url' => LoanResource::queueUrl('awaiting_payout'),
+                'loans_url' => LoanResource::listUrl(),
+                'loans_active_url' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'active']]),
+                'loans_completed_url' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'completed']]),
             ],
             'status_breakdown' => $this->statusBreakdown(),
             'trend' => $this->sixMonthLoanTrend(),
@@ -300,10 +305,10 @@ final class LoanInsightsService
                 ['key' => 'emergency', 'label' => __('Emergency'), 'value' => (string) $emergency, 'sub' => __('In queue'), 'icon' => 'heroicon-o-bolt', 'accent' => 'rose', 'active' => $emergency > 0],
                 ['key' => 'queue', 'label' => __('Queue'), 'value' => (string) $total, 'sub' => __('All stages'), 'icon' => 'heroicon-o-queue-list', 'accent' => 'teal', 'active' => true],
             ], [
-                'decision' => LoanResource::getUrl('queue') . '?tab=needs_decision',
-                'disburse' => LoanResource::getUrl('queue') . '?tab=ready_to_disburse',
-                'payout' => LoanResource::getUrl('queue') . '?tab=awaiting_payout',
-                'tab_total' => LoanResource::getUrl('queue') . '?tab=' . $activeTab,
+                'decision' => LoanResource::queueUrl('needs_decision'),
+                'disburse' => LoanResource::queueUrl('ready_to_disburse'),
+                'payout' => LoanResource::queueUrl('awaiting_payout'),
+                'tab_total' => LoanResource::queueUrl($activeTab),
                 'emergency' => LoanResource::getUrl('queue'),
                 'queue' => LoanResource::getUrl('queue'),
             ]),
@@ -312,6 +317,9 @@ final class LoanInsightsService
                 'ready_to_disburse' => $readyToDisburse,
                 'awaiting_payout' => $awaitingPayout,
                 'queue_url' => LoanResource::getUrl('queue'),
+                'queue_needs_decision_url' => LoanResource::queueUrl('needs_decision'),
+                'queue_ready_to_disburse_url' => LoanResource::queueUrl('ready_to_disburse'),
+                'queue_awaiting_payout_url' => LoanResource::queueUrl('awaiting_payout'),
             ],
             'preview' => $preview,
             'tab_labels' => [
@@ -774,13 +782,11 @@ final class LoanInsightsService
 
     private function memberLoansIndexUrl(?string $status = null): string
     {
-        $url = MyLoanResource::getUrl('index');
-
-        if ($status !== null) {
-            $url .= '?tableFilters[status][value]=' . urlencode($status);
+        if ($status === null) {
+            return MyLoanResource::listUrl();
         }
 
-        return $url;
+        return MyLoanResource::listUrl(['status' => ['value' => $status]]);
     }
 
     private function memberLoanViewUrl(Loan $loan): string

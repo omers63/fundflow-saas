@@ -27,23 +27,23 @@
             @endif
         </div>
         <div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-5">
-            <a href="{{ $pipeline['queue_url'] }}?tab=needs_decision" class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-amber-50/70 dark:hover:bg-amber-950/20">
+            <a href="{{ $pipeline['queue_needs_decision_url'] }}" class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-amber-50/70 dark:hover:bg-amber-950/20">
                 <span class="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ $pipeline['needs_decision'] }}</span>
                 <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Decision') }}</span>
             </a>
-            <a href="{{ $pipeline['queue_url'] }}?tab=ready_to_disburse" class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-sky-50/70 dark:hover:bg-sky-950/20">
+            <a href="{{ $pipeline['queue_ready_to_disburse_url'] }}" class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-sky-50/70 dark:hover:bg-sky-950/20">
                 <span class="text-xl font-bold tabular-nums text-sky-600 dark:text-sky-400">{{ $pipeline['ready_to_disburse'] }}</span>
                 <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Disburse') }}</span>
             </a>
-            <a href="{{ $pipeline['queue_url'] }}?tab=awaiting_payout" class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-indigo-50/70 dark:hover:bg-indigo-950/20">
+            <a href="{{ $pipeline['queue_awaiting_payout_url'] }}" class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-indigo-50/70 dark:hover:bg-indigo-950/20">
                 <span class="text-xl font-bold tabular-nums text-indigo-600 dark:text-indigo-400">{{ $pipeline['awaiting_payout'] }}</span>
                 <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Payout') }}</span>
             </a>
-            <a href="{{ $pipeline['loans_url'] }}?tableFilters[status][value]=active" class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-emerald-50/70 dark:hover:bg-emerald-950/20">
+            <a href="{{ $pipeline['loans_active_url'] }}" class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-emerald-50/70 dark:hover:bg-emerald-950/20">
                 <span class="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{{ $pipeline['active'] }}</span>
                 <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Active') }}</span>
             </a>
-            <a href="{{ $pipeline['loans_url'] }}?tableFilters[status][value]=completed" class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-gray-50/70 dark:hover:bg-gray-900/20">
+            <a href="{{ $pipeline['loans_completed_url'] }}" class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-gray-50/70 dark:hover:bg-gray-900/20">
                 <span class="text-xl font-bold tabular-nums text-gray-600 dark:text-gray-300">{{ $pipeline['completed'] }}</span>
                 <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Closed') }}</span>
             </a>

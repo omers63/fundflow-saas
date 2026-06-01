@@ -16,12 +16,12 @@
         ['key' => 'dependents', 'label' => __('Dependents'), 'value' => $d['dependents'], 'sub' => __(':count heads', ['count' => $d['independent']]), 'icon' => 'heroicon-o-user-group', 'accent' => 'teal', 'active' => $d['dependents'] > 0],
         ['key' => 'avg', 'label' => __('Avg contrib'), 'value' => number_format($d['avg_contribution'], 0), 'sub' => $currency, 'icon' => 'heroicon-o-banknotes', 'accent' => 'amber', 'active' => $d['avg_contribution'] > 0],
     ], [
-        'active' => $pipeline['members_url'].'?tableFilters[status][value]=active',
-        'delinquent' => $pipeline['members_url'].'?tableFilters[status][value]=delinquent',
+        'active' => $pipeline['members_active_url'],
+        'delinquent' => $pipeline['members_delinquent_url'],
         'total' => $pipeline['members_url'],
         'new' => $pipeline['members_url'],
-        'dependents' => $pipeline['members_url'].'?tableFilters[has_dependents][value]=1',
-        'avg' => \App\Filament\Tenant\Resources\Contributions\ContributionResource::getUrl('index'),
+        'dependents' => $pipeline['members_url'],
+        'avg' => \App\Filament\Tenant\Resources\Contributions\ContributionResource::listUrl('ledger'),
     ]);
 @endphp
 
@@ -51,7 +51,7 @@
                             </p>
                         </div>
                     </div>
-                    <a href="{{ $pipeline['members_url'] }}?tableFilters[status][value]=delinquent"
+                    <a href="{{ $pipeline['members_delinquent_url'] }}"
                         class="shrink-0 rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-500 dark:bg-amber-500">
                         {{ __('Review') }}
                     </a>
@@ -87,13 +87,13 @@
                 @endif
             </div>
             <div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-700">
-                <a href="{{ $pipeline['members_url'] }}?tableFilters[status][value]=active"
+                <a href="{{ $pipeline['members_active_url'] }}"
                     class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-emerald-50/70 dark:hover:bg-emerald-950/20">
                     <span
                         class="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{{ $pipeline['active_members'] }}</span>
                     <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Active') }}</span>
                 </a>
-                <a href="{{ $pipeline['members_url'] }}?tableFilters[status][value]=delinquent"
+                <a href="{{ $pipeline['members_delinquent_url'] }}"
                     class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-rose-50/70 dark:hover:bg-rose-950/20">
                     <span
                         class="text-xl font-bold tabular-nums text-rose-600 dark:text-rose-400">{{ $pipeline['delinquent_members'] }}</span>

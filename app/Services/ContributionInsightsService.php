@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Filament\Tenant\Pages\ContributionCyclePage;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Contribution;
@@ -91,9 +90,10 @@ final class ContributionInsightsService
                 'amount_display' => InsightFormatter::money((float) $contribution->amount),
                 'is_late' => (bool) $contribution->is_late,
                 'days_waiting' => (int) Carbon::parse($contribution->created_at)->diffInDays($now),
-                'queue_url' => ContributionResource::getUrl('index')
-                    . '?tableFilters[member_id][value]=' . $contribution->member_id
-                    . '&tableFilters[status][value]=pending',
+                'queue_url' => ContributionResource::listUrl('ledger', array_merge(
+                    ContributionResource::memberFilter((int) $contribution->member_id),
+                    ['status' => ['value' => 'pending']],
+                )),
             ])
             ->all();
 
@@ -114,7 +114,7 @@ final class ContributionInsightsService
             ->all();
 
         $currency = Setting::get('general', 'currency', 'USD');
-        $contributionsUrl = ContributionResource::getUrl('index');
+        $contributionsUrl = ContributionResource::listUrl('ledger');
 
         return [
             'total' => $total,
@@ -153,7 +153,10 @@ final class ContributionInsightsService
                 'posted_contributions' => $posted,
                 'missing_open_period' => $missingOpenPeriod,
                 'contributions_url' => $contributionsUrl,
-                'cycle_url' => ContributionCyclePage::getUrl(),
+                'contributions_pending_url' => ContributionResource::listUrl('ledger', ['status' => ['value' => 'pending']]),
+                'contributions_posted_url' => ContributionResource::listUrl('ledger', ['status' => ['value' => 'posted']]),
+                'contributions_failed_url' => ContributionResource::listUrl('ledger', ['status' => ['value' => 'failed']]),
+                'cycle_url' => ContributionResource::listTabUrl('collect'),
                 'members_url' => MemberResource::getUrl('index'),
                 'delinquency_url' => ContributionResource::listTabUrl('arrears'),
             ],

@@ -58,6 +58,20 @@ class MyLoanResource extends Resource
         ];
     }
 
+    /**
+     * @param  array<string, array<string, mixed>>  $filters
+     */
+    public static function listUrl(array $filters = []): string
+    {
+        $parameters = [];
+
+        if ($filters !== []) {
+            $parameters['filters'] = $filters;
+        }
+
+        return static::getUrl('index', $parameters);
+    }
+
     public static function getPages(): array
     {
         return [

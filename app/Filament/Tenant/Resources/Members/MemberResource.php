@@ -57,11 +57,25 @@ class MemberResource extends Resource
 
     public static function listTabUrl(string $tab): string
     {
-        if ($tab === 'all') {
-            return static::getUrl('index');
+        return static::listUrl($tab);
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $filters
+     */
+    public static function listUrl(string $tab = 'all', array $filters = []): string
+    {
+        $parameters = [];
+
+        if ($tab !== 'all') {
+            $parameters['tab'] = $tab;
         }
 
-        return static::getUrl('index', ['tab' => $tab]);
+        if ($filters !== []) {
+            $parameters['filters'] = $filters;
+        }
+
+        return static::getUrl('index', $parameters);
     }
 
     public static function resolveListTab(): string

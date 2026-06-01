@@ -64,7 +64,8 @@ test('edit member page uses member title and combined full-width section', funct
         ->assertDontSee(__('Member Information'))
         ->assertDontSee(__('Membership Details'))
         ->assertSee(__('Loans'))
-        ->assertSee(__('Messages'));
+        ->assertSee(__('Messages'))
+        ->assertDontSee(__('Delinquency'), false);
 });
 
 test('member accounts relation manager rows link to account view page', function () {

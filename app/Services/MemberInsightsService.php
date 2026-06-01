@@ -132,8 +132,12 @@ final class MemberInsightsService
                 'delinquent_members' => $delinquent,
                 'dependents' => $dependents,
                 'members_url' => $membersUrl,
+                'members_active_url' => MemberResource::listUrl('all', ['status' => ['value' => 'active']]),
+                'members_delinquent_url' => MemberResource::listTabUrl('delinquent'),
                 'applications_url' => MembershipApplicationResource::getUrl('index'),
-                'contributions_url' => ContributionResource::getUrl('index') . '?tableFilters[status][value]=pending',
+                'applications_pending_url' => MembershipApplicationResource::listUrl(['status' => ['value' => 'pending']]),
+                'applications_approved_url' => MembershipApplicationResource::listUrl(['status' => ['value' => 'approved']]),
+                'contributions_url' => ContributionResource::listUrl('ledger', ['status' => ['value' => 'pending']]),
                 'delinquency_url' => MemberResource::listTabUrl('delinquent'),
             ],
         ];

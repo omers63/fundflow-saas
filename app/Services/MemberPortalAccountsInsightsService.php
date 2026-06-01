@@ -95,7 +95,7 @@ final class MemberPortalAccountsInsightsService
             ->orderByDesc('transacted_at')
             ->limit(5)
             ->get()
-            ->map(fn (Transaction $transaction): array => [
+            ->map(fn(Transaction $transaction): array => [
                 'description' => Str::limit($transaction->description ?? '—', 40),
                 'transacted_at' => $transaction->transacted_at?->format('d M, H:i'),
                 'amount' => InsightFormatter::money((float) $transaction->amount),
@@ -135,7 +135,7 @@ final class MemberPortalAccountsInsightsService
                     'balance' => InsightFormatter::money($cashBalance),
                     'url' => $member->cashAccount
                         ? MyAccountResource::getUrl('view', ['record' => $member->cashAccount])
-                        : $indexUrl.'?tab=cash',
+                        : MyAccountResource::listUrl('cash'),
                 ],
                 'fund' => [
                     'label' => __('Fund'),
@@ -143,14 +143,14 @@ final class MemberPortalAccountsInsightsService
                     'negative' => $fundBalance < 0,
                     'url' => $member->fundAccount
                         ? MyAccountResource::getUrl('view', ['record' => $member->fundAccount])
-                        : $indexUrl.'?tab=fund',
+                        : MyAccountResource::listUrl('fund'),
                 ],
             ],
             'urls' => [
                 'index' => $indexUrl,
-                'cash' => $indexUrl.'?tab=cash',
-                'fund' => $indexUrl.'?tab=fund',
-                'loans' => $indexUrl.'?tab=loans',
+                'cash' => MyAccountResource::listUrl('cash'),
+                'fund' => MyAccountResource::listUrl('fund'),
+                'loans' => MyAccountResource::listUrl('loans'),
                 'deposits' => MyFundPostingResource::getUrl('index'),
                 'deposits_create' => MyFundPostingResource::getUrl('create'),
                 'contributions' => MyContributionResource::getUrl('index'),
@@ -199,7 +199,7 @@ final class MemberPortalAccountsInsightsService
                 'cta_label' => $activeLoan ? __('View loan') : __('View fund'),
                 'cta_url' => $activeLoan
                     ? MyLoanResource::getUrl('view', ['record' => $activeLoan])
-                    : MyAccountResource::getUrl('index').'?tab=fund',
+                    : MyAccountResource::listUrl('fund'),
             ];
         }
 
@@ -233,7 +233,7 @@ final class MemberPortalAccountsInsightsService
             ];
         }
 
-        if (! $postedThisCycle) {
+        if (!$postedThisCycle) {
             return [
                 'tone' => 'amber',
                 'title' => __('Open contribution cycle'),
@@ -272,7 +272,7 @@ final class MemberPortalAccountsInsightsService
                 'sub' => InsightFormatter::money($cashBalance),
                 'icon' => 'heroicon-o-wallet',
                 'accent' => $cashBalance > 0 ? 'sky' : 'amber',
-                'url' => MyAccountResource::getUrl('index').'?tab=cash',
+                'url' => MyAccountResource::listUrl('cash'),
                 'value_class' => $cashBalance > 0
                     ? 'text-sky-600 dark:text-sky-400'
                     : 'text-amber-600 dark:text-amber-400',
@@ -283,7 +283,7 @@ final class MemberPortalAccountsInsightsService
                 'sub' => InsightFormatter::money($fundBalance),
                 'icon' => 'heroicon-o-building-library',
                 'accent' => $fundBalance < 0 ? 'rose' : 'indigo',
-                'url' => MyAccountResource::getUrl('index').'?tab=fund',
+                'url' => MyAccountResource::listUrl('fund'),
                 'value_class' => $fundBalance < 0
                     ? 'text-rose-600 dark:text-rose-400'
                     : 'text-indigo-600 dark:text-indigo-400',
@@ -294,7 +294,7 @@ final class MemberPortalAccountsInsightsService
                 'sub' => __('Cash + fund'),
                 'icon' => 'heroicon-o-scale',
                 'accent' => 'emerald',
-                'url' => MyAccountResource::getUrl('index').'?tab=all',
+                'url' => MyAccountResource::listUrl('all'),
             ],
             [
                 'label' => __('Loan due'),
@@ -302,7 +302,7 @@ final class MemberPortalAccountsInsightsService
                 'sub' => trans_choice(':count active|:count active', $activeLoanCount, ['count' => $activeLoanCount]),
                 'icon' => 'heroicon-o-currency-dollar',
                 'accent' => $loanOutstanding > 0 ? 'violet' : 'gray',
-                'url' => MyAccountResource::getUrl('index').'?tab=loans',
+                'url' => MyAccountResource::listUrl('loans'),
             ],
             [
                 'label' => __('Deposits'),
@@ -314,7 +314,7 @@ final class MemberPortalAccountsInsightsService
             ],
             [
                 'label' => __('30d net'),
-                'value' => ($net30 >= 0 ? '+' : '−').InsightFormatter::compactAmount(abs($net30)),
+                'value' => ($net30 >= 0 ? '+' : '−') . InsightFormatter::compactAmount(abs($net30)),
                 'sub' => trans_choice(':count txn|:count txns', $txCount30, ['count' => $txCount30]),
                 'icon' => 'heroicon-o-arrows-right-left',
                 'accent' => $net30 >= 0 ? 'teal' : 'amber',

@@ -44,7 +44,7 @@ class ListLoans extends ListRecords
     {
         $sortColumn = $this->getTableSortColumn();
 
-        if ($sortColumn && !$this->getTable()->getSortableVisibleColumn($sortColumn)) {
+        if ($sortColumn && ! $this->getTable()->getSortableVisibleColumn($sortColumn)) {
             $this->tableSort = null;
         }
 
@@ -63,7 +63,7 @@ class ListLoans extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            ActionGroup::make(LoanDelinquencyHeaderActions::make($this))
+            ActionGroup::make(LoanDelinquencyHeaderActions::make())
                 ->label(__('Delinquency tools'))
                 ->icon('heroicon-o-exclamation-triangle')
                 ->color('gray')
@@ -71,7 +71,7 @@ class ListLoans extends ListRecords
             Action::make('loanOverrides')
                 ->label(__('Loan overrides'))
                 ->icon(Heroicon::OutlinedShieldCheck)
-                ->url(fn(): string => LoanEligibilityOverrideResource::getUrl('index')),
+                ->url(fn (): string => LoanEligibilityOverrideResource::getUrl('index')),
             CreateAction::make(),
         ];
     }
@@ -127,6 +127,6 @@ class ListLoans extends ListRecords
     {
         $tab = LoanResource::resolveListTab();
 
-        return $tab === 'portfolio' ? null : 'loans-' . $tab;
+        return $tab === 'portfolio' ? null : 'loans-'.$tab;
     }
 }

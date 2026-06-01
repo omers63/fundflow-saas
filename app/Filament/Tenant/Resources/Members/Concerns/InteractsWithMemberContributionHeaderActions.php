@@ -4,13 +4,11 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\Members\Concerns;
 
-use App\Filament\Support\MemberDelinquencyActions;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Livewire\Component;
@@ -119,26 +117,6 @@ trait InteractsWithMemberContributionHeaderActions
                     $this->resetTable();
                 }
             });
-    }
-
-    /**
-     * @return list<Action|ActionGroup>
-     */
-    protected function organizedMemberHeaderActions(): array
-    {
-        $actions = [];
-
-        $delinquencyActions = MemberDelinquencyActions::forMemberRecord();
-
-        if ($delinquencyActions !== []) {
-            $actions[] = ActionGroup::make($delinquencyActions)
-                ->label(__('Delinquency'))
-                ->icon('heroicon-o-exclamation-triangle')
-                ->color('gray')
-                ->button();
-        }
-
-        return $actions;
     }
 
     protected function resolveMemberForContributionAction(): ?Member

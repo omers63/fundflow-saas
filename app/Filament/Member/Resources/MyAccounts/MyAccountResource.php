@@ -92,6 +92,17 @@ class MyAccountResource extends Resource
         ];
     }
 
+    public static function listUrl(string $tab = 'cash'): string
+    {
+        $parameters = [];
+
+        if ($tab !== 'cash') {
+            $parameters['tab'] = $tab;
+        }
+
+        return static::getUrl('index', $parameters);
+    }
+
     public static function getPages(): array
     {
         return [

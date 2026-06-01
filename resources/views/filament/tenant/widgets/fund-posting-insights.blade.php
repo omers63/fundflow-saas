@@ -33,9 +33,9 @@
         ['key' => 'rate', 'label' => __('Acceptance'), 'value' => $d['acceptance_rate'] !== null ? $d['acceptance_rate'] . '%' : '—', 'sub' => __('Decided'), 'icon' => 'heroicon-o-chart-pie', 'accent' => 'violet', 'active' => $d['acceptance_rate'] !== null],
         ['key' => 'review', 'label' => __('Avg review'), 'value' => $d['avg_review_days'], 'sub' => __('days'), 'icon' => 'heroicon-o-arrow-path', 'accent' => 'teal', 'active' => true, 'suffix' => __('d')],
     ], [
-        'pending' => $pipeline['deposits_url'].'?tableFilters[status][value]=pending',
-        'accepted' => $pipeline['deposits_url'].'?tableFilters[status][value]=accepted',
-        'rejected' => $pipeline['deposits_url'].'?tableFilters[status][value]=rejected',
+        'pending' => $pipeline['deposits_pending_url'],
+        'accepted' => $pipeline['deposits_accepted_url'],
+        'rejected' => $pipeline['deposits_rejected_url'],
         'new' => $pipeline['deposits_url'],
         'rate' => $pipeline['deposits_url'],
         'review' => $pipeline['deposits_url'],
@@ -66,7 +66,7 @@
                             </p>
                         </div>
                     </div>
-                    <a href="{{ $pipeline['deposits_url'] }}?tableFilters[status][value]=pending"
+                    <a href="{{ $pipeline['deposits_pending_url'] }}"
                         class="shrink-0 rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-500 dark:bg-amber-500">
                         {{ __('Review') }}
                     </a>
@@ -103,13 +103,13 @@
                 @endif
             </div>
             <div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-700">
-                <a href="{{ $pipeline['deposits_url'] }}?tableFilters[status][value]=pending"
+                <a href="{{ $pipeline['deposits_pending_url'] }}"
                     class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-amber-50/70 dark:hover:bg-amber-950/20">
                     <span
                         class="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ $pipeline['pending_deposits'] }}</span>
                     <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Pending') }}</span>
                 </a>
-                <a href="{{ $pipeline['deposits_url'] }}?tableFilters[status][value]=accepted"
+                <a href="{{ $pipeline['deposits_accepted_url'] }}"
                     class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-emerald-50/70 dark:hover:bg-emerald-950/20">
                     <span
                         class="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{{ $pipeline['accepted_deposits'] }}</span>

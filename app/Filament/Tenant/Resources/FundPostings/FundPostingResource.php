@@ -8,6 +8,7 @@ use App\Filament\Tenant\Resources\FundPostings\Tables\FundPostingsTable;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Filament\Tenant\Widgets\FundPostingInsightsWidget;
 use App\Models\Tenant\FundPosting;
+use App\Models\Tenant\Member;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
@@ -53,6 +54,45 @@ class FundPostingResource extends Resource
         return 'warning';
     }
 
+    /**
+     * @param  array<string, array<string, mixed>>  $filters
+     */
+    public static function listUrl(array $filters = []): string
+    {
+        $parameters = [];
+
+        if ($filters !== []) {
+            $parameters['filters'] = $filters;
+        }
+
+        return static::getUrl('index', $parameters);
+    }
+
+    /**
+     * @return array<string, array<string, string>>
+     */
+    public static function memberFilter(int|Member $member): array
+    {
+        $memberId = $member instanceof Member ? $member->getKey() : $member;
+
+        return [
+            'member_id' => [
+                'value' => (string) $memberId,
+            ],
+        ];
+    }
+
+    public static function indexUrlForMember(int|Member $member, ?string $status = null): string
+    {
+        $filters = static::memberFilter($member);
+
+        if ($status !== null) {
+            $filters['status'] = ['value' => $status];
+        }
+
+        return static::listUrl($filters);
+    }
+
     public static function getPages(): array
     {
         return [
@@ -72,7 +112,7 @@ class FundPostingResource extends Resource
         );
 
         $livewire->js(
-            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
+            'setTimeout(() => window.Livewire.getByName(' . $targetName . ').forEach(w => w.$refresh()), 0)'
         );
     }
 }

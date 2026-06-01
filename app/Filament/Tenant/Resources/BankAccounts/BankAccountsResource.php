@@ -48,7 +48,7 @@ class BankAccountsResource extends Resource
     public static function table(Table $table): Table
     {
         $afterLedgerMutation = Livewire::current() instanceof ListRecords
-            ? fn (): mixed => Livewire::current()->resetTable()
+            ? fn(): mixed => Livewire::current()->resetTable()
             : null;
 
         return match (self::resolveListBankAccountsTab()) {
@@ -83,6 +83,24 @@ class BankAccountsResource extends Resource
             'ledger', 'statements', 'imports' => $tab,
             default => 'imports',
         };
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $filters
+     */
+    public static function listUrl(string $tab = 'imports', array $filters = []): string
+    {
+        $parameters = [];
+
+        if ($tab !== 'imports') {
+            $parameters['tab'] = $tab;
+        }
+
+        if ($filters !== []) {
+            $parameters['filters'] = $filters;
+        }
+
+        return static::getUrl('index', $parameters);
     }
 
     public static function getRelations(): array

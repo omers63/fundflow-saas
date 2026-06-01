@@ -17,6 +17,7 @@ use App\Filament\Tenant\Resources\Loans\Schemas\LoanForm;
 use App\Filament\Tenant\Resources\Loans\Tables\LoansTable;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -59,11 +60,60 @@ class LoanResource extends Resource
 
     public static function listTabUrl(string $tab): string
     {
-        if ($tab === 'portfolio') {
-            return static::getUrl('index');
+        return static::listUrl($tab);
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $filters
+     */
+    public static function listUrl(string $tab = 'portfolio', array $filters = []): string
+    {
+        $parameters = [];
+
+        if ($tab !== 'portfolio') {
+            $parameters['tab'] = $tab;
         }
 
-        return static::getUrl('index', ['tab' => $tab]);
+        if ($filters !== []) {
+            $parameters['filters'] = $filters;
+        }
+
+        return static::getUrl('index', $parameters);
+    }
+
+    /**
+     * @return array<string, array<string, string>>
+     */
+    public static function memberFilter(int|Member $member): array
+    {
+        $memberId = $member instanceof Member ? $member->getKey() : $member;
+
+        return [
+            'member_id' => [
+                'value' => (string) $memberId,
+            ],
+        ];
+    }
+
+    public static function portfolioUrlForMember(int|Member $member, ?string $status = null): string
+    {
+        $filters = static::memberFilter($member);
+
+        if ($status !== null) {
+            $filters['status'] = ['value' => $status];
+        }
+
+        return static::listUrl('portfolio', $filters);
+    }
+
+    public static function queueUrl(string $tab = 'needs_decision'): string
+    {
+        return static::getUrl('queue', ['tab' => $tab]);
+    }
+
+    public static function overdueInstallmentsUrlForMember(int|Member $member): string
+    {
+        return static::listUrl('overdue_installments', static::memberFilter($member));
     }
 
     /**

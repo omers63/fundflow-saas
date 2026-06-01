@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\Members\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberDelinquencyActions;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -61,9 +62,11 @@ class MembersTable
                 ->recordUrl(fn (Member $record): string => MemberResource::getUrl('edit', ['record' => $record]))
                 ->recordActions(TableRecordActionGroups::wrap([
                     EditAction::make(),
+                    ...MemberDelinquencyActions::forMemberListRow(),
                 ]))
                 ->toolbarActions([
                     BulkActionGroup::make([
+                        ...MemberDelinquencyActions::forMemberListBulk(),
                         DeleteBulkAction::make(),
                         TableToolbar::refreshBulkAction(),
                     ]),

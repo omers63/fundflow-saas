@@ -58,7 +58,7 @@ final class MembershipApplicationInsightsService
         $avgReviewDays = $reviewedApplications->isEmpty()
             ? 0.0
             : round((float) $reviewedApplications->avg(
-                fn (MembershipApplication $application): float => (float) Carbon::parse($application->created_at)
+                fn(MembershipApplication $application): float => (float) Carbon::parse($application->created_at)
                     ->diffInDays(Carbon::parse($application->reviewed_at))
             ), 1);
 
@@ -74,7 +74,7 @@ final class MembershipApplicationInsightsService
             ->orderBy('created_at')
             ->limit(6)
             ->get()
-            ->map(fn (MembershipApplication $application): array => [
+            ->map(fn(MembershipApplication $application): array => [
                 'id' => $application->id,
                 'name' => $application->name,
                 'email' => $application->email,
@@ -93,7 +93,7 @@ final class MembershipApplicationInsightsService
             ->pluck('total', 'application_type');
 
         $typeBreakdown = collect(MembershipApplication::APPLICATION_TYPES)
-            ->map(fn (string $type): array => [
+            ->map(fn(string $type): array => [
                 'type' => $type,
                 'label' => ucfirst($type),
                 'count' => (int) ($typeCounts[$type] ?? 0),
@@ -157,6 +157,8 @@ final class MembershipApplicationInsightsService
                 'active_members' => $activeMembers,
                 'members_joined_month' => $membersJoinedThisMonth,
                 'applications_url' => MembershipApplicationResource::getUrl('index'),
+                'applications_pending_url' => MembershipApplicationResource::listUrl(['status' => ['value' => 'pending']]),
+                'applications_approved_url' => MembershipApplicationResource::listUrl(['status' => ['value' => 'approved']]),
                 'members_url' => MemberResource::getUrl('index'),
             ],
         ];

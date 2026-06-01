@@ -6,6 +6,7 @@ use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Loans\Pages\ListLoans;
 use App\Filament\Tenant\Resources\Members\MemberResource;
+use App\Filament\Tenant\Resources\Members\Pages\ListMembers;
 use App\Models\Central\Tenant;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
@@ -25,7 +26,7 @@ beforeEach(function () {
     $tenant = Tenant::find('testing');
     $this->domain = 'testing.localhost';
 
-    if (!$tenant->domains()->where('domain', $this->domain)->exists()) {
+    if (! $tenant->domains()->where('domain', $this->domain)->exists()) {
         $tenant->domains()->create(['domain' => $this->domain]);
     }
 
@@ -50,15 +51,17 @@ test('loans list exposes delinquency maintenance actions', function () {
 test('overdue installments tab loads on loans list', function () {
     $path = parse_url(LoanResource::listTabUrl('overdue_installments'), PHP_URL_PATH) ?? '/admin/loans';
 
-    $this->get('http://' . $this->domain . $path)
+    $this->get('http://'.$this->domain.$path)
         ->assertSuccessful()
         ->assertSee(__('Overdue installments'), false);
 });
 
 test('contribution arrears tab loads without summary sql errors', function () {
-    $path = parse_url(ContributionResource::listTabUrl('arrears'), PHP_URL_PATH) ?? '/admin/contributions';
+    $url = ContributionResource::listTabUrl('arrears');
+    $path = parse_url($url, PHP_URL_PATH) ?? '/admin/contributions';
+    $query = parse_url($url, PHP_URL_QUERY);
 
-    $this->get('http://' . $this->domain . $path)
+    $this->get('http://'.$this->domain.$path.($query ? '?'.$query : ''))
         ->assertSuccessful()
         ->assertSee(__('Arrears'), false);
 });
@@ -68,7 +71,7 @@ test('contribution arrears tab renders member and period columns', function () {
 
     $accounting = app(AccountingService::class);
     $member = Member::create([
-        'member_number' => 'ARR-' . uniqid(),
+        'member_number' => 'ARR-'.uniqid(),
         'name' => 'Arrears Table Member',
         'monthly_contribution_amount' => 5000,
         'joined_at' => now()->subMonths(18),
@@ -81,9 +84,12 @@ test('contribution arrears tab renders member and period columns', function () {
     expect($rows)->not->toBeEmpty();
 
     $periodLabel = $rows->first()['period_label'];
-    $path = parse_url(ContributionResource::listTabUrl('arrears'), PHP_URL_PATH) ?? '/admin/contributions';
 
-    $this->get('http://' . $this->domain . $path . '?tab=arrears')
+    $url = ContributionResource::listTabUrl('arrears');
+    $path = parse_url($url, PHP_URL_PATH) ?? '/admin/contributions';
+    $query = parse_url($url, PHP_URL_QUERY);
+
+    $this->get('http://'.$this->domain.$path.($query ? '?'.$query : ''))
         ->assertSuccessful()
         ->assertSee('Arrears Table Member', false)
         ->assertSee($periodLabel, false);
@@ -94,9 +100,25 @@ test('contribution arrears tab renders member and period columns', function () {
 test('delinquent members tab loads on members list', function () {
     $path = parse_url(MemberResource::listTabUrl('delinquent'), PHP_URL_PATH) ?? '/admin/members';
 
-    $this->get('http://' . $this->domain . $path)
+    $this->get('http://'.$this->domain.$path)
         ->assertSuccessful()
         ->assertSee(__('Delinquent'), false);
 
     expect(LoanResource::listTabUrl('overdue_installments'))->toContain('tab=overdue_installments');
+});
+
+test('members list exposes delinquency row actions', function () {
+    $member = Member::create([
+        'member_number' => 'DLQ-'.uniqid(),
+        'name' => 'Delinquent Row Member',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => now()->subYear(),
+        'status' => 'delinquent',
+    ]);
+
+    Livewire::test(ListMembers::class)
+        ->assertTableActionVisible('syncMemberDelinquency', $member)
+        ->assertTableActionVisible('restoreMemberActive', $member)
+        ->callTableAction('syncMemberDelinquency', $member)
+        ->assertNotified();
 });

@@ -60,7 +60,7 @@ final class FundPostingInsightsService
         $avgReviewDays = $reviewedPostings->isEmpty()
             ? 0.0
             : round((float) $reviewedPostings->avg(
-                fn (FundPosting $posting): float => (float) Carbon::parse($posting->created_at)
+                fn(FundPosting $posting): float => (float) Carbon::parse($posting->created_at)
                     ->diffInDays(Carbon::parse($posting->reviewed_at))
             ), 1);
 
@@ -69,7 +69,7 @@ final class FundPostingInsightsService
             ->where('created_at', '<', $now->copy()->subDays(self::SLA_DAYS))
             ->count();
 
-        $depositsUrl = FundPostingResource::getUrl('index');
+        $depositsUrl = FundPostingResource::listUrl();
 
         $oldestPending = FundPosting::query()
             ->with('member:id,name')
@@ -77,14 +77,14 @@ final class FundPostingInsightsService
             ->orderBy('created_at')
             ->limit(6)
             ->get()
-            ->map(fn (FundPosting $posting): array => [
+            ->map(fn(FundPosting $posting): array => [
                 'id' => $posting->id,
                 'name' => $posting->member?->name ?? __('Unknown member'),
                 'amount' => (float) $posting->amount,
                 'amount_display' => InsightFormatter::money((float) $posting->amount),
                 'days_waiting' => (int) Carbon::parse($posting->created_at)->diffInDays($now),
                 'has_receipt' => filled($posting->attachment),
-                'queue_url' => $depositsUrl.'?tableFilters[member_id][value]='.$posting->member_id.'&tableFilters[status][value]=pending',
+                'queue_url' => FundPostingResource::indexUrlForMember((int) $posting->member_id, 'pending'),
             ])
             ->all();
 
@@ -108,7 +108,7 @@ final class FundPostingInsightsService
 
         $acceptedUncleared = FundPosting::query()
             ->where('status', 'accepted')
-            ->whereHas('bankTransaction', fn ($query) => $query->where('is_cleared', false))
+            ->whereHas('bankTransaction', fn($query) => $query->where('is_cleared', false))
             ->count();
 
         $acceptedWithBank = FundPosting::query()
@@ -159,7 +159,10 @@ final class FundPostingInsightsService
                 'accepted_deposits' => $accepted,
                 'uncleared_bank' => $acceptedUncleared,
                 'deposits_url' => $depositsUrl,
-                'bank_url' => BankAccountsResource::getUrl('index', ['tab' => 'imports']),
+                'deposits_pending_url' => FundPostingResource::listUrl(['status' => ['value' => 'pending']]),
+                'deposits_accepted_url' => FundPostingResource::listUrl(['status' => ['value' => 'accepted']]),
+                'deposits_rejected_url' => FundPostingResource::listUrl(['status' => ['value' => 'rejected']]),
+                'bank_url' => BankAccountsResource::listUrl('imports'),
             ],
         ];
     }

@@ -26,7 +26,7 @@ final class LoanDelinquencyTables
     {
         return LoanInstallment::query()
             ->where('status', 'overdue')
-            ->whereHas('loan', fn(Builder $q): Builder => $q->where('status', 'active'))
+            ->whereHas('loan', fn (Builder $q): Builder => $q->where('status', 'active'))
             ->with(['loan.member', 'loan.guarantor']);
     }
 
@@ -42,12 +42,12 @@ final class LoanDelinquencyTables
                     ->orWhere(function (Builder $inner) use ($grace): void {
                         $inner->whereNull('guarantor_liability_transferred_at')
                             ->where('late_repayment_count', '>=', $grace)
-                            ->whereHas('installments', fn(Builder $i): Builder => $i->where('status', 'overdue'));
+                            ->whereHas('installments', fn (Builder $i): Builder => $i->where('status', 'overdue'));
                     });
             })
             ->with(['member', 'guarantor'])
             ->withCount([
-                'installments as overdue_installments_count' => fn(Builder $q): Builder => $q->where('status', 'overdue'),
+                'installments as overdue_installments_count' => fn (Builder $q): Builder => $q->where('status', 'overdue'),
             ]);
     }
 
@@ -65,8 +65,8 @@ final class LoanDelinquencyTables
                     ->wrap(),
                 TextColumn::make('loan_id')
                     ->label(__('Loan'))
-                    ->formatStateUsing(fn(int $state): string => '#' . $state)
-                    ->url(fn(LoanInstallment $record): string => LoanResource::getUrl('view', ['record' => $record->loan_id])),
+                    ->formatStateUsing(fn (int $state): string => '#'.$state)
+                    ->url(fn (LoanInstallment $record): string => LoanResource::getUrl('view', ['record' => $record->loan_id])),
                 TextColumn::make('installment_number')
                     ->label(__('#'))
                     ->sortable(),
@@ -85,11 +85,27 @@ final class LoanDelinquencyTables
                     ->toggleable(),
                 TextColumn::make('loan.guarantor_liability_transferred_at')
                     ->label(__('Liability'))
-                    ->formatStateUsing(fn($state): string => $state ? __('Guarantor') : __('Borrower'))
+                    ->formatStateUsing(fn ($state): string => $state ? __('Guarantor') : __('Borrower'))
                     ->badge()
-                    ->color(fn($state): string => $state ? 'warning' : 'gray'),
+                    ->color(fn ($state): string => $state ? 'warning' : 'gray'),
             ])
             ->defaultSort('due_date')
+            ->filters([
+                SelectFilter::make('member_id')
+                    ->label(__('Member'))
+                    ->options(fn (): array => Member::query()->orderBy('name')->pluck('name', 'id')->all())
+                    ->searchable()
+                    ->query(function (Builder $query, array $data): Builder {
+                        if (blank($data['value'] ?? null)) {
+                            return $query;
+                        }
+
+                        return $query->whereHas(
+                            'loan',
+                            fn (Builder $loan): Builder => $loan->where('member_id', (int) $data['value']),
+                        );
+                    }),
+            ])
             ->recordActions(TableRecordActionGroups::wrap([
                 self::viewLoanInstallmentAction(),
             ]))
@@ -110,8 +126,8 @@ final class LoanDelinquencyTables
         $restoreAction = LoanFilamentActions::restoreBorrowerLiability();
 
         if ($livewire !== null) {
-            $transferAction = $transferAction->after(fn(): mixed => LoanResource::dispatchInsightsRefresh($livewire));
-            $restoreAction = $restoreAction->after(fn(): mixed => LoanResource::dispatchInsightsRefresh($livewire));
+            $transferAction = $transferAction->after(fn (): mixed => LoanResource::dispatchInsightsRefresh($livewire));
+            $restoreAction = $restoreAction->after(fn (): mixed => LoanResource::dispatchInsightsRefresh($livewire));
         }
 
         return TableGrouping::apply($table
@@ -183,7 +199,7 @@ final class LoanDelinquencyTables
 
         return $table
             ->query(null)
-            ->records(function (?string $search, ?string $sortColumn, ?string $sortDirection, ?array $filters, ) use ($delinquency): Collection {
+            ->records(function (?string $search, ?string $sortColumn, ?string $sortDirection, ?array $filters) use ($delinquency): Collection {
                 $filters ??= [];
 
                 $memberId = isset($filters['member_id']['value'])
@@ -234,8 +250,8 @@ final class LoanDelinquencyTables
                     ->label(__('Contribution'))
                     ->badge()
                     ->sortable(false)
-                    ->formatStateUsing(fn(?string $state): string => $delinquency->contributionStatusLabel((string) $state))
-                    ->color(fn(?string $state): string => $delinquency->contributionStatusColor((string) $state)),
+                    ->formatStateUsing(fn (?string $state): string => $delinquency->contributionStatusLabel((string) $state))
+                    ->color(fn (?string $state): string => $delinquency->contributionStatusColor((string) $state)),
                 TextColumn::make('monthly_contribution_amount')
                     ->label(__('Monthly'))
                     ->sortable(false)
@@ -250,15 +266,18 @@ final class LoanDelinquencyTables
                     ->label(__('Member status'))
                     ->badge()
                     ->sortable(false)
-                    ->formatStateUsing(fn(?string $state): string => Member::statusOptions()[(string) $state] ?? (string) $state)
-                    ->color(fn(?string $state): string => Member::statusBadgeColor((string) $state))
+                    ->formatStateUsing(fn (?string $state): string => Member::statusOptions()[(string) $state] ?? (string) $state)
+                    ->color(fn (?string $state): string => Member::statusBadgeColor((string) $state))
                     ->toggleable(false),
             ])
             ->defaultSort('year', 'desc')
+            ->headerActions([
+                ContributionListTableHeaderActions::delinquencyToolsGroup(),
+            ])
             ->filters([
                 SelectFilter::make('member_id')
                     ->label(__('Member'))
-                    ->options(fn(): array => Member::query()
+                    ->options(fn (): array => Member::query()
                         ->whereIn('id', $delinquency->contributionArrearsMemberIds() ?: [0])
                         ->orderBy('name')
                         ->pluck('name', 'id')
@@ -282,7 +301,7 @@ final class LoanDelinquencyTables
         return Action::make('view_loan')
             ->label(__('View loan'))
             ->icon(Heroicon::OutlinedEye)
-            ->url(fn(LoanInstallment $record): string => LoanResource::getUrl('view', ['record' => $record->loan_id]));
+            ->url(fn (LoanInstallment $record): string => LoanResource::getUrl('view', ['record' => $record->loan_id]));
     }
 
     public static function viewLoanAction(): Action
@@ -290,7 +309,7 @@ final class LoanDelinquencyTables
         return Action::make('view_loan')
             ->label(__('View loan'))
             ->icon(Heroicon::OutlinedEye)
-            ->url(fn(Loan $record): string => LoanResource::getUrl('view', ['record' => $record]));
+            ->url(fn (Loan $record): string => LoanResource::getUrl('view', ['record' => $record]));
     }
 
     public static function viewMemberFromArrearsAction(): Action

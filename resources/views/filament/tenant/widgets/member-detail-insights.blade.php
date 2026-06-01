@@ -182,9 +182,9 @@
                             </p>
                         </div>
                     </div>
-                    <a href="{{ $d['arrears']['delinquency_url'] }}"
+                    <a href="{{ $d['arrears']['cta_url'] }}"
                         class="shrink-0 rounded-lg bg-rose-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-rose-500">
-                        {{ __('Delinquency') }}
+                        {{ $d['arrears']['cta_label'] }}
                     </a>
                 </div>
             </div>

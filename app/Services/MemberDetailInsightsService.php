@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Filament\Tenant\Pages\ContributionCyclePage;
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
@@ -160,13 +159,13 @@ final class MemberDetailInsightsService
                 'posted' => $postedThisPeriod,
                 'exempt' => $exempt,
                 'can_apply' => $canApply,
-                'cycle_url' => ContributionCyclePage::getUrl(),
+                'cycle_url' => ContributionResource::listTabUrl('collect'),
             ],
             'arrears' => [
                 'visible' => $arrears['has_arrears'] || $arrears['is_delinquent'],
                 'overdue_installments' => $arrears['overdue_installment_count'],
                 'unpaid_periods' => $arrears['unpaid_contribution_periods'],
-                'delinquency_url' => ContributionResource::listTabUrl('arrears') . '?tableFilters[member_id][value]=' . $member->id,
+                ...$this->arrearsCta($member, $arrears),
             ],
             'loan' => $activeLoan ? [
                 'id' => $activeLoan->id,
@@ -223,17 +222,17 @@ final class MemberDetailInsightsService
             'quick_links' => [
                 [
                     'label' => __('Contributions'),
-                    'url' => ContributionResource::getUrl('index') . '?tableFilters[member_id][value]=' . $member->id,
+                    'url' => ContributionResource::ledgerUrlForMember($member),
                     'icon' => 'heroicon-o-banknotes',
                 ],
                 [
                     'label' => __('Postings'),
-                    'url' => FundPostingResource::getUrl('index') . '?tableFilters[member_id][value]=' . $member->id,
+                    'url' => FundPostingResource::indexUrlForMember($member),
                     'icon' => 'heroicon-o-inbox-arrow-down',
                 ],
                 [
                     'label' => __('Loans'),
-                    'url' => LoanResource::getUrl('index') . '?tableFilters[member_id][value]=' . $member->id,
+                    'url' => LoanResource::portfolioUrlForMember($member),
                     'icon' => 'heroicon-o-currency-dollar',
                 ],
             ],
@@ -245,6 +244,32 @@ final class MemberDetailInsightsService
      * @param  array{key: string, label: string, tone: string}  $cycleStatus
      * @return array{tone: string, title: string, subtitle: string, cta_label: ?string, cta_url: ?string}
      */
+    /**
+     * @param  array{has_arrears: bool, is_delinquent: bool, overdue_installment_count: int, unpaid_contribution_periods: list<string>}  $arrears
+     * @return array{cta_label: string, cta_url: string}
+     */
+    private function arrearsCta(Member $member, array $arrears): array
+    {
+        if (count($arrears['unpaid_contribution_periods']) > 0) {
+            return [
+                'cta_label' => __('Contribution arrears'),
+                'cta_url' => ContributionResource::arrearsUrlForMember($member),
+            ];
+        }
+
+        if ($arrears['overdue_installment_count'] > 0) {
+            return [
+                'cta_label' => __('Overdue installments'),
+                'cta_url' => LoanResource::overdueInstallmentsUrlForMember($member),
+            ];
+        }
+
+        return [
+            'cta_label' => __('Delinquent members'),
+            'cta_url' => MemberResource::listTabUrl('delinquent'),
+        ];
+    }
+
     private function buildHero(
         Member $member,
         array $arrears,
@@ -258,7 +283,7 @@ final class MemberDetailInsightsService
                 'title' => __('Arrears need attention'),
                 'subtitle' => trans_choice(':count overdue installment|:count overdue installments', $installmentsOverdue, ['count' => $installmentsOverdue]),
                 'cta_label' => __('Overdue installments'),
-                'cta_url' => LoanResource::listTabUrl('overdue_installments'),
+                'cta_url' => LoanResource::overdueInstallmentsUrlForMember($member),
             ];
         }
 
@@ -278,7 +303,7 @@ final class MemberDetailInsightsService
                 'title' => __('Outstanding obligations'),
                 'subtitle' => __('Review unpaid contributions or installments'),
                 'cta_label' => __('Contribution arrears'),
-                'cta_url' => ContributionResource::listTabUrl('arrears') . '?tableFilters[member_id][value]=' . $member->id,
+                'cta_url' => ContributionResource::arrearsUrlForMember($member),
             ];
         }
 
@@ -288,7 +313,7 @@ final class MemberDetailInsightsService
                 'title' => __('Ready for :period', ['period' => $cycleStatus['period'] ?? '']),
                 'subtitle' => __('Cash balance covers the open-cycle contribution'),
                 'cta_label' => __('Cycle'),
-                'cta_url' => ContributionCyclePage::getUrl(),
+                'cta_url' => ContributionResource::listTabUrl('collect'),
             ];
         }
 
@@ -652,7 +677,7 @@ final class MemberDetailInsightsService
                     : null,
                 'accent' => 'emerald',
                 'icon' => 'heroicon-o-banknotes',
-                'url' => ContributionResource::getUrl('index') . '?tableFilters[member_id][value]=' . $member->id,
+                'url' => ContributionResource::ledgerUrlForMember($member),
             ],
             [
                 'key' => 'loans',
@@ -667,7 +692,7 @@ final class MemberDetailInsightsService
                 'icon' => 'heroicon-o-currency-dollar',
                 'url' => $activeLoan
                     ? LoanResource::getUrl('edit', ['record' => $activeLoan])
-                    : LoanResource::getUrl('index') . '?tableFilters[member_id][value]=' . $member->id,
+                    : LoanResource::portfolioUrlForMember($member),
             ],
             [
                 'key' => 'household',
