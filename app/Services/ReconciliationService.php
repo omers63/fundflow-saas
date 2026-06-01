@@ -851,15 +851,7 @@ class ReconciliationService
             Contribution::query()
                 ->where('late_fee_amount', '>', 0)
                 ->each(function (Contribution $contribution) use (&$count): void {
-                    $debitCount = Transaction::query()
-                        ->where('reference_type', $contribution->getMorphClass())
-                        ->where('reference_id', $contribution->id)
-                        ->where('type', 'debit')
-                        ->where(function ($query): void {
-                            $query->where('description', 'like', '%late fee%')
-                                ->orWhere('description', 'like', '%Late fee%');
-                        })
-                        ->count();
+                    $debitCount = $this->accounting->contributionLateFeeMemberCashDebitCount($contribution);
 
                     if ($debitCount > 1) {
                         $this->raiseOnce('REPLACEMENT_PRIOR_TIER_NOT_REVERSED', 'late_fee', 'medium', null, [

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Member\Resources\MyFundPostings\Schemas;
 
+use App\Support\Tenant\CurrentMember;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Textarea;
@@ -27,6 +28,7 @@ class MyFundPostingForm
                     ->prefix('$'),
                 TextInput::make('reference')
                     ->label('Reference / Receipt Number')
+                    ->default(fn (): ?string => CurrentMember::get()?->name)
                     ->maxLength(255)
                     ->placeholder(__('e.g. bank transfer reference')),
                 FileUpload::make('attachment')

@@ -11,6 +11,7 @@ use Filament\Actions\CreateAction;
 use Filament\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 
 class LoanTiersTable
@@ -34,6 +35,10 @@ class LoanTiersTable
                     ->money($currency),
                 IconColumn::make('is_active')
                     ->boolean(),
+            ])
+            ->filters([
+                TernaryFilter::make('is_active')
+                    ->label(__('Active')),
             ])
             ->defaultSort('tier_number')
             ->headerActions([

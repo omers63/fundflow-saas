@@ -5,6 +5,7 @@ namespace App\Filament\Member\Resources\MyContributions\Tables;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\LateSettledArrearsTableStyling;
 use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Setting;
 use Filament\Tables\Columns\TextColumn;
@@ -47,7 +48,10 @@ class MyContributionsTable
                     DateColumnRangeFilter::make('posted_at', 'Posted'),
                 ])
                 ->defaultSort('period', 'desc')
-                ->recordClasses(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionRecordClasses($record)),
+                ->recordClasses(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionRecordClasses($record))
+                ->toolbarActions(TableToolbar::bulkGroup([
+                    TableToolbar::refreshBulkAction(),
+                ])),
             TableGrouping::contributions(includeMember: false)
         );
     }

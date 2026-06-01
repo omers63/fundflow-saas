@@ -38,6 +38,7 @@ final class ContributionPolicySettings
             'late_fee_tier_1_day' => 3,
             'late_fee_tier_2_day' => 10,
             'late_fee_tier_3_day' => 20,
+            'late_fee_tier_4_day' => 30,
             'late_fee_model' => 'replacement',
             'recon_tolerance' => 0.01,
             'bank_match_date_range_days' => 3,
@@ -103,6 +104,11 @@ final class ContributionPolicySettings
     public static function lateFeeTier3Day(): int
     {
         return max(1, (int) self::collectionGet('late_fee_tier_3_day', 20));
+    }
+
+    public static function lateFeeTier4Day(): int
+    {
+        return max(1, (int) self::collectionGet('late_fee_tier_4_day', 30));
     }
 
     public static function lateFeeModel(): string

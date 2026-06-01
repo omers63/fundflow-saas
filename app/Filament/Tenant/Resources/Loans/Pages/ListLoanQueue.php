@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\Loans\Pages;
 
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\LoanFilamentActions;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -19,6 +20,8 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
@@ -157,12 +160,19 @@ class ListLoanQueue extends ListRecords
                 TextColumn::make('is_emergency')
                     ->label(__('Emergency'))
                     ->badge()
-                    ->formatStateUsing(fn (bool $state): string => $state ? __('Yes') : __('No'))
-                    ->color(fn (bool $state): string => $state ? 'danger' : 'gray'),
+                    ->formatStateUsing(fn(bool $state): string => $state ? __('Yes') : __('No'))
+                    ->color(fn(bool $state): string => $state ? 'danger' : 'gray'),
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => Loan::statusOptions()[$state] ?? $state)
-                    ->color(fn (string $state): string => Loan::statusColor($state)),
+                    ->formatStateUsing(fn(string $state): string => Loan::statusOptions()[$state] ?? $state)
+                    ->color(fn(string $state): string => Loan::statusColor($state)),
+            ])
+            ->filters([
+                SelectFilter::make('status')
+                    ->options(Loan::statusOptions()),
+                TernaryFilter::make('is_emergency')
+                    ->label(__('Emergency')),
+                DateColumnRangeFilter::make('applied_at', __('Applied')),
             ])
             ->recordActions(TableRecordActionGroups::wrap(LoanFilamentActions::workflowActions()))
             ->toolbarActions([

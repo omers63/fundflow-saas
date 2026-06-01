@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyGuaranteedLoans\Tables;
 
 use App\Filament\Member\Resources\MyGuaranteedLoans\MyGuaranteedLoanResource;
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -14,6 +15,7 @@ use App\Support\Loans\LoanUserFacingStage;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 
@@ -33,18 +35,23 @@ class MyGuaranteedLoansTable
                     ->money($currency),
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn (string $state, Loan $record): string => LoanUserFacingStage::memberListStatusLabel($record))
-                    ->color(fn (string $state): string => Loan::statusColor($state)),
+                    ->formatStateUsing(fn(string $state, Loan $record): string => LoanUserFacingStage::memberListStatusLabel($record))
+                    ->color(fn(string $state): string => Loan::statusColor($state)),
                 TextColumn::make('guarantor_liability_transferred_at')
                     ->label(__('Liability'))
                     ->badge()
-                    ->formatStateUsing(fn ($state): string => $state ? __('On guarantor') : __('On borrower'))
-                    ->color(fn ($state): string => $state ? 'warning' : 'gray'),
+                    ->formatStateUsing(fn($state): string => $state ? __('On guarantor') : __('On borrower'))
+                    ->color(fn($state): string => $state ? 'warning' : 'gray'),
                 TextColumn::make('applied_at')
                     ->dateTime()
                     ->sortable(),
             ])
-            ->recordUrl(fn (Model $record): string => MyGuaranteedLoanResource::getUrl('view', ['record' => $record]))
+            ->filters([
+                SelectFilter::make('status')
+                    ->options(Loan::statusOptions()),
+                DateColumnRangeFilter::make('applied_at', __('Applied')),
+            ])
+            ->recordUrl(fn(Model $record): string => MyGuaranteedLoanResource::getUrl('view', ['record' => $record]))
             ->recordActions(TableRecordActionGroups::wrap([
                 ViewAction::make(),
             ]))

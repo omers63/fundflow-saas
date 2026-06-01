@@ -4,6 +4,7 @@ namespace App\Filament\Member\Resources\MyCashOutRequests\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Setting;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -46,7 +47,10 @@ class MyCashOutRequestsTable
                     ]),
                 DateColumnRangeFilter::make('created_at', 'Submitted'),
             ])
-            ->defaultSort('created_at', 'desc'),
+            ->defaultSort('created_at', 'desc')
+            ->toolbarActions(TableToolbar::bulkGroup([
+                TableToolbar::refreshBulkAction(),
+            ])),
             TableGrouping::fundPostings(includeMember: false));
     }
 }

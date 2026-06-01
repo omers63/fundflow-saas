@@ -9,11 +9,13 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\ContributionCycleService;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 
 final class ContributionCycleTables
 {
@@ -89,7 +91,37 @@ final class ContributionCycleTables
                     }),
             ]))
             ->toolbarActions([
-                BulkActionGroup::make([]),
+                BulkActionGroup::make([
+                    BulkAction::make('applySelected')
+                        ->label(__('Apply now'))
+                        ->icon('heroicon-o-check')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->action(function (Collection $records) use ($month, $year, $cycles): void {
+                            $applied = 0;
+                            $skipped = 0;
+
+                            foreach ($records as $record) {
+                                $outcome = $cycles->applyContributionForMemberForPeriod($record, $month, $year);
+
+                                if ($outcome === 'applied') {
+                                    $applied++;
+                                } else {
+                                    $skipped++;
+                                }
+                            }
+
+                            Notification::make()
+                                ->title(__('Bulk apply complete'))
+                                ->body(__(':applied applied, :skipped skipped or could not apply.', [
+                                    'applied' => $applied,
+                                    'skipped' => $skipped,
+                                ]))
+                                ->color($applied > 0 ? 'success' : 'warning')
+                                ->send();
+                        }),
+                    TableToolbar::refreshBulkAction(),
+                ]),
             ]), TableGrouping::members());
     }
 
@@ -120,6 +152,11 @@ final class ContributionCycleTables
                 TextColumn::make('posted_at')->dateTime()->placeholder(__('—')),
             ])
             ->recordClasses(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionRecordClasses($record))
-            ->recordActions(TableRecordActionGroups::wrap([])), TableGrouping::contributions(includeMember: false));
+            ->recordActions(TableRecordActionGroups::wrap([]))
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    TableToolbar::refreshBulkAction(),
+                ]),
+            ]), TableGrouping::contributions(includeMember: false));
     }
 }

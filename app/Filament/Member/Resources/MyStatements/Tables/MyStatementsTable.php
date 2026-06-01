@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Member\Resources\MyStatements\Tables;
 
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -24,7 +25,7 @@ class MyStatementsTable
             ->columns([
                 TextColumn::make('period')
                     ->label(__('Period'))
-                    ->formatStateUsing(fn (MonthlyStatement $record): string => $record->period_formatted)
+                    ->formatStateUsing(fn(MonthlyStatement $record): string => $record->period_formatted)
                     ->sortable(),
                 TextColumn::make('total_contributions')
                     ->label(__('Contributions'))
@@ -38,12 +39,15 @@ class MyStatementsTable
                 TextColumn::make('generated_at')
                     ->dateTime(),
             ])
+            ->filters([
+                DateColumnRangeFilter::make('generated_at', __('Generated')),
+            ])
             ->defaultSort('period', 'desc')
             ->recordActions(TableRecordActionGroups::wrap([
                 Action::make('download')
                     ->label(__('Download PDF'))
                     ->icon('heroicon-o-arrow-down-tray')
-                    ->url(fn (MonthlyStatement $record): string => route('tenant.member.statement.pdf', $record))
+                    ->url(fn(MonthlyStatement $record): string => route('tenant.member.statement.pdf', $record))
                     ->openUrlInNewTab(),
             ]))
             ->toolbarActions([

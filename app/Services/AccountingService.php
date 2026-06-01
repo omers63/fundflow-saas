@@ -14,6 +14,7 @@ use App\Support\ContributionPolicySettings;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use DateTimeInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -1322,7 +1323,6 @@ class AccountingService
 
     /**
      * Debit member cash and mirror the same amount on master cash (pool outflow).
-     * Master cash leg omits member_id to avoid auto-collection side effects.
      */
     public function debitMemberCashWithMasterMirror(
         Account $memberCash,
@@ -1347,14 +1347,17 @@ class AccountingService
 
         self::$masterPoolMirrorDepth++;
 
+        $masterReference = $this->masterPoolMirrorReference($reference);
+
         try {
             $memberTransaction = $this->debit($memberCash, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
             $this->debit(
                 $masterCash,
                 $amount,
-                trim($description).' '.$mirrorSuffix,
-                null,
+                $this->masterPoolMirrorLegDescription($description, $resolvedMemberId, $mirrorSuffix),
+                $masterReference,
                 $transactedAt,
+                $resolvedMemberId,
             );
 
             return $memberTransaction;
@@ -1389,18 +1392,22 @@ class AccountingService
 
         self::$masterPoolMirrorDepth++;
 
+        $masterReference = $this->masterPoolMirrorReference($reference);
+
         try {
             $this->credit(
                 $masterCash,
                 $amount,
-                trim($description).' '.$mirrorSuffix,
-                null,
+                $this->masterPoolMirrorLegDescription($description, $resolvedMemberId, $mirrorSuffix),
+                $masterReference,
                 $transactedAt,
+                $resolvedMemberId,
             );
 
             return $this->credit($memberCash, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
         } finally {
             self::$masterPoolMirrorDepth--;
+            $this->dispatchMemberCashIncreasedAfterPoolMirror($memberCash, $resolvedMemberId);
         }
     }
 
@@ -1430,14 +1437,17 @@ class AccountingService
 
         self::$masterPoolMirrorDepth++;
 
+        $masterReference = $this->masterPoolMirrorReference($reference);
+
         try {
             $memberTransaction = $this->debit($memberFund, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
             $this->debit(
                 $masterFund,
                 $amount,
-                trim($description).' '.$mirrorSuffix,
-                $reference,
+                $this->masterPoolMirrorLegDescription($description, $resolvedMemberId, $mirrorSuffix),
+                $masterReference,
                 $transactedAt,
+                $resolvedMemberId,
             );
 
             return $memberTransaction;
@@ -1472,19 +1482,55 @@ class AccountingService
 
         self::$masterPoolMirrorDepth++;
 
+        $masterReference = $this->masterPoolMirrorReference($reference);
+
         try {
             $this->credit(
                 $masterFund,
                 $amount,
-                trim($description).' '.$mirrorSuffix,
-                $reference,
+                $this->masterPoolMirrorLegDescription($description, $resolvedMemberId, $mirrorSuffix),
+                $masterReference,
                 $transactedAt,
+                $resolvedMemberId,
             );
 
             return $this->credit($memberFund, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
         } finally {
             self::$masterPoolMirrorDepth--;
         }
+    }
+
+    /**
+     * Fund deposit accept tags only the member leg with {@see FundPosting}; the pool mirror must not
+     * share that reference or paired-journal validation sees two credits and no debits.
+     */
+    private function masterPoolMirrorReference(?Model $memberLegReference): ?Model
+    {
+        if ($memberLegReference instanceof FundPosting) {
+            return null;
+        }
+
+        return $memberLegReference;
+    }
+
+    private function masterPoolMirrorLegDescription(string $description, ?int $memberId, string $mirrorSuffix): string
+    {
+        $base = trim($description);
+
+        if ($memberId === null) {
+            return $base === '' ? trim($mirrorSuffix) : $base.' '.trim($mirrorSuffix);
+        }
+
+        $memberName = Member::query()->whereKey($memberId)->value('name');
+
+        if (filled($memberName)) {
+            return __(':description (:member)', [
+                'description' => $base,
+                'member' => $memberName,
+            ]);
+        }
+
+        return $base === '' ? trim($mirrorSuffix) : $base.' '.trim($mirrorSuffix);
     }
 
     private function assertMasterReserveAccount(Account $account): void
@@ -1517,8 +1563,37 @@ class AccountingService
         }
     }
 
+    /**
+     * Pool-mirror credits suppress per-leg dispatch while {@see $masterPoolMirrorDepth} > 0;
+     * run settlement once after the member cash leg is posted (deposit accept, etc.).
+     */
+    private function dispatchMemberCashIncreasedAfterPoolMirror(Account $memberCash, ?int $resolvedMemberId): void
+    {
+        if (self::$masterPoolMirrorDepth !== 0) {
+            return;
+        }
+
+        $memberId = $memberCash->member_id ?? $resolvedMemberId;
+
+        if ($memberId === null) {
+            return;
+        }
+
+        $member = Member::query()->find($memberId);
+
+        if ($member === null) {
+            return;
+        }
+
+        $this->triggerMemberCashCollection($member);
+    }
+
     private function dispatchMemberCashIncreasedIfApplicable(Account $account, ?int $resolvedMemberId = null): void
     {
+        if (self::masterPoolMirrorInProgress()) {
+            return;
+        }
+
         $memberId = $account->member_id ?? $resolvedMemberId;
 
         if ($memberId === null) {
@@ -1723,27 +1798,41 @@ class AccountingService
     }
 
     /**
-     * Cash already debited for this contribution's late fee (tier accrual or prior partial collection).
+     * Member-cash late fee debits for this contribution (excludes master cash mirror legs).
+     *
+     * @return Builder<Transaction>
      */
-    public function contributionLateFeeCollectedAmount(Contribution $contribution): float
+    public function contributionLateFeeMemberCashDebitQuery(Contribution $contribution): Builder
     {
         $contribution->loadMissing('member.cashAccount');
 
         $cashAccountId = $contribution->member?->cashAccount?->id;
-
-        if ($cashAccountId === null) {
-            return 0.0;
-        }
-
         $descriptionPrefix = __('Contribution late fee —');
 
-        return (float) Transaction::query()
-            ->where('account_id', $cashAccountId)
+        $query = Transaction::query()
             ->where('reference_type', Contribution::class)
             ->where('reference_id', $contribution->id)
             ->where('type', 'debit')
-            ->where('description', 'like', $descriptionPrefix.'%')
-            ->sum('amount');
+            ->where('description', 'like', $descriptionPrefix.'%');
+
+        if ($cashAccountId === null) {
+            return $query->whereRaw('0 = 1');
+        }
+
+        return $query->where('account_id', $cashAccountId);
+    }
+
+    /**
+     * Cash already debited for this contribution's late fee (tier accrual or prior partial collection).
+     */
+    public function contributionLateFeeCollectedAmount(Contribution $contribution): float
+    {
+        return (float) $this->contributionLateFeeMemberCashDebitQuery($contribution)->sum('amount');
+    }
+
+    public function contributionLateFeeMemberCashDebitCount(Contribution $contribution): int
+    {
+        return (int) $this->contributionLateFeeMemberCashDebitQuery($contribution)->count();
     }
 
     public function reverseContributionLateFee(Contribution $contribution, float $lateFee): void

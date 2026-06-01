@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\FundPostings;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
+use App\Filament\Support\DatabaseNotificationsRefresh;
 use App\Filament\Tenant\Resources\FundPostings\Pages\ListFundPostings;
 use App\Filament\Tenant\Resources\FundPostings\Tables\FundPostingsTable;
 use App\Filament\Tenant\Support\TenantNavigation;
@@ -65,7 +66,7 @@ class FundPostingResource extends Resource
             $parameters['filters'] = $filters;
         }
 
-        return static::getUrl('index', $parameters);
+        return static::getUrl('index', $parameters, panel: 'tenant');
     }
 
     /**
@@ -112,7 +113,9 @@ class FundPostingResource extends Resource
         );
 
         $livewire->js(
-            'setTimeout(() => window.Livewire.getByName(' . $targetName . ').forEach(w => w.$refresh()), 0)'
+            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
         );
+
+        DatabaseNotificationsRefresh::dispatch($livewire);
     }
 }

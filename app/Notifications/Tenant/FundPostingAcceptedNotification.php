@@ -4,22 +4,25 @@ declare(strict_types=1);
 
 namespace App\Notifications\Tenant;
 
+use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
 use App\Models\Tenant\FundPosting;
+use App\Notifications\Concerns\DeliversToMemberChannels;
+use App\Notifications\Tenant\Concerns\BuildsFundPostingDatabaseMessage;
+use App\Services\FundPostingSettlementSummary;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Facades\URL;
 
 class FundPostingAcceptedNotification extends Notification
 {
+    use BuildsFundPostingDatabaseMessage;
+    use DeliversToMemberChannels;
+
     public function __construct(
         public FundPosting $fundPosting,
+        public ?FundPostingSettlementSummary $settlement = null,
     ) {}
-
-    /**
-     * @return array<int, string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['database'];
-    }
 
     /**
      * @return array<string, mixed>
@@ -28,12 +31,36 @@ class FundPostingAcceptedNotification extends Notification
     {
         return [
             'title' => __('Deposit accepted'),
-            'body' => __('Your deposit of :amount on :date was accepted.', [
-                'amount' => $this->fundPosting->amount,
-                'date' => $this->fundPosting->posting_date->format('M d, Y'),
-            ]),
+            'body' => $this->fundPostingBody($this->fundPosting, $this->settlement),
             'fund_posting_id' => $this->fundPosting->id,
             'status' => 'accepted',
+            'settlement' => $this->settlement?->toArray(),
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toDatabase(object $notifiable): array
+    {
+        return FilamentNotification::make()
+            ->title(__('Deposit accepted'))
+            ->body($this->fundPostingDatabaseBody($this->fundPosting, $this->settlement, 'accepted'))
+            ->icon('heroicon-o-check-circle')
+            ->iconColor('success')
+            ->actions([
+                Action::make('view')
+                    ->label(__('View my deposits'))
+                    ->url($this->memberDepositsUrl())
+                    ->markAsRead(),
+            ])
+            ->getDatabaseMessage();
+    }
+
+    protected function memberDepositsUrl(): string
+    {
+        $url = MyFundPostingResource::getUrl('index', panel: 'member');
+
+        return str_starts_with($url, 'http') ? $url : URL::to($url);
     }
 }

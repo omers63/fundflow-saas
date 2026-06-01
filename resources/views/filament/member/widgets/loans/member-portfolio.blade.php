@@ -3,7 +3,7 @@
 @endphp
 
 <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-    @include('filament.tenant.widgets.partials.insights-hero', ['hero' => $d['hero']])
+    @include('filament.member.widgets.partials.insights-hero', ['hero' => $d['hero']])
     <div
         class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 md:col-span-2">
         <div class="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-4">

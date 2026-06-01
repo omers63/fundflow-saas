@@ -10,7 +10,7 @@ use Carbon\Carbon;
 
 /**
  * Tiered late fees after the collection window closes.
- * Days 1–N (reminder window): no fee. Tier thresholds default to 3 / 10 / 20 days overdue.
+ * Days 1–N (reminder window): no fee. Tier thresholds default to 3 / 10 / 20 / 30 days overdue.
  */
 class LateFeeService
 {
@@ -48,6 +48,7 @@ class LateFeeService
         }
 
         $tier = match (true) {
+            $daysPast >= ContributionPolicySettings::lateFeeTier4Day() => 4,
             $daysPast >= ContributionPolicySettings::lateFeeTier3Day() => 3,
             $daysPast >= ContributionPolicySettings::lateFeeTier2Day() => 2,
             $daysPast > ContributionPolicySettings::lateFeeReminderDays() => 1,
@@ -64,6 +65,7 @@ class LateFeeService
     private function feeForTier(int $tier, string $prefix): float
     {
         $dayKey = match ($tier) {
+            4 => 30,
             3 => 20,
             2 => 10,
             default => 3,

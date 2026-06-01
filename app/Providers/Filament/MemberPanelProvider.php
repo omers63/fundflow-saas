@@ -7,6 +7,7 @@ use App\Filament\Member\Pages\MemberDashboard;
 use App\Filament\Member\Pages\MyProfilePage;
 use App\Filament\Member\Support\MemberNavigation;
 use App\Filament\Member\Support\ReturnToParentPortalAction;
+use App\Filament\Support\DatabaseNotificationsRefresh;
 use App\Http\Middleware\AuthenticateMemberPanel;
 use App\Http\Middleware\SetFilamentPanelAuthGuard;
 use App\Livewire\Tenant\MemberLoginPage;
@@ -83,7 +84,8 @@ class MemberPanelProvider extends PanelProvider
             ])
             ->discoverWidgets(in: app_path('Filament/Member/Widgets'), for: 'App\\Filament\\Member\\Widgets')
             ->widgets([])
-            ->databaseNotifications()
+            ->databaseNotifications(isLazy: false)
+            ->databaseNotificationsPolling(DatabaseNotificationsRefresh::pollingInterval())
             ->renderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(view('partials.pwa-head')->render()))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.livewire-session-recovery')->render()))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))

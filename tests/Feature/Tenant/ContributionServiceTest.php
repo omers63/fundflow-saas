@@ -4,6 +4,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
 use App\Services\ContributionService;
 use Tests\Concerns\InitializesTenancy;
@@ -66,6 +67,35 @@ test('posting contribution debits member cash and credits member fund and master
     expect($member->fundAccount->fresh()->balance)->toBe('5000.00');
     expect(Account::masterFund()->balance)->toBe('5000.00');
     expect(Account::masterCash()->balance)->toBe('0.00');
+});
+
+test('posting contribution tags master cash mirror with member name and id', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-0042',
+        'name' => 'Ada Lovelace',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    Account::masterCash()->update(['balance' => 5000]);
+    $member->cashAccount->update(['balance' => 5000]);
+
+    $contribution = $this->service->recordContribution($member, '2026-05-01');
+    $contribution->update(['payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT]);
+    $this->service->postContribution($contribution);
+
+    $masterCashDebit = Transaction::query()
+        ->where('account_id', Account::masterCash()->id)
+        ->where('type', 'debit')
+        ->latest('id')
+        ->first();
+
+    expect($masterCashDebit)->not->toBeNull()
+        ->and($masterCashDebit->member_id)->toBe($member->id)
+        ->and($masterCashDebit->description)->toContain('Ada Lovelace')
+        ->and($masterCashDebit->description)->not->toContain('contribution mirror');
 });
 
 test('contribution cycle uses configurable start day', function () {

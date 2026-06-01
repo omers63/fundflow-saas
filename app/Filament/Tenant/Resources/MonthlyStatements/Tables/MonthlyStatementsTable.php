@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\MonthlyStatements\Tables;
 
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -53,12 +54,16 @@ class MonthlyStatementsTable
                     ->dateTime()
                     ->placeholder(__('—')),
             ])
+            ->filters([
+                DateColumnRangeFilter::make('generated_at', __('Generated')),
+                DateColumnRangeFilter::make('notified_at', __('Notified')),
+            ])
             ->defaultSort('period', 'desc')
             ->recordActions(TableRecordActionGroups::wrap([
                 Action::make('pdf')
                     ->label(__('Download PDF'))
                     ->icon('heroicon-o-arrow-down-tray')
-                    ->url(fn (MonthlyStatement $record): string => route('tenant.admin.statement.pdf', $record))
+                    ->url(fn(MonthlyStatement $record): string => route('tenant.admin.statement.pdf', $record))
                     ->openUrlInNewTab(),
                 Action::make('regenerate')
                     ->label(__('Regenerate'))

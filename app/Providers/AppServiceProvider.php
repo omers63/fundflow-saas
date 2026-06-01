@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Events\DatabaseNotificationsSentNow;
 use App\Filament\Support\Action as AppAction;
 use App\Filament\Support\TabLabelColors;
 use App\Filament\Support\TableSummaryFooter;
@@ -53,6 +54,9 @@ use Filament\Tables\Filters\BaseFilter;
 use Filament\Tables\Table;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
@@ -83,6 +87,18 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(CommandStarting::class, [RecordSystemJobRunListener::class, 'handleStarting']);
         Event::listen(CommandFinished::class, [RecordSystemJobRunListener::class, 'handleFinished']);
+
+        Event::listen(NotificationSent::class, function (NotificationSent $event): void {
+            if ($event->channel !== 'database' || ! Filament::hasBroadcasting() || ! config('filament.broadcasting.echo')) {
+                return;
+            }
+
+            $notifiable = $event->notifiable;
+
+            if ($notifiable instanceof Model || $notifiable instanceof Authenticatable) {
+                DatabaseNotificationsSentNow::dispatch($notifiable);
+            }
+        });
 
         Column::configureUsing(function (Column $column): Column {
             $column = $column

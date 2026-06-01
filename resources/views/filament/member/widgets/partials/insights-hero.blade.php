@@ -1,4 +1,4 @@
-@props(['hero'])
+@props(['hero', 'stackCta' => true])
 
 @php
     $toneClasses = match ($hero['tone'] ?? 'success') {
@@ -28,16 +28,29 @@
 @endphp
 
 <div @class(['ff-app-insights-hero overflow-hidden rounded-xl border px-3 py-2.5 shadow-sm', $toneClasses])>
-    <div class="flex items-center justify-between gap-2">
-        <div class="flex min-w-0 items-center gap-2">
-            <x-dynamic-component :component="$icon" @class(['h-4 w-4 shrink-0', $iconColor]) />
+    <div @class([
+        'flex gap-2',
+        $stackCta ? 'flex-col items-stretch' : 'items-center justify-between',
+    ])>
+        <div class="flex min-w-0 items-start gap-2">
+            <x-dynamic-component :component="$icon" @class(['mt-0.5 h-4 w-4 shrink-0', $iconColor]) />
             <div class="min-w-0">
-                <p class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ $hero['title'] }}</p>
-                <p class="truncate text-xs text-gray-600 dark:text-gray-400">{{ $hero['subtitle'] }}</p>
+                <p @class([
+                    'text-sm font-semibold text-gray-900 dark:text-white',
+                    $stackCta ? '' : 'truncate',
+                ])>{{ $hero['title'] }}</p>
+                <p @class([
+                    'text-xs text-gray-600 dark:text-gray-400',
+                    $stackCta ? 'mt-0.5' : 'truncate',
+                ])>{{ $hero['subtitle'] }}</p>
             </div>
         </div>
         @if (!empty($hero['cta_url'] ?? null))
-            <a href="{{ $hero['cta_url'] }}" @class(['shrink-0 rounded-lg px-4 py-2 text-xs font-semibold text-white', $ctaClass])>
+            <a href="{{ $hero['cta_url'] }}" @class([
+                'rounded-lg px-4 py-2 text-center text-xs font-semibold text-white',
+                $ctaClass,
+                $stackCta ? 'self-start' : 'shrink-0',
+            ])>
                 {{ $hero['cta_label'] }}
             </a>
         @endif

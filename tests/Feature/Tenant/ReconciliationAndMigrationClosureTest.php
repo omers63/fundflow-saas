@@ -17,6 +17,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
@@ -28,6 +29,7 @@ use App\Services\ReconciliationCorrectionService;
 use App\Services\ReconciliationResolutionService;
 use App\Services\ReconciliationService;
 use App\Support\ContributionCollectionStatus;
+use App\Support\ContributionPolicySettings;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
 
@@ -496,6 +498,103 @@ test('late fee reconciliation accepts mirrored cash and master fees legs', funct
         ->exists())->toBeFalse();
 });
 
+test('replacement late fee reconciliation ignores master cash mirror debits', function () {
+    Setting::set(ContributionPolicySettings::GROUP_COLLECTION, 'late_fee_model', 'replacement');
+
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 100, 'is_master' => true]);
+    Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
+
+    $member = Member::create([
+        'member_number' => 'FEE-003',
+        'name' => 'Replacement Mirror OK',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $accounting = app(AccountingService::class);
+    $accounting->createMemberAccounts($member);
+    $member->cashAccount->update(['balance' => 100]);
+
+    $contribution = Contribution::create([
+        'member_id' => $member->id,
+        'period' => now()->startOfMonth(),
+        'amount' => 500,
+        'status' => 'posted',
+        'posted_at' => now(),
+        'late_fee_amount' => 25,
+        'late_fee_tier' => 1,
+    ]);
+
+    AccountingService::withoutMemberCashCollection(function () use ($accounting, $contribution): void {
+        $accounting->postContributionLateFee($contribution, 25);
+    });
+
+    ReconciliationException::query()
+        ->where('exception_code', 'REPLACEMENT_PRIOR_TIER_NOT_REVERSED')
+        ->delete();
+
+    $recon = app(ReconciliationService::class);
+    $method = new ReflectionMethod($recon, 'reconcileLateFees');
+    $method->setAccessible(true);
+    $method->invoke($recon);
+
+    expect($accounting->contributionLateFeeMemberCashDebitCount($contribution))->toBe(1)
+        ->and(ReconciliationException::query()
+            ->where('exception_code', 'REPLACEMENT_PRIOR_TIER_NOT_REVERSED')
+            ->open()
+            ->exists())->toBeFalse();
+});
+
+test('replacement late fee reconciliation flags duplicate member cash debits', function () {
+    Setting::set(ContributionPolicySettings::GROUP_COLLECTION, 'late_fee_model', 'replacement');
+
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 200, 'is_master' => true]);
+    Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
+
+    $member = Member::create([
+        'member_number' => 'FEE-004',
+        'name' => 'Replacement Duplicate',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $accounting = app(AccountingService::class);
+    $accounting->createMemberAccounts($member);
+    $member->cashAccount->update(['balance' => 200]);
+
+    $contribution = Contribution::create([
+        'member_id' => $member->id,
+        'period' => now()->startOfMonth(),
+        'amount' => 500,
+        'status' => 'posted',
+        'posted_at' => now(),
+        'late_fee_amount' => 50,
+        'late_fee_tier' => 2,
+    ]);
+
+    AccountingService::withoutMemberCashCollection(function () use ($accounting, $contribution): void {
+        $accounting->postContributionLateFee($contribution, 25);
+        $accounting->postContributionLateFee($contribution, 25);
+    });
+
+    ReconciliationException::query()
+        ->where('exception_code', 'REPLACEMENT_PRIOR_TIER_NOT_REVERSED')
+        ->delete();
+
+    $recon = app(ReconciliationService::class);
+    $method = new ReflectionMethod($recon, 'reconcileLateFees');
+    $method->setAccessible(true);
+    $method->invoke($recon);
+
+    expect($accounting->contributionLateFeeMemberCashDebitCount($contribution))->toBe(2)
+        ->and(ReconciliationException::query()
+            ->where('exception_code', 'REPLACEMENT_PRIOR_TIER_NOT_REVERSED')
+            ->open()
+            ->exists())->toBeTrue();
+});
+
 test('realtime pool drift is not raised while master cash mirror is in progress', function () {
     Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
     Account::masterCash()->update(['balance' => 500]);
@@ -566,6 +665,53 @@ test('member cash invariant stays balanced after mirrored contribution late fee'
 
     expect($result['balanced'])->toBeTrue()
         ->and($result['components']['late_fees_net'])->toBe(30.0);
+});
+
+test('late fees settled column sums member cash debits only not master cash mirror', function () {
+    Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
+    Account::masterCash()->update(['balance' => 500]);
+
+    $member = Member::create([
+        'member_number' => 'LATE-SUM',
+        'name' => 'Late Fee Sum',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $accounting = app(AccountingService::class);
+    $accounting->createMemberAccounts($member);
+    $member->cashAccount->update(['balance' => 500]);
+
+    $contribution = Contribution::create([
+        'member_id' => $member->id,
+        'period' => now()->startOfMonth(),
+        'amount' => 500,
+        'status' => 'posted',
+        'posted_at' => now(),
+        'late_fee_amount' => 100,
+    ]);
+
+    AccountingService::withoutMemberCashCollection(function () use ($accounting, $contribution): void {
+        $accounting->postContributionLateFee($contribution, 100);
+    });
+
+    expect($accounting->contributionLateFeeCollectedAmount($contribution))->toBe(100.0);
+
+    $loaded = Contribution::query()
+        ->withLateFeeCollectedAmountSum()
+        ->findOrFail($contribution->id);
+
+    expect((float) $loaded->late_fee_collected_amount)->toBe(100.0);
+
+    $mirrorLegCount = Transaction::query()
+        ->where('reference_type', Contribution::class)
+        ->where('reference_id', $contribution->id)
+        ->where('type', 'debit')
+        ->where('description', 'like', __('Contribution late fee —').'%')
+        ->count();
+
+    expect($mirrorLegCount)->toBe(2);
 });
 
 test('member fund invariant stays balanced after mirrored contribution post', function () {

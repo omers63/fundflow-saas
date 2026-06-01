@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\Loans\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -44,13 +45,16 @@ class RepaymentsRelationManager extends RelationManager
                     ->placeholder(__('—'))
                     ->wrap(),
             ])
+            ->filters([
+                DateColumnRangeFilter::make('paid_at', __('Paid at')),
+            ])
             ->defaultSort('paid_at', 'desc')
             ->headerActions([
                 Action::make('earlySettle')
                     ->label(__('Early settle'))
                     ->icon('heroicon-o-check-badge')
                     ->color('success')
-                    ->visible(fn (): bool => $this->getOwnerRecord()->status === 'active')
+                    ->visible(fn(): bool => $this->getOwnerRecord()->status === 'active')
                     ->requiresConfirmation()
                     ->action(function (LoanService $service): void {
                         try {

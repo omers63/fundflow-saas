@@ -2,6 +2,8 @@
 
 use App\Http\Middleware\InitializeTenancyByDomainEarly;
 use App\Http\Middleware\SetApplicationLocale;
+use Filament\Http\Middleware\Authenticate as FilamentAuthenticate;
+use Filament\Http\Middleware\AuthenticateSession as FilamentAuthenticateSession;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -38,4 +40,16 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
-    })->create();
+    })
+    ->withBroadcasting(
+        channels: __DIR__.'/../routes/channels.php',
+        attributes: [
+            'middleware' => [
+                'web',
+                InitializeTenancyByDomainEarly::class,
+                FilamentAuthenticateSession::class,
+                FilamentAuthenticate::class,
+            ],
+        ],
+    )
+    ->create();

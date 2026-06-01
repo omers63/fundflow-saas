@@ -3,14 +3,18 @@
 namespace App\Filament\Tenant\Resources\CashOutRequests;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
+use App\Filament\Support\DatabaseNotificationsRefresh;
 use App\Filament\Tenant\Resources\CashOutRequests\Pages\ListCashOutRequests;
 use App\Filament\Tenant\Resources\CashOutRequests\Tables\CashOutRequestsTable;
 use App\Filament\Tenant\Support\TenantNavigation;
+use App\Filament\Tenant\Widgets\CashOutRequestInsightsWidget;
 use App\Models\Tenant\CashOutRequest;
+use App\Models\Tenant\Member;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Livewire\Component;
 use UnitEnum;
 
 class CashOutRequestResource extends Resource
@@ -49,6 +53,63 @@ class CashOutRequestResource extends Resource
     public static function getNavigationBadgeColor(): ?string
     {
         return 'warning';
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $filters
+     */
+    public static function listUrl(array $filters = []): string
+    {
+        $parameters = [];
+
+        if ($filters !== []) {
+            $parameters['filters'] = $filters;
+        }
+
+        return static::getUrl('index', $parameters);
+    }
+
+    /**
+     * @return array<string, array<string, string>>
+     */
+    public static function memberFilter(int|Member $member): array
+    {
+        $memberId = $member instanceof Member ? $member->getKey() : $member;
+
+        return [
+            'member_id' => [
+                'value' => (string) $memberId,
+            ],
+        ];
+    }
+
+    public static function indexUrlForMember(int|Member $member, ?string $status = null): string
+    {
+        $filters = static::memberFilter($member);
+
+        if ($status !== null) {
+            $filters['status'] = ['value' => $status];
+        }
+
+        return static::listUrl($filters);
+    }
+
+    public static function dispatchInsightsRefresh(?Component $livewire): void
+    {
+        if ($livewire === null) {
+            return;
+        }
+
+        $targetName = json_encode(
+            app('livewire.factory')->resolveComponentName(CashOutRequestInsightsWidget::class),
+            JSON_THROW_ON_ERROR
+        );
+
+        $livewire->js(
+            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
+        );
+
+        DatabaseNotificationsRefresh::dispatch($livewire);
     }
 
     public static function getPages(): array

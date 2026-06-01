@@ -24,14 +24,14 @@
             'border-indigo-200/80 bg-gradient-to-r from-indigo-50 to-violet-50/80 dark:border-indigo-500/30 dark:from-indigo-950/40 dark:to-violet-950/20' => $latest !== null,
             'border-gray-200/70 bg-gradient-to-r from-gray-50 to-slate-50/60 dark:border-gray-600/25 dark:from-gray-950/30 dark:to-slate-950/20' => $latest === null,
         ])>
-            <div class="flex items-center justify-between gap-2">
+            <div class="flex flex-col items-stretch gap-2">
                 @if ($latest)
-                    <div class="flex min-w-0 items-center gap-2">
-                        <x-heroicon-o-document-chart-bar class="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                    <div class="flex min-w-0 items-start gap-2">
+                        <x-heroicon-o-document-chart-bar class="mt-0.5 h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
                         <div class="min-w-0">
-                            <p class="truncate text-xs font-semibold text-indigo-900 dark:text-indigo-100">
+                            <p class="text-xs font-semibold text-indigo-900 dark:text-indigo-100">
                                 {{ __('Latest statement: :period', ['period' => $latest['period_label']]) }}</p>
-                            <p class="truncate text-[11px] text-gray-600 dark:text-gray-400">
+                            <p class="mt-0.5 text-[11px] text-gray-600 dark:text-gray-400">
                                 {{ $latest['closing_display'] }}
                                 @if ($latest['notified'])
                                     · <span class="text-emerald-600">{{ __('Delivered') }}</span>
@@ -43,13 +43,13 @@
                     </div>
                     @if ($latest['pdf_url'])
                         <a href="{{ $latest['pdf_url'] }}"
-                            class="shrink-0 rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-indigo-500">
+                            class="self-start rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500">
                             {{ __('PDF') }}
                         </a>
                     @endif
                 @else
-                    <div class="flex items-center gap-2">
-                        <x-heroicon-o-information-circle class="h-4 w-4 text-gray-500" />
+                    <div class="flex items-start gap-2">
+                        <x-heroicon-o-information-circle class="mt-0.5 h-4 w-4 shrink-0 text-gray-500" />
                         <p class="text-xs font-semibold text-gray-900 dark:text-white">{{ __('No statements yet') }}</p>
                     </div>
                 @endif

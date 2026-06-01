@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Concerns\RegistersFundPublicShell;
+use App\Filament\Support\DatabaseNotificationsRefresh;
 use App\Filament\Tenant\Pages\Dashboard;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Livewire\Tenant\TenantAdminLoginPage;
@@ -58,7 +59,8 @@ class TenantPanelProvider extends PanelProvider
             ])
             ->discoverWidgets(in: app_path('Filament/Tenant/Widgets'), for: 'App\\Filament\\Tenant\\Widgets')
             ->widgets([])
-            ->databaseNotifications()
+            ->databaseNotifications(isLazy: false)
+            ->databaseNotificationsPolling(DatabaseNotificationsRefresh::pollingInterval())
             ->renderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(view('partials.pwa-head')->render()))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.livewire-session-recovery')->render()))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))

@@ -24,6 +24,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -85,9 +86,9 @@ class MessagesInboxPage extends Page implements HasTable
                 ->icon('heroicon-o-megaphone')
                 ->color('primary')
                 ->modalHeading(__('Send message to all members'))
-                ->modalDescription(fn (): string => __('This sends the same message (and attachments) to every member who has a login account. Currently: ')
-                    .Member::query()->whereNotNull('user_id')->count()
-                    .' '.__('member(s).'))
+                ->modalDescription(fn(): string => __('This sends the same message (and attachments) to every member who has a login account. Currently: ')
+                    . Member::query()->whereNotNull('user_id')->count()
+                    . ' ' . __('member(s).'))
                 ->modalWidth('2xl')
                 ->schema($this->bulkMessageFormSchema())
                 ->action(function (array $data): void {
@@ -114,14 +115,14 @@ class MessagesInboxPage extends Page implements HasTable
                     ->selectSub(
                         DirectMessage::query()
                             ->whereColumn('to_user_id', 'members.user_id')
-                            ->whereHas('sender', fn (Builder $q): Builder => $q->where('is_admin', true))
+                            ->whereHas('sender', fn(Builder $q): Builder => $q->where('is_admin', true))
                             ->selectRaw('count(*)'),
                         'messages_received_count'
                     )
                     ->selectSub(
                         DirectMessage::query()
                             ->whereColumn('from_user_id', 'members.user_id')
-                            ->whereHas('recipient', fn (Builder $q): Builder => $q->where('is_admin', true))
+                            ->whereHas('recipient', fn(Builder $q): Builder => $q->where('is_admin', true))
                             ->selectRaw('count(*)'),
                         'messages_sent_count'
                     )
@@ -138,10 +139,10 @@ class MessagesInboxPage extends Page implements HasTable
                             ->where(function (Builder $query): void {
                                 $query->where(function (Builder $q): void {
                                     $q->whereColumn('to_user_id', 'members.user_id')
-                                        ->whereHas('sender', fn (Builder $sq): Builder => $sq->where('is_admin', true));
+                                        ->whereHas('sender', fn(Builder $sq): Builder => $sq->where('is_admin', true));
                                 })->orWhere(function (Builder $q): void {
                                     $q->whereColumn('from_user_id', 'members.user_id')
-                                        ->whereHas('recipient', fn (Builder $rq): Builder => $rq->where('is_admin', true));
+                                        ->whereHas('recipient', fn(Builder $rq): Builder => $rq->where('is_admin', true));
                                 });
                             })
                             ->selectRaw('MAX(created_at)'),
@@ -149,6 +150,15 @@ class MessagesInboxPage extends Page implements HasTable
                     )
             )
             ->defaultSort('last_message_at', 'desc')
+            ->filters([
+                TernaryFilter::make('has_unread')
+                    ->label(__('Has unread'))
+                    ->queries(
+                        true: fn(Builder $query): Builder => $query->having('unread_messages_count', '>', 0),
+                        false: fn(Builder $query): Builder => $query,
+                        blank: fn(Builder $query): Builder => $query,
+                    ),
+            ])
             ->columns([
                 TextColumn::make('user.name')
                     ->label(__('Member'))
@@ -184,12 +194,12 @@ class MessagesInboxPage extends Page implements HasTable
                     ->label(__('Communicate'))
                     ->icon('heroicon-o-chat-bubble-left-right')
                     ->color('primary')
-                    ->disabled(fn (Member $record): bool => blank($record->user_id))
-                    ->modalHeading(fn (Member $record): string => __('Conversation with :name', ['name' => $record->user?->name ?? __('Member')]))
+                    ->disabled(fn(Member $record): bool => blank($record->user_id))
+                    ->modalHeading(fn(Member $record): string => __('Conversation with :name', ['name' => $record->user?->name ?? __('Member')]))
                     ->modalDescription(__('Single communication thread with full history.'))
                     ->modalWidth('5xl')
                     ->modalSubmitActionLabel(__('Send message'))
-                    ->modalContent(fn (Member $record) => view(
+                    ->modalContent(fn(Member $record) => view(
                         'filament.tenant.pages.partials.member-conversation-modal',
                         [
                             'messages' => $this->conversationMessages($record),
@@ -214,7 +224,7 @@ class MessagesInboxPage extends Page implements HasTable
                     ->action(function (Action $action, Member $record, array $data): void {
                         $admin = auth('tenant')->user();
 
-                        if (! $admin instanceof User) {
+                        if (!$admin instanceof User) {
                             return;
                         }
 
@@ -235,7 +245,7 @@ class MessagesInboxPage extends Page implements HasTable
                     ->icon('heroicon-o-trash')
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->modalHeading(fn (Member $record): string => __('Delete conversation with :name?', ['name' => $record->user?->name ?? __('member')]))
+                    ->modalHeading(fn(Member $record): string => __('Delete conversation with :name?', ['name' => $record->user?->name ?? __('member')]))
                     ->modalDescription(__('This will clear all previous communications with this member from the inbox.'))
                     ->action(function (Member $record): void {
                         $this->deleteConversation($record);
@@ -252,7 +262,7 @@ class MessagesInboxPage extends Page implements HasTable
                     ->schema($this->bulkMessageFormSchema())
                     ->action(function (array $data, EloquentCollection $records): void {
                         $members = $records->filter(
-                            fn ($record): bool => $record instanceof Member && filled($record->user_id)
+                            fn($record): bool => $record instanceof Member && filled($record->user_id)
                         );
 
                         $this->sendMessageToMembersCollection($members, $data);
@@ -266,7 +276,7 @@ class MessagesInboxPage extends Page implements HasTable
                     ->modalHeading(__('Clear selected conversations?'))
                     ->modalDescription(__('This will delete all previous communications for the selected member rows.'))
                     ->action(function (EloquentCollection $records): void {
-                        $members = $records->filter(fn ($record): bool => $record instanceof Member);
+                        $members = $records->filter(fn($record): bool => $record instanceof Member);
 
                         $membersCleared = 0;
                         $messagesDeleted = 0;
@@ -291,7 +301,7 @@ class MessagesInboxPage extends Page implements HasTable
 
                         Notification::make()
                             ->title(__('Conversations cleared'))
-                            ->body(__('Members').": {$membersCleared}. ".__('Messages deleted').": {$messagesDeleted}.")
+                            ->body(__('Members') . ": {$membersCleared}. " . __('Messages deleted') . ": {$messagesDeleted}.")
                             ->success()
                             ->send();
                     })
@@ -331,7 +341,7 @@ class MessagesInboxPage extends Page implements HasTable
     {
         $admin = auth('tenant')->user();
 
-        if (! $admin instanceof User) {
+        if (!$admin instanceof User) {
             return;
         }
 
@@ -353,7 +363,7 @@ class MessagesInboxPage extends Page implements HasTable
         $skipped = 0;
 
         foreach ($members as $member) {
-            if (! $member instanceof Member || blank($member->user_id)) {
+            if (!$member instanceof Member || blank($member->user_id)) {
                 $skipped++;
 
                 continue;
@@ -378,7 +388,7 @@ class MessagesInboxPage extends Page implements HasTable
 
         Notification::make()
             ->title(__('Messages sent'))
-            ->body(__('Delivered to')." {$sent} ".__('member(s)').($skipped > 0 ? '. '.__('Skipped').": {$skipped}." : '.'))
+            ->body(__('Delivered to') . " {$sent} " . __('member(s)') . ($skipped > 0 ? '. ' . __('Skipped') . ": {$skipped}." : '.'))
             ->success()
             ->send();
     }

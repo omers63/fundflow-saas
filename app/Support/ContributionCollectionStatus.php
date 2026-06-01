@@ -23,6 +23,8 @@ final class ContributionCollectionStatus
 
     public const LATE_T3 = 'late_t3';
 
+    public const LATE_T4 = 'late_t4';
+
     public const SETTLING = 'settling';
 
     /** @return list<string> */
@@ -35,6 +37,7 @@ final class ContributionCollectionStatus
             self::LATE_T1,
             self::LATE_T2,
             self::LATE_T3,
+            self::LATE_T4,
             self::SETTLING,
         ];
     }
@@ -42,13 +45,17 @@ final class ContributionCollectionStatus
     /** @return list<string> */
     public static function lateStates(): array
     {
-        return [self::LATE_T1, self::LATE_T2, self::LATE_T3];
+        return [self::LATE_T1, self::LATE_T2, self::LATE_T3, self::LATE_T4];
     }
 
     public static function tierForDays(int $daysOverdue): ?int
     {
         if ($daysOverdue <= ContributionPolicySettings::lateFeeReminderDays()) {
             return null;
+        }
+
+        if ($daysOverdue >= ContributionPolicySettings::lateFeeTier4Day()) {
+            return 4;
         }
 
         if ($daysOverdue >= ContributionPolicySettings::lateFeeTier3Day()) {
@@ -72,6 +79,7 @@ final class ContributionCollectionStatus
             1 => self::LATE_T1,
             2 => self::LATE_T2,
             3 => self::LATE_T3,
+            4 => self::LATE_T4,
             default => self::OVERDUE,
         };
     }

@@ -30,18 +30,18 @@
         @if ($d['arrears']['visible'] ?? false)
             <div
                 class="overflow-hidden rounded-xl border border-rose-300/80 bg-gradient-to-r from-rose-50 via-amber-50/60 to-white px-3 py-2 shadow-sm ring-1 ring-rose-200/70 dark:border-rose-500/35 dark:from-rose-950/50 dark:via-amber-950/30 dark:to-gray-900">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <div class="flex items-center gap-2">
-                        <x-heroicon-o-exclamation-triangle class="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                <div class="flex flex-col items-stretch gap-2">
+                    <div class="flex items-start gap-2">
+                        <x-heroicon-o-exclamation-triangle class="mt-0.5 h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
                         <div>
                             <p class="text-xs font-semibold text-rose-950 dark:text-rose-50">{{ __('Catch up on missed periods') }}</p>
-                            <p class="text-[10px] text-rose-900/80 dark:text-rose-100/90">
+                            <p class="mt-0.5 text-[10px] text-rose-900/80 dark:text-rose-100/90">
                                 {{ implode(' · ', $d['arrears']['periods']) }}
                             </p>
                         </div>
                     </div>
                     <a href="{{ $d['filters']['posted'] }}"
-                        class="rounded-lg bg-rose-600 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-rose-500">
+                        class="self-start rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-500">
                         {{ __('View history') }}
                     </a>
                 </div>

@@ -11,12 +11,12 @@
                 'border-amber-200/80 bg-gradient-to-r from-amber-50 to-emerald-50/80 dark:border-amber-500/30 dark:from-amber-950/40 dark:to-emerald-950/20' => $d['pending'] > 0,
                 'border-emerald-200/70 bg-gradient-to-r from-emerald-50 to-teal-50/60 dark:border-emerald-500/25 dark:from-emerald-950/30 dark:to-teal-950/20' => $d['pending'] === 0,
             ])>
-                <div class="flex items-center justify-between gap-2">
+                <div class="flex flex-col items-stretch gap-2">
                     <div class="min-w-0">
                         <p class="text-xs font-semibold text-gray-900 dark:text-white">
                             {{ $d['pending'] > 0 ? __('Deposits awaiting review') : __('All deposits reviewed') }}
                         </p>
-                        <p class="text-[11px] text-gray-500">
+                        <p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
                             {{ trans_choice(':count pending|:count pending', $d['pending'], ['count' => $d['pending']]) }}
                             @if ($d['pending'] > 0)
                                 · {{ $d['pending_amount'] }}
@@ -24,7 +24,7 @@
                         </p>
                     </div>
                     <a href="{{ $d['create_url'] }}"
-                        class="shrink-0 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500">
+                        class="self-start rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500">
                         {{ __('New deposit') }}
                     </a>
                 </div>

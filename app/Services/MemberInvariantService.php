@@ -247,10 +247,16 @@ class MemberInvariantService
     {
         $fromRequests = $this->sumByReference($accountId, $memberId, CashOutRequest::class, 'debit');
 
+        $cashOutRequestMorph = (new CashOutRequest)->getMorphClass();
+
         $legacy = (float) Transaction::query()
             ->where('account_id', $accountId)
             ->where('member_id', $memberId)
             ->where('type', 'debit')
+            ->where(function ($query) use ($cashOutRequestMorph): void {
+                $query->whereNull('reference_type')
+                    ->orWhere('reference_type', '!=', $cashOutRequestMorph);
+            })
             ->where(function ($query): void {
                 $query->where('description', 'like', '%refund%')
                     ->orWhere('description', 'like', '%Refund%')

@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\Loans\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -49,6 +50,9 @@ class DisbursementsRelationManager extends RelationManager
                     ->placeholder(__('—'))
                     ->wrap()
                     ->limit(60),
+            ])
+            ->filters([
+                DateColumnRangeFilter::make('disbursed_at', __('Disbursed at')),
             ])
             ->defaultSort('disbursed_at', 'desc')
             ->recordActions(TableRecordActionGroups::wrap([]))

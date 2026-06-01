@@ -8,12 +8,14 @@ use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\AccountTransactionAmountColumn;
 use App\Filament\Support\AccountTransactionManualAdjustmentHeaderActions;
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\UiLabelIcons;
 use App\Filament\Support\ViewActions\ViewAccountTransactionAction;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -31,7 +33,7 @@ class MemberTransactionsTabsRelationManager extends RelationManager
 
     public function setLedgerTab(string $tab): void
     {
-        if (! in_array($tab, ['cash', 'fund', 'loan'], true)) {
+        if (!in_array($tab, ['cash', 'fund', 'loan'], true)) {
             return;
         }
 
@@ -48,7 +50,7 @@ class MemberTransactionsTabsRelationManager extends RelationManager
             ->modifyQueryUsing(function (Builder $query) use ($member): Builder {
                 return $query
                     ->where('member_id', $member->id)
-                    ->whereHas('account', fn (Builder $q): Builder => $q->where('type', $this->ledgerTab))
+                    ->whereHas('account', fn(Builder $q): Builder => $q->where('type', $this->ledgerTab))
                     ->with('account')
                     ->latest('transacted_at');
             })
@@ -63,15 +65,23 @@ class MemberTransactionsTabsRelationManager extends RelationManager
                 TextColumn::make('description')->wrap(),
                 TextColumn::make('balance_after')
                     ->label(__('Balance after'))
-                    ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
+                    ->money(fn(): string => Setting::get('general', 'currency', 'USD'))
                     ->sortable(),
+            ])
+            ->filters([
+                SelectFilter::make('type')
+                    ->options([
+                        'credit' => __('Credit'),
+                        'debit' => __('Debit'),
+                    ]),
+                DateColumnRangeFilter::make('transacted_at', __('Date')),
             ]);
 
         if ($this->ledgerTab === 'cash') {
             $table = $table->headerActions(
                 AccountTransactionManualAdjustmentHeaderActions::make(
-                    fn (): Account => $member->cashAccount,
-                    fn (): mixed => $this->resetTable(),
+                    fn(): Account => $member->cashAccount,
+                    fn(): mixed => $this->resetTable(),
                 ),
             );
         }
@@ -82,6 +92,6 @@ class MemberTransactionsTabsRelationManager extends RelationManager
 
     protected function getTableQueryStringIdentifier(): ?string
     {
-        return 'member_ledger_'.$this->ledgerTab;
+        return 'member_ledger_' . $this->ledgerTab;
     }
 }

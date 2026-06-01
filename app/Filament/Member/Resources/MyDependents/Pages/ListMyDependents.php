@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace App\Filament\Member\Resources\MyDependents\Pages;
 
-use App\Filament\Member\Pages\MyProfilePage;
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Member\Widgets\MemberDependentsInsightsWidget;
-use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
 
 class ListMyDependents extends ListRecords
@@ -32,16 +30,5 @@ class ListMyDependents extends ListRecords
     public function getHeaderWidgetsColumns(): int|array
     {
         return 1;
-    }
-
-    protected function getHeaderActions(): array
-    {
-        return [
-            Action::make('householdProfiles')
-                ->label(__('Household profiles'))
-                ->icon('heroicon-o-user-circle')
-                ->url(MyProfilePage::getUrl())
-                ->color('gray'),
-        ];
     }
 }

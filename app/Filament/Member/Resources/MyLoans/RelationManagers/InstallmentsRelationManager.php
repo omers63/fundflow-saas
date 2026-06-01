@@ -6,6 +6,7 @@ namespace App\Filament\Member\Resources\MyLoans\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\LateSettledArrearsTableStyling;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -14,6 +15,7 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
 class InstallmentsRelationManager extends RelationManager
@@ -46,17 +48,26 @@ class InstallmentsRelationManager extends RelationManager
                     ->placeholder(__('—')),
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn (string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusLabel($record))
-                    ->color(fn (string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusColor($record))
-                    ->tooltip(fn (LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentWasSettledLate($record)
+                    ->formatStateUsing(fn(string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusLabel($record))
+                    ->color(fn(string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusColor($record))
+                    ->tooltip(fn(LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentWasSettledLate($record)
                         ? LateSettledArrearsTableStyling::eligibilityHint()
                         : null),
                 TextColumn::make('paid_at')
                     ->dateTime()
                     ->placeholder(__('—')),
             ])
+            ->filters([
+                SelectFilter::make('status')
+                    ->options([
+                        'pending' => __('Pending'),
+                        'paid' => __('Paid'),
+                        'overdue' => __('Overdue'),
+                    ]),
+                DateColumnRangeFilter::make('due_date', __('Due date')),
+            ])
             ->defaultSort('installment_number')
-            ->recordClasses(fn (LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentRecordClasses($record))
+            ->recordClasses(fn(LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentRecordClasses($record))
             ->recordActions(TableRecordActionGroups::wrap([]))
             ->toolbarActions([
                 BulkActionGroup::make([

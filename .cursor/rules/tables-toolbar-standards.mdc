@@ -1,0 +1,34 @@
+---
+description: Filament tables — bulk actions, group-by, filters, column manager
+alwaysApply: true
+---
+
+# Filament table toolbar standards
+
+Every **data table** (list resources, relation managers, custom pages, table widgets) must expose:
+
+| Control | Requirement |
+|---------|-------------|
+| **Show / hide columns** | Enabled globally via `Table::configureUsing()` → `columnManager()` in `AppServiceProvider`. Do not disable unless the grid is a fixed-layout special case (document why). |
+| **Filters** | At least one `->filters([...])` entry (status, date range, ternary, or domain filter). Use `DateColumnRangeFilter` for dates. |
+| **Group by** | Chain `TableGrouping::apply($table, TableGrouping::…())` with domain-appropriate groups (collapsible). |
+| **Bulk actions** | `->toolbarActions()` with at least one `BulkActionGroup`. Mutating row actions need matching bulk counterparts. Read-only grids use `TableStandards::defaultToolbarActions()` or `TableToolbar::refreshBulkAction()`. |
+
+## Row actions
+
+- Every row action lives inside an `ActionGroup` (`TableRecordActionGroups::wrap([...])`).
+- Do not leave bare `Action` / `EditAction` / `ViewAction` at the top level of `recordActions()`.
+
+## Helpers
+
+- `App\Filament\Support\TableGrouping` — group-by definitions per domain
+- `App\Filament\Support\TableToolbar` — refresh bulk action, `bulkGroup()`
+- `App\Filament\Support\TableStandards` — `defaultToolbarActions()` for read-only tables
+
+## Account transaction ledgers
+
+Tenant account transaction relation managers use `headerActions()` for Credit / Debit / Refund via `AccountTransactionManualAdjustmentHeaderActions`. Member-facing ledgers do not expose manual adjustments.
+
+## Tests
+
+`tests/Architecture/FilamentTableStandardsTest.php` guards tables that define columns but omit filters, grouping, or bulk toolbar actions.

@@ -24,7 +24,7 @@ class MyCashOutRequestResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowUpTray;
 
-    protected static ?string $navigationLabel = 'Cash Out';
+    protected static ?string $navigationLabel = 'My Cash-Outs';
 
     protected static ?string $modelLabel = 'Cash out';
 

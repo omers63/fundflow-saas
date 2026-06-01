@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\LoanEligibilityOverrides\Tables;
 
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableToolbar;
@@ -14,6 +15,7 @@ use Filament\Actions\CreateAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
 class LoanEligibilityOverridesTable
@@ -27,6 +29,16 @@ class LoanEligibilityOverridesTable
                 TextColumn::make('reason')->wrap()->limit(80),
                 TextColumn::make('approver.name')->placeholder(__('—')),
                 TextColumn::make('created_at')->dateTime()->sortable(),
+            ])
+            ->filters([
+                SelectFilter::make('gate')
+                    ->options([
+                        'min_fund_balance' => __('Minimum fund balance'),
+                        'active_loan' => __('Active loan limit'),
+                        'delinquency' => __('Delinquency'),
+                        'other' => __('Other'),
+                    ]),
+                DateColumnRangeFilter::make('created_at', __('Created')),
             ])
             ->headerActions([
                 CreateAction::make()

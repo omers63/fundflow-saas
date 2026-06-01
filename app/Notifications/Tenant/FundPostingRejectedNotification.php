@@ -4,41 +4,70 @@ declare(strict_types=1);
 
 namespace App\Notifications\Tenant;
 
+use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
 use App\Models\Tenant\FundPosting;
+use App\Notifications\Concerns\DeliversToMemberChannels;
+use App\Notifications\Tenant\Concerns\BuildsFundPostingDatabaseMessage;
+use App\Support\Notifications\FundPostingNotificationFormatter;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Facades\URL;
 
 class FundPostingRejectedNotification extends Notification
 {
+    use BuildsFundPostingDatabaseMessage;
+    use DeliversToMemberChannels;
+
     public function __construct(
         public FundPosting $fundPosting,
     ) {}
-
-    /**
-     * @return array<int, string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['database'];
-    }
 
     /**
      * @return array<string, mixed>
      */
     public function toArray(object $notifiable): array
     {
-        $remarks = filled($this->fundPosting->admin_remarks)
-            ? ' '.__('Reason: :reason', ['reason' => $this->fundPosting->admin_remarks])
-            : '';
+        $lines = FundPostingNotificationFormatter::depositDetailRows($this->fundPosting);
+
+        if (filled($this->fundPosting->admin_remarks)) {
+            $lines[] = [
+                'label' => __('Reason'),
+                'value' => (string) $this->fundPosting->admin_remarks,
+            ];
+        }
 
         return [
             'title' => __('Deposit rejected'),
-            'body' => __('Your deposit of :amount on :date was not accepted.:remarks', [
-                'amount' => $this->fundPosting->amount,
-                'date' => $this->fundPosting->posting_date->format('M d, Y'),
-                'remarks' => $remarks,
-            ]),
+            'body' => FundPostingNotificationFormatter::plainTextFromRows($lines),
             'fund_posting_id' => $this->fundPosting->id,
             'status' => 'rejected',
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toDatabase(object $notifiable): array
+    {
+        return FilamentNotification::make()
+            ->title(__('Deposit rejected'))
+            ->body($this->fundPostingDatabaseBody($this->fundPosting, null, 'rejected'))
+            ->icon('heroicon-o-x-circle')
+            ->iconColor('danger')
+            ->actions([
+                Action::make('view')
+                    ->label(__('View my deposits'))
+                    ->url($this->memberDepositsUrl())
+                    ->markAsRead(),
+            ])
+            ->getDatabaseMessage();
+    }
+
+    protected function memberDepositsUrl(): string
+    {
+        $url = MyFundPostingResource::getUrl('index', panel: 'member');
+
+        return str_starts_with($url, 'http') ? $url : URL::to($url);
     }
 }

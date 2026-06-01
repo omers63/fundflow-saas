@@ -5,8 +5,11 @@ namespace App\Services;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
+use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundPosting;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\FundPostingAcceptedNotification;
 use App\Notifications\Tenant\FundPostingRejectedNotification;
@@ -93,6 +96,7 @@ class FundPostingService
             $memberCash = $member->cashAccount;
             $amount = (float) $posting->amount;
             $description = __('Deposit #:id by :name', ['id' => $posting->id, 'name' => $member->name]);
+            $transactionWatermark = (int) Transaction::query()->max('id');
 
             $this->accounting->creditMemberCashWithMasterMirror(
                 $memberCash,
@@ -103,6 +107,8 @@ class FundPostingService
                 null,
                 $member->id,
             );
+
+            $settlement = $this->buildSettlementSummary($member, $transactionWatermark, $amount);
 
             $posting->update([
                 'status' => 'accepted',
@@ -115,7 +121,7 @@ class FundPostingService
                 $posting->bankTransaction->update(['status' => 'posted']);
             }
 
-            $this->notifyMemberOfReview($posting, 'accepted');
+            $this->notifyMemberOfReview($posting, 'accepted', $settlement);
         });
     }
 
@@ -141,8 +147,11 @@ class FundPostingService
         });
     }
 
-    private function notifyMemberOfReview(FundPosting $posting, string $outcome): void
-    {
+    private function notifyMemberOfReview(
+        FundPosting $posting,
+        string $outcome,
+        ?FundPostingSettlementSummary $settlement = null,
+    ): void {
         $posting->loadMissing('member.user');
         $memberUser = $posting->member?->user;
 
@@ -151,10 +160,60 @@ class FundPostingService
         }
 
         $notification = $outcome === 'accepted'
-            ? new FundPostingAcceptedNotification($posting)
+            ? new FundPostingAcceptedNotification($posting, $settlement)
             : new FundPostingRejectedNotification($posting);
 
         $memberUser->notify($notification);
+    }
+
+    protected function buildSettlementSummary(
+        Member $member,
+        int $afterTransactionId,
+        float $depositAmount,
+    ): FundPostingSettlementSummary {
+        $member->loadMissing('cashAccount');
+        $cashAccountId = $member->cashAccount?->id;
+
+        if ($cashAccountId === null) {
+            return new FundPostingSettlementSummary(
+                depositAmount: $depositAmount,
+                contributionsApplied: 0.0,
+                loanInstallmentsApplied: 0.0,
+                remainingCash: (float) $member->fresh()->getCashBalance(),
+            );
+        }
+
+        $contributionMorph = (new Contribution)->getMorphClass();
+        $installmentMorph = (new LoanInstallment)->getMorphClass();
+
+        $contributionsApplied = 0.0;
+        $loanInstallmentsApplied = 0.0;
+
+        Transaction::query()
+            ->where('account_id', $cashAccountId)
+            ->where('type', 'debit')
+            ->where('id', '>', $afterTransactionId)
+            ->get(['amount', 'reference_type'])
+            ->each(function (Transaction $transaction) use ($contributionMorph, $installmentMorph, &$contributionsApplied, &$loanInstallmentsApplied): void {
+                $amount = (float) $transaction->amount;
+
+                if ($transaction->reference_type === $contributionMorph) {
+                    $contributionsApplied += $amount;
+
+                    return;
+                }
+
+                if ($transaction->reference_type === $installmentMorph) {
+                    $loanInstallmentsApplied += $amount;
+                }
+            });
+
+        return new FundPostingSettlementSummary(
+            depositAmount: $depositAmount,
+            contributionsApplied: $contributionsApplied,
+            loanInstallmentsApplied: $loanInstallmentsApplied,
+            remainingCash: (float) $member->fresh()->getCashBalance(),
+        );
     }
 
     /**

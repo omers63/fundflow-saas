@@ -30,20 +30,11 @@ class ContributionsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         $currency = fn (): string => Setting::get('general', 'currency', 'USD');
-        $lateFeeDescriptionPrefix = __('Contribution late fee —');
 
         return TableGrouping::apply(
             $table
                 ->recordTitleAttribute('period')
-                ->modifyQueryUsing(function (Builder $query) use ($lateFeeDescriptionPrefix): void {
-                    $query->withSum([
-                        'transactions as late_fee_collected_amount' => static function (Builder $transactionQuery) use ($lateFeeDescriptionPrefix): void {
-                            $transactionQuery
-                                ->where('type', 'debit')
-                                ->where('description', 'like', $lateFeeDescriptionPrefix.'%');
-                        },
-                    ], 'amount');
-                })
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query->withLateFeeCollectedAmountSum())
                 ->columns([
                     TextColumn::make('period')
                         ->date('M Y')

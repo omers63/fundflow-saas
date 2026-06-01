@@ -122,6 +122,31 @@ class Contribution extends Model
         return app(AccountingService::class)->contributionLateFeeCollectedAmount($this);
     }
 
+    /**
+     * Eager-load {@see self::lateFeeCollectedAmount()} for tables (member cash debits only).
+     *
+     * @param  Builder<Contribution>  $query
+     * @return Builder<Contribution>
+     */
+    public function scopeWithLateFeeCollectedAmountSum(Builder $query): Builder
+    {
+        $descriptionPrefix = __('Contribution late fee —');
+
+        return $query->withSum([
+            'transactions as late_fee_collected_amount' => static function (Builder $transactionQuery) use ($descriptionPrefix): void {
+                $transactionQuery
+                    ->where('type', 'debit')
+                    ->where('description', 'like', $descriptionPrefix.'%')
+                    ->whereHas('account', static function (Builder $accountQuery): void {
+                        $accountQuery
+                            ->where('type', 'cash')
+                            ->where('is_master', false)
+                            ->whereColumn('accounts.member_id', 'contributions.member_id');
+                    });
+            },
+        ], 'amount');
+    }
+
     public function scopePending(Builder $query): Builder
     {
         return $query->where('status', 'pending');

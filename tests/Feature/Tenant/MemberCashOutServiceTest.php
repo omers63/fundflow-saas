@@ -8,6 +8,7 @@ use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\LoanService;
 use App\Services\MemberCashOutService;
+use App\Services\MemberInvariantService;
 use Illuminate\Support\Facades\Notification;
 use Tests\Concerns\InitializesTenancy;
 
@@ -101,6 +102,20 @@ test('member can submit and admin can accept a cash-out request', function () {
         ->and($request->bankTransaction)->not->toBeNull()
         ->and($request->bankTransaction->is_cleared)->toBeFalse()
         ->and((float) $request->bankTransaction->amount)->toBe(-2000.0);
+});
+
+test('accepted cash-out is counted once in member cash invariant', function () {
+    disburseLoanProceedsToMemberCash($this->accounting, $this->loanService, $this->member, 15000);
+    $this->member->refresh();
+
+    $request = $this->service->submit($this->member, 2000);
+    $this->service->accept($request, $this->admin->id);
+
+    $result = app(MemberInvariantService::class)->check($this->member->fresh());
+
+    expect($result['cash_drift'])->toBe(0.0)
+        ->and($result['expected_cash'])->toBe($result['actual_cash'])
+        ->and($result['components']['cash_outs'])->toBe(2000.0);
 });
 
 test('cash-out amount cannot exceed available cash after emi reserve', function () {

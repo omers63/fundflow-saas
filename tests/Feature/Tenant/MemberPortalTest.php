@@ -218,7 +218,11 @@ test('apply for loan page is registered on member panel', function () {
 });
 
 test('member panel has database notifications enabled', function () {
-    expect(filament()->getPanel('member')->hasDatabaseNotifications())->toBeTrue();
+    expect(filament()->getPanel('member')->hasDatabaseNotifications())->toBeTrue()
+        ->and(filament()->getPanel('member')->hasLazyLoadedDatabaseNotifications())->toBeFalse()
+        ->and(filament()->getPanel('member')->getDatabaseNotificationsPollingInterval())->toBe('10s')
+        ->and(filament()->getPanel('member')->hasBroadcasting())->toBeTrue()
+        ->and(config('filament.broadcasting.echo.broadcaster'))->toBe('reverb');
 });
 
 test('member portal topbar shows fund name beside logo', function () {

@@ -6,6 +6,7 @@ use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Resources\CashOutRequests\CashOutRequestResource;
 use App\Models\Tenant\Setting;
 use App\Services\MemberCashOutService;
 use Filament\Actions\Action;
@@ -17,6 +18,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Collection;
+use Livewire\Component;
 
 class CashOutRequestsTable
 {
@@ -75,9 +77,11 @@ class CashOutRequestsTable
                                 ->label(__('Remarks (optional)'))
                                 ->rows(2),
                         ])
-                        ->action(function ($record, array $data, MemberCashOutService $service): void {
+                        ->action(function ($record, array $data, MemberCashOutService $service, Component $livewire): void {
                             $service->accept($record, auth()->id(), $data['admin_remarks'] ?? null);
                             Notification::make()->title(__('Cash out accepted'))->success()->send();
+
+                            CashOutRequestResource::dispatchInsightsRefresh($livewire);
                         }),
                     Action::make('reject')
                         ->label(__('Reject'))
@@ -92,9 +96,11 @@ class CashOutRequestsTable
                                 ->required()
                                 ->rows(2),
                         ])
-                        ->action(function ($record, array $data, MemberCashOutService $service): void {
+                        ->action(function ($record, array $data, MemberCashOutService $service, Component $livewire): void {
                             $service->reject($record, auth()->id(), $data['admin_remarks']);
                             Notification::make()->title(__('Cash out rejected'))->send();
+
+                            CashOutRequestResource::dispatchInsightsRefresh($livewire);
                         }),
                 ]))
                 ->toolbarActions([
@@ -104,7 +110,7 @@ class CashOutRequestsTable
                             ->icon('heroicon-o-check-circle')
                             ->color('success')
                             ->requiresConfirmation()
-                            ->action(function (Collection $records, MemberCashOutService $service): void {
+                            ->action(function (Collection $records, MemberCashOutService $service, Component $livewire): void {
                                 $count = 0;
                                 foreach ($records as $record) {
                                     if ($record->status === 'pending') {
@@ -113,6 +119,8 @@ class CashOutRequestsTable
                                     }
                                 }
                                 Notification::make()->title(__(':count cash out(s) accepted', ['count' => $count]))->success()->send();
+
+                                CashOutRequestResource::dispatchInsightsRefresh($livewire);
                             }),
                         BulkAction::make('rejectSelected')
                             ->label(__('Reject selected'))
@@ -126,7 +134,7 @@ class CashOutRequestsTable
                                     ->required()
                                     ->rows(2),
                             ])
-                            ->action(function (Collection $records, array $data, MemberCashOutService $service): void {
+                            ->action(function (Collection $records, array $data, MemberCashOutService $service, Component $livewire): void {
                                 $count = 0;
                                 foreach ($records as $record) {
                                     if ($record->status === 'pending') {
@@ -135,6 +143,8 @@ class CashOutRequestsTable
                                     }
                                 }
                                 Notification::make()->title(__(':count cash out(s) rejected', ['count' => $count]))->send();
+
+                                CashOutRequestResource::dispatchInsightsRefresh($livewire);
                             }),
                         TableToolbar::refreshBulkAction(),
                     ]),
