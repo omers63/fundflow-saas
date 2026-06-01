@@ -58,7 +58,7 @@ class DelinquencyDigestNotification extends Notification
             $message->line(__(':guarantor loan(s) with guarantor exposure', ['guarantor' => $guarantor]));
         }
 
-        return $message->action(__('Open delinquency workspace'), $this->absoluteDelinquencyUrl());
+        return $message->action(__('Review in admin'), $this->absoluteDelinquencyUrl());
     }
 
     /**
@@ -72,7 +72,7 @@ class DelinquencyDigestNotification extends Notification
 
         return FilamentNotification::make()
             ->title(__('Delinquency digest'))
-            ->body(__(':overdue overdue installment(s) · :arrears contribution period(s) in arrears · :delinquent delinquent member(s). Open the delinquency workspace to review.', [
+            ->body(__(':overdue overdue installment(s) · :arrears contribution period(s) in arrears · :delinquent delinquent member(s). Review loans, contributions, or members as needed.', [
                 'overdue' => $overdue,
                 'arrears' => $arrears,
                 'delinquent' => $delinquent,
@@ -81,7 +81,7 @@ class DelinquencyDigestNotification extends Notification
             ->iconColor('warning')
             ->actions([
                 Action::make('open')
-                    ->label(__('Open delinquency workspace'))
+                    ->label(__('Review in admin'))
                     ->url($this->absoluteDelinquencyUrl())
                     ->markAsRead(),
             ])

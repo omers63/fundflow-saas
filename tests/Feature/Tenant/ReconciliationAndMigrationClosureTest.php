@@ -16,7 +16,6 @@ use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
-use App\Models\Tenant\MigrationCycleStub;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
@@ -24,8 +23,7 @@ use App\Services\AccountingService;
 use App\Services\BankClearingMatchService;
 use App\Services\ContributionCollectionCycleService;
 use App\Services\MemberInvariantService;
-use App\Services\MigrationCycleService;
-use App\Services\MigrationOpeningBalanceService;
+use App\Services\MemberOpeningBalanceService;
 use App\Services\ReconciliationCorrectionService;
 use App\Services\ReconciliationResolutionService;
 use App\Services\ReconciliationService;
@@ -40,39 +38,11 @@ beforeEach(function () {
 
     Account::query()->delete();
     Member::query()->delete();
-    MigrationCycleStub::query()->delete();
     ReconciliationException::query()->delete();
     Contribution::query()->delete();
 
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 0, 'is_master' => true]);
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 0, 'is_master' => true]);
-});
-
-test('partial clearance grants active status while migration stubs may remain escalated', function () {
-    $member = Member::create([
-        'member_number' => 'PC-001',
-        'name' => 'Partial Clear',
-        'monthly_contribution_amount' => 500,
-        'joined_at' => now()->subYear(),
-        'status' => 'active',
-        'migration_status' => 'migration_pending',
-    ]);
-
-    MigrationCycleStub::create([
-        'member_id' => $member->id,
-        'cycle_date' => now()->subMonths(2)->startOfMonth(),
-        'amount_due' => 500,
-        'status' => 'escalated',
-        'classification' => MigrationCycleStub::CLASS_ESCALATED,
-        'late_fee_exempt' => true,
-    ]);
-
-    app(MigrationCycleService::class)->grantPartialClearance($member, 'Long history under review');
-
-    $member->refresh();
-
-    expect($member->migration_status)->toBe('active')
-        ->and($member->partial_clearance_granted_at)->not->toBeNull();
 });
 
 test('reconciliation resolution service escalates open exception', function () {
@@ -138,12 +108,16 @@ test('member invariant uses spec formula components and balances after opening p
         'monthly_contribution_amount' => 500,
         'joined_at' => now()->subYear(),
         'status' => 'active',
-        'migration_status' => 'active',
     ]);
 
     app(AccountingService::class)->createMemberAccounts($member);
 
-    app(MigrationOpeningBalanceService::class)->postOpeningBalances($member, 200, 400);
+    app(MemberOpeningBalanceService::class)->postOpeningBalances(
+        $member,
+        200,
+        400,
+        now()->subMonth(),
+    );
 
     $result = app(MemberInvariantService::class)->check($member->fresh());
 
@@ -334,11 +308,10 @@ test('nightly reconciliation raises fund tier over committed', function () {
         'monthly_contribution_amount' => 500,
         'joined_at' => now()->subYear(),
         'status' => 'active',
-        'migration_status' => 'active',
     ]);
 
     app(AccountingService::class)->createMemberAccounts($member);
-    app(MigrationOpeningBalanceService::class)->postOpeningBalances($member, 0, 40000);
+    app(MemberOpeningBalanceService::class)->postOpeningBalances($member, 0, 40000, now()->subMonth());
 
     Loan::create([
         'member_id' => $member->id,
@@ -363,36 +336,6 @@ test('nightly reconciliation raises fund tier over committed', function () {
 
     expect(ReconciliationException::query()
         ->where('exception_code', 'FUND_TIER_OVER_COMMITTED')
-        ->open()
-        ->exists())->toBeTrue();
-});
-
-test('migration reconciliation detects opening fund sum drift', function () {
-    $member = Member::create([
-        'member_number' => 'MOS-001',
-        'name' => 'Opening Sum Member',
-        'monthly_contribution_amount' => 500,
-        'joined_at' => now()->subYear(),
-        'status' => 'active',
-        'migration_status' => 'active',
-        'migration_cutoff_date' => now()->subMonth(),
-    ]);
-
-    app(AccountingService::class)->createMemberAccounts($member);
-    app(MigrationOpeningBalanceService::class)->postOpeningBalances($member, 0, 1000);
-
-    $masterFund = Account::masterFund();
-    $memberFund = $member->fundAccount;
-    app(AccountingService::class)->credit($masterFund, 500, 'MIGRATION_OPENING — fund — extra', null, null, $member->id);
-    app(AccountingService::class)->credit($memberFund, 500, 'MIGRATION_OPENING — fund — extra', null, null, $member->id);
-
-    $recon = app(ReconciliationService::class);
-    $method = new ReflectionMethod($recon, 'reconcileMigration');
-    $method->setAccessible(true);
-    $method->invoke($recon);
-
-    expect(ReconciliationException::query()
-        ->where('exception_code', 'MIGRATION_OPENING_SUM_DRIFT')
         ->open()
         ->exists())->toBeTrue();
 });
@@ -487,6 +430,8 @@ test('custom journal correction posts balanced multi-leg entry', function () {
 });
 
 test('late fee reconciliation detects fee posted to wrong account', function () {
+    Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
+
     $member = Member::create([
         'member_number' => 'FEE-001',
         'name' => 'Fee Wrong Account',
@@ -508,4 +453,200 @@ test('late fee reconciliation detects fee posted to wrong account', function () 
         ->where('exception_code', 'FEE_POSTED_WRONG_ACCOUNT')
         ->open()
         ->exists())->toBeTrue();
+});
+
+test('late fee reconciliation accepts mirrored cash and master fees legs', function () {
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 100, 'is_master' => true]);
+    Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
+
+    $member = Member::create([
+        'member_number' => 'FEE-002',
+        'name' => 'Fee Correct Account',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $accounting = app(AccountingService::class);
+    $accounting->createMemberAccounts($member);
+    $member->cashAccount->update(['balance' => 100]);
+
+    $contribution = Contribution::create([
+        'member_id' => $member->id,
+        'period' => now()->startOfMonth(),
+        'amount' => 500,
+        'status' => 'posted',
+        'posted_at' => now(),
+    ]);
+
+    AccountingService::withoutMemberCashCollection(function () use ($accounting, $contribution): void {
+        $accounting->postContributionLateFee($contribution, 25);
+    });
+
+    ReconciliationException::query()->where('exception_code', 'FEE_POSTED_WRONG_ACCOUNT')->delete();
+
+    $recon = app(ReconciliationService::class);
+    $method = new ReflectionMethod($recon, 'reconcileLateFees');
+    $method->setAccessible(true);
+    $method->invoke($recon);
+
+    expect(ReconciliationException::query()
+        ->where('exception_code', 'FEE_POSTED_WRONG_ACCOUNT')
+        ->open()
+        ->exists())->toBeFalse();
+});
+
+test('realtime pool drift is not raised while master cash mirror is in progress', function () {
+    Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
+    Account::masterCash()->update(['balance' => 500]);
+
+    $member = Member::create([
+        'member_number' => 'POOL-001',
+        'name' => 'Pool Mirror Member',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $accounting = app(AccountingService::class);
+    $accounting->createMemberAccounts($member);
+    $member->cashAccount->update(['balance' => 500]);
+
+    ReconciliationException::query()
+        ->whereIn('exception_code', ['MASTER_CASH_POOL_DRIFT', 'MEMBER_CASH_DRIFT'])
+        ->delete();
+
+    AccountingService::withoutMemberCashCollection(function () use ($accounting, $member): void {
+        $accounting->debitMemberCashWithMasterMirror(
+            $member->cashAccount,
+            100,
+            'Pool mirror test',
+            '(test)',
+        );
+    });
+
+    expect(ReconciliationException::query()
+        ->whereIn('exception_code', ['MASTER_CASH_POOL_DRIFT', 'MEMBER_CASH_DRIFT'])
+        ->open()
+        ->exists())->toBeFalse()
+        ->and((float) Account::masterCash()->fresh()->balance)->toBe(400.0)
+        ->and((float) $member->cashAccount->fresh()->balance)->toBe(400.0);
+});
+
+test('member cash invariant stays balanced after mirrored contribution late fee', function () {
+    Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
+    Account::masterCash()->update(['balance' => 500]);
+
+    $member = Member::create([
+        'member_number' => 'INV-LATE',
+        'name' => 'Late Fee Invariant',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+        'opening_cash_balance' => 500,
+    ]);
+
+    $accounting = app(AccountingService::class);
+    $accounting->createMemberAccounts($member);
+    $member->cashAccount->update(['balance' => 500]);
+
+    $contribution = Contribution::create([
+        'member_id' => $member->id,
+        'period' => now()->startOfMonth(),
+        'amount' => 500,
+        'status' => 'posted',
+        'posted_at' => now(),
+    ]);
+
+    AccountingService::withoutMemberCashCollection(function () use ($accounting, $contribution): void {
+        $accounting->postContributionLateFee($contribution, 30);
+    });
+
+    $result = app(MemberInvariantService::class)->check($member->fresh());
+
+    expect($result['balanced'])->toBeTrue()
+        ->and($result['components']['late_fees_net'])->toBe(30.0);
+});
+
+test('member fund invariant stays balanced after mirrored contribution post', function () {
+    Account::masterCash()->update(['balance' => 5000]);
+    Account::masterFund()->update(['balance' => 0]);
+
+    $member = Member::create([
+        'member_number' => 'INV-FUND',
+        'name' => 'Fund Invariant',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+        'opening_cash_balance' => 5000,
+    ]);
+
+    $accounting = app(AccountingService::class);
+    $accounting->createMemberAccounts($member);
+    $member->cashAccount->update(['balance' => 5000]);
+
+    $contribution = Contribution::create([
+        'member_id' => $member->id,
+        'period' => now()->startOfMonth(),
+        'amount' => 500,
+        'status' => 'pending',
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+    ]);
+
+    AccountingService::withoutMemberCashCollection(function () use ($accounting, $contribution): void {
+        $accounting->postContributionPrincipal($contribution, 500);
+    });
+
+    $result = app(MemberInvariantService::class)->check($member->fresh());
+
+    expect($result['balanced'])->toBeTrue()
+        ->and($result['components']['contributions_collected'])->toBe(500.0)
+        ->and((float) Account::masterFund()->fresh()->balance)->toBe(500.0);
+});
+
+test('pending past window close is not raised for contribution-exempt members', function () {
+    $member = Member::create([
+        'member_number' => 'EXEMPT-PEND',
+        'name' => 'Exempt Pending',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $pastPeriod = now()->subMonths(3)->startOfMonth();
+
+    Contribution::create([
+        'member_id' => $member->id,
+        'period' => $pastPeriod,
+        'amount' => 500,
+        'status' => 'pending',
+        'collection_status' => ContributionCollectionStatus::PENDING,
+    ]);
+
+    $loan = Loan::factory()->for($member)->create([
+        'status' => 'active',
+        'member_portion' => 10000,
+        'master_portion' => 0,
+        'amount_disbursed' => 10000,
+    ]);
+
+    $loan->installments()->create([
+        'installment_number' => 1,
+        'due_date' => now()->subMonth(),
+        'amount' => 500,
+        'status' => 'pending',
+    ]);
+
+    ReconciliationException::query()->where('exception_code', 'PENDING_PAST_WINDOW_CLOSE')->delete();
+
+    $recon = app(ReconciliationService::class);
+    $method = new ReflectionMethod($recon, 'reconcileContributions');
+    $method->setAccessible(true);
+    $method->invoke($recon);
+
+    expect(ReconciliationException::query()
+        ->where('exception_code', 'PENDING_PAST_WINDOW_CLOSE')
+        ->where('affected_entities->member_id', $member->id)
+        ->open()
+        ->exists())->toBeFalse();
 });

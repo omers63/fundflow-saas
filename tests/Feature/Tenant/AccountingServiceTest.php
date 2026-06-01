@@ -177,7 +177,7 @@ test('post balanced journal rejects unbalanced legs', function () {
     $cash = Account::masterCash();
     $fund = Account::masterFund();
 
-    expect(fn() => $this->service->postBalancedJournal(
+    expect(fn () => $this->service->postBalancedJournal(
         [
             ['account_id' => $cash->id, 'type' => 'debit', 'amount' => 100],
             ['account_id' => $fund->id, 'type' => 'credit', 'amount' => 50],
@@ -254,4 +254,29 @@ test('debit member cash with master mirror keeps cash pool balanced', function (
 
     expect((float) $member->cashAccount->fresh()->balance)->toBe(750.0)
         ->and((float) Account::masterCash()->fresh()->balance)->toBe(750.0);
+});
+
+test('credit member fund with master mirror keeps fund pool balanced', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-FUND-MIRROR',
+        'name' => 'Fund Mirror Member',
+        'email' => 'fund-mirror@example.com',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now(),
+        'status' => 'active',
+    ]);
+    $this->service->createMemberAccounts($member);
+
+    Account::masterFund()->update(['balance' => 500]);
+    $member->fundAccount->update(['balance' => 500]);
+
+    $this->service->creditMemberFundWithMasterMirror(
+        $member->fundAccount,
+        200,
+        'Test fund inflow',
+        '(test mirror)',
+    );
+
+    expect((float) $member->fundAccount->fresh()->balance)->toBe(700.0)
+        ->and((float) Account::masterFund()->fresh()->balance)->toBe(700.0);
 });

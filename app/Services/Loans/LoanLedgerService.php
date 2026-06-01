@@ -68,7 +68,7 @@ final class LoanLedgerService
             throw new RuntimeException(__('Required accounts are not configured.'));
         }
 
-        DB::transaction(function () use ($loan, $member, $memberFund, $masterFund, $masterCash, $memberCash, $loanAccount, $amount, $disbursementRecord, $disbursedAt, $allowNegativeMasterFundBalance): void {
+        DB::transaction(function () use ($loan, $member, $memberFund, $masterFund, $memberCash, $loanAccount, $amount, $disbursementRecord, $disbursedAt, $allowNegativeMasterFundBalance): void {
             if (
                 ! $allowNegativeMasterFundBalance
                 && $amount > 0
@@ -86,10 +86,24 @@ final class LoanLedgerService
             $at = $disbursedAt ?? now();
 
             $this->accounting->debit($loanAccount, $amount, $label, $loan, $at, $member->id);
-            $this->accounting->debit($masterFund, $amount, $label.' '.__('(master funded)'), $loan, $at, $member->id);
-            $this->accounting->debit($memberFund, $amount, $label.' '.__('(member mirror)'), $loan, $at, $member->id);
-            $this->accounting->credit($masterCash, $amount, $label.' '.__('(cash payout mirror)'), $loan, $at);
-            $this->accounting->credit($memberCash, $amount, $label.' '.__('(cash payout)'), $loan, $at, $member->id);
+            $this->accounting->debitMemberFundWithMasterMirror(
+                $memberFund,
+                $amount,
+                $label,
+                __('(master funded)'),
+                $loan,
+                $at,
+                $member->id,
+            );
+            $this->accounting->creditMemberCashWithMasterMirror(
+                $memberCash,
+                $amount,
+                $label,
+                __('(cash payout mirror)'),
+                $loan,
+                $at,
+                $member->id,
+            );
 
             $disbursementRecord->update([
                 'member_portion' => 0,
@@ -157,19 +171,8 @@ final class LoanLedgerService
             'name' => $member->name,
         ]);
 
-        DB::transaction(function () use ($installment, $loan, $member, $amount, $lateFee, $description): void {
+        DB::transaction(function () use ($installment, $loan, $member, $amount, $description): void {
             $this->postLoanPrincipalRepayment($loan, $amount, $description, $installment, $member->id);
-
-            if ($installment->is_late && $lateFee > 0.00001) {
-                $masterCash = Account::masterCash();
-                if ($masterCash !== null) {
-                    $lateDesc = __('Loan late fee – #:id inst. :num', [
-                        'id' => $loan->id,
-                        'num' => $installment->installment_number,
-                    ]);
-                    $this->accounting->credit($masterCash, $lateFee, $lateDesc, $installment, null, $member->id);
-                }
-            }
         });
     }
 
@@ -192,7 +195,15 @@ final class LoanLedgerService
             'num' => $installment->installment_number,
         ]);
 
-        $this->accounting->debit($cash, $total, $description, $installment, $transactedAt ?? now(), $member->id);
+        $this->accounting->debitMemberCashWithMasterMirror(
+            $cash,
+            $total,
+            $description,
+            __('(loan repayment mirror)'),
+            $installment,
+            $transactedAt ?? now(),
+            $member->id,
+        );
     }
 
     public function debitGuarantorFundForDefault(Member $guarantor, LoanInstallment $installment): void
@@ -208,7 +219,15 @@ final class LoanLedgerService
             'num' => $installment->installment_number,
         ]);
 
-        $this->accounting->debit($fund, $amount, $description, $installment, now(), $guarantor->id);
+        $this->accounting->debitMemberFundWithMasterMirror(
+            $fund,
+            $amount,
+            $description,
+            __('(guarantor default mirror)'),
+            $installment,
+            now(),
+            $guarantor->id,
+        );
     }
 
     private function postLoanPrincipalRepayment(
@@ -232,8 +251,15 @@ final class LoanLedgerService
             $amount,
         );
 
-        $this->accounting->credit($masterFund, $amount, $description, $source, null, $memberId);
-        $this->accounting->credit($memberFund, $amount, $description, $source, null, $memberId);
+        $this->accounting->creditMemberFundWithMasterMirror(
+            $memberFund,
+            $amount,
+            $description,
+            __('(loan repayment mirror)'),
+            $source,
+            null,
+            $memberId,
+        );
         $this->accounting->credit($loanAccount, $amount, $description, $source, null, $memberId);
 
         if ($repaidSlice > 0.00001) {

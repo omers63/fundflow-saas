@@ -40,7 +40,6 @@ class LoanEligibilityOverridesTable
                                 'min_fund_balance' => __('Minimum fund balance'),
                                 'active_loan' => __('Active loan limit'),
                                 'delinquency' => __('Delinquency'),
-                                'migration_pending' => __('Migration pending'),
                                 'other' => __('Other'),
                             ])
                             ->required(),

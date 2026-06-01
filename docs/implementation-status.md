@@ -129,7 +129,7 @@ Loan/fund tier column manager, loan insights (tenant + member), deposits rename,
 
 | Area | Status |
 |------|--------|
-| `FEE_POSTED_WRONG_ACCOUNT` | **Done** — late fee credits/debits on non-fees/non-cash accounts |
+| `FEE_POSTED_WRONG_ACCOUNT` | **Done** — late fee on fund/bank/etc.; allows DR/CR cash (member + master mirror) and fees legs |
 | `FEE_WRONG_TIER` / `REPLACEMENT_PRIOR_TIER_NOT_REVERSED` | **Done** — tier drift + duplicate replacement debits; auto re-apply tier |
 | `CONTRIBUTION_MEMBER_FUND_MISSING` | **Done** — auto-post member fund credit |
 | `MIGRATION_OPENING_SUM_DRIFT` | **Done** — Σ master MIGRATION_OPENING fund vs member opening balances |

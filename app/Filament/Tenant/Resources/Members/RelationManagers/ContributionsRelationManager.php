@@ -10,6 +10,7 @@ use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tables\Columns\TextColumn;
+use App\Filament\Tenant\Resources\Members\Concerns\InteractsWithMemberContributionHeaderActions;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
@@ -19,6 +20,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class ContributionsRelationManager extends RelationManager
 {
+    use InteractsWithMemberContributionHeaderActions;
     use TranslatesRelationManagerTitle;
 
     protected static string $relationship = 'contributions';
@@ -83,6 +85,9 @@ class ContributionsRelationManager extends RelationManager
                     DateColumnRangeFilter::make('posted_at', 'Posted'),
                 ])
                 ->recordClasses(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionRecordClasses($record))
+                ->headerActions([
+                    $this->buildMemberContributeAction(),
+                ])
                 ->recordActions(TableRecordActionGroups::wrap([]))
                 ->toolbarActions([
                     BulkActionGroup::make([

@@ -12,7 +12,7 @@ use InvalidArgumentException;
 class MembershipApplicationImportCutoffService
 {
     public function __construct(
-        private readonly MigrationOpeningBalanceService $openingBalances,
+        private readonly MemberOpeningBalanceService $openingBalances,
         private readonly ContributionCollectionCycleService $contributions,
     ) {}
 
@@ -46,7 +46,7 @@ class MembershipApplicationImportCutoffService
         $cash = (float) ($application->import_cutoff_cash_balance ?? 0);
         $fund = (float) ($application->import_cutoff_fund_balance ?? 0);
 
-        if ($cash <= 0.00001 && $fund <= 0.00001) {
+        if (abs($cash) <= 0.00001 && abs($fund) <= 0.00001) {
             return;
         }
 

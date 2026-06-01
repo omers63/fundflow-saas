@@ -26,7 +26,7 @@ final class ScheduledJobRegistry
     {
         return [
             self::job('fund:assert-master-invariants', __('Assert master invariants'), __('Verify master cash/fund equal member sums'), __('Daily at 06:00'), 'fund', false),
-            self::job('fund:nightly-reconciliation', __('Nightly reconciliation'), __('Master, contributions, EMI, bank, migration checks'), __('Daily at 06:30'), 'reconciliation', false),
+            self::job('fund:nightly-reconciliation', __('Nightly reconciliation'), __('Master, contributions, EMI, and bank checks'), __('Daily at 06:30'), 'reconciliation', false),
             self::job('contributions:init-cycle', __('Init contribution cycle'), __('Create pending rows for open period'), __('Monthly on 1st at 08:00'), 'contributions', true),
             self::job('contributions:notify', __('Contribution due notifications'), __('Notify members of open period'), __('Monthly on 1st at 09:00'), 'contributions', false),
             self::job('contributions:apply', __('Apply contributions'), __('Debit member cash for open period'), __('Monthly on 5th at 09:00'), 'contributions', true),

@@ -166,7 +166,7 @@ final class MemberDetailInsightsService
                 'visible' => $arrears['has_arrears'] || $arrears['is_delinquent'],
                 'overdue_installments' => $arrears['overdue_installment_count'],
                 'unpaid_periods' => $arrears['unpaid_contribution_periods'],
-                'delinquency_url' => LoanResource::getUrl('delinquency'),
+                'delinquency_url' => ContributionResource::listTabUrl('arrears') . '?tableFilters[member_id][value]=' . $member->id,
             ],
             'loan' => $activeLoan ? [
                 'id' => $activeLoan->id,
@@ -189,7 +189,7 @@ final class MemberDetailInsightsService
                     ->orderBy('name')
                     ->limit(5)
                     ->get()
-                    ->map(fn (Member $dependent): array => [
+                    ->map(fn(Member $dependent): array => [
                         'name' => $dependent->name,
                         'number' => $dependent->member_number,
                         'status' => Member::statusOptions()[$dependent->status] ?? $dependent->status,
@@ -223,17 +223,17 @@ final class MemberDetailInsightsService
             'quick_links' => [
                 [
                     'label' => __('Contributions'),
-                    'url' => ContributionResource::getUrl('index').'?tableFilters[member_id][value]='.$member->id,
+                    'url' => ContributionResource::getUrl('index') . '?tableFilters[member_id][value]=' . $member->id,
                     'icon' => 'heroicon-o-banknotes',
                 ],
                 [
                     'label' => __('Postings'),
-                    'url' => FundPostingResource::getUrl('index').'?tableFilters[member_id][value]='.$member->id,
+                    'url' => FundPostingResource::getUrl('index') . '?tableFilters[member_id][value]=' . $member->id,
                     'icon' => 'heroicon-o-inbox-arrow-down',
                 ],
                 [
                     'label' => __('Loans'),
-                    'url' => LoanResource::getUrl('index').'?tableFilters[member_id][value]='.$member->id,
+                    'url' => LoanResource::getUrl('index') . '?tableFilters[member_id][value]=' . $member->id,
                     'icon' => 'heroicon-o-currency-dollar',
                 ],
             ],
@@ -252,15 +252,23 @@ final class MemberDetailInsightsService
         ?Loan $activeLoan,
         int $installmentsOverdue,
     ): array {
-        if ($arrears['is_delinquent'] || $installmentsOverdue > 0) {
+        if ($installmentsOverdue > 0) {
             return [
                 'tone' => 'danger',
                 'title' => __('Arrears need attention'),
-                'subtitle' => $installmentsOverdue > 0
-                    ? trans_choice(':count overdue installment|:count overdue installments', $installmentsOverdue, ['count' => $installmentsOverdue])
-                    : __('Member is marked delinquent'),
-                'cta_label' => __('Delinquency'),
-                'cta_url' => LoanResource::getUrl('delinquency'),
+                'subtitle' => trans_choice(':count overdue installment|:count overdue installments', $installmentsOverdue, ['count' => $installmentsOverdue]),
+                'cta_label' => __('Overdue installments'),
+                'cta_url' => LoanResource::listTabUrl('overdue_installments'),
+            ];
+        }
+
+        if ($arrears['is_delinquent']) {
+            return [
+                'tone' => 'danger',
+                'title' => __('Member is delinquent'),
+                'subtitle' => __('Restore active after arrears are cleared, or use force restore on the member record.'),
+                'cta_label' => __('Member record'),
+                'cta_url' => MemberResource::getUrl('edit', ['record' => $member]),
             ];
         }
 
@@ -269,8 +277,8 @@ final class MemberDetailInsightsService
                 'tone' => 'amber',
                 'title' => __('Outstanding obligations'),
                 'subtitle' => __('Review unpaid contributions or installments'),
-                'cta_label' => __('Review'),
-                'cta_url' => LoanResource::getUrl('delinquency'),
+                'cta_label' => __('Contribution arrears'),
+                'cta_url' => ContributionResource::listTabUrl('arrears') . '?tableFilters[member_id][value]=' . $member->id,
             ];
         }
 
@@ -304,7 +312,7 @@ final class MemberDetailInsightsService
             ];
         }
 
-        if (! in_array($member->status, ['active'], true)) {
+        if (!in_array($member->status, ['active'], true)) {
             return [
                 'tone' => 'amber',
                 'title' => Member::statusOptions()[$member->status] ?? ucfirst($member->status),
@@ -575,7 +583,7 @@ final class MemberDetailInsightsService
             ->orderByDesc('posted_at')
             ->limit(5)
             ->get()
-            ->map(fn (Contribution $contribution): array => [
+            ->map(fn(Contribution $contribution): array => [
                 'period' => $contribution->period?->format('M Y') ?? '—',
                 'amount' => InsightFormatter::money((float) $contribution->amount),
                 'posted_at' => $contribution->posted_at?->format('d M'),
@@ -600,7 +608,7 @@ final class MemberDetailInsightsService
             ->orderByDesc('transacted_at')
             ->limit(5)
             ->get()
-            ->map(fn (Transaction $transaction): array => [
+            ->map(fn(Transaction $transaction): array => [
                 'description' => Str::limit($transaction->description ?? '—', 40),
                 'transacted_at' => $transaction->transacted_at?->format('d M, H:i'),
                 'amount' => InsightFormatter::money((float) $transaction->amount),
@@ -627,8 +635,8 @@ final class MemberDetailInsightsService
             [
                 'key' => 'accounts',
                 'label' => __('Accounts'),
-                'value' => InsightFormatter::money($member->getCashBalance()).' · '.__('Cash'),
-                'hint' => InsightFormatter::money($member->getFundBalance()).' '.__('fund'),
+                'value' => InsightFormatter::money($member->getCashBalance()) . ' · ' . __('Cash'),
+                'hint' => InsightFormatter::money($member->getFundBalance()) . ' ' . __('fund'),
                 'accent' => 'indigo',
                 'icon' => 'heroicon-o-rectangle-stack',
                 'url' => $member->cashAccount
@@ -638,13 +646,13 @@ final class MemberDetailInsightsService
             [
                 'key' => 'contributions',
                 'label' => __('Contributions'),
-                'value' => (string) $contributionsPostedCount.' '.__('posted'),
+                'value' => (string) $contributionsPostedCount . ' ' . __('posted'),
                 'hint' => $pendingPostings > 0
                     ? trans_choice(':count posting pending|:count postings pending', $pendingPostings, ['count' => $pendingPostings])
                     : null,
                 'accent' => 'emerald',
                 'icon' => 'heroicon-o-banknotes',
-                'url' => ContributionResource::getUrl('index').'?tableFilters[member_id][value]='.$member->id,
+                'url' => ContributionResource::getUrl('index') . '?tableFilters[member_id][value]=' . $member->id,
             ],
             [
                 'key' => 'loans',
@@ -659,7 +667,7 @@ final class MemberDetailInsightsService
                 'icon' => 'heroicon-o-currency-dollar',
                 'url' => $activeLoan
                     ? LoanResource::getUrl('edit', ['record' => $activeLoan])
-                    : LoanResource::getUrl('index').'?tableFilters[member_id][value]='.$member->id,
+                    : LoanResource::getUrl('index') . '?tableFilters[member_id][value]=' . $member->id,
             ],
             [
                 'key' => 'household',

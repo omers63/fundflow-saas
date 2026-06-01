@@ -43,7 +43,6 @@ final class ContributionPolicySettings
             'bank_match_date_range_days' => 3,
             'stale_pending_days' => 30,
             'cash_deposit_unbanked_days' => 14,
-            'migration_instalment_cycles' => 6,
             'timing_diff_defer_hours' => 24,
             'timing_diff_escalate_hours' => 48,
         ];
@@ -67,11 +66,6 @@ final class ContributionPolicySettings
     public static function cashDepositUnbankedDays(): int
     {
         return max(1, (int) self::collectionGet('cash_deposit_unbanked_days', 14));
-    }
-
-    public static function migrationInstalmentCycles(): int
-    {
-        return max(1, (int) self::collectionGet('migration_instalment_cycles', 6));
     }
 
     public static function lateFeeDefaults(): array

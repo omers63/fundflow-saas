@@ -400,13 +400,7 @@ class MembershipApplicationImportService
             ]));
         }
 
-        $amount = (float) $raw;
-
-        if ($amount < 0) {
-            throw new \InvalidArgumentException(__(':column cannot be negative.', ['column' => $key]));
-        }
-
-        return $amount;
+        return (float) $raw;
     }
 
     /**

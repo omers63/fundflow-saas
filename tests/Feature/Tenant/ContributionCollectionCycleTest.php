@@ -7,7 +7,7 @@ use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Services\ContributionCollectionCycleService;
 use App\Services\ContributionCycleService;
-use App\Services\MigrationOpeningBalanceService;
+use App\Services\MemberOpeningBalanceService;
 use App\Support\ContributionCollectionStatus;
 use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
@@ -426,7 +426,7 @@ test('import cut-off cash does not collect the in-window current cycle before it
         'is_late' => true,
     ]);
 
-    app(MigrationOpeningBalanceService::class)->postOpeningBalances(
+    app(MemberOpeningBalanceService::class)->postOpeningBalances(
         $member,
         600,
         0,
@@ -478,7 +478,7 @@ test('import cut-off cash posting triggers oldest-first arrear collection', func
         'late_fee_amount' => 50,
     ]);
 
-    app(MigrationOpeningBalanceService::class)->postOpeningBalances(
+    app(MemberOpeningBalanceService::class)->postOpeningBalances(
         $member,
         550,
         0,
@@ -624,7 +624,7 @@ test('auto-collection skips pending cycles before import arrears cut-off', funct
         'late_fee_amount' => 50,
     ]);
 
-    app(MigrationOpeningBalanceService::class)->postOpeningBalances(
+    app(MemberOpeningBalanceService::class)->postOpeningBalances(
         $member,
         550,
         0,

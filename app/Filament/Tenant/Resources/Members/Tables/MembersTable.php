@@ -44,15 +44,6 @@ class MembersTable
                         ->badge()
                         ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
                         ->color(fn (string $state): string => Member::statusBadgeColor($state)),
-                    TextColumn::make('migration_status')
-                        ->label(__('Migration'))
-                        ->badge()
-                        ->placeholder(__('—'))
-                        ->formatStateUsing(fn (?string $state): string => $state !== null
-                            ? (Member::migrationStatusOptions()[$state] ?? $state)
-                            : __('—'))
-                        ->color(fn (?string $state): string => Member::migrationStatusBadgeColor($state))
-                        ->toggleable(),
                     TextColumn::make('joined_at')
                         ->date()
                         ->sortable(),
@@ -60,9 +51,6 @@ class MembersTable
                 ->filters([
                     SelectFilter::make('status')
                         ->options(Member::statusOptions()),
-                    SelectFilter::make('migration_status')
-                        ->label(__('Migration status'))
-                        ->options(Member::migrationStatusOptions()),
                     SelectFilter::make('parent_member_id')
                         ->label('Parent')
                         ->relationship('parent', 'name')

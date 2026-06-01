@@ -9,6 +9,7 @@ use App\Filament\Member\Resources\MyAccounts\RelationManagers\TransactionsRelati
 use App\Filament\Member\Resources\MyAccounts\Tables\MyMemberAccountsLoansTable;
 use App\Filament\Member\Resources\MyAccounts\Tables\MyMemberAccountsTable;
 use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Support\UiLabelIcons;
 use App\Models\Tenant\Account;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -53,17 +54,17 @@ class MyAccountResource extends Resource
     {
         return match (self::resolveListMyAccountsTab()) {
             'loans' => MyMemberAccountsLoansTable::configure(
-                $table->pluralModelLabel(__('Loans')),
+                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Loans'), UiLabelIcons::forKey('loans'))),
             ),
             'all' => MyMemberAccountsTable::configure(
-                $table->pluralModelLabel(__('All')),
+                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('All'), UiLabelIcons::forKey('all'))),
                 showTypeColumn: true,
             ),
             'fund' => MyMemberAccountsTable::configure(
-                $table->pluralModelLabel(__('Fund')),
+                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Fund'), UiLabelIcons::forKey('fund'))),
             ),
             default => MyMemberAccountsTable::configure(
-                $table->pluralModelLabel(__('Cash')),
+                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Cash'), UiLabelIcons::forKey('cash'))),
             ),
         };
     }

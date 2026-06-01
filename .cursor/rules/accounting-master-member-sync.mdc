@@ -16,7 +16,9 @@ Keep **member** and **master** ledger legs in sync wherever they represent the s
    - Do **not** pass `member_id` on **master cash** legs unless there is an explicit, documented reason — it triggers `ContributionCollectionCycleService::onMemberCashIncreased()` and can drain member cash unexpectedly.
 
 2. **Master Fund ↔ Member Fund**
-   - Contributions and loan fund-side entries mirror master fund when member fund moves (see `ContributionService`, loan disbursement fund debits).
+   - When member fund is **credited** or **debited** for pool movements (contributions, loan disbursement fund leg, repayments, opening balances, guarantor default), mirror the same amount on **master fund** in the same transaction.
+   - Post **master fund first** on credits, then member fund (same order as cash inflows).
+   - Use `AccountingService::creditMemberFundWithMasterMirror()` / `debitMemberFundWithMasterMirror()` instead of separate legs.
 
 3. **Bank clearance is a separate step**
    - Ledger posting records intent (e.g. cash-out approval debits cash; deposit accept credits cash).
@@ -29,7 +31,10 @@ Keep **member** and **master** ledger legs in sync wherever they represent the s
 
 5. **New flows**
    - Before adding a member cash credit/debit, check sibling services and update invariants/tests if descriptions or reference types change.
-   - Prefer shared patterns in `AccountingService` (`pairManualCredit` / `pairManualDebit`, `postManualMasterBankShadow`) over one-off legs.
+   - Prefer shared patterns in `AccountingService` (`creditMemberCashWithMasterMirror`, `debitMemberCashWithMasterMirror`, `creditMemberFundWithMasterMirror`, `debitMemberFundWithMasterMirror`, `pairManualCredit` / `pairManualDebit`, `AccountingService::withoutMasterPoolMirror()` when posting an explicit paired journal) over one-off legs.
+   - Reconciliation raises `MASTER_CASH_POOL_DRIFT` / `MASTER_FUND_POOL_DRIFT` when `master_*` balance ≠ sum(member `*_` balances) on nightly batch (not mid-mirror — realtime checks skip while `AccountingService::masterPoolMirrorInProgress()`).
+   - `MEMBER_CASH_DRIFT` / `MEMBER_FUND_DRIFT` use the §5.13 component formula (fund side includes contribution reversals, loan disbursement debits, guarantor instalment debits, EMI fund credits); realtime checks skip during pool mirroring.
+   - `PENDING_PAST_WINDOW_CLOSE` is a **collection workflow** signal (pending contribution still uncollected after cycle due end), not a pool-mirror check; exempt members for that period are skipped.
 
 ## Reference implementations
 
@@ -39,4 +44,6 @@ Keep **member** and **master** ledger legs in sync wherever they represent the s
 | Loan disbursement | `LoanLedgerService::postPartialLoanDisbursement()` | DR funds + CR master cash + CR member cash |
 | Cash-out approve | `MemberCashOutService::accept()` | DR member cash + DR master cash + uncleared bank txn |
 | Contribution / late fee / subscription fee | `AccountingService::postContribution*()`, `MembershipSubscriptionFeeService` | DR member cash + DR master cash mirror; fund/fees legs unchanged |
+| CSV import cut-off balances | `MemberOpeningBalanceService` | Signed pool mirrors on member + master cash/fund only (no bank statement lines or master bank ledger) |
+| CSV subscription fee on approval | `MembershipSubscriptionFeeService` | Member + master cash mirror and fee to master fees (no bank statement lines or master bank ledger) |
 | Bank import mirror | `FundFlowService::mirrorToCash()` | Master bank ↔ master cash |

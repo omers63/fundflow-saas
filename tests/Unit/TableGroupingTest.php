@@ -36,9 +36,6 @@ it('exposes expected group counts for ledger and listing presets', function (str
     ['centralPlans', 2],
     ['centralInvoices', 3],
     ['centralSubscriptions', 2],
-    ['migrationQueueMembers', 5],
-    ['migrationNotStartedMembers', 2],
-    ['migrationCycleStubs', 4],
 ]);
 
 it('omits member group on member-scoped loan and contribution presets', function (): void {

@@ -8,7 +8,6 @@ use App\Filament\Tenant\Resources\Members\RelationManagers\ContributionsRelation
 use App\Filament\Tenant\Resources\Members\RelationManagers\DependentsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\LoansRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\MessagesRelationManager;
-use App\Filament\Tenant\Resources\Members\RelationManagers\MigrationStubsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\RepaymentsRelationManager;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
@@ -121,6 +120,5 @@ test('member resource relation tabs are ordered with loans before dependents and
         LoansRelationManager::class,
         DependentsRelationManager::class,
         MessagesRelationManager::class,
-        MigrationStubsRelationManager::class,
     ]);
 });

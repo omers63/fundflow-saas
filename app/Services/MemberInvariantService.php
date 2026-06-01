@@ -10,6 +10,8 @@ use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\MembershipApplication;
+use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\Transaction;
 use App\Support\ContributionPolicySettings;
 
@@ -44,12 +46,16 @@ class MemberInvariantService
             ? $this->sumByReference($fundAccountId, $member->id, Contribution::class, 'credit')
             : 0.0;
 
-        $migrationInstalmentsCollected = $fundAccountId
-            ? $this->sumMigrationCollectedOnFund($fundAccountId, $member->id)
+        $contributionFundReversals = $fundAccountId
+            ? $this->sumByReference($fundAccountId, $member->id, Contribution::class, 'debit')
             : 0.0;
 
-        $loanDisbursementsMemberPortion = $fundAccountId
-            ? $this->sumLoanDisbursementMemberMirror($fundAccountId, $member->id)
+        $loanDisbursementsFromFund = $fundAccountId
+            ? $this->sumByReference($fundAccountId, $member->id, Loan::class, 'debit')
+            : 0.0;
+
+        $guarantorFundDebits = $fundAccountId
+            ? $this->sumByReference($fundAccountId, $member->id, LoanInstallment::class, 'debit')
             : 0.0;
 
         $emiRepayments = $fundAccountId
@@ -60,39 +66,65 @@ class MemberInvariantService
             ? $this->sumByReference($cashAccountId, $member->id, FundPosting::class, 'credit')
             : 0.0;
 
+        $subscriptionDeposits = $cashAccountId
+            ? $this->sumByReference($cashAccountId, $member->id, MembershipApplication::class, 'credit')
+            : 0.0;
+
         $loanDisbursementsCredited = $cashAccountId
-            ? $this->sumLoanCashPayouts($cashAccountId, $member->id)
+            ? $this->sumByReference($cashAccountId, $member->id, Loan::class, 'credit')
+            : 0.0;
+
+        $dependentTransfersIn = $cashAccountId
+            ? $this->sumDescriptionPattern($cashAccountId, $member->id, 'credit', 'Transfer from%')
             : 0.0;
 
         $contributionsDebited = $cashAccountId
-            ? $this->sumByReference($cashAccountId, $member->id, Contribution::class, 'debit')
+            ? $this->sumContributionPrincipalDebited($cashAccountId, $member->id)
             : 0.0;
 
         $emiDebited = $cashAccountId
             ? $this->sumByReference($cashAccountId, $member->id, LoanInstallment::class, 'debit')
             : 0.0;
 
-        $lateFeesDebited = $cashAccountId
-            ? $this->sumLateFeesDebited($cashAccountId, $member->id)
+        $subscriptionFeesDebited = $cashAccountId
+            ? $this->sumByReference($cashAccountId, $member->id, MembershipApplication::class, 'debit')
+            : 0.0;
+
+        $lateFeesNet = $cashAccountId
+            ? $this->sumLateFeesNet($cashAccountId, $member->id)
             : 0.0;
 
         $cashOuts = $cashAccountId
             ? $this->sumCashOuts($cashAccountId, $member->id)
             : 0.0;
 
+        $refundsAndCorrections = $cashAccountId
+            ? $this->sumRefundsAndReconCredits($cashAccountId, $member->id)
+            : 0.0;
+
+        $dependentTransfersOut = $cashAccountId
+            ? $this->sumDescriptionPattern($cashAccountId, $member->id, 'debit', 'Transfer to%')
+            : 0.0;
+
         $expectedFund = $openingFund
             + $contributionsCollected
-            + $migrationInstalmentsCollected
-            - $loanDisbursementsMemberPortion
+            - $contributionFundReversals
+            - $loanDisbursementsFromFund
+            - $guarantorFundDebits
             + $emiRepayments;
 
         $expectedCash = $openingCash
             + $depositsReceived
+            + $subscriptionDeposits
             + $loanDisbursementsCredited
+            + $dependentTransfersIn
+            + $refundsAndCorrections
             - $contributionsDebited
             - $emiDebited
-            - $lateFeesDebited
-            - $cashOuts;
+            - $subscriptionFeesDebited
+            - $lateFeesNet
+            - $cashOuts
+            - $dependentTransfersOut;
 
         $actualFund = (float) ($member->fundAccount?->balance ?? 0);
         $actualCash = (float) ($member->cashAccount?->balance ?? 0);
@@ -112,16 +144,22 @@ class MemberInvariantService
             'components' => [
                 'opening_fund' => $openingFund,
                 'contributions_collected' => $contributionsCollected,
-                'migration_instalments_collected' => $migrationInstalmentsCollected,
-                'loan_disbursements_member_portion' => $loanDisbursementsMemberPortion,
+                'contribution_fund_reversals' => $contributionFundReversals,
+                'loan_disbursements_from_fund' => $loanDisbursementsFromFund,
+                'guarantor_fund_debits' => $guarantorFundDebits,
                 'emi_repayments' => $emiRepayments,
                 'opening_cash' => $openingCash,
                 'deposits_received' => $depositsReceived,
+                'subscription_deposits' => $subscriptionDeposits,
                 'loan_disbursements_credited' => $loanDisbursementsCredited,
+                'dependent_transfers_in' => $dependentTransfersIn,
+                'refunds_and_recon_credits' => $refundsAndCorrections,
                 'contributions_debited' => $contributionsDebited,
                 'emi_debited' => $emiDebited,
-                'late_fees_debited' => $lateFeesDebited,
+                'subscription_fees_debited' => $subscriptionFeesDebited,
+                'late_fees_net' => $lateFeesNet,
                 'cash_outs' => $cashOuts,
+                'dependent_transfers_out' => $dependentTransfersOut,
             ],
         ];
     }
@@ -140,51 +178,69 @@ class MemberInvariantService
             ->sum('amount');
     }
 
-    protected function sumMigrationCollectedOnFund(int $accountId, int $memberId): float
-    {
-        return (float) Transaction::query()
-            ->where('account_id', $accountId)
-            ->where('member_id', $memberId)
-            ->where('type', 'credit')
-            ->where('description', 'like', 'MIGRATION_%')
-            ->where('description', 'not like', '%MIGRATION_OPENING%')
-            ->where('description', 'not like', '%MIGRATION_OB_OFFSET%')
-            ->sum('amount');
-    }
-
-    protected function sumLoanDisbursementMemberMirror(int $accountId, int $memberId): float
+    protected function sumContributionPrincipalDebited(int $accountId, int $memberId): float
     {
         return (float) Transaction::query()
             ->where('account_id', $accountId)
             ->where('member_id', $memberId)
             ->where('type', 'debit')
-            ->where('reference_type', (new Loan)->getMorphClass())
-            ->where('description', 'like', '%(member mirror)%')
-            ->sum('amount');
-    }
-
-    protected function sumLoanCashPayouts(int $accountId, int $memberId): float
-    {
-        return (float) Transaction::query()
-            ->where('account_id', $accountId)
-            ->where('member_id', $memberId)
-            ->where('type', 'credit')
-            ->where('reference_type', (new Loan)->getMorphClass())
-            ->where('description', 'like', '%(cash payout)%')
-            ->sum('amount');
-    }
-
-    protected function sumLateFeesDebited(int $accountId, int $memberId): float
-    {
-        return (float) Transaction::query()
-            ->where('account_id', $accountId)
-            ->where('member_id', $memberId)
-            ->where('type', 'debit')
+            ->where('reference_type', (new Contribution)->getMorphClass())
             ->where(function ($query): void {
-                $query->where('description', 'like', '%late fee%')
-                    ->orWhere('description', 'like', '%Late fee%');
+                $query->where('description', 'not like', '%late fee%')
+                    ->where('description', 'not like', '%Late fee%');
             })
             ->sum('amount');
+    }
+
+    protected function sumDescriptionPattern(
+        int $accountId,
+        int $memberId,
+        string $type,
+        string $descriptionPattern,
+    ): float {
+        return (float) Transaction::query()
+            ->where('account_id', $accountId)
+            ->where('member_id', $memberId)
+            ->where('type', $type)
+            ->where('description', 'like', $descriptionPattern)
+            ->sum('amount');
+    }
+
+    /**
+     * Net late-fee cash impact (debits for fees posted minus credits for reversals).
+     */
+    protected function sumLateFeesNet(int $accountId, int $memberId): float
+    {
+        $query = Transaction::query()
+            ->where('account_id', $accountId)
+            ->where('member_id', $memberId)
+            ->where(function ($builder): void {
+                $builder->where('description', 'like', '%late fee%')
+                    ->orWhere('description', 'like', '%Late fee%');
+            });
+
+        $debited = (float) (clone $query)->where('type', 'debit')->sum('amount');
+        $credited = (float) (clone $query)->where('type', 'credit')->sum('amount');
+
+        return $debited - $credited;
+    }
+
+    protected function sumRefundsAndReconCredits(int $accountId, int $memberId): float
+    {
+        $refunds = (float) Transaction::query()
+            ->where('account_id', $accountId)
+            ->where('member_id', $memberId)
+            ->where('type', 'credit')
+            ->where(function ($query): void {
+                $query->where('description', 'like', 'Refund —%')
+                    ->orWhere('description', 'like', '%RECON_%REFUND%')
+                    ->orWhere('description', 'like', '%RECON_EMI_OVERPAYMENT_REFUND%');
+            })
+            ->sum('amount');
+
+        $reconCredits = $this->sumByReference($accountId, $memberId, ReconciliationException::class, 'credit');
+
+        return $refunds + $reconCredits;
     }
 
     protected function sumCashOuts(int $accountId, int $memberId): float
@@ -196,8 +252,7 @@ class MemberInvariantService
             ->where('member_id', $memberId)
             ->where('type', 'debit')
             ->where(function ($query): void {
-                $query->where('description', 'like', 'MIGRATION_LUMPSUM%')
-                    ->orWhere('description', 'like', '%refund%')
+                $query->where('description', 'like', '%refund%')
                     ->orWhere('description', 'like', '%Refund%')
                     ->orWhere('description', 'like', '%(cash out)%')
                     ->orWhere('description', 'like', '%(cash clearing to master cash)%');

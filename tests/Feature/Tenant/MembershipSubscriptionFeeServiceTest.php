@@ -3,12 +3,15 @@
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
+use App\Models\Tenant\ReconciliationException;
+use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
-use App\Services\FundPostingService;
 use App\Services\MembershipApplicationApprovalService;
 use App\Services\MembershipSubscriptionFeeService;
+use App\Services\ReconciliationService;
 use App\Support\PublicPageSettings;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -21,8 +24,11 @@ beforeEach(function () {
     Storage::fake('public');
 
     Account::query()->delete();
+    Contribution::query()->delete();
+    Member::query()->delete();
     MembershipApplication::query()->delete();
     BankTransaction::query()->delete();
+    Transaction::query()->delete();
 
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 0, 'is_master' => true]);
     Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
@@ -64,54 +70,25 @@ test('approval is blocked when transfer amount is below required subscription fe
         'membership_fee_required_amount' => 50,
     ]);
 
-    expect(fn() => $this->approval->approve($application))
+    expect(fn () => $this->approval->approve($application))
         ->toThrow(InvalidArgumentException::class);
 });
 
-test('approving application without transfer receipt still posts uncleared subscription fee accounting', function () {
+test('approving application posts subscription fee to cash pools without bank statement lines', function () {
     $application = makePendingFeeApplication([
         'membership_fee_receipt_path' => null,
-    ]);
-
-    $member = $this->approval->approve($application);
-
-    expect(BankTransaction::query()
-        ->where('membership_application_id', $application->fresh()->id)
-        ->where('is_cleared', false)
-        ->exists())->toBeTrue()
-        ->and((float) $member->cashAccount->fresh()->balance)->toBe(25.0);
-});
-
-test('approving application posts subscription fee accounting and leaves excess in member cash', function () {
-    $application = makePendingFeeApplication([
         'membership_fee_transfer_date' => '2026-02-15',
     ]);
 
     $member = $this->approval->approve($application);
 
-    $masterCash = Account::masterCash();
-    $masterFees = Account::masterFees();
-    $memberCash = $member->cashAccount;
+    expect(BankTransaction::query()->where('membership_application_id', $application->fresh()->id)->exists())->toBeFalse()
+        ->and((float) $member->cashAccount->fresh()->balance)->toBe(25.0)
+        ->and((float) Account::masterCash()->fresh()->balance)->toBe(25.0)
+        ->and((float) Account::masterFees()->fresh()->balance)->toBe(50.0)
+        ->and((float) Account::masterBank()->fresh()->balance)->toBe(0.0);
 
-    expect((float) $masterCash->fresh()->balance)->toBe(25.0)
-        ->and((float) $masterFees->fresh()->balance)->toBe(50.0)
-        ->and((float) $memberCash->fresh()->balance)->toBe(25.0);
-
-    $bankTxn = BankTransaction::query()
-        ->where('membership_application_id', $application->fresh()->id)
-        ->first();
-
-    expect($bankTxn)->not->toBeNull()
-        ->and($bankTxn->is_cleared)->toBeFalse()
-        ->and((float) $bankTxn->amount)->toBe(75.0)
-        ->and($bankTxn->master_cash_transaction_id)->not->toBeNull()
-        ->and($bankTxn->transaction_date->toDateString())->toBe('2026-02-15');
-
-    expect(Carbon::parse($memberCash->transactions()->where('type', 'credit')->value('transacted_at'))->toDateString())
-        ->toBe('2026-02-15')
-        ->and(Carbon::parse($memberCash->transactions()->where('type', 'debit')->value('transacted_at'))->toDateString())
-        ->toBe('2026-02-15')
-        ->and(Carbon::parse($masterCash->transactions()->where('type', 'credit')->value('transacted_at'))->toDateString())
+    expect(Carbon::parse($member->cashAccount->transactions()->where('type', 'credit')->value('transacted_at'))->toDateString())
         ->toBe('2026-02-15');
 });
 
@@ -144,6 +121,59 @@ test('csv import subscription fee does not trigger contribution collection on ap
         )->toBeFalse();
 });
 
+test('import cutoff approval keeps master pools aligned without bank postings', function () {
+    PublicPageSettings::save([
+        ...PublicPageSettings::defaults(),
+        'fee_new' => '150',
+    ]);
+
+    ReconciliationException::query()->delete();
+
+    $application = makePendingFeeApplication([
+        'membership_fee_amount' => 150,
+        'membership_fee_required_amount' => 150,
+        'membership_fee_transfer_reference' => 'CSV-CUTOFF-001',
+        'import_arrears_cutoff_date' => now()->subMonths(6)->startOfMonth()->toDateString(),
+        'import_cutoff_cash_balance' => 500,
+        'import_cutoff_fund_balance' => 180000,
+    ]);
+
+    $member = $this->approval->approve($application);
+
+    expect((float) $member->cashAccount->fresh()->balance)->toBe(500.0)
+        ->and((float) $member->fundAccount->fresh()->balance)->toBe(180000.0)
+        ->and((float) Account::masterCash()->fresh()->balance)->toBe(500.0)
+        ->and((float) Account::masterFund()->fresh()->balance)->toBe(180000.0)
+        ->and((float) Account::masterBank()->fresh()->balance)->toBe(0.0)
+        ->and(BankTransaction::query()->where('membership_application_id', $application->fresh()->id)->exists())->toBeFalse();
+
+    $recon = app(ReconciliationService::class);
+    $recon->runNightlyBatch();
+    $recon->runNightlyBatch();
+
+    $spuriousCodes = [
+        'MASTER_CASH_POOL_DRIFT',
+        'MASTER_FUND_POOL_DRIFT',
+        'MEMBER_CASH_DRIFT',
+        'MEMBER_FUND_DRIFT',
+        'PENDING_PAST_WINDOW_CLOSE',
+        'CONTRIBUTION_MISSING_MASTER_CREDIT',
+        'CONTRIBUTION_MEMBER_FUND_MISSING',
+        'ORPHAN_MASTER_FUND_CREDIT',
+        'FEE_POSTED_WRONG_ACCOUNT',
+        'UNMATCHED_CASH_ENTRY',
+        'STALE_PENDING',
+    ];
+
+    $openSpurious = ReconciliationException::query()
+        ->open()
+        ->whereIn('exception_code', $spuriousCodes)
+        ->pluck('exception_code')
+        ->all();
+
+    expect($openSpurious)->toBeEmpty('Unexpected: '.implode(', ', $openSpurious));
+});
+
 test('imported transfer amount triggers subscription fee posting on approval', function () {
     PublicPageSettings::save([
         ...PublicPageSettings::defaults(),
@@ -161,33 +191,6 @@ test('imported transfer amount triggers subscription fee posting on approval', f
     $member = $this->approval->approve($application);
 
     expect((float) $member->cashAccount->fresh()->balance)->toBe(10.0);
-});
-
-test('bank statement match clears uncleared subscription fee transaction', function () {
-    $application = makePendingFeeApplication();
-    $member = $this->approval->approve($application);
-
-    $uncleared = BankTransaction::query()
-        ->where('membership_application_id', $application->fresh()->id)
-        ->firstOrFail();
-
-    $imported = BankTransaction::create([
-        'bank_statement_id' => $uncleared->bank_statement_id,
-        'transaction_date' => $uncleared->transaction_date,
-        'description' => 'Bank import match',
-        'amount' => $uncleared->amount,
-        'reference' => $uncleared->reference,
-        'status' => 'imported',
-        'member_id' => $member->id,
-        'hash' => md5('imported-subscription-fee'),
-        'is_cleared' => false,
-    ]);
-
-    app(FundPostingService::class)->clearTransaction($uncleared, $imported);
-
-    expect($uncleared->fresh()->is_cleared)->toBeTrue()
-        ->and($imported->fresh()->is_cleared)->toBeTrue()
-        ->and($imported->fresh()->membership_application_id)->toBe($application->fresh()->id);
 });
 
 test('enrollment dependent applications skip subscription fee posting', function () {
@@ -239,7 +242,7 @@ test('csv-imported dependent applications post subscription fees to their own me
 
     $childMember = $this->approval->approve($dependent);
 
-    expect(BankTransaction::query()->where('membership_application_id', $dependent->id)->exists())->toBeTrue()
+    expect(BankTransaction::query()->where('membership_application_id', $dependent->id)->exists())->toBeFalse()
         ->and((float) $childMember->cashAccount->fresh()->balance)->toBe(30.0)
         ->and((float) $parentMember->cashAccount->fresh()->balance)->toBe(10.0);
 });
@@ -252,13 +255,8 @@ test('csv-imported applications can be approved without a transfer reference', f
 
     $member = $this->approval->approve($application);
 
-    $bankTxn = BankTransaction::query()
-        ->where('membership_application_id', $application->fresh()->id)
-        ->first();
-
     expect($member)->not->toBeNull()
-        ->and($bankTxn)->not->toBeNull()
-        ->and($bankTxn->reference)->toBe(__('Application #:id', ['id' => $application->id]));
+        ->and(BankTransaction::query()->where('membership_application_id', $application->fresh()->id)->exists())->toBeFalse();
 });
 
 test('approve many collects subscription fee validation failures instead of throwing', function () {

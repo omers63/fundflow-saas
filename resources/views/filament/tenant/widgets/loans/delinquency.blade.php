@@ -13,7 +13,8 @@
         <div class="flex items-center gap-1.5">
             <x-heroicon-o-exclamation-triangle class="h-4 w-4 text-rose-500" />
             <h3 class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                {{ __('Delinquency workspace') }}</h3>
+                {{ __('Collections attention') }}
+            </h3>
         </div>
     </div>
     <div class="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-4">
@@ -35,7 +36,7 @@
                 class="text-xl font-bold tabular-nums text-sky-600 dark:text-sky-400">{{ $pipeline['guarantor_at_risk'] }}</span>
             <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Guarantor risk') }}</span>
         </a>
-        <a href="{{ $pipeline['delinquency_guarantor_url'] }}"
+        <a href="{{ $pipeline['delinquency_members_url'] }}"
             class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-violet-50/70 dark:hover:bg-violet-950/20">
             <span
                 class="text-xl font-bold tabular-nums text-violet-600 dark:text-violet-400">{{ $pipeline['delinquent_members'] }}</span>

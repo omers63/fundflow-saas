@@ -21,7 +21,6 @@ use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
-use App\Models\Tenant\MigrationCycleStub;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\SystemJobRun;
 use App\Models\Tenant\Transaction;
@@ -295,88 +294,6 @@ final class TableGrouping
                 ->getTitleFromRecordUsing(fn (MembershipApplication $record): string => ucfirst((string) $record->application_type)),
             Group::make('created_at')
                 ->label(__('Submitted'))
-                ->date(),
-        ];
-    }
-
-    /**
-     * @return array<int, Group>
-     */
-    public static function migrationQueueMembers(): array
-    {
-        return [
-            Group::make('partial_clearance_granted_at')
-                ->label(__('Partial clearance'))
-                ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn (Member $record): string => $record->partial_clearance_granted_at !== null
-                    ? __('Granted')
-                    : __('Not granted')),
-            Group::make('opening_balances_posted_at')
-                ->label(__('Opening balances'))
-                ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn (Member $record): string => $record->opening_balances_posted_at !== null
-                    ? __('Posted')
-                    : __('Not posted')),
-            Group::make('migration_cutoff_date')
-                ->label(__('Cutoff'))
-                ->date(),
-            Group::make('parent.name')
-                ->label(__('Parent'))
-                ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn (Member $record): string => $record->parent?->name ?? __('Independent')),
-            Group::make('joined_at')
-                ->label(__('Joined'))
-                ->date(),
-        ];
-    }
-
-    /**
-     * @return array<int, Group>
-     */
-    public static function migrationNotStartedMembers(): array
-    {
-        return [
-            Group::make('parent.name')
-                ->label(__('Parent'))
-                ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn (Member $record): string => $record->parent?->name ?? __('Independent')),
-            Group::make('joined_at')
-                ->label(__('Joined'))
-                ->date(),
-        ];
-    }
-
-    /**
-     * @return array<int, Group>
-     */
-    public static function migrationCycleStubs(): array
-    {
-        return [
-            Group::make('status')
-                ->label(__('Status'))
-                ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn (MigrationCycleStub $record): string => match ($record->status) {
-                    'unresolved' => __('Unresolved'),
-                    'closed' => __('Closed'),
-                    'escalated' => __('Escalated'),
-                    default => ucfirst((string) $record->status),
-                }),
-            Group::make('classification')
-                ->label(__('Classification'))
-                ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn (MigrationCycleStub $record): string => match ($record->classification) {
-                    MigrationCycleStub::CLASS_WAIVED => __('Waived'),
-                    MigrationCycleStub::CLASS_BACKDATED_PAID => __('Backdated paid'),
-                    MigrationCycleStub::CLASS_BACKDATED_DUE => __('Backdated due'),
-                    MigrationCycleStub::CLASS_OB_ABSORBED => __('Opening balance absorbed'),
-                    MigrationCycleStub::CLASS_ESCALATED => __('Escalated'),
-                    default => __('Unclassified'),
-                }),
-            Group::make('member.name')
-                ->label(__('Member'))
-                ->titlePrefixedWithLabel(false),
-            Group::make('cycle_date')
-                ->label(__('Cycle date'))
                 ->date(),
         ];
     }

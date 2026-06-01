@@ -8,6 +8,7 @@ use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\AccountTransactionAmountColumn;
 use App\Filament\Support\AccountTransactionManualAdjustmentHeaderActions;
+use App\Filament\Support\UiLabelIcons;
 use App\Filament\Support\ViewActions\ViewAccountTransactionAction;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
@@ -52,9 +53,9 @@ class MemberTransactionsTabsRelationManager extends RelationManager
                     ->latest('transacted_at');
             })
             ->heading(match ($this->ledgerTab) {
-                'fund' => __('Fund transactions'),
-                'loan' => __('Loan account transactions'),
-                default => __('Cash transactions'),
+                'fund' => UiLabelIcons::labeledHtml(__('Fund transactions'), UiLabelIcons::forKey('fund')),
+                'loan' => UiLabelIcons::labeledHtml(__('Loan account transactions'), UiLabelIcons::forKey('loan')),
+                default => UiLabelIcons::labeledHtml(__('Cash transactions'), UiLabelIcons::forKey('cash')),
             })
             ->columns([
                 TextColumn::make('transacted_at')->dateTime()->sortable(),

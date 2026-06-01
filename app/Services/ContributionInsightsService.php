@@ -6,7 +6,6 @@ namespace App\Services;
 
 use App\Filament\Tenant\Pages\ContributionCyclePage;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
-use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Setting;
@@ -17,7 +16,8 @@ final class ContributionInsightsService
 {
     public function __construct(
         protected ContributionCycleService $cycles,
-    ) {}
+    ) {
+    }
 
     /**
      * @return array<string, mixed>
@@ -84,7 +84,7 @@ final class ContributionInsightsService
             ->orderBy('created_at')
             ->limit(6)
             ->get()
-            ->map(fn (Contribution $contribution): array => [
+            ->map(fn(Contribution $contribution): array => [
                 'id' => $contribution->id,
                 'name' => $contribution->member?->name ?? __('Unknown member'),
                 'period_label' => $contribution->period?->translatedFormat('M Y') ?? '—',
@@ -92,8 +92,8 @@ final class ContributionInsightsService
                 'is_late' => (bool) $contribution->is_late,
                 'days_waiting' => (int) Carbon::parse($contribution->created_at)->diffInDays($now),
                 'queue_url' => ContributionResource::getUrl('index')
-                    .'?tableFilters[member_id][value]='.$contribution->member_id
-                    .'&tableFilters[status][value]=pending',
+                    . '?tableFilters[member_id][value]=' . $contribution->member_id
+                    . '&tableFilters[status][value]=pending',
             ])
             ->all();
 
@@ -105,7 +105,7 @@ final class ContributionInsightsService
             ->pluck('total', 'payment_method');
 
         $methodBreakdown = collect(Contribution::paymentMethodOptions())
-            ->map(fn (string $label, string $method): array => [
+            ->map(fn(string $label, string $method): array => [
                 'method' => $method,
                 'label' => $label,
                 'count' => (int) ($methodCounts[$method] ?? 0),
@@ -155,7 +155,7 @@ final class ContributionInsightsService
                 'contributions_url' => $contributionsUrl,
                 'cycle_url' => ContributionCyclePage::getUrl(),
                 'members_url' => MemberResource::getUrl('index'),
-                'delinquency_url' => LoanResource::getUrl('delinquency'),
+                'delinquency_url' => ContributionResource::listTabUrl('arrears'),
             ],
         ];
     }

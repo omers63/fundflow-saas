@@ -9,6 +9,7 @@ use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Resources\Members\Concerns\InteractsWithMemberContributionHeaderActions;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
@@ -18,11 +19,12 @@ use Filament\Tables\Table;
 
 class DependentsRelationManager extends RelationManager
 {
+    use InteractsWithMemberContributionHeaderActions;
     use TranslatesRelationManagerTitle;
 
     protected static string $relationship = 'dependents';
 
-    protected static ?string $title = 'Dependents';
+    protected static ?string $title = 'Household';
 
     public function table(Table $table): Table
     {
@@ -51,6 +53,9 @@ class DependentsRelationManager extends RelationManager
                 SelectFilter::make('status')
                     ->options(Member::statusOptions()),
                 DateColumnRangeFilter::make('joined_at', 'Joined'),
+            ])
+            ->headerActions([
+                $this->buildMemberAllocateDependentsAction(),
             ])
             ->recordActions(TableRecordActionGroups::wrap([]))
             ->toolbarActions([

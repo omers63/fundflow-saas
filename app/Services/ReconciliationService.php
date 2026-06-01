@@ -12,8 +12,6 @@ use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
-use App\Models\Tenant\MigrationCycleStub;
-use App\Models\Tenant\MigrationInstalmentSchedule;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\Transaction;
 use App\Services\Loans\LateFeeService;
@@ -72,7 +70,6 @@ class ReconciliationService
         $raised += $this->reconcileFundTiers();
         $raised += $this->reconcileBankClearing();
         $raised += $this->reconcileLateFees();
-        $raised += $this->reconcileMigration();
         $raised += $this->reconcileMemberInvariants();
 
         $open = ReconciliationException::query()->open()->get();
@@ -129,22 +126,6 @@ class ReconciliationService
             ],
         );
 
-        $member = $transaction->member;
-
-        if ($member && $member->migration_status === 'migration_pending') {
-            $allowed = str_starts_with((string) $transaction->description, 'MIGRATION_')
-                || str_contains((string) $transaction->description, 'Migration');
-
-            if (! $allowed) {
-                $this->raiseOnce('INELIGIBLE_ACCOUNT_POSTING', 'migration', 'high', null, [
-                    'transaction_id' => $transaction->id,
-                    'member_id' => $member->id,
-                ]);
-
-                $this->attemptVoidUnbalancedOrIneligible($transaction, __('Ineligible posting on migration-pending member'));
-            }
-        }
-
         $imbalance = $this->accounting->validateBalancedJournalForReference($transaction);
 
         if ($imbalance !== null) {
@@ -157,13 +138,56 @@ class ReconciliationService
 
         $this->handleRealtimeLateFeeRules($transaction);
         $this->handleRealtimeMemberInvariant($transaction);
+        $this->handleRealtimeMasterPoolInvariant($transaction);
+    }
+
+    protected function handleRealtimeMasterPoolInvariant(Transaction $transaction): void
+    {
+        if (AccountingService::masterPoolMirrorInProgress()) {
+            return;
+        }
+
+        $transaction->loadMissing('account');
+
+        if ($transaction->account === null) {
+            return;
+        }
+
+        if (! in_array($transaction->account->type, ['cash', 'fund'], true)) {
+            return;
+        }
+
+        $result = $this->masterInvariants->check();
+        $tolerance = ContributionPolicySettings::reconTolerance();
+
+        if ($result['cash_delta'] > $tolerance) {
+            $this->raiseOnce('MASTER_CASH_POOL_DRIFT', 'master_account', 'high', $result['cash_delta'], [
+                'transaction_id' => $transaction->id,
+                'master_cash' => $result['master_cash'],
+                'member_cash_sum' => $result['member_cash_sum'],
+                'realtime' => true,
+            ]);
+        }
+
+        if ($result['fund_delta'] > $tolerance) {
+            $this->raiseOnce('MASTER_FUND_POOL_DRIFT', 'master_account', 'high', $result['fund_delta'], [
+                'transaction_id' => $transaction->id,
+                'master_fund' => $result['master_fund'],
+                'member_fund_sum' => $result['member_fund_sum'],
+                'realtime' => true,
+            ]);
+        }
     }
 
     protected function handleRealtimeMemberInvariant(Transaction $transaction): void
     {
+        if (AccountingService::masterPoolMirrorInProgress()) {
+            return;
+        }
+
         $member = $transaction->member;
 
-        if ($member === null || $member->migration_status === 'migration_pending') {
+        if ($member === null) {
             return;
         }
 
@@ -224,16 +248,6 @@ class ReconciliationService
             return;
         }
 
-        if ($member->migration_status === 'migration_pending') {
-            $this->raiseOnce('RECON_AUTO_FEE_EXEMPTION_REVERSAL', 'late_fee', 'low', (float) $transaction->amount, [
-                'transaction_id' => $transaction->id,
-                'member_id' => $member->id,
-                'reason' => 'migration_pending',
-            ]);
-
-            return;
-        }
-
         if (
             str_contains($description, 'Contribution late fee')
             && $member->isExemptFromContributions()
@@ -249,18 +263,6 @@ class ReconciliationService
     protected function reconcileContributions(): int
     {
         $count = 0;
-
-        Contribution::query()
-            ->where('status', 'posted')
-            ->whereHas('member', fn ($q) => $q->where('migration_status', 'migration_pending'))
-            ->with('member')
-            ->each(function (Contribution $contribution) use (&$count): void {
-                $this->raiseOnce('MIGRATION_PENDING_DEBITED', 'contribution', 'high', null, [
-                    'contribution_id' => $contribution->id,
-                    'member_id' => $contribution->member_id,
-                ]);
-                $count++;
-            });
 
         Contribution::query()
             ->where('status', 'posted')
@@ -305,6 +307,10 @@ class ReconciliationService
 
                 $month = (int) $contribution->period->month;
                 $year = (int) $contribution->period->year;
+
+                if ($contribution->member?->isExemptFromContributions($month, $year)) {
+                    return;
+                }
 
                 if (now()->greaterThan($this->contributionCycles->cycleDueEndAt($month, $year))) {
                     $this->raiseOnce('PENDING_PAST_WINDOW_CLOSE', 'contribution', 'medium', null, [
@@ -713,11 +719,11 @@ class ReconciliationService
 
         BankTransaction::query()
             ->uncleared()
-            ->where(function ($query): void {
-                $query->whereNotNull('fund_posting_id')
-                    ->orWhereNotNull('membership_application_id');
-            })
+            ->whereNotNull('fund_posting_id')
             ->where('created_at', '<', now()->subDays($staleDays))
+            ->whereDoesntHave('bankStatement', function ($query): void {
+                $query->whereIn('filename', $this->bankClearing->membershipImportPlaceholderStatementFilenames());
+            })
             ->each(function (BankTransaction $txn) use (&$count): void {
                 $this->raiseOnce('UNMATCHED_CASH_ENTRY', 'bank_clearing', 'medium', (float) $txn->amount, [
                     'bank_transaction_id' => $txn->id,
@@ -729,6 +735,9 @@ class ReconciliationService
         BankTransaction::query()
             ->uncleared()
             ->where('created_at', '<', now()->subDays($staleDays))
+            ->whereDoesntHave('bankStatement', function ($query): void {
+                $query->whereIn('filename', $this->bankClearing->membershipImportPlaceholderStatementFilenames());
+            })
             ->each(function (BankTransaction $txn) use (&$count): void {
                 $this->raiseOnce('STALE_PENDING', 'bank_clearing', 'medium', (float) $txn->amount, [
                     'bank_transaction_id' => $txn->id,
@@ -786,17 +795,6 @@ class ReconciliationService
             $count++;
         }
 
-        Contribution::query()
-            ->where('status', 'pending')
-            ->where('late_fee_amount', '>', 0)
-            ->whereHas('member', fn ($q) => $q->where('migration_status', 'migration_pending'))
-            ->each(function (Contribution $contribution) use (&$count): void {
-                $this->raiseOnce('MIGRATION_LATE_FEE_APPLIED', 'late_fee', 'medium', (float) $contribution->late_fee_amount, [
-                    'contribution_id' => $contribution->id,
-                ]);
-                $count++;
-            });
-
         Transaction::query()
             ->where(function ($query): void {
                 $query->where('description', 'like', '%late fee%')
@@ -810,13 +808,7 @@ class ReconciliationService
                     return;
                 }
 
-                $wrongAccount = match ($transaction->type) {
-                    'credit' => ! $account->is_master || $account->type !== 'fees',
-                    'debit' => $account->is_master || $account->type !== 'cash',
-                    default => false,
-                };
-
-                if ($wrongAccount) {
+                if ($this->lateFeePostedToWrongAccount($account, (string) $transaction->type)) {
                     $this->raiseOnce('FEE_POSTED_WRONG_ACCOUNT', 'late_fee', 'high', (float) $transaction->amount, [
                         'transaction_id' => $transaction->id,
                         'account_id' => $account->id,
@@ -882,6 +874,24 @@ class ReconciliationService
         return $count;
     }
 
+    /**
+     * Valid late-fee journal legs per pool mirroring rules:
+     * - Application: DR member cash + DR master cash (mirror), CR master fees.
+     * - Reversal: CR member cash + CR master cash (mirror), DR master fees.
+     */
+    protected function lateFeePostedToWrongAccount(Account $account, string $transactionType): bool
+    {
+        $allowed = match ($transactionType) {
+            'credit' => ($account->is_master && $account->type === 'fees')
+            || $account->type === 'cash',
+            'debit' => $account->type === 'cash'
+            || ($account->is_master && $account->type === 'fees'),
+            default => false,
+        };
+
+        return ! $allowed;
+    }
+
     protected function reconcileMemberInvariants(): int
     {
         $count = 0;
@@ -889,7 +899,6 @@ class ReconciliationService
 
         Member::query()
             ->where('status', 'active')
-            ->where('migration_status', '!=', 'migration_pending')
             ->each(function (Member $member) use (&$count, $tolerance): void {
                 $result = $this->memberInvariants->check($member);
 
@@ -911,235 +920,6 @@ class ReconciliationService
         return $count;
     }
 
-    protected function reconcileMigration(): int
-    {
-        $count = 0;
-
-        Member::query()
-            ->where('migration_status', 'active')
-            ->whereNull('partial_clearance_granted_at')
-            ->whereHas('migrationStubs', fn ($q) => $q->unresolved())
-            ->each(function (Member $member) use (&$count): void {
-                $this->raiseOnce('ACTIVE_WITH_UNRESOLVED_STUBS', 'migration', 'high', null, [
-                    'member_id' => $member->id,
-                ]);
-                $count++;
-            });
-
-        Member::query()
-            ->whereNotNull('partial_clearance_granted_at')
-            ->whereHas('migrationStubs', fn ($q) => $q
-                ->where('classification', MigrationCycleStub::CLASS_ESCALATED)
-                ->where('status', '!=', 'closed'))
-            ->each(function (Member $member) use (&$count): void {
-                $this->raiseOnce('PARTIAL_CLEARANCE_ESCALATED_OPEN', 'migration', 'low', null, [
-                    'member_id' => $member->id,
-                ]);
-                $count++;
-            });
-
-        Member::query()
-            ->where('migration_status', 'active')
-            ->whereHas('migrationStubs', fn ($q) => $q
-                ->where('classification', MigrationCycleStub::CLASS_BACKDATED_DUE)
-                ->whereNull('resolution_method'))
-            ->each(function (Member $member) use (&$count): void {
-                $this->raiseOnce('BACKDATED_DUE_UNRESOLVED', 'migration', 'high', null, [
-                    'member_id' => $member->id,
-                ]);
-                $count++;
-            });
-
-        Member::query()
-            ->whereNotNull('opening_balances_posted_at')
-            ->each(function (Member $member) use (&$count): void {
-                $cashOpening = (float) ($member->opening_cash_balance ?? 0);
-                $fundOpening = (float) ($member->opening_fund_balance ?? 0);
-
-                if ($cashOpening > 0.00001) {
-                    $cashLegs = Transaction::query()
-                        ->where('member_id', $member->id)
-                        ->where('description', 'like', 'MIGRATION_OPENING — cash%')
-                        ->count();
-
-                    if ($cashLegs < 2) {
-                        $this->raiseOnce('MIGRATION_OPENING_MISSING_LEG', 'migration', 'high', null, [
-                            'member_id' => $member->id,
-                            'leg' => 'cash',
-                        ]);
-                        $count++;
-                    }
-                }
-
-                if ($fundOpening > 0.00001) {
-                    $fundLegs = Transaction::query()
-                        ->where('member_id', $member->id)
-                        ->where('description', 'like', 'MIGRATION_OPENING — fund%')
-                        ->count();
-
-                    if ($fundLegs < 2) {
-                        $this->raiseOnce('MIGRATION_OPENING_MISSING_LEG', 'migration', 'high', null, [
-                            'member_id' => $member->id,
-                            'leg' => 'fund',
-                        ]);
-                        $count++;
-                    }
-                }
-            });
-
-        $tolerance = ContributionPolicySettings::reconTolerance();
-        $masterFundId = Account::masterFund()?->id;
-
-        if ($masterFundId !== null) {
-            $postedOpeningFund = (float) Transaction::query()
-                ->where('account_id', $masterFundId)
-                ->where('type', 'credit')
-                ->where('description', 'like', 'MIGRATION_OPENING — fund%')
-                ->sum('amount');
-
-            $expectedOpeningFund = (float) Member::query()
-                ->whereNotNull('opening_balances_posted_at')
-                ->sum('opening_fund_balance');
-
-            if (abs($postedOpeningFund - $expectedOpeningFund) > $tolerance) {
-                $this->raiseOnce('MIGRATION_OPENING_SUM_DRIFT', 'migration', 'high', $postedOpeningFund - $expectedOpeningFund, [
-                    'posted_sum' => $postedOpeningFund,
-                    'expected_sum' => $expectedOpeningFund,
-                ]);
-                $count++;
-            }
-        }
-
-        Member::query()
-            ->whereNotNull('opening_balances_posted_at')
-            ->whereNull('migration_cutoff_date')
-            ->each(function (Member $member) use (&$count): void {
-                $this->raiseOnce('MIGRATION_CUTOFF_MISSING', 'migration', 'medium', null, [
-                    'member_id' => $member->id,
-                ]);
-                $count++;
-            });
-
-        Member::query()
-            ->whereNotNull('opening_balances_posted_at')
-            ->each(function (Member $member) use (&$count): void {
-                $member->loadMissing('fundAccount');
-                $balance = (float) ($member->fundAccount?->balance ?? 0);
-
-                if ($balance >= -0.00001) {
-                    return;
-                }
-
-                $hasObOffset = Transaction::query()
-                    ->where('member_id', $member->id)
-                    ->where('description', 'like', 'MIGRATION_OB_OFFSET%')
-                    ->exists();
-
-                if ($hasObOffset) {
-                    $this->raiseOnce('OB_OFFSET_NEGATIVE_FUND', 'migration', 'high', $balance, [
-                        'member_id' => $member->id,
-                    ]);
-                    $count++;
-                }
-            });
-
-        Member::query()
-            ->whereHas('migrationInstalmentSchedules')
-            ->each(function (Member $member) use (&$count, $tolerance): void {
-                $scheduleTotal = (float) MigrationInstalmentSchedule::query()
-                    ->where('member_id', $member->id)
-                    ->sum('amount');
-
-                $backdatedTotal = (float) MigrationCycleStub::query()
-                    ->where('member_id', $member->id)
-                    ->where('classification', MigrationCycleStub::CLASS_BACKDATED_DUE)
-                    ->sum('amount_due');
-
-                if ($scheduleTotal > $backdatedTotal + $tolerance && $backdatedTotal > 0.00001) {
-                    $this->raiseOnce('MIGRATION_INSTALMENT_EXCESS', 'migration', 'medium', $scheduleTotal - $backdatedTotal, [
-                        'member_id' => $member->id,
-                        'schedule_total' => $scheduleTotal,
-                        'backdated_total' => $backdatedTotal,
-                    ]);
-                    $count++;
-                }
-            });
-
-        Contribution::query()
-            ->where('status', 'posted')
-            ->whereNotNull('period')
-            ->each(function (Contribution $contribution) use (&$count): void {
-                $period = $contribution->period;
-
-                $waivedStub = MigrationCycleStub::query()
-                    ->where('member_id', $contribution->member_id)
-                    ->where('classification', MigrationCycleStub::CLASS_WAIVED)
-                    ->whereYear('cycle_date', (int) $period->year)
-                    ->whereMonth('cycle_date', (int) $period->month)
-                    ->exists();
-
-                if ($waivedStub) {
-                    $this->raiseOnce('WAIVED_CYCLE_DEBITED', 'migration', 'high', (float) $contribution->amount, [
-                        'contribution_id' => $contribution->id,
-                        'member_id' => $contribution->member_id,
-                        'period' => $period->format('Y-m'),
-                    ]);
-                    $count++;
-                }
-            });
-
-        $count += $this->reconcileMigrationLedgerIntegrity($tolerance);
-
-        return $count;
-    }
-
-    protected function reconcileMigrationLedgerIntegrity(float $tolerance): int
-    {
-        $count = 0;
-        $masterFundId = Account::masterFund()?->id;
-
-        if ($masterFundId === null) {
-            return 0;
-        }
-
-        $expectedObligation = (float) Member::query()
-            ->whereNotNull('opening_balances_posted_at')
-            ->sum('opening_fund_balance')
-            + (float) MigrationCycleStub::query()
-                ->where('classification', MigrationCycleStub::CLASS_BACKDATED_DUE)
-                ->sum('amount_due');
-
-        $openingPosted = (float) Transaction::query()
-            ->where('account_id', $masterFundId)
-            ->where('type', 'credit')
-            ->where('description', 'like', 'MIGRATION_OPENING — fund%')
-            ->sum('amount');
-
-        $lumpsumPosted = (float) Transaction::query()
-            ->where('account_id', $masterFundId)
-            ->where('type', 'credit')
-            ->where('description', 'like', 'MIGRATION_LUMPSUM%')
-            ->sum('amount');
-
-        $obOffsetApplied = (float) Transaction::query()
-            ->where('account_id', $masterFundId)
-            ->where('type', 'credit')
-            ->where('description', 'like', 'MIGRATION_OB_OFFSET%')
-            ->sum('amount');
-
-        $ledgerTotal = $openingPosted + $lumpsumPosted + $obOffsetApplied;
-
-        if ($expectedObligation > 0.00001 && abs($ledgerTotal - $expectedObligation) > $tolerance) {
-            $this->raiseOnce('MIGRATION_LEDGER_DRIFT', 'migration', 'high', $ledgerTotal - $expectedObligation, [
-                'ledger_total' => $ledgerTotal,
-                'expected_obligation' => $expectedObligation,
-            ]);
-            $count++;
-        }
-
-        return $count;
-    }
-
     protected function assertMasterBalancedOrRound(): void
     {
         $result = $this->masterInvariants->check();
@@ -1154,6 +934,24 @@ class ReconciliationService
             $this->suspense->postRoundingAdjustment($result['master_fund'] - $result['expected_master_fund'], 'fund');
         } elseif ($result['cash_delta'] <= $tolerance) {
             $this->suspense->postRoundingAdjustment($result['master_cash'] - $result['member_cash_sum'], 'cash');
+        }
+
+        $final = $this->masterInvariants->check();
+
+        if (! $final['balanced']) {
+            if ($final['cash_delta'] > $tolerance) {
+                $this->raiseOnce('MASTER_CASH_POOL_DRIFT', 'master_account', 'critical', $final['cash_delta'], [
+                    'master_cash' => $final['master_cash'],
+                    'member_cash_sum' => $final['member_cash_sum'],
+                ]);
+            }
+
+            if ($final['fund_delta'] > $tolerance) {
+                $this->raiseOnce('MASTER_FUND_POOL_DRIFT', 'master_account', 'critical', $final['fund_delta'], [
+                    'master_fund' => $final['master_fund'],
+                    'member_fund_sum' => $final['member_fund_sum'],
+                ]);
+            }
         }
 
         $this->masterInvariants->assert();
@@ -1188,10 +986,6 @@ class ReconciliationService
             return $this->autoReverseExemptContribution($exception);
         }
 
-        if ($exception->exception_code === 'MIGRATION_LATE_FEE_APPLIED') {
-            return $this->autoReverseMigrationLateFee($exception);
-        }
-
         if ($exception->exception_code === 'PENDING_PAST_WINDOW_CLOSE') {
             $contributionId = (int) ($exception->affected_entities['contribution_id'] ?? 0);
             $contribution = Contribution::query()->find($contributionId);
@@ -1223,10 +1017,6 @@ class ReconciliationService
             }
         }
 
-        if ($exception->exception_code === 'MIGRATION_PENDING_DEBITED') {
-            return $this->autoReverseMigrationPendingContribution($exception);
-        }
-
         if ($exception->exception_code === 'GRACE_CYCLE_EMI_DEBIT') {
             return $this->autoClearGraceCycleEmi($exception);
         }
@@ -1237,12 +1027,6 @@ class ReconciliationService
 
         if ($exception->exception_code === 'RECON_AUTO_FEE_EXEMPTION_REVERSAL') {
             return $this->autoReverseFeeExemptionTransaction($exception);
-        }
-
-        if ($exception->exception_code === 'PARTIAL_CLEARANCE_ESCALATED_OPEN') {
-            $this->resolveException($exception, __('Acknowledged under partial clearance — monitoring'));
-
-            return true;
         }
 
         if ($exception->exception_code === 'CONTRIBUTION_AMOUNT_MISMATCH') {
@@ -1280,14 +1064,6 @@ class ReconciliationService
             return $this->autoCorrectFeeTier($exception);
         }
 
-        if ($exception->exception_code === 'WAIVED_CYCLE_DEBITED') {
-            return $this->autoReverseWaivedCycleContribution($exception);
-        }
-
-        if ($exception->exception_code === 'MIGRATION_INSTALMENT_EXCESS') {
-            return $this->autoRefundMigrationInstalmentExcess($exception);
-        }
-
         return false;
     }
 
@@ -1310,7 +1086,32 @@ class ReconciliationService
         try {
             $periodLabel = $contribution->period?->format('M Y') ?? '';
             $description = __('Contribution member fund correction — :period', ['period' => $periodLabel]);
-            $this->accounting->credit($memberFund, $amount, $description, $contribution);
+            $masterFund = Account::masterFund();
+
+            if ($masterFund === null) {
+                return false;
+            }
+
+            $masterAlreadyCredited = Transaction::query()
+                ->where('account_id', $masterFund->id)
+                ->where('reference_type', Contribution::class)
+                ->where('reference_id', $contribution->id)
+                ->where('type', 'credit')
+                ->where('amount', '>=', $amount - ContributionPolicySettings::reconTolerance())
+                ->exists();
+
+            if ($masterAlreadyCredited) {
+                $this->accounting->credit($memberFund, $amount, $description, $contribution);
+            } else {
+                $this->accounting->creditMemberFundWithMasterMirror(
+                    $memberFund,
+                    $amount,
+                    $description,
+                    __('(recon correction mirror)'),
+                    $contribution,
+                );
+            }
+
             $this->resolveException($exception, __('Posted missing member fund credit'));
 
             return true;
@@ -1341,56 +1142,6 @@ class ReconciliationService
         return false;
     }
 
-    protected function autoReverseWaivedCycleContribution(ReconciliationException $exception): bool
-    {
-        $contributionId = (int) ($exception->affected_entities['contribution_id'] ?? 0);
-        $exception->update([
-            'affected_entities' => array_merge($exception->affected_entities ?? [], [
-                'contribution_id' => $contributionId,
-            ]),
-        ]);
-
-        return $this->autoReverseExemptContribution($exception);
-    }
-
-    protected function autoRefundMigrationInstalmentExcess(ReconciliationException $exception): bool
-    {
-        $memberId = (int) ($exception->affected_entities['member_id'] ?? 0);
-        $member = Member::query()->with('cashAccount')->find($memberId);
-        $masterFund = Account::masterFund();
-        $excess = (float) ($exception->amount_delta ?? 0);
-
-        if ($member === null || $masterFund === null || $excess <= 0.00001) {
-            return false;
-        }
-
-        $instalmentAmount = (float) MigrationInstalmentSchedule::query()
-            ->where('member_id', $memberId)
-            ->orderByDesc('amount')
-            ->value('amount');
-
-        if ($instalmentAmount > 0.00001 && $excess > $instalmentAmount + ContributionPolicySettings::reconTolerance()) {
-            return false;
-        }
-
-        $cash = $member->cashAccount;
-
-        if ($cash === null) {
-            return false;
-        }
-
-        try {
-            $description = __('RECON_MIGRATION_INSTALMENT_EXCESS_REFUND — :name', ['name' => $member->name]);
-            $this->accounting->credit($cash, $excess, $description, $exception, null, $member->id);
-            $this->accounting->debit($masterFund, $excess, $description, $exception, null, $member->id);
-            $this->resolveException($exception, __('Refunded migration instalment plan excess'), true);
-
-            return true;
-        } catch (\Throwable) {
-            return false;
-        }
-    }
-
     protected function autoPostMissingContributionMasterCredit(ReconciliationException $exception): bool
     {
         $contributionId = (int) ($exception->affected_entities['contribution_id'] ?? 0);
@@ -1410,7 +1161,32 @@ class ReconciliationService
         try {
             $periodLabel = $contribution->period?->format('M Y') ?? '';
             $description = __('Contribution master credit correction — :period', ['period' => $periodLabel]);
-            $this->accounting->credit($masterFund, $amount, $description, $contribution);
+            $memberFund = $contribution->member?->fundAccount;
+
+            if ($memberFund === null) {
+                return false;
+            }
+
+            $memberAlreadyCredited = Transaction::query()
+                ->where('account_id', $memberFund->id)
+                ->where('reference_type', Contribution::class)
+                ->where('reference_id', $contribution->id)
+                ->where('type', 'credit')
+                ->where('amount', '>=', $amount - ContributionPolicySettings::reconTolerance())
+                ->exists();
+
+            if ($memberAlreadyCredited) {
+                $this->accounting->credit($masterFund, $amount, $description, $contribution);
+            } else {
+                $this->accounting->creditMemberFundWithMasterMirror(
+                    $memberFund,
+                    $amount,
+                    $description,
+                    __('(recon correction mirror)'),
+                    $contribution,
+                );
+            }
+
             $this->resolveException($exception, __('Posted missing master fund credit'));
 
             return true;
@@ -1473,11 +1249,6 @@ class ReconciliationService
         } catch (\Throwable) {
             return false;
         }
-    }
-
-    protected function autoReverseMigrationPendingContribution(ReconciliationException $exception): bool
-    {
-        return $this->autoReverseExemptContribution($exception);
     }
 
     protected function autoClearGraceCycleEmi(ReconciliationException $exception): bool
@@ -1544,34 +1315,6 @@ class ReconciliationService
             }
 
             $this->resolveException($exception, __('Reversed ineligible late fee posting'), true);
-
-            return true;
-        } catch (\Throwable) {
-            return false;
-        }
-    }
-
-    protected function autoReverseMigrationLateFee(ReconciliationException $exception): bool
-    {
-        $contributionId = (int) ($exception->affected_entities['contribution_id'] ?? 0);
-        $contribution = Contribution::query()->find($contributionId);
-
-        if ($contribution === null || (float) ($contribution->late_fee_amount ?? 0) <= 0.00001) {
-            return false;
-        }
-
-        try {
-            DB::transaction(function () use ($contribution): void {
-                $late = (float) $contribution->late_fee_amount;
-                $this->accounting->reverseContributionLateFee($contribution, $late);
-                $contribution->update([
-                    'late_fee_amount' => null,
-                    'late_fee_tier' => null,
-                    'collection_status' => ContributionCollectionStatus::OVERDUE,
-                ]);
-            });
-
-            $this->resolveException($exception, __('Reversed late fee on migration-pending member'));
 
             return true;
         } catch (\Throwable) {

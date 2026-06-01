@@ -2,7 +2,7 @@
 
 namespace App\Filament\Tables\Concerns;
 
-use App\Support\Lang;
+use App\Filament\Support\UiLabelIcons;
 use Illuminate\Contracts\Support\Htmlable;
 
 trait CapitalizesTableColumnHeaderLabel
@@ -11,8 +11,12 @@ trait CapitalizesTableColumnHeaderLabel
     {
         $label = parent::getLabel();
 
-        if ($label instanceof Htmlable) {
+        if ($label instanceof Htmlable && str_contains($label->toHtml() ?? '', 'fi-ff-label-with-icon')) {
             return $label;
+        }
+
+        if ($label instanceof Htmlable) {
+            return UiLabelIcons::labeledHtml($label);
         }
 
         $string = trim((string) $label);
@@ -21,6 +25,8 @@ trait CapitalizesTableColumnHeaderLabel
             return $label;
         }
 
-        return Lang::formatUiLabel($string);
+        $icon = UiLabelIcons::forColumnName((string) $this->getName());
+
+        return UiLabelIcons::labeledHtml($string, $icon);
     }
 }

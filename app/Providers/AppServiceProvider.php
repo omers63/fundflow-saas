@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Filament\Support\Action as AppAction;
 use App\Filament\Support\TabLabelColors;
 use App\Filament\Support\TableSummaryFooter;
+use App\Filament\Support\UiLabelIcons;
 use App\Filament\Tables\Columns\BadgeColumn as AppBadgeColumn;
 use App\Filament\Tables\Columns\BooleanColumn as AppBooleanColumn;
 use App\Filament\Tables\Columns\CheckboxColumn as AppCheckboxColumn;
@@ -126,11 +127,18 @@ class AppServiceProvider extends ServiceProvider
 
         Tab::configureUsing(function (Tab $tab): Tab {
             $color = TabLabelColors::forLabel($tab->getLabel());
+            $icon = $tab->getIcon() ?? UiLabelIcons::forLabel($tab->getLabel());
 
-            return $tab
+            $tab = $tab
                 ->translateLabel()
                 ->extraAttributes(['data-ff-tab-color' => $color], merge: true)
                 ->badgeColor($color);
+
+            if ($icon !== null) {
+                $tab->icon($icon);
+            }
+
+            return $tab;
         });
 
         Tabs::configureUsing(fn (Tabs $tabs): Tabs => $tabs->translateLabel());

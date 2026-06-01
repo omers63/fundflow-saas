@@ -29,6 +29,8 @@ class BankTransaction extends Model
         'cash_out_request_id',
         'duplicate_of_id',
         'master_cash_transaction_id',
+        'master_bank_transaction_id',
+        'master_fund_transaction_id',
     ];
 
     protected function casts(): array
@@ -79,6 +81,16 @@ class BankTransaction extends Model
     public function masterCashTransaction(): BelongsTo
     {
         return $this->belongsTo(Transaction::class, 'master_cash_transaction_id');
+    }
+
+    public function masterBankTransaction(): BelongsTo
+    {
+        return $this->belongsTo(Transaction::class, 'master_bank_transaction_id');
+    }
+
+    public function masterFundTransaction(): BelongsTo
+    {
+        return $this->belongsTo(Transaction::class, 'master_fund_transaction_id');
     }
 
     public function resolveMasterCashTransaction(bool $persistLink = true): ?Transaction
@@ -181,5 +193,23 @@ class BankTransaction extends Model
     public function scopeDuplicate($query)
     {
         return $query->where('status', 'duplicate');
+    }
+
+    protected static function booted(): void
+    {
+        static::saved(function (BankTransaction $transaction): void {
+            $transaction->bankStatement?->refreshRowCounts();
+        });
+
+        static::deleted(function (BankTransaction $transaction): void {
+            if ($transaction->bank_statement_id === null) {
+                return;
+            }
+
+            BankStatement::query()
+                ->whereKey($transaction->bank_statement_id)
+                ->first()
+                ?->refreshRowCounts();
+        });
     }
 }

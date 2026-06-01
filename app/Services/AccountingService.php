@@ -25,6 +25,8 @@ class AccountingService
 
     private static bool $memberCashSettlementActive = false;
 
+    private static int $masterPoolMirrorDepth = 0;
+
     /**
      * Run a callback without dispatching member cash collection (for tests and internal transfers).
      *
@@ -47,6 +49,30 @@ class AccountingService
     public static function memberCashCollectionInProgress(): bool
     {
         return self::$memberCashSettlementActive;
+    }
+
+    public static function masterPoolMirrorInProgress(): bool
+    {
+        return self::$masterPoolMirrorDepth > 0;
+    }
+
+    /**
+     * Run a callback without auto-mirroring member cash/fund legs to master pool accounts.
+     *
+     * @template TReturn
+     *
+     * @param  callable(): TReturn  $callback
+     * @return TReturn
+     */
+    public static function withoutMasterPoolMirror(callable $callback): mixed
+    {
+        self::$masterPoolMirrorDepth++;
+
+        try {
+            return $callback();
+        } finally {
+            self::$masterPoolMirrorDepth--;
+        }
     }
 
     /**
@@ -469,6 +495,50 @@ class AccountingService
             'reason' => $trimmed,
         ]);
 
+        if (! $account->is_master && $account->type === 'cash') {
+            return $counterType === 'credit'
+                ? $this->creditMemberCashWithMasterMirror(
+                    $account,
+                    $amount,
+                    $description,
+                    __('(reversal mirror)'),
+                    $original,
+                    $transactedAt,
+                    $original->member_id,
+                )
+                : $this->debitMemberCashWithMasterMirror(
+                    $account,
+                    $amount,
+                    $description,
+                    __('(reversal mirror)'),
+                    $original,
+                    $transactedAt,
+                    $original->member_id,
+                );
+        }
+
+        if (! $account->is_master && $account->type === 'fund') {
+            return $counterType === 'credit'
+                ? $this->creditMemberFundWithMasterMirror(
+                    $account,
+                    $amount,
+                    $description,
+                    __('(reversal mirror)'),
+                    $original,
+                    $transactedAt,
+                    $original->member_id,
+                )
+                : $this->debitMemberFundWithMasterMirror(
+                    $account,
+                    $amount,
+                    $description,
+                    __('(reversal mirror)'),
+                    $original,
+                    $transactedAt,
+                    $original->member_id,
+                );
+        }
+
         $reversal = $counterType === 'credit'
             ? $this->credit($account, $amount, $description, $original, $transactedAt, $original->member_id)
             : $this->debit($account, $amount, $description, $original, $transactedAt, $original->member_id);
@@ -648,9 +718,15 @@ class AccountingService
             'reason' => $reason,
         ]);
 
-        DB::transaction(function () use ($memberCash, $masterCash, $amount, $refundDescription, $transactedAt): void {
-            $this->debit($memberCash, $amount, $refundDescription, null, $transactedAt);
-            $this->debit($masterCash, $amount, $refundDescription, null, $transactedAt);
+        DB::transaction(function () use ($memberCash, $amount, $refundDescription, $transactedAt): void {
+            $this->debitMemberCashWithMasterMirror(
+                $memberCash,
+                $amount,
+                $refundDescription,
+                __('(refund mirror)'),
+                null,
+                $transactedAt,
+            );
         });
     }
 
@@ -834,11 +910,13 @@ class AccountingService
                 throw new InvalidArgumentException(__('Debit amount exceeds the member cash balance.'));
             }
 
-            if ($direction === 'debit') {
-                $this->debit($memberCash, $amount, $description, null, $transactedAt, $memberId);
-            } else {
-                $this->credit($memberCash, $amount, $description, null, $transactedAt, $memberId);
-            }
+            self::withoutMasterPoolMirror(function () use ($direction, $memberCash, $amount, $description, $transactedAt, $memberId): void {
+                if ($direction === 'debit') {
+                    $this->debit($memberCash, $amount, $description, null, $transactedAt, $memberId);
+                } else {
+                    $this->credit($memberCash, $amount, $description, null, $transactedAt, $memberId);
+                }
+            });
         }
 
         if ($direction === 'debit' && $amount > (float) $masterCash->balance) {
@@ -1034,9 +1112,11 @@ class AccountingService
         ?DateTimeInterface $transactedAt,
         ?int $memberId,
     ): Transaction {
-        $this->credit($counterpart, $amount, $description, null, $transactedAt, $memberId);
+        return self::withoutMasterPoolMirror(function () use ($primary, $counterpart, $amount, $description, $transactedAt, $memberId): Transaction {
+            $this->credit($counterpart, $amount, $description, null, $transactedAt, $memberId);
 
-        return $this->credit($primary, $amount, $description, null, $transactedAt, $memberId);
+            return $this->credit($primary, $amount, $description, null, $transactedAt, $memberId);
+        });
     }
 
     protected function pairManualDebit(
@@ -1047,9 +1127,11 @@ class AccountingService
         ?DateTimeInterface $transactedAt,
         ?int $memberId,
     ): Transaction {
-        $this->debit($counterpart, $amount, $description, null, $transactedAt, $memberId);
+        return self::withoutMasterPoolMirror(function () use ($primary, $counterpart, $amount, $description, $transactedAt, $memberId): Transaction {
+            $this->debit($counterpart, $amount, $description, null, $transactedAt, $memberId);
 
-        return $this->debit($primary, $amount, $description, null, $transactedAt, $memberId);
+            return $this->debit($primary, $amount, $description, null, $transactedAt, $memberId);
+        });
     }
 
     protected function resolveMemberCashAccount(?int $memberId): Account
@@ -1250,9 +1332,9 @@ class AccountingService
         ?Model $reference = null,
         ?DateTimeInterface $transactedAt = null,
         ?int $memberId = null,
-    ): void {
+    ): Transaction {
         if ($amount <= 0.00001) {
-            return;
+            throw new InvalidArgumentException(__('Amount must be greater than zero.'));
         }
 
         $masterCash = Account::masterCash();
@@ -1263,18 +1345,26 @@ class AccountingService
 
         $resolvedMemberId = $this->resolveTransactionMemberId($memberCash, $memberId);
 
-        $this->debit($memberCash, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
-        $this->debit(
-            $masterCash,
-            $amount,
-            trim($description).' '.$mirrorSuffix,
-            $reference,
-            $transactedAt,
-        );
+        self::$masterPoolMirrorDepth++;
+
+        try {
+            $memberTransaction = $this->debit($memberCash, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
+            $this->debit(
+                $masterCash,
+                $amount,
+                trim($description).' '.$mirrorSuffix,
+                null,
+                $transactedAt,
+            );
+
+            return $memberTransaction;
+        } finally {
+            self::$masterPoolMirrorDepth--;
+        }
     }
 
     /**
-     * Credit member cash and mirror the same amount on master cash (reversal of pool outflow).
+     * Credit member cash and mirror the same amount on master cash (pool inflow).
      */
     public function creditMemberCashWithMasterMirror(
         Account $memberCash,
@@ -1284,9 +1374,9 @@ class AccountingService
         ?Model $reference = null,
         ?DateTimeInterface $transactedAt = null,
         ?int $memberId = null,
-    ): void {
+    ): Transaction {
         if ($amount <= 0.00001) {
-            return;
+            throw new InvalidArgumentException(__('Amount must be greater than zero.'));
         }
 
         $masterCash = Account::masterCash();
@@ -1297,14 +1387,104 @@ class AccountingService
 
         $resolvedMemberId = $this->resolveTransactionMemberId($memberCash, $memberId);
 
-        $this->credit($memberCash, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
-        $this->credit(
-            $masterCash,
-            $amount,
-            trim($description).' '.$mirrorSuffix,
-            $reference,
-            $transactedAt,
-        );
+        self::$masterPoolMirrorDepth++;
+
+        try {
+            $this->credit(
+                $masterCash,
+                $amount,
+                trim($description).' '.$mirrorSuffix,
+                null,
+                $transactedAt,
+            );
+
+            return $this->credit($memberCash, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
+        } finally {
+            self::$masterPoolMirrorDepth--;
+        }
+    }
+
+    /**
+     * Debit member fund and mirror the same amount on master fund (pool outflow).
+     */
+    public function debitMemberFundWithMasterMirror(
+        Account $memberFund,
+        float $amount,
+        string $description,
+        string $mirrorSuffix,
+        ?Model $reference = null,
+        ?DateTimeInterface $transactedAt = null,
+        ?int $memberId = null,
+    ): Transaction {
+        if ($amount <= 0.00001) {
+            throw new InvalidArgumentException(__('Amount must be greater than zero.'));
+        }
+
+        $masterFund = Account::masterFund();
+
+        if ($masterFund === null) {
+            throw new InvalidArgumentException(__('Master fund account is not configured.'));
+        }
+
+        $resolvedMemberId = $this->resolveTransactionMemberId($memberFund, $memberId);
+
+        self::$masterPoolMirrorDepth++;
+
+        try {
+            $memberTransaction = $this->debit($memberFund, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
+            $this->debit(
+                $masterFund,
+                $amount,
+                trim($description).' '.$mirrorSuffix,
+                $reference,
+                $transactedAt,
+            );
+
+            return $memberTransaction;
+        } finally {
+            self::$masterPoolMirrorDepth--;
+        }
+    }
+
+    /**
+     * Credit member fund and mirror the same amount on master fund (pool inflow).
+     */
+    public function creditMemberFundWithMasterMirror(
+        Account $memberFund,
+        float $amount,
+        string $description,
+        string $mirrorSuffix,
+        ?Model $reference = null,
+        ?DateTimeInterface $transactedAt = null,
+        ?int $memberId = null,
+    ): Transaction {
+        if ($amount <= 0.00001) {
+            throw new InvalidArgumentException(__('Amount must be greater than zero.'));
+        }
+
+        $masterFund = Account::masterFund();
+
+        if ($masterFund === null) {
+            throw new InvalidArgumentException(__('Master fund account is not configured.'));
+        }
+
+        $resolvedMemberId = $this->resolveTransactionMemberId($memberFund, $memberId);
+
+        self::$masterPoolMirrorDepth++;
+
+        try {
+            $this->credit(
+                $masterFund,
+                $amount,
+                trim($description).' '.$mirrorSuffix,
+                $reference,
+                $transactedAt,
+            );
+
+            return $this->credit($memberFund, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
+        } finally {
+            self::$masterPoolMirrorDepth--;
+        }
     }
 
     private function assertMasterReserveAccount(Account $account): void
@@ -1501,8 +1681,13 @@ class AccountingService
             );
         }
 
-        $this->credit($masterFund, $amount, $description, $contribution);
-        $this->credit($memberFund, $amount, $description, $contribution);
+        $this->creditMemberFundWithMasterMirror(
+            $memberFund,
+            $amount,
+            $description,
+            __('(contribution mirror)'),
+            $contribution,
+        );
     }
 
     public function postContributionLateFee(Contribution $contribution, float $lateFee): void
@@ -1609,7 +1794,15 @@ class AccountingService
             'num' => $installment->installment_number,
         ]);
 
-        $this->debit($memberCash, $lateFee, $description, $installment, now(), $member->id);
+        $this->debitMemberCashWithMasterMirror(
+            $memberCash,
+            $lateFee,
+            $description,
+            __('(EMI late fee mirror)'),
+            $installment,
+            now(),
+            $member->id,
+        );
         $this->credit($masterFees, $lateFee, $description, $installment, now(), $member->id);
     }
 
@@ -1632,7 +1825,18 @@ class AccountingService
             'num' => $installment->installment_number,
         ]);
 
-        $this->credit($memberCash, $lateFee, $description, $installment);
+        $installment->loadMissing('loan.member');
+        $memberId = $installment->loan->member_id;
+
+        $this->creditMemberCashWithMasterMirror(
+            $memberCash,
+            $lateFee,
+            $description,
+            __('(EMI late fee mirror)'),
+            $installment,
+            null,
+            $memberId,
+        );
         $this->debit($masterFees, $lateFee, $description, $installment);
     }
 
@@ -1656,11 +1860,22 @@ class AccountingService
         $description = __('Contribution reversal — :period', ['period' => $periodLabel]);
 
         if ($contribution->payment_method === Contribution::PAYMENT_METHOD_CASH_ACCOUNT) {
-            $this->credit($memberCash, $amount, $description, $contribution);
+            $this->creditMemberCashWithMasterMirror(
+                $memberCash,
+                $amount,
+                $description,
+                __('(contribution reversal mirror)'),
+                $contribution,
+            );
         }
 
-        $this->debit($masterFund, $amount, $description, $contribution);
-        $this->debit($memberFund, $amount, $description, $contribution);
+        $this->debitMemberFundWithMasterMirror(
+            $memberFund,
+            $amount,
+            $description,
+            __('(contribution reversal mirror)'),
+            $contribution,
+        );
     }
 
     public function fundDependentCashAccount(
@@ -1690,8 +1905,18 @@ class AccountingService
 
         DB::transaction(function () use ($parentCash, $dependentCash, $amount, $debitDesc, $creditDesc): void {
             self::withoutMemberCashCollection(function () use ($parentCash, $dependentCash, $amount, $debitDesc, $creditDesc): void {
-                $this->debit($parentCash, $amount, $debitDesc);
-                $this->credit($dependentCash, $amount, $creditDesc);
+                $this->debitMemberCashWithMasterMirror(
+                    $parentCash,
+                    $amount,
+                    $debitDesc,
+                    __('(dependent transfer mirror)'),
+                );
+                $this->creditMemberCashWithMasterMirror(
+                    $dependentCash,
+                    $amount,
+                    $creditDesc,
+                    __('(dependent transfer mirror)'),
+                );
             });
         });
 

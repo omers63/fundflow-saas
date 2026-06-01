@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace App\Services\Loans;
 
+use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\DelinquencyDigestNotification;
 
 class DelinquencyDigestService
 {
-    public function __construct(protected LoanDelinquencyService $delinquency) {}
+    public function __construct(protected LoanDelinquencyService $delinquency)
+    {
+    }
 
     /**
      * Notify tenant admins when there is delinquency activity worth reviewing.
@@ -27,7 +30,7 @@ class DelinquencyDigestService
             return 0;
         }
 
-        $url = LoanResource::getUrl('delinquency');
+        $url = $this->primaryReviewUrl($counts);
         $notified = 0;
 
         User::query()
@@ -38,5 +41,21 @@ class DelinquencyDigestService
             });
 
         return $notified;
+    }
+
+    /**
+     * @param  array<string, int>  $counts
+     */
+    protected function primaryReviewUrl(array $counts): string
+    {
+        if (($counts['overdue_installments'] ?? 0) > 0) {
+            return LoanResource::listTabUrl('overdue_installments');
+        }
+
+        if (($counts['contribution_arrears_periods'] ?? 0) > 0) {
+            return ContributionResource::listTabUrl('arrears');
+        }
+
+        return LoanResource::listTabUrl('guarantor_exposure');
     }
 }

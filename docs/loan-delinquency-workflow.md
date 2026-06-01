@@ -45,29 +45,27 @@ Previously, most logic lived in services and cron but was **not wired end-to-end
 
 `loans:check-defaults` now runs: **mark overdue → sync members → warnings / guarantor debits**.
 
-### 2. Delinquency workspace (Loans cluster)
+### 2. Admin UI (distributed by domain)
 
-**Navigation:** Fund Management → Loans → **Delinquency** (badge = overdue installment count)
+Delinquency is no longer a standalone page. Use:
 
-**Page:** `app/Filament/Tenant/Resources/Loans/Pages/ListDelinquency.php`  
-**Route:** `LoanResource` → `/delinquency`  
-**Cluster nav:** `app/Filament/Tenant/Clusters/DelinquencyPage.php`
+| Concern | Where | Tab / action |
+|--------|--------|----------------|
+| Overdue loan installments | **Loans** list | **Overdue installments** |
+| Guarantor exposure | **Loans** list | **Guarantor exposure** |
+| Contribution arrears | **Contributions** list | **Arrears** |
+| Delinquent members | **Members** list | **Delinquent** |
+| Member status (sync / restore) | **Member** edit | **Delinquency** action group |
+| Policy thresholds | **Settings** → Contributions | Delinquency policy section |
 
-Three tabs:
-
-1. **Overdue installments** — all `overdue` rows, link to loan
-2. **Contribution arrears** — one row per member + period (missing / pending / failed; only **posted** clears)
-3. **Guarantor exposure** — loans past grace or with liability already transferred
-
-**Header actions:**
+**Shared tables:** `app/Filament/Support/LoanDelinquencyTables.php`  
+**Maintenance actions:** `app/Filament/Support/LoanDelinquencyHeaderActions.php` on **Loans** (and **Contributions → Arrears** tab)
 
 - **Run delinquency check** — full `runDailyMaintenance()`
-- **Mark overdue only** — `markOverdueInstallments()` without defaults processing
-- **Send admin digest** — notifies tenant admins when there is delinquency to review
+- **Mark overdue only** — `markOverdueInstallments()` only
+- **Send admin digest** — notifies tenant admins when there is activity to review
 
-**Insights:** `LoanInsightsService::delinquencySnapshot()` + `resources/views/filament/tenant/widgets/loans/delinquency.blade.php`
-
-**Tab UX:** `wire:key` per tab on the delinquency page so table columns do not bleed when switching tabs; `getTableQueryStringIdentifier()` isolates Livewire table state.
+**Insights:** `LoanInsightsService::delinquencySnapshot()` on loan list tabs; KPI links route to the tabs above.
 
 ### 3. Loan view actions
 
@@ -189,7 +187,7 @@ This section records work completed after the initial delinquency workspace ship
 | Search/sort | `filterContributionArrearsRecords()`; default sort by year/month descending |
 | Tab switching | `wire:key="delinquency-table-{tab}"` + `getTableQueryStringIdentifier()` |
 
-**Key files:** `LoanDelinquencyService.php`, `ListDelinquency.php` (`contributionsTable()`), `list-delinquency.blade.php`
+**Key files:** `LoanDelinquencyService.php`, `LoanDelinquencyTables.php` (`configureContributionArrearsTable()`), `ListContributions.php` (Arrears tab)
 
 ### 2. Member admin actions
 

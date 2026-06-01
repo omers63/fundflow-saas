@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Tenant\Account;
-use App\Models\Tenant\BankStatement;
-use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\Transaction;
@@ -74,8 +72,8 @@ class MembershipSubscriptionFeeService
     /**
      * Post subscription fee accounting when a membership application is approved.
      *
-     * Credits master cash (uncleared bank item), mirrors to member cash, then allocates
-     * the required fee amount from member cash to the master fees account.
+     * Mirrors transfer to member and master cash, then allocates the required fee to master fees.
+     * Does not create bank statement lines or master bank ledger entries.
      */
     public function postOnApproval(MembershipApplication $application, Member $member): void
     {
@@ -83,7 +81,7 @@ class MembershipSubscriptionFeeService
             return;
         }
 
-        if (BankTransaction::query()->where('membership_application_id', $application->id)->exists()) {
+        if ($this->hasSubscriptionFeePosted($application)) {
             throw new InvalidArgumentException(__('Subscription fee accounting has already been posted for this application.'));
         }
 
@@ -110,31 +108,22 @@ class MembershipSubscriptionFeeService
 
         $transferDate = $application->membership_fee_transfer_date ?? now();
 
-        $postSubscriptionFee = function () use ($application, $member, $transferred, $required, $masterCash, $masterFees, $memberCash, $transferDate): void {
-            DB::transaction(function () use ($application, $member, $transferred, $required, $masterCash, $masterFees, $memberCash, $transferDate): void {
-                $bankTxn = $this->createUnclearedBankTransaction($application, $member, $transferred);
-
+        $postSubscriptionFee = function () use ($application, $member, $transferred, $required, $masterFees, $memberCash, $transferDate): void {
+            DB::transaction(function () use ($application, $member, $transferred, $required, $masterFees, $memberCash, $transferDate): void {
                 $receiptDescription = __('Subscription fees — :name (application #:id)', [
                     'name' => $member->name,
                     'id' => $application->id,
                 ]);
 
-                $masterCredit = $this->accounting->credit(
-                    $masterCash,
+                $this->accounting->creditMemberCashWithMasterMirror(
+                    $memberCash,
                     $transferred,
-                    $receiptDescription,
+                    __('Posted: :description', ['description' => $receiptDescription]),
+                    __('(subscription deposit mirror)'),
                     $application,
                     $transferDate,
                     $member->id,
                 );
-
-                $bankTxn->forceFill([
-                    'master_cash_transaction_id' => $masterCredit->id,
-                    'status' => 'posted',
-                ])->save();
-
-                $mirrorDescription = __('Posted: :description', ['description' => $receiptDescription]);
-                $this->accounting->mirror($memberCash, $transferred, $mirrorDescription, $application, $transferDate);
 
                 if ($required > 0) {
                     $feeDescription = __('Subscription fee — :name', ['name' => $member->name]);
@@ -167,62 +156,25 @@ class MembershipSubscriptionFeeService
         $postSubscriptionFee();
     }
 
-    private function createUnclearedBankTransaction(
-        MembershipApplication $application,
-        Member $member,
-        float $amount,
-    ): BankTransaction {
-        $statement = BankStatement::firstOrCreate(
-            ['filename' => 'membership-subscription-fees', 'status' => 'completed'],
-            [
-                'bank_name' => __('Membership subscription fees'),
-                'total_rows' => 0,
-                'imported_rows' => 0,
-                'duplicate_rows' => 0,
-            ],
-        );
-
-        $transferDate = $application->membership_fee_transfer_date?->toDateString()
-            ?? now()->toDateString();
-
-        return BankTransaction::create([
-            'bank_statement_id' => $statement->id,
-            'transaction_date' => $transferDate,
-            'description' => __('Subscription fees — :name', ['name' => $member->name]),
-            'amount' => $amount,
-            'reference' => filled($application->membership_fee_transfer_reference)
-                ? $application->membership_fee_transfer_reference
-                : __('Application #:id', ['id' => $application->id]),
-            'status' => 'imported',
-            'member_id' => $member->id,
-            'hash' => md5("membership-fee-{$application->id}-{$transferDate}-{$amount}"),
-            'is_cleared' => false,
-            'membership_application_id' => $application->id,
-        ]);
-    }
-
-    public function unclearedBankTransaction(MembershipApplication $application): ?BankTransaction
-    {
-        return BankTransaction::query()
-            ->where('membership_application_id', $application->id)
-            ->where('is_cleared', false)
-            ->first();
-    }
-
     public function masterCashCreditTransaction(MembershipApplication $application): ?Transaction
     {
-        $bankTxn = $this->unclearedBankTransaction($application);
+        $masterCashId = Account::masterCash()?->id;
 
-        if ($bankTxn !== null) {
-            return $bankTxn->resolveMasterCashTransaction();
+        if ($masterCashId === null) {
+            return null;
         }
 
         return Transaction::query()
-            ->where('reference_type', MembershipApplication::class)
-            ->where('reference_id', $application->id)
-            ->whereHas('account', fn ($query) => $query->where('is_master', true)->where('type', 'cash'))
+            ->where('account_id', $masterCashId)
             ->where('type', 'credit')
-            ->orderBy('id')
+            ->where('description', 'like', '%(subscription deposit mirror)%')
+            ->where('description', 'like', '%application #:'.$application->id.'%')
+            ->orderByDesc('id')
             ->first();
+    }
+
+    protected function hasSubscriptionFeePosted(MembershipApplication $application): bool
+    {
+        return $this->masterCashCreditTransaction($application) !== null;
     }
 }

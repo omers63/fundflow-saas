@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\MasterAccounts;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
+use App\Filament\Support\UiLabelIcons;
 use App\Filament\Tenant\Resources\MasterAccounts\Pages\ListMasterAccounts;
 use App\Filament\Tenant\Resources\MasterAccounts\Pages\ViewMasterAccount;
 use App\Filament\Tenant\Resources\MasterAccounts\RelationManagers\TransactionsRelationManager;
@@ -84,7 +85,7 @@ class MasterAccountResource extends Resource
         $tab = self::resolveListMasterAccountsTab();
 
         return MasterAccountsTable::configure(
-            $table->pluralModelLabel(self::tabLabel($tab)),
+            $table->pluralModelLabel(UiLabelIcons::labeledHtml(self::tabLabel($tab), UiLabelIcons::forKey($tab))),
             showTypeColumn: $tab === 'all',
         );
     }

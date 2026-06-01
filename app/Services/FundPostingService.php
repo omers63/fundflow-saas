@@ -90,17 +90,15 @@ class FundPostingService
     {
         DB::transaction(function () use ($posting, $reviewedBy, $remarks) {
             $member = $posting->member;
-            $masterCash = Account::masterCash();
             $memberCash = $member->cashAccount;
             $amount = (float) $posting->amount;
             $description = __('Deposit #:id by :name', ['id' => $posting->id, 'name' => $member->name]);
 
-            $this->accounting->credit($masterCash, $amount, $description);
-
-            $this->accounting->credit(
+            $this->accounting->creditMemberCashWithMasterMirror(
                 $memberCash,
                 $amount,
                 __('Posted: :description', ['description' => $description]),
+                __('(deposit mirror)'),
                 $posting,
                 null,
                 $member->id,

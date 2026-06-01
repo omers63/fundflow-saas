@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tenant\Resources\BankAccounts\Pages;
 
+use App\Filament\Support\TabLabelColors;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Widgets\BankAccountsInsightsWidget;
 use App\Models\Tenant\Account;
@@ -16,6 +17,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
@@ -87,9 +89,15 @@ class ListBankAccounts extends ListRecords
     public function getTabs(): array
     {
         return [
-            'imports' => Tab::make(__('Statement lines')),
-            'ledger' => Tab::make(__('Master bank ledger')),
-            'statements' => Tab::make(__('Statements')),
+            'imports' => Tab::make(__('Statement lines'))
+                ->icon(Heroicon::OutlinedQueueList)
+                ->extraAttributes(['data-ff-tab-key' => 'imports', 'data-ff-tab-color' => TabLabelColors::forKey('imports')], merge: true),
+            'ledger' => Tab::make(__('Master bank ledger'))
+                ->icon(Heroicon::OutlinedBookOpen)
+                ->extraAttributes(['data-ff-tab-key' => 'ledger', 'data-ff-tab-color' => TabLabelColors::forKey('ledger')], merge: true),
+            'statements' => Tab::make(__('Statements'))
+                ->icon(Heroicon::OutlinedDocumentText)
+                ->extraAttributes(['data-ff-tab-key' => 'statements', 'data-ff-tab-color' => TabLabelColors::forKey('statements')], merge: true),
         ];
     }
 

@@ -70,6 +70,6 @@ class Setting extends Model
 
     public static function loanGuarantorTransferMissedThreshold(): int
     {
-        return max(1, (int) LoanSettings::get('guarantor_transfer_missed_threshold', self::loanDefaultGraceCycles() + 1));
+        return LoanSettings::guarantorTransferMissedThreshold();
     }
 }

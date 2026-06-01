@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
-use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Models\Tenant\Loan;
@@ -46,14 +45,14 @@ final class MemberInsightsService
         $independent = Member::query()->independent()->count();
 
         $withActiveLoans = Member::query()
-            ->whereHas('loans', fn ($query) => $query->where('status', 'active'))
+            ->whereHas('loans', fn($query) => $query->where('status', 'active'))
             ->count();
 
         $loanExempt = Member::query()
             ->active()
             ->whereHas('loans', function ($query): void {
                 $query->where('status', 'active')
-                    ->whereHas('installments', fn ($installment) => $installment->whereIn('status', ['pending', 'overdue']));
+                    ->whereHas('installments', fn($installment) => $installment->whereIn('status', ['pending', 'overdue']));
             })
             ->count();
 
@@ -61,7 +60,7 @@ final class MemberInsightsService
 
         $zeroCashMembers = Member::query()
             ->active()
-            ->whereHas('accounts', fn ($query) => $query
+            ->whereHas('accounts', fn($query) => $query
                 ->where('type', 'cash')
                 ->where('is_master', false)
                 ->where('balance', '<=', 0))
@@ -73,7 +72,7 @@ final class MemberInsightsService
             ->pluck('total', 'status');
 
         $statusBreakdown = collect(Member::STATUSES)
-            ->map(fn (string $status): array => [
+            ->map(fn(string $status): array => [
                 'status' => $status,
                 'label' => Member::statusOptions()[$status] ?? ucfirst($status),
                 'count' => (int) ($statusCounts[$status] ?? 0),
@@ -87,7 +86,7 @@ final class MemberInsightsService
             ->orderBy('name')
             ->limit(6)
             ->get()
-            ->map(fn (Member $member): array => [
+            ->map(fn(Member $member): array => [
                 'id' => $member->id,
                 'name' => $member->name,
                 'status' => Member::statusOptions()[$member->status] ?? $member->status,
@@ -134,8 +133,8 @@ final class MemberInsightsService
                 'dependents' => $dependents,
                 'members_url' => $membersUrl,
                 'applications_url' => MembershipApplicationResource::getUrl('index'),
-                'contributions_url' => ContributionResource::getUrl('index').'?tableFilters[status][value]=pending',
-                'delinquency_url' => LoanResource::getUrl('delinquency'),
+                'contributions_url' => ContributionResource::getUrl('index') . '?tableFilters[status][value]=pending',
+                'delinquency_url' => MemberResource::listTabUrl('delinquent'),
             ],
         ];
     }

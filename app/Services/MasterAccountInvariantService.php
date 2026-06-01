@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Tenant\Account;
-use App\Models\Tenant\MigrationCycleStub;
 use App\Support\ContributionPolicySettings;
 use InvalidArgumentException;
 
@@ -19,7 +18,6 @@ class MasterAccountInvariantService
      *     balanced: bool,
      *     master_fund: float,
      *     member_fund_sum: float,
-     *     backdated_due_sum: float,
      *     expected_master_fund: float,
      *     master_cash: float,
      *     member_cash_sum: float,
@@ -42,12 +40,7 @@ class MasterAccountInvariantService
             ->where('type', 'cash')
             ->sum('balance');
 
-        $backdatedDueSum = (float) MigrationCycleStub::query()
-            ->where('classification', MigrationCycleStub::CLASS_BACKDATED_DUE)
-            ->where('status', '!=', 'closed')
-            ->sum('amount_due');
-
-        $expectedMasterFund = $memberFundSum + $backdatedDueSum;
+        $expectedMasterFund = $memberFundSum;
 
         $tolerance = ContributionPolicySettings::reconTolerance();
         $fundDelta = abs($masterFund - $expectedMasterFund);
@@ -57,7 +50,6 @@ class MasterAccountInvariantService
             'balanced' => $fundDelta <= $tolerance && $cashDelta <= $tolerance,
             'master_fund' => $masterFund,
             'member_fund_sum' => $memberFundSum,
-            'backdated_due_sum' => $backdatedDueSum,
             'expected_master_fund' => $expectedMasterFund,
             'master_cash' => $masterCash,
             'member_cash_sum' => $memberCashSum,
@@ -75,10 +67,9 @@ class MasterAccountInvariantService
         }
 
         throw new InvalidArgumentException(__(
-            'Master account invariant failed (MASTER_IMBALANCE). Fund delta: :fund_delta (includes backdated due :backdated), Cash delta: :cash_delta',
+            'Master account invariant failed (MASTER_IMBALANCE). Fund delta: :fund_delta, Cash delta: :cash_delta',
             [
                 'fund_delta' => number_format($result['fund_delta'], 2),
-                'backdated' => number_format($result['backdated_due_sum'], 2),
                 'cash_delta' => number_format($result['cash_delta'], 2),
             ],
         ));

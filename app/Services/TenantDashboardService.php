@@ -6,7 +6,6 @@ namespace App\Services;
 
 use App\Filament\Tenant\Pages\ContributionCyclePage;
 use App\Filament\Tenant\Pages\JobsPage;
-use App\Filament\Tenant\Pages\MigrationWorkflowPage;
 use App\Filament\Tenant\Pages\Settings;
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
@@ -45,7 +44,8 @@ final class TenantDashboardService
         protected MasterAccountsInsightsService $masterAccounts,
         protected BankAccountsInsightsService $bankAccounts,
         protected LoanDelinquencyService $delinquency,
-    ) {}
+    ) {
+    }
 
     /**
      * @return array<string, mixed>
@@ -58,7 +58,7 @@ final class TenantDashboardService
         assert($user instanceof User);
 
         $masters = Account::master()->get()->keyBy('type');
-        $masterBalance = fn (string $type): float => (float) ($masters->get($type)?->balance ?? 0);
+        $masterBalance = fn(string $type): float => (float) ($masters->get($type)?->balance ?? 0);
 
         $loanPortfolio = $this->loanInsights->portfolioSnapshot();
         $masterSnapshot = $this->masterAccounts->snapshot();
@@ -218,7 +218,7 @@ final class TenantDashboardService
                 'label' => Lang::ui('Delinquency'),
                 'description' => Lang::ui('Arrears & overdue'),
                 'icon' => 'heroicon-o-exclamation-triangle',
-                'url' => LoanResource::getUrl('delinquency'),
+                'url' => LoanResource::listTabUrl('overdue_installments'),
                 'tone' => 'delinquency',
                 'badge' => $delinquencyTotal > 0 ? (string) $delinquencyTotal : null,
             ],
@@ -361,7 +361,7 @@ final class TenantDashboardService
      */
     private function openReconciliationCount(): int
     {
-        if (! Schema::hasTable('reconciliation_exceptions')) {
+        if (!Schema::hasTable('reconciliation_exceptions')) {
             return 0;
         }
 
@@ -433,7 +433,7 @@ final class TenantDashboardService
                 'body' => Lang::uiText(trans_choice(':count overdue installment|:count overdue installments', $overdue, ['count' => $overdue])),
                 'tone' => 'rose',
                 'icon' => 'heroicon-o-exclamation-triangle',
-                'url' => LoanResource::getUrl('delinquency'),
+                'url' => LoanResource::listTabUrl('overdue_installments'),
             ];
         }
 
@@ -506,7 +506,6 @@ final class TenantDashboardService
                     ['label' => Lang::ui('Member accounts'), 'icon' => 'heroicon-o-wallet', 'url' => AccountResource::getUrl('index')],
                     ['label' => Lang::ui('Contributions'), 'icon' => 'heroicon-o-calendar-days', 'url' => ContributionResource::getUrl('index')],
                     ['label' => Lang::ui('Contribution cycle'), 'icon' => 'heroicon-o-arrow-path-rounded-square', 'url' => ContributionCyclePage::getUrl()],
-                    ['label' => Lang::ui('Migrations'), 'icon' => 'heroicon-o-clock', 'url' => MigrationWorkflowPage::getUrl()],
                     ['label' => Lang::ui('Monthly statements'), 'icon' => 'heroicon-o-document-text', 'url' => MonthlyStatementResource::getUrl('index')],
                     ['label' => Lang::ui('Applications'), 'icon' => 'heroicon-o-user-plus', 'url' => MembershipApplicationResource::getUrl('index')],
                 ],
@@ -516,7 +515,9 @@ final class TenantDashboardService
                 'links' => [
                     ['label' => Lang::ui('All loans'), 'icon' => 'heroicon-o-banknotes', 'url' => LoanResource::getUrl('index')],
                     ['label' => Lang::ui('Loan queue'), 'icon' => 'heroicon-o-queue-list', 'url' => LoanResource::getUrl('queue')],
-                    ['label' => Lang::ui('Delinquency'), 'icon' => 'heroicon-o-exclamation-triangle', 'url' => LoanResource::getUrl('delinquency')],
+                    ['label' => Lang::ui('Overdue installments'), 'icon' => 'heroicon-o-calendar-days', 'url' => LoanResource::listTabUrl('overdue_installments')],
+                    ['label' => Lang::ui('Contribution arrears'), 'icon' => 'heroicon-o-banknotes', 'url' => ContributionResource::listTabUrl('arrears')],
+                    ['label' => Lang::ui('Delinquent members'), 'icon' => 'heroicon-o-user-minus', 'url' => MemberResource::listTabUrl('delinquent')],
                     ['label' => Lang::ui('Loan tiers'), 'icon' => 'heroicon-o-squares-2x2', 'url' => LoanTierResource::getUrl('index')],
                     ['label' => Lang::ui('Fund tiers'), 'icon' => 'heroicon-o-chart-pie', 'url' => FundTierResource::getUrl('index')],
                 ],
@@ -540,7 +541,7 @@ final class TenantDashboardService
         ];
 
         return array_map(
-            fn (array $section): array => [
+            fn(array $section): array => [
                 ...$section,
                 'links' => Lang::formatLabeledRows($section['links']),
             ],

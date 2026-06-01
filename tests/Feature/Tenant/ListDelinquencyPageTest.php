@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
+use App\Filament\Tenant\Resources\Loans\Pages\ListLoans;
+use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Central\Tenant;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
@@ -10,6 +13,7 @@ use App\Services\AccountingService;
 use App\Services\Loans\LoanDelinquencyService;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
+use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -21,7 +25,7 @@ beforeEach(function () {
     $tenant = Tenant::find('testing');
     $this->domain = 'testing.localhost';
 
-    if (! $tenant->domains()->where('domain', $this->domain)->exists()) {
+    if (!$tenant->domains()->where('domain', $this->domain)->exists()) {
         $tenant->domains()->create(['domain' => $this->domain]);
     }
 
@@ -36,12 +40,27 @@ beforeEach(function () {
     $this->actingAs($admin, 'tenant');
 });
 
-test('contribution arrears tab loads without summary sql errors', function () {
-    $path = parse_url(LoanResource::getUrl('delinquency'), PHP_URL_PATH) ?? '/admin/loans/delinquency';
+test('loans list exposes delinquency maintenance actions', function () {
+    Livewire::test(ListLoans::class)
+        ->call('mountAction', 'markOverdueInstallments')
+        ->callMountedAction()
+        ->assertNotified();
+});
 
-    $this->get('http://'.$this->domain.$path.'?tab=contributions')
+test('overdue installments tab loads on loans list', function () {
+    $path = parse_url(LoanResource::listTabUrl('overdue_installments'), PHP_URL_PATH) ?? '/admin/loans';
+
+    $this->get('http://' . $this->domain . $path)
         ->assertSuccessful()
-        ->assertSee(__('Contribution arrears'), false);
+        ->assertSee(__('Overdue installments'), false);
+});
+
+test('contribution arrears tab loads without summary sql errors', function () {
+    $path = parse_url(ContributionResource::listTabUrl('arrears'), PHP_URL_PATH) ?? '/admin/contributions';
+
+    $this->get('http://' . $this->domain . $path)
+        ->assertSuccessful()
+        ->assertSee(__('Arrears'), false);
 });
 
 test('contribution arrears tab renders member and period columns', function () {
@@ -49,7 +68,7 @@ test('contribution arrears tab renders member and period columns', function () {
 
     $accounting = app(AccountingService::class);
     $member = Member::create([
-        'member_number' => 'ARR-'.uniqid(),
+        'member_number' => 'ARR-' . uniqid(),
         'name' => 'Arrears Table Member',
         'monthly_contribution_amount' => 5000,
         'joined_at' => now()->subMonths(18),
@@ -62,12 +81,22 @@ test('contribution arrears tab renders member and period columns', function () {
     expect($rows)->not->toBeEmpty();
 
     $periodLabel = $rows->first()['period_label'];
-    $path = parse_url(LoanResource::getUrl('delinquency'), PHP_URL_PATH) ?? '/admin/loans/delinquency';
+    $path = parse_url(ContributionResource::listTabUrl('arrears'), PHP_URL_PATH) ?? '/admin/contributions';
 
-    $this->get('http://'.$this->domain.$path.'?tab=contributions')
+    $this->get('http://' . $this->domain . $path . '?tab=arrears')
         ->assertSuccessful()
         ->assertSee('Arrears Table Member', false)
         ->assertSee($periodLabel, false);
 
     Carbon::setTestNow();
+});
+
+test('delinquent members tab loads on members list', function () {
+    $path = parse_url(MemberResource::listTabUrl('delinquent'), PHP_URL_PATH) ?? '/admin/members';
+
+    $this->get('http://' . $this->domain . $path)
+        ->assertSuccessful()
+        ->assertSee(__('Delinquent'), false);
+
+    expect(LoanResource::listTabUrl('overdue_installments'))->toContain('tab=overdue_installments');
 });

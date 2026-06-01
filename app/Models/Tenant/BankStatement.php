@@ -60,4 +60,22 @@ class BankStatement extends Model
     {
         return $query->where('status', 'pending');
     }
+
+    /**
+     * Recompute denormalized row counts from linked bank transactions.
+     */
+    public function refreshRowCounts(): void
+    {
+        $query = $this->transactions();
+
+        $total = (clone $query)->count();
+        $duplicates = (clone $query)->where('status', 'duplicate')->count();
+        $imported = (clone $query)->where('status', '!=', 'duplicate')->count();
+
+        $this->forceFill([
+            'total_rows' => $total,
+            'imported_rows' => $imported,
+            'duplicate_rows' => $duplicates,
+        ])->saveQuietly();
+    }
 }

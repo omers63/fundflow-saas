@@ -9,9 +9,8 @@ use App\Filament\Support\ViewActions\ViewBankTransactionAction;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Services\BankClearingMatchService;
 use App\Services\FundFlowService;
-use App\Services\FundPostingService;
-use App\Services\MemberCashOutService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -167,38 +166,35 @@ class BankTransactionsTable
                         ->color('primary')
                         ->requiresConfirmation()
                         ->modalDescription(__('Match this uncleared transaction against an imported bank transaction to clear both.'))
-                        ->hidden(fn ($record) => $record->is_cleared || (! $record->fund_posting_id && ! $record->membership_application_id && ! $record->cash_out_request_id))
+                        ->hidden(fn (BankTransaction $record, BankClearingMatchService $matching): bool => ! $matching->isPendingClearance($record))
                         ->form([
                             Select::make('imported_transaction_id')
-                                ->label('Match with imported transaction')
-                                ->options(function ($record) {
-                                    return BankTransaction::where('id', '!=', $record->id)
-                                        ->where('fund_posting_id', null)
-                                        ->where('is_cleared', true)
-                                        ->orWhere(function ($q) use ($record) {
-                                            $q->where('id', '!=', $record->id)
-                                                ->whereNull('fund_posting_id')
-                                                ->where('is_cleared', false)
-                                                ->whereIn('status', ['imported', 'mirrored', 'posted']);
-                                        })
-                                        ->orderBy('transaction_date', 'desc')
-                                        ->limit(50)
-                                        ->get()
-                                        ->mapWithKeys(fn ($txn) => [
-                                            $txn->id => "{$txn->transaction_date->format('Y-m-d')} | {$txn->description} | \${$txn->amount}",
-                                        ]);
+                                ->label(__('Match with bank statement line'))
+                                ->options(function (BankTransaction $record, BankClearingMatchService $matching): array {
+                                    return $matching->findImportedCandidates($record)
+                                        ->mapWithKeys(fn (BankTransaction $txn): array => [
+                                            $txn->id => $matching->formatMatchOptionLabel($txn),
+                                        ])
+                                        ->all();
                                 })
                                 ->searchable()
-                                ->required(),
+                                ->required()
+                                ->helperText(__('Only imported CSV statement lines within amount and date tolerance are listed.')),
                         ])
-                        ->action(function ($record, array $data, FundPostingService $fundPostings, MemberCashOutService $cashOuts) {
+                        ->action(function (BankTransaction $record, array $data, BankClearingMatchService $matching): void {
                             $imported = BankTransaction::findOrFail($data['imported_transaction_id']);
 
-                            if ($record->cash_out_request_id) {
-                                $cashOuts->clearTransaction($record, $imported);
-                            } else {
-                                $fundPostings->clearTransaction($record, $imported);
+                            if (! $matching->isImportedMatchCandidate($imported)) {
+                                Notification::make()
+                                    ->title(__('That statement line cannot be matched'))
+                                    ->body(__('Choose a bank import line that is not already linked to a posting.'))
+                                    ->danger()
+                                    ->send();
+
+                                return;
                             }
+
+                            $matching->clearMatchPair($record, $imported);
 
                             Notification::make()->title(__('Transactions matched and cleared'))->success()->send();
                         }),
@@ -215,6 +211,52 @@ class BankTransactionsTable
                 ]))
                 ->toolbarActions([
                     BulkActionGroup::make([
+                        BulkAction::make('clearMatchSelected')
+                            ->label(__('Clear / match'))
+                            ->icon('heroicon-o-link')
+                            ->color('primary')
+                            ->requiresConfirmation()
+                            ->modalDescription(__('Match uncleared postings to imported statement lines. Select one pending and one imported line to pair directly, or select multiple lines to auto-match when amount and date uniquely identify a pair.'))
+                            ->action(function (Collection $records, BankClearingMatchService $matching): void {
+                                $stats = $matching->autoMatchSelected($records);
+
+                                if ($stats['manual_pair'] && $stats['matched'] === 1) {
+                                    Notification::make()
+                                        ->title(__('Transactions matched and cleared'))
+                                        ->success()
+                                        ->send();
+
+                                    return;
+                                }
+
+                                if ($stats['matched'] === 0 && $stats['ambiguous'] === 0 && $stats['skipped'] > 0) {
+                                    Notification::make()
+                                        ->title(__('No lines could be matched'))
+                                        ->body(__('Selected rows must be uncleared postings or imported statement lines with a unique counterpart within tolerance.'))
+                                        ->warning()
+                                        ->send();
+
+                                    return;
+                                }
+
+                                $body = collect([
+                                    $stats['matched'] > 0
+                                    ? __(':count matched', ['count' => $stats['matched']])
+                                    : null,
+                                    $stats['ambiguous'] > 0
+                                    ? __(':count ambiguous (multiple candidates)', ['count' => $stats['ambiguous']])
+                                    : null,
+                                    $stats['skipped'] > 0
+                                    ? __(':count skipped', ['count' => $stats['skipped']])
+                                    : null,
+                                ])->filter()->implode(' · ');
+
+                                Notification::make()
+                                    ->title(__('Clear / match finished'))
+                                    ->body($body)
+                                    ->success()
+                                    ->send();
+                            }),
                         BulkAction::make('mirrorSelectedToCash')
                             ->label('Mirror to cash')
                             ->icon('heroicon-o-arrow-right')

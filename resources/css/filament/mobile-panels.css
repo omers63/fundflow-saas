@@ -133,19 +133,88 @@
 }
 
 /* Tab labels: colored pill badges; count badges stay rounded */
+.fi-body .fi-tabs-item[data-ff-tab-color] {
+    position: relative;
+}
+
 .fi-body .fi-tabs-item[data-ff-tab-color] .fi-tabs-item-label {
     border-radius: 9999px;
     font-size: 0.75rem;
     font-weight: 600;
     line-height: 1.25;
-    padding: 0.2rem 0.65rem;
+    padding: 0.25rem 0.75rem;
     transition:
         background-color 0.15s ease,
-        color 0.15s ease;
+        color 0.15s ease,
+        box-shadow 0.15s ease,
+        opacity 0.15s ease,
+        transform 0.15s ease;
+}
+
+.fi-body .fi-tabs-item[data-ff-tab-color]:not(.fi-active) .fi-tabs-item-label {
+    opacity: 0.65;
+}
+
+.fi-body .fi-tabs-item.fi-active[data-ff-tab-color] .fi-tabs-item-label {
+    font-weight: 700;
+    opacity: 1;
+    transform: translateY(-1px);
+    box-shadow:
+        0 1px 2px rgb(0 0 0 / 0.08),
+        0 0 0 2px rgb(255 255 255 / 0.9);
+}
+
+.dark .fi-body .fi-tabs-item.fi-active[data-ff-tab-color] .fi-tabs-item-label {
+    box-shadow:
+        0 1px 3px rgb(0 0 0 / 0.35),
+        0 0 0 2px rgb(0 0 0 / 0.4);
+}
+
+.fi-body .fi-tabs-item.fi-active[data-ff-tab-color]::after {
+    background-color: currentColor;
+    border-radius: 3px 3px 0 0;
+    bottom: -0.125rem;
+    content: '';
+    height: 3px;
+    left: 0.35rem;
+    position: absolute;
+    right: 0.35rem;
+}
+
+.fi-body .fi-tabs-item.fi-active[data-ff-tab-color] .fi-icon {
+    opacity: 1;
+}
+
+.fi-body .fi-tabs-item[data-ff-tab-color]:not(.fi-active) .fi-icon {
+    opacity: 0.55;
 }
 
 .fi-body .fi-tabs-item[data-ff-tab-color] .fi-badge {
     border-radius: 9999px;
+}
+
+.fi-body .fi-tabs-item.fi-active[data-ff-tab-color] .fi-badge {
+    font-weight: 700;
+}
+
+/* Table column headers & labeled headings with icons */
+.fi-body .fi-ff-label-with-icon {
+    gap: 0.375rem;
+    line-height: 1.25;
+    max-width: 100%;
+}
+
+.fi-body .fi-ff-label-with-icon .fi-ff-label-text {
+    min-width: 0;
+}
+
+.fi-body .fi-ta-header-cell .fi-ff-label-with-icon {
+    justify-content: flex-start;
+}
+
+.fi-body .fi-ta-header-heading .fi-ff-label-with-icon {
+    font-size: inherit;
+    font-weight: inherit;
 }
 
 .fi-body .fi-tabs-item[data-ff-tab-color='primary'] .fi-tabs-item-label {
@@ -159,8 +228,13 @@
 }
 
 .fi-body .fi-tabs-item.fi-active[data-ff-tab-color='primary'] .fi-tabs-item-label {
-    background-color: rgb(var(--primary-100));
-    color: rgb(var(--primary-800));
+    background-color: rgb(var(--primary-200));
+    color: rgb(var(--primary-900));
+}
+
+.dark .fi-body .fi-tabs-item.fi-active[data-ff-tab-color='primary'] .fi-tabs-item-label {
+    background-color: rgb(var(--primary-400) / 0.35);
+    color: rgb(var(--primary-300));
 }
 
 .fi-body .fi-tabs-item[data-ff-tab-color='info'] .fi-tabs-item-label {
@@ -174,8 +248,13 @@
 }
 
 .fi-body .fi-tabs-item.fi-active[data-ff-tab-color='info'] .fi-tabs-item-label {
-    background-color: rgb(var(--info-100));
-    color: rgb(var(--info-800));
+    background-color: rgb(var(--info-200));
+    color: rgb(var(--info-900));
+}
+
+.dark .fi-body .fi-tabs-item.fi-active[data-ff-tab-color='info'] .fi-tabs-item-label {
+    background-color: rgb(var(--info-400) / 0.35);
+    color: rgb(var(--info-300));
 }
 
 .fi-body .fi-tabs-item[data-ff-tab-color='success'] .fi-tabs-item-label {
@@ -189,8 +268,13 @@
 }
 
 .fi-body .fi-tabs-item.fi-active[data-ff-tab-color='success'] .fi-tabs-item-label {
-    background-color: rgb(var(--success-100));
-    color: rgb(var(--success-800));
+    background-color: rgb(var(--success-200));
+    color: rgb(var(--success-900));
+}
+
+.dark .fi-body .fi-tabs-item.fi-active[data-ff-tab-color='success'] .fi-tabs-item-label {
+    background-color: rgb(var(--success-400) / 0.35);
+    color: rgb(var(--success-300));
 }
 
 .fi-body .fi-tabs-item[data-ff-tab-color='warning'] .fi-tabs-item-label {

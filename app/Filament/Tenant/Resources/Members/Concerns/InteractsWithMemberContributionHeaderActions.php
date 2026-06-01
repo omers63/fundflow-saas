@@ -13,95 +13,112 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
+use Livewire\Component;
 
 trait InteractsWithMemberContributionHeaderActions
 {
-    /**
-     * @return list<Action>
-     */
-    protected function memberContributionHeaderActions(): array
+    protected function buildMemberContributeAction(): Action
     {
         $cycles = app(ContributionCycleService::class);
 
-        return [
-            Action::make('contribute')
-                ->label(__('Contribute'))
-                ->icon('heroicon-o-banknotes')
-                ->color('success')
-                ->visible(fn (): bool => $this->record instanceof Member && $cycles->contributionCycleSelectOptionsForMember($this->record) !== [])
-                ->schema([
-                    Select::make('cycle')
-                        ->label(__('Cycle'))
-                        ->options(fn (): array => $this->record instanceof Member
-                            ? $cycles->contributionCycleSelectOptionsForMember($this->record)
-                            : [])
-                        ->required(),
-                ])
-                ->fillForm(fn (): array => [
-                    'cycle' => $this->record instanceof Member
-                        ? $cycles->defaultContributionCycleKeyForMember($this->record)
-                        : null,
-                ])
-                ->action(function (array $data) use ($cycles): void {
-                    if (! $this->record instanceof Member) {
-                        return;
+        return Action::make('contribute')
+            ->label(__('Contribute'))
+            ->icon('heroicon-o-banknotes')
+            ->color('success')
+            ->visible(fn (): bool => ($member = $this->resolveMemberForContributionAction()) !== null
+                && $cycles->contributionCycleSelectOptionsForMember($member) !== [])
+            ->schema([
+                Select::make('cycle')
+                    ->label(__('Cycle'))
+                    ->options(fn (): array => ($member = $this->resolveMemberForContributionAction()) !== null
+                        ? $cycles->contributionCycleSelectOptionsForMember($member)
+                        : [])
+                    ->required(),
+            ])
+            ->fillForm(fn (): array => [
+                'cycle' => ($member = $this->resolveMemberForContributionAction()) !== null
+                    ? $cycles->defaultContributionCycleKeyForMember($member)
+                    : null,
+            ])
+            ->action(function (array $data) use ($cycles): void {
+                $member = $this->resolveMemberForContributionAction();
+
+                if ($member === null) {
+                    return;
+                }
+
+                [$month, $year] = $cycles->parseContributionCycleKey($data['cycle']);
+                $outcome = $cycles->applyContributionForMemberForPeriod($member, $month, $year);
+
+                Notification::make()
+                    ->title($outcome === 'applied' ? __('Contribution applied') : __('Could not apply'))
+                    ->body(match ($outcome) {
+                        'applied' => __('Posted successfully.'),
+                        'insufficient' => __('Insufficient cash.'),
+                        'exempt' => __('Member is exempt while loan installments are pending.'),
+                        default => $outcome,
+                    })
+                    ->color($outcome === 'applied' ? 'success' : 'warning')
+                    ->send();
+
+                if ($outcome === 'applied') {
+                    MemberResource::dispatchMemberDetailInsightsRefresh($this->resolveContributionRefreshTarget());
+
+                    if (method_exists($this, 'resetTable')) {
+                        $this->resetTable();
                     }
+                }
+            });
+    }
 
-                    [$month, $year] = $cycles->parseContributionCycleKey($data['cycle']);
-                    $outcome = $cycles->applyContributionForMemberForPeriod($this->record, $month, $year);
+    protected function buildMemberAllocateDependentsAction(): Action
+    {
+        $cycles = app(ContributionCycleService::class);
 
-                    Notification::make()
-                        ->title($outcome === 'applied' ? __('Contribution applied') : __('Could not apply'))
-                        ->body(match ($outcome) {
-                            'applied' => __('Posted successfully.'),
-                            'insufficient' => __('Insufficient cash.'),
-                            'exempt' => __('Member is exempt while loan installments are pending.'),
-                            default => $outcome,
-                        })
-                        ->color($outcome === 'applied' ? 'success' : 'warning')
-                        ->send();
+        return Action::make('allocateDependents')
+            ->label(__('Allocate to dependents'))
+            ->icon('heroicon-o-users')
+            ->color('info')
+            ->visible(fn (): bool => ($member = $this->resolveMemberForContributionAction()) instanceof Member
+                && $member->dependents()->where('status', 'active')->exists())
+            ->schema([
+                Select::make('cycle')
+                    ->label(__('Cycle'))
+                    ->options(fn (): array => ($member = $this->resolveMemberForContributionAction()) instanceof Member
+                        ? $cycles->contributionCycleSelectOptionsForBulk()
+                        : [])
+                    ->required(),
+            ])
+            ->action(function (array $data) use ($cycles): void {
+                $member = $this->resolveMemberForContributionAction();
 
-                    if ($outcome === 'applied') {
-                        MemberResource::dispatchMemberDetailInsightsRefresh($this);
+                if ($member === null) {
+                    return;
+                }
+
+                [$month, $year] = $cycles->parseContributionCycleKey($data['cycle']);
+                $result = $cycles->applyDependentAllocationForParentForPeriod($member, $month, $year);
+
+                foreach ($result['allocated_dependent_ids'] as $dependentId) {
+                    $dependent = Member::query()->find($dependentId);
+
+                    if ($dependent !== null) {
+                        app(AccountingService::class)->triggerMemberCashCollection($dependent);
                     }
-                }),
-            Action::make('allocateDependents')
-                ->label(__('Allocate to dependents'))
-                ->icon('heroicon-o-users')
-                ->color('info')
-                ->visible(fn (): bool => $this->record instanceof Member
-                    && $this->record->dependents()->where('status', 'active')->exists())
-                ->schema([
-                    Select::make('cycle')
-                        ->label(__('Cycle'))
-                        ->options(fn (): array => $this->record instanceof Member
-                            ? $cycles->contributionCycleSelectOptionsForBulk()
-                            : [])
-                        ->required(),
-                ])
-                ->action(function (array $data) use ($cycles): void {
-                    if (! $this->record instanceof Member) {
-                        return;
-                    }
+                }
 
-                    [$month, $year] = $cycles->parseContributionCycleKey($data['cycle']);
-                    $result = $cycles->applyDependentAllocationForParentForPeriod($this->record, $month, $year);
+                Notification::make()
+                    ->title(__(':count transfer(s) completed', ['count' => $result['transfers']]))
+                    ->body(implode("\n", $result['details']))
+                    ->success()
+                    ->send();
 
-                    foreach ($result['allocated_dependent_ids'] as $dependentId) {
-                        $dependent = Member::query()->find($dependentId);
+                MemberResource::dispatchMemberDetailInsightsRefresh($this->resolveContributionRefreshTarget());
 
-                        if ($dependent !== null) {
-                            app(AccountingService::class)->triggerMemberCashCollection($dependent);
-                        }
-                    }
-
-                    Notification::make()
-                        ->title(__(':count transfer(s) completed', ['count' => $result['transfers']]))
-                        ->body(implode("\n", $result['details']))
-                        ->success()
-                        ->send();
-                }),
-        ];
+                if (method_exists($this, 'resetTable')) {
+                    $this->resetTable();
+                }
+            });
     }
 
     /**
@@ -109,22 +126,7 @@ trait InteractsWithMemberContributionHeaderActions
      */
     protected function organizedMemberHeaderActions(): array
     {
-        $contributionActions = $this->memberContributionHeaderActions();
         $actions = [];
-
-        if (isset($contributionActions[0])) {
-            $actions[] = $contributionActions[0];
-        }
-
-        $householdActions = array_slice($contributionActions, 1);
-
-        if ($householdActions !== []) {
-            $actions[] = ActionGroup::make($householdActions)
-                ->label(__('Household'))
-                ->icon('heroicon-o-users')
-                ->color('gray')
-                ->button();
-        }
 
         $delinquencyActions = MemberDelinquencyActions::forMemberRecord();
 
@@ -137,5 +139,31 @@ trait InteractsWithMemberContributionHeaderActions
         }
 
         return $actions;
+    }
+
+    protected function resolveMemberForContributionAction(): ?Member
+    {
+        if (property_exists($this, 'record') && $this->record instanceof Member) {
+            return $this->record;
+        }
+
+        if (method_exists($this, 'getOwnerRecord')) {
+            $owner = $this->getOwnerRecord();
+
+            return $owner instanceof Member ? $owner : null;
+        }
+
+        return null;
+    }
+
+    protected function resolveContributionRefreshTarget(): ?Component
+    {
+        if (method_exists($this, 'getLivewire')) {
+            $livewire = $this->getLivewire();
+
+            return $livewire instanceof Component ? $livewire : null;
+        }
+
+        return $this instanceof Component ? $this : null;
     }
 }

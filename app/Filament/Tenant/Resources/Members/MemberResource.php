@@ -11,7 +11,6 @@ use App\Filament\Tenant\Resources\Members\RelationManagers\ContributionsRelation
 use App\Filament\Tenant\Resources\Members\RelationManagers\DependentsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\LoansRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\MessagesRelationManager;
-use App\Filament\Tenant\Resources\Members\RelationManagers\MigrationStubsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\RepaymentsRelationManager;
 use App\Filament\Tenant\Resources\Members\Schemas\MemberForm;
 use App\Filament\Tenant\Resources\Members\Tables\MembersTable;
@@ -25,6 +24,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Livewire\Component;
+use Livewire\Livewire;
 use UnitEnum;
 
 class MemberResource extends Resource
@@ -38,6 +38,44 @@ class MemberResource extends Resource
     protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
 
     protected static ?int $navigationSort = TenantNavigation::SORT_MEMBERS;
+
+    /**
+     * @return list<string>
+     */
+    public static function listTabKeys(): array
+    {
+        return ['all', 'delinquent'];
+    }
+
+    public static function listTabLabel(string $tab): string
+    {
+        return match ($tab) {
+            'delinquent' => __('Delinquent'),
+            default => __('All members'),
+        };
+    }
+
+    public static function listTabUrl(string $tab): string
+    {
+        if ($tab === 'all') {
+            return static::getUrl('index');
+        }
+
+        return static::getUrl('index', ['tab' => $tab]);
+    }
+
+    public static function resolveListTab(): string
+    {
+        $livewire = Livewire::current();
+
+        if ($livewire instanceof ListMembers && filled($livewire->activeTab)) {
+            $tab = $livewire->activeTab;
+        } else {
+            $tab = request()->string('tab')->toString() ?: 'all';
+        }
+
+        return in_array($tab, self::listTabKeys(), true) ? $tab : 'all';
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -58,7 +96,6 @@ class MemberResource extends Resource
             LoansRelationManager::class,
             DependentsRelationManager::class,
             MessagesRelationManager::class,
-            MigrationStubsRelationManager::class,
         ];
     }
 
@@ -100,7 +137,7 @@ class MemberResource extends Resource
         );
 
         $livewire->js(
-            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
+            'setTimeout(() => window.Livewire.getByName(' . $targetName . ').forEach(w => w.$refresh()), 0)'
         );
     }
 
@@ -116,7 +153,7 @@ class MemberResource extends Resource
         );
 
         $livewire->js(
-            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
+            'setTimeout(() => window.Livewire.getByName(' . $targetName . ').forEach(w => w.$refresh()), 0)'
         );
     }
 }

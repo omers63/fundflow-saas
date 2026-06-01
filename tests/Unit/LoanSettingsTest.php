@@ -14,7 +14,15 @@ beforeEach(function () {
 
 it('uses defaults when loan settings are not stored', function () {
     expect(LoanSettings::eligibilityMonths())->toBe(12)
-        ->and(LoanSettings::defaultInterestRate())->toBe(10.0);
+        ->and(LoanSettings::defaultInterestRate())->toBe(10.0)
+        ->and(LoanSettings::guarantorTransferMissedThreshold())->toBe(3)
+        ->and(Setting::loanGuarantorTransferMissedThreshold())->toBe(3);
+});
+
+it('falls back guarantor transfer threshold to grace cycles plus one', function () {
+    LoanSettings::save(['default_grace_cycles' => 4]);
+
+    expect(LoanSettings::guarantorTransferMissedThreshold())->toBe(5);
 });
 
 it('caps max loan amount by fund balance multiplier', function () {

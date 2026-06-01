@@ -84,7 +84,7 @@ class BankImportService
                     $existingId = $this->findDuplicateId($hash, $parsed, $template);
 
                     if ($existingId !== null) {
-                        BankTransaction::create([
+                        BankTransaction::withoutEvents(fn () => BankTransaction::create([
                             'bank_statement_id' => $statement->id,
                             'transaction_date' => $parsed['date'],
                             'description' => $parsed['description'],
@@ -96,14 +96,14 @@ class BankImportService
                             'raw_data' => json_encode($rawData),
                             'is_cleared' => false,
                             'duplicate_of_id' => $existingId,
-                        ]);
+                        ]));
 
                         $duplicates++;
 
                         continue;
                     }
 
-                    BankTransaction::create([
+                    BankTransaction::withoutEvents(fn () => BankTransaction::create([
                         'bank_statement_id' => $statement->id,
                         'transaction_date' => $parsed['date'],
                         'description' => $parsed['description'],
@@ -115,7 +115,7 @@ class BankImportService
                         'raw_data' => json_encode($rawData),
                         'is_cleared' => true,
                         'cleared_at' => now(),
-                    ]);
+                    ]));
 
                     $imported++;
                 } catch (\Exception $e) {
@@ -131,12 +131,11 @@ class BankImportService
                 ->value('transaction_date');
 
             $statement->update([
-                'total_rows' => $totalRows,
-                'imported_rows' => $imported,
-                'duplicate_rows' => $duplicates,
                 'statement_date' => $statementDate,
                 'status' => 'completed',
             ]);
+
+            $statement->refreshRowCounts();
         } catch (\Exception $e) {
             $statement->update(['status' => 'failed', 'notes' => $e->getMessage()]);
             throw $e;

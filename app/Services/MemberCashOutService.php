@@ -123,25 +123,20 @@ final class MemberCashOutService
             throw new InvalidArgumentException(__('Member no longer has enough available cash for this request.'));
         }
 
-        DB::transaction(function () use ($request, $member, $memberCash, $masterCash, $amount, $reviewedBy, $remarks): void {
+        DB::transaction(function () use ($request, $member, $memberCash, $amount, $reviewedBy, $remarks): void {
             $description = __('Cash out #:id – :name', [
                 'id' => $request->id,
                 'name' => $member->name,
             ]);
 
-            $this->accounting->debit(
+            $this->accounting->debitMemberCashWithMasterMirror(
                 $memberCash,
                 $amount,
                 $description.' '.__('(cash out)'),
+                __('(cash out mirror)'),
                 $request,
                 null,
                 $member->id,
-            );
-            $this->accounting->debit(
-                $masterCash,
-                $amount,
-                $description.' '.__('(cash out mirror)'),
-                $request,
             );
 
             $statement = BankStatement::firstOrCreate(

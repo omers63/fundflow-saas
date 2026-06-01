@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\Accounts;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
+use App\Filament\Support\UiLabelIcons;
 use App\Filament\Tenant\Resources\Accounts\Pages\ListAccounts;
 use App\Filament\Tenant\Resources\Accounts\Pages\ViewAccount;
 use App\Filament\Tenant\Resources\Accounts\RelationManagers\TransactionsRelationManager;
@@ -68,17 +69,17 @@ class AccountResource extends Resource
     {
         return match (self::resolveListMemberAccountsTab()) {
             'loans' => MemberAccountsLoansTable::configure(
-                $table->pluralModelLabel(__('Loans')),
+                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Loans'), UiLabelIcons::forKey('loans'))),
             ),
             'all' => MemberAccountsTable::configure(
-                $table->pluralModelLabel(__('All accounts')),
+                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('All accounts'), UiLabelIcons::forKey('all'))),
                 showTypeColumn: true,
             ),
             'fund' => MemberAccountsTable::configure(
-                $table->pluralModelLabel(__('Fund accounts')),
+                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Fund accounts'), UiLabelIcons::forKey('fund'))),
             ),
             default => MemberAccountsTable::configure(
-                $table->pluralModelLabel(__('Cash accounts')),
+                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Cash accounts'), UiLabelIcons::forKey('cash'))),
             ),
         };
     }

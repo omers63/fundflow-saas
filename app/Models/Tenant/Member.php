@@ -40,10 +40,6 @@ class Member extends Model
         'monthly_contribution_amount',
         'joined_at',
         'contribution_arrears_cutoff_date',
-        'migration_cutoff_date',
-        'migration_status',
-        'partial_clearance_granted_at',
-        'partial_clearance_notes',
         'opening_cash_balance',
         'opening_fund_balance',
         'opening_balances_posted_at',
@@ -56,8 +52,6 @@ class Member extends Model
             'monthly_contribution_amount' => 'decimal:2',
             'joined_at' => 'date',
             'contribution_arrears_cutoff_date' => 'date',
-            'migration_cutoff_date' => 'date',
-            'partial_clearance_granted_at' => 'datetime',
             'opening_cash_balance' => 'decimal:2',
             'opening_fund_balance' => 'decimal:2',
             'opening_balances_posted_at' => 'datetime',
@@ -120,11 +114,6 @@ class Member extends Model
     public function fundPostings(): HasMany
     {
         return $this->hasMany(FundPosting::class);
-    }
-
-    public function migrationInstalmentSchedules(): HasMany
-    {
-        return $this->hasMany(MigrationInstalmentSchedule::class);
     }
 
     public function repayments(): HasManyThrough
@@ -265,10 +254,6 @@ class Member extends Model
 
     public function isExemptFromContributions(?int $month = null, ?int $year = null): bool
     {
-        if ($this->migration_status === 'migration_pending') {
-            return true;
-        }
-
         if ($this->hasActiveLoanRepaymentObligation()) {
             return true;
         }
@@ -324,36 +309,6 @@ class Member extends Model
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class);
-    }
-
-    public function migrationStubs(): HasMany
-    {
-        return $this->hasMany(MigrationCycleStub::class);
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    public static function migrationStatusOptions(): array
-    {
-        return [
-            'migration_pending' => __('Migration pending'),
-            'active' => __('Cleared for active operation'),
-        ];
-    }
-
-    public static function migrationStatusBadgeColor(?string $state): string
-    {
-        return match ($state) {
-            'migration_pending' => 'warning',
-            'active' => 'success',
-            default => 'gray',
-        };
-    }
-
-    public function isMigrationPending(): bool
-    {
-        return $this->migration_status === 'migration_pending';
     }
 
     public function monthlyStatements(): HasMany

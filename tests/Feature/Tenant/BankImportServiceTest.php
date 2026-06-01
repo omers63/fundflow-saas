@@ -53,6 +53,41 @@ function defaultTemplate(array $overrides = []): array
     ], $overrides);
 }
 
+test('refresh row counts updates synthetic statements when transactions are added', function () {
+    $statement = BankStatement::create([
+        'filename' => 'membership-subscription-fees',
+        'bank_name' => __('Membership subscription fees'),
+        'status' => 'completed',
+        'total_rows' => 0,
+        'imported_rows' => 0,
+        'duplicate_rows' => 0,
+    ]);
+
+    BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => now(),
+        'description' => 'Pending fee',
+        'amount' => 150,
+        'status' => 'posted',
+        'hash' => md5('synthetic-fee-1'),
+        'is_cleared' => false,
+    ]);
+
+    BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => now(),
+        'description' => 'Pending fee 2',
+        'amount' => 200,
+        'status' => 'imported',
+        'hash' => md5('synthetic-fee-2'),
+        'is_cleared' => false,
+    ]);
+
+    expect($statement->fresh()->total_rows)->toBe(2)
+        ->and($statement->fresh()->imported_rows)->toBe(2)
+        ->and($statement->fresh()->duplicate_rows)->toBe(0);
+});
+
 test('imports CSV with default template', function () {
     $csv = "date,description,amount,reference\n"
         ."2026-05-01,Deposit from John,5000,REF001\n"

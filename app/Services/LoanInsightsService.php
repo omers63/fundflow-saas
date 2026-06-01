@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
+use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\LoanTiers\LoanTierResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
+use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
@@ -59,12 +61,12 @@ final class LoanInsightsService
 
         $outstanding = (float) LoanInstallment::query()
             ->whereIn('status', ['pending', 'overdue'])
-            ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
+            ->whereHas('loan', fn($q) => $q->where('status', 'active'))
             ->sum('amount');
 
         $overdueCount = (int) LoanInstallment::query()
             ->where('status', 'overdue')
-            ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
+            ->whereHas('loan', fn($q) => $q->where('status', 'active'))
             ->count();
 
         $newThisMonth = Loan::query()
@@ -103,7 +105,7 @@ final class LoanInsightsService
             ->orderBy('applied_at')
             ->limit(5)
             ->get()
-            ->map(fn (Loan $loan): array => $this->queueLoanRow($loan, $now))
+            ->map(fn(Loan $loan): array => $this->queueLoanRow($loan, $now))
             ->all();
 
         return [
@@ -135,10 +137,10 @@ final class LoanInsightsService
                 ['key' => 'new', 'label' => __('New/mo'), 'value' => (string) $newThisMonth, 'sub' => $this->monthOverMonthChange($newThisMonth, $newLastMonth) !== null ? __(':percent%', ['percent' => $this->monthOverMonthChange($newThisMonth, $newLastMonth)]) : now()->format('M'), 'icon' => 'heroicon-o-sparkles', 'accent' => 'sky', 'active' => true, 'mom' => $this->monthOverMonthChange($newThisMonth, $newLastMonth)],
                 ['key' => 'disbursed', 'label' => __('Disbursed'), 'value' => $this->formatMoneyCompact($disbursedThisMonth, $currency), 'sub' => __('This month'), 'icon' => 'heroicon-o-arrow-trending-up', 'accent' => 'teal', 'active' => true],
             ], [
-                'pending' => LoanResource::getUrl('index').'?tableFilters[status][value]=pending',
-                'active' => LoanResource::getUrl('index').'?tableFilters[status][value]=active',
+                'pending' => LoanResource::getUrl('index') . '?tableFilters[status][value]=pending',
+                'active' => LoanResource::getUrl('index') . '?tableFilters[status][value]=active',
                 'outstanding' => LoanResource::getUrl('index'),
-                'overdue' => LoanResource::getUrl('delinquency'),
+                'overdue' => LoanResource::listTabUrl('overdue_installments'),
                 'new' => LoanResource::getUrl('index'),
                 'disbursed' => LoanResource::getUrl('index'),
             ]),
@@ -172,12 +174,12 @@ final class LoanInsightsService
 
         $overdueInstallments = (int) LoanInstallment::query()
             ->where('status', 'overdue')
-            ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
+            ->whereHas('loan', fn($q) => $q->where('status', 'active'))
             ->count();
 
         $overdueAmount = (float) LoanInstallment::query()
             ->where('status', 'overdue')
-            ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
+            ->whereHas('loan', fn($q) => $q->where('status', 'active'))
             ->sum('amount');
 
         $counts = $delinquency->digestCounts();
@@ -206,8 +208,8 @@ final class LoanInsightsService
                         'delinquent' => $delinquentMembers,
                     ])
                     : __('No overdue installments or contribution arrears in the current lookback.'),
-                'cta_label' => $totalIssues > 0 ? __('Review delinquency') : null,
-                'cta_url' => $totalIssues > 0 ? LoanResource::getUrl('delinquency') : null,
+                'cta_label' => $totalIssues > 0 ? __('Review overdue') : null,
+                'cta_url' => $totalIssues > 0 ? LoanResource::listTabUrl('overdue_installments') : null,
             ],
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'overdue', 'label' => __('Overdue'), 'value' => (string) $overdueInstallments, 'sub' => __('Installments'), 'icon' => 'heroicon-o-calendar-days', 'accent' => 'rose', 'active' => $overdueInstallments > 0, 'value_class' => $overdueInstallments > 0 ? 'text-rose-600 dark:text-rose-400' : null],
@@ -217,12 +219,12 @@ final class LoanInsightsService
                 ['key' => 'guarantor', 'label' => __('Guarantor'), 'value' => (string) $guarantorTransferred, 'sub' => __('Liability transferred'), 'icon' => 'heroicon-o-shield-exclamation', 'accent' => 'sky', 'active' => $guarantorTransferred > 0],
                 ['key' => 'exposure', 'label' => __('Exposure'), 'value' => (string) $guarantorAtRisk, 'sub' => __('Past grace'), 'icon' => 'heroicon-o-exclamation-circle', 'accent' => 'rose', 'active' => $guarantorAtRisk > 0],
             ], [
-                'overdue' => LoanResource::getUrl('delinquency').'?tab=installments',
-                'at_risk' => LoanResource::getUrl('delinquency').'?tab=installments',
-                'arrears' => LoanResource::getUrl('delinquency').'?tab=contributions',
-                'delinquent' => LoanResource::getUrl('delinquency'),
-                'guarantor' => LoanResource::getUrl('delinquency').'?tab=guarantor',
-                'exposure' => LoanResource::getUrl('delinquency').'?tab=guarantor',
+                'overdue' => LoanResource::listTabUrl('overdue_installments'),
+                'at_risk' => LoanResource::listTabUrl('overdue_installments'),
+                'arrears' => ContributionResource::listTabUrl('arrears'),
+                'delinquent' => MemberResource::listTabUrl('delinquent'),
+                'guarantor' => LoanResource::listTabUrl('guarantor_exposure'),
+                'exposure' => LoanResource::listTabUrl('guarantor_exposure'),
             ]),
             'pipeline' => [
                 'overdue_installments' => $overdueInstallments,
@@ -230,10 +232,11 @@ final class LoanInsightsService
                 'guarantor_at_risk' => $guarantorAtRisk,
                 'guarantor_transferred' => $guarantorTransferred,
                 'delinquent_members' => $delinquentMembers,
-                'delinquency_url' => LoanResource::getUrl('delinquency'),
-                'delinquency_installments_url' => LoanResource::getUrl('delinquency').'?tab=installments',
-                'delinquency_contributions_url' => LoanResource::getUrl('delinquency').'?tab=contributions',
-                'delinquency_guarantor_url' => LoanResource::getUrl('delinquency').'?tab=guarantor',
+                'delinquency_url' => LoanResource::listTabUrl('overdue_installments'),
+                'delinquency_installments_url' => LoanResource::listTabUrl('overdue_installments'),
+                'delinquency_contributions_url' => ContributionResource::listTabUrl('arrears'),
+                'delinquency_guarantor_url' => LoanResource::listTabUrl('guarantor_exposure'),
+                'delinquency_members_url' => MemberResource::listTabUrl('delinquent'),
             ],
         ];
     }
@@ -266,7 +269,7 @@ final class LoanInsightsService
             ->orderBy('applied_at')
             ->limit(5)
             ->get()
-            ->map(fn (Loan $loan): array => $this->queueLoanRow($loan, $now))
+            ->map(fn(Loan $loan): array => $this->queueLoanRow($loan, $now))
             ->all();
 
         $emergency = Loan::query()->inQueue()->where('is_emergency', true)->count();
@@ -297,10 +300,10 @@ final class LoanInsightsService
                 ['key' => 'emergency', 'label' => __('Emergency'), 'value' => (string) $emergency, 'sub' => __('In queue'), 'icon' => 'heroicon-o-bolt', 'accent' => 'rose', 'active' => $emergency > 0],
                 ['key' => 'queue', 'label' => __('Queue'), 'value' => (string) $total, 'sub' => __('All stages'), 'icon' => 'heroicon-o-queue-list', 'accent' => 'teal', 'active' => true],
             ], [
-                'decision' => LoanResource::getUrl('queue').'?tab=needs_decision',
-                'disburse' => LoanResource::getUrl('queue').'?tab=ready_to_disburse',
-                'payout' => LoanResource::getUrl('queue').'?tab=awaiting_payout',
-                'tab_total' => LoanResource::getUrl('queue').'?tab='.$activeTab,
+                'decision' => LoanResource::getUrl('queue') . '?tab=needs_decision',
+                'disburse' => LoanResource::getUrl('queue') . '?tab=ready_to_disburse',
+                'payout' => LoanResource::getUrl('queue') . '?tab=awaiting_payout',
+                'tab_total' => LoanResource::getUrl('queue') . '?tab=' . $activeTab,
                 'emergency' => LoanResource::getUrl('queue'),
                 'queue' => LoanResource::getUrl('queue'),
             ]),
@@ -334,9 +337,9 @@ final class LoanInsightsService
             ->groupBy('loan_tier_id')
             ->pluck('total', 'loan_tier_id');
 
-        $breakdown = $activeTiers->map(fn (LoanTier $tier): array => [
+        $breakdown = $activeTiers->map(fn(LoanTier $tier): array => [
             'label' => $tier->label,
-            'range' => $this->formatMoneyCompact((float) $tier->min_amount, $currency).' – '.$this->formatMoneyCompact((float) $tier->max_amount, $currency),
+            'range' => $this->formatMoneyCompact((float) $tier->min_amount, $currency) . ' – ' . $this->formatMoneyCompact((float) $tier->max_amount, $currency),
             'count' => (int) ($loansByTier[$tier->id] ?? 0),
             'min_installment' => $this->formatMoneyCompact((float) $tier->min_monthly_installment, $currency),
         ])->values()->all();
@@ -392,8 +395,8 @@ final class LoanInsightsService
             ->orderBy('tier_number')
             ->get();
 
-        $totalAllocated = $tiers->sum(fn (FundTier $tier): float => $tier->allocated_amount);
-        $totalExposure = $tiers->sum(fn (FundTier $tier): float => $tier->active_exposure);
+        $totalAllocated = $tiers->sum(fn(FundTier $tier): float => $tier->allocated_amount);
+        $totalExposure = $tiers->sum(fn(FundTier $tier): float => $tier->active_exposure);
         $totalAvailable = max(0, $totalAllocated - $totalExposure);
         $utilization = $totalAllocated > 0 ? (int) round(($totalExposure / $totalAllocated) * 100) : 0;
 
@@ -435,7 +438,7 @@ final class LoanInsightsService
                 ['key' => 'allocated', 'label' => __('Allocated'), 'value' => $this->formatMoneyCompact($totalAllocated, $currency), 'sub' => __('Pools'), 'icon' => 'heroicon-o-circle-stack', 'accent' => 'sky', 'active' => true],
                 ['key' => 'deployed', 'label' => __('Deployed'), 'value' => $this->formatMoneyCompact($totalExposure, $currency), 'sub' => __('Exposure'), 'icon' => 'heroicon-o-arrow-trending-up', 'accent' => 'amber', 'active' => $totalExposure > 0],
                 ['key' => 'available', 'label' => __('Available'), 'value' => $this->formatMoneyCompact($totalAvailable, $currency), 'sub' => __('Headroom'), 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => true],
-                ['key' => 'utilization', 'label' => __('Utilization'), 'value' => $utilization.'%', 'sub' => __('Portfolio'), 'icon' => 'heroicon-o-chart-pie', 'accent' => 'violet', 'active' => true],
+                ['key' => 'utilization', 'label' => __('Utilization'), 'value' => $utilization . '%', 'sub' => __('Portfolio'), 'icon' => 'heroicon-o-chart-pie', 'accent' => 'violet', 'active' => true],
                 ['key' => 'active_tiers', 'label' => __('Active tiers'), 'value' => (string) $tiers->count(), 'sub' => __('Pools'), 'icon' => 'heroicon-o-squares-2x2', 'accent' => 'teal', 'active' => true],
             ], [
                 'master_fund' => MasterAccountResource::getUrl('index', ['tab' => 'fund']),
@@ -522,10 +525,10 @@ final class LoanInsightsService
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'requested', 'label' => __('Requested'), 'value' => $this->formatMoneyCompact((float) $loan->amount_requested, $currency), 'sub' => __('Application'), 'icon' => 'heroicon-o-document-text', 'accent' => 'sky', 'active' => true],
                 ['key' => 'approved', 'label' => __('Approved'), 'value' => $loan->amount_approved ? $this->formatMoneyCompact($approved, $currency) : '—', 'sub' => __('Terms'), 'icon' => 'heroicon-o-check-badge', 'accent' => 'emerald', 'active' => (bool) $loan->amount_approved],
-                ['key' => 'disbursed', 'label' => __('Disbursed'), 'value' => $this->formatMoneyCompact($disbursed, $currency), 'sub' => $disbursePercent.'%', 'icon' => 'heroicon-o-banknotes', 'accent' => 'indigo', 'active' => $disbursed > 0],
+                ['key' => 'disbursed', 'label' => __('Disbursed'), 'value' => $this->formatMoneyCompact($disbursed, $currency), 'sub' => $disbursePercent . '%', 'icon' => 'heroicon-o-banknotes', 'accent' => 'indigo', 'active' => $disbursed > 0],
                 ['key' => 'outstanding', 'label' => __('Outstanding'), 'value' => $this->formatMoneyCompact($outstanding, $currency), 'sub' => __('Balance'), 'icon' => 'heroicon-o-scale', 'accent' => 'violet', 'active' => $outstanding > 0],
-                ['key' => 'queue', 'label' => __('Queue'), 'value' => $loan->queue_position ? '#'.$loan->queue_position : '—', 'sub' => $loan->fundTier?->label ?? '—', 'icon' => 'heroicon-o-queue-list', 'accent' => 'amber', 'active' => (bool) $loan->queue_position],
-                ['key' => 'schedule', 'label' => __('Schedule'), 'value' => $installmentsTotal > 0 ? $installmentsPaid.'/'.$installmentsTotal : '—', 'sub' => $repayPercent.'% '.__('paid'), 'icon' => 'heroicon-o-calendar-days', 'accent' => 'teal', 'active' => $installmentsTotal > 0],
+                ['key' => 'queue', 'label' => __('Queue'), 'value' => $loan->queue_position ? '#' . $loan->queue_position : '—', 'sub' => $loan->fundTier?->label ?? '—', 'icon' => 'heroicon-o-queue-list', 'accent' => 'amber', 'active' => (bool) $loan->queue_position],
+                ['key' => 'schedule', 'label' => __('Schedule'), 'value' => $installmentsTotal > 0 ? $installmentsPaid . '/' . $installmentsTotal : '—', 'sub' => $repayPercent . '% ' . __('paid'), 'icon' => 'heroicon-o-calendar-days', 'accent' => 'teal', 'active' => $installmentsTotal > 0],
             ], $kpiUrls),
             'progress' => [
                 'disburse' => ['percent' => $disbursePercent, 'label' => __('Ledger disbursement')],
@@ -541,7 +544,7 @@ final class LoanInsightsService
                 [
                     'key' => 'installments',
                     'label' => __('Repayment schedule'),
-                    'value' => $installmentsTotal > 0 ? $installmentsPaid.' / '.$installmentsTotal.' '.__('paid') : __('Not generated'),
+                    'value' => $installmentsTotal > 0 ? $installmentsPaid . ' / ' . $installmentsTotal . ' ' . __('paid') : __('Not generated'),
                     'hint' => $installmentsOverdue > 0 ? trans_choice(':count overdue|:count overdue', $installmentsOverdue, ['count' => $installmentsOverdue]) : ($nextInstallment ? __('Next :date', ['date' => $nextInstallment->due_date?->format('d M')]) : null),
                     'accent' => $installmentsOverdue > 0 ? 'rose' : 'teal',
                     'icon' => 'heroicon-o-calendar-days',
@@ -549,7 +552,7 @@ final class LoanInsightsService
                 [
                     'key' => 'disbursements',
                     'label' => __('Disbursements'),
-                    'value' => $this->formatMoneyCompact($disbursed, $currency).' / '.$this->formatMoneyCompact($approved ?: (float) $loan->amount_requested, $currency),
+                    'value' => $this->formatMoneyCompact($disbursed, $currency) . ' / ' . $this->formatMoneyCompact($approved ?: (float) $loan->amount_requested, $currency),
                     'hint' => trans_choice(':count tranche|:count tranches', $loan->disbursements->count(), ['count' => $loan->disbursements->count()]),
                     'accent' => 'indigo',
                     'icon' => 'heroicon-o-arrow-down-tray',
@@ -591,7 +594,7 @@ final class LoanInsightsService
 
         $outstanding = (float) LoanInstallment::query()
             ->whereIn('status', ['pending', 'overdue'])
-            ->whereHas('loan', fn ($q) => $q->where('member_id', $memberId)->where('status', 'active'))
+            ->whereHas('loan', fn($q) => $q->where('member_id', $memberId)->where('status', 'active'))
             ->sum('amount');
 
         $member = Member::query()->find($memberId);
@@ -668,12 +671,12 @@ final class LoanInsightsService
             ->pluck('total', 'status');
 
         return collect(Loan::statusOptions())
-            ->map(fn (string $label, string $status): array => [
+            ->map(fn(string $label, string $status): array => [
                 'status' => $status,
                 'label' => $label,
                 'count' => (int) ($counts[$status] ?? 0),
             ])
-            ->filter(fn (array $row): bool => $row['count'] > 0)
+            ->filter(fn(array $row): bool => $row['count'] > 0)
             ->values()
             ->all();
     }
@@ -774,7 +777,7 @@ final class LoanInsightsService
         $url = MyLoanResource::getUrl('index');
 
         if ($status !== null) {
-            $url .= '?tableFilters[status][value]='.urlencode($status);
+            $url .= '?tableFilters[status][value]=' . urlencode($status);
         }
 
         return $url;
@@ -788,13 +791,13 @@ final class LoanInsightsService
     private function formatMoneyCompact(float $amount, string $currency): string
     {
         if ($amount >= 1_000_000) {
-            return number_format($amount / 1_000_000, 1).'M '.$currency;
+            return number_format($amount / 1_000_000, 1) . 'M ' . $currency;
         }
 
         if ($amount >= 1_000) {
-            return number_format($amount / 1_000, 1).'K '.$currency;
+            return number_format($amount / 1_000, 1) . 'K ' . $currency;
         }
 
-        return number_format($amount, 0).' '.$currency;
+        return number_format($amount, 0) . ' ' . $currency;
     }
 }

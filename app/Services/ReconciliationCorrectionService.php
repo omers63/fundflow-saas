@@ -176,8 +176,24 @@ class ReconciliationCorrectionService
         $description = __('RECON_MANUAL_CORRECTION — :reason', ['reason' => $trimmed]);
 
         $transaction = match ($direction) {
-            'credit' => $this->accounting->credit($cash, $amount, $description, $exception, null, $member->id),
-            'debit' => $this->accounting->debit($cash, $amount, $description, $exception, null, $member->id),
+            'credit' => $this->accounting->creditMemberCashWithMasterMirror(
+                $cash,
+                $amount,
+                $description,
+                __('(recon correction mirror)'),
+                $exception,
+                null,
+                $member->id,
+            ),
+            'debit' => $this->accounting->debitMemberCashWithMasterMirror(
+                $cash,
+                $amount,
+                $description,
+                __('(recon correction mirror)'),
+                $exception,
+                null,
+                $member->id,
+            ),
             default => throw new InvalidArgumentException(__('Direction must be credit or debit.')),
         };
 
@@ -283,12 +299,11 @@ class ReconciliationCorrectionService
             throw new InvalidArgumentException(__('Refund amount must be greater than zero.'));
         }
 
-        $loan->loadMissing('member.cashAccount');
+        $loan->loadMissing('member.cashAccount', 'member.fundAccount');
         $memberCash = $loan->member->cashAccount;
-        $masterFund = Account::masterFund();
 
-        if ($memberCash === null || $masterFund === null) {
-            throw new InvalidArgumentException(__('Member cash and master fund accounts are required.'));
+        if ($memberCash === null) {
+            throw new InvalidArgumentException(__('Member cash account is required.'));
         }
 
         $trimmed = trim($reason);
@@ -297,8 +312,30 @@ class ReconciliationCorrectionService
             'reason' => $trimmed,
         ]);
 
-        $this->accounting->credit($memberCash, $amount, $description, $loan, null, $loan->member_id);
-        $this->accounting->debit($masterFund, $amount, $description, $loan, null, $loan->member_id);
+        $memberFund = $loan->member->fundAccount;
+
+        if ($memberFund === null) {
+            throw new InvalidArgumentException(__('Member fund account is not configured.'));
+        }
+
+        $this->accounting->creditMemberCashWithMasterMirror(
+            $memberCash,
+            $amount,
+            $description,
+            __('(EMI overpayment refund mirror)'),
+            $loan,
+            null,
+            $loan->member_id,
+        );
+        $this->accounting->debitMemberFundWithMasterMirror(
+            $memberFund,
+            $amount,
+            $description,
+            __('(EMI overpayment refund mirror)'),
+            $loan,
+            null,
+            $loan->member_id,
+        );
 
         $overRepaid = max(0.0, (float) $loan->repaid_to_master - (float) $loan->master_portion);
 
@@ -340,8 +377,13 @@ class ReconciliationCorrectionService
             'reason' => $trimmed,
         ]);
 
-        $this->accounting->credit($masterFund, $amount, $description, $contribution);
-        $this->accounting->credit($memberFund, $amount, $description, $contribution);
+        $this->accounting->creditMemberFundWithMasterMirror(
+            $memberFund,
+            $amount,
+            $description,
+            __('(recon correction mirror)'),
+            $contribution,
+        );
 
         $this->audit->log('RECON_MANUAL_CORRECTION', 'reconciliation', $exception, $contribution->member, [
             'action' => 'member_fund_principal',

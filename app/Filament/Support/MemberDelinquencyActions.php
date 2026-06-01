@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
-use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
 use Filament\Actions\Action;
@@ -23,7 +22,6 @@ final class MemberDelinquencyActions
             self::syncDelinquency(),
             self::markDelinquent(),
             self::restoreActive(),
-            self::openDelinquencyWorkspace(),
         ];
     }
 
@@ -33,7 +31,7 @@ final class MemberDelinquencyActions
             ->label(__('Sync delinquency status'))
             ->icon('heroicon-o-arrow-path')
             ->color('warning')
-            ->visible(fn (Member $record): bool => in_array($record->status, ['active', 'delinquent'], true))
+            ->visible(fn(Member $record): bool => in_array($record->status, ['active', 'delinquent'], true))
             ->action(function (Member $record, LoanDelinquencyService $delinquency): void {
                 $result = $delinquency->syncMemberDelinquencyStatusForMember($record);
 
@@ -62,7 +60,7 @@ final class MemberDelinquencyActions
             ->label(__('Mark delinquent'))
             ->icon('heroicon-o-user-minus')
             ->color('danger')
-            ->visible(fn (Member $record): bool => $record->status === 'active')
+            ->visible(fn(Member $record): bool => $record->status === 'active')
             ->requiresConfirmation()
             ->modalDescription(__('Blocks member portal access until arrears are cleared and status is restored.'))
             ->action(function (Member $record, LoanDelinquencyService $delinquency): void {
@@ -81,7 +79,7 @@ final class MemberDelinquencyActions
             ->label(__('Restore active'))
             ->icon('heroicon-o-user-plus')
             ->color('success')
-            ->visible(fn (Member $record): bool => $record->status === 'delinquent')
+            ->visible(fn(Member $record): bool => $record->status === 'delinquent')
             ->schema([
                 Checkbox::make('force')
                     ->label(__('Force restore (ignore outstanding arrears)'))
@@ -95,15 +93,5 @@ final class MemberDelinquencyActions
                     Notification::make()->title(__('Cannot restore'))->body($e->getMessage())->danger()->send();
                 }
             });
-    }
-
-    public static function openDelinquencyWorkspace(): Action
-    {
-        return Action::make('openDelinquency')
-            ->label(__('Delinquency workspace'))
-            ->icon('heroicon-o-exclamation-triangle')
-            ->color('gray')
-            ->url(fn (): string => LoanResource::getUrl('delinquency'))
-            ->openUrlInNewTab();
     }
 }

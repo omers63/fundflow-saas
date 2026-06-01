@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\BankAccounts;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
+use App\Filament\Support\UiLabelIcons;
 use App\Filament\Tenant\Resources\BankAccounts\Pages\ListBankAccounts;
 use App\Filament\Tenant\Resources\BankAccounts\Pages\ViewBankStatement;
 use App\Filament\Tenant\Resources\BankAccounts\RelationManagers\BankTransactionsRelationManager;
@@ -52,14 +53,14 @@ class BankAccountsResource extends Resource
 
         return match (self::resolveListBankAccountsTab()) {
             'ledger' => MasterBankLedgerTable::configure(
-                $table->pluralModelLabel(__('Master bank ledger')),
+                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Master bank ledger'), UiLabelIcons::forKey('ledger'))),
                 $afterLedgerMutation,
             ),
             'imports', 'transactions' => BankTransactionsTable::configure(
-                $table->pluralModelLabel(__('Statement lines')),
+                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Statement lines'), UiLabelIcons::forKey('imports'))),
             ),
             default => BankStatementsTable::configure(
-                $table->pluralModelLabel(__('Statements')),
+                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Statements'), UiLabelIcons::forKey('statements'))),
             ),
         };
     }

@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
-use App\Models\Tenant\MigrationCycleStub;
 use App\Models\Tenant\Setting;
 use App\Services\AccountingService;
 use App\Services\MasterAccountInvariantService;
@@ -22,14 +21,12 @@ beforeEach(function () {
 
     Account::query()->delete();
     Member::query()->delete();
-    MigrationCycleStub::query()->delete();
-
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 0, 'is_master' => true]);
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 0, 'is_master' => true]);
     Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
 });
 
-test('master invariant includes unresolved backdated due obligations', function () {
+test('master invariant expects master fund to match member fund sum', function () {
     $member = Member::create([
         'member_number' => 'INV-001',
         'name' => 'Invariant Member',
@@ -38,19 +35,13 @@ test('master invariant includes unresolved backdated due obligations', function 
         'status' => 'active',
     ]);
 
-    MigrationCycleStub::create([
-        'member_id' => $member->id,
-        'cycle_date' => now()->subMonths(3)->startOfMonth(),
-        'amount_due' => 1500,
-        'status' => 'open',
-        'classification' => MigrationCycleStub::CLASS_BACKDATED_DUE,
-        'late_fee_exempt' => true,
-    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+    app(AccountingService::class)->credit($member->fundAccount, 1500, 'Seed fund');
 
     $result = app(MasterAccountInvariantService::class)->check();
 
-    expect($result['backdated_due_sum'])->toBe(1500.0)
-        ->and($result['expected_master_fund'])->toBe($result['member_fund_sum'] + 1500.0);
+    expect($result['expected_master_fund'])->toBe($result['member_fund_sum'])
+        ->and($result['balanced'])->toBeFalse();
 });
 
 test('member invariant reports balanced ledger when opening and net movement align', function () {

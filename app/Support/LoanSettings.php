@@ -80,6 +80,11 @@ final class LoanSettings
         return (int) self::get('default_grace_cycles', 2);
     }
 
+    public static function guarantorTransferMissedThreshold(): int
+    {
+        return max(1, (int) self::get('guarantor_transfer_missed_threshold', self::defaultGraceCycles() + 1));
+    }
+
     public static function requireGuarantorAboveFundBalance(): bool
     {
         return (bool) self::get('require_guarantor_above_fund_balance', true);
