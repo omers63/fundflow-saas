@@ -2,6 +2,8 @@
 
 namespace App\Models\Tenant;
 
+use App\Support\ImportDateFormats;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 
 class BankTemplate extends Model
@@ -72,6 +74,7 @@ class BankTemplate extends Model
             'delimiter' => $this->delimiter,
             'has_header' => $this->has_header,
             'skip_rows' => $this->skip_rows,
+            'date_formats' => $this->date_format,
             'date_format' => $this->date_format,
             'amount_mode' => $this->amount_mode ?? 'single',
             'columns' => $columns,
@@ -106,5 +109,16 @@ class BankTemplate extends Model
     {
         return static::where('is_default', true)->first()
             ?? static::first();
+    }
+
+    /**
+     * @return Attribute<array<int, string>, string>
+     */
+    protected function dateFormat(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value): array => ImportDateFormats::normalize($value),
+            set: fn (array|string|null $value): string => json_encode(ImportDateFormats::normalize($value)),
+        );
     }
 }

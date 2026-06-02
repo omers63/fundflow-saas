@@ -136,7 +136,7 @@ class ContributionResource extends Resource
             'collect' => ContributionCycleTables::configurePendingMembersTable($table),
             'collected' => ContributionCycleTables::configureCollectedTable($table),
             'arrears' => LoanDelinquencyTables::configureContributionArrearsTable(
-                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Contribution arrears'), UiLabelIcons::forKey('contributions'))),
+                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Contribution arrears'))),
             ),
             default => ContributionsTable::configure($table),
         };

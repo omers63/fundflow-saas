@@ -94,7 +94,8 @@ test('admin can mount edit action from account transactions relation manager', f
 });
 
 test('delete transaction reverses balance and removes row', function () {
-    $account = Account::factory()->cash()->withBalance(300)->create();
+    $account = Account::masterCash();
+    $account->update(['balance' => 300]);
     $transaction = app(AccountingService::class)->credit($account, 200, 'Deposit');
 
     app(AccountingService::class)->deleteTransaction($transaction);
@@ -103,4 +104,21 @@ test('delete transaction reverses balance and removes row', function () {
 
     expect(Transaction::query()->find($transaction->id))->toBeNull()
         ->and((float) $account->balance)->toBe(300.0);
+});
+
+test('delete transaction recalculates balance_after on remaining rows', function () {
+    $account = Account::masterCash();
+    $account->update(['balance' => 0]);
+    $service = app(AccountingService::class);
+
+    $first = $service->credit($account, 100, 'First');
+    $account->refresh();
+    $second = $service->credit($account, 50, 'Second');
+
+    $service->deleteTransaction($first);
+
+    $account->refresh();
+
+    expect((float) $account->balance)->toBe(50.0)
+        ->and((float) $second->fresh()->balance_after)->toBe(50.0);
 });

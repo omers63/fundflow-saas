@@ -9,6 +9,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTemplate;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Transaction;
+use App\Services\BankClearingMatchService;
 use App\Services\BankImportService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
@@ -92,6 +93,12 @@ class ListBankAccounts extends ListRecords
             'imports' => Tab::make(__('Statement lines'))
                 ->icon(Heroicon::OutlinedQueueList)
                 ->extraAttributes(['data-ff-tab-key' => 'imports', 'data-ff-tab-color' => TabLabelColors::forKey('imports')], merge: true),
+            'clearance' => Tab::make(__('Pending bank match'))
+                ->icon(Heroicon::OutlinedLink)
+                ->badge(fn (): ?string => ($count = app(BankClearingMatchService::class)->pendingOperationalClearanceCount()) > 0
+                    ? (string) $count
+                    : null)
+                ->extraAttributes(['data-ff-tab-key' => 'clearance', 'data-ff-tab-color' => TabLabelColors::forKey('clearance')], merge: true),
             'ledger' => Tab::make(__('Master bank ledger'))
                 ->icon(Heroicon::OutlinedBookOpen)
                 ->extraAttributes(['data-ff-tab-key' => 'ledger', 'data-ff-tab-color' => TabLabelColors::forKey('ledger')], merge: true),
@@ -111,13 +118,20 @@ class ListBankAccounts extends ListRecords
                 fn (Builder $query): Builder => $query->where('account_id', $masterBankId),
                 fn (Builder $query): Builder => $query->whereRaw('0 = 1'),
             ),
-            'imports' => BankTransaction::query(),
+            'imports' => app(BankClearingMatchService::class)
+                ->applyRealBankStatementLinesScope(BankTransaction::query()),
+            'clearance' => app(BankClearingMatchService::class)
+                ->applyPendingOperationalClearanceScope(BankTransaction::query()),
             default => static::getResource()::getEloquentQuery(),
         };
     }
 
     protected function getHeaderActions(): array
     {
+        if (BankAccountsResource::resolveListBankAccountsTab() !== 'imports') {
+            return [];
+        }
+
         return [
             Action::make('import')
                 ->label(__('Import statement'))

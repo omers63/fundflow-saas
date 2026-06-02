@@ -103,7 +103,9 @@
                                         {{ strtoupper(mb_substr($profile['name'], 0, 1)) }}
                                     @endif
                                 </span>
-                                <span class="member-login-profile-card__name">{{ $profile['name'] }}</span>
+                                <span class="member-login-profile-card__name">
+                                    <x-arabic-text :text="$profile['name']" />
+                                </span>
                                 <span class="member-login-profile-card__role">
                                     {{ $profile['is_parent'] ? __('Parent profile') : __('Dependent profile') }}
                                     @if ($profile['is_separated'])

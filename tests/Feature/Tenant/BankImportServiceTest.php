@@ -583,6 +583,27 @@ test('imports using BankTemplate model toTemplateArray', function () {
     expect($txn->transaction_date->format('Y-m-d'))->toBe('2026-05-01');
 });
 
+test('imports CSV with multiple configured date formats in one file', function () {
+    $template = defaultTemplate([
+        'date_formats' => ['Y-m-d', 'd/m/Y'],
+        'date_format' => ['Y-m-d', 'd/m/Y'],
+    ]);
+
+    $csv = "date,description,amount,reference\n"
+        ."2026-05-01,ISO date row,1000,REF001\n"
+        ."02/05/2026,EU date row,2000,REF002\n";
+
+    $file = createCsvFile($csv);
+    $result = $this->service->importCsv($file, template: $template);
+
+    expect($result['imported'])->toBe(2);
+
+    expect(BankTransaction::where('reference', 'REF001')->first()->transaction_date->format('Y-m-d'))
+        ->toBe('2026-05-01');
+    expect(BankTransaction::where('reference', 'REF002')->first()->transaction_date->format('Y-m-d'))
+        ->toBe('2026-05-02');
+});
+
 test('imports header-based column names correctly', function () {
     $template = defaultTemplate([
         'has_header' => true,

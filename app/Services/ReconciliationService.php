@@ -734,6 +734,8 @@ class ReconciliationService
 
         BankTransaction::query()
             ->uncleared()
+            ->whereNull('fund_posting_id')
+            ->whereNull('cash_out_request_id')
             ->where('created_at', '<', now()->subDays($staleDays))
             ->whereDoesntHave('bankStatement', function ($query): void {
                 $query->whereIn('filename', $this->bankClearing->membershipImportPlaceholderStatementFilenames());

@@ -8,7 +8,10 @@ use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Widgets\MemberDetailInsightsWidget;
 use App\Models\Tenant\Member;
 use App\Services\Tenant\HouseholdMemberService;
+use App\Support\ArabicDisplaySettings;
+use App\Support\ArabicTypography;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
 use Livewire\Attributes\On;
 
@@ -24,8 +27,14 @@ class EditMember extends EditRecord
         return __('Member');
     }
 
-    public function getHeading(): string
+    public function getHeading(): string|Htmlable
     {
+        assert($this->record instanceof Member);
+
+        if (ArabicDisplaySettings::enhancedNameStyle() && ArabicTypography::containsArabic($this->record->name)) {
+            return ArabicTypography::display($this->record->name);
+        }
+
         return $this->record->name;
     }
 

@@ -6,7 +6,11 @@ use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Services\BankClearingMatchService;
+use App\Services\ContributionCollectionCycleService;
+use App\Services\FundFlowService;
 use App\Services\FundPostingService;
+use App\Services\MemberCashOutService;
+use App\Support\BankTransactionWorkflow;
 use Illuminate\Support\Collection;
 use Tests\Concerns\InitializesTenancy;
 
@@ -111,6 +115,42 @@ test('auto match selected matches uncleared lines with a unique imported counter
         ->and($uncleared->fresh()->is_cleared)->toBeTrue();
 });
 
+test('posted bank lines assigned to a member are not unmatched import targets', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-BM-05',
+        'name' => 'Direct Post Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $statement = BankStatement::create([
+        'filename' => 'direct-post.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    $imported = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => now(),
+        'description' => 'Salary transfer',
+        'amount' => 5500,
+        'status' => 'posted',
+        'member_id' => $member->id,
+        'is_cleared' => true,
+        'cleared_at' => now(),
+        'hash' => md5('direct-posted-line'),
+    ]);
+
+    $scan = $this->matching->scanMatchExceptions();
+
+    expect($scan['unmatched_imported'])->not->toContain($imported->id);
+});
+
 test('mirrored bank statement lines are eligible match targets', function () {
     $member = Member::create([
         'member_number' => 'MEM-BM-04',
@@ -147,10 +187,223 @@ test('mirrored bank statement lines are eligible match targets', function () {
 
     expect($this->matching->isImportedMatchCandidate($imported))->toBeTrue();
 
+    $masterBank = Account::masterBank();
+    $bankBalanceBeforeMatch = (float) $masterBank->balance;
+
     $this->matching->clearMatchPair($uncleared, $imported);
 
+    $imported = $imported->fresh();
+
     expect($uncleared->fresh()->is_cleared)->toBeTrue()
-        ->and($imported->fresh()->fund_posting_id)->toBe($posting->id);
+        ->and($imported->fund_posting_id)->toBe($posting->id)
+        ->and($imported->status)->toBe('posted')
+        ->and($imported->member_id)->toBe($member->id)
+        ->and($imported->master_bank_transaction_id)->not->toBeNull()
+        ->and((float) $masterBank->fresh()->balance)->toBe($bankBalanceBeforeMatch + 750);
+
+    $bankLedger = $imported->masterBankTransaction;
+
+    expect($bankLedger)->not->toBeNull()
+        ->and($bankLedger->account_id)->toBe($masterBank->id)
+        ->and($bankLedger->member_id)->toBe($member->id)
+        ->and($bankLedger->type)->toBe('credit');
+});
+
+test('matched bank import is match-only and cannot be posted to cash or member', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-BM-06',
+        'name' => 'Match Only Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $posting = $this->fundPostings->submit($member, 1800, '2026-05-14');
+    $this->fundPostings->accept($posting);
+
+    $uncleared = $posting->bankTransaction->fresh();
+    $statement = BankStatement::create([
+        'filename' => 'match-only.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    $imported = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => '2026-05-14',
+        'description' => 'Bank deposit',
+        'amount' => 1800,
+        'status' => 'imported',
+        'hash' => md5('match-only-import'),
+        'is_cleared' => false,
+    ]);
+
+    $masterBank = Account::masterBank();
+    $masterCash = Account::masterCash();
+    $cashAfterAccept = (float) $masterCash->fresh()->balance;
+    $bankBeforeMatch = (float) $masterBank->balance;
+
+    $this->matching->clearMatchPair($uncleared, $imported);
+
+    $imported = $imported->fresh();
+
+    expect(BankTransactionWorkflow::canPostToCash($imported))->toBeFalse()
+        ->and(BankTransactionWorkflow::canPostToMember($imported))->toBeFalse()
+        ->and($imported->fund_posting_id)->toBe($posting->id)
+        ->and($imported->status)->toBe('posted')
+        ->and($imported->master_bank_transaction_id)->not->toBeNull()
+        ->and((float) $masterBank->fresh()->balance)->toBe($bankBeforeMatch + 1800)
+        ->and((float) $masterCash->fresh()->balance)->toBe($cashAfterAccept);
+
+    $fundFlow = app(FundFlowService::class);
+
+    expect($fundFlow->mirrorToCash([$imported->id]))->toBe(0);
+
+    expect(fn() => $fundFlow->ensureMirroredAndPostToMember($imported, $member))
+        ->toThrow(InvalidArgumentException::class);
+
+    $scan = $this->matching->scanMatchExceptions();
+
+    expect($scan['unmatched_imported'])->not->toContain($imported->id);
+});
+
+test('synthetic postings appear only on pending bank match until cleared', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-BM-09',
+        'name' => 'Tab Scope Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $posting = $this->fundPostings->submit($member, 950, '2026-05-16');
+    $this->fundPostings->accept($posting);
+
+    $synthetic = $posting->bankTransaction->fresh();
+    $statement = BankStatement::create([
+        'filename' => 'tab-scope.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    $imported = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => '2026-05-16',
+        'description' => 'Bank line',
+        'amount' => 950,
+        'status' => 'imported',
+        'hash' => md5('tab-scope-import'),
+        'is_cleared' => false,
+    ]);
+
+    $realScope = $this->matching->applyRealBankStatementLinesScope(BankTransaction::query())->pluck('id');
+    $pendingScope = $this->matching->applyPendingOperationalClearanceScope(BankTransaction::query())->pluck('id');
+
+    expect($realScope)->not->toContain($synthetic->id)
+        ->and($realScope)->toContain($imported->id)
+        ->and($pendingScope)->toContain($synthetic->id)
+        ->and($pendingScope)->not->toContain($imported->id);
+
+    $this->matching->clearMatchPair($synthetic, $imported);
+
+    $realScope = $this->matching->applyRealBankStatementLinesScope(BankTransaction::query())->pluck('id');
+    $pendingScope = $this->matching->applyPendingOperationalClearanceScope(BankTransaction::query())->pluck('id');
+
+    expect($realScope)->toContain($imported->fresh()->id)
+        ->and($realScope)->not->toContain($synthetic->fresh()->id)
+        ->and($pendingScope)->not->toContain($synthetic->fresh()->id);
+});
+
+test('synthetic fund posting lines cannot be posted to cash', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-BM-07',
+        'name' => 'Synthetic Posting Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $posting = $this->fundPostings->submit($member, 600, '2026-05-15');
+    $synthetic = $posting->bankTransaction->fresh();
+
+    expect(BankTransactionWorkflow::canPostToCash($synthetic))->toBeFalse()
+        ->and(BankTransactionWorkflow::canPostToMember($synthetic))->toBeFalse();
+});
+
+test('cash-out matched import is match-only', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-BM-08',
+        'name' => 'Cash Out Match Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $collection = Mockery::mock(ContributionCollectionCycleService::class);
+    $collection->shouldReceive('onMemberCashIncreased')->andReturnNull();
+    app()->instance(ContributionCollectionCycleService::class, $collection);
+
+    $this->accounting->creditMemberCashWithMasterMirror(
+        $member->cashAccount,
+        5000,
+        'Seed cash',
+        __('(seed mirror)'),
+        null,
+        null,
+        $member->id,
+    );
+    $member->refresh();
+
+    $cashOuts = app(MemberCashOutService::class);
+    $request = $cashOuts->submit($member, 400, 'Need funds');
+    $cashOuts->accept($request, reviewedBy: null);
+
+    $uncleared = $request->fresh()->bankTransaction;
+    $statement = BankStatement::create([
+        'filename' => 'cash-out-match.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    $imported = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => now()->toDateString(),
+        'description' => 'Withdrawal',
+        'amount' => -400,
+        'status' => 'imported',
+        'hash' => md5('cash-out-match-import'),
+        'is_cleared' => false,
+    ]);
+
+    $masterBank = Account::masterBank();
+    $bankBeforeMatch = (float) $masterBank->balance;
+
+    $this->matching->clearMatchPair($uncleared, $imported);
+
+    $imported = $imported->fresh();
+
+    expect(BankTransactionWorkflow::canPostToCash($imported))->toBeFalse()
+        ->and(BankTransactionWorkflow::canPostToMember($imported))->toBeFalse()
+        ->and($imported->cash_out_request_id)->toBe($request->id)
+        ->and($imported->status)->toBe('posted')
+        ->and($imported->member_id)->toBe($member->id)
+        ->and($imported->master_bank_transaction_id)->not->toBeNull()
+        ->and((float) $masterBank->fresh()->balance)->toBe($bankBeforeMatch - 400);
+
+    expect($imported->masterBankTransaction?->type)->toBe('debit');
 });
 
 test('synthetic operational statement lines are not match targets', function () {

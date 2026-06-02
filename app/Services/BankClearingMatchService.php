@@ -10,6 +10,7 @@ use App\Support\ContributionPolicySettings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
@@ -40,6 +41,16 @@ class BankClearingMatchService
     ];
 
     /**
+     * Accepted member deposits and cash-outs awaiting a real bank CSV match.
+     *
+     * @var list<string>
+     */
+    private const OPERATIONAL_CLEARANCE_STATEMENT_FILENAMES = [
+        'member-postings',
+        'member-cash-outs',
+    ];
+
+    /**
      * @return list<string>
      */
     public function membershipImportPlaceholderStatementFilenames(): array
@@ -47,11 +58,53 @@ class BankClearingMatchService
         return self::MEMBERSHIP_IMPORT_PLACEHOLDER_STATEMENTS;
     }
 
+    /**
+     * @return list<string>
+     */
+    public function operationalClearanceStatementFilenames(): array
+    {
+        return self::OPERATIONAL_CLEARANCE_STATEMENT_FILENAMES;
+    }
+
+    /**
+     * @param  Builder<BankTransaction>  $query
+     * @return Builder<BankTransaction>
+     */
+    public function applyRealBankStatementLinesScope(Builder $query): Builder
+    {
+        return $query->whereHas('bankStatement', function (Builder $statementQuery): void {
+            $statementQuery->whereNotIn('filename', self::SYNTHETIC_STATEMENT_FILENAMES);
+        });
+    }
+
+    /**
+     * @param  Builder<BankTransaction>  $query
+     * @return Builder<BankTransaction>
+     */
+    public function applyPendingOperationalClearanceScope(Builder $query): Builder
+    {
+        return $query
+            ->uncleared()
+            ->where(function (Builder $pendingQuery): void {
+                $pendingQuery->whereNotNull('fund_posting_id')
+                    ->orWhereNotNull('cash_out_request_id');
+            })
+            ->whereHas('bankStatement', function (Builder $statementQuery): void {
+                $statementQuery->whereIn('filename', self::OPERATIONAL_CLEARANCE_STATEMENT_FILENAMES);
+            });
+    }
+
+    public function pendingOperationalClearanceCount(): int
+    {
+        return $this->applyPendingOperationalClearanceScope(BankTransaction::query())->count();
+    }
+
     public function __construct(
         protected FundPostingService $fundPostings,
         protected MemberCashOutService $cashOuts,
         protected AccountingService $accounting,
-    ) {}
+    ) {
+    }
 
     /**
      * @return list<string>
@@ -110,7 +163,7 @@ class BankClearingMatchService
         $dayRange = ContributionPolicySettings::bankMatchDateRangeDays();
 
         foreach ($records as $record) {
-            if (! $record instanceof BankTransaction) {
+            if (!$record instanceof BankTransaction) {
                 $stats['skipped']++;
 
                 continue;
@@ -166,21 +219,55 @@ class BankClearingMatchService
 
     public function clearMatchPair(BankTransaction $uncleared, BankTransaction $imported): void
     {
-        if (! $this->isPendingClearance($uncleared)) {
+        if (!$this->isPendingClearance($uncleared)) {
             throw new InvalidArgumentException(__('The pending transaction is not eligible for clearance.'));
         }
 
-        if (! $this->isImportedMatchCandidate($imported)) {
+        if (!$this->isImportedMatchCandidate($imported)) {
             throw new InvalidArgumentException(__('The imported statement line is not eligible for matching.'));
         }
 
-        if ($uncleared->cash_out_request_id) {
-            $this->cashOuts->clearTransaction($uncleared, $imported);
+        DB::transaction(function () use ($uncleared, $imported): void {
+            if ($uncleared->cash_out_request_id) {
+                $this->cashOuts->clearTransaction($uncleared, $imported);
+            } else {
+                $this->fundPostings->clearTransaction($uncleared, $imported);
+            }
 
+            $this->postMatchedImportToMasterBankLedger($imported->fresh());
+        });
+    }
+
+    /**
+     * Record the real bank statement line on the master bank ledger.
+     * Member/master cash were already posted when the deposit or cash-out was accepted.
+     */
+    public function postMatchedImportToMasterBankLedger(BankTransaction $imported): void
+    {
+        if ($imported->master_bank_transaction_id !== null) {
             return;
         }
 
-        $this->fundPostings->clearTransaction($uncleared, $imported);
+        $masterBank = Account::masterBank();
+
+        if ($masterBank === null) {
+            return;
+        }
+
+        $amount = (float) $imported->amount;
+
+        if (abs($amount) <= 0.00001) {
+            return;
+        }
+
+        $description = FundFlowService::mirrorToCashLedgerDescription($imported);
+        $memberId = $imported->member_id;
+
+        $ledger = $amount >= 0
+            ? $this->accounting->credit($masterBank, $amount, $description, $imported, null, $memberId)
+            : $this->accounting->debit($masterBank, abs($amount), $description, $imported, null, $memberId);
+
+        $imported->forceFill(['master_bank_transaction_id' => $ledger->id])->saveQuietly();
     }
 
     public function isPendingClearance(BankTransaction $transaction): bool
@@ -217,7 +304,7 @@ class BankClearingMatchService
         return in_array($transaction->status, ['imported', 'mirrored', 'posted'], true);
     }
 
-    protected function isSyntheticOperationalStatement(BankTransaction $transaction): bool
+    public function isSyntheticOperationalStatement(BankTransaction $transaction): bool
     {
         $filename = $transaction->bankStatement?->filename;
 
@@ -327,7 +414,7 @@ class BankClearingMatchService
                 ]);
             })
             ->get()
-            ->filter(fn (BankTransaction $candidate): bool => $this->amountsMatch($candidate, $imported, $tolerance))
+            ->filter(fn(BankTransaction $candidate): bool => $this->amountsMatch($candidate, $imported, $tolerance))
             ->values();
     }
 
@@ -352,7 +439,7 @@ class BankClearingMatchService
                 ]);
             })
             ->get()
-            ->filter(fn (BankTransaction $candidate): bool => $this->isImportedMatchCandidate($candidate)
+            ->filter(fn(BankTransaction $candidate): bool => $this->isImportedMatchCandidate($candidate)
                 && $this->amountsMatch($uncleared, $candidate, $tolerance))
             ->values();
     }
@@ -369,6 +456,11 @@ class BankClearingMatchService
             ->whereNull('membership_application_id')
             ->whereNull('cash_out_request_id')
             ->whereNull('duplicate_of_id')
+            ->where(function (Builder $query): void {
+                // Import → mirror → post to member completes without an uncleared posting to match.
+                $query->where('status', '!=', 'posted')
+                    ->orWhereNull('member_id');
+            })
             ->whereHas('bankStatement', function ($query): void {
                 $query->whereNotIn('filename', self::SYNTHETIC_STATEMENT_FILENAMES);
             });
@@ -380,8 +472,8 @@ class BankClearingMatchService
      */
     protected function identifyManualPair(Collection $records): ?array
     {
-        $uncleared = $records->first(fn (BankTransaction $record): bool => $this->isPendingClearance($record));
-        $imported = $records->first(fn (BankTransaction $record): bool => $this->isImportedMatchCandidate($record));
+        $uncleared = $records->first(fn(BankTransaction $record): bool => $this->isPendingClearance($record));
+        $imported = $records->first(fn(BankTransaction $record): bool => $this->isImportedMatchCandidate($record));
 
         if ($uncleared === null || $imported === null) {
             return null;
@@ -398,26 +490,5 @@ class BankClearingMatchService
         $tolerance ??= ContributionPolicySettings::reconTolerance();
 
         return abs((float) $uncleared->amount - (float) $imported->amount) <= $tolerance;
-    }
-
-    protected function postBankClearingEntry(BankTransaction $imported): void
-    {
-        $masterBank = Account::masterBank();
-        $masterCash = Account::masterCash();
-
-        if ($masterBank === null || $masterCash === null) {
-            return;
-        }
-
-        $amount = abs((float) $imported->amount);
-
-        if ($amount <= 0.00001) {
-            return;
-        }
-
-        $description = __('Bank clearing — import #:id', ['id' => $imported->id]);
-
-        $this->accounting->debit($masterBank, $amount, $description, $imported);
-        $this->accounting->credit($masterCash, $amount, $description, $imported);
     }
 }

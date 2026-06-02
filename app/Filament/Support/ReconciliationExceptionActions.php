@@ -10,6 +10,8 @@ use App\Models\Tenant\User;
 use App\Services\ReconciliationResolutionService;
 use App\Support\Lang;
 use Filament\Actions\Action;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -41,7 +43,22 @@ final class ReconciliationExceptionActions
             self::resolveAmbiguousBankMatchAction(),
             self::acceptOverrideAction(),
             self::resolveAction(),
+            self::deleteAction(),
         ]);
+    }
+
+    public static function deleteAction(): DeleteAction
+    {
+        return DeleteAction::make()
+            ->modalHeading(__('Delete reconciliation exception'))
+            ->modalDescription(__('This removes the exception record only. It does not reverse ledger entries or undo resolutions already applied.'));
+    }
+
+    public static function deleteBulkAction(): DeleteBulkAction
+    {
+        return DeleteBulkAction::make()
+            ->modalHeading(__('Delete reconciliation exceptions'))
+            ->modalDescription(__('This removes the selected exception records only. It does not reverse ledger entries or undo resolutions already applied.'));
     }
 
     public static function viewAction(): Action

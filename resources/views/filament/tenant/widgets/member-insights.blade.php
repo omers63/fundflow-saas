@@ -191,7 +191,9 @@
                             {{ strtoupper(substr($member['name'], 0, 1)) }}
                         </span>
                         <div class="min-w-0 flex-1">
-                            <p class="truncate text-xs font-medium text-gray-900 dark:text-white">{{ $member['name'] }}</p>
+                            <p class="truncate text-xs font-medium text-gray-900 dark:text-white">
+                                <x-arabic-text :text="$member['name']" />
+                            </p>
                             <p class="truncate text-[10px] text-gray-400">{{ $member['contribution'] }} ·
                                 {{ $member['status'] }}</p>
                         </div>

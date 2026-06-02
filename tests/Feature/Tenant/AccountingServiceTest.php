@@ -51,6 +51,25 @@ test('debit decreases account balance', function () {
     expect($transaction->getSignedAmount())->toBe(-2000.0);
 });
 
+test('reconcile account ledger balances rebuilds balance_after from chronological lines', function () {
+    $account = Account::masterCash();
+    $account->update(['balance' => 0]);
+
+    $first = $this->service->credit($account, 100, 'First');
+    $account->refresh();
+    $second = $this->service->credit($account, 50, 'Second');
+
+    $account->update(['balance' => 150]);
+    $first->update(['balance_after' => 999]);
+    $second->update(['balance_after' => 999]);
+
+    $this->service->reconcileAccountLedgerBalances($account);
+
+    expect((float) $account->fresh()->balance)->toBe(150.0)
+        ->and((float) $first->fresh()->balance_after)->toBe(100.0)
+        ->and((float) $second->fresh()->balance_after)->toBe(150.0);
+});
+
 test('update transaction adjusts account balance when amount changes', function () {
     $account = Account::masterCash();
     $account->update(['balance' => 1000]);

@@ -341,6 +341,10 @@ class AccountingService
                     : $transaction->balance_after,
             ]);
 
+            if ($balanceAffectingChanged) {
+                $this->reconcileAccountLedgerBalances($lockedAccount);
+            }
+
             return $transaction->fresh();
         });
     }
@@ -371,7 +375,50 @@ class AccountingService
             }
 
             $transaction->delete();
+
+            $this->reconcileAccountLedgerBalances($lockedAccount);
         });
+    }
+
+    /**
+     * Recompute balance_after on each ledger line from chronological order.
+     *
+     * Preserves the account's current balance (including opening balance not stored as lines).
+     */
+    public function reconcileAccountLedgerBalances(Account $account): void
+    {
+        $account->refresh();
+
+        $transactions = Transaction::query()
+            ->where('account_id', $account->id)
+            ->orderBy('transacted_at')
+            ->orderBy('id')
+            ->get();
+
+        $linesNet = 0.0;
+
+        foreach ($transactions as $ledgerLine) {
+            $amount = round((float) $ledgerLine->amount, 2);
+            $linesNet = $ledgerLine->type === 'credit'
+                ? round($linesNet + $amount, 2)
+                : round($linesNet - $amount, 2);
+        }
+
+        $running = round((float) $account->balance - $linesNet, 2);
+
+        foreach ($transactions as $ledgerLine) {
+            $amount = round((float) $ledgerLine->amount, 2);
+
+            if ($ledgerLine->type === 'credit') {
+                $running = round($running + $amount, 2);
+            } else {
+                $running = round($running - $amount, 2);
+            }
+
+            if ((float) $ledgerLine->balance_after !== $running) {
+                $ledgerLine->update(['balance_after' => $running]);
+            }
+        }
     }
 
     public function canSplitTransaction(Transaction $transaction): bool

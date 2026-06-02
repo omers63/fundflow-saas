@@ -8,8 +8,10 @@ use App\Filament\Tenant\Resources\LoanTiers\LoanTierResource;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\BankTemplate;
 use App\Models\Tenant\Setting;
+use App\Support\ArabicDisplaySettings;
 use App\Support\CommunicationSettings;
 use App\Support\ContributionPolicySettings;
+use App\Support\ImportDateFormats;
 use App\Support\Lang;
 use App\Support\LoanSettings;
 use App\Support\MemberNumberSettings;
@@ -134,6 +136,7 @@ class Settings extends Page implements HasForms
             'contact_email' => $public['contact_email'] ?? '',
             'contact_phone' => $public['contact_phone'] ?? '',
             'fund_logo' => filled($public['fund_logo'] ?? '') ? [$public['fund_logo']] : [],
+            ...ArabicDisplaySettings::allForForm(),
         ]);
     }
 
@@ -217,6 +220,15 @@ class Settings extends Page implements HasForms
                                             ->required()
                                             ->maxLength(255)
                                             ->helperText(__('Shown on public pages and panels when the interface is in Arabic.')),
+                                        Select::make('arabic_display_font')
+                                            ->label(__('Arabic typeface'))
+                                            ->options(ArabicDisplaySettings::fontOptions())
+                                            ->required()
+                                            ->native(false)
+                                            ->helperText(__('Font used for Arabic interface text. Member names in tables use the same typeface.')),
+                                        Toggle::make('arabic_enhanced_name_style')
+                                            ->label(__('Enhanced Arabic member names'))
+                                            ->helperText(__('Larger display and explicit right-to-left layout for Arabic names in tables and headings. When off, names use normal size with RTL text only.')),
                                         FileUpload::make('fund_logo')
                                             ->label(__('Fund logo'))
                                             ->image()
@@ -630,16 +642,24 @@ class Settings extends Page implements HasForms
                             '|' => 'Pipe (|)',
                         ]))
                         ->required(),
-                    Select::make('date_format')
-                        ->label('Date format')
-                        ->options(Lang::transOptions([
-                            'Y-m-d' => 'YYYY-MM-DD (2026-01-15)',
-                            'd/m/Y' => 'DD/MM/YYYY (15/01/2026)',
-                            'm/d/Y' => 'MM/DD/YYYY (01/15/2026)',
-                            'd-m-Y' => 'DD-MM-YYYY (15-01-2026)',
-                            'd.m.Y' => 'DD.MM.YYYY (15.01.2026)',
-                        ]))
-                        ->required(),
+                    CheckboxList::make('date_format')
+                        ->label('Date formats')
+                        ->options(Lang::transOptions(ImportDateFormats::options()))
+                        ->columns(1)
+                        ->required()
+                        ->minItems(1)
+                        ->helperText(__('Select every format that may appear in the file. Do not combine day/month and month/day styles (e.g. DD/MM/YYYY with MM/DD/YYYY).'))
+                        ->rule(function (): \Closure {
+                            return function (string $attribute, mixed $value, \Closure $fail): void {
+                                $message = ImportDateFormats::contradictionMessage(
+                                    ImportDateFormats::normalize(is_array($value) ? $value : [])
+                                );
+
+                                if ($message !== null) {
+                                    $fail($message);
+                                }
+                            };
+                        }),
                     TextInput::make('skip_rows')
                         ->label('Skip rows')
                         ->numeric()
@@ -802,6 +822,11 @@ class Settings extends Page implements HasForms
             'twilio_whatsapp_from' => $state['notifications_twilio_whatsapp_from'] ?? '',
         ]);
 
+        ArabicDisplaySettings::save([
+            'arabic_display_font' => $state['arabic_display_font'] ?? ArabicDisplaySettings::FONT_NOTO_SANS,
+            'arabic_enhanced_name_style' => (bool) ($state['arabic_enhanced_name_style'] ?? false),
+        ]);
+
         PublicPageSettings::save([
             'fund_name_en' => $state['fund_name_en'],
             'fund_name_ar' => $state['fund_name_ar'],
@@ -839,7 +864,7 @@ class Settings extends Page implements HasForms
                 'delimiter' => $templateData['delimiter'],
                 'has_header' => (bool) ($templateData['has_header'] ?? false),
                 'skip_rows' => (int) ($templateData['skip_rows'] ?? 0),
-                'date_format' => $templateData['date_format'],
+                'date_format' => ImportDateFormats::normalize($templateData['date_format'] ?? null),
                 'date_column' => $templateData['date_column'],
                 'amount_mode' => $templateData['amount_mode'] ?? 'single',
                 'amount_column' => $templateData['amount_column'] ?? null,

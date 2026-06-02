@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
+use App\Support\ImportDateFormats;
 use Illuminate\Http\UploadedFile;
 
 class BankImportService
@@ -166,10 +167,11 @@ class BankImportService
             return null;
         }
 
-        $dateFormat = $template['date_format'] ?? 'Y-m-d';
-        $date = \DateTime::createFromFormat($dateFormat, $dateRaw);
-        if ($date === false) {
-            $date = new \DateTime($dateRaw);
+        $dateFormats = $template['date_formats'] ?? $template['date_format'] ?? 'Y-m-d';
+        try {
+            $date = ImportDateFormats::parse($dateRaw, $dateFormats);
+        } catch (\InvalidArgumentException) {
+            return null;
         }
 
         $amountMode = $template['amount_mode'] ?? 'single';
@@ -457,7 +459,8 @@ class BankImportService
             'delimiter' => ',',
             'has_header' => true,
             'skip_rows' => 0,
-            'date_format' => 'Y-m-d',
+            'date_formats' => ['Y-m-d'],
+            'date_format' => ['Y-m-d'],
             'amount_mode' => 'single',
             'columns' => [
                 'date' => 0,

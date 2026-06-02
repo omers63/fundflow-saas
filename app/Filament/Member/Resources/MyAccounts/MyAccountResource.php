@@ -54,17 +54,17 @@ class MyAccountResource extends Resource
     {
         return match (self::resolveListMyAccountsTab()) {
             'loans' => MyMemberAccountsLoansTable::configure(
-                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Loans'), UiLabelIcons::forKey('loans'))),
+                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Loans'))),
             ),
             'all' => MyMemberAccountsTable::configure(
-                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('All'), UiLabelIcons::forKey('all'))),
+                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('All'))),
                 showTypeColumn: true,
             ),
             'fund' => MyMemberAccountsTable::configure(
-                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Fund'), UiLabelIcons::forKey('fund'))),
+                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Fund'))),
             ),
             default => MyMemberAccountsTable::configure(
-                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Cash'), UiLabelIcons::forKey('cash'))),
+                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Cash'))),
             ),
         };
     }

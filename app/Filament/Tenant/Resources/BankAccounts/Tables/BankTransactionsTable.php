@@ -2,15 +2,16 @@
 
 namespace App\Filament\Tenant\Resources\BankAccounts\Tables;
 
+use App\Filament\Support\BankTransactionTableActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\ViewActions\ViewBankTransactionAction;
 use App\Models\Tenant\BankTransaction;
-use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\BankClearingMatchService;
 use App\Services\FundFlowService;
+use App\Support\BankTransactionWorkflow;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -132,41 +133,25 @@ class BankTransactionsTable
                 ->recordActions(TableRecordActionGroups::wrap([
                     ViewBankTransactionAction::make(),
                     Action::make('mirrorToCash')
-                        ->label('Mirror to cash')
+                        ->label(__('Post to cash'))
                         ->icon('heroicon-o-arrow-right')
                         ->color('info')
                         ->requiresConfirmation()
-                        ->modalDescription(__('Mirror this transaction to the Master Cash account.'))
-                        ->hidden(fn ($record) => $record->status !== 'imported')
+                        ->modalDescription(__('Post this statement line to the master cash pool.'))
+                        ->hidden(fn (BankTransaction $record): bool => ! BankTransactionWorkflow::canPostToCash($record))
                         ->action(function ($record, FundFlowService $service) {
                             $service->mirrorToCash([$record->id]);
-                            Notification::make()->title(__('Transaction mirrored to cash'))->success()->send();
+                            Notification::make()->title(__('Posted to master cash'))->success()->send();
                         }),
-                    Action::make('postToMember')
-                        ->label('Post to member')
-                        ->icon('heroicon-o-user-plus')
-                        ->color('success')
-                        ->requiresConfirmation()
-                        ->hidden(fn ($record) => $record->status !== 'mirrored')
-                        ->form([
-                            Select::make('member_id')
-                                ->label('Member')
-                                ->options(fn () => Member::active()->pluck('name', 'id'))
-                                ->searchable()
-                                ->required(),
-                        ])
-                        ->action(function ($record, array $data, FundFlowService $service) {
-                            $member = Member::findOrFail($data['member_id']);
-                            $service->postToMember($record, $member);
-                            Notification::make()->title(__('Posted to :name', ['name' => $member->name]))->success()->send();
-                        }),
+                    BankTransactionTableActions::postToMember(),
                     Action::make('clearMatch')
                         ->label('Clear / Match')
                         ->icon('heroicon-o-link')
                         ->color('primary')
                         ->requiresConfirmation()
                         ->modalDescription(__('Match this uncleared transaction against an imported bank transaction to clear both.'))
-                        ->hidden(fn (BankTransaction $record, BankClearingMatchService $matching): bool => ! $matching->isPendingClearance($record))
+                        ->hidden(fn (BankTransaction $record, BankClearingMatchService $matching): bool => ! $matching->isPendingClearance($record)
+                            || $matching->isSyntheticOperationalStatement($record))
                         ->form([
                             Select::make('imported_transaction_id')
                                 ->label(__('Match with bank statement line'))
@@ -208,6 +193,7 @@ class BankTransactionsTable
                             $record->update(['status' => 'ignored']);
                             Notification::make()->title(__('Transaction ignored'))->send();
                         }),
+                    BankTransactionTableActions::delete(),
                 ]))
                 ->toolbarActions([
                     BulkActionGroup::make([
@@ -258,49 +244,24 @@ class BankTransactionsTable
                                     ->send();
                             }),
                         BulkAction::make('mirrorSelectedToCash')
-                            ->label('Mirror to cash')
+                            ->label(__('Post to cash'))
                             ->icon('heroicon-o-arrow-right')
                             ->color('info')
                             ->requiresConfirmation()
-                            ->modalDescription(__('Mirror all selected imported transactions to the Master Cash account.'))
+                            ->modalDescription(__('Post all selected imported statement lines to the master cash pool.'))
                             ->action(function (Collection $records, FundFlowService $service) {
-                                $importedIds = $records->where('status', 'imported')->pluck('id');
+                                $importedIds = $records
+                                    ->filter(fn (BankTransaction $record): bool => BankTransactionWorkflow::canPostToCash($record))
+                                    ->pluck('id');
                                 if ($importedIds->isEmpty()) {
                                     Notification::make()->title(__('No imported transactions selected'))->warning()->send();
 
                                     return;
                                 }
                                 $count = $service->mirrorToCash($importedIds);
-                                Notification::make()->title(__(':count transaction(s) mirrored to cash', ['count' => $count]))->success()->send();
+                                Notification::make()->title(__(':count transaction(s) posted to master cash', ['count' => $count]))->success()->send();
                             }),
-                        BulkAction::make('postSelectedToMember')
-                            ->label(__('Post to member'))
-                            ->icon('heroicon-o-user-plus')
-                            ->color('success')
-                            ->requiresConfirmation()
-                            ->modalDescription(__('Post all selected mirrored transactions to the same member.'))
-                            ->form([
-                                Select::make('member_id')
-                                    ->label('Member')
-                                    ->options(fn () => Member::active()->pluck('name', 'id'))
-                                    ->searchable()
-                                    ->required(),
-                            ])
-                            ->action(function (Collection $records, array $data, FundFlowService $service) {
-                                $member = Member::findOrFail($data['member_id']);
-                                $count = 0;
-                                foreach ($records as $record) {
-                                    if ($record->status !== 'mirrored') {
-                                        continue;
-                                    }
-                                    $service->postToMember($record, $member);
-                                    $count++;
-                                }
-                                Notification::make()
-                                    ->title(__(':count transaction(s) posted to :name', ['count' => $count, 'name' => $member->name]))
-                                    ->success()
-                                    ->send();
-                            }),
+                        BankTransactionTableActions::postToMemberBulk(),
                         BulkAction::make('ignoreSelected')
                             ->label('Ignore selected')
                             ->icon('heroicon-o-x-mark')
@@ -316,6 +277,7 @@ class BankTransactionsTable
                                 }
                                 Notification::make()->title(__(':count transaction(s) ignored', ['count' => $count]))->send();
                             }),
+                        BankTransactionTableActions::deleteBulk(),
                     ]),
                 ])
                 ->defaultSort('transaction_date', 'desc'),

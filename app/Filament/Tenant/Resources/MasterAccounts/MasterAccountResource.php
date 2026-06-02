@@ -85,7 +85,7 @@ class MasterAccountResource extends Resource
         $tab = self::resolveListMasterAccountsTab();
 
         return MasterAccountsTable::configure(
-            $table->pluralModelLabel(UiLabelIcons::labeledHtml(self::tabLabel($tab), UiLabelIcons::forKey($tab))),
+            $table->pluralModelLabel(UiLabelIcons::tableModelLabel(self::tabLabel($tab))),
             showTypeColumn: $tab === 'all',
         );
     }

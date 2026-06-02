@@ -29,7 +29,8 @@
             <div class="min-w-0 flex-1">
                 <p class="text-[10px] font-medium uppercase tracking-widest text-emerald-100/90">{{ $g['date'] }}</p>
                 <h2 class="mt-0.5 text-lg font-bold leading-tight text-white sm:text-xl">
-                    {{ $g['period_label'] }}, {{ $g['name'] }}
+                    {{ $g['period_label'] }},
+                    <x-arabic-text :text="$g['name']" />
                 </h2>
                 <p class="mt-0.5 text-xs text-emerald-100">{{ $g['fund_name'] }}</p>
                 <p class="mt-1.5 line-clamp-2 text-xs leading-snug text-white/90 sm:text-sm">{{ $g['subtitle'] }}</p>

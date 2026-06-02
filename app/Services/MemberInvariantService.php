@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundPosting;
@@ -106,6 +107,8 @@ class MemberInvariantService
             ? $this->sumDescriptionPattern($cashAccountId, $member->id, 'debit', 'Transfer to%')
             : 0.0;
 
+        $directBankImportsPosted = $this->sumDirectBankImportsPosted($member->id);
+
         $expectedFund = $openingFund
             + $contributionsCollected
             - $contributionFundReversals
@@ -117,6 +120,7 @@ class MemberInvariantService
             + $depositsReceived
             + $subscriptionDeposits
             + $loanDisbursementsCredited
+            + $directBankImportsPosted
             + $dependentTransfersIn
             + $refundsAndCorrections
             - $contributionsDebited
@@ -152,6 +156,7 @@ class MemberInvariantService
                 'deposits_received' => $depositsReceived,
                 'subscription_deposits' => $subscriptionDeposits,
                 'loan_disbursements_credited' => $loanDisbursementsCredited,
+                'direct_bank_imports_posted' => $directBankImportsPosted,
                 'dependent_transfers_in' => $dependentTransfersIn,
                 'refunds_and_recon_credits' => $refundsAndCorrections,
                 'contributions_debited' => $contributionsDebited,
@@ -266,5 +271,19 @@ class MemberInvariantService
             ->sum('amount');
 
         return $fromRequests + $legacy;
+    }
+
+    /**
+     * CSV import lines posted to member cash (mirror → post), not fund-posting clearance.
+     */
+    protected function sumDirectBankImportsPosted(int $memberId): float
+    {
+        return (float) BankTransaction::query()
+            ->where('member_id', $memberId)
+            ->where('status', 'posted')
+            ->whereNull('fund_posting_id')
+            ->whereNull('membership_application_id')
+            ->whereNull('cash_out_request_id')
+            ->sum('amount');
     }
 }

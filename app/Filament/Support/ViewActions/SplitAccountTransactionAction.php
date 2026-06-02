@@ -61,7 +61,7 @@ final class SplitAccountTransactionAction
                     ->success()
                     ->send();
             })
-            ->after(fn (Transaction $record) => AccountDetailInsightsRefresh::dispatchForAccount((int) $record->account_id));
+            ->after(fn (Transaction $record) => AccountDetailInsightsRefresh::dispatchLedgerChange((int) $record->account_id));
     }
 
     public static function modalDescription(Transaction $record): string

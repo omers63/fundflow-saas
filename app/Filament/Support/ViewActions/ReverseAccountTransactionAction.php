@@ -78,7 +78,7 @@ final class ReverseAccountTransactionAction
                     throw new Halt;
                 }
             })
-            ->after(fn (Transaction $record) => AccountDetailInsightsRefresh::dispatchForAccount((int) $record->account_id));
+            ->after(fn (Transaction $record) => AccountDetailInsightsRefresh::dispatchLedgerChange((int) $record->account_id));
     }
 
     public static function canReverse(Transaction $record): bool

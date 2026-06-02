@@ -61,7 +61,11 @@ class TenantPanelProvider extends PanelProvider
             ->widgets([])
             ->databaseNotifications(isLazy: false)
             ->databaseNotificationsPolling(DatabaseNotificationsRefresh::pollingInterval())
-            ->renderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(view('partials.pwa-head')->render()))
+            ->renderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(
+                view('partials.arabic-fonts')->render()
+                .view('partials.arabic-display-body-class')->render()
+                .view('partials.pwa-head')->render()
+            ))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.livewire-session-recovery')->render()))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))
             ->middleware([

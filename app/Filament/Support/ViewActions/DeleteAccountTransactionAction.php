@@ -19,6 +19,6 @@ final class DeleteAccountTransactionAction
                 app(AccountingService::class)->deleteTransaction($record);
             })
             ->successNotificationTitle(__('Transaction deleted'))
-            ->after(fn (Transaction $record) => AccountDetailInsightsRefresh::dispatchForAccount((int) $record->account_id));
+            ->after(fn (Transaction $record) => AccountDetailInsightsRefresh::dispatchLedgerChange((int) $record->account_id));
     }
 }

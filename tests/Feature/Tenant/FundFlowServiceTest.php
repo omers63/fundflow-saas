@@ -3,11 +3,14 @@
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
+use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
 use App\Services\ContributionService;
 use App\Services\FundFlowService;
+use App\Services\MemberInvariantService;
+use App\Support\ContributionPolicySettings;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -48,6 +51,79 @@ function createBankTransaction(array $overrides = []): BankTransaction
     ], $overrides));
 }
 
+test('member invariant includes direct bank import posted to member cash', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-INV-01',
+        'name' => 'Invariant Member',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $txn = createBankTransaction(['amount' => 5500, 'description' => 'Deposit']);
+
+    $this->service->mirrorToCash([$txn->id]);
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->service->postToMember($txn->fresh(), $member),
+    );
+
+    $result = app(MemberInvariantService::class)->check($member->fresh());
+
+    expect($result['cash_drift'])->toBeLessThanOrEqual(ContributionPolicySettings::reconTolerance())
+        ->and($result['components']['direct_bank_imports_posted'])->toBe(5500.0);
+});
+
+test('post to member uses bank line detail when description is empty', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-REF-01',
+        'name' => 'Reference Member',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $txn = createBankTransaction([
+        'amount' => 5500,
+        'description' => '',
+        'reference' => 'WIRE-5500',
+        'status' => 'mirrored',
+    ]);
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->service->postToMember($txn, $member),
+    );
+
+    $ledger = Transaction::query()
+        ->where('account_id', $member->cashAccount->id)
+        ->where('type', 'credit')
+        ->latest('id')
+        ->first();
+
+    expect($ledger)->not->toBeNull()
+        ->and($ledger->description)->toContain('WIRE-5500')
+        ->and($txn->fresh()->is_cleared)->toBeTrue();
+});
+
+test('mirror to cash does not auto-reverse on unbalanced journal validation', function () {
+    $txn = createBankTransaction(['amount' => 1500]);
+
+    $this->service->mirrorToCash([$txn->id]);
+
+    expect(Transaction::query()
+        ->where('description', 'like', 'Reversal of #%')
+        ->exists())->toBeFalse();
+
+    expect(Transaction::query()
+        ->where('reference_type', BankTransaction::class)
+        ->where('reference_id', $txn->id)
+        ->count())->toBe(1);
+
+    expect(Account::masterBank()->balance)->toBe('1500.00')
+        ->and(Account::masterCash()->balance)->toBe('1500.00');
+});
+
 test('mirror to cash updates master bank and master cash for credits', function () {
     $txn = createBankTransaction(['amount' => 5000]);
 
@@ -64,8 +140,16 @@ test('mirror to cash updates master bank and master cash for credits', function 
     $ledger = Transaction::findOrFail($txn->master_cash_transaction_id);
 
     expect($ledger->account_id)->toBe(Account::masterCash()->id)
-        ->and($ledger->reference_type)->toBe(BankTransaction::class)
-        ->and($ledger->reference_id)->toBe($txn->id);
+        ->and($ledger->reference_type)->toBeNull();
+
+    $bankLedger = Transaction::query()
+        ->where('reference_type', BankTransaction::class)
+        ->where('reference_id', $txn->id)
+        ->where('account_id', Account::masterBank()->id)
+        ->first();
+
+    expect($bankLedger)->not->toBeNull()
+        ->and($bankLedger->type)->toBe('credit');
 });
 
 test('mirror to cash handles debits (negative amounts)', function () {
@@ -100,6 +184,30 @@ test('mirror multiple transactions at once', function () {
     expect(Account::masterBank()->balance)->toBe('7000.00');
 });
 
+test('ensure mirrored and post to member mirrors imported lines first', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-EM-01',
+        'name' => 'Ensure Mirror',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $txn = createBankTransaction(['amount' => 2500, 'status' => 'imported']);
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->service->ensureMirroredAndPostToMember($txn, $member),
+    );
+
+    $txn->refresh();
+
+    expect($txn->status)->toBe('posted')
+        ->and($txn->member_id)->toBe($member->id)
+        ->and($member->cashAccount->fresh()->balance)->toBe('2500.00')
+        ->and(Account::masterCash()->balance)->toBe('2500.00');
+});
+
 test('post to member credits member cash account', function () {
     $member = Member::create([
         'member_number' => 'MEM-0001',
@@ -112,7 +220,9 @@ test('post to member credits member cash account', function () {
 
     $txn = createBankTransaction(['amount' => 5000, 'status' => 'mirrored']);
 
-    $this->service->postToMember($txn, $member);
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->service->postToMember($txn, $member),
+    );
 
     expect($txn->fresh()->status)->toBe('posted');
     expect($txn->fresh()->member_id)->toBe($member->id);
@@ -194,11 +304,14 @@ test('full fund flow: import, mirror, post, contribute', function () {
     expect(Account::masterCash()->balance)->toBe('5000.00');
 
     $txn->refresh();
-    $this->service->postToMember($txn, $member);
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->service->postToMember($txn, $member),
+    );
     expect($member->cashAccount->fresh()->balance)->toBe('5000.00');
 
     $contributionService = app(ContributionService::class);
     $contribution = $contributionService->recordContribution($member, now()->startOfMonth()->format('Y-m-d'));
+    $contribution->update(['payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT]);
     $contributionService->postContribution($contribution);
 
     expect($member->cashAccount->fresh()->balance)->toBe('0.00');

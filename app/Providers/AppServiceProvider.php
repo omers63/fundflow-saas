@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Events\DatabaseNotificationsSentNow;
 use App\Filament\Support\Action as AppAction;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TabLabelColors;
 use App\Filament\Support\TableSummaryFooter;
 use App\Filament\Support\UiLabelIcons;
@@ -27,6 +28,8 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Transaction;
 use App\Observers\LoanInstallmentObserver;
 use App\Observers\TransactionObserver;
+use App\Support\ArabicDisplaySettings;
+use App\Support\ArabicTypography;
 use Filament\Actions\Action as FilamentAction;
 use Filament\Auth\Http\Responses\Contracts\LogoutResponse;
 use Filament\Facades\Filament;
@@ -55,6 +58,7 @@ use Filament\Tables\Table;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Support\Facades\Event;
@@ -118,6 +122,13 @@ class AppServiceProvider extends ServiceProvider
                     ->size($textSize);
 
                 $column = TableSummaryFooter::applySummarizersToTextColumn($column);
+
+                if (
+                    ArabicDisplaySettings::enhancedNameStyle()
+                    && ArabicTypography::isPersonNameColumn($column->getName())
+                ) {
+                    $column = MemberTableColumns::applyArabicNameTypography($column);
+                }
             }
 
             return $column;
@@ -128,9 +139,24 @@ class AppServiceProvider extends ServiceProvider
                 ? TextSize::Small
                 : TextSize::ExtraSmall;
 
-            return $entry
+            $entry = $entry
                 ->wrap()
                 ->size($textSize);
+
+            if (
+                ArabicDisplaySettings::enhancedNameStyle()
+                && ArabicTypography::isPersonNameColumn($entry->getName())
+            ) {
+                $entry = $entry
+                    ->html()
+                    ->formatStateUsing(
+                        fn ($state): Htmlable => ArabicTypography::display(
+                            is_scalar($state) ? (string) $state : null,
+                        ),
+                    );
+            }
+
+            return $entry;
         });
 
         Field::configureUsing(fn (Field $field): Field => $field->translateLabel());

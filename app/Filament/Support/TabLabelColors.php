@@ -22,6 +22,7 @@ class TabLabelColors
         'all' => 'gray',
         'statements' => 'primary',
         'imports' => 'info',
+        'clearance' => 'warning',
         'ledger' => 'warning',
         'transactions' => 'info',
         'bank' => 'primary',

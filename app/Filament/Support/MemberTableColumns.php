@@ -6,7 +6,10 @@ namespace App\Filament\Support;
 
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
+use App\Support\ArabicDisplaySettings;
+use App\Support\ArabicTypography;
 use Filament\Tables\Columns\TextColumn;
+use Illuminate\Contracts\Support\Htmlable;
 
 final class MemberTableColumns
 {
@@ -33,7 +36,8 @@ final class MemberTableColumns
             $textColumn->label($label);
         }
 
-        return $textColumn->url(self::memberRecordEditUrl(...));
+        return self::applyArabicNameTypography($textColumn)
+            ->url(self::memberRecordEditUrl(...));
     }
 
     public static function relationNumber(?string $label = null): TextColumn
@@ -46,6 +50,21 @@ final class MemberTableColumns
     {
         return self::name('member.name', $label)
             ->url(self::relatedMemberEditUrl(...));
+    }
+
+    public static function applyArabicNameTypography(TextColumn $column): TextColumn
+    {
+        if (! ArabicDisplaySettings::enhancedNameStyle()) {
+            return $column;
+        }
+
+        return $column
+            ->html()
+            ->formatStateUsing(
+                fn ($state): Htmlable => ArabicTypography::display(
+                    is_scalar($state) ? (string) $state : null,
+                ),
+            );
     }
 
     public static function memberRecordEditUrl(Member $record): string

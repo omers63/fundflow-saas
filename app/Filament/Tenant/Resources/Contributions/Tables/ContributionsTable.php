@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\Contributions\Tables;
 
 use App\Filament\Support\ContributionListTableHeaderActions;
+use App\Filament\Support\ContributionTableActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -64,6 +65,7 @@ class ContributionsTable
                     DateColumnRangeFilter::make('posted_at', 'Posted'),
                 ])
                 ->recordActions(TableRecordActionGroups::wrap([
+                    ContributionTableActions::delete(),
                     Action::make('post')
                         ->label('Post')
                         ->icon('heroicon-o-check-circle')
@@ -82,6 +84,7 @@ class ContributionsTable
                 ]))
                 ->toolbarActions([
                     BulkActionGroup::make([
+                        ContributionTableActions::deleteBulk(),
                         BulkAction::make('postSelected')
                             ->label('Post selected')
                             ->icon('heroicon-o-check-circle')

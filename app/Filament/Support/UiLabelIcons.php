@@ -181,6 +181,14 @@ class UiLabelIcons
         return self::forKey(str_replace('.', '', $name));
     }
 
+    /**
+     * Plain text for Filament table summaries and translation placeholders (not HTML).
+     */
+    public static function tableModelLabel(string $label): string
+    {
+        return Lang::formatUiLabel(trim($label));
+    }
+
     public static function labeledHtml(string|Htmlable $label, string|BackedEnum|null $icon = null): Htmlable
     {
         if ($label instanceof Htmlable) {

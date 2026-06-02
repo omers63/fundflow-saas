@@ -33,11 +33,12 @@ final class DeleteAccountTransactionsBulkAction
             })
             ->successNotificationTitle(__('Transactions deleted'))
             ->after(function ($records): void {
-                $first = collect($records)->first();
+                $accountIds = collect($records)
+                    ->filter(fn ($record): bool => $record instanceof Transaction)
+                    ->map(fn (Transaction $record): int => (int) $record->account_id)
+                    ->all();
 
-                if ($first instanceof Transaction) {
-                    AccountDetailInsightsRefresh::dispatchForAccount((int) $first->account_id);
-                }
+                AccountDetailInsightsRefresh::dispatchLedgerChangeForAccounts($accountIds);
             });
     }
 }

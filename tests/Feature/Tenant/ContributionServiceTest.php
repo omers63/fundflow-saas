@@ -128,6 +128,51 @@ test('generate monthly contributions creates entries for all active members', fu
     expect(Contribution::where('period', '2026-05-01')->count())->toBe(3);
 });
 
+test('delete contribution removes pending record without ledger impact', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-DEL-01',
+        'name' => 'Delete Pending',
+        'monthly_contribution_amount' => 3000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $contribution = $this->service->recordContribution($member, '2026-04-01');
+
+    $this->service->deleteContribution($contribution);
+
+    expect(Contribution::query()->whereKey($contribution->id)->exists())->toBeFalse();
+});
+
+test('delete posted contribution reverses ledger and removes record', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-DEL-02',
+        'name' => 'Delete Posted',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    Account::masterCash()->update(['balance' => 5000]);
+    $member->cashAccount->update(['balance' => 5000]);
+
+    $contribution = $this->service->recordContribution($member, '2026-05-01');
+    $contribution->update(['payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT]);
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->service->postContribution($contribution),
+    );
+
+    $this->service->deleteContribution($contribution->fresh());
+
+    expect(Contribution::query()->whereKey($contribution->id)->exists())->toBeFalse()
+        ->and($member->cashAccount->fresh()->balance)->toBe('5000.00')
+        ->and($member->fundAccount->fresh()->balance)->toBe('0.00')
+        ->and(Account::masterFund()->fresh()->balance)->toBe('0.00');
+});
+
 test('duplicate contributions are not generated', function () {
     $member = Member::create([
         'member_number' => 'MEM-0001',

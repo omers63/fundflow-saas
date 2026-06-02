@@ -69,6 +69,7 @@ class ReconciliationExceptionsTable
             ->recordActions(ReconciliationExceptionActions::recordActions())
             ->toolbarActions([
                 BulkActionGroup::make([
+                    ReconciliationExceptionActions::deleteBulkAction(),
                     TableToolbar::refreshBulkAction(),
                 ]),
             ]), TableGrouping::reconciliationExceptions());

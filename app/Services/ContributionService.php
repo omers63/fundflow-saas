@@ -256,4 +256,54 @@ class ContributionService
     {
         return $this->cycles->periodLabel($month, $year);
     }
+
+    public static function deleteModalDescription(Contribution $contribution): string
+    {
+        $period = $contribution->period?->translatedFormat('F Y') ?? __('this period');
+
+        if ($contribution->status === 'posted') {
+            return __('This removes the :period contribution and posts reversing entries on member cash, fund, and related master accounts.', [
+                'period' => $period,
+            ]);
+        }
+
+        $lateFeeCollected = app(AccountingService::class)->contributionLateFeeCollectedAmount($contribution);
+
+        if ($lateFeeCollected > 0.00001) {
+            return __('This removes the :period contribution and reverses :amount in late fees already debited from cash.', [
+                'period' => $period,
+                'amount' => number_format($lateFeeCollected, 2),
+            ]);
+        }
+
+        return __('This permanently removes the :period contribution record.', [
+            'period' => $period,
+        ]);
+    }
+
+    public function deleteContribution(Contribution $contribution): void
+    {
+        AccountingService::withoutMemberCashCollection(function () use ($contribution): void {
+            DB::transaction(function () use ($contribution): void {
+                $contribution->loadMissing('member');
+
+                if ($contribution->status === 'posted') {
+                    $this->accounting->reverseContributionPrincipal(
+                        $contribution,
+                        (float) $contribution->amount,
+                    );
+                }
+
+                $lateFeeCollected = $this->accounting->contributionLateFeeCollectedAmount($contribution);
+
+                if ($lateFeeCollected > 0.00001) {
+                    $this->accounting->reverseContributionLateFee($contribution, $lateFeeCollected);
+                }
+
+                $contribution->transactions()->delete();
+
+                $contribution->delete();
+            });
+        });
+    }
 }

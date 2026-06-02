@@ -222,6 +222,10 @@ class FundPostingService
     public function clearTransaction(BankTransaction $uncleared, BankTransaction $imported): void
     {
         DB::transaction(function () use ($uncleared, $imported) {
+            $posting = $uncleared->fund_posting_id !== null
+                ? FundPosting::query()->find($uncleared->fund_posting_id)
+                : null;
+
             $uncleared->update([
                 'is_cleared' => true,
                 'cleared_at' => now(),
@@ -232,6 +236,8 @@ class FundPostingService
                 'cleared_at' => now(),
                 'fund_posting_id' => $uncleared->fund_posting_id,
                 'membership_application_id' => $uncleared->membership_application_id,
+                'status' => 'posted',
+                'member_id' => $posting?->member_id ?? $uncleared->member_id,
             ]);
         });
     }

@@ -190,6 +190,8 @@ final class MemberCashOutService
                 'is_cleared' => true,
                 'cleared_at' => now(),
                 'cash_out_request_id' => $uncleared->cash_out_request_id,
+                'status' => 'posted',
+                'member_id' => $uncleared->member_id,
             ]);
         });
     }

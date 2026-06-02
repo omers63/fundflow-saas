@@ -16,7 +16,9 @@
                     @endif
                 </div>
                 <div class="min-w-0 flex-1">
-                    <p class="member-profile-identity-heading">{{ $user?->name }}</p>
+                    <p class="member-profile-identity-heading">
+                        <x-arabic-text :text="$user?->name" />
+                    </p>
                     @if ($member)
                         <p class="member-profile-identity-muted mt-1 font-mono text-sm">{{ $member->member_number }}</p>
                     @endif

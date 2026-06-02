@@ -4,6 +4,7 @@ namespace App\Filament\Tenant\Resources\Members\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
+use App\Filament\Support\ContributionTableActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\LateSettledArrearsTableStyling;
 use App\Filament\Support\TableGrouping;
@@ -79,9 +80,12 @@ class ContributionsRelationManager extends RelationManager
                 ->headerActions([
                     $this->buildMemberContributeAction(),
                 ])
-                ->recordActions(TableRecordActionGroups::wrap([]))
+                ->recordActions(TableRecordActionGroups::wrap([
+                    ContributionTableActions::delete(),
+                ]))
                 ->toolbarActions([
                     BulkActionGroup::make([
+                        ContributionTableActions::deleteBulk(),
                         TableToolbar::refreshBulkAction(),
                     ]),
                 ])

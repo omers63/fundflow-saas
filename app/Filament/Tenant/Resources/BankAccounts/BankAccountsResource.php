@@ -10,6 +10,7 @@ use App\Filament\Tenant\Resources\BankAccounts\RelationManagers\BankTransactions
 use App\Filament\Tenant\Resources\BankAccounts\Tables\BankStatementsTable;
 use App\Filament\Tenant\Resources\BankAccounts\Tables\BankTransactionsTable;
 use App\Filament\Tenant\Resources\BankAccounts\Tables\MasterBankLedgerTable;
+use App\Filament\Tenant\Resources\BankAccounts\Tables\PendingOperationalClearanceTable;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\BankStatement;
 use BackedEnum;
@@ -48,19 +49,22 @@ class BankAccountsResource extends Resource
     public static function table(Table $table): Table
     {
         $afterLedgerMutation = Livewire::current() instanceof ListRecords
-            ? fn(): mixed => Livewire::current()->resetTable()
+            ? fn (): mixed => Livewire::current()->resetTable()
             : null;
 
         return match (self::resolveListBankAccountsTab()) {
             'ledger' => MasterBankLedgerTable::configure(
-                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Master bank ledger'), UiLabelIcons::forKey('ledger'))),
+                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Master bank ledger'))),
                 $afterLedgerMutation,
             ),
             'imports', 'transactions' => BankTransactionsTable::configure(
-                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Statement lines'), UiLabelIcons::forKey('imports'))),
+                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Statement lines'))),
+            ),
+            'clearance' => PendingOperationalClearanceTable::configure(
+                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Pending bank match'))),
             ),
             default => BankStatementsTable::configure(
-                $table->pluralModelLabel(UiLabelIcons::labeledHtml(__('Statements'), UiLabelIcons::forKey('statements'))),
+                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Statements'))),
             ),
         };
     }
@@ -80,7 +84,7 @@ class BankAccountsResource extends Resource
 
         return match ($tab) {
             'transactions' => 'imports',
-            'ledger', 'statements', 'imports' => $tab,
+            'ledger', 'statements', 'imports', 'clearance' => $tab,
             default => 'imports',
         };
     }

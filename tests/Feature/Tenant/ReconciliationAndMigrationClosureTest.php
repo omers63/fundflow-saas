@@ -380,6 +380,33 @@ test('reconciliation resource registers in tenant panel navigation', function ()
         ->and(ReconciliationExceptionResource::getUrl('index'))->toContain('reconciliation-exceptions');
 });
 
+test('reconciliation exception records can be deleted individually or in bulk', function () {
+    $first = ReconciliationException::create([
+        'exception_code' => 'DELETE_ONE',
+        'domain' => 'master_account',
+        'severity' => 'low',
+        'status' => ReconciliationException::STATUS_RESOLVED,
+        'raised_at' => now(),
+    ]);
+
+    $second = ReconciliationException::create([
+        'exception_code' => 'DELETE_TWO',
+        'domain' => 'master_account',
+        'severity' => 'low',
+        'status' => ReconciliationException::STATUS_OPEN,
+        'raised_at' => now(),
+    ]);
+
+    $first->delete();
+
+    expect(ReconciliationException::query()->whereKey($first->id)->exists())->toBeFalse()
+        ->and(ReconciliationException::query()->whereKey($second->id)->exists())->toBeTrue();
+
+    ReconciliationException::query()->whereKey($second->id)->delete();
+
+    expect(ReconciliationException::query()->count())->toBe(0);
+});
+
 test('fund audit log resource is read-only in navigation', function () {
     expect(FundAuditLogResource::canCreate())->toBeFalse()
         ->and(FundAuditLogResource::canEdit(new FundAuditLog))->toBeFalse();

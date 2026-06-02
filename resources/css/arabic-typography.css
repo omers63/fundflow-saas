@@ -1,0 +1,78 @@
+/**
+ * Arabic typeface (--ff-font-arabic) is set per tenant in Settings → Public page.
+ * See App\Support\ArabicDisplaySettings and partials/arabic-fonts.blade.php.
+ */
+
+/* Filament panels: Arabic glyphs use the configured stack after Latin UI fonts. */
+.fi-body {
+    font-family: var(--font-family, ui-sans-serif, system-ui, sans-serif), var(--ff-font-arabic);
+}
+
+html[dir='rtl'] .fi-body {
+    font-family: var(--ff-font-arabic), var(--font-family, ui-sans-serif, system-ui, sans-serif);
+}
+
+html[dir='rtl'] body,
+html[dir='rtl'] .tenant-public-nav,
+html[dir='rtl'] .tenant-public-footer,
+html[dir='rtl'] .landing-hero-section,
+html[dir='rtl'] .landing-cta-section {
+    font-family: var(--ff-font-arabic), 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+}
+
+html[dir='rtl'] .tenant-public-nav__fund-name,
+html[dir='rtl'] .tenant-public-footer__fund-name {
+    font-family: var(--ff-font-arabic), 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+}
+
+:lang(ar) {
+    font-family: var(--ff-font-arabic);
+}
+
+/* Optional enhanced member-name styling (Settings → Enhanced Arabic member names). */
+.ff-arabic-name {
+    display: inline-block;
+    direction: rtl;
+    unicode-bidi: isolate;
+    font-family: var(--ff-font-arabic);
+    text-align: right;
+}
+
+html[dir='rtl'] .ff-arabic-name {
+    text-align: start;
+}
+
+html.ff-arabic-enhanced-names .ff-arabic-name {
+    font-weight: 400;
+    font-size: 1.125em;
+    font-feature-settings: 'liga' 1, 'calt' 1, 'kern' 1;
+    letter-spacing: 0.02em;
+    line-height: 1.65;
+    word-spacing: 0.05em;
+}
+
+html.ff-arabic-enhanced-names .fi-ta-text-item .ff-arabic-name,
+html.ff-arabic-enhanced-names .fi-ta-text .ff-arabic-name,
+html.ff-arabic-enhanced-names .fi-in-entry .ff-arabic-name {
+    font-size: 1.0625rem;
+    line-height: 1.75;
+}
+
+html.ff-arabic-enhanced-names .member-profile-identity-heading .ff-arabic-name,
+html.ff-arabic-enhanced-names .member-login-profile-card__name .ff-arabic-name,
+html.ff-arabic-enhanced-names .fi-header-heading .ff-arabic-name {
+    font-weight: 700;
+    letter-spacing: 0.03em;
+}
+
+html.ff-arabic-enhanced-names.fi-body.fi-panel-member .member-profile-identity-heading .ff-arabic-name {
+    font-size: 1.875rem;
+    line-height: 2.375rem;
+}
+
+@media (min-width: 640px) {
+    html.ff-arabic-enhanced-names.fi-body.fi-panel-member .member-profile-identity-heading .ff-arabic-name {
+        font-size: 2rem;
+        line-height: 2.5rem;
+    }
+}

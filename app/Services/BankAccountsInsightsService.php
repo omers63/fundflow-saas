@@ -26,8 +26,11 @@ final class BankAccountsInsightsService
         $currency = InsightFormatter::currency();
         $activeTab = BankAccountsResource::resolveListBankAccountsTab();
         $now = Carbon::now();
+        $bankClearing = app(BankClearingMatchService::class);
 
-        $statusCounts = BankTransaction::query()
+        $statementLineQuery = $bankClearing->applyRealBankStatementLinesScope(BankTransaction::query());
+
+        $statusCounts = (clone $statementLineQuery)
             ->selectRaw('status, COUNT(*) as cnt')
             ->groupBy('status')
             ->pluck('cnt', 'status');
@@ -43,11 +46,13 @@ final class BankAccountsInsightsService
         $postRate = $totalTx > 0 ? round((($posted + $mirrored) / $totalTx) * 100, 1) : 0.0;
         $dupeRate = $totalTx > 0 ? round(($duplicate / $totalTx) * 100, 1) : 0.0;
 
-        $unassignedCredits = BankTransaction::query()
+        $unassignedCredits = (clone $statementLineQuery)
             ->where('status', 'imported')
             ->where('amount', '>', 0)
             ->whereNull('member_id')
             ->count();
+
+        $pendingBankMatch = $bankClearing->pendingOperationalClearanceCount();
 
         $pendingFundPostings = FundPosting::query()->where('status', 'pending')->count();
 
@@ -64,7 +69,7 @@ final class BankAccountsInsightsService
         $masterBank = (float) (Account::masterBank()?->balance ?? 0);
 
         $since = Carbon::now()->subDays(30);
-        $importedAmount = (float) BankTransaction::query()
+        $importedAmount = (float) (clone $statementLineQuery)
             ->where('status', 'imported')
             ->where('transaction_date', '>=', $since)
             ->sum('amount');
@@ -73,7 +78,7 @@ final class BankAccountsInsightsService
         for ($i = 5; $i >= 0; $i--) {
             $month = $now->copy()->subMonths($i)->startOfMonth();
             $end = $month->copy()->endOfMonth();
-            $count = BankTransaction::query()
+            $count = (clone $statementLineQuery)
                 ->whereBetween('created_at', [$month, $end])
                 ->count();
 
@@ -89,7 +94,7 @@ final class BankAccountsInsightsService
             ->orderByDesc('imported_at')
             ->limit(5)
             ->get()
-            ->map(fn(BankStatement $statement): array => [
+            ->map(fn (BankStatement $statement): array => [
                 'id' => $statement->id,
                 'filename' => $statement->filename,
                 'bank_name' => $statement->bank_name,
@@ -109,8 +114,10 @@ final class BankAccountsInsightsService
             'active_tab_label' => match ($activeTab) {
                 'ledger' => __('Master bank ledger'),
                 'statements' => __('Statements'),
+                'clearance' => __('Pending bank match'),
                 default => __('Statement lines'),
             },
+            'pending_bank_match' => $pendingBankMatch,
             'pending_post' => $pendingPost,
             'unassigned_credits' => $unassignedCredits,
             'pending_fund_postings' => $pendingFundPostings,
@@ -136,6 +143,7 @@ final class BankAccountsInsightsService
             'urls' => [
                 'index' => $indexUrl,
                 'imports' => BankAccountsResource::listUrl('imports'),
+                'clearance' => BankAccountsResource::listUrl('clearance'),
                 'ledger' => BankAccountsResource::listUrl('ledger'),
                 'transactions' => BankAccountsResource::listUrl('imports'),
                 'fund_postings' => FundPostingResource::listUrl(),
@@ -204,6 +212,7 @@ final class BankAccountsInsightsService
                 $pendingPost,
                 $unassignedCredits,
                 $pendingFundPostings,
+                $pendingBankMatch,
                 $failedStatements,
                 $indexUrl,
             ),
@@ -217,6 +226,7 @@ final class BankAccountsInsightsService
         int $pendingPost,
         int $unassignedCredits,
         int $pendingFundPostings,
+        int $pendingBankMatch,
         int $failedStatements,
         string $indexUrl,
     ): array {
@@ -232,7 +242,7 @@ final class BankAccountsInsightsService
             ];
         }
 
-        if ($pendingPost > 0 || $unassignedCredits > 0) {
+        if ($pendingPost > 0 || $unassignedCredits > 0 || $pendingBankMatch > 0) {
             return [
                 'tone' => 'warning',
                 'title' => __('Bank queue needs action'),
@@ -243,12 +253,17 @@ final class BankAccountsInsightsService
                     $unassignedCredits > 0
                     ? trans_choice(':count unassigned credit|:count unassigned credits', $unassignedCredits, ['count' => $unassignedCredits])
                     : null,
+                    $pendingBankMatch > 0
+                    ? trans_choice(':count awaiting bank match|:count awaiting bank match', $pendingBankMatch, ['count' => $pendingBankMatch])
+                    : null,
                     $pendingFundPostings > 0
                     ? trans_choice(':count deposit pending|:count deposits pending', $pendingFundPostings, ['count' => $pendingFundPostings])
                     : null,
                 ])->filter()->implode(' · '),
-                'cta_label' => __('Statement lines'),
-                'cta_url' => BankAccountsResource::listUrl('imports'),
+                'cta_label' => $pendingBankMatch > 0 ? __('Pending bank match') : __('Statement lines'),
+                'cta_url' => $pendingBankMatch > 0
+                    ? BankAccountsResource::listUrl('clearance')
+                    : BankAccountsResource::listUrl('imports'),
             ];
         }
 

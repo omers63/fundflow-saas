@@ -20,6 +20,12 @@ it('resolves the master bank ledger tab from the tab query string', function () 
     expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('ledger');
 });
 
+it('resolves the pending bank match tab from the tab query string', function () {
+    request()->replace(['tab' => 'clearance']);
+
+    expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('clearance');
+});
+
 it('falls back to statement lines for an invalid tab query', function () {
     request()->replace(['tab' => 'invalid']);
 

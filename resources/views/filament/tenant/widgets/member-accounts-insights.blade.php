@@ -99,7 +99,9 @@
                         {{ strtoupper(substr($member['name'], 0, 1)) }}
                     </span>
                     <div class="min-w-0 flex-1">
-                        <p class="truncate text-xs font-medium text-gray-900 dark:text-white">{{ $member['name'] }}</p>
+                        <p class="truncate text-xs font-medium text-gray-900 dark:text-white">
+                            <x-arabic-text :text="$member['name']" />
+                        </p>
                         <p class="text-[10px] text-gray-400">
                             {{ __('Cash') }} {{ \App\Support\Insights\InsightFormatter::money($member['cash']) }} ·
                             {{ __('Fund') }} {{ \App\Support\Insights\InsightFormatter::money($member['fund']) }}
