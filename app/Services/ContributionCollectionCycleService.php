@@ -16,6 +16,7 @@ use App\Support\ContributionPolicySettings;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -27,7 +28,8 @@ class ContributionCollectionCycleService
         protected AccountingService $accounting,
         protected ContributionCycleService $cycles,
         protected LateFeeService $lateFees,
-    ) {}
+    ) {
+    }
 
     public function initializeOpenPeriod(int $month, int $year): int
     {
@@ -103,7 +105,7 @@ class ContributionCollectionCycleService
         $member = $contribution->member;
 
         if (
-            $contribution->period !== null && ! $this->memberPeriodEligibleForAutoCollection(
+            $contribution->period !== null && !$this->memberPeriodEligibleForAutoCollection(
                 $member,
                 (int) $contribution->period->month,
                 (int) $contribution->period->year,
@@ -172,13 +174,13 @@ class ContributionCollectionCycleService
     {
         $member = $member->fresh() ?? $member;
         $member->unsetRelation('accounts');
+        $activeDependents = $member->dependents()->where('status', 'active')->orderBy('member_number')->get();
 
-        $hasActiveDependents = $member->parent_member_id === null
-            && $member->dependents()->where('status', 'active')->exists();
+        $hasActiveDependents = $member->parent_member_id === null && $activeDependents->isNotEmpty();
 
         if ($hasActiveDependents) {
-            $this->settleHouseholdContributions($member);
-            $this->settleHouseholdLoanRepayments($member);
+            $this->settleHouseholdContributions($member, $activeDependents);
+            $this->settleHouseholdLoanRepayments($member, $activeDependents);
 
             return;
         }
@@ -193,7 +195,7 @@ class ContributionCollectionCycleService
     protected function settleDirectMemberCash(Member $member): void
     {
         foreach ($this->orderedCollectiblePeriodsForAutoCollection($member) as [$month, $year]) {
-            if (! $this->settleSingleContributionPeriod($member, $month, $year)) {
+            if (!$this->settleSingleContributionPeriod($member, $month, $year)) {
                 break;
             }
         }
@@ -213,7 +215,7 @@ class ContributionCollectionCycleService
                 break;
             }
 
-            if (! $this->settleSingleContributionPeriod($member, $month, $year)) {
+            if (!$this->settleSingleContributionPeriod($member, $month, $year)) {
                 break;
             }
         }
@@ -243,7 +245,7 @@ class ContributionCollectionCycleService
             $year = (int) $period->year;
             $key = $period->format('Y-m');
 
-            if (! $this->memberPeriodEligibleForAutoCollection($member, $month, $year)) {
+            if (!$this->memberPeriodEligibleForAutoCollection($member, $month, $year)) {
                 continue;
             }
 
@@ -353,12 +355,12 @@ class ContributionCollectionCycleService
     /**
      * @return list<array{0: int, 1: int}>
      */
-    protected function outstandingPeriodsForHousehold(Member $parent): array
+    protected function outstandingPeriodsForHousehold(Member $parent, SupportCollection $dependents): array
     {
         $periods = [];
 
         $householdMembers = collect([$parent])
-            ->merge($parent->dependents()->where('status', 'active')->get());
+            ->merge($dependents);
 
         foreach ($householdMembers as $member) {
             foreach ($this->orderedCollectiblePeriodsForAutoCollection($member) as [$month, $year]) {
@@ -371,10 +373,9 @@ class ContributionCollectionCycleService
         return array_values($periods);
     }
 
-    protected function settleHouseholdContributions(Member $parent): void
+    protected function settleHouseholdContributions(Member $parent, SupportCollection $dependents): void
     {
-        $dependents = $parent->dependents()->where('status', 'active')->orderBy('member_number')->get();
-        $householdPeriods = $this->outstandingPeriodsForHousehold($parent);
+        $householdPeriods = $this->outstandingPeriodsForHousehold($parent, $dependents);
 
         foreach ($householdPeriods as [$month, $year]) {
             $parent = $parent->fresh() ?? $parent;
@@ -414,11 +415,11 @@ class ContributionCollectionCycleService
         }
     }
 
-    protected function settleHouseholdLoanRepayments(Member $parent): void
+    protected function settleHouseholdLoanRepayments(Member $parent, SupportCollection $dependents): void
     {
         $this->settleMemberLoanRepayments($parent);
 
-        foreach ($parent->dependents()->where('status', 'active')->orderBy('member_number')->get() as $dependent) {
+        foreach ($dependents as $dependent) {
             $this->settleMemberLoanRepayments($dependent);
         }
     }
@@ -463,7 +464,7 @@ class ContributionCollectionCycleService
 
     public function syncContributionLateFeesBeforeCollection(Contribution $contribution): void
     {
-        if (! $this->contributionEligibleForArrearLateFees($contribution)) {
+        if (!$this->contributionEligibleForArrearLateFees($contribution)) {
             return;
         }
 
@@ -496,7 +497,7 @@ class ContributionCollectionCycleService
                 }
             }
 
-            if (! $progress) {
+            if (!$progress) {
                 break;
             }
         }
@@ -563,7 +564,7 @@ class ContributionCollectionCycleService
             ->whereNotNull('overdue_since')
             ->with('member')
             ->each(function (Contribution $contribution) use (&$updated): void {
-                if (! $this->contributionEligibleForArrearLateFees($contribution)) {
+                if (!$this->contributionEligibleForArrearLateFees($contribution)) {
                     return;
                 }
 
@@ -616,7 +617,7 @@ class ContributionCollectionCycleService
                             'late_fee_tier' => null,
                             'overdue_since' => null,
                             'is_late' => false,
-                            'notes' => trim(($contribution->notes ?? '').' '.__('Dismissed: before contribution arrears cut-off.')),
+                            'notes' => trim(($contribution->notes ?? '') . ' ' . __('Dismissed: before contribution arrears cut-off.')),
                         ]);
 
                         DB::table('contributions')->where('id', $contribution->id)->delete();
@@ -631,7 +632,7 @@ class ContributionCollectionCycleService
 
     public function applyLateFeeTierForContribution(Contribution $contribution): bool
     {
-        if (! $this->contributionEligibleForArrearLateFees($contribution)) {
+        if (!$this->contributionEligibleForArrearLateFees($contribution)) {
             return false;
         }
 
@@ -793,7 +794,7 @@ class ContributionCollectionCycleService
 
     protected function contributionRecordMissingForPeriod(Member $member, int $month, int $year): bool
     {
-        return ! Contribution::query()
+        return !Contribution::query()
             ->where('member_id', $member->id)
             ->forPeriod($month, $year)
             ->exists();

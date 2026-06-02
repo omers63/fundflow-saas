@@ -355,54 +355,11 @@ class LoanDelinquencyService
             return [];
         }
 
-        $now = now();
-        $postedContributionsByPeriod = $this->memberContributionsByPeriodWithinLookback($member);
-        $periods = [];
-        [$curM, $curY] = $this->cycles->currentOpenPeriod();
-        $cursor = Carbon::create($curY, $curM, 1)->startOfMonth();
-
-        for ($i = 0; $i < self::CONTRIBUTION_ARREARS_LOOKBACK_MONTHS; $i++) {
-            $month = (int) $cursor->month;
-            $year = (int) $cursor->year;
-
-            $deadline = $this->cycles->deadline($month, $year);
-
-            if ($now->lte($deadline)) {
-                $cursor->subMonthNoOverflow();
-
-                continue;
-            }
-
-            if (! $this->memberLiableForContributionPeriod($member, $month, $year)) {
-                $cursor->subMonthNoOverflow();
-
-                continue;
-            }
-
-            $contributionPeriod = Contribution::periodDate($month, $year);
-            $contribution = $postedContributionsByPeriod[$contributionPeriod] ?? null;
-
-            if (in_array($contribution?->status, ['posted', 'failed'], true)) {
-                $cursor->subMonthNoOverflow();
-
-                continue;
-            }
-
-            $days = $this->lateFees->daysPastDue($deadline, $now);
-
-            $periods[] = [
-                'month' => $month,
-                'year' => $year,
-                'period_label' => $this->cycles->periodLabel($month, $year),
-                'contribution_status' => $contribution?->status ?? 'missing',
-                'late_fee' => $this->lateFees->contributionLateFeeForDays($days),
-                'record_key' => "{$member->id}-{$year}-".sprintf('%02d', $month),
-            ];
-
-            $cursor->subMonthNoOverflow();
-        }
-
-        return $periods;
+        return $this->buildUnpaidContributionPeriods(
+            $member,
+            $this->memberContributionsByPeriodWithinLookback($member),
+            now(),
+        );
     }
 
     /**
@@ -422,10 +379,16 @@ class LoanDelinquencyService
             $membersQuery->whereKey($memberId);
         }
 
-        $membersQuery
-            ->get()
-            ->each(function (Member $member) use ($rows): void {
-                foreach ($this->unpaidContributionPeriods($member) as $period) {
+        $members = $membersQuery->get();
+        $preloadedContributions = $this->memberContributionsByPeriodForMembers(
+            $members->pluck('id')->map(fn ($id): int => (int) $id)->all(),
+        );
+
+        $members
+            ->each(function (Member $member) use ($rows, $preloadedContributions): void {
+                $contributionsByPeriod = $preloadedContributions[$member->id] ?? [];
+
+                foreach ($this->buildUnpaidContributionPeriods($member, $contributionsByPeriod, now()) as $period) {
                     $rows->push([
                         '__key' => $period['record_key'],
                         'member_id' => $member->id,
@@ -604,5 +567,98 @@ class LoanDelinquencyService
         }
 
         return Carbon::parse((string) $contribution->period)->toDateString();
+    }
+
+    /**
+     * @param  array<string, Contribution>  $postedContributionsByPeriod
+     * @return list<array{
+     *     month: int,
+     *     year: int,
+     *     period_label: string,
+     *     contribution_status: string,
+     *     late_fee: float,
+     *     record_key: string
+     * }>
+     */
+    private function buildUnpaidContributionPeriods(
+        Member $member,
+        array $postedContributionsByPeriod,
+        Carbon $now,
+    ): array {
+        $periods = [];
+        [$curM, $curY] = $this->cycles->currentOpenPeriod();
+        $cursor = Carbon::create($curY, $curM, 1)->startOfMonth();
+
+        for ($i = 0; $i < self::CONTRIBUTION_ARREARS_LOOKBACK_MONTHS; $i++) {
+            $month = (int) $cursor->month;
+            $year = (int) $cursor->year;
+            $deadline = $this->cycles->deadline($month, $year);
+
+            if ($now->lte($deadline)) {
+                $cursor->subMonthNoOverflow();
+
+                continue;
+            }
+
+            if (! $this->memberLiableForContributionPeriod($member, $month, $year)) {
+                $cursor->subMonthNoOverflow();
+
+                continue;
+            }
+
+            $contributionPeriod = Contribution::periodDate($month, $year);
+            $contribution = $postedContributionsByPeriod[$contributionPeriod] ?? null;
+
+            if (in_array($contribution?->status, ['posted', 'failed'], true)) {
+                $cursor->subMonthNoOverflow();
+
+                continue;
+            }
+
+            $days = $this->lateFees->daysPastDue($deadline, $now);
+
+            $periods[] = [
+                'month' => $month,
+                'year' => $year,
+                'period_label' => $this->cycles->periodLabel($month, $year),
+                'contribution_status' => $contribution?->status ?? 'missing',
+                'late_fee' => $this->lateFees->contributionLateFeeForDays($days),
+                'record_key' => "{$member->id}-{$year}-".sprintf('%02d', $month),
+            ];
+
+            $cursor->subMonthNoOverflow();
+        }
+
+        return $periods;
+    }
+
+    /**
+     * @param  list<int>  $memberIds
+     * @return array<int, array<string, Contribution>>
+     */
+    private function memberContributionsByPeriodForMembers(array $memberIds): array
+    {
+        if ($memberIds === []) {
+            return [];
+        }
+
+        $grouped = [];
+
+        Contribution::query()
+            ->whereIn('member_id', $memberIds)
+            ->orderBy('id')
+            ->get(['id', 'member_id', 'period', 'status', 'is_late'])
+            ->each(function (Contribution $contribution) use (&$grouped): void {
+                $memberId = (int) $contribution->member_id;
+                $period = $this->contributionPeriodKey($contribution);
+
+                if ($period === '' || isset($grouped[$memberId][$period])) {
+                    return;
+                }
+
+                $grouped[$memberId][$period] = $contribution;
+            });
+
+        return $grouped;
     }
 }

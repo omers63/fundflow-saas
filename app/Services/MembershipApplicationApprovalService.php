@@ -16,8 +16,9 @@ class MembershipApplicationApprovalService
     public function __construct(
         private readonly HouseholdMemberService $householdMembers,
         private readonly MembershipSubscriptionFeeService $subscriptionFees,
-        private readonly MembershipApplicationImportCutoffService $importCutoffs,
-    ) {}
+        private readonly MembershipApprovalPostingPipeline $approvalPostingPipeline,
+    ) {
+    }
 
     public function approve(MembershipApplication $application): Member
     {
@@ -42,8 +43,8 @@ class MembershipApplicationApprovalService
     public function approveMany(Collection $applications): array
     {
         $ordered = $applications
-            ->filter(fn (MembershipApplication $application): bool => $application->status === 'pending')
-            ->sortBy(fn (MembershipApplication $application): int => $application->parent_application_id === null ? 0 : 1)
+            ->filter(fn(MembershipApplication $application): bool => $application->status === 'pending')
+            ->sortBy(fn(MembershipApplication $application): int => $application->parent_application_id === null ? 0 : 1)
             ->values();
 
         $members = [];
@@ -108,23 +109,6 @@ class MembershipApplicationApprovalService
 
     private function finalizeApprovedApplication(MembershipApplication $application, Member $member): Member
     {
-        $reviewedAt = now();
-
-        $application->update([
-            'status' => 'approved',
-            'reviewed_at' => $reviewedAt,
-            'member_id' => $member->id,
-            'household_email' => $member->household_email,
-        ]);
-
-        if ($application->wasImportedFromCsv()) {
-            $this->importCutoffs->prepareCutoffOnApproval($application, $member);
-        }
-
-        $approvedApplication = $application->fresh();
-        $this->subscriptionFees->postOnApproval($approvedApplication, $member);
-        $this->importCutoffs->postOpeningBalancesOnApproval($approvedApplication, $member);
-
-        return $member->fresh();
+        return $this->approvalPostingPipeline->run($application, $member, now());
     }
 }

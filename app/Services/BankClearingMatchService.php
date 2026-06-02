@@ -8,6 +8,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTransaction;
 use App\Support\BankStatementBuckets;
 use App\Support\ContributionPolicySettings;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
@@ -93,7 +94,7 @@ class BankClearingMatchService
 
         return sprintf(
             '%s | %s | %s | %s',
-            $transaction->transaction_date->format('Y-m-d'),
+            Carbon::parse((string) $transaction->transaction_date)->format('Y-m-d'),
             $status,
             $transaction->description,
             number_format((float) $transaction->amount, 2, '.', ','),
@@ -380,15 +381,15 @@ class BankClearingMatchService
             ->whereDoesntHave('bankStatement', function ($query): void {
                 $query->whereIn('filename', BankStatementBuckets::MEMBERSHIP_IMPORT_PLACEHOLDERS);
             })
+            ->whereBetween('amount', [$amount - $tolerance, $amount + $tolerance])
             ->when($date, function ($query) use ($date, $dayRange): void {
+                $parsedDate = Carbon::parse((string) $date);
                 $query->whereBetween('transaction_date', [
-                    $date->copy()->subDays($dayRange)->toDateString(),
-                    $date->copy()->addDays($dayRange)->toDateString(),
+                    $parsedDate->copy()->subDays($dayRange)->toDateString(),
+                    $parsedDate->copy()->addDays($dayRange)->toDateString(),
                 ]);
             })
-            ->get()
-            ->filter(fn (BankTransaction $candidate): bool => $this->amountsMatch($candidate, $imported, $tolerance))
-            ->values();
+            ->get();
     }
 
     /**
@@ -405,16 +406,15 @@ class BankClearingMatchService
         $date = $uncleared->transaction_date;
 
         return $this->bankStatementMatchTargetQuery()
+            ->whereBetween('amount', [$amount - $tolerance, $amount + $tolerance])
             ->when($date, function ($query) use ($date, $dayRange): void {
+                $parsedDate = Carbon::parse((string) $date);
                 $query->whereBetween('transaction_date', [
-                    $date->copy()->subDays($dayRange)->toDateString(),
-                    $date->copy()->addDays($dayRange)->toDateString(),
+                    $parsedDate->copy()->subDays($dayRange)->toDateString(),
+                    $parsedDate->copy()->addDays($dayRange)->toDateString(),
                 ]);
             })
-            ->get()
-            ->filter(fn (BankTransaction $candidate): bool => $this->isImportedMatchCandidate($candidate)
-                && $this->amountsMatch($uncleared, $candidate, $tolerance))
-            ->values();
+            ->get();
     }
 
     /**

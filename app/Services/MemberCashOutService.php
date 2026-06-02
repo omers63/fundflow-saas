@@ -10,11 +10,9 @@ use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
-use App\Models\Tenant\User;
 use App\Notifications\Tenant\CashOutRequestAcceptedNotification;
 use App\Notifications\Tenant\CashOutRequestRejectedNotification;
 use App\Notifications\Tenant\NewCashOutRequestNotification;
-use App\Support\BankStatementBuckets;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -25,6 +23,9 @@ final class MemberCashOutService
     public function __construct(
         private AccountingService $accounting,
         private BankTransactionClearanceService $bankClearance,
+        private OperationalReviewWorkflowService $reviewWorkflow,
+        private SyntheticBankStatementFactory $syntheticStatements,
+        private BankClearanceLinkageResolver $clearanceLinkageResolver,
     ) {
     }
 
@@ -138,7 +139,7 @@ final class MemberCashOutService
                 $member->id,
             );
 
-            $statement = $this->memberCashOutStatement();
+            $statement = $this->syntheticStatements->memberCashOuts();
             $bankTxn = $this->createCashOutBankTransaction(
                 $statement,
                 $request,
@@ -148,7 +149,7 @@ final class MemberCashOutService
                 $reviewedAt,
             );
 
-            $this->markRequestReviewed($request, 'accepted', $reviewedBy, $remarks, $reviewedAt, [
+            $this->reviewWorkflow->markReviewed($request, 'accepted', $reviewedBy, $remarks, $reviewedAt, [
                 'bank_transaction_id' => $bankTxn->id,
             ]);
 
@@ -161,11 +162,11 @@ final class MemberCashOutService
      */
     public function clearTransaction(BankTransaction $uncleared, BankTransaction $imported): void
     {
-        $this->bankClearance->clearMatchedPair($uncleared, $imported, [
-            'cash_out_request_id' => $uncleared->cash_out_request_id,
-            'status' => 'posted',
-            'member_id' => $uncleared->member_id,
-        ]);
+        $this->bankClearance->clearMatchedPair(
+            $uncleared,
+            $imported,
+            $this->clearanceLinkageResolver->forCashOut($uncleared),
+        );
     }
 
     public function reject(CashOutRequest $request, ?int $reviewedBy = null, ?string $remarks = null): void
@@ -174,7 +175,7 @@ final class MemberCashOutService
         $this->assertRemarksProvided($remarks, __('Provide a reason for rejection.'));
 
         DB::transaction(function () use ($request, $reviewedBy, $remarks): void {
-            $this->markRequestReviewed($request, 'rejected', $reviewedBy, $remarks, now());
+            $this->reviewWorkflow->markReviewed($request, 'rejected', $reviewedBy, $remarks, now());
 
             $this->notifyMemberAboutCashOut($request, false);
         });
@@ -185,19 +186,6 @@ final class MemberCashOutService
         if ($request->status !== 'pending') {
             throw new InvalidArgumentException($message);
         }
-    }
-
-    private function memberCashOutStatement(): BankStatement
-    {
-        return BankStatement::firstOrCreate(
-            ['filename' => BankStatementBuckets::MEMBER_CASH_OUTS, 'status' => 'completed'],
-            [
-                'bank_name' => __('Member cash outs'),
-                'total_rows' => 0,
-                'imported_rows' => 0,
-                'duplicate_rows' => 0,
-            ],
-        );
     }
 
     private function createCashOutBankTransaction(
@@ -222,25 +210,6 @@ final class MemberCashOutService
         ]);
     }
 
-    /**
-     * @param  array<string, mixed>  $extraUpdates
-     */
-    private function markRequestReviewed(
-        CashOutRequest $request,
-        string $status,
-        ?int $reviewedBy = null,
-        ?string $remarks = null,
-        ?CarbonInterface $reviewedAt = null,
-        array $extraUpdates = [],
-    ): void {
-        $request->update(array_merge([
-            'status' => $status,
-            'reviewed_by' => $reviewedBy,
-            'reviewed_at' => $reviewedAt ?? now(),
-            'admin_remarks' => $remarks,
-        ], $extraUpdates));
-    }
-
     private function notifyMemberAboutCashOut(CashOutRequest $request, bool $accepted): void
     {
         $request->loadMissing('member.user');
@@ -254,11 +223,7 @@ final class MemberCashOutService
 
     private function notifyAdminsOfNewRequest(CashOutRequest $request): void
     {
-        User::query()
-            ->where('is_admin', true)
-            ->each(function (User $admin) use ($request): void {
-                $admin->notify(new NewCashOutRequestNotification($request));
-            });
+        $this->reviewWorkflow->notifyAdmins(new NewCashOutRequestNotification($request));
     }
 
     private function assertAmountWithinAvailable(float $amount, float $available, string $message): void

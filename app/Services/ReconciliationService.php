@@ -698,6 +698,7 @@ class ReconciliationService
         $count = 0;
         $staleDays = ContributionPolicySettings::stalePendingDays();
         $tolerance = ContributionPolicySettings::reconTolerance();
+        $staleCutoff = now()->subDays($staleDays);
 
         $scan = $this->bankClearing->scanMatchExceptions();
 
@@ -709,9 +710,15 @@ class ReconciliationService
             $count++;
         }
 
-        foreach ($scan['unmatched_imported'] as $importedId) {
-            $imported = BankTransaction::query()->find($importedId);
-            $this->raiseOnce('RECON_UNMATCHED_BANK_LINE', 'bank_clearing', 'high', $imported ? (float) $imported->amount : null, [
+        $unmatchedImportedIds = array_values(array_unique(array_map('intval', $scan['unmatched_imported'])));
+        $unmatchedImportedAmounts = BankTransaction::query()
+            ->whereIn('id', $unmatchedImportedIds)
+            ->pluck('amount', 'id')
+            ->map(fn ($amount): float => (float) $amount)
+            ->all();
+
+        foreach ($unmatchedImportedIds as $importedId) {
+            $this->raiseOnce('RECON_UNMATCHED_BANK_LINE', 'bank_clearing', 'high', $unmatchedImportedAmounts[$importedId] ?? null, [
                 'bank_transaction_id' => $importedId,
             ]);
             $count++;
@@ -720,10 +727,11 @@ class ReconciliationService
         BankTransaction::query()
             ->uncleared()
             ->whereNotNull('fund_posting_id')
-            ->where('created_at', '<', now()->subDays($staleDays))
+            ->where('created_at', '<', $staleCutoff)
             ->whereDoesntHave('bankStatement', function ($query): void {
                 $query->whereIn('filename', $this->bankClearing->membershipImportPlaceholderStatementFilenames());
             })
+            ->get(['id', 'amount', 'fund_posting_id'])
             ->each(function (BankTransaction $txn) use (&$count): void {
                 $this->raiseOnce('UNMATCHED_CASH_ENTRY', 'bank_clearing', 'medium', (float) $txn->amount, [
                     'bank_transaction_id' => $txn->id,
@@ -736,10 +744,11 @@ class ReconciliationService
             ->uncleared()
             ->whereNull('fund_posting_id')
             ->whereNull('cash_out_request_id')
-            ->where('created_at', '<', now()->subDays($staleDays))
+            ->where('created_at', '<', $staleCutoff)
             ->whereDoesntHave('bankStatement', function ($query): void {
                 $query->whereIn('filename', $this->bankClearing->membershipImportPlaceholderStatementFilenames());
             })
+            ->get(['id', 'amount'])
             ->each(function (BankTransaction $txn) use (&$count): void {
                 $this->raiseOnce('STALE_PENDING', 'bank_clearing', 'medium', (float) $txn->amount, [
                     'bank_transaction_id' => $txn->id,
@@ -751,6 +760,7 @@ class ReconciliationService
             ->where('status', 'accepted')
             ->whereNull('bank_transaction_id')
             ->where('reviewed_at', '<', now()->subDays(ContributionPolicySettings::cashDepositUnbankedDays()))
+            ->get(['id', 'member_id', 'amount'])
             ->each(function (FundPosting $posting) use (&$count): void {
                 $this->raiseOnce('CASH_DEPOSIT_UNBANKED', 'bank_clearing', 'medium', (float) $posting->amount, [
                     'fund_posting_id' => $posting->id,
@@ -760,22 +770,24 @@ class ReconciliationService
             });
 
         FundPosting::query()
-            ->whereNotNull('bank_transaction_id')
-            ->with('bankTransaction')
-            ->each(function (FundPosting $posting) use (&$count, $tolerance): void {
-                $bank = $posting->bankTransaction;
+            ->join('bank_transactions', 'bank_transactions.id', '=', 'fund_postings.bank_transaction_id')
+            ->select([
+                'fund_postings.id as fund_posting_id',
+                'fund_postings.amount as posting_amount',
+                'bank_transactions.id as bank_transaction_id',
+                'bank_transactions.amount as bank_amount',
+            ])
+            ->whereRaw('ABS(fund_postings.amount - bank_transactions.amount) > ?', [$tolerance])
+            ->get()
+            ->each(function ($row) use (&$count): void {
+                $postingAmount = (float) $row->posting_amount;
+                $bankAmount = (float) $row->bank_amount;
 
-                if ($bank === null) {
-                    return;
-                }
-
-                if (abs((float) $posting->amount - (float) $bank->amount) > $tolerance) {
-                    $this->raiseOnce('AMOUNT_MISMATCH', 'bank_clearing', 'high', (float) $posting->amount - (float) $bank->amount, [
-                        'fund_posting_id' => $posting->id,
-                        'bank_transaction_id' => $bank->id,
-                    ]);
-                    $count++;
-                }
+                $this->raiseOnce('AMOUNT_MISMATCH', 'bank_clearing', 'high', $postingAmount - $bankAmount, [
+                    'fund_posting_id' => (int) $row->fund_posting_id,
+                    'bank_transaction_id' => (int) $row->bank_transaction_id,
+                ]);
+                $count++;
             });
 
         return $count;
@@ -1078,7 +1090,9 @@ class ReconciliationService
         }
 
         try {
-            $periodLabel = $contribution->period?->format('M Y') ?? '';
+            $periodLabel = $contribution->period !== null
+                ? Carbon::parse((string) $contribution->period)->format('M Y')
+                : '';
             $description = __('Contribution member fund correction — :period', ['period' => $periodLabel]);
             $masterFund = Account::masterFund();
 
@@ -1153,7 +1167,9 @@ class ReconciliationService
         }
 
         try {
-            $periodLabel = $contribution->period?->format('M Y') ?? '';
+            $periodLabel = $contribution->period !== null
+                ? Carbon::parse((string) $contribution->period)->format('M Y')
+                : '';
             $description = __('Contribution master credit correction — :period', ['period' => $periodLabel]);
             $memberFund = $contribution->member?->fundAccount;
 

@@ -3,18 +3,15 @@
 namespace App\Services;
 
 use App\Models\Tenant\Account;
-use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
-use App\Models\Tenant\User;
 use App\Notifications\Tenant\FundPostingAcceptedNotification;
 use App\Notifications\Tenant\FundPostingRejectedNotification;
 use App\Notifications\Tenant\NewFundPostingNotification;
-use App\Support\BankStatementBuckets;
 use Illuminate\Support\Facades\DB;
 
 class FundPostingService
@@ -22,7 +19,11 @@ class FundPostingService
     public function __construct(
         public AccountingService $accounting,
         private BankTransactionClearanceService $bankClearance,
-    ) {}
+        private OperationalReviewWorkflowService $reviewWorkflow,
+        private SyntheticBankStatementFactory $syntheticStatements,
+        private BankClearanceLinkageResolver $clearanceLinkageResolver,
+    ) {
+    }
 
     /**
      * Submit a fund posting request from a member.
@@ -48,7 +49,7 @@ class FundPostingService
                 'status' => 'pending',
             ]);
 
-            $statement = $this->memberPostingStatement();
+            $statement = $this->syntheticStatements->memberPostings();
 
             $bankTxn = BankTransaction::create([
                 'bank_statement_id' => $statement->id,
@@ -101,7 +102,7 @@ class FundPostingService
 
             $settlement = $this->buildSettlementSummary($member, $transactionWatermark, $amount);
 
-            $this->markPostingReviewed($posting, 'accepted', $reviewedBy, $remarks);
+            $this->reviewWorkflow->markReviewed($posting, 'accepted', $reviewedBy, $remarks);
 
             $this->updateLinkedBankTransactionStatus($posting, 'posted');
 
@@ -116,7 +117,7 @@ class FundPostingService
     public function reject(FundPosting $posting, ?int $reviewedBy = null, ?string $remarks = null): void
     {
         DB::transaction(function () use ($posting, $reviewedBy, $remarks) {
-            $this->markPostingReviewed($posting, 'rejected', $reviewedBy, $remarks);
+            $this->reviewWorkflow->markReviewed($posting, 'rejected', $reviewedBy, $remarks);
 
             $this->updateLinkedBankTransactionStatus($posting, 'ignored');
 
@@ -145,11 +146,7 @@ class FundPostingService
 
     private function notifyAdminsOfNewPosting(FundPosting $posting): void
     {
-        User::query()
-            ->where('is_admin', true)
-            ->each(function (User $admin) use ($posting): void {
-                $admin->notify(new NewFundPostingNotification($posting));
-            });
+        $this->reviewWorkflow->notifyAdmins(new NewFundPostingNotification($posting));
     }
 
     private function updateLinkedBankTransactionStatus(FundPosting $posting, string $status): void
@@ -161,33 +158,6 @@ class FundPostingService
         }
 
         $bankTransaction->update(['status' => $status]);
-    }
-
-    private function memberPostingStatement(): BankStatement
-    {
-        return BankStatement::firstOrCreate(
-            ['filename' => BankStatementBuckets::MEMBER_POSTINGS, 'status' => 'completed'],
-            [
-                'bank_name' => 'Member Postings',
-                'total_rows' => 0,
-                'imported_rows' => 0,
-                'duplicate_rows' => 0,
-            ],
-        );
-    }
-
-    private function markPostingReviewed(
-        FundPosting $posting,
-        string $status,
-        ?int $reviewedBy = null,
-        ?string $remarks = null,
-    ): void {
-        $posting->update([
-            'status' => $status,
-            'reviewed_by' => $reviewedBy,
-            'reviewed_at' => now(),
-            'admin_remarks' => $remarks,
-        ]);
     }
 
     protected function buildSettlementSummary(
@@ -245,15 +215,10 @@ class FundPostingService
      */
     public function clearTransaction(BankTransaction $uncleared, BankTransaction $imported): void
     {
-        $posting = $uncleared->fund_posting_id !== null
-            ? FundPosting::query()->find($uncleared->fund_posting_id)
-            : null;
-
-        $this->bankClearance->clearMatchedPair($uncleared, $imported, [
-            'fund_posting_id' => $uncleared->fund_posting_id,
-            'membership_application_id' => $uncleared->membership_application_id,
-            'status' => 'posted',
-            'member_id' => $posting?->member_id ?? $uncleared->member_id,
-        ]);
+        $this->bankClearance->clearMatchedPair(
+            $uncleared,
+            $imported,
+            $this->clearanceLinkageResolver->forFundPosting($uncleared),
+        );
     }
 }

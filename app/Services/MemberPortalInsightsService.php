@@ -77,11 +77,6 @@ final class MemberPortalInsightsService
             ->whereHas('sender', fn ($q) => $q->where('is_admin', true))
             ->count();
 
-        $contributionsPosted = (int) Contribution::query()
-            ->where('member_id', $member->id)
-            ->posted()
-            ->count();
-
         $latestStatement = MonthlyStatement::query()
             ->where('member_id', $member->id)
             ->latest('period')
@@ -89,17 +84,21 @@ final class MemberPortalInsightsService
 
         $cycles = app(ContributionCycleService::class);
         [$curMonth, $curYear] = $cycles->currentOpenPeriod();
-        $postedThisCycle = Contribution::query()
+        $currentPeriod = Contribution::periodDate($curMonth, $curYear);
+        $contributionMetrics = Contribution::query()
             ->where('member_id', $member->id)
-            ->forPeriod($curMonth, $curYear)
-            ->posted()
-            ->exists();
+            ->selectRaw("SUM(CASE WHEN status = 'posted' THEN 1 ELSE 0 END) as posted_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'posted' THEN amount ELSE 0 END), 0) as posted_total")
+            ->selectRaw(
+                "MAX(CASE WHEN status = 'posted' AND period = ? THEN 1 ELSE 0 END) as posted_this_cycle",
+                [$currentPeriod],
+            )
+            ->first();
 
+        $postedThisCycle = (int) ($contributionMetrics?->posted_this_cycle ?? 0) === 1;
         $monthly = (float) $member->monthly_contribution_amount;
-        $contributionsPostedTotal = (float) Contribution::query()
-            ->where('member_id', $member->id)
-            ->posted()
-            ->sum('amount');
+        $contributionsPosted = (int) ($contributionMetrics?->posted_count ?? 0);
+        $contributionsPostedTotal = (float) ($contributionMetrics?->posted_total ?? 0.0);
         $dependentsCount = $member->dependents()->count();
         $guaranteedLoansCount = (int) Loan::query()
             ->where('guarantor_member_id', $member->id)
