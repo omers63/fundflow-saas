@@ -331,12 +331,9 @@ class LoanDelinquencyService
      */
     public function contributionArrearsMemberIds(): array
     {
-        return Member::query()
-            ->whereIn('status', ['active', 'delinquent'])
-            ->orderBy('name')
-            ->get()
-            ->filter(fn (Member $member): bool => $this->memberHasContributionArrears($member))
-            ->pluck('id')
+        return $this->contributionArrearsTableRecords()
+            ->pluck('member_id')
+            ->unique()
             ->map(fn ($id): int => (int) $id)
             ->values()
             ->all();
@@ -358,6 +355,8 @@ class LoanDelinquencyService
             return [];
         }
 
+        $now = now();
+        $postedContributionsByPeriod = $this->memberContributionsByPeriodWithinLookback($member);
         $periods = [];
         [$curM, $curY] = $this->cycles->currentOpenPeriod();
         $cursor = Carbon::create($curY, $curM, 1)->startOfMonth();
@@ -366,7 +365,9 @@ class LoanDelinquencyService
             $month = (int) $cursor->month;
             $year = (int) $cursor->year;
 
-            if (now()->lte($this->cycles->deadline($month, $year))) {
+            $deadline = $this->cycles->deadline($month, $year);
+
+            if ($now->lte($deadline)) {
                 $cursor->subMonthNoOverflow();
 
                 continue;
@@ -378,10 +379,8 @@ class LoanDelinquencyService
                 continue;
             }
 
-            $contribution = Contribution::query()
-                ->where('member_id', $member->id)
-                ->forPeriod($month, $year)
-                ->first();
+            $contributionPeriod = Contribution::periodDate($month, $year);
+            $contribution = $postedContributionsByPeriod[$contributionPeriod] ?? null;
 
             if (in_array($contribution?->status, ['posted', 'failed'], true)) {
                 $cursor->subMonthNoOverflow();
@@ -389,8 +388,7 @@ class LoanDelinquencyService
                 continue;
             }
 
-            $deadline = $this->cycles->deadline($month, $year);
-            $days = $this->lateFees->daysPastDue($deadline, now());
+            $days = $this->lateFees->daysPastDue($deadline, $now);
 
             $periods[] = [
                 'month' => $month,
@@ -523,14 +521,21 @@ class LoanDelinquencyService
      */
     public function contributionArrearsRows(): Collection
     {
-        return Member::query()
-            ->whereIn('id', $this->contributionArrearsMemberIds() ?: [0])
-            ->orderBy('name')
+        $records = $this->contributionArrearsTableRecords();
+        $members = Member::query()
+            ->whereIn('id', $records->pluck('member_id')->unique()->map(fn ($id): int => (int) $id)->all())
             ->get()
-            ->map(fn (Member $member): array => [
-                'member' => $member,
-                'periods' => array_column($this->unpaidContributionPeriods($member), 'period_label'),
-            ])
+            ->keyBy('id');
+
+        return $records
+            ->groupBy('member_id')
+            ->map(function (Collection $memberRecords, int|string $memberId) use ($members): array {
+                return [
+                    'member' => $members->get((int) $memberId),
+                    'periods' => $memberRecords->pluck('period_label')->values()->all(),
+                ];
+            })
+            ->filter(fn (array $row): bool => $row['member'] instanceof Member)
             ->values();
     }
 
@@ -575,5 +580,29 @@ class LoanDelinquencyService
         }
 
         return $periodStart->greaterThanOrEqualTo($joinedStart);
+    }
+
+    /**
+     * @return array<string, Contribution>
+     */
+    private function memberContributionsByPeriodWithinLookback(Member $member): array
+    {
+        return Contribution::query()
+            ->where('member_id', $member->id)
+            ->orderBy('id')
+            ->get()
+            ->groupBy(fn (Contribution $contribution): string => $this->contributionPeriodKey($contribution))
+            ->map(fn (Collection $records): ?Contribution => $records->first())
+            ->filter(fn (?Contribution $contribution, string $key): bool => $contribution !== null && $key !== '')
+            ->all();
+    }
+
+    private function contributionPeriodKey(Contribution $contribution): string
+    {
+        if ($contribution->period === null) {
+            return '';
+        }
+
+        return Carbon::parse((string) $contribution->period)->toDateString();
     }
 }

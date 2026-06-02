@@ -80,13 +80,29 @@ final class MemberPortalAccountsInsightsService
         $trend = $this->sixMonthTrend($accountIds);
         $trendMax = max(1.0, (float) collect($trend)->max('total'));
 
+        $sparklineCounts = [];
+        $sparklineWindowStart = Carbon::now()->subDays(6)->startOfDay();
+        $sparklineWindowEnd = Carbon::now()->endOfDay();
+
+        Transaction::query()
+            ->whereIn('account_id', $accountIds)
+            ->whereBetween('transacted_at', [$sparklineWindowStart, $sparklineWindowEnd])
+            ->get(['transacted_at'])
+            ->each(function (Transaction $transaction) use (&$sparklineCounts): void {
+                $transactedAt = $transaction->transacted_at;
+
+                if ($transactedAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $transactedAt)->startOfDay()->toDateString();
+                $sparklineCounts[$key] = ($sparklineCounts[$key] ?? 0) + 1;
+            });
+
         $sparkline = [];
         for ($i = 6; $i >= 0; $i--) {
-            $day = Carbon::now()->subDays($i)->startOfDay();
-            $sparkline[] = Transaction::query()
-                ->whereIn('account_id', $accountIds)
-                ->whereDate('transacted_at', $day)
-                ->count();
+            $day = Carbon::now()->subDays($i)->startOfDay()->toDateString();
+            $sparkline[] = $sparklineCounts[$day] ?? 0;
         }
 
         $recent = Transaction::query()
@@ -95,7 +111,7 @@ final class MemberPortalAccountsInsightsService
             ->orderByDesc('transacted_at')
             ->limit(5)
             ->get()
-            ->map(fn(Transaction $transaction): array => [
+            ->map(fn (Transaction $transaction): array => [
                 'description' => Str::limit($transaction->description ?? '—', 40),
                 'transacted_at' => $transaction->transacted_at?->format('d M, H:i'),
                 'amount' => InsightFormatter::money((float) $transaction->amount),
@@ -233,7 +249,7 @@ final class MemberPortalAccountsInsightsService
             ];
         }
 
-        if (!$postedThisCycle) {
+        if (! $postedThisCycle) {
             return [
                 'tone' => 'amber',
                 'title' => __('Open contribution cycle'),
@@ -314,7 +330,7 @@ final class MemberPortalAccountsInsightsService
             ],
             [
                 'label' => __('30d net'),
-                'value' => ($net30 >= 0 ? '+' : '−') . InsightFormatter::compactAmount(abs($net30)),
+                'value' => ($net30 >= 0 ? '+' : '−').InsightFormatter::compactAmount(abs($net30)),
                 'sub' => trans_choice(':count txn|:count txns', $txCount30, ['count' => $txCount30]),
                 'icon' => 'heroicon-o-arrows-right-left',
                 'accent' => $net30 >= 0 ? 'teal' : 'amber',
@@ -337,24 +353,42 @@ final class MemberPortalAccountsInsightsService
             return [];
         }
 
-        $trend = [];
         $now = Carbon::now();
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $monthTotals = [];
+
+        Transaction::query()
+            ->whereIn('account_id', $accountIds)
+            ->whereBetween('transacted_at', [$oldestMonth, $now->copy()->endOfMonth()])
+            ->get(['type', 'amount', 'transacted_at'])
+            ->each(function (Transaction $transaction) use (&$monthTotals): void {
+                $transactedAt = $transaction->transacted_at;
+
+                if ($transactedAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $transactedAt)->startOfMonth()->format('Y-m');
+                $monthTotals[$key] ??= ['credits' => 0.0, 'debits' => 0.0];
+
+                if ($transaction->type === 'credit') {
+                    $monthTotals[$key]['credits'] += (float) $transaction->amount;
+
+                    return;
+                }
+
+                if ($transaction->type === 'debit') {
+                    $monthTotals[$key]['debits'] += (float) $transaction->amount;
+                }
+            });
+
+        $trend = [];
 
         for ($i = 5; $i >= 0; $i--) {
             $month = $now->copy()->subMonths($i)->startOfMonth();
-            $end = $month->copy()->endOfMonth();
-
-            $credits = (float) Transaction::query()
-                ->whereIn('account_id', $accountIds)
-                ->where('type', 'credit')
-                ->whereBetween('transacted_at', [$month, $end])
-                ->sum('amount');
-
-            $debits = (float) Transaction::query()
-                ->whereIn('account_id', $accountIds)
-                ->where('type', 'debit')
-                ->whereBetween('transacted_at', [$month, $end])
-                ->sum('amount');
+            $key = $month->format('Y-m');
+            $credits = (float) ($monthTotals[$key]['credits'] ?? 0.0);
+            $debits = (float) ($monthTotals[$key]['debits'] ?? 0.0);
 
             $trend[] = [
                 'label' => $month->locale(app()->getLocale())->translatedFormat('M'),

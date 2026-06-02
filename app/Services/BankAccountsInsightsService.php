@@ -74,17 +74,31 @@ final class BankAccountsInsightsService
             ->where('transaction_date', '>=', $since)
             ->sum('amount');
 
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $monthCounts = [];
+
+        (clone $statementLineQuery)
+            ->whereBetween('created_at', [$oldestMonth, $now->copy()->endOfMonth()])
+            ->get(['created_at'])
+            ->each(function (BankTransaction $transaction) use (&$monthCounts): void {
+                $createdAt = $transaction->created_at;
+
+                if ($createdAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $createdAt)->startOfMonth()->format('Y-m');
+                $monthCounts[$key] = ($monthCounts[$key] ?? 0) + 1;
+            });
+
         $trend = [];
         for ($i = 5; $i >= 0; $i--) {
             $month = $now->copy()->subMonths($i)->startOfMonth();
-            $end = $month->copy()->endOfMonth();
-            $count = (clone $statementLineQuery)
-                ->whereBetween('created_at', [$month, $end])
-                ->count();
+            $key = $month->format('Y-m');
 
             $trend[] = [
                 'label' => $month->locale(app()->getLocale())->translatedFormat('M'),
-                'count' => $count,
+                'count' => $monthCounts[$key] ?? 0,
             ];
         }
 

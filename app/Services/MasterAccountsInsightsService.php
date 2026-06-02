@@ -24,7 +24,7 @@ final class MasterAccountsInsightsService
     {
         $currency = InsightFormatter::currency();
         $masters = Account::query()->where('is_master', true)->get()->keyBy('type');
-        $balance = fn(string $type): float => (float) ($masters->get($type)?->balance ?? 0);
+        $balance = fn (string $type): float => (float) ($masters->get($type)?->balance ?? 0);
 
         $masterCash = $balance('cash');
         $masterFund = $balance('fund');
@@ -33,7 +33,7 @@ final class MasterAccountsInsightsService
         $masterInvest = $balance('invest');
 
         $loanExposure = (float) Loan::active()->get()->sum(
-            fn(Loan $loan): float => $loan->getOutstandingBalance()
+            fn (Loan $loan): float => $loan->getOutstandingBalance()
         );
         $activeLoanCount = Loan::active()->count();
         $coverage = $loanExposure > 0.01 ? round($masterFund / $loanExposure, 2) : null;
@@ -41,7 +41,7 @@ final class MasterAccountsInsightsService
 
         $since = Carbon::now()->subDays(30);
         $activity = Transaction::query()
-            ->whereHas('account', fn($query) => $query->where('is_master', true))
+            ->whereHas('account', fn ($query) => $query->where('is_master', true))
             ->where('transacted_at', '>=', $since)
             ->selectRaw("
                 SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END) as credits,
@@ -74,19 +74,35 @@ final class MasterAccountsInsightsService
 
         $zeroCashMembers = Member::query()
             ->active()
-            ->whereHas('accounts', fn($query) => $query
+            ->whereHas('accounts', fn ($query) => $query
                 ->where('type', 'cash')
                 ->where('is_master', false)
                 ->where('balance', '<=', 0))
             ->count();
 
+        $sparklineCounts = [];
+        $sparklineWindowStart = Carbon::now()->subDays(6)->startOfDay();
+        $sparklineWindowEnd = Carbon::now()->endOfDay();
+
+        Transaction::query()
+            ->whereHas('account', fn ($query) => $query->where('is_master', true))
+            ->whereBetween('transacted_at', [$sparklineWindowStart, $sparklineWindowEnd])
+            ->get(['transacted_at'])
+            ->each(function (Transaction $transaction) use (&$sparklineCounts): void {
+                $transactedAt = $transaction->transacted_at;
+
+                if ($transactedAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $transactedAt)->startOfDay()->toDateString();
+                $sparklineCounts[$key] = ($sparklineCounts[$key] ?? 0) + 1;
+            });
+
         $sparkline = [];
         for ($i = 6; $i >= 0; $i--) {
-            $day = Carbon::now()->subDays($i)->startOfDay();
-            $sparkline[] = Transaction::query()
-                ->whereHas('account', fn($query) => $query->where('is_master', true))
-                ->whereDate('transacted_at', $day)
-                ->count();
+            $day = Carbon::now()->subDays($i)->startOfDay()->toDateString();
+            $sparkline[] = $sparklineCounts[$day] ?? 0;
         }
 
         $fundHealth = match (true) {
@@ -260,7 +276,7 @@ final class MasterAccountsInsightsService
             [
                 'key' => 'activity',
                 'label' => __('30d net'),
-                'value' => ($activityNet >= 0 ? '+' : '−') . InsightFormatter::compactAmount($activityNet),
+                'value' => ($activityNet >= 0 ? '+' : '−').InsightFormatter::compactAmount($activityNet),
                 'sub' => trans_choice(':count txn|:count txns', $activityTxCount, ['count' => $activityTxCount]),
                 'icon' => 'heroicon-o-arrows-right-left',
                 'accent' => $activityNet >= 0 ? 'teal' : 'amber',

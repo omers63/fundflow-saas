@@ -20,6 +20,15 @@ class MemberDelinquencyEvaluator
     /** @var array<string, bool> */
     protected array $exemptFromContributionCache = [];
 
+    /** @var array<string, bool> */
+    protected array $postedContributionPeriods = [];
+
+    /** @var array<string, bool> */
+    protected array $repaymentMissPeriods = [];
+
+    /** @var list<string> */
+    protected array $contributionExemptStarts = [];
+
     public function __construct(
         protected ContributionCycleService $cycles,
     ) {}
@@ -35,6 +44,9 @@ class MemberDelinquencyEvaluator
     public function evaluate(Member $member): array
     {
         $this->exemptFromContributionCache = [];
+        $this->postedContributionPeriods = [];
+        $this->repaymentMissPeriods = [];
+        $this->contributionExemptStarts = [];
 
         $now = now();
         [$lastM, $lastY] = $this->lastClosedPeriodMonthYear($now);
@@ -53,6 +65,7 @@ class MemberDelinquencyEvaluator
         }
 
         $lookback = ContributionPolicySettings::totalMissLookbackMonths();
+        $this->warmPeriodCaches($member, $joined, $lastM, $lastY);
 
         $rollingTotal = 0;
         $cursor = Carbon::create($lastY, $lastM, 1)->startOfMonth();
@@ -147,10 +160,7 @@ class MemberDelinquencyEvaluator
             return false;
         }
 
-        return ! Contribution::query()
-            ->where('member_id', $member->id)
-            ->forPeriod($month, $year)
-            ->exists();
+        return ! ($this->postedContributionPeriods[$this->monthKey($month, $year)] ?? false);
     }
 
     protected function repaymentMiss(Member $member, int $month, int $year): bool
@@ -160,12 +170,7 @@ class MemberDelinquencyEvaluator
             return false;
         }
 
-        return LoanInstallment::query()
-            ->whereHas('loan', fn ($q) => $q->where('member_id', $member->id)->where('status', 'active'))
-            ->whereYear('due_date', $year)
-            ->whereMonth('due_date', $month)
-            ->whereIn('status', ['pending', 'overdue'])
-            ->exists();
+        return $this->repaymentMissPeriods[$this->monthKey($month, $year)] ?? false;
     }
 
     protected function isExemptFromContributionsInMonth(Member $member, int $month, int $year): bool
@@ -175,14 +180,10 @@ class MemberDelinquencyEvaluator
             return $this->exemptFromContributionCache[$k];
         }
 
-        $end = Carbon::create($year, $month, 1)->endOfMonth();
-
-        $v = Loan::query()
-            ->where('member_id', $member->id)
-            ->where('status', 'active')
-            ->where('disbursed_at', '<=', $end)
-            ->whereHas('installments', fn ($q) => $q->whereIn('status', ['pending', 'overdue']))
-            ->exists();
+        $monthKey = $this->monthKey($month, $year);
+        $v = collect($this->contributionExemptStarts)->contains(
+            fn (string $start): bool => $start <= $monthKey
+        );
 
         return $this->exemptFromContributionCache[$k] = $v;
     }
@@ -190,5 +191,60 @@ class MemberDelinquencyEvaluator
     protected function periodKey(int $year, int $month): int
     {
         return $year * 12 + $month;
+    }
+
+    protected function monthKey(int $month, int $year): string
+    {
+        return sprintf('%04d-%02d', $year, $month);
+    }
+
+    protected function warmPeriodCaches(Member $member, Carbon $joined, int $lastMonth, int $lastYear): void
+    {
+        $endOfLastClosed = Carbon::create($lastYear, $lastMonth, 1)->endOfMonth();
+
+        $this->postedContributionPeriods = Contribution::query()
+            ->where('member_id', $member->id)
+            ->whereBetween('period', [$joined->toDateString(), $endOfLastClosed->toDateString()])
+            ->get(['period'])
+            ->filter(fn (Contribution $contribution): bool => $contribution->period !== null)
+            ->mapWithKeys(function (Contribution $contribution): array {
+                $period = Carbon::parse((string) $contribution->period);
+
+                return [$this->monthKey((int) $period->month, (int) $period->year) => true];
+            })
+            ->all();
+
+        $this->repaymentMissPeriods = LoanInstallment::query()
+            ->whereHas(
+                'loan',
+                fn ($query) => $query
+                    ->where('member_id', $member->id)
+                    ->where('status', 'active')
+            )
+            ->whereIn('status', ['pending', 'overdue'])
+            ->whereDate('due_date', '<=', $endOfLastClosed)
+            ->get(['due_date'])
+            ->filter(fn (LoanInstallment $installment): bool => $installment->due_date !== null)
+            ->mapWithKeys(function (LoanInstallment $installment): array {
+                $dueDate = Carbon::parse((string) $installment->due_date);
+
+                return [$this->monthKey((int) $dueDate->month, (int) $dueDate->year) => true];
+            })
+            ->all();
+
+        $this->contributionExemptStarts = Loan::query()
+            ->where('member_id', $member->id)
+            ->where('status', 'active')
+            ->whereDate('disbursed_at', '<=', $endOfLastClosed)
+            ->whereHas('installments', fn ($query) => $query->whereIn('status', ['pending', 'overdue']))
+            ->get(['disbursed_at'])
+            ->filter(fn (Loan $loan): bool => $loan->disbursed_at !== null)
+            ->map(function (Loan $loan): string {
+                $disbursedAt = Carbon::parse((string) $loan->disbursed_at);
+
+                return $this->monthKey((int) $disbursedAt->month, (int) $disbursedAt->year);
+            })
+            ->values()
+            ->all();
     }
 }

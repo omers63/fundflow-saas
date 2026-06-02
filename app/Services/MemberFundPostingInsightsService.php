@@ -48,7 +48,9 @@ final class MemberFundPostingInsightsService
                     'rejected' => __('Rejected'),
                     default => ucfirst($posting->status),
                 },
-                'date' => $posting->posting_date?->format('d M Y') ?? '—',
+                'date' => $posting->posting_date !== null
+                    ? Carbon::parse((string) $posting->posting_date)->format('d M Y')
+                    : '—',
             ])
             ->all();
 
@@ -71,16 +73,30 @@ final class MemberFundPostingInsightsService
      */
     private function monthlySparkline(Member $member): array
     {
+        $now = Carbon::now();
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $monthCounts = [];
+
+        FundPosting::query()
+            ->where('member_id', $member->id)
+            ->whereBetween('created_at', [$oldestMonth, $now->copy()->endOfMonth()])
+            ->get(['created_at'])
+            ->each(function (FundPosting $posting) use (&$monthCounts): void {
+                $createdAt = $posting->created_at;
+
+                if ($createdAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $createdAt)->startOfMonth()->format('Y-m');
+                $monthCounts[$key] = ($monthCounts[$key] ?? 0) + 1;
+            });
+
         $points = [];
 
         for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i);
-
-            $points[] = FundPosting::query()
-                ->where('member_id', $member->id)
-                ->whereYear('created_at', $month->year)
-                ->whereMonth('created_at', $month->month)
-                ->count();
+            $month = $now->copy()->subMonths($i)->startOfMonth()->format('Y-m');
+            $points[] = $monthCounts[$month] ?? 0;
         }
 
         return $points;

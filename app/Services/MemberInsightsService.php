@@ -45,26 +45,20 @@ final class MemberInsightsService
         $independent = Member::query()->independent()->count();
 
         $withActiveLoans = Member::query()
-            ->whereHas('loans', fn($query) => $query->where('status', 'active'))
+            ->whereHas('loans', fn ($query) => $query->where('status', 'active'))
             ->count();
 
         $loanExempt = Member::query()
             ->active()
             ->whereHas('loans', function ($query): void {
                 $query->where('status', 'active')
-                    ->whereHas('installments', fn($installment) => $installment->whereIn('status', ['pending', 'overdue']));
+                    ->whereHas('installments', fn ($installment) => $installment->whereIn('status', ['pending', 'overdue']));
             })
             ->count();
 
         $avgContribution = (float) (Member::query()->active()->avg('monthly_contribution_amount') ?? 0);
 
-        $zeroCashMembers = Member::query()
-            ->active()
-            ->whereHas('accounts', fn($query) => $query
-                ->where('type', 'cash')
-                ->where('is_master', false)
-                ->where('balance', '<=', 0))
-            ->count();
+        $zeroCashMembers = Member::query()->activeWithZeroCash()->count();
 
         $statusCounts = Member::query()
             ->selectRaw('status, COUNT(*) as total')
@@ -72,7 +66,7 @@ final class MemberInsightsService
             ->pluck('total', 'status');
 
         $statusBreakdown = collect(Member::STATUSES)
-            ->map(fn(string $status): array => [
+            ->map(fn (string $status): array => [
                 'status' => $status,
                 'label' => Member::statusOptions()[$status] ?? ucfirst($status),
                 'count' => (int) ($statusCounts[$status] ?? 0),
@@ -86,7 +80,7 @@ final class MemberInsightsService
             ->orderBy('name')
             ->limit(6)
             ->get()
-            ->map(fn(Member $member): array => [
+            ->map(fn (Member $member): array => [
                 'id' => $member->id,
                 'name' => $member->name,
                 'status' => Member::statusOptions()[$member->status] ?? $member->status,
@@ -157,16 +151,31 @@ final class MemberInsightsService
      */
     private function sixMonthJoinTrend(): array
     {
+        $now = Carbon::now();
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $monthCounts = [];
+
+        Member::query()
+            ->whereNotNull('joined_at')
+            ->whereDate('joined_at', '>=', $oldestMonth)
+            ->get(['joined_at'])
+            ->each(function (Member $member) use (&$monthCounts): void {
+                $joinedAt = $member->joined_at;
+
+                if ($joinedAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $joinedAt)->startOfMonth()->format('Y-m');
+                $monthCounts[$key] = ($monthCounts[$key] ?? 0) + 1;
+            });
+
         $trend = [];
 
         for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i)->startOfMonth();
-
-            $total = Member::query()
-                ->whereNotNull('joined_at')
-                ->whereYear('joined_at', $month->year)
-                ->whereMonth('joined_at', $month->month)
-                ->count();
+            $month = $now->copy()->subMonths($i)->startOfMonth();
+            $key = $month->format('Y-m');
+            $total = $monthCounts[$key] ?? 0;
 
             $trend[] = [
                 'label' => $month->format('M'),
@@ -185,15 +194,31 @@ final class MemberInsightsService
      */
     private function weeklyJoinSparkline(): array
     {
+        $now = Carbon::now();
+        $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
+        $currentWeekEnd = $now->copy()->endOfWeek();
+        $weekCounts = [];
+
+        Member::query()
+            ->whereNotNull('joined_at')
+            ->whereBetween('joined_at', [$oldestWeekStart, $currentWeekEnd])
+            ->get(['joined_at'])
+            ->each(function (Member $member) use (&$weekCounts): void {
+                $joinedAt = $member->joined_at;
+
+                if ($joinedAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $joinedAt)->startOfWeek()->toDateString();
+                $weekCounts[$key] = ($weekCounts[$key] ?? 0) + 1;
+            });
+
         $points = [];
 
         for ($i = 7; $i >= 0; $i--) {
-            $start = Carbon::now()->subWeeks($i)->startOfWeek();
-            $end = $start->copy()->endOfWeek();
-
-            $points[] = Member::query()
-                ->whereBetween('joined_at', [$start, $end])
-                ->count();
+            $start = $now->copy()->subWeeks($i)->startOfWeek()->toDateString();
+            $points[] = $weekCounts[$start] ?? 0;
         }
 
         return $points;

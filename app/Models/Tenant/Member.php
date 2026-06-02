@@ -168,6 +168,17 @@ class Member extends Model
         return $query->where('status', 'active');
     }
 
+    public function scopeActiveWithZeroCash($query)
+    {
+        return $query
+            ->active()
+            ->whereHas('accounts', function ($query): void {
+                $query->where('type', 'cash')
+                    ->where('is_master', false)
+                    ->where('balance', '<=', 0);
+            });
+    }
+
     public function scopeWithParent($query)
     {
         return $query->whereNotNull('parent_member_id');

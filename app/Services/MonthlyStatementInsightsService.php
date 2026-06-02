@@ -222,26 +222,42 @@ final class MonthlyStatementInsightsService
      */
     private function sixMonthTrend(): array
     {
+        $now = Carbon::now();
+        $oldestPeriod = $now->copy()->subMonths(5)->format('Y-m');
+        $periodTotals = [];
+
+        MonthlyStatement::query()
+            ->where('period', '>=', $oldestPeriod)
+            ->get(['period', 'notified_at'])
+            ->each(function (MonthlyStatement $statement) use (&$periodTotals): void {
+                $period = (string) $statement->period;
+                $periodTotals[$period] ??= [
+                    'total' => 0,
+                    'notified' => 0,
+                    'pending' => 0,
+                ];
+                $periodTotals[$period]['total']++;
+
+                if ($statement->notified_at !== null) {
+                    $periodTotals[$period]['notified']++;
+
+                    return;
+                }
+
+                $periodTotals[$period]['pending']++;
+            });
+
         $trend = [];
 
         for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i)->startOfMonth();
+            $month = $now->copy()->subMonths($i)->startOfMonth();
             $period = $month->format('Y-m');
-
-            $row = MonthlyStatement::query()
-                ->where('period', $period)
-                ->selectRaw('
-                    COUNT(*) as total,
-                    SUM(CASE WHEN notified_at IS NOT NULL THEN 1 ELSE 0 END) as notified,
-                    SUM(CASE WHEN notified_at IS NULL THEN 1 ELSE 0 END) as pending
-                ')
-                ->first();
 
             $trend[] = [
                 'label' => $month->format('M'),
-                'total' => (int) ($row->total ?? 0),
-                'notified' => (int) ($row->notified ?? 0),
-                'pending' => (int) ($row->pending ?? 0),
+                'total' => (int) ($periodTotals[$period]['total'] ?? 0),
+                'notified' => (int) ($periodTotals[$period]['notified'] ?? 0),
+                'pending' => (int) ($periodTotals[$period]['pending'] ?? 0),
             ];
         }
 
@@ -253,15 +269,30 @@ final class MonthlyStatementInsightsService
      */
     private function weeklySparkline(): array
     {
+        $now = Carbon::now();
+        $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
+        $currentWeekEnd = $now->copy()->endOfWeek();
+        $weekCounts = [];
+
+        MonthlyStatement::query()
+            ->whereBetween('generated_at', [$oldestWeekStart, $currentWeekEnd])
+            ->get(['generated_at'])
+            ->each(function (MonthlyStatement $statement) use (&$weekCounts): void {
+                $generatedAt = $statement->generated_at;
+
+                if ($generatedAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $generatedAt)->startOfWeek()->toDateString();
+                $weekCounts[$key] = ($weekCounts[$key] ?? 0) + 1;
+            });
+
         $points = [];
 
         for ($i = 7; $i >= 0; $i--) {
-            $start = Carbon::now()->subWeeks($i)->startOfWeek();
-            $end = $start->copy()->endOfWeek();
-
-            $points[] = MonthlyStatement::query()
-                ->whereBetween('generated_at', [$start, $end])
-                ->count();
+            $start = $now->copy()->subWeeks($i)->startOfWeek()->toDateString();
+            $points[] = $weekCounts[$start] ?? 0;
         }
 
         return $points;

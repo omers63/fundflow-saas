@@ -44,13 +44,7 @@ final class MemberAccountsInsightsService
         $memberFundCount = (int) ($memberFundStats->cnt ?? 0);
         $negativeFundCount = (int) ($memberFundStats->negative_cnt ?? 0);
 
-        $zeroCashMembers = Member::query()
-            ->active()
-            ->whereHas('accounts', fn ($query) => $query
-                ->where('type', 'cash')
-                ->where('is_master', false)
-                ->where('balance', '<=', 0))
-            ->count();
+        $zeroCashMembers = Member::query()->activeWithZeroCash()->count();
 
         $activeMembers = Member::active()->count();
         $loanExposure = (float) Loan::active()->get()->sum(
@@ -75,21 +69,42 @@ final class MemberAccountsInsightsService
         $activityNet = $activityCredits - $activityDebits;
         $activityTxCount = (int) ($activity->tx_count ?? 0);
 
-        $trend = [];
         $now = Carbon::now();
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $monthTotals = [];
+
+        Transaction::query()
+            ->whereHas('account', fn ($query) => $query->where('is_master', false))
+            ->whereBetween('transacted_at', [$oldestMonth, $now->copy()->endOfMonth()])
+            ->get(['type', 'amount', 'transacted_at'])
+            ->each(function (Transaction $transaction) use (&$monthTotals): void {
+                $transactedAt = $transaction->transacted_at;
+
+                if ($transactedAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $transactedAt)->startOfMonth()->format('Y-m');
+                $monthTotals[$key] ??= ['credits' => 0.0, 'debits' => 0.0];
+
+                if ($transaction->type === 'credit') {
+                    $monthTotals[$key]['credits'] += (float) $transaction->amount;
+
+                    return;
+                }
+
+                if ($transaction->type === 'debit') {
+                    $monthTotals[$key]['debits'] += (float) $transaction->amount;
+                }
+            });
+
+        $trend = [];
+
         for ($i = 5; $i >= 0; $i--) {
             $month = $now->copy()->subMonths($i)->startOfMonth();
-            $end = $month->copy()->endOfMonth();
-            $credits = (float) Transaction::query()
-                ->whereHas('account', fn ($query) => $query->where('is_master', false))
-                ->where('type', 'credit')
-                ->whereBetween('transacted_at', [$month, $end])
-                ->sum('amount');
-            $debits = (float) Transaction::query()
-                ->whereHas('account', fn ($query) => $query->where('is_master', false))
-                ->where('type', 'debit')
-                ->whereBetween('transacted_at', [$month, $end])
-                ->sum('amount');
+            $key = $month->format('Y-m');
+            $credits = (float) ($monthTotals[$key]['credits'] ?? 0.0);
+            $debits = (float) ($monthTotals[$key]['debits'] ?? 0.0);
 
             $trend[] = [
                 'label' => $month->locale(app()->getLocale())->translatedFormat('M'),

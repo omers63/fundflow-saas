@@ -23,8 +23,7 @@ final class MemberContributionInsightsService
     public function __construct(
         protected ContributionCycleService $cycles,
         protected LoanDelinquencyService $delinquency,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -85,7 +84,7 @@ final class MemberContributionInsightsService
 
         $trend = $this->sixMonthAmountTrend($member);
         $trendMax = max(1, (int) collect($trend)->max('posted_amount'));
-        $sparkline = collect($trend)->pluck('posted_amount')->map(fn(float $amount): int => (int) round($amount))->all();
+        $sparkline = collect($trend)->pluck('posted_amount')->map(fn (float $amount): int => (int) round($amount))->all();
 
         $methodBreakdown = $this->paymentMethodBreakdown($member);
         $streak = $this->postedStreakMonths($member);
@@ -227,10 +226,10 @@ final class MemberContributionInsightsService
         }
 
         if (
-            !$cashReady
+            ! $cashReady
             && $member->status === 'active'
             && (float) $member->monthly_contribution_amount > 0
-            && !$member->isExemptFromContributions()
+            && ! $member->isExemptFromContributions()
         ) {
             return [
                 'tone' => 'amber',
@@ -341,6 +340,7 @@ final class MemberContributionInsightsService
      */
     private function consistencyScore(Member $member): array
     {
+        $postedByPeriod = $this->postedContributionsByPeriod($member, 12);
         $liable = 0;
         $onTime = 0;
 
@@ -349,19 +349,16 @@ final class MemberContributionInsightsService
             $m = (int) $month->month;
             $y = (int) $month->year;
 
-            if (!$this->cycles->memberCanApplyContributionForPeriod($member, $m, $y)) {
+            if (! $this->cycles->memberCanApplyContributionForPeriod($member, $m, $y)) {
                 continue;
             }
 
             $liable++;
 
-            $row = Contribution::query()
-                ->where('member_id', $member->id)
-                ->forPeriod($m, $y)
-                ->posted()
-                ->first();
+            $period = Contribution::periodDate($m, $y);
+            $row = $postedByPeriod[$period] ?? null;
 
-            if ($row !== null && !$row->is_late) {
+            if ($row !== null && ! $row->is_late) {
                 $onTime++;
             }
         }
@@ -369,7 +366,7 @@ final class MemberContributionInsightsService
         $percent = $liable > 0 ? (int) round(($onTime / $liable) * 100) : 100;
 
         return [
-            'display' => $percent . '%',
+            'display' => $percent.'%',
             'percent' => $percent,
             'posted' => $onTime,
             'liable' => $liable,
@@ -378,6 +375,7 @@ final class MemberContributionInsightsService
 
     private function postedStreakMonths(Member $member): int
     {
+        $postedByPeriod = $this->postedContributionsByPeriod($member, 24);
         $streak = 0;
 
         for ($i = 1; $i <= 24; $i++) {
@@ -385,17 +383,14 @@ final class MemberContributionInsightsService
             $m = (int) $month->month;
             $y = (int) $month->year;
 
-            if (!$this->cycles->memberCanApplyContributionForPeriod($member, $m, $y)) {
+            if (! $this->cycles->memberCanApplyContributionForPeriod($member, $m, $y)) {
                 continue;
             }
 
-            $hasPosted = Contribution::query()
-                ->where('member_id', $member->id)
-                ->forPeriod($m, $y)
-                ->posted()
-                ->exists();
+            $period = Contribution::periodDate($m, $y);
+            $hasPosted = isset($postedByPeriod[$period]);
 
-            if (!$hasPosted) {
+            if (! $hasPosted) {
                 break;
             }
 
@@ -410,33 +405,82 @@ final class MemberContributionInsightsService
      */
     private function sixMonthAmountTrend(Member $member): array
     {
+        $now = Carbon::now();
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $oldestPeriod = Contribution::periodDate((int) $oldestMonth->month, (int) $oldestMonth->year);
+        $periodTotals = [];
+
+        Contribution::query()
+            ->where('member_id', $member->id)
+            ->where('period', '>=', $oldestPeriod)
+            ->get(['period', 'status', 'amount'])
+            ->each(function (Contribution $contribution) use (&$periodTotals): void {
+                $period = (string) $contribution->period;
+
+                if ($period === '') {
+                    return;
+                }
+
+                $periodTotals[$period] ??= [
+                    'posted' => 0,
+                    'posted_amount' => 0.0,
+                    'pending' => 0,
+                    'failed' => 0,
+                ];
+
+                if ($contribution->status === 'posted') {
+                    $periodTotals[$period]['posted']++;
+                    $periodTotals[$period]['posted_amount'] += (float) $contribution->amount;
+
+                    return;
+                }
+
+                if ($contribution->status === 'pending') {
+                    $periodTotals[$period]['pending']++;
+
+                    return;
+                }
+
+                if ($contribution->status === 'failed') {
+                    $periodTotals[$period]['failed']++;
+                }
+            });
+
         $trend = [];
 
         for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i)->startOfMonth();
+            $month = $now->copy()->subMonths($i)->startOfMonth();
             $m = (int) $month->month;
             $y = (int) $month->year;
             $period = Contribution::periodDate($m, $y);
 
-            $rows = Contribution::query()
-                ->where('member_id', $member->id)
-                ->where('period', $period);
-
-            $postedAmount = (float) (clone $rows)->posted()->sum('amount');
-            $posted = (int) (clone $rows)->posted()->count();
-            $pending = (int) (clone $rows)->pending()->count();
-            $failed = (int) (clone $rows)->where('status', 'failed')->count();
-
             $trend[] = [
                 'label' => $month->locale(app()->getLocale())->translatedFormat('M'),
-                'posted' => $posted,
-                'posted_amount' => $postedAmount,
-                'pending' => $pending,
-                'failed' => $failed,
+                'posted' => (int) ($periodTotals[$period]['posted'] ?? 0),
+                'posted_amount' => (float) ($periodTotals[$period]['posted_amount'] ?? 0.0),
+                'pending' => (int) ($periodTotals[$period]['pending'] ?? 0),
+                'failed' => (int) ($periodTotals[$period]['failed'] ?? 0),
             ];
         }
 
         return $trend;
+    }
+
+    /**
+     * @return array<string, Contribution>
+     */
+    private function postedContributionsByPeriod(Member $member, int $monthsBack): array
+    {
+        $oldestMonth = Carbon::now()->subMonths($monthsBack)->startOfMonth();
+        $oldestPeriod = Contribution::periodDate((int) $oldestMonth->month, (int) $oldestMonth->year);
+
+        return Contribution::query()
+            ->where('member_id', $member->id)
+            ->posted()
+            ->where('period', '>=', $oldestPeriod)
+            ->get(['period', 'is_late'])
+            ->keyBy(fn (Contribution $contribution): string => (string) $contribution->period)
+            ->all();
     }
 
     /**
@@ -453,12 +497,12 @@ final class MemberContributionInsightsService
             ->pluck('total', 'payment_method');
 
         return collect(Contribution::paymentMethodOptions())
-            ->map(fn(string $label, string $method): array => [
+            ->map(fn (string $label, string $method): array => [
                 'method' => $method,
                 'label' => $label,
                 'count' => (int) ($methodCounts[$method] ?? 0),
             ])
-            ->filter(fn(array $row): bool => $row['count'] > 0)
+            ->filter(fn (array $row): bool => $row['count'] > 0)
             ->values()
             ->all();
     }

@@ -49,13 +49,29 @@ final class AccountDetailInsightsService
         $txCount30 = (int) ($stats30->tx_count ?? 0);
         $totalTx = Transaction::query()->where('account_id', $account->id)->count();
 
+        $sparklineCounts = [];
+        $sparklineWindowStart = Carbon::now()->subDays(6)->startOfDay();
+        $sparklineWindowEnd = Carbon::now()->endOfDay();
+
+        Transaction::query()
+            ->where('account_id', $account->id)
+            ->whereBetween('transacted_at', [$sparklineWindowStart, $sparklineWindowEnd])
+            ->get(['transacted_at'])
+            ->each(function (Transaction $transaction) use (&$sparklineCounts): void {
+                $transactedAt = $transaction->transacted_at;
+
+                if ($transactedAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $transactedAt)->startOfDay()->toDateString();
+                $sparklineCounts[$key] = ($sparklineCounts[$key] ?? 0) + 1;
+            });
+
         $sparkline = [];
         for ($i = 6; $i >= 0; $i--) {
-            $day = Carbon::now()->subDays($i)->startOfDay();
-            $sparkline[] = Transaction::query()
-                ->where('account_id', $account->id)
-                ->whereDate('transacted_at', $day)
-                ->count();
+            $day = Carbon::now()->subDays($i)->startOfDay()->toDateString();
+            $sparkline[] = $sparklineCounts[$day] ?? 0;
         }
 
         $recent = Transaction::query()

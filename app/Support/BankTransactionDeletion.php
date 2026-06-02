@@ -13,18 +13,6 @@ use InvalidArgumentException;
 
 final class BankTransactionDeletion
 {
-    /**
-     * Operational buckets (not real bank CSV imports).
-     *
-     * @var list<string>
-     */
-    private const SYNTHETIC_STATEMENT_FILENAMES = [
-        'membership-subscription-fees',
-        'import-cutoff-balances',
-        'member-postings',
-        'member-cash-outs',
-    ];
-
     public function __construct(
         private AccountingService $accounting,
     ) {}
@@ -50,7 +38,7 @@ final class BankTransactionDeletion
 
         $filename = $bankTransaction->bankStatement?->filename;
 
-        if ($filename !== null && in_array($filename, self::SYNTHETIC_STATEMENT_FILENAMES, true)) {
+        if ($filename !== null && in_array($filename, BankStatementBuckets::SYNTHETIC_OPERATIONAL, true)) {
             return __('Operational statement lines cannot be deleted from this screen.');
         }
 

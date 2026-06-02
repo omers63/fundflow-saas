@@ -54,13 +54,29 @@ final class BankStatementDetailInsightsService
             ->whereNull('member_id')
             ->count();
 
+        $sparklineCounts = [];
+        $sparklineWindowStart = Carbon::now()->subDays(6)->startOfDay();
+        $sparklineWindowEnd = Carbon::now()->endOfDay();
+
+        BankTransaction::query()
+            ->where('bank_statement_id', $statement->id)
+            ->whereBetween('transaction_date', [$sparklineWindowStart, $sparklineWindowEnd])
+            ->get(['transaction_date'])
+            ->each(function (BankTransaction $transaction) use (&$sparklineCounts): void {
+                $transactionDate = $transaction->transaction_date;
+
+                if ($transactionDate === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $transactionDate)->startOfDay()->toDateString();
+                $sparklineCounts[$key] = ($sparklineCounts[$key] ?? 0) + 1;
+            });
+
         $sparkline = [];
         for ($i = 6; $i >= 0; $i--) {
-            $day = Carbon::now()->subDays($i)->startOfDay();
-            $sparkline[] = BankTransaction::query()
-                ->where('bank_statement_id', $statement->id)
-                ->whereDate('transaction_date', $day)
-                ->count();
+            $day = Carbon::now()->subDays($i)->startOfDay()->toDateString();
+            $sparkline[] = $sparklineCounts[$day] ?? 0;
         }
 
         $recent = BankTransaction::query()
@@ -70,7 +86,9 @@ final class BankStatementDetailInsightsService
             ->limit(5)
             ->get()
             ->map(fn (BankTransaction $line): array => [
-                'date' => $line->transaction_date?->format('M j'),
+                'date' => $line->transaction_date !== null
+                    ? Carbon::parse((string) $line->transaction_date)->format('M j')
+                    : null,
                 'description' => Str::limit($line->description ?? '—', 40),
                 'amount' => InsightFormatter::money((float) $line->amount),
                 'status' => $line->status,
@@ -110,7 +128,9 @@ final class BankStatementDetailInsightsService
                 'title' => $statement->filename,
                 'subtitle' => __(':bank · :date', [
                     'bank' => $statement->bank_name ?: __('Bank statement'),
-                    'date' => $statement->statement_date?->format('M j, Y') ?? '—',
+                    'date' => $statement->statement_date !== null
+                        ? Carbon::parse((string) $statement->statement_date)->format('M j, Y')
+                        : '—',
                 ]),
             ],
         };

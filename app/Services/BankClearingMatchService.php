@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTransaction;
+use App\Support\BankStatementBuckets;
 use App\Support\ContributionPolicySettings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -23,39 +24,12 @@ class BankClearingMatchService
      *
      * @var list<string>
      */
-    private const SYNTHETIC_STATEMENT_FILENAMES = [
-        'membership-subscription-fees',
-        'import-cutoff-balances',
-        'member-postings',
-        'member-cash-outs',
-    ];
-
-    /**
-     * Legacy import placeholders that must not participate in bank clearing.
-     *
-     * @var list<string>
-     */
-    private const MEMBERSHIP_IMPORT_PLACEHOLDER_STATEMENTS = [
-        'membership-subscription-fees',
-        'import-cutoff-balances',
-    ];
-
-    /**
-     * Accepted member deposits and cash-outs awaiting a real bank CSV match.
-     *
-     * @var list<string>
-     */
-    private const OPERATIONAL_CLEARANCE_STATEMENT_FILENAMES = [
-        'member-postings',
-        'member-cash-outs',
-    ];
-
     /**
      * @return list<string>
      */
     public function membershipImportPlaceholderStatementFilenames(): array
     {
-        return self::MEMBERSHIP_IMPORT_PLACEHOLDER_STATEMENTS;
+        return BankStatementBuckets::MEMBERSHIP_IMPORT_PLACEHOLDERS;
     }
 
     /**
@@ -63,7 +37,7 @@ class BankClearingMatchService
      */
     public function operationalClearanceStatementFilenames(): array
     {
-        return self::OPERATIONAL_CLEARANCE_STATEMENT_FILENAMES;
+        return BankStatementBuckets::OPERATIONAL_CLEARANCE;
     }
 
     /**
@@ -73,7 +47,7 @@ class BankClearingMatchService
     public function applyRealBankStatementLinesScope(Builder $query): Builder
     {
         return $query->whereHas('bankStatement', function (Builder $statementQuery): void {
-            $statementQuery->whereNotIn('filename', self::SYNTHETIC_STATEMENT_FILENAMES);
+            $statementQuery->whereNotIn('filename', BankStatementBuckets::SYNTHETIC_OPERATIONAL);
         });
     }
 
@@ -90,7 +64,7 @@ class BankClearingMatchService
                     ->orWhereNotNull('cash_out_request_id');
             })
             ->whereHas('bankStatement', function (Builder $statementQuery): void {
-                $statementQuery->whereIn('filename', self::OPERATIONAL_CLEARANCE_STATEMENT_FILENAMES);
+                $statementQuery->whereIn('filename', BankStatementBuckets::OPERATIONAL_CLEARANCE);
             });
     }
 
@@ -103,15 +77,14 @@ class BankClearingMatchService
         protected FundPostingService $fundPostings,
         protected MemberCashOutService $cashOuts,
         protected AccountingService $accounting,
-    ) {
-    }
+    ) {}
 
     /**
      * @return list<string>
      */
     public function syntheticStatementFilenames(): array
     {
-        return self::SYNTHETIC_STATEMENT_FILENAMES;
+        return BankStatementBuckets::SYNTHETIC_OPERATIONAL;
     }
 
     public function formatMatchOptionLabel(BankTransaction $transaction): string
@@ -163,7 +136,7 @@ class BankClearingMatchService
         $dayRange = ContributionPolicySettings::bankMatchDateRangeDays();
 
         foreach ($records as $record) {
-            if (!$record instanceof BankTransaction) {
+            if (! $record instanceof BankTransaction) {
                 $stats['skipped']++;
 
                 continue;
@@ -219,11 +192,11 @@ class BankClearingMatchService
 
     public function clearMatchPair(BankTransaction $uncleared, BankTransaction $imported): void
     {
-        if (!$this->isPendingClearance($uncleared)) {
+        if (! $this->isPendingClearance($uncleared)) {
             throw new InvalidArgumentException(__('The pending transaction is not eligible for clearance.'));
         }
 
-        if (!$this->isImportedMatchCandidate($imported)) {
+        if (! $this->isImportedMatchCandidate($imported)) {
             throw new InvalidArgumentException(__('The imported statement line is not eligible for matching.'));
         }
 
@@ -308,7 +281,7 @@ class BankClearingMatchService
     {
         $filename = $transaction->bankStatement?->filename;
 
-        return $filename !== null && in_array($filename, self::SYNTHETIC_STATEMENT_FILENAMES, true);
+        return $filename !== null && in_array($filename, BankStatementBuckets::SYNTHETIC_OPERATIONAL, true);
     }
 
     /**
@@ -405,7 +378,7 @@ class BankClearingMatchService
                     ->orWhereNotNull('cash_out_request_id');
             })
             ->whereDoesntHave('bankStatement', function ($query): void {
-                $query->whereIn('filename', self::MEMBERSHIP_IMPORT_PLACEHOLDER_STATEMENTS);
+                $query->whereIn('filename', BankStatementBuckets::MEMBERSHIP_IMPORT_PLACEHOLDERS);
             })
             ->when($date, function ($query) use ($date, $dayRange): void {
                 $query->whereBetween('transaction_date', [
@@ -414,7 +387,7 @@ class BankClearingMatchService
                 ]);
             })
             ->get()
-            ->filter(fn(BankTransaction $candidate): bool => $this->amountsMatch($candidate, $imported, $tolerance))
+            ->filter(fn (BankTransaction $candidate): bool => $this->amountsMatch($candidate, $imported, $tolerance))
             ->values();
     }
 
@@ -439,7 +412,7 @@ class BankClearingMatchService
                 ]);
             })
             ->get()
-            ->filter(fn(BankTransaction $candidate): bool => $this->isImportedMatchCandidate($candidate)
+            ->filter(fn (BankTransaction $candidate): bool => $this->isImportedMatchCandidate($candidate)
                 && $this->amountsMatch($uncleared, $candidate, $tolerance))
             ->values();
     }
@@ -462,7 +435,7 @@ class BankClearingMatchService
                     ->orWhereNull('member_id');
             })
             ->whereHas('bankStatement', function ($query): void {
-                $query->whereNotIn('filename', self::SYNTHETIC_STATEMENT_FILENAMES);
+                $query->whereNotIn('filename', BankStatementBuckets::SYNTHETIC_OPERATIONAL);
             });
     }
 
@@ -472,8 +445,8 @@ class BankClearingMatchService
      */
     protected function identifyManualPair(Collection $records): ?array
     {
-        $uncleared = $records->first(fn(BankTransaction $record): bool => $this->isPendingClearance($record));
-        $imported = $records->first(fn(BankTransaction $record): bool => $this->isImportedMatchCandidate($record));
+        $uncleared = $records->first(fn (BankTransaction $record): bool => $this->isPendingClearance($record));
+        $imported = $records->first(fn (BankTransaction $record): bool => $this->isImportedMatchCandidate($record));
 
         if ($uncleared === null || $imported === null) {
             return null;

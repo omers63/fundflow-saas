@@ -60,7 +60,7 @@ final class FundPostingInsightsService
         $avgReviewDays = $reviewedPostings->isEmpty()
             ? 0.0
             : round((float) $reviewedPostings->avg(
-                fn(FundPosting $posting): float => (float) Carbon::parse($posting->created_at)
+                fn (FundPosting $posting): float => (float) Carbon::parse($posting->created_at)
                     ->diffInDays(Carbon::parse($posting->reviewed_at))
             ), 1);
 
@@ -77,7 +77,7 @@ final class FundPostingInsightsService
             ->orderBy('created_at')
             ->limit(6)
             ->get()
-            ->map(fn(FundPosting $posting): array => [
+            ->map(fn (FundPosting $posting): array => [
                 'id' => $posting->id,
                 'name' => $posting->member?->name ?? __('Unknown member'),
                 'amount' => (float) $posting->amount,
@@ -108,7 +108,7 @@ final class FundPostingInsightsService
 
         $acceptedUncleared = FundPosting::query()
             ->where('status', 'accepted')
-            ->whereHas('bankTransaction', fn($query) => $query->where('is_cleared', false))
+            ->whereHas('bankTransaction', fn ($query) => $query->where('is_cleared', false))
             ->count();
 
         $acceptedWithBank = FundPosting::query()
@@ -217,28 +217,58 @@ final class FundPostingInsightsService
      */
     private function sixMonthTrend(): array
     {
+        $now = Carbon::now();
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $monthTotals = [];
+
+        FundPosting::query()
+            ->whereBetween('created_at', [$oldestMonth, $now->copy()->endOfMonth()])
+            ->get(['status', 'created_at'])
+            ->each(function (FundPosting $posting) use (&$monthTotals): void {
+                $createdAt = $posting->created_at;
+
+                if ($createdAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $createdAt)->startOfMonth()->format('Y-m');
+                $monthTotals[$key] ??= [
+                    'total' => 0,
+                    'accepted' => 0,
+                    'rejected' => 0,
+                    'pending' => 0,
+                ];
+                $monthTotals[$key]['total']++;
+
+                if ($posting->status === 'accepted') {
+                    $monthTotals[$key]['accepted']++;
+
+                    return;
+                }
+
+                if ($posting->status === 'rejected') {
+                    $monthTotals[$key]['rejected']++;
+
+                    return;
+                }
+
+                if ($posting->status === 'pending') {
+                    $monthTotals[$key]['pending']++;
+                }
+            });
+
         $trend = [];
 
         for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i)->startOfMonth();
-
-            $row = FundPosting::query()
-                ->whereYear('created_at', $month->year)
-                ->whereMonth('created_at', $month->month)
-                ->selectRaw("
-                    COUNT(*) as total,
-                    SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
-                    SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
-                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
-                ")
-                ->first();
+            $month = $now->copy()->subMonths($i)->startOfMonth();
+            $key = $month->format('Y-m');
 
             $trend[] = [
                 'label' => $month->format('M'),
-                'total' => (int) ($row->total ?? 0),
-                'accepted' => (int) ($row->accepted ?? 0),
-                'rejected' => (int) ($row->rejected ?? 0),
-                'pending' => (int) ($row->pending ?? 0),
+                'total' => (int) ($monthTotals[$key]['total'] ?? 0),
+                'accepted' => (int) ($monthTotals[$key]['accepted'] ?? 0),
+                'rejected' => (int) ($monthTotals[$key]['rejected'] ?? 0),
+                'pending' => (int) ($monthTotals[$key]['pending'] ?? 0),
             ];
         }
 
@@ -250,15 +280,30 @@ final class FundPostingInsightsService
      */
     private function weeklySparkline(): array
     {
+        $now = Carbon::now();
+        $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
+        $currentWeekEnd = $now->copy()->endOfWeek();
+        $weekCounts = [];
+
+        FundPosting::query()
+            ->whereBetween('created_at', [$oldestWeekStart, $currentWeekEnd])
+            ->get(['created_at'])
+            ->each(function (FundPosting $posting) use (&$weekCounts): void {
+                $createdAt = $posting->created_at;
+
+                if ($createdAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $createdAt)->startOfWeek()->toDateString();
+                $weekCounts[$key] = ($weekCounts[$key] ?? 0) + 1;
+            });
+
         $points = [];
 
         for ($i = 7; $i >= 0; $i--) {
-            $start = Carbon::now()->subWeeks($i)->startOfWeek();
-            $end = $start->copy()->endOfWeek();
-
-            $points[] = FundPosting::query()
-                ->whereBetween('created_at', [$start, $end])
-                ->count();
+            $start = $now->copy()->subWeeks($i)->startOfWeek()->toDateString();
+            $points[] = $weekCounts[$start] ?? 0;
         }
 
         return $points;

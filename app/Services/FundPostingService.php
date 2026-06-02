@@ -14,12 +14,14 @@ use App\Models\Tenant\User;
 use App\Notifications\Tenant\FundPostingAcceptedNotification;
 use App\Notifications\Tenant\FundPostingRejectedNotification;
 use App\Notifications\Tenant\NewFundPostingNotification;
+use App\Support\BankStatementBuckets;
 use Illuminate\Support\Facades\DB;
 
 class FundPostingService
 {
     public function __construct(
         public AccountingService $accounting,
+        private BankTransactionClearanceService $bankClearance,
     ) {}
 
     /**
@@ -46,15 +48,7 @@ class FundPostingService
                 'status' => 'pending',
             ]);
 
-            $statement = BankStatement::firstOrCreate(
-                ['filename' => 'member-postings', 'status' => 'completed'],
-                [
-                    'bank_name' => 'Member Postings',
-                    'total_rows' => 0,
-                    'imported_rows' => 0,
-                    'duplicate_rows' => 0,
-                ],
-            );
+            $statement = $this->memberPostingStatement();
 
             $bankTxn = BankTransaction::create([
                 'bank_statement_id' => $statement->id,
@@ -71,10 +65,7 @@ class FundPostingService
 
             $posting->update(['bank_transaction_id' => $bankTxn->id]);
 
-            $admins = User::where('is_admin', true)->get();
-            foreach ($admins as $admin) {
-                $admin->notify(new NewFundPostingNotification($posting));
-            }
+            $this->notifyAdminsOfNewPosting($posting);
 
             return $posting;
         });
@@ -110,16 +101,9 @@ class FundPostingService
 
             $settlement = $this->buildSettlementSummary($member, $transactionWatermark, $amount);
 
-            $posting->update([
-                'status' => 'accepted',
-                'reviewed_by' => $reviewedBy,
-                'reviewed_at' => now(),
-                'admin_remarks' => $remarks,
-            ]);
+            $this->markPostingReviewed($posting, 'accepted', $reviewedBy, $remarks);
 
-            if ($posting->bankTransaction) {
-                $posting->bankTransaction->update(['status' => 'posted']);
-            }
+            $this->updateLinkedBankTransactionStatus($posting, 'posted');
 
             $this->notifyMemberOfReview($posting, 'accepted', $settlement);
         });
@@ -132,16 +116,9 @@ class FundPostingService
     public function reject(FundPosting $posting, ?int $reviewedBy = null, ?string $remarks = null): void
     {
         DB::transaction(function () use ($posting, $reviewedBy, $remarks) {
-            $posting->update([
-                'status' => 'rejected',
-                'reviewed_by' => $reviewedBy,
-                'reviewed_at' => now(),
-                'admin_remarks' => $remarks,
-            ]);
+            $this->markPostingReviewed($posting, 'rejected', $reviewedBy, $remarks);
 
-            if ($posting->bankTransaction) {
-                $posting->bankTransaction->update(['status' => 'ignored']);
-            }
+            $this->updateLinkedBankTransactionStatus($posting, 'ignored');
 
             $this->notifyMemberOfReview($posting, 'rejected');
         });
@@ -164,6 +141,53 @@ class FundPostingService
             : new FundPostingRejectedNotification($posting);
 
         $memberUser->notify($notification);
+    }
+
+    private function notifyAdminsOfNewPosting(FundPosting $posting): void
+    {
+        User::query()
+            ->where('is_admin', true)
+            ->each(function (User $admin) use ($posting): void {
+                $admin->notify(new NewFundPostingNotification($posting));
+            });
+    }
+
+    private function updateLinkedBankTransactionStatus(FundPosting $posting, string $status): void
+    {
+        $bankTransaction = $posting->bankTransaction;
+
+        if ($bankTransaction === null) {
+            return;
+        }
+
+        $bankTransaction->update(['status' => $status]);
+    }
+
+    private function memberPostingStatement(): BankStatement
+    {
+        return BankStatement::firstOrCreate(
+            ['filename' => BankStatementBuckets::MEMBER_POSTINGS, 'status' => 'completed'],
+            [
+                'bank_name' => 'Member Postings',
+                'total_rows' => 0,
+                'imported_rows' => 0,
+                'duplicate_rows' => 0,
+            ],
+        );
+    }
+
+    private function markPostingReviewed(
+        FundPosting $posting,
+        string $status,
+        ?int $reviewedBy = null,
+        ?string $remarks = null,
+    ): void {
+        $posting->update([
+            'status' => $status,
+            'reviewed_by' => $reviewedBy,
+            'reviewed_at' => now(),
+            'admin_remarks' => $remarks,
+        ]);
     }
 
     protected function buildSettlementSummary(
@@ -221,24 +245,15 @@ class FundPostingService
      */
     public function clearTransaction(BankTransaction $uncleared, BankTransaction $imported): void
     {
-        DB::transaction(function () use ($uncleared, $imported) {
-            $posting = $uncleared->fund_posting_id !== null
-                ? FundPosting::query()->find($uncleared->fund_posting_id)
-                : null;
+        $posting = $uncleared->fund_posting_id !== null
+            ? FundPosting::query()->find($uncleared->fund_posting_id)
+            : null;
 
-            $uncleared->update([
-                'is_cleared' => true,
-                'cleared_at' => now(),
-            ]);
-
-            $imported->update([
-                'is_cleared' => true,
-                'cleared_at' => now(),
-                'fund_posting_id' => $uncleared->fund_posting_id,
-                'membership_application_id' => $uncleared->membership_application_id,
-                'status' => 'posted',
-                'member_id' => $posting?->member_id ?? $uncleared->member_id,
-            ]);
-        });
+        $this->bankClearance->clearMatchedPair($uncleared, $imported, [
+            'fund_posting_id' => $uncleared->fund_posting_id,
+            'membership_application_id' => $uncleared->membership_application_id,
+            'status' => 'posted',
+            'member_id' => $posting?->member_id ?? $uncleared->member_id,
+        ]);
     }
 }

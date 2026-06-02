@@ -38,10 +38,12 @@ final class MemberPortalAccountDetailInsightsService
 
         $account->loadMissing('member');
         $account = $account->fresh() ?? $account;
+        $memberMetrics = $this->memberContextMetrics($member);
 
         $currency = InsightFormatter::currency();
         $balance = (float) $account->balance;
-        $since = Carbon::now()->subDays(30);
+        $now = Carbon::now();
+        $since = $now->copy()->subDays(30);
 
         $stats30 = Transaction::query()
             ->where('account_id', $account->id)
@@ -59,13 +61,29 @@ final class MemberPortalAccountDetailInsightsService
         $txCount30 = (int) ($stats30->tx_count ?? 0);
         $totalTx = Transaction::query()->where('account_id', $account->id)->count();
 
+        $sparklineCounts = [];
+        $sparklineWindowStart = $now->copy()->subDays(6)->startOfDay();
+        $sparklineWindowEnd = $now->copy()->endOfDay();
+
+        Transaction::query()
+            ->where('account_id', $account->id)
+            ->whereBetween('transacted_at', [$sparklineWindowStart, $sparklineWindowEnd])
+            ->get(['transacted_at'])
+            ->each(function (Transaction $transaction) use (&$sparklineCounts): void {
+                $transactedAt = $transaction->transacted_at;
+
+                if ($transactedAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $transactedAt)->startOfDay()->toDateString();
+                $sparklineCounts[$key] = ($sparklineCounts[$key] ?? 0) + 1;
+            });
+
         $sparkline = [];
         for ($i = 6; $i >= 0; $i--) {
-            $day = Carbon::now()->subDays($i)->startOfDay();
-            $sparkline[] = Transaction::query()
-                ->where('account_id', $account->id)
-                ->whereDate('transacted_at', $day)
-                ->count();
+            $day = $now->copy()->subDays($i)->startOfDay()->toDateString();
+            $sparkline[] = $sparklineCounts[$day] ?? 0;
         }
 
         $recent = Transaction::query()
@@ -91,7 +109,7 @@ final class MemberPortalAccountDetailInsightsService
             default => ucfirst($account->type),
         };
 
-        $context = $this->buildContext($account, $member, $balance);
+        $context = $this->buildContext($account, $member, $balance, $memberMetrics);
         $kpis = $this->buildKpis($balance, $credits30, $debits30, $net30, $txCount30, $totalTx, $context);
 
         return [
@@ -108,7 +126,7 @@ final class MemberPortalAccountDetailInsightsService
             'sparkline' => $sparkline,
             'sparkline_max' => max(1, max($sparkline)),
             'recent' => $recent,
-            'hero' => $this->buildHero($account, $balance, $member),
+            'hero' => $this->buildHero($account, $balance, $member, $memberMetrics),
             'kpis' => $kpis,
             'context' => $context,
         ];
@@ -117,10 +135,10 @@ final class MemberPortalAccountDetailInsightsService
     /**
      * @return array{tone: string, title: string, subtitle: string, cta_label: ?string, cta_url: ?string}
      */
-    private function buildHero(Account $account, float $balance, Member $member): array
+    private function buildHero(Account $account, float $balance, Member $member, array $memberMetrics): array
     {
         if ($account->type === 'fund' && $balance < 0) {
-            $activeLoan = $member->loans()->active()->first();
+            $activeLoan = $memberMetrics['active_loan'];
 
             return [
                 'tone' => 'danger',
@@ -134,10 +152,7 @@ final class MemberPortalAccountDetailInsightsService
         }
 
         if ($account->type === 'cash' && $balance <= 0) {
-            $pending = FundPosting::query()
-                ->where('member_id', $member->id)
-                ->where('status', 'pending')
-                ->count();
+            $pending = $memberMetrics['pending_postings'];
 
             return [
                 'tone' => 'amber',
@@ -168,20 +183,13 @@ final class MemberPortalAccountDetailInsightsService
     /**
      * @return array{panels: list<array<string, mixed>>, sixth_kpi: ?array<string, mixed>}
      */
-    private function buildContext(Account $account, Member $member, float $balance): array
+    private function buildContext(Account $account, Member $member, float $balance, array $memberMetrics): array
     {
         $member->loadMissing(['cashAccount', 'fundAccount']);
-
-        $activeLoan = Loan::query()
-            ->where('member_id', $member->id)
-            ->active()
-            ->first();
+        $activeLoan = $memberMetrics['active_loan'];
 
         $outstanding = $activeLoan ? $activeLoan->getOutstandingBalance() : 0.0;
-        $pendingPostings = (int) FundPosting::query()
-            ->where('member_id', $member->id)
-            ->where('status', 'pending')
-            ->count();
+        $pendingPostings = $memberMetrics['pending_postings'];
 
         $otherAccount = $account->type === 'cash' ? $member->fundAccount : $member->cashAccount;
         $otherBalance = $account->type === 'cash'
@@ -274,6 +282,23 @@ final class MemberPortalAccountDetailInsightsService
         return [
             'panels' => $panels,
             'sixth_kpi' => $sixthKpi,
+        ];
+    }
+
+    /**
+     * @return array{active_loan: ?Loan, pending_postings: int}
+     */
+    private function memberContextMetrics(Member $member): array
+    {
+        return [
+            'active_loan' => Loan::query()
+                ->where('member_id', $member->id)
+                ->active()
+                ->first(),
+            'pending_postings' => (int) FundPosting::query()
+                ->where('member_id', $member->id)
+                ->where('status', 'pending')
+                ->count(),
         ];
     }
 

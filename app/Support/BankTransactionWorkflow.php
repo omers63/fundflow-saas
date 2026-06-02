@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Support;
 
 use App\Models\Tenant\BankTransaction;
-use App\Services\BankClearingMatchService;
 
 /**
  * Bank statement line lifecycle: import → post to cash → post to member,
@@ -22,8 +21,9 @@ final class BankTransactionWorkflow
 
     public static function isSyntheticOperationalStatement(BankTransaction $transaction): bool
     {
-        return app(BankClearingMatchService::class)
-            ->isSyntheticOperationalStatement($transaction);
+        $filename = $transaction->bankStatement?->filename;
+
+        return $filename !== null && in_array($filename, BankStatementBuckets::SYNTHETIC_OPERATIONAL, true);
     }
 
     /**

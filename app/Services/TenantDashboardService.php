@@ -353,10 +353,6 @@ final class TenantDashboardService
         ]);
     }
 
-    /**
-     * @param  array<string, int>  $delinquencyCounts
-     * @return list<array<string, mixed>>
-     */
     private function openReconciliationCount(): int
     {
         if (! Schema::hasTable('reconciliation_exceptions')) {
@@ -464,21 +460,33 @@ final class TenantDashboardService
      */
     private function contributionTrend(Carbon $now): array
     {
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $monthTotals = [];
+
+        Contribution::query()
+            ->where('status', 'posted')
+            ->whereBetween('posted_at', [$oldestMonth, $now->copy()->endOfMonth()])
+            ->get(['posted_at', 'amount'])
+            ->each(function (Contribution $contribution) use (&$monthTotals): void {
+                $postedAt = $contribution->posted_at;
+
+                if ($postedAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $postedAt)->startOfMonth()->format('Y-m');
+                $monthTotals[$key] ??= ['amount' => 0.0, 'count' => 0];
+                $monthTotals[$key]['amount'] += (float) $contribution->amount;
+                $monthTotals[$key]['count']++;
+            });
+
         $trend = [];
 
         for ($i = 5; $i >= 0; $i--) {
             $month = $now->copy()->subMonths($i)->startOfMonth();
-            $end = $month->copy()->endOfMonth();
-
-            $posted = (float) Contribution::query()
-                ->where('status', 'posted')
-                ->whereBetween('posted_at', [$month, $end])
-                ->sum('amount');
-
-            $count = Contribution::query()
-                ->where('status', 'posted')
-                ->whereBetween('posted_at', [$month, $end])
-                ->count();
+            $key = $month->format('Y-m');
+            $posted = (float) ($monthTotals[$key]['amount'] ?? 0.0);
+            $count = (int) ($monthTotals[$key]['count'] ?? 0);
 
             $trend[] = [
                 'label' => $month->locale(app()->getLocale())->translatedFormat('M'),

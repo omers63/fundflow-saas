@@ -261,28 +261,58 @@ final class CashOutRequestInsightsService
      */
     private function sixMonthTrend(): array
     {
+        $now = Carbon::now();
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $monthTotals = [];
+
+        CashOutRequest::query()
+            ->whereBetween('created_at', [$oldestMonth, $now->copy()->endOfMonth()])
+            ->get(['status', 'created_at'])
+            ->each(function (CashOutRequest $request) use (&$monthTotals): void {
+                $createdAt = $request->created_at;
+
+                if ($createdAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $createdAt)->startOfMonth()->format('Y-m');
+                $monthTotals[$key] ??= [
+                    'total' => 0,
+                    'accepted' => 0,
+                    'rejected' => 0,
+                    'pending' => 0,
+                ];
+                $monthTotals[$key]['total']++;
+
+                if ($request->status === 'accepted') {
+                    $monthTotals[$key]['accepted']++;
+
+                    return;
+                }
+
+                if ($request->status === 'rejected') {
+                    $monthTotals[$key]['rejected']++;
+
+                    return;
+                }
+
+                if ($request->status === 'pending') {
+                    $monthTotals[$key]['pending']++;
+                }
+            });
+
         $trend = [];
 
         for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i)->startOfMonth();
-
-            $row = CashOutRequest::query()
-                ->whereYear('created_at', $month->year)
-                ->whereMonth('created_at', $month->month)
-                ->selectRaw("
-                    COUNT(*) as total,
-                    SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
-                    SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
-                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
-                ")
-                ->first();
+            $month = $now->copy()->subMonths($i)->startOfMonth();
+            $key = $month->format('Y-m');
 
             $trend[] = [
                 'label' => $month->format('M'),
-                'total' => (int) ($row->total ?? 0),
-                'accepted' => (int) ($row->accepted ?? 0),
-                'rejected' => (int) ($row->rejected ?? 0),
-                'pending' => (int) ($row->pending ?? 0),
+                'total' => (int) ($monthTotals[$key]['total'] ?? 0),
+                'accepted' => (int) ($monthTotals[$key]['accepted'] ?? 0),
+                'rejected' => (int) ($monthTotals[$key]['rejected'] ?? 0),
+                'pending' => (int) ($monthTotals[$key]['pending'] ?? 0),
             ];
         }
 
@@ -294,15 +324,30 @@ final class CashOutRequestInsightsService
      */
     private function weeklySparkline(): array
     {
+        $now = Carbon::now();
+        $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
+        $currentWeekEnd = $now->copy()->endOfWeek();
+        $weekCounts = [];
+
+        CashOutRequest::query()
+            ->whereBetween('created_at', [$oldestWeekStart, $currentWeekEnd])
+            ->get(['created_at'])
+            ->each(function (CashOutRequest $request) use (&$weekCounts): void {
+                $createdAt = $request->created_at;
+
+                if ($createdAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $createdAt)->startOfWeek()->toDateString();
+                $weekCounts[$key] = ($weekCounts[$key] ?? 0) + 1;
+            });
+
         $points = [];
 
         for ($i = 7; $i >= 0; $i--) {
-            $start = Carbon::now()->subWeeks($i)->startOfWeek();
-            $end = $start->copy()->endOfWeek();
-
-            $points[] = CashOutRequest::query()
-                ->whereBetween('created_at', [$start, $end])
-                ->count();
+            $start = $now->copy()->subWeeks($i)->startOfWeek()->toDateString();
+            $points[] = $weekCounts[$start] ?? 0;
         }
 
         return $points;

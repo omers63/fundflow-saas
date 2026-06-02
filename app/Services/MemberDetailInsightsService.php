@@ -123,9 +123,11 @@ final class MemberDetailInsightsService
                 'number' => $member->member_number,
                 'status' => $member->status,
                 'status_label' => Member::statusOptions()[$member->status] ?? $member->status,
-                'joined_at' => $member->joined_at?->format('d M Y'),
+                'joined_at' => $member->joined_at !== null
+                    ? Carbon::parse((string) $member->joined_at)->format('d M Y')
+                    : null,
                 'tenure_months' => $member->joined_at
-                    ? (int) $member->joined_at->diffInMonths(now())
+                    ? (int) Carbon::parse((string) $member->joined_at)->diffInMonths(now())
                     : null,
                 'is_parent' => $member->isParent(),
                 'parent_name' => $member->parent?->name,
@@ -188,7 +190,7 @@ final class MemberDetailInsightsService
                     ->orderBy('name')
                     ->limit(5)
                     ->get()
-                    ->map(fn(Member $dependent): array => [
+                    ->map(fn (Member $dependent): array => [
                         'name' => $dependent->name,
                         'number' => $dependent->member_number,
                         'status' => Member::statusOptions()[$dependent->status] ?? $dependent->status,
@@ -337,7 +339,7 @@ final class MemberDetailInsightsService
             ];
         }
 
-        if (!in_array($member->status, ['active'], true)) {
+        if (! in_array($member->status, ['active'], true)) {
             return [
                 'tone' => 'amber',
                 'title' => Member::statusOptions()[$member->status] ?? ucfirst($member->status),
@@ -548,18 +550,32 @@ final class MemberDetailInsightsService
      */
     private function sixMonthContributionTrend(Member $member): array
     {
+        $now = Carbon::now();
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $periodPostedCounts = [];
+
+        Contribution::query()
+            ->where('member_id', $member->id)
+            ->posted()
+            ->where('period', '>=', $oldestMonth->toDateString())
+            ->get(['period'])
+            ->each(function (Contribution $contribution) use (&$periodPostedCounts): void {
+                $period = $contribution->period;
+
+                if ($period === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $period)->startOfMonth()->toDateString();
+                $periodPostedCounts[$key] = ($periodPostedCounts[$key] ?? 0) + 1;
+            });
+
         $trend = [];
 
         for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i)->startOfMonth();
-            $m = (int) $month->month;
-            $y = (int) $month->year;
-
-            $posted = (int) Contribution::query()
-                ->where('member_id', $member->id)
-                ->forPeriod($m, $y)
-                ->posted()
-                ->count();
+            $month = $now->copy()->subMonths($i)->startOfMonth();
+            $key = $month->toDateString();
+            $posted = $periodPostedCounts[$key] ?? 0;
 
             $trend[] = [
                 'label' => $month->format('M'),
@@ -583,15 +599,30 @@ final class MemberDetailInsightsService
             return array_fill(0, 8, 0);
         }
 
+        $now = Carbon::now();
+        $oldestDay = $now->copy()->subDays(7)->startOfDay();
+        $dayCounts = [];
+
+        Transaction::query()
+            ->where('account_id', $accountId)
+            ->whereBetween('transacted_at', [$oldestDay, $now->copy()->endOfDay()])
+            ->get(['transacted_at'])
+            ->each(function (Transaction $transaction) use (&$dayCounts): void {
+                $transactedAt = $transaction->transacted_at;
+
+                if ($transactedAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $transactedAt)->startOfDay()->toDateString();
+                $dayCounts[$key] = ($dayCounts[$key] ?? 0) + 1;
+            });
+
         $points = [];
 
         for ($i = 7; $i >= 0; $i--) {
-            $day = Carbon::now()->subDays($i)->startOfDay();
-
-            $points[] = Transaction::query()
-                ->where('account_id', $accountId)
-                ->whereDate('transacted_at', $day)
-                ->count();
+            $day = $now->copy()->subDays($i)->startOfDay()->toDateString();
+            $points[] = $dayCounts[$day] ?? 0;
         }
 
         return $points;
@@ -608,8 +639,10 @@ final class MemberDetailInsightsService
             ->orderByDesc('posted_at')
             ->limit(5)
             ->get()
-            ->map(fn(Contribution $contribution): array => [
-                'period' => $contribution->period?->format('M Y') ?? '—',
+            ->map(fn (Contribution $contribution): array => [
+                'period' => $contribution->period !== null
+                    ? Carbon::parse((string) $contribution->period)->format('M Y')
+                    : '—',
                 'amount' => InsightFormatter::money((float) $contribution->amount),
                 'posted_at' => $contribution->posted_at?->format('d M'),
                 'late' => (bool) $contribution->is_late,
@@ -633,7 +666,7 @@ final class MemberDetailInsightsService
             ->orderByDesc('transacted_at')
             ->limit(5)
             ->get()
-            ->map(fn(Transaction $transaction): array => [
+            ->map(fn (Transaction $transaction): array => [
                 'description' => Str::limit($transaction->description ?? '—', 40),
                 'transacted_at' => $transaction->transacted_at?->format('d M, H:i'),
                 'amount' => InsightFormatter::money((float) $transaction->amount),
@@ -660,8 +693,8 @@ final class MemberDetailInsightsService
             [
                 'key' => 'accounts',
                 'label' => __('Accounts'),
-                'value' => InsightFormatter::money($member->getCashBalance()) . ' · ' . __('Cash'),
-                'hint' => InsightFormatter::money($member->getFundBalance()) . ' ' . __('fund'),
+                'value' => InsightFormatter::money($member->getCashBalance()).' · '.__('Cash'),
+                'hint' => InsightFormatter::money($member->getFundBalance()).' '.__('fund'),
                 'accent' => 'indigo',
                 'icon' => 'heroicon-o-rectangle-stack',
                 'url' => $member->cashAccount
@@ -671,7 +704,7 @@ final class MemberDetailInsightsService
             [
                 'key' => 'contributions',
                 'label' => __('Contributions'),
-                'value' => (string) $contributionsPostedCount . ' ' . __('posted'),
+                'value' => (string) $contributionsPostedCount.' '.__('posted'),
                 'hint' => $pendingPostings > 0
                     ? trans_choice(':count posting pending|:count postings pending', $pendingPostings, ['count' => $pendingPostings])
                     : null,

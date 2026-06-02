@@ -15,8 +15,7 @@ final class ContributionInsightsService
 {
     public function __construct(
         protected ContributionCycleService $cycles,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -83,10 +82,14 @@ final class ContributionInsightsService
             ->orderBy('created_at')
             ->limit(6)
             ->get()
-            ->map(fn(Contribution $contribution): array => [
+            ->map(fn (Contribution $contribution): array => [
                 'id' => $contribution->id,
                 'name' => $contribution->member?->name ?? __('Unknown member'),
-                'period_label' => $contribution->period?->translatedFormat('M Y') ?? '—',
+                'period_label' => $contribution->period !== null
+                    ? Carbon::parse((string) $contribution->period)
+                        ->locale(app()->getLocale())
+                        ->translatedFormat('M Y')
+                    : '—',
                 'amount_display' => InsightFormatter::money((float) $contribution->amount),
                 'is_late' => (bool) $contribution->is_late,
                 'days_waiting' => (int) Carbon::parse($contribution->created_at)->diffInDays($now),
@@ -105,7 +108,7 @@ final class ContributionInsightsService
             ->pluck('total', 'payment_method');
 
         $methodBreakdown = collect(Contribution::paymentMethodOptions())
-            ->map(fn(string $label, string $method): array => [
+            ->map(fn (string $label, string $method): array => [
                 'method' => $method,
                 'label' => $label,
                 'count' => (int) ($methodCounts[$method] ?? 0),
@@ -177,28 +180,53 @@ final class ContributionInsightsService
      */
     private function sixMonthTrend(): array
     {
+        $now = Carbon::now();
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $oldestPeriod = Contribution::periodDate((int) $oldestMonth->month, (int) $oldestMonth->year);
+        $periodTotals = [];
+
+        Contribution::query()
+            ->where('period', '>=', $oldestPeriod)
+            ->get(['period', 'status'])
+            ->each(function (Contribution $contribution) use (&$periodTotals): void {
+                $period = (string) $contribution->period;
+                $periodTotals[$period] ??= [
+                    'total' => 0,
+                    'posted' => 0,
+                    'pending' => 0,
+                    'failed' => 0,
+                ];
+                $periodTotals[$period]['total']++;
+
+                if ($contribution->status === 'posted') {
+                    $periodTotals[$period]['posted']++;
+
+                    return;
+                }
+
+                if ($contribution->status === 'pending') {
+                    $periodTotals[$period]['pending']++;
+
+                    return;
+                }
+
+                if ($contribution->status === 'failed') {
+                    $periodTotals[$period]['failed']++;
+                }
+            });
+
         $trend = [];
 
         for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i)->startOfMonth();
+            $month = $now->copy()->subMonths($i)->startOfMonth();
             $period = Contribution::periodDate((int) $month->month, (int) $month->year);
-
-            $row = Contribution::query()
-                ->where('period', $period)
-                ->selectRaw("
-                    COUNT(*) as total,
-                    SUM(CASE WHEN status = 'posted' THEN 1 ELSE 0 END) as posted,
-                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
-                ")
-                ->first();
 
             $trend[] = [
                 'label' => $month->format('M'),
-                'total' => (int) ($row->total ?? 0),
-                'posted' => (int) ($row->posted ?? 0),
-                'pending' => (int) ($row->pending ?? 0),
-                'failed' => (int) ($row->failed ?? 0),
+                'total' => (int) ($periodTotals[$period]['total'] ?? 0),
+                'posted' => (int) ($periodTotals[$period]['posted'] ?? 0),
+                'pending' => (int) ($periodTotals[$period]['pending'] ?? 0),
+                'failed' => (int) ($periodTotals[$period]['failed'] ?? 0),
             ];
         }
 
@@ -210,15 +238,30 @@ final class ContributionInsightsService
      */
     private function weeklySparkline(): array
     {
+        $now = Carbon::now();
+        $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
+        $currentWeekEnd = $now->copy()->endOfWeek();
+        $weekCounts = [];
+
+        Contribution::query()
+            ->whereBetween('created_at', [$oldestWeekStart, $currentWeekEnd])
+            ->get(['created_at'])
+            ->each(function (Contribution $contribution) use (&$weekCounts): void {
+                $createdAt = $contribution->created_at;
+
+                if ($createdAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $createdAt)->startOfWeek()->toDateString();
+                $weekCounts[$key] = ($weekCounts[$key] ?? 0) + 1;
+            });
+
         $points = [];
 
         for ($i = 7; $i >= 0; $i--) {
-            $start = Carbon::now()->subWeeks($i)->startOfWeek();
-            $end = $start->copy()->endOfWeek();
-
-            $points[] = Contribution::query()
-                ->whereBetween('created_at', [$start, $end])
-                ->count();
+            $start = $now->copy()->subWeeks($i)->startOfWeek()->toDateString();
+            $points[] = $weekCounts[$start] ?? 0;
         }
 
         return $points;

@@ -61,12 +61,12 @@ final class LoanInsightsService
 
         $outstanding = (float) LoanInstallment::query()
             ->whereIn('status', ['pending', 'overdue'])
-            ->whereHas('loan', fn($q) => $q->where('status', 'active'))
+            ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
             ->sum('amount');
 
         $overdueCount = (int) LoanInstallment::query()
             ->where('status', 'overdue')
-            ->whereHas('loan', fn($q) => $q->where('status', 'active'))
+            ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
             ->count();
 
         $newThisMonth = Loan::query()
@@ -105,7 +105,7 @@ final class LoanInsightsService
             ->orderBy('applied_at')
             ->limit(5)
             ->get()
-            ->map(fn(Loan $loan): array => $this->queueLoanRow($loan, $now))
+            ->map(fn (Loan $loan): array => $this->queueLoanRow($loan, $now))
             ->all();
 
         return [
@@ -179,12 +179,12 @@ final class LoanInsightsService
 
         $overdueInstallments = (int) LoanInstallment::query()
             ->where('status', 'overdue')
-            ->whereHas('loan', fn($q) => $q->where('status', 'active'))
+            ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
             ->count();
 
         $overdueAmount = (float) LoanInstallment::query()
             ->where('status', 'overdue')
-            ->whereHas('loan', fn($q) => $q->where('status', 'active'))
+            ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
             ->sum('amount');
 
         $counts = $delinquency->digestCounts();
@@ -274,7 +274,7 @@ final class LoanInsightsService
             ->orderBy('applied_at')
             ->limit(5)
             ->get()
-            ->map(fn(Loan $loan): array => $this->queueLoanRow($loan, $now))
+            ->map(fn (Loan $loan): array => $this->queueLoanRow($loan, $now))
             ->all();
 
         $emergency = Loan::query()->inQueue()->where('is_emergency', true)->count();
@@ -345,9 +345,9 @@ final class LoanInsightsService
             ->groupBy('loan_tier_id')
             ->pluck('total', 'loan_tier_id');
 
-        $breakdown = $activeTiers->map(fn(LoanTier $tier): array => [
+        $breakdown = $activeTiers->map(fn (LoanTier $tier): array => [
             'label' => $tier->label,
-            'range' => $this->formatMoneyCompact((float) $tier->min_amount, $currency) . ' – ' . $this->formatMoneyCompact((float) $tier->max_amount, $currency),
+            'range' => $this->formatMoneyCompact((float) $tier->min_amount, $currency).' – '.$this->formatMoneyCompact((float) $tier->max_amount, $currency),
             'count' => (int) ($loansByTier[$tier->id] ?? 0),
             'min_installment' => $this->formatMoneyCompact((float) $tier->min_monthly_installment, $currency),
         ])->values()->all();
@@ -403,8 +403,8 @@ final class LoanInsightsService
             ->orderBy('tier_number')
             ->get();
 
-        $totalAllocated = $tiers->sum(fn(FundTier $tier): float => $tier->allocated_amount);
-        $totalExposure = $tiers->sum(fn(FundTier $tier): float => $tier->active_exposure);
+        $totalAllocated = $tiers->sum(fn (FundTier $tier): float => $tier->allocated_amount);
+        $totalExposure = $tiers->sum(fn (FundTier $tier): float => $tier->active_exposure);
         $totalAvailable = max(0, $totalAllocated - $totalExposure);
         $utilization = $totalAllocated > 0 ? (int) round(($totalExposure / $totalAllocated) * 100) : 0;
 
@@ -446,7 +446,7 @@ final class LoanInsightsService
                 ['key' => 'allocated', 'label' => __('Allocated'), 'value' => $this->formatMoneyCompact($totalAllocated, $currency), 'sub' => __('Pools'), 'icon' => 'heroicon-o-circle-stack', 'accent' => 'sky', 'active' => true],
                 ['key' => 'deployed', 'label' => __('Deployed'), 'value' => $this->formatMoneyCompact($totalExposure, $currency), 'sub' => __('Exposure'), 'icon' => 'heroicon-o-arrow-trending-up', 'accent' => 'amber', 'active' => $totalExposure > 0],
                 ['key' => 'available', 'label' => __('Available'), 'value' => $this->formatMoneyCompact($totalAvailable, $currency), 'sub' => __('Headroom'), 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => true],
-                ['key' => 'utilization', 'label' => __('Utilization'), 'value' => $utilization . '%', 'sub' => __('Portfolio'), 'icon' => 'heroicon-o-chart-pie', 'accent' => 'violet', 'active' => true],
+                ['key' => 'utilization', 'label' => __('Utilization'), 'value' => $utilization.'%', 'sub' => __('Portfolio'), 'icon' => 'heroicon-o-chart-pie', 'accent' => 'violet', 'active' => true],
                 ['key' => 'active_tiers', 'label' => __('Active tiers'), 'value' => (string) $tiers->count(), 'sub' => __('Pools'), 'icon' => 'heroicon-o-squares-2x2', 'accent' => 'teal', 'active' => true],
             ], [
                 'master_fund' => MasterAccountResource::getUrl('index', ['tab' => 'fund']),
@@ -533,10 +533,10 @@ final class LoanInsightsService
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'requested', 'label' => __('Requested'), 'value' => $this->formatMoneyCompact((float) $loan->amount_requested, $currency), 'sub' => __('Application'), 'icon' => 'heroicon-o-document-text', 'accent' => 'sky', 'active' => true],
                 ['key' => 'approved', 'label' => __('Approved'), 'value' => $loan->amount_approved ? $this->formatMoneyCompact($approved, $currency) : '—', 'sub' => __('Terms'), 'icon' => 'heroicon-o-check-badge', 'accent' => 'emerald', 'active' => (bool) $loan->amount_approved],
-                ['key' => 'disbursed', 'label' => __('Disbursed'), 'value' => $this->formatMoneyCompact($disbursed, $currency), 'sub' => $disbursePercent . '%', 'icon' => 'heroicon-o-banknotes', 'accent' => 'indigo', 'active' => $disbursed > 0],
+                ['key' => 'disbursed', 'label' => __('Disbursed'), 'value' => $this->formatMoneyCompact($disbursed, $currency), 'sub' => $disbursePercent.'%', 'icon' => 'heroicon-o-banknotes', 'accent' => 'indigo', 'active' => $disbursed > 0],
                 ['key' => 'outstanding', 'label' => __('Outstanding'), 'value' => $this->formatMoneyCompact($outstanding, $currency), 'sub' => __('Balance'), 'icon' => 'heroicon-o-scale', 'accent' => 'violet', 'active' => $outstanding > 0],
-                ['key' => 'queue', 'label' => __('Queue'), 'value' => $loan->queue_position ? '#' . $loan->queue_position : '—', 'sub' => $loan->fundTier?->label ?? '—', 'icon' => 'heroicon-o-queue-list', 'accent' => 'amber', 'active' => (bool) $loan->queue_position],
-                ['key' => 'schedule', 'label' => __('Schedule'), 'value' => $installmentsTotal > 0 ? $installmentsPaid . '/' . $installmentsTotal : '—', 'sub' => $repayPercent . '% ' . __('paid'), 'icon' => 'heroicon-o-calendar-days', 'accent' => 'teal', 'active' => $installmentsTotal > 0],
+                ['key' => 'queue', 'label' => __('Queue'), 'value' => $loan->queue_position ? '#'.$loan->queue_position : '—', 'sub' => $loan->fundTier?->label ?? '—', 'icon' => 'heroicon-o-queue-list', 'accent' => 'amber', 'active' => (bool) $loan->queue_position],
+                ['key' => 'schedule', 'label' => __('Schedule'), 'value' => $installmentsTotal > 0 ? $installmentsPaid.'/'.$installmentsTotal : '—', 'sub' => $repayPercent.'% '.__('paid'), 'icon' => 'heroicon-o-calendar-days', 'accent' => 'teal', 'active' => $installmentsTotal > 0],
             ], $kpiUrls),
             'progress' => [
                 'disburse' => ['percent' => $disbursePercent, 'label' => __('Ledger disbursement')],
@@ -552,7 +552,7 @@ final class LoanInsightsService
                 [
                     'key' => 'installments',
                     'label' => __('Repayment schedule'),
-                    'value' => $installmentsTotal > 0 ? $installmentsPaid . ' / ' . $installmentsTotal . ' ' . __('paid') : __('Not generated'),
+                    'value' => $installmentsTotal > 0 ? $installmentsPaid.' / '.$installmentsTotal.' '.__('paid') : __('Not generated'),
                     'hint' => $installmentsOverdue > 0 ? trans_choice(':count overdue|:count overdue', $installmentsOverdue, ['count' => $installmentsOverdue]) : ($nextInstallment ? __('Next :date', ['date' => $nextInstallment->due_date?->format('d M')]) : null),
                     'accent' => $installmentsOverdue > 0 ? 'rose' : 'teal',
                     'icon' => 'heroicon-o-calendar-days',
@@ -560,7 +560,7 @@ final class LoanInsightsService
                 [
                     'key' => 'disbursements',
                     'label' => __('Disbursements'),
-                    'value' => $this->formatMoneyCompact($disbursed, $currency) . ' / ' . $this->formatMoneyCompact($approved ?: (float) $loan->amount_requested, $currency),
+                    'value' => $this->formatMoneyCompact($disbursed, $currency).' / '.$this->formatMoneyCompact($approved ?: (float) $loan->amount_requested, $currency),
                     'hint' => trans_choice(':count tranche|:count tranches', $loan->disbursements->count(), ['count' => $loan->disbursements->count()]),
                     'accent' => 'indigo',
                     'icon' => 'heroicon-o-arrow-down-tray',
@@ -602,7 +602,7 @@ final class LoanInsightsService
 
         $outstanding = (float) LoanInstallment::query()
             ->whereIn('status', ['pending', 'overdue'])
-            ->whereHas('loan', fn($q) => $q->where('member_id', $memberId)->where('status', 'active'))
+            ->whereHas('loan', fn ($q) => $q->where('member_id', $memberId)->where('status', 'active'))
             ->sum('amount');
 
         $member = Member::query()->find($memberId);
@@ -679,12 +679,12 @@ final class LoanInsightsService
             ->pluck('total', 'status');
 
         return collect(Loan::statusOptions())
-            ->map(fn(string $label, string $status): array => [
+            ->map(fn (string $label, string $status): array => [
                 'status' => $status,
                 'label' => $label,
                 'count' => (int) ($counts[$status] ?? 0),
             ])
-            ->filter(fn(array $row): bool => $row['count'] > 0)
+            ->filter(fn (array $row): bool => $row['count'] > 0)
             ->values()
             ->all();
     }
@@ -694,28 +694,58 @@ final class LoanInsightsService
      */
     private function sixMonthLoanTrend(): array
     {
+        $now = Carbon::now();
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $monthTotals = [];
+
+        Loan::query()
+            ->whereBetween('applied_at', [$oldestMonth, $now->copy()->endOfMonth()])
+            ->get(['status', 'applied_at'])
+            ->each(function (Loan $loan) use (&$monthTotals): void {
+                $appliedAt = $loan->applied_at;
+
+                if ($appliedAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $appliedAt)->startOfMonth()->format('Y-m');
+                $monthTotals[$key] ??= [
+                    'total' => 0,
+                    'pending' => 0,
+                    'active' => 0,
+                    'completed' => 0,
+                ];
+                $monthTotals[$key]['total']++;
+
+                if ($loan->status === 'pending') {
+                    $monthTotals[$key]['pending']++;
+
+                    return;
+                }
+
+                if ($loan->status === 'active') {
+                    $monthTotals[$key]['active']++;
+
+                    return;
+                }
+
+                if (in_array($loan->status, ['completed', 'early_settled'], true)) {
+                    $monthTotals[$key]['completed']++;
+                }
+            });
+
         $trend = [];
 
         for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i)->startOfMonth();
-
-            $row = Loan::query()
-                ->whereYear('applied_at', $month->year)
-                ->whereMonth('applied_at', $month->month)
-                ->selectRaw("
-                    COUNT(*) as total,
-                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-                    SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
-                    SUM(CASE WHEN status IN ('completed', 'early_settled') THEN 1 ELSE 0 END) as completed
-                ")
-                ->first();
+            $month = $now->copy()->subMonths($i)->startOfMonth();
+            $key = $month->format('Y-m');
 
             $trend[] = [
                 'label' => $month->format('M'),
-                'total' => (int) ($row->total ?? 0),
-                'pending' => (int) ($row->pending ?? 0),
-                'active' => (int) ($row->active ?? 0),
-                'completed' => (int) ($row->completed ?? 0),
+                'total' => (int) ($monthTotals[$key]['total'] ?? 0),
+                'pending' => (int) ($monthTotals[$key]['pending'] ?? 0),
+                'active' => (int) ($monthTotals[$key]['active'] ?? 0),
+                'completed' => (int) ($monthTotals[$key]['completed'] ?? 0),
             ];
         }
 
@@ -727,15 +757,30 @@ final class LoanInsightsService
      */
     private function weeklyApplicationSparkline(): array
     {
+        $now = Carbon::now();
+        $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
+        $currentWeekEnd = $now->copy()->endOfWeek();
+        $weekCounts = [];
+
+        Loan::query()
+            ->whereBetween('applied_at', [$oldestWeekStart, $currentWeekEnd])
+            ->get(['applied_at'])
+            ->each(function (Loan $loan) use (&$weekCounts): void {
+                $appliedAt = $loan->applied_at;
+
+                if ($appliedAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $appliedAt)->startOfWeek()->toDateString();
+                $weekCounts[$key] = ($weekCounts[$key] ?? 0) + 1;
+            });
+
         $points = [];
 
         for ($i = 7; $i >= 0; $i--) {
-            $start = Carbon::now()->subWeeks($i)->startOfWeek();
-            $end = $start->copy()->endOfWeek();
-
-            $points[] = Loan::query()
-                ->whereBetween('applied_at', [$start, $end])
-                ->count();
+            $start = $now->copy()->subWeeks($i)->startOfWeek()->toDateString();
+            $points[] = $weekCounts[$start] ?? 0;
         }
 
         return $points;
@@ -797,13 +842,13 @@ final class LoanInsightsService
     private function formatMoneyCompact(float $amount, string $currency): string
     {
         if ($amount >= 1_000_000) {
-            return number_format($amount / 1_000_000, 1) . 'M ' . $currency;
+            return number_format($amount / 1_000_000, 1).'M '.$currency;
         }
 
         if ($amount >= 1_000) {
-            return number_format($amount / 1_000, 1) . 'K ' . $currency;
+            return number_format($amount / 1_000, 1).'K '.$currency;
         }
 
-        return number_format($amount, 0) . ' ' . $currency;
+        return number_format($amount, 0).' '.$currency;
     }
 }

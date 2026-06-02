@@ -14,6 +14,8 @@ use App\Models\Tenant\User;
 use App\Notifications\Tenant\CashOutRequestAcceptedNotification;
 use App\Notifications\Tenant\CashOutRequestRejectedNotification;
 use App\Notifications\Tenant\NewCashOutRequestNotification;
+use App\Support\BankStatementBuckets;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use RuntimeException;
@@ -22,12 +24,26 @@ final class MemberCashOutService
 {
     public function __construct(
         private AccountingService $accounting,
-    ) {}
+        private BankTransactionClearanceService $bankClearance,
+    ) {
+    }
 
     public function availableCashForWithdrawal(Member $member, ?CashOutRequest $excludeRequest = null): float
     {
         $balance = max(0.0, $this->cashBalanceFor($member));
         $reserved = $this->reservedForNextEmi($member);
+        $pending = $this->pendingCashOutAmount($member, $excludeRequest);
+
+        return max(0.0, round($balance - $reserved - $pending, 2));
+    }
+
+    private function cashBalanceFor(Member $member): float
+    {
+        return (float) ($member->cashAccount?->balance ?? 0);
+    }
+
+    private function pendingCashOutAmount(Member $member, ?CashOutRequest $excludeRequest = null): float
+    {
         $pendingQuery = CashOutRequest::query()
             ->where('member_id', $member->id)
             ->where('status', 'pending');
@@ -36,25 +52,13 @@ final class MemberCashOutService
             $pendingQuery->whereKeyNot($excludeRequest->getKey());
         }
 
-        $pending = (float) $pendingQuery->sum('amount');
-
-        return max(0.0, round($balance - $reserved - $pending, 2));
-    }
-
-    private function cashBalanceFor(Member $member): float
-    {
-        return (float) (Account::query()
-            ->where('member_id', $member->id)
-            ->where('type', 'cash')
-            ->where('is_master', false)
-            ->orderBy('id')
-            ->value('balance') ?? 0);
+        return (float) $pendingQuery->sum('amount');
     }
 
     public function reservedForNextEmi(Member $member): float
     {
         $installment = LoanInstallment::query()
-            ->whereHas('loan', fn ($query) => $query
+            ->whereHas('loan', fn($query) => $query
                 ->where('member_id', $member->id)
                 ->where('status', 'active'))
             ->whereIn('status', ['pending', 'overdue'])
@@ -75,12 +79,13 @@ final class MemberCashOutService
         }
 
         $available = $this->availableCashForWithdrawal($member);
-
-        if ($amount > $available + 0.01) {
-            throw new InvalidArgumentException(__('Amount exceeds available cash (:available).', [
+        $this->assertAmountWithinAvailable(
+            $amount,
+            $available,
+            __('Amount exceeds available cash (:available).', [
                 'available' => number_format($available, 2),
-            ]));
-        }
+            ]),
+        );
 
         return DB::transaction(function () use ($member, $amount, $notes): CashOutRequest {
             $request = CashOutRequest::create([
@@ -90,9 +95,7 @@ final class MemberCashOutService
                 'status' => 'pending',
             ]);
 
-            User::query()->where('is_admin', true)->each(
-                fn (User $admin): mixed => $admin->notify(new NewCashOutRequestNotification($request)),
-            );
+            $this->notifyAdminsOfNewRequest($request);
 
             return $request;
         });
@@ -100,30 +103,26 @@ final class MemberCashOutService
 
     public function accept(CashOutRequest $request, ?int $reviewedBy = null, ?string $remarks = null): void
     {
-        if ($request->status !== 'pending') {
-            throw new InvalidArgumentException(__('Only pending cash-out requests can be accepted.'));
-        }
+        $this->assertPendingRequest($request, __('Only pending cash-out requests can be accepted.'));
 
         $request->loadMissing('member');
         $member = $request->member;
-        $memberCash = Account::query()
-            ->where('member_id', $member->id)
-            ->where('type', 'cash')
-            ->where('is_master', false)
-            ->orderBy('id')
-            ->first();
-        $masterCash = Account::masterCash();
+        $member->loadMissing('cashAccount');
+        $memberCash = $member->cashAccount;
         $amount = (float) $request->amount;
 
-        if ($memberCash === null || $masterCash === null) {
+        if ($memberCash === null || Account::masterCash() === null) {
             throw new RuntimeException(__('Required cash accounts are not configured.'));
         }
 
-        if ($amount > $this->availableCashForWithdrawal($member, $request) + 0.01) {
-            throw new InvalidArgumentException(__('Member no longer has enough available cash for this request.'));
-        }
+        $this->assertAmountWithinAvailable(
+            $amount,
+            $this->availableCashForWithdrawal($member, $request),
+            __('Member no longer has enough available cash for this request.'),
+        );
 
         DB::transaction(function () use ($request, $member, $memberCash, $amount, $reviewedBy, $remarks): void {
+            $reviewedAt = now();
             $description = __('Cash out #:id – :name', [
                 'id' => $request->id,
                 'name' => $member->name,
@@ -132,46 +131,28 @@ final class MemberCashOutService
             $this->accounting->debitMemberCashWithMasterMirror(
                 $memberCash,
                 $amount,
-                $description.' '.__('(cash out)'),
+                $description . ' ' . __('(cash out)'),
                 __('(cash out mirror)'),
                 $request,
                 null,
                 $member->id,
             );
 
-            $statement = BankStatement::firstOrCreate(
-                ['filename' => 'member-cash-outs', 'status' => 'completed'],
-                [
-                    'bank_name' => __('Member cash outs'),
-                    'total_rows' => 0,
-                    'imported_rows' => 0,
-                    'duplicate_rows' => 0,
-                ],
+            $statement = $this->memberCashOutStatement();
+            $bankTxn = $this->createCashOutBankTransaction(
+                $statement,
+                $request,
+                $member,
+                $description,
+                $amount,
+                $reviewedAt,
             );
 
-            $bankTxn = BankTransaction::create([
-                'bank_statement_id' => $statement->id,
-                'transaction_date' => now()->toDateString(),
-                'description' => $description,
-                'amount' => -$amount,
-                'reference' => (string) $request->id,
-                'status' => 'imported',
-                'member_id' => $member->id,
-                'hash' => md5("cash-out-{$request->id}-{$amount}"),
-                'is_cleared' => false,
-                'cash_out_request_id' => $request->id,
-            ]);
-
-            $request->update([
-                'status' => 'accepted',
-                'reviewed_by' => $reviewedBy,
-                'reviewed_at' => now(),
-                'admin_remarks' => $remarks,
+            $this->markRequestReviewed($request, 'accepted', $reviewedBy, $remarks, $reviewedAt, [
                 'bank_transaction_id' => $bankTxn->id,
             ]);
 
-            $member->loadMissing('user');
-            $member->user?->notify(new CashOutRequestAcceptedNotification($request));
+            $this->notifyMemberAboutCashOut($request, true);
         });
     }
 
@@ -180,42 +161,117 @@ final class MemberCashOutService
      */
     public function clearTransaction(BankTransaction $uncleared, BankTransaction $imported): void
     {
-        DB::transaction(function () use ($uncleared, $imported): void {
-            $uncleared->update([
-                'is_cleared' => true,
-                'cleared_at' => now(),
-            ]);
-
-            $imported->update([
-                'is_cleared' => true,
-                'cleared_at' => now(),
-                'cash_out_request_id' => $uncleared->cash_out_request_id,
-                'status' => 'posted',
-                'member_id' => $uncleared->member_id,
-            ]);
-        });
+        $this->bankClearance->clearMatchedPair($uncleared, $imported, [
+            'cash_out_request_id' => $uncleared->cash_out_request_id,
+            'status' => 'posted',
+            'member_id' => $uncleared->member_id,
+        ]);
     }
 
     public function reject(CashOutRequest $request, ?int $reviewedBy = null, ?string $remarks = null): void
     {
-        if ($request->status !== 'pending') {
-            throw new InvalidArgumentException(__('Only pending cash-out requests can be rejected.'));
-        }
-
-        if ($remarks === null || trim($remarks) === '') {
-            throw new InvalidArgumentException(__('Provide a reason for rejection.'));
-        }
+        $this->assertPendingRequest($request, __('Only pending cash-out requests can be rejected.'));
+        $this->assertRemarksProvided($remarks, __('Provide a reason for rejection.'));
 
         DB::transaction(function () use ($request, $reviewedBy, $remarks): void {
-            $request->update([
-                'status' => 'rejected',
-                'reviewed_by' => $reviewedBy,
-                'reviewed_at' => now(),
-                'admin_remarks' => $remarks,
-            ]);
+            $this->markRequestReviewed($request, 'rejected', $reviewedBy, $remarks, now());
 
-            $request->loadMissing('member.user');
-            $request->member->user?->notify(new CashOutRequestRejectedNotification($request));
+            $this->notifyMemberAboutCashOut($request, false);
         });
+    }
+
+    private function assertPendingRequest(CashOutRequest $request, string $message): void
+    {
+        if ($request->status !== 'pending') {
+            throw new InvalidArgumentException($message);
+        }
+    }
+
+    private function memberCashOutStatement(): BankStatement
+    {
+        return BankStatement::firstOrCreate(
+            ['filename' => BankStatementBuckets::MEMBER_CASH_OUTS, 'status' => 'completed'],
+            [
+                'bank_name' => __('Member cash outs'),
+                'total_rows' => 0,
+                'imported_rows' => 0,
+                'duplicate_rows' => 0,
+            ],
+        );
+    }
+
+    private function createCashOutBankTransaction(
+        BankStatement $statement,
+        CashOutRequest $request,
+        Member $member,
+        string $description,
+        float $amount,
+        CarbonInterface $reviewedAt,
+    ): BankTransaction {
+        return BankTransaction::create([
+            'bank_statement_id' => $statement->id,
+            'transaction_date' => $reviewedAt->toDateString(),
+            'description' => $description,
+            'amount' => -$amount,
+            'reference' => (string) $request->id,
+            'status' => 'imported',
+            'member_id' => $member->id,
+            'hash' => md5("cash-out-{$request->id}-{$amount}"),
+            'is_cleared' => false,
+            'cash_out_request_id' => $request->id,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $extraUpdates
+     */
+    private function markRequestReviewed(
+        CashOutRequest $request,
+        string $status,
+        ?int $reviewedBy = null,
+        ?string $remarks = null,
+        ?CarbonInterface $reviewedAt = null,
+        array $extraUpdates = [],
+    ): void {
+        $request->update(array_merge([
+            'status' => $status,
+            'reviewed_by' => $reviewedBy,
+            'reviewed_at' => $reviewedAt ?? now(),
+            'admin_remarks' => $remarks,
+        ], $extraUpdates));
+    }
+
+    private function notifyMemberAboutCashOut(CashOutRequest $request, bool $accepted): void
+    {
+        $request->loadMissing('member.user');
+
+        $notification = $accepted
+            ? new CashOutRequestAcceptedNotification($request)
+            : new CashOutRequestRejectedNotification($request);
+
+        $request->member->user?->notify($notification);
+    }
+
+    private function notifyAdminsOfNewRequest(CashOutRequest $request): void
+    {
+        User::query()
+            ->where('is_admin', true)
+            ->each(function (User $admin) use ($request): void {
+                $admin->notify(new NewCashOutRequestNotification($request));
+            });
+    }
+
+    private function assertAmountWithinAvailable(float $amount, float $available, string $message): void
+    {
+        if ($amount > $available + 0.01) {
+            throw new InvalidArgumentException($message);
+        }
+    }
+
+    private function assertRemarksProvided(?string $remarks, string $message): void
+    {
+        if ($remarks === null || trim($remarks) === '') {
+            throw new InvalidArgumentException($message);
+        }
     }
 }

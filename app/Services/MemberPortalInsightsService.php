@@ -237,7 +237,9 @@ final class MemberPortalInsightsService
                         'rejected' => __('Rejected'),
                         default => ucfirst($posting->status),
                     },
-                    'date' => $posting->posting_date?->format('d M Y') ?? '—',
+                    'date' => $posting->posting_date !== null
+                        ? Carbon::parse((string) $posting->posting_date)->format('d M Y')
+                        : '—',
                     'url' => MyFundPostingResource::getUrl('index'),
                 ])
                 ->all(),
@@ -380,7 +382,11 @@ final class MemberPortalInsightsService
             'avatar_url' => $user?->avatarPublicUrl(),
             'profile_url' => MyProfilePage::getUrl(),
             'joined_label' => $member->joined_at
-                ? __('Member since :date', ['date' => $member->joined_at->locale(app()->getLocale())->translatedFormat('M Y')])
+                ? __('Member since :date', [
+                    'date' => Carbon::parse((string) $member->joined_at)
+                        ->locale(app()->getLocale())
+                        ->translatedFormat('M Y'),
+                ])
                 : null,
             'balances' => [
                 [
@@ -658,17 +664,31 @@ final class MemberPortalInsightsService
      */
     private function contributionSparkline(Member $member): array
     {
+        $now = Carbon::now();
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $monthCounts = [];
+
+        Contribution::query()
+            ->where('member_id', $member->id)
+            ->posted()
+            ->where('period', '>=', $oldestMonth->toDateString())
+            ->get(['period'])
+            ->each(function (Contribution $contribution) use (&$monthCounts): void {
+                $period = $contribution->period;
+
+                if ($period === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $period)->startOfMonth()->format('Y-m');
+                $monthCounts[$key] = ($monthCounts[$key] ?? 0) + 1;
+            });
+
         $points = [];
 
         for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i)->startOfMonth();
-
-            $points[] = (int) Contribution::query()
-                ->where('member_id', $member->id)
-                ->whereYear('period', $month->year)
-                ->whereMonth('period', $month->month)
-                ->posted()
-                ->count();
+            $month = $now->copy()->subMonths($i)->startOfMonth()->format('Y-m');
+            $points[] = (int) ($monthCounts[$month] ?? 0);
         }
 
         return $points;

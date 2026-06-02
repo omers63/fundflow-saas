@@ -3,6 +3,7 @@
 namespace App\Services\Loans;
 
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Setting;
 use App\Notifications\Tenant\LoanDefaultGuarantorNotification;
 use App\Notifications\Tenant\LoanDefaultWarningNotification;
@@ -12,7 +13,11 @@ use Illuminate\Support\Facades\DB;
 
 class LoanDefaultService
 {
-    public function __construct(protected LoanLedgerService $ledger) {}
+    public function __construct(
+        protected LoanLedgerService $ledger,
+        protected ContributionCycleService $cycles,
+        protected LateFeeService $lateFees,
+    ) {}
 
     /**
      * For each overdue installment across all active loans:
@@ -49,52 +54,12 @@ class LoanDefaultService
                     if ($guarantorLiabilityFlag) {
                         // Delinquency suspension: prefer immediate guarantor collection when a guarantor exists.
                         if ($loan->guarantor_member_id && ! $loan->isGuarantorReleased()) {
-                            try {
-                                DB::transaction(function () use ($loan, $installment) {
-                                    $this->ledger->debitGuarantorFundForDefault(
-                                        $loan->guarantor,
-                                        $installment
-                                    );
-
-                                    $due = $installment->due_date;
-                                    $deadline = app(ContributionCycleService::class)->deadline(
-                                        (int) $due->month,
-                                        (int) $due->year
-                                    );
-                                    $lateFees = app(LateFeeService::class);
-                                    $days = $lateFees->daysPastDue($deadline, now());
-                                    $feeAmt = $lateFees->repaymentLateFeeForDays($days);
-
-                                    $installment->update([
-                                        'status' => 'paid',
-                                        'paid_at' => now(),
-                                        'paid_by_guarantor' => true,
-                                        'is_late' => $days >= 1,
-                                        'late_fee_amount' => $feeAmt > 0.00001 ? $feeAmt : null,
-                                    ]);
-
-                                    $loan->releaseGuarantorIfDue();
-                                });
-
-                                $loan->guarantor->user->notify(
-                                    new LoanDefaultGuarantorNotification($loan, $installment)
-                                );
+                            if ($this->debitGuarantorForInstallment($loan, $installment, 'LoanDefaultService: guarantor debit failed (delinquency liability)')) {
                                 $debited++;
-                            } catch (\Throwable $e) {
-                                logger()->error('LoanDefaultService: guarantor debit failed (delinquency liability)', [
-                                    'loan_id' => $loan->id,
-                                    'installment' => $installment->id,
-                                    'error' => $e->getMessage(),
-                                ]);
                             }
                         } elseif ($totalDefaults <= $grace) {
-                            try {
-                                $loan->member->user->notify(
-                                    new LoanDefaultWarningNotification($loan, $installment, $totalDefaults, $grace)
-                                );
+                            if ($this->warnBorrower($loan, $installment, $totalDefaults, $grace)) {
                                 $warned++;
-                            } catch (\Throwable $e) {
-                                logger()->error('LoanDefaultService: warning notification failed', ['loan_id' => $loan->id]);
                             }
                         }
 
@@ -102,55 +67,14 @@ class LoanDefaultService
                     }
 
                     if ($totalDefaults <= $grace) {
-                        // Warn borrower
-                        try {
-                            $loan->member->user->notify(
-                                new LoanDefaultWarningNotification($loan, $installment, $totalDefaults, $grace)
-                            );
+                        if ($this->warnBorrower($loan, $installment, $totalDefaults, $grace)) {
                             $warned++;
-                        } catch (\Throwable $e) {
-                            logger()->error('LoanDefaultService: warning notification failed', ['loan_id' => $loan->id]);
                         }
                     } else {
                         // Debit guarantor's fund + notify guarantor
                         if ($loan->guarantor_member_id && ! $loan->isGuarantorReleased()) {
-                            try {
-                                DB::transaction(function () use ($loan, $installment) {
-                                    $this->ledger->debitGuarantorFundForDefault(
-                                        $loan->guarantor,
-                                        $installment
-                                    );
-
-                                    $due = $installment->due_date;
-                                    $deadline = app(ContributionCycleService::class)->deadline(
-                                        (int) $due->month,
-                                        (int) $due->year
-                                    );
-                                    $lateFees = app(LateFeeService::class);
-                                    $days = $lateFees->daysPastDue($deadline, now());
-                                    $feeAmt = $lateFees->repaymentLateFeeForDays($days);
-
-                                    $installment->update([
-                                        'status' => 'paid',
-                                        'paid_at' => now(),
-                                        'paid_by_guarantor' => true,
-                                        'is_late' => $days >= 1,
-                                        'late_fee_amount' => $feeAmt > 0.00001 ? $feeAmt : null,
-                                    ]);
-
-                                    $loan->releaseGuarantorIfDue();
-                                });
-
-                                $loan->guarantor->user->notify(
-                                    new LoanDefaultGuarantorNotification($loan, $installment)
-                                );
+                            if ($this->debitGuarantorForInstallment($loan, $installment, 'LoanDefaultService: guarantor debit failed')) {
                                 $debited++;
-                            } catch (\Throwable $e) {
-                                logger()->error('LoanDefaultService: guarantor debit failed', [
-                                    'loan_id' => $loan->id,
-                                    'installment' => $installment->id,
-                                    'error' => $e->getMessage(),
-                                ]);
                             }
                         }
                     }
@@ -191,5 +115,58 @@ class LoanDefaultService
         });
 
         return $settled;
+    }
+
+    private function warnBorrower(Loan $loan, LoanInstallment $installment, int $totalDefaults, int $grace): bool
+    {
+        try {
+            $loan->member->user->notify(
+                new LoanDefaultWarningNotification($loan, $installment, $totalDefaults, $grace)
+            );
+
+            return true;
+        } catch (\Throwable $e) {
+            logger()->error('LoanDefaultService: warning notification failed', ['loan_id' => $loan->id]);
+
+            return false;
+        }
+    }
+
+    private function debitGuarantorForInstallment(Loan $loan, LoanInstallment $installment, string $errorMessage): bool
+    {
+        try {
+            DB::transaction(function () use ($loan, $installment): void {
+                $this->ledger->debitGuarantorFundForDefault($loan->guarantor, $installment);
+
+                $due = $installment->due_date;
+                $deadline = $this->cycles->deadline((int) $due->month, (int) $due->year);
+                $days = $this->lateFees->daysPastDue($deadline, now());
+                $feeAmount = $this->lateFees->repaymentLateFeeForDays($days);
+
+                $installment->update([
+                    'status' => 'paid',
+                    'paid_at' => now(),
+                    'paid_by_guarantor' => true,
+                    'is_late' => $days >= 1,
+                    'late_fee_amount' => $feeAmount > 0.00001 ? $feeAmount : null,
+                ]);
+
+                $loan->releaseGuarantorIfDue();
+            });
+
+            $loan->guarantor->user->notify(
+                new LoanDefaultGuarantorNotification($loan, $installment)
+            );
+
+            return true;
+        } catch (\Throwable $e) {
+            logger()->error($errorMessage, [
+                'loan_id' => $loan->id,
+                'installment' => $installment->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
     }
 }

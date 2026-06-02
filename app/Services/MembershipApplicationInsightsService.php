@@ -58,7 +58,7 @@ final class MembershipApplicationInsightsService
         $avgReviewDays = $reviewedApplications->isEmpty()
             ? 0.0
             : round((float) $reviewedApplications->avg(
-                fn(MembershipApplication $application): float => (float) Carbon::parse($application->created_at)
+                fn (MembershipApplication $application): float => (float) Carbon::parse($application->created_at)
                     ->diffInDays(Carbon::parse($application->reviewed_at))
             ), 1);
 
@@ -74,7 +74,7 @@ final class MembershipApplicationInsightsService
             ->orderBy('created_at')
             ->limit(6)
             ->get()
-            ->map(fn(MembershipApplication $application): array => [
+            ->map(fn (MembershipApplication $application): array => [
                 'id' => $application->id,
                 'name' => $application->name,
                 'email' => $application->email,
@@ -93,7 +93,7 @@ final class MembershipApplicationInsightsService
             ->pluck('total', 'application_type');
 
         $typeBreakdown = collect(MembershipApplication::APPLICATION_TYPES)
-            ->map(fn(string $type): array => [
+            ->map(fn (string $type): array => [
                 'type' => $type,
                 'label' => ucfirst($type),
                 'count' => (int) ($typeCounts[$type] ?? 0),
@@ -178,28 +178,58 @@ final class MembershipApplicationInsightsService
      */
     private function sixMonthTrend(): array
     {
+        $now = Carbon::now();
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $monthTotals = [];
+
+        MembershipApplication::query()
+            ->whereBetween('created_at', [$oldestMonth, $now->copy()->endOfMonth()])
+            ->get(['status', 'created_at'])
+            ->each(function (MembershipApplication $application) use (&$monthTotals): void {
+                $createdAt = $application->created_at;
+
+                if ($createdAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $createdAt)->startOfMonth()->format('Y-m');
+                $monthTotals[$key] ??= [
+                    'total' => 0,
+                    'approved' => 0,
+                    'rejected' => 0,
+                    'pending' => 0,
+                ];
+                $monthTotals[$key]['total']++;
+
+                if ($application->status === 'approved') {
+                    $monthTotals[$key]['approved']++;
+
+                    return;
+                }
+
+                if ($application->status === 'rejected') {
+                    $monthTotals[$key]['rejected']++;
+
+                    return;
+                }
+
+                if ($application->status === 'pending') {
+                    $monthTotals[$key]['pending']++;
+                }
+            });
+
         $trend = [];
 
         for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i)->startOfMonth();
-
-            $row = MembershipApplication::query()
-                ->whereYear('created_at', $month->year)
-                ->whereMonth('created_at', $month->month)
-                ->selectRaw("
-                    COUNT(*) as total,
-                    SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
-                    SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
-                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
-                ")
-                ->first();
+            $month = $now->copy()->subMonths($i)->startOfMonth();
+            $key = $month->format('Y-m');
 
             $trend[] = [
                 'label' => $month->format('M'),
-                'total' => (int) ($row->total ?? 0),
-                'approved' => (int) ($row->approved ?? 0),
-                'rejected' => (int) ($row->rejected ?? 0),
-                'pending' => (int) ($row->pending ?? 0),
+                'total' => (int) ($monthTotals[$key]['total'] ?? 0),
+                'approved' => (int) ($monthTotals[$key]['approved'] ?? 0),
+                'rejected' => (int) ($monthTotals[$key]['rejected'] ?? 0),
+                'pending' => (int) ($monthTotals[$key]['pending'] ?? 0),
             ];
         }
 
@@ -211,15 +241,30 @@ final class MembershipApplicationInsightsService
      */
     private function weeklySparkline(): array
     {
+        $now = Carbon::now();
+        $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
+        $currentWeekEnd = $now->copy()->endOfWeek();
+        $weekCounts = [];
+
+        MembershipApplication::query()
+            ->whereBetween('created_at', [$oldestWeekStart, $currentWeekEnd])
+            ->get(['created_at'])
+            ->each(function (MembershipApplication $application) use (&$weekCounts): void {
+                $createdAt = $application->created_at;
+
+                if ($createdAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $createdAt)->startOfWeek()->toDateString();
+                $weekCounts[$key] = ($weekCounts[$key] ?? 0) + 1;
+            });
+
         $points = [];
 
         for ($i = 7; $i >= 0; $i--) {
-            $start = Carbon::now()->subWeeks($i)->startOfWeek();
-            $end = $start->copy()->endOfWeek();
-
-            $points[] = MembershipApplication::query()
-                ->whereBetween('created_at', [$start, $end])
-                ->count();
+            $start = $now->copy()->subWeeks($i)->startOfWeek()->toDateString();
+            $points[] = $weekCounts[$start] ?? 0;
         }
 
         return $points;

@@ -73,22 +73,7 @@ class MembershipApplicationApprovalService
 
         $member = $this->householdMembers->createFromApplication($application);
 
-        $application->update([
-            'status' => 'approved',
-            'reviewed_at' => now(),
-            'member_id' => $member->id,
-            'household_email' => $member->household_email,
-        ]);
-
-        if ($application->wasImportedFromCsv()) {
-            $this->importCutoffs->prepareCutoffOnApproval($application, $member);
-        }
-
-        $this->subscriptionFees->postOnApproval($application->fresh(), $member);
-
-        $this->importCutoffs->postOpeningBalancesOnApproval($application, $member);
-
-        return $member->fresh();
+        return $this->finalizeApprovedApplication($application, $member);
     }
 
     private function approveDependent(MembershipApplication $application): Member
@@ -118,9 +103,16 @@ class MembershipApplicationApprovalService
 
         $member = $this->householdMembers->createFromApplication($application, $parentMember);
 
+        return $this->finalizeApprovedApplication($application, $member);
+    }
+
+    private function finalizeApprovedApplication(MembershipApplication $application, Member $member): Member
+    {
+        $reviewedAt = now();
+
         $application->update([
             'status' => 'approved',
-            'reviewed_at' => now(),
+            'reviewed_at' => $reviewedAt,
             'member_id' => $member->id,
             'household_email' => $member->household_email,
         ]);
@@ -129,9 +121,9 @@ class MembershipApplicationApprovalService
             $this->importCutoffs->prepareCutoffOnApproval($application, $member);
         }
 
-        $this->subscriptionFees->postOnApproval($application->fresh(), $member);
-
-        $this->importCutoffs->postOpeningBalancesOnApproval($application, $member);
+        $approvedApplication = $application->fresh();
+        $this->subscriptionFees->postOnApproval($approvedApplication, $member);
+        $this->importCutoffs->postOpeningBalancesOnApproval($approvedApplication, $member);
 
         return $member->fresh();
     }

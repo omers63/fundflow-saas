@@ -292,16 +292,30 @@ final class MemberGuaranteedLoanInsightsService
      */
     private function monthlySparkline(Member $member): array
     {
+        $now = Carbon::now();
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $monthCounts = [];
+
+        Loan::query()
+            ->where('guarantor_member_id', $member->id)
+            ->whereBetween('applied_at', [$oldestMonth, $now->copy()->endOfMonth()])
+            ->get(['applied_at'])
+            ->each(function (Loan $loan) use (&$monthCounts): void {
+                $appliedAt = $loan->applied_at;
+
+                if ($appliedAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $appliedAt)->startOfMonth()->format('Y-m');
+                $monthCounts[$key] = ($monthCounts[$key] ?? 0) + 1;
+            });
+
         $points = [];
 
         for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i);
-
-            $points[] = Loan::query()
-                ->where('guarantor_member_id', $member->id)
-                ->whereYear('applied_at', $month->year)
-                ->whereMonth('applied_at', $month->month)
-                ->count();
+            $month = $now->copy()->subMonths($i)->startOfMonth()->format('Y-m');
+            $points[] = $monthCounts[$month] ?? 0;
         }
 
         return $points;

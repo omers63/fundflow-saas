@@ -215,16 +215,30 @@ final class MemberCashOutInsightsService
      */
     private function monthlySparkline(Member $member): array
     {
+        $now = Carbon::now();
+        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
+        $monthCounts = [];
+
+        CashOutRequest::query()
+            ->where('member_id', $member->id)
+            ->whereBetween('created_at', [$oldestMonth, $now->copy()->endOfMonth()])
+            ->get(['created_at'])
+            ->each(function (CashOutRequest $request) use (&$monthCounts): void {
+                $createdAt = $request->created_at;
+
+                if ($createdAt === null) {
+                    return;
+                }
+
+                $key = Carbon::parse((string) $createdAt)->startOfMonth()->format('Y-m');
+                $monthCounts[$key] = ($monthCounts[$key] ?? 0) + 1;
+            });
+
         $points = [];
 
         for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i);
-
-            $points[] = CashOutRequest::query()
-                ->where('member_id', $member->id)
-                ->whereYear('created_at', $month->year)
-                ->whereMonth('created_at', $month->month)
-                ->count();
+            $month = $now->copy()->subMonths($i)->startOfMonth()->format('Y-m');
+            $points[] = $monthCounts[$month] ?? 0;
         }
 
         return $points;
