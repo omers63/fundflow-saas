@@ -62,11 +62,60 @@ class BankClearingMatchService
             ->uncleared()
             ->where(function (Builder $pendingQuery): void {
                 $pendingQuery->whereNotNull('fund_posting_id')
-                    ->orWhereNotNull('cash_out_request_id');
+                    ->orWhereNotNull('cash_out_request_id')
+                    ->orWhereNotNull('expense_disbursement_id')
+                    ->orWhereNotNull('fee_disbursement_id')
+                    ->orWhereNotNull('invest_disbursement_id')
+                    ->orWhereNotNull('invest_return_id');
             })
             ->whereHas('bankStatement', function (Builder $statementQuery): void {
                 $statementQuery->whereIn('filename', BankStatementBuckets::OPERATIONAL_CLEARANCE);
             });
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function masterAccountTypesWithPendingClearance(): array
+    {
+        return ['cash', 'expense', 'fees', 'invest'];
+    }
+
+    public static function masterAccountTypeSupportsPendingClearance(string $type): bool
+    {
+        return in_array($type, self::masterAccountTypesWithPendingClearance(), true);
+    }
+
+    /**
+     * @param  Builder<BankTransaction>  $query
+     * @return Builder<BankTransaction>
+     */
+    public function applyPendingOperationalClearanceScopeForMasterAccount(Builder $query, Account $account): Builder
+    {
+        $scoped = $this->applyPendingOperationalClearanceScope($query);
+
+        return match ($account->type) {
+            'cash' => $scoped->where(function (Builder $cashQuery): void {
+                    $cashQuery->whereNotNull('fund_posting_id')
+                    ->orWhereNotNull('cash_out_request_id');
+                }),
+            'expense' => $scoped->whereNotNull('expense_disbursement_id'),
+            'fees' => $scoped->whereNotNull('fee_disbursement_id'),
+            'invest' => $scoped->where(function (Builder $investQuery): void {
+                    $investQuery->whereNotNull('invest_disbursement_id')
+                    ->orWhereNotNull('invest_return_id');
+                }),
+            default => $scoped->whereRaw('0 = 1'),
+        };
+    }
+
+    public function pendingOperationalClearanceCountForMasterAccount(Account $account): int
+    {
+        if (!$account->is_master || !self::masterAccountTypeSupportsPendingClearance($account->type)) {
+            return 0;
+        }
+
+        return $this->applyPendingOperationalClearanceScopeForMasterAccount(BankTransaction::query(), $account)->count();
     }
 
     public function pendingOperationalClearanceCount(): int
@@ -74,11 +123,33 @@ class BankClearingMatchService
         return $this->applyPendingOperationalClearanceScope(BankTransaction::query())->count();
     }
 
+    /**
+     * Imported CSV lines that still need posting to the master cash pool.
+     *
+     * @param  Builder<BankTransaction>  $query
+     * @return Builder<BankTransaction>
+     */
+    public function applyBankLinesAwaitingPostingScope(Builder $query): Builder
+    {
+        return $this->applyRealBankStatementLinesScope($query)
+            ->whereIn('status', ['imported', 'mirrored']);
+    }
+
+    public function bankLinesAwaitingPostingCount(): int
+    {
+        return $this->applyBankLinesAwaitingPostingScope(BankTransaction::query())->count();
+    }
+
     public function __construct(
         protected FundPostingService $fundPostings,
         protected MemberCashOutService $cashOuts,
+        protected MasterExpenseDisbursementService $expenseDisbursements,
+        protected MasterFeeDisbursementService $feeDisbursements,
+        protected MasterInvestDisbursementService $investDisbursements,
+        protected MasterInvestReturnService $investReturns,
         protected AccountingService $accounting,
-    ) {}
+    ) {
+    }
 
     /**
      * @return list<string>
@@ -137,7 +208,7 @@ class BankClearingMatchService
         $dayRange = ContributionPolicySettings::bankMatchDateRangeDays();
 
         foreach ($records as $record) {
-            if (! $record instanceof BankTransaction) {
+            if (!$record instanceof BankTransaction) {
                 $stats['skipped']++;
 
                 continue;
@@ -193,28 +264,43 @@ class BankClearingMatchService
 
     public function clearMatchPair(BankTransaction $uncleared, BankTransaction $imported): void
     {
-        if (! $this->isPendingClearance($uncleared)) {
+        if (!$this->isPendingClearance($uncleared)) {
             throw new InvalidArgumentException(__('The pending transaction is not eligible for clearance.'));
         }
 
-        if (! $this->isImportedMatchCandidate($imported)) {
+        if (!$this->isImportedMatchCandidate($imported)) {
             throw new InvalidArgumentException(__('The imported statement line is not eligible for matching.'));
         }
 
         DB::transaction(function () use ($uncleared, $imported): void {
+            $skipMasterBankLedger = $uncleared->expense_disbursement_id !== null
+                || $uncleared->fee_disbursement_id !== null
+                || $uncleared->invest_disbursement_id !== null
+                || $uncleared->invest_return_id !== null;
+
             if ($uncleared->cash_out_request_id) {
                 $this->cashOuts->clearTransaction($uncleared, $imported);
+            } elseif ($uncleared->fee_disbursement_id) {
+                $this->feeDisbursements->clearTransaction($uncleared, $imported);
+            } elseif ($uncleared->expense_disbursement_id) {
+                $this->expenseDisbursements->clearTransaction($uncleared, $imported);
+            } elseif ($uncleared->invest_return_id) {
+                $this->investReturns->clearTransaction($uncleared, $imported);
+            } elseif ($uncleared->invest_disbursement_id) {
+                $this->investDisbursements->clearTransaction($uncleared, $imported);
             } else {
                 $this->fundPostings->clearTransaction($uncleared, $imported);
             }
 
-            $this->postMatchedImportToMasterBankLedger($imported->fresh());
+            if (!$skipMasterBankLedger) {
+                $this->postMatchedImportToMasterBankLedger($imported->fresh());
+            }
         });
     }
 
     /**
      * Record the real bank statement line on the master bank ledger.
-     * Member/master cash were already posted when the deposit or cash-out was accepted.
+     * Member/master cash were already posted when the deposit or cash-out was recorded; expense disbursements debit master expense only.
      */
     public function postMatchedImportToMasterBankLedger(BankTransaction $imported): void
     {
@@ -251,7 +337,11 @@ class BankClearingMatchService
         }
 
         return $transaction->fund_posting_id !== null
-            || $transaction->cash_out_request_id !== null;
+            || $transaction->cash_out_request_id !== null
+            || $transaction->expense_disbursement_id !== null
+            || $transaction->fee_disbursement_id !== null
+            || $transaction->invest_disbursement_id !== null
+            || $transaction->invest_return_id !== null;
     }
 
     /**
@@ -267,6 +357,10 @@ class BankClearingMatchService
             $transaction->fund_posting_id !== null
             || $transaction->membership_application_id !== null
             || $transaction->cash_out_request_id !== null
+            || $transaction->expense_disbursement_id !== null
+            || $transaction->fee_disbursement_id !== null
+            || $transaction->invest_disbursement_id !== null
+            || $transaction->invest_return_id !== null
         ) {
             return false;
         }
@@ -376,7 +470,11 @@ class BankClearingMatchService
             ->uncleared()
             ->where(function ($query): void {
                 $query->whereNotNull('fund_posting_id')
-                    ->orWhereNotNull('cash_out_request_id');
+                    ->orWhereNotNull('cash_out_request_id')
+                    ->orWhereNotNull('expense_disbursement_id')
+                    ->orWhereNotNull('fee_disbursement_id')
+                    ->orWhereNotNull('invest_disbursement_id')
+                    ->orWhereNotNull('invest_return_id');
             })
             ->whereDoesntHave('bankStatement', function ($query): void {
                 $query->whereIn('filename', BankStatementBuckets::MEMBERSHIP_IMPORT_PLACEHOLDERS);
@@ -428,6 +526,10 @@ class BankClearingMatchService
             ->whereNull('fund_posting_id')
             ->whereNull('membership_application_id')
             ->whereNull('cash_out_request_id')
+            ->whereNull('expense_disbursement_id')
+            ->whereNull('fee_disbursement_id')
+            ->whereNull('invest_disbursement_id')
+            ->whereNull('invest_return_id')
             ->whereNull('duplicate_of_id')
             ->where(function (Builder $query): void {
                 // Import → mirror → post to member completes without an uncleared posting to match.
@@ -445,8 +547,8 @@ class BankClearingMatchService
      */
     protected function identifyManualPair(Collection $records): ?array
     {
-        $uncleared = $records->first(fn (BankTransaction $record): bool => $this->isPendingClearance($record));
-        $imported = $records->first(fn (BankTransaction $record): bool => $this->isImportedMatchCandidate($record));
+        $uncleared = $records->first(fn(BankTransaction $record): bool => $this->isPendingClearance($record));
+        $imported = $records->first(fn(BankTransaction $record): bool => $this->isImportedMatchCandidate($record));
 
         if ($uncleared === null || $imported === null) {
             return null;

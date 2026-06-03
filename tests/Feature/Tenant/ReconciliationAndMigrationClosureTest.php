@@ -23,6 +23,7 @@ use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\BankClearingMatchService;
 use App\Services\ContributionCollectionCycleService;
+use App\Services\MasterFeeDisbursementService;
 use App\Services\MemberInvariantService;
 use App\Services\MemberOpeningBalanceService;
 use App\Services\ReconciliationCorrectionService;
@@ -620,6 +621,45 @@ test('replacement late fee reconciliation flags duplicate member cash debits', f
             ->where('exception_code', 'REPLACEMENT_PRIOR_TIER_NOT_REVERSED')
             ->open()
             ->exists())->toBeTrue();
+});
+
+test('late fee reconciliation ignores fee disbursement debits when checking fee income drift', function () {
+    $masterFees = Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
+
+    app(AccountingService::class)->credit($masterFees, 500, 'Collected fees', null, now());
+
+    app(MasterFeeDisbursementService::class)->disburse($masterFees->fresh(), 200, 'Fee payout');
+
+    ReconciliationException::query()->where('exception_code', 'FEE_INCOME_DRIFT')->delete();
+
+    $recon = app(ReconciliationService::class);
+    $method = new ReflectionMethod($recon, 'reconcileLateFees');
+    $method->setAccessible(true);
+    $method->invoke($recon);
+
+    expect(ReconciliationException::query()
+        ->where('exception_code', 'FEE_INCOME_DRIFT')
+        ->open()
+        ->exists())->toBeFalse();
+});
+
+test('late fee reconciliation still detects fee income drift when balance diverges from net ledger', function () {
+    $masterFees = Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
+
+    app(AccountingService::class)->credit($masterFees, 500, 'Collected fees', null, now());
+    $masterFees->update(['balance' => 100]);
+
+    ReconciliationException::query()->where('exception_code', 'FEE_INCOME_DRIFT')->delete();
+
+    $recon = app(ReconciliationService::class);
+    $method = new ReflectionMethod($recon, 'reconcileLateFees');
+    $method->setAccessible(true);
+    $method->invoke($recon);
+
+    expect(ReconciliationException::query()
+        ->where('exception_code', 'FEE_INCOME_DRIFT')
+        ->open()
+        ->exists())->toBeTrue();
 });
 
 test('realtime pool drift is not raised while master cash mirror is in progress', function () {

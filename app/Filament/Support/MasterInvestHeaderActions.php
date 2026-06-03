@@ -6,6 +6,8 @@ namespace App\Filament\Support;
 
 use App\Models\Tenant\Account;
 use App\Services\AccountingService;
+use App\Services\MasterInvestDisbursementService;
+use App\Services\MasterInvestReturnService;
 use Carbon\Carbon;
 use Closure;
 use Filament\Actions\Action;
@@ -32,7 +34,7 @@ final class MasterInvestHeaderActions
             ->label(__('Fund Invest'))
             ->icon('heroicon-o-arrow-down-circle')
             ->color('success')
-            ->visible(fn (): bool => self::isMasterInvestAdmin($resolveAccount))
+            ->visible(fn(): bool => self::isMasterInvestAdmin($resolveAccount))
             ->modalHeading(__('Fund Invest'))
             ->modalDescription(__('Transfer funds from Master Fund into the Master Invest account.'))
             ->modalWidth('md')
@@ -67,16 +69,16 @@ final class MasterInvestHeaderActions
             ->label(__('Disburse Invest'))
             ->icon('heroicon-o-arrow-up-circle')
             ->color('warning')
-            ->visible(fn (): bool => self::isMasterInvestAdmin($resolveAccount))
+            ->visible(fn(): bool => self::isMasterInvestAdmin($resolveAccount))
             ->modalHeading(__('Disburse Invest'))
-            ->modalDescription(__('Move funds out of Master Invest through Master Cash to record a check disbursement.'))
+            ->modalDescription(__('Debits master invest only, then creates a pending bank line to match when the payment appears on an imported statement.'))
             ->modalWidth('md')
             ->schema(self::formSchema())
-            ->action(function (array $data, AccountingService $accounting) use ($resolveAccount): void {
+            ->action(function (array $data, MasterInvestDisbursementService $investDisbursements) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
                 try {
-                    $accounting->disburseReserveAccountByCheck(
+                    $investDisbursements->disburse(
                         $account,
                         (float) $data['amount'],
                         (string) $data['description'],
@@ -102,14 +104,17 @@ final class MasterInvestHeaderActions
             ->label(__('Record Return'))
             ->icon('heroicon-o-arrow-path-rounded-square')
             ->color('info')
-            ->visible(fn (): bool => self::isMasterInvestAdmin($resolveAccount))
+            ->visible(fn(): bool => self::isMasterInvestAdmin($resolveAccount))
             ->modalHeading(__('Record Return'))
-            ->modalDescription(__('Record an investment return received through Master Cash into the Master Invest account.'))
+            ->modalDescription(__('Credits master invest only, then creates a pending bank line to match when the receipt appears on an imported statement.'))
             ->modalWidth('md')
             ->schema(self::formSchema(__('Investment return')))
-            ->action(function (array $data, AccountingService $accounting): void {
+            ->action(function (array $data, MasterInvestReturnService $investReturns) use ($resolveAccount): void {
+                $account = $resolveAccount();
+
                 try {
-                    $accounting->recordInvestmentReturn(
+                    $investReturns->record(
+                        $account,
                         (float) $data['amount'],
                         (string) $data['description'],
                         Carbon::parse($data['transacted_at']),
@@ -144,7 +149,7 @@ final class MasterInvestHeaderActions
      */
     private static function isMasterInvestAdmin(Closure $resolveAccount): bool
     {
-        if (! (bool) Auth::guard('tenant')->user()?->is_admin) {
+        if (!(bool) Auth::guard('tenant')->user()?->is_admin) {
             return false;
         }
 

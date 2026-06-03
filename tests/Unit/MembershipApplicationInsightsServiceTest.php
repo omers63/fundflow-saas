@@ -38,6 +38,8 @@ test('insights snapshot aggregates application pipeline metrics', function () {
         'email' => 'approved@test.com',
         'application_type' => 'new',
         'status' => 'approved',
+        'membership_fee_amount' => 25,
+        'membership_fee_required_amount' => 50,
         'reviewed_at' => now()->subDay(),
     ]);
     $approved->forceFill(['created_at' => now()->subDays(3)])->save();
@@ -51,16 +53,27 @@ test('insights snapshot aggregates application pipeline metrics', function () {
     ]);
     $rejected->forceFill(['created_at' => now()->subDays(2)])->save();
 
+    MembershipApplication::create([
+        'name' => 'Approved Legacy Arrears',
+        'email' => 'approved-legacy@test.com',
+        'application_type' => 'renew',
+        'status' => 'approved',
+        'rejection_reason' => 'Subscription fee arrears: 15.00',
+        'reviewed_at' => now()->subDays(2),
+    ]);
+
     $snapshot = app(MembershipApplicationInsightsService::class)->snapshot();
 
     expect($snapshot['pending'])->toBe(2)
-        ->and($snapshot['approved'])->toBe(1)
+        ->and($snapshot['approved'])->toBe(2)
         ->and($snapshot['rejected'])->toBe(1)
-        ->and($snapshot['total'])->toBe(4)
+        ->and($snapshot['total'])->toBe(5)
         ->and($snapshot['pending_over_sla'])->toBe(1)
-        ->and($snapshot['approval_rate'])->toBe(50.0)
+        ->and($snapshot['approval_rate'])->toBe(66.7)
         ->and($snapshot['fees']['pending_total'])->toBe(50.0)
         ->and($snapshot['fees']['pending_with_fee'])->toBe(1)
+        ->and($snapshot['fees']['subscription_arrears_count'])->toBe(2)
+        ->and($snapshot['fees']['subscription_arrears_total'])->toBe(40.0)
         ->and($snapshot['trend'])->toHaveCount(6)
         ->and($snapshot['sparkline'])->toHaveCount(8)
         ->and($snapshot['type_breakdown'])->not->toBeEmpty()

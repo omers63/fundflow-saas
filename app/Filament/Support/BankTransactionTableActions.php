@@ -7,6 +7,7 @@ namespace App\Filament\Support;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Member;
 use App\Services\FundFlowService;
+use App\Services\PendingOperationalClearanceDeletionService;
 use App\Support\BankTransactionDeletion;
 use App\Support\BankTransactionWorkflow;
 use Filament\Actions\Action;
@@ -133,6 +134,63 @@ final class BankTransactionTableActions
                             message: $label.': '.$exception->getMessage(),
                         );
                     }
+                }
+            });
+    }
+
+    public static function deletePendingOperationalClearance(): DeleteAction
+    {
+        return DeleteAction::make()
+            ->visible(fn (BankTransaction $record): bool => PendingOperationalClearanceDeletionService::canDelete($record))
+            ->modalHeading(__('Remove pending bank match'))
+            ->modalDescription(fn (BankTransaction $record): string => PendingOperationalClearanceDeletionService::modalDescription($record))
+            ->using(function (BankTransaction $record): void {
+                app(PendingOperationalClearanceDeletionService::class)->delete($record);
+
+                Notification::make()
+                    ->title(__('Pending bank match removed'))
+                    ->success()
+                    ->send();
+            });
+    }
+
+    public static function deletePendingOperationalClearanceBulk(): DeleteBulkAction
+    {
+        return DeleteBulkAction::make()
+            ->modalHeading(__('Remove pending bank matches'))
+            ->modalDescription(__('Removes selected uncleared deposit, cash-out, and expense lines. Accepted operations are reversed on the ledger first.'))
+            ->using(function (DeleteBulkAction $action, Collection $records): void {
+                $deletion = app(PendingOperationalClearanceDeletionService::class);
+                $removed = 0;
+
+                foreach ($records as $record) {
+                    if (! $record instanceof BankTransaction) {
+                        continue;
+                    }
+
+                    if (! PendingOperationalClearanceDeletionService::canDelete($record)) {
+                        continue;
+                    }
+
+                    try {
+                        $deletion->delete($record);
+                        $removed++;
+                    } catch (Throwable $exception) {
+                        $label = filled($record->description)
+                            ? $record->description
+                            : '#'.$record->id;
+
+                        $action->reportBulkProcessingFailure(
+                            message: $label.': '.$exception->getMessage(),
+                        );
+                    }
+                }
+
+                if ($removed > 0) {
+                    Notification::make()
+                        ->title(__(':count pending bank match line(s) removed', ['count' => $removed]))
+                        ->success()
+                        ->send();
                 }
             });
     }

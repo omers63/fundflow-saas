@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Resources\MasterAccounts\Pages;
 use App\Filament\Concerns\RefreshesResourceRecord;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Widgets\AccountDetailInsightsWidget;
+use App\Models\Tenant\Account;
 use App\Models\Tenant\Setting;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Section;
@@ -20,7 +21,7 @@ class ViewMasterAccount extends ViewRecord
 
     public function getHeading(): string
     {
-        return $this->record->name;
+        return $this->record->displayLabel();
     }
 
     /**
@@ -66,8 +67,10 @@ class ViewMasterAccount extends ViewRecord
                 Section::make(__('Account Details'))
                     ->columns(3)
                     ->schema([
-                        TextEntry::make('name'),
+                        TextEntry::make('name')
+                            ->formatStateUsing(fn (string $state, Account $record): string => $record->displayLabel()),
                         TextEntry::make('type')
+                            ->formatStateUsing(fn (string $state): string => MasterAccountResource::tabLabel($state))
                             ->badge()
                             ->color(fn (string $state): string => match ($state) {
                                 'cash' => 'info',
@@ -76,6 +79,8 @@ class ViewMasterAccount extends ViewRecord
                                 'expense' => 'danger',
                                 'fees' => 'warning',
                                 'invest' => 'gray',
+                                'suspense' => 'gray',
+                                default => 'gray',
                             }),
                         TextEntry::make('balance')
                             ->money(fn (): string => Setting::get('general', 'currency', 'USD')),

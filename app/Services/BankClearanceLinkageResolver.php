@@ -37,4 +37,52 @@ final class BankClearanceLinkageResolver
             'member_id' => $uncleared->member_id,
         ];
     }
+
+    /**
+     * @return array<string, int|string|null>
+     */
+    public function forExpenseDisbursement(BankTransaction $uncleared): array
+    {
+        return [
+            'expense_disbursement_id' => $uncleared->expense_disbursement_id,
+            'status' => 'posted',
+            'member_id' => null,
+        ];
+    }
+
+    /**
+     * @return array<string, int|string|null>
+     */
+    public function forFeeDisbursement(BankTransaction $uncleared): array
+    {
+        return [
+            'fee_disbursement_id' => $uncleared->fee_disbursement_id,
+            'status' => 'posted',
+            'member_id' => null,
+        ];
+    }
+
+    /**
+     * @return array<string, int|string|null>
+     */
+    public function forInvestDisbursement(BankTransaction $uncleared): array
+    {
+        return [
+            'invest_disbursement_id' => $uncleared->invest_disbursement_id,
+            'status' => 'posted',
+            'member_id' => null,
+        ];
+    }
+
+    /**
+     * @return array<string, int|string|null>
+     */
+    public function forInvestReturn(BankTransaction $uncleared): array
+    {
+        return [
+            'invest_return_id' => $uncleared->invest_return_id,
+            'status' => 'posted',
+            'member_id' => null,
+        ];
+    }
 }

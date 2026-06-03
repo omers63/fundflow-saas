@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\BankAccounts\Tables;
 
+use App\Filament\Support\BankTransactionTableActions;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\ViewActions\ViewBankTransactionAction;
@@ -23,41 +24,60 @@ use Illuminate\Database\Eloquent\Collection;
 
 final class PendingOperationalClearanceTable
 {
-    public static function configure(Table $table): Table
+    public static function configure(Table $table, bool $showClearanceKindColumn = true): Table
     {
+        $columns = [
+            TextColumn::make('transaction_date')
+                ->date()
+                ->sortable(),
+        ];
+
+        if ($showClearanceKindColumn) {
+            $columns[] = TextColumn::make('clearance_kind')
+                ->label(__('Type'))
+                ->badge()
+                ->sortable(false)
+                ->state(fn(BankTransaction $record): string => match (true) {
+                    $record->invest_return_id !== null => __('Return in'),
+                    $record->invest_disbursement_id !== null => __('Invest out'),
+                    $record->fee_disbursement_id !== null => __('Fee'),
+                    $record->expense_disbursement_id !== null => __('Expense'),
+                    $record->cash_out_request_id !== null => __('Cash out'),
+                    default => __('Deposit'),
+                })
+                ->color(fn(BankTransaction $record): string => match (true) {
+                    $record->invest_return_id !== null => 'success',
+                    $record->invest_disbursement_id !== null => 'warning',
+                    $record->fee_disbursement_id !== null => 'info',
+                    $record->expense_disbursement_id !== null => 'danger',
+                    $record->cash_out_request_id !== null => 'warning',
+                    default => 'success',
+                });
+        }
+
+        $columns = array_merge($columns, [
+            TextColumn::make('member.name')
+                ->label(__('Member'))
+                ->sortable(),
+            TextColumn::make('amount')
+                ->money(fn(): string => Setting::get('general', 'currency', 'USD'))
+                ->sortable()
+                ->color(fn($state): string => $state >= 0 ? 'success' : 'danger'),
+            TextColumn::make('description')
+                ->searchable()
+                ->wrap(),
+            TextColumn::make('status')
+                ->badge()
+                ->color(fn(string $state): string => match ($state) {
+                    'imported' => 'warning',
+                    'posted' => 'success',
+                    default => 'gray',
+                }),
+        ]);
+
         return TableGrouping::apply(
             $table
-                ->columns([
-                    TextColumn::make('transaction_date')
-                        ->date()
-                        ->sortable(),
-                    TextColumn::make('clearance_kind')
-                        ->label(__('Type'))
-                        ->badge()
-                        ->state(fn (BankTransaction $record): string => $record->cash_out_request_id !== null
-                            ? __('Cash out')
-                            : __('Deposit'))
-                        ->color(fn (BankTransaction $record): string => $record->cash_out_request_id !== null
-                            ? 'warning'
-                            : 'success'),
-                    TextColumn::make('member.name')
-                        ->label(__('Member'))
-                        ->sortable(),
-                    TextColumn::make('amount')
-                        ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
-                        ->sortable()
-                        ->color(fn ($state): string => $state >= 0 ? 'success' : 'danger'),
-                    TextColumn::make('description')
-                        ->searchable()
-                        ->wrap(),
-                    TextColumn::make('status')
-                        ->badge()
-                        ->color(fn (string $state): string => match ($state) {
-                            'imported' => 'warning',
-                            'posted' => 'success',
-                            default => 'gray',
-                        }),
-                ])
+                ->columns($columns)
                 ->filters([
                     SelectFilter::make('member_id')
                         ->label(__('Member'))
@@ -65,9 +85,9 @@ final class PendingOperationalClearanceTable
                         ->searchable()
                         ->preload(),
                 ])
-                ->recordUrl(fn (): ?string => null)
+                ->recordUrl(fn(): ?string => null)
                 ->recordAction(ViewAction::getDefaultName())
-                ->emptyStateDescription(__('Accepted deposits and cash-outs that still need a matching line from an imported bank statement. After you match, they leave this list.'))
+                ->emptyStateDescription(__('Accepted deposits, cash-outs, expense disbursements, and fee disbursements that still need a matching line from an imported bank statement. After you match, they leave this list.'))
                 ->recordActions(TableRecordActionGroups::wrap([
                     ViewBankTransactionAction::make(),
                     Action::make('clearMatch')
@@ -81,7 +101,7 @@ final class PendingOperationalClearanceTable
                                 ->label(__('Match with bank statement line'))
                                 ->options(function (BankTransaction $record, BankClearingMatchService $matching): array {
                                     return $matching->findImportedCandidates($record)
-                                        ->mapWithKeys(fn (BankTransaction $txn): array => [
+                                        ->mapWithKeys(fn(BankTransaction $txn): array => [
                                             $txn->id => $matching->formatMatchOptionLabel($txn),
                                         ])
                                         ->all();
@@ -93,7 +113,7 @@ final class PendingOperationalClearanceTable
                         ->action(function (BankTransaction $record, array $data, BankClearingMatchService $matching): void {
                             $imported = BankTransaction::findOrFail($data['imported_transaction_id']);
 
-                            if (! $matching->isImportedMatchCandidate($imported)) {
+                            if (!$matching->isImportedMatchCandidate($imported)) {
                                 Notification::make()
                                     ->title(__('That statement line cannot be matched'))
                                     ->body(__('Choose a bank import line that is not already linked to a posting.'))
@@ -107,6 +127,7 @@ final class PendingOperationalClearanceTable
 
                             Notification::make()->title(__('Transactions matched and cleared'))->success()->send();
                         }),
+                    BankTransactionTableActions::deletePendingOperationalClearance(),
                 ]))
                 ->toolbarActions([
                     BulkActionGroup::make([
@@ -156,6 +177,7 @@ final class PendingOperationalClearanceTable
                                     ->success()
                                     ->send();
                             }),
+                        BankTransactionTableActions::deletePendingOperationalClearanceBulk(),
                     ]),
                 ])
                 ->defaultSort('transaction_date', 'desc'),

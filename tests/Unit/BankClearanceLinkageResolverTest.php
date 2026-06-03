@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\CashOutRequest;
+use App\Models\Tenant\ExpenseDisbursement;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
@@ -109,5 +110,41 @@ test('resolver maps cash-out clearance payload with uncleared member id', functi
         'cash_out_request_id' => $cashOutRequest->id,
         'status' => 'posted',
         'member_id' => $member->id,
+    ]);
+});
+
+test('resolver maps expense disbursement clearance payload without member', function () {
+    $disbursement = ExpenseDisbursement::create([
+        'amount' => 500,
+        'description' => 'Office supplies',
+        'transacted_at' => now(),
+    ]);
+
+    $statement = BankStatement::create([
+        'filename' => 'clear-linkage-expense.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    $uncleared = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => now()->toDateString(),
+        'description' => 'Uncleared expense disbursement',
+        'amount' => -500,
+        'status' => 'imported',
+        'expense_disbursement_id' => $disbursement->id,
+        'hash' => md5('clear-linkage-expense'),
+        'is_cleared' => false,
+    ]);
+
+    $payload = app(BankClearanceLinkageResolver::class)->forExpenseDisbursement($uncleared);
+
+    expect($payload)->toMatchArray([
+        'expense_disbursement_id' => $disbursement->id,
+        'status' => 'posted',
+        'member_id' => null,
     ]);
 });

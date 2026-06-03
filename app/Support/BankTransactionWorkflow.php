@@ -8,7 +8,7 @@ use App\Models\Tenant\BankTransaction;
 
 /**
  * Bank statement line lifecycle: import → post to cash → post to member,
- * or match-only when ledger posting was already done via fund posting / cash-out.
+ * or match-only when ledger posting was already done via fund posting, cash-out, or expense disbursement.
  */
 final class BankTransactionWorkflow
 {
@@ -16,6 +16,10 @@ final class BankTransactionWorkflow
     {
         return $transaction->fund_posting_id !== null
             || $transaction->cash_out_request_id !== null
+            || $transaction->expense_disbursement_id !== null
+            || $transaction->fee_disbursement_id !== null
+            || $transaction->invest_disbursement_id !== null
+            || $transaction->invest_return_id !== null
             || $transaction->membership_application_id !== null;
     }
 
@@ -32,8 +36,8 @@ final class BankTransactionWorkflow
     public static function canPostToCash(BankTransaction $transaction): bool
     {
         return $transaction->status === 'imported'
-            && ! self::isLinkedToOperationalRequest($transaction)
-            && ! self::isSyntheticOperationalStatement($transaction);
+            && !self::isLinkedToOperationalRequest($transaction)
+            && !self::isSyntheticOperationalStatement($transaction);
     }
 
     /**
@@ -42,7 +46,7 @@ final class BankTransactionWorkflow
     public static function canPostToMember(BankTransaction $transaction): bool
     {
         return in_array($transaction->status, ['imported', 'mirrored'], true)
-            && ! self::isLinkedToOperationalRequest($transaction)
-            && ! self::isSyntheticOperationalStatement($transaction);
+            && !self::isLinkedToOperationalRequest($transaction)
+            && !self::isSyntheticOperationalStatement($transaction);
     }
 }

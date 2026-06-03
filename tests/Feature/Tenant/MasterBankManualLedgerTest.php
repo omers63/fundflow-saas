@@ -9,7 +9,6 @@ use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
-use App\Services\ContributionCollectionCycleService;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -19,7 +18,7 @@ beforeEach(function () {
     Account::query()->delete();
 });
 
-test('manual master bank credit shadows master cash', function () {
+test('manual master bank credit is single legged on master bank only', function () {
     $bank = Account::factory()->masterBank()->withBalance(100)->create();
     $cash = Account::factory()->masterCash()->withBalance(0)->create();
 
@@ -28,12 +27,12 @@ test('manual master bank credit shadows master cash', function () {
     );
 
     expect((float) $bank->fresh()->balance)->toBe(150.0)
-        ->and((float) $cash->fresh()->balance)->toBe(50.0)
+        ->and((float) $cash->fresh()->balance)->toBe(0.0)
         ->and($bank->transactions()->count())->toBe(1)
-        ->and($cash->transactions()->count())->toBe(1);
+        ->and($cash->transactions()->count())->toBe(0);
 });
 
-test('manual master bank credit with member tag shadows master cash and member cash', function () {
+test('manual master bank credit with member tag does not mirror member cash', function () {
     $bank = Account::factory()->masterBank()->withBalance(0)->create();
     $cash = Account::factory()->masterCash()->withBalance(0)->create();
     $member = Member::factory()->create();
@@ -44,26 +43,13 @@ test('manual master bank credit with member tag shadows master cash and member c
     );
 
     expect((float) $bank->fresh()->balance)->toBe(75.0)
-        ->and((float) $cash->fresh()->balance)->toBe(75.0)
-        ->and((float) $memberCash->fresh()->balance)->toBe(75.0)
-        ->and($bank->transactions()->first()->member_id)->toBe($member->id);
+        ->and((float) $cash->fresh()->balance)->toBe(0.0)
+        ->and((float) $memberCash->fresh()->balance)->toBe(0.0)
+        ->and($bank->transactions()->first()->member_id)->toBe($member->id)
+        ->and($bank->transactions()->count())->toBe(1);
 });
 
-test('manual master bank credit with member tag triggers auto-collection', function () {
-    $bank = Account::factory()->masterBank()->withBalance(0)->create();
-    Account::factory()->masterCash()->withBalance(0)->create();
-    $member = Member::factory()->create();
-    Account::factory()->cash()->for($member)->withBalance(0)->create();
-
-    $collection = $this->mock(ContributionCollectionCycleService::class);
-    $collection->shouldReceive('onMemberCashIncreased')
-        ->once()
-        ->with(Mockery::on(fn (Member $m): bool => $m->id === $member->id));
-
-    app(AccountingService::class)->postManualCredit($bank, 40, 'Collection trigger', null, $member->id);
-});
-
-test('manual master bank debit shadows master cash', function () {
+test('manual master bank debit is single legged on master bank only', function () {
     $bank = Account::factory()->masterBank()->withBalance(100)->create();
     $cash = Account::factory()->masterCash()->withBalance(50)->create();
 
@@ -72,7 +58,9 @@ test('manual master bank debit shadows master cash', function () {
     );
 
     expect((float) $bank->fresh()->balance)->toBe(80.0)
-        ->and((float) $cash->fresh()->balance)->toBe(30.0);
+        ->and((float) $cash->fresh()->balance)->toBe(50.0)
+        ->and($bank->transactions()->count())->toBe(1)
+        ->and($cash->transactions()->count())->toBe(0);
 });
 
 test('master bank ledger table exposes credit and debit header actions for admins', function () {

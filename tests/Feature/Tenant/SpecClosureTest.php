@@ -36,12 +36,50 @@ test('master invariant expects master fund to match member fund sum', function (
     ]);
 
     app(AccountingService::class)->createMemberAccounts($member);
-    app(AccountingService::class)->credit($member->fundAccount, 1500, 'Seed fund');
+    app(AccountingService::class)->credit($member->fundAccount, 1800, 'Seed fund');
 
     $result = app(MasterAccountInvariantService::class)->check();
 
     expect($result['expected_master_fund'])->toBe($result['member_fund_sum'])
         ->and($result['balanced'])->toBeFalse();
+});
+
+test('master invariant treats master invest balance as part of fund pool', function () {
+    Account::masterFund()?->update(['balance' => 1800]);
+    $masterInvest = Account::create(['type' => 'invest', 'name' => 'Master Invest', 'balance' => 0, 'is_master' => true]);
+    $masterExpense = Account::create(['type' => 'expense', 'name' => 'Master Expense', 'balance' => 0, 'is_master' => true]);
+
+    app(AccountingService::class)->fundReserveAccountFromMasterFund(
+        $masterInvest,
+        500,
+        'Capital allocation',
+    );
+    app(AccountingService::class)->recordInvestmentReturn(300, 'Q1 return');
+    app(AccountingService::class)->fundReserveAccountFromMasterFund(
+        $masterExpense,
+        300,
+        'Operations float',
+    );
+
+    $member = Member::create([
+        'member_number' => 'INV-INVEST-001',
+        'name' => 'Invest Pool Member',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+    app(AccountingService::class)->credit($member->fundAccount, 1800, 'Seed fund');
+
+    $result = app(MasterAccountInvariantService::class)->check();
+
+    expect($result['master_fund'])->toBe(1000.0)
+        ->and($result['master_invest_from_fund_credits'])->toBe(500.0)
+        ->and($result['master_expense_from_fund_credits'])->toBe(300.0)
+        ->and($result['master_fund_pool'])->toBe(1800.0)
+        ->and($result['member_fund_sum'])->toBe(1800.0)
+        ->and($result['balanced'])->toBeTrue();
 });
 
 test('member invariant reports balanced ledger when opening and net movement align', function () {

@@ -42,6 +42,33 @@ test('nightly reconciliation completes when master accounts balance', function (
     expect($result['halted'])->toBeFalse();
 });
 
+test('nightly reconciliation clears existing exceptions before running', function () {
+    ReconciliationException::create([
+        'exception_code' => 'STALE_PENDING',
+        'domain' => 'bank_clearing',
+        'severity' => 'medium',
+        'status' => 'open',
+        'raised_at' => now(),
+    ]);
+
+    ReconciliationException::create([
+        'exception_code' => 'MEMBER_CASH_DRIFT',
+        'domain' => 'master_account',
+        'severity' => 'high',
+        'status' => 'resolved',
+        'raised_at' => now()->subDay(),
+        'resolved_at' => now(),
+    ]);
+
+    expect(ReconciliationException::query()->count())->toBe(2);
+
+    app(ReconciliationService::class)->runNightlyBatch();
+
+    $codes = ReconciliationException::query()->pluck('exception_code')->all();
+
+    expect($codes)->not->toContain('STALE_PENDING', 'MEMBER_CASH_DRIFT');
+});
+
 test('loan computeExemption supports zero and two grace cycles', function () {
     $disbursed = Carbon::parse('2026-05-10');
 

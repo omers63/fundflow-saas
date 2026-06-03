@@ -15,7 +15,8 @@ final class BankTransactionDeletion
 {
     public function __construct(
         private AccountingService $accounting,
-    ) {}
+    ) {
+    }
 
     public static function canDelete(BankTransaction $bankTransaction): bool
     {
@@ -30,6 +31,22 @@ final class BankTransactionDeletion
 
         if ($bankTransaction->cash_out_request_id !== null) {
             return __('This line is linked to a cash-out request and cannot be deleted here.');
+        }
+
+        if ($bankTransaction->expense_disbursement_id !== null) {
+            return __('This line is linked to an expense disbursement and cannot be deleted here.');
+        }
+
+        if ($bankTransaction->fee_disbursement_id !== null) {
+            return __('This line is linked to a fee disbursement and cannot be deleted here.');
+        }
+
+        if ($bankTransaction->invest_disbursement_id !== null) {
+            return __('This line is linked to an invest disbursement and cannot be deleted here.');
+        }
+
+        if ($bankTransaction->invest_return_id !== null) {
+            return __('This line is linked to an invest return and cannot be deleted here.');
         }
 
         if ($bankTransaction->membership_application_id !== null) {
@@ -61,13 +78,13 @@ final class BankTransactionDeletion
         $base = __('This permanently removes the statement line from the import.');
 
         if ($ledgerCount > 0) {
-            return $base.' '.__(':count linked ledger transaction(s) will be removed and account balances adjusted.', [
+            return $base . ' ' . __(':count linked ledger transaction(s) will be removed and account balances adjusted.', [
                 'count' => $ledgerCount,
             ]);
         }
 
         if ($bankTransaction->status === 'duplicate') {
-            return $base.' '.__('Other lines marked as duplicates of this one will be unlinked.');
+            return $base . ' ' . __('Other lines marked as duplicates of this one will be unlinked.');
         }
 
         return $base;

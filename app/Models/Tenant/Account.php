@@ -2,6 +2,8 @@
 
 namespace App\Models\Tenant;
 
+use App\Models\Tenant\Relations\MasterAccountBankLinesAwaitingPostingRelation;
+use App\Models\Tenant\Relations\MasterAccountPendingClearanceRelation;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -47,6 +49,16 @@ class Account extends Model
         return $this->hasMany(Transaction::class);
     }
 
+    public function pendingOperationalClearanceBankTransactions(): MasterAccountPendingClearanceRelation
+    {
+        return new MasterAccountPendingClearanceRelation($this);
+    }
+
+    public function bankLinesAwaitingPosting(): MasterAccountBankLinesAwaitingPostingRelation
+    {
+        return new MasterAccountBankLinesAwaitingPostingRelation($this);
+    }
+
     public function scopeMaster($query)
     {
         return $query->where('is_master', true);
@@ -85,5 +97,17 @@ class Account extends Model
     public static function masterInvest(): ?self
     {
         return static::where('is_master', true)->where('type', 'invest')->first();
+    }
+
+    /**
+     * User-facing label for master accounts (Filament list/view); ledger name stays unchanged.
+     */
+    public function displayLabel(): string
+    {
+        if ($this->is_master && $this->type === 'suspense') {
+            return __('Master Suspense');
+        }
+
+        return $this->name;
     }
 }

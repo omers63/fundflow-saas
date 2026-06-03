@@ -7,6 +7,7 @@ use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
+use App\Models\Tenant\Account;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
@@ -20,7 +21,11 @@ class MasterAccountsTable
     {
         $columns = [
             TextColumn::make('name')
-                ->sortable(),
+                ->label(__('Account'))
+                ->formatStateUsing(fn (string $state, Account $record): string => $record->displayLabel())
+                ->sortable(query: function ($query, string $direction): void {
+                    $query->orderBy('name', $direction);
+                }),
         ];
 
         if ($showTypeColumn) {
@@ -33,8 +38,10 @@ class MasterAccountsTable
                     'expense' => 'danger',
                     'fees' => 'warning',
                     'invest' => 'gray',
+                    'suspense' => 'gray',
                     default => 'gray',
-                });
+                })
+                ->formatStateUsing(fn (string $state): string => MasterAccountResource::tabLabel($state));
         }
 
         $columns[] = TextColumn::make('balance')
@@ -46,21 +53,23 @@ class MasterAccountsTable
             ->dateTime()
             ->sortable();
 
-        return TableGrouping::apply($table
-            ->columns($columns)
-            ->filters([
-                DateColumnRangeFilter::make('updated_at', __('Last activity')),
-            ])
-            ->recordUrl(fn (Model $record): string => MasterAccountResource::getUrl('view', ['record' => $record]))
-            ->recordActions(TableRecordActionGroups::wrap([
-                ViewAction::make(),
-            ]))
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    TableToolbar::refreshBulkAction(),
-                ]),
-            ])
-            ->defaultSort('name'),
-            TableGrouping::memberAccounts($showTypeColumn));
+        return TableGrouping::apply(
+            $table
+                ->columns($columns)
+                ->filters([
+                    DateColumnRangeFilter::make('updated_at', __('Last activity')),
+                ])
+                ->recordUrl(fn (Model $record): string => MasterAccountResource::getUrl('view', ['record' => $record]))
+                ->recordActions(TableRecordActionGroups::wrap([
+                    ViewAction::make(),
+                ]))
+                ->toolbarActions([
+                    BulkActionGroup::make([
+                        TableToolbar::refreshBulkAction(),
+                    ]),
+                ])
+                ->defaultSort('name'),
+            TableGrouping::memberAccounts($showTypeColumn)
+        );
     }
 }

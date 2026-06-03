@@ -6,6 +6,7 @@ namespace App\Filament\Support;
 
 use App\Models\Tenant\Account;
 use App\Services\AccountingService;
+use App\Services\MasterExpenseDisbursementService;
 use Carbon\Carbon;
 use Closure;
 use Filament\Actions\Action;
@@ -85,14 +86,14 @@ final class MasterExpenseHeaderActions
                 return $account->is_master && $account->type === 'expense';
             })
             ->modalHeading(__('Disburse Expense'))
-            ->modalDescription(__('Move funds out of Master Expense through Master Cash to record a check disbursement.'))
+            ->modalDescription(__('Debits master expense only, then creates a pending bank line to match when the payment appears on an imported statement.'))
             ->modalWidth('md')
             ->schema(self::formSchema())
-            ->action(function (array $data, AccountingService $accounting) use ($resolveAccount): void {
+            ->action(function (array $data, MasterExpenseDisbursementService $expenseDisbursements) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
                 try {
-                    $accounting->disburseReserveAccountByCheck(
+                    $expenseDisbursements->disburse(
                         $account,
                         (float) $data['amount'],
                         (string) $data['description'],

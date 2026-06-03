@@ -25,6 +25,32 @@ use Illuminate\Support\Facades\DB;
 
 class ReconciliationService
 {
+    private static int $realtimeChecksSuspendedDepth = 0;
+
+    /**
+     * Run a callback while realtime reconciliation hooks are temporarily disabled.
+     *
+     * @template TReturn
+     *
+     * @param  callable(): TReturn  $callback
+     * @return TReturn
+     */
+    public static function withoutRealtimeChecks(callable $callback): mixed
+    {
+        self::$realtimeChecksSuspendedDepth++;
+
+        try {
+            return $callback();
+        } finally {
+            self::$realtimeChecksSuspendedDepth--;
+        }
+    }
+
+    public static function realtimeChecksSuspended(): bool
+    {
+        return self::$realtimeChecksSuspendedDepth > 0;
+    }
+
     public function __construct(
         protected MasterAccountInvariantService $masterInvariants,
         protected MemberInvariantService $memberInvariants,
@@ -37,7 +63,8 @@ class ReconciliationService
         protected LoanLedgerService $loanLedger,
         protected LateFeeService $lateFees,
         protected ContributionCollectionCycleService $contributionCollection,
-    ) {}
+    ) {
+    }
 
     /**
      * @return array{halted: bool, raised: int, resolved: int, critical: int}
@@ -47,6 +74,8 @@ class ReconciliationService
         $raised = 0;
         $resolved = 0;
         $critical = 0;
+
+        ReconciliationException::query()->delete();
 
         $this->audit->log('NIGHTLY_RECON_START', 'reconciliation');
 
@@ -114,6 +143,10 @@ class ReconciliationService
 
     public function onTransactionPosted(Transaction $transaction): void
     {
+        if (self::realtimeChecksSuspended()) {
+            return;
+        }
+
         $this->audit->log(
             'TRANSACTION_POSTED',
             'ledger',
@@ -153,7 +186,7 @@ class ReconciliationService
             return;
         }
 
-        if (! in_array($transaction->account->type, ['cash', 'fund'], true)) {
+        if (!in_array($transaction->account->type, ['cash', 'fund'], true)) {
             return;
         }
 
@@ -197,7 +230,7 @@ class ReconciliationService
             return;
         }
 
-        if (! in_array($transaction->account->type, ['cash', 'fund'], true)) {
+        if (!in_array($transaction->account->type, ['cash', 'fund'], true)) {
             return;
         }
 
@@ -238,7 +271,7 @@ class ReconciliationService
     {
         $description = (string) $transaction->description;
 
-        if (! str_contains(strtolower($description), 'late fee')) {
+        if (!str_contains(strtolower($description), 'late fee')) {
             return;
         }
 
@@ -356,7 +389,7 @@ class ReconciliationService
                     ->where('reference_id', $contribution->id)
                     ->exists();
 
-                if (! $hasCashDebit) {
+                if (!$hasCashDebit) {
                     $this->raiseOnce('ORPHAN_MASTER_FUND_CREDIT', 'contribution', 'high', (float) $contribution->amount, [
                         'contribution_id' => $contribution->id,
                         'member_id' => $contribution->member_id,
@@ -378,7 +411,7 @@ class ReconciliationService
                         ->where('reference_id', $contribution->id)
                         ->exists();
 
-                    if (! $hasMasterCredit) {
+                    if (!$hasMasterCredit) {
                         $this->raiseOnce('CONTRIBUTION_MISSING_MASTER_CREDIT', 'contribution', 'high', (float) $contribution->amount, [
                             'contribution_id' => $contribution->id,
                             'member_id' => $contribution->member_id,
@@ -406,7 +439,7 @@ class ReconciliationService
                     ->where('reference_id', $contribution->id)
                     ->exists();
 
-                if (! $hasMemberFundCredit) {
+                if (!$hasMemberFundCredit) {
                     $this->raiseOnce('CONTRIBUTION_MEMBER_FUND_MISSING', 'contribution', 'high', (float) $contribution->amount, [
                         'contribution_id' => $contribution->id,
                         'member_id' => $contribution->member_id,
@@ -489,7 +522,7 @@ class ReconciliationService
         LoanInstallment::query()
             ->where('status', 'overdue')
             ->whereNull('overdue_since')
-            ->whereHas('loan', fn ($q) => $q->whereIn('status', ['active', 'transferred']))
+            ->whereHas('loan', fn($q) => $q->whereIn('status', ['active', 'transferred']))
             ->each(function (LoanInstallment $installment) use (&$count): void {
                 $this->raiseOnce('EMI_OVERDUE_WITHOUT_CLOCK', 'emi', 'medium', null, [
                     'installment_id' => $installment->id,
@@ -518,13 +551,13 @@ class ReconciliationService
                     ->exists();
 
                 $masterFundDebited = Transaction::query()
-                    ->whereHas('account', fn ($q) => $q->where('is_master', true)->where('type', 'fund'))
+                    ->whereHas('account', fn($q) => $q->where('is_master', true)->where('type', 'fund'))
                     ->where('type', 'debit')
                     ->where('reference_type', $loan->getMorphClass())
                     ->where('reference_id', $loan->id)
                     ->exists();
 
-                if ($masterFundDebited && ! $hasPayout) {
+                if ($masterFundDebited && !$hasPayout) {
                     $this->raiseOnce('DISBURSEMENT_MEMBER_CASH_MISSING', 'loan', 'high', (float) $loan->amount_disbursed, [
                         'loan_id' => $loan->id,
                         'member_id' => $loan->member_id,
@@ -581,7 +614,7 @@ class ReconciliationService
                     ->where('reference_id', $installment->id)
                     ->exists();
 
-                if (! $hasRepaymentCredit) {
+                if (!$hasRepaymentCredit) {
                     $this->raiseOnce('EMI_COLLECTED_LEDGER_MISSING', 'emi', 'medium', (float) $installment->amount, [
                         'installment_id' => $installment->id,
                         'loan_id' => $loan->id,
@@ -627,7 +660,7 @@ class ReconciliationService
                     ->where('type', 'debit')
                     ->where('reference_type', $installment->getMorphClass())
                     ->where('reference_id', $installment->id)
-                    ->whereHas('account', fn ($q) => $q->where('type', 'cash')->where('is_master', false))
+                    ->whereHas('account', fn($q) => $q->where('type', 'cash')->where('is_master', false))
                     ->exists();
 
                 $guarantorDebited = Transaction::query()
@@ -635,7 +668,7 @@ class ReconciliationService
                     ->where('type', 'debit')
                     ->where('reference_type', $installment->getMorphClass())
                     ->where('reference_id', $installment->id)
-                    ->whereHas('account', fn ($q) => $q->where('type', 'fund')->where('is_master', false))
+                    ->whereHas('account', fn($q) => $q->where('type', 'fund')->where('is_master', false))
                     ->exists();
 
                 if ($borrowerDebited && $guarantorDebited) {
@@ -714,7 +747,7 @@ class ReconciliationService
         $unmatchedImportedAmounts = BankTransaction::query()
             ->whereIn('id', $unmatchedImportedIds)
             ->pluck('amount', 'id')
-            ->map(fn ($amount): float => (float) $amount)
+            ->map(fn($amount): float => (float) $amount)
             ->all();
 
         foreach ($unmatchedImportedIds as $importedId) {
@@ -744,6 +777,10 @@ class ReconciliationService
             ->uncleared()
             ->whereNull('fund_posting_id')
             ->whereNull('cash_out_request_id')
+            ->whereNull('expense_disbursement_id')
+            ->whereNull('fee_disbursement_id')
+            ->whereNull('invest_disbursement_id')
+            ->whereNull('invest_return_id')
             ->where('created_at', '<', $staleCutoff)
             ->whereDoesntHave('bankStatement', function ($query): void {
                 $query->whereIn('filename', $this->bankClearing->membershipImportPlaceholderStatementFilenames());
@@ -799,13 +836,13 @@ class ReconciliationService
         $tolerance = ContributionPolicySettings::reconTolerance();
 
         $masterFees = (float) (Account::query()->where('is_master', true)->where('type', 'fees')->value('balance') ?? 0);
-        $postedFees = (float) Transaction::query()
-            ->whereHas('account', fn ($q) => $q->where('is_master', true)->where('type', 'fees'))
-            ->where('type', 'credit')
-            ->sum('amount');
+        $masterFeesLedgerQuery = Transaction::query()
+            ->whereHas('account', fn($q) => $q->where('is_master', true)->where('type', 'fees'));
+        $netPostedFees = (float) ((clone $masterFeesLedgerQuery)->where('type', 'credit')->sum('amount')
+            - (clone $masterFeesLedgerQuery)->where('type', 'debit')->sum('amount'));
 
-        if (abs($masterFees - $postedFees) > $tolerance) {
-            $this->raiseOnce('FEE_INCOME_DRIFT', 'late_fee', 'high', $masterFees - $postedFees, []);
+        if (abs($masterFees - $netPostedFees) > $tolerance) {
+            $this->raiseOnce('FEE_INCOME_DRIFT', 'late_fee', 'high', $masterFees - $netPostedFees, []);
             $count++;
         }
 
@@ -895,7 +932,7 @@ class ReconciliationService
             default => false,
         };
 
-        return ! $allowed;
+        return !$allowed;
     }
 
     protected function reconcileMemberInvariants(): int
@@ -936,15 +973,21 @@ class ReconciliationService
 
         $tolerance = ContributionPolicySettings::reconTolerance();
 
-        if ($result['fund_delta'] <= $tolerance) {
-            $this->suspense->postRoundingAdjustment($result['master_fund'] - $result['expected_master_fund'], 'fund');
-        } elseif ($result['cash_delta'] <= $tolerance) {
-            $this->suspense->postRoundingAdjustment($result['master_cash'] - $result['member_cash_sum'], 'cash');
+        if ($result['fund_delta'] > 0.00001 && $result['fund_delta'] <= $tolerance) {
+            $this->suspense->postRoundingAdjustment(
+                round($result['member_fund_sum'] - $result['master_fund_pool'], 2),
+                'fund',
+            );
+        } elseif ($result['cash_delta'] > 0.00001 && $result['cash_delta'] <= $tolerance) {
+            $this->suspense->postRoundingAdjustment(
+                round($result['member_cash_sum'] - $result['master_cash'], 2),
+                'cash',
+            );
         }
 
         $final = $this->masterInvariants->check();
 
-        if (! $final['balanced']) {
+        if (!$final['balanced']) {
             if ($final['cash_delta'] > $tolerance) {
                 $this->raiseOnce('MASTER_CASH_POOL_DRIFT', 'master_account', 'critical', $final['cash_delta'], [
                     'master_cash' => $final['master_cash'],
@@ -1316,7 +1359,7 @@ class ReconciliationService
             $this->accounting->credit(
                 $transaction->account,
                 $amount,
-                __('RECON_AUTO_FEE_EXEMPTION_REVERSAL').': '.$transaction->description,
+                __('RECON_AUTO_FEE_EXEMPTION_REVERSAL') . ': ' . $transaction->description,
                 $transaction,
             );
             $fees = Account::masterFees();
@@ -1392,13 +1435,13 @@ class ReconciliationService
         ?float $amountDelta = null,
         array $entities = [],
     ): ReconciliationException {
-        $fingerprint = hash('sha256', $code.'|'.$domain.'|'.json_encode($entities, JSON_THROW_ON_ERROR));
+        $fingerprint = hash('sha256', $code . '|' . $domain . '|' . json_encode($entities, JSON_THROW_ON_ERROR));
 
         $existing = ReconciliationException::query()
             ->open()
             ->where('exception_code', $code)
             ->get()
-            ->first(fn (ReconciliationException $row): bool => $this->fingerprint($row) === $fingerprint);
+            ->first(fn(ReconciliationException $row): bool => $this->fingerprint($row) === $fingerprint);
 
         if ($existing) {
             return $existing;
@@ -1438,7 +1481,7 @@ class ReconciliationService
 
     protected function fingerprint(ReconciliationException $exception): string
     {
-        return hash('sha256', $exception->exception_code.'|'.$exception->domain.'|'.json_encode(
+        return hash('sha256', $exception->exception_code . '|' . $exception->domain . '|' . json_encode(
             $exception->affected_entities ?? [],
             JSON_THROW_ON_ERROR,
         ));

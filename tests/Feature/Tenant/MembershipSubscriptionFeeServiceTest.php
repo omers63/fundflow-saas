@@ -64,14 +64,18 @@ function makePendingFeeApplication(array $overrides = []): MembershipApplication
     ], $overrides));
 }
 
-test('approval is blocked when transfer amount is below required subscription fee', function () {
+test('approval allows transfer below required subscription fee and flags arrears', function () {
     $application = makePendingFeeApplication([
         'membership_fee_amount' => 40,
         'membership_fee_required_amount' => 50,
     ]);
 
-    expect(fn () => $this->approval->approve($application))
-        ->toThrow(InvalidArgumentException::class);
+    $member = $this->approval->approve($application);
+
+    expect((float) $member->cashAccount->fresh()->balance)->toBe(0.0)
+        ->and((float) Account::masterCash()->fresh()->balance)->toBe(0.0)
+        ->and((float) Account::masterFees()->fresh()->balance)->toBe(40.0)
+        ->and((string) $application->fresh()->rejection_reason)->toBe('Subscription fee arrears: 10.00');
 });
 
 test('approving application posts subscription fee to cash pools without bank statement lines', function () {

@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 use App\Filament\Support\MasterExpenseHeaderActions;
 use App\Models\Tenant\Account;
+use App\Models\Tenant\BankTransaction;
+use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\MasterExpenseDisbursementService;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -65,21 +68,30 @@ test('fund expense transfers from master fund to master expense', function () {
     expect((float) $masterFund->fresh()->balance)->toBe(7_500.0)
         ->and((float) $masterExpense->fresh()->balance)->toBe(2_500.0)
         ->and($masterExpense->transactions()->count())->toBe(1)
-        ->and($masterFund->transactions()->count())->toBe(1);
+        ->and($masterFund->transactions()->count())->toBe(1)
+        ->and(ReconciliationException::query()
+            ->where('exception_code', 'MASTER_FUND_POOL_DRIFT')
+            ->where('status', ReconciliationException::STATUS_OPEN)
+            ->count())->toBe(0);
 });
 
-test('disburse expense moves funds through master cash and debits master expense', function () {
-    Account::factory()->masterCash()->withBalance(0)->create();
+test('disburse expense debits master expense only and creates uncleared bank line', function () {
+    Account::factory()->masterFund()->withBalance(0)->create();
+    Account::factory()->masterCash()->withBalance(10_000)->create();
     $masterExpense = Account::factory()->masterExpense()->withBalance(1_000)->create();
 
-    app(AccountingService::class)->disburseReserveAccountByCheck(
+    $disbursement = app(MasterExpenseDisbursementService::class)->disburse(
         $masterExpense,
         400,
         'Check #1001',
     );
 
     expect((float) $masterExpense->fresh()->balance)->toBe(600.0)
-        ->and((float) Account::masterCash()->fresh()->balance)->toBe(0.0)
+        ->and((float) Account::masterCash()->fresh()->balance)->toBe(10_000.0)
         ->and($masterExpense->transactions()->count())->toBe(1)
-        ->and(Account::masterCash()->transactions()->count())->toBe(2);
+        ->and(Account::masterCash()->transactions()->count())->toBe(0)
+        ->and($disbursement->bankTransaction)->not->toBeNull()
+        ->and($disbursement->bankTransaction->is_cleared)->toBeFalse()
+        ->and((float) $disbursement->bankTransaction->amount)->toBe(-400.0)
+        ->and(BankTransaction::query()->count())->toBe(1);
 });

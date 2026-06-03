@@ -20,6 +20,10 @@ final class BankStatementBuckets
     public const OPERATIONAL_CLEARANCE = [
         'member-postings',
         'member-cash-outs',
+        'master-expense-disbursements',
+        'master-fee-disbursements',
+        'master-invest-disbursements',
+        'master-invest-returns',
     ];
 
     /**
@@ -33,4 +37,12 @@ final class BankStatementBuckets
     public const MEMBER_POSTINGS = 'member-postings';
 
     public const MEMBER_CASH_OUTS = 'member-cash-outs';
+
+    public const MASTER_EXPENSE_DISBURSEMENTS = 'master-expense-disbursements';
+
+    public const MASTER_FEE_DISBURSEMENTS = 'master-fee-disbursements';
+
+    public const MASTER_INVEST_DISBURSEMENTS = 'master-invest-disbursements';
+
+    public const MASTER_INVEST_RETURNS = 'master-invest-returns';
 }

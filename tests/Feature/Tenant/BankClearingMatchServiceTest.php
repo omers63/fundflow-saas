@@ -9,6 +9,7 @@ use App\Services\BankClearingMatchService;
 use App\Services\ContributionCollectionCycleService;
 use App\Services\FundFlowService;
 use App\Services\FundPostingService;
+use App\Services\MasterExpenseDisbursementService;
 use App\Services\MemberCashOutService;
 use App\Support\BankTransactionWorkflow;
 use Illuminate\Support\Collection;
@@ -263,7 +264,7 @@ test('matched bank import is match-only and cannot be posted to cash or member',
 
     expect($fundFlow->mirrorToCash([$imported->id]))->toBe(0);
 
-    expect(fn() => $fundFlow->ensureMirroredAndPostToMember($imported, $member))
+    expect(fn () => $fundFlow->ensureMirroredAndPostToMember($imported, $member))
         ->toThrow(InvalidArgumentException::class);
 
     $scan = $this->matching->scanMatchExceptions();
@@ -404,6 +405,58 @@ test('cash-out matched import is match-only', function () {
         ->and((float) $masterBank->fresh()->balance)->toBe($bankBeforeMatch - 400);
 
     expect($imported->masterBankTransaction?->type)->toBe('debit');
+});
+
+test('expense disbursement matched import is match-only without master bank or cash ledger', function () {
+    $masterExpense = Account::factory()->masterExpense()->withBalance(2_000)->create();
+    $masterCash = Account::masterCash();
+    $masterCash->update(['balance' => 10_000]);
+
+    $disbursement = app(MasterExpenseDisbursementService::class)->disburse(
+        $masterExpense,
+        350,
+        'Vendor check',
+    );
+
+    $uncleared = $disbursement->bankTransaction;
+    $expenseAfterDisburse = (float) $masterExpense->fresh()->balance;
+
+    $statement = BankStatement::create([
+        'filename' => 'expense-disburse-match.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    $imported = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => now()->toDateString(),
+        'description' => 'Check paid',
+        'amount' => -350,
+        'status' => 'imported',
+        'hash' => md5('expense-disburse-match-import'),
+        'is_cleared' => false,
+    ]);
+
+    $masterBank = Account::masterBank();
+    $bankBeforeMatch = (float) $masterBank->balance;
+
+    $this->matching->clearMatchPair($uncleared, $imported);
+
+    $imported = $imported->fresh();
+
+    expect(BankTransactionWorkflow::canPostToCash($imported))->toBeFalse()
+        ->and(BankTransactionWorkflow::canPostToMember($imported))->toBeFalse()
+        ->and($imported->expense_disbursement_id)->toBe($disbursement->id)
+        ->and($imported->status)->toBe('posted')
+        ->and($imported->member_id)->toBeNull()
+        ->and($imported->master_bank_transaction_id)->toBeNull()
+        ->and((float) $masterBank->fresh()->balance)->toBe($bankBeforeMatch)
+        ->and((float) $masterCash->fresh()->balance)->toBe(10_000.0)
+        ->and((float) $masterExpense->fresh()->balance)->toBe($expenseAfterDisburse)
+        ->and($masterExpense->transactions()->count())->toBe(1);
 });
 
 test('synthetic operational statement lines are not match targets', function () {

@@ -163,18 +163,12 @@ final class AccountTransactionManualAdjustmentHeaderActions
 
     private static function creditModalDescription(Account $account): string
     {
-        return match ($account->type) {
-            'bank' => __('Credits the master bank and mirrors the same amount to master cash. With a member tag, also credits that member’s cash and runs collection for contributions, allocations, and repayments.'),
-            default => __('Post a credit to this account. Use a clear description for the audit trail.'),
-        };
+        return __('Post a credit to this account only. Use a clear description for the audit trail.');
     }
 
     private static function debitModalDescription(Account $account): string
     {
-        return match ($account->type) {
-            'bank' => __('Debits the master bank and mirrors the same amount from master cash. With a member tag, also debits that member’s cash (same amount).'),
-            default => __('Post a debit to this account. Use a clear description for the audit trail.'),
-        };
+        return __('Post a debit to this account only. Use a clear description for the audit trail.');
     }
 
     /**
@@ -205,9 +199,8 @@ final class AccountTransactionManualAdjustmentHeaderActions
         ];
 
         if ($account->is_master) {
-            $fields[] = $account->type === 'bank'
-                ? MemberLedgerTagSelect::make()->helperText(__('Optional — also credits or debits the member’s cash and runs auto-collection on credit.'))
-                : MemberLedgerTagSelect::make();
+            $fields[] = MemberLedgerTagSelect::make()
+                ->helperText(__('Optional — tags this ledger line with a member for reporting.'));
         }
 
         return $fields;

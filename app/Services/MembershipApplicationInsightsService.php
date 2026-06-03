@@ -107,6 +107,32 @@ final class MembershipApplicationInsightsService
             ->where('membership_fee_amount', '>', 0)
             ->sum('membership_fee_amount');
 
+        $approvedWithSubscriptionFee = MembershipApplication::query()
+            ->where('status', 'approved')
+            ->get(['membership_fee_amount', 'membership_fee_required_amount', 'rejection_reason']);
+
+        $subscriptionArrearsCount = 0;
+        $subscriptionArrearsTotal = 0.0;
+
+        $approvedWithSubscriptionFee->each(function (MembershipApplication $application) use (&$subscriptionArrearsCount, &$subscriptionArrearsTotal): void {
+            $required = (float) ($application->membership_fee_required_amount ?? 0);
+            $transferred = (float) ($application->membership_fee_amount ?? 0);
+            $arrears = max(0.0, round($required - $transferred, 2));
+
+            if ($arrears <= 0.00001 && is_string($application->rejection_reason)) {
+                if (preg_match('/Subscription fee arrears:\s*([0-9]+(?:\.[0-9]+)?)/', $application->rejection_reason, $matches) === 1) {
+                    $arrears = (float) $matches[1];
+                }
+            }
+
+            if ($arrears <= 0.00001) {
+                return;
+            }
+
+            $subscriptionArrearsCount++;
+            $subscriptionArrearsTotal += $arrears;
+        });
+
         $pendingWithFeeCount = MembershipApplication::query()
             ->where('status', 'pending')
             ->whereNotNull('membership_fee_amount')
@@ -150,6 +176,8 @@ final class MembershipApplicationInsightsService
                 'pending_total' => $pendingFeeTotal,
                 'pending_with_fee' => $pendingWithFeeCount,
                 'receipt_rate' => $receiptRate,
+                'subscription_arrears_count' => $subscriptionArrearsCount,
+                'subscription_arrears_total' => round($subscriptionArrearsTotal, 2),
             ],
             'pipeline' => [
                 'pending_apps' => $pending,

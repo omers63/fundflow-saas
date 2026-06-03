@@ -55,18 +55,6 @@ class MembershipSubscriptionFeeService
             throw new InvalidArgumentException(__('A transfer reference is required before this application can be approved.'));
         }
 
-        $transferred = (float) ($application->membership_fee_amount ?? 0);
-        $required = $this->requiredFeeAmount($application);
-
-        if ($transferred < $required) {
-            throw new InvalidArgumentException(__(
-                'The declared transfer amount (:transferred) is less than the required subscription fee (:required). Approval is not allowed until the member transfers at least the required amount.',
-                [
-                    'transferred' => number_format($transferred, 2),
-                    'required' => number_format($required, 2),
-                ],
-            ));
-        }
     }
 
     /**
@@ -78,6 +66,8 @@ class MembershipSubscriptionFeeService
     public function postOnApproval(MembershipApplication $application, Member $member): void
     {
         if (! $this->applicationRequiresSubscriptionFee($application)) {
+            $application->update(['rejection_reason' => null]);
+
             return;
         }
 
@@ -89,6 +79,8 @@ class MembershipSubscriptionFeeService
 
         $transferred = (float) $application->membership_fee_amount;
         $required = $this->requiredFeeAmount($application);
+        $settledFee = min($transferred, $required);
+        $arrears = max(0.0, round($required - $settledFee, 2));
 
         $masterCash = Account::masterCash();
         $masterFees = Account::masterFees();
@@ -108,28 +100,30 @@ class MembershipSubscriptionFeeService
 
         $transferDate = $application->membership_fee_transfer_date ?? now();
 
-        $postSubscriptionFee = function () use ($application, $member, $transferred, $required, $masterFees, $memberCash, $transferDate): void {
-            DB::transaction(function () use ($application, $member, $transferred, $required, $masterFees, $memberCash, $transferDate): void {
+        $postSubscriptionFee = function () use ($application, $member, $transferred, $settledFee, $arrears, $masterFees, $memberCash, $transferDate): void {
+            DB::transaction(function () use ($application, $member, $transferred, $settledFee, $arrears, $masterFees, $memberCash, $transferDate): void {
                 $receiptDescription = __('Subscription fees — :name (application #:id)', [
                     'name' => $member->name,
                     'id' => $application->id,
                 ]);
 
-                $this->accounting->creditMemberCashWithMasterMirror(
-                    $memberCash,
-                    $transferred,
-                    __('Posted: :description', ['description' => $receiptDescription]),
-                    __('(subscription deposit mirror)'),
-                    $application,
-                    $transferDate,
-                    $member->id,
-                );
+                if ($transferred > 0.00001) {
+                    $this->accounting->creditMemberCashWithMasterMirror(
+                        $memberCash,
+                        $transferred,
+                        __('Posted: :description', ['description' => $receiptDescription]),
+                        __('(subscription deposit mirror)'),
+                        $application,
+                        $transferDate,
+                        $member->id,
+                    );
+                }
 
-                if ($required > 0) {
+                if ($settledFee > 0) {
                     $feeDescription = __('Subscription fee — :name', ['name' => $member->name]);
                     $this->accounting->debitMemberCashWithMasterMirror(
                         $memberCash,
-                        $required,
+                        $settledFee,
                         $feeDescription,
                         __('(subscription fee mirror)'),
                         $application,
@@ -138,12 +132,18 @@ class MembershipSubscriptionFeeService
                     );
                     $this->accounting->credit(
                         $masterFees,
-                        $required,
+                        $settledFee,
                         $feeDescription,
                         $application,
                         $transferDate,
                     );
                 }
+
+                $application->update([
+                    'rejection_reason' => $arrears > 0
+                        ? __('Subscription fee arrears: :amount', ['amount' => number_format($arrears, 2)])
+                        : null,
+                ]);
             });
         };
 

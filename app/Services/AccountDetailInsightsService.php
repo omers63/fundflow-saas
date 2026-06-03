@@ -10,7 +10,6 @@ use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Account;
-use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
@@ -80,7 +79,7 @@ final class AccountDetailInsightsService
             ->orderByDesc('transacted_at')
             ->limit(5)
             ->get()
-            ->map(fn (Transaction $transaction): array => [
+            ->map(fn(Transaction $transaction): array => [
                 'id' => $transaction->id,
                 'transacted_at' => $transaction->transacted_at?->format('M j, H:i'),
                 'type' => $transaction->type,
@@ -226,7 +225,7 @@ final class AccountDetailInsightsService
                 'rows' => [
                     ['label' => __('Monthly minimum'), 'value' => InsightFormatter::money($min)],
                     ['label' => __('Current fund'), 'value' => InsightFormatter::money($balance)],
-                    ['label' => __('Of minimum'), 'value' => $pct !== null ? $pct.'%' : '—'],
+                    ['label' => __('Of minimum'), 'value' => $pct !== null ? $pct . '%' : '—'],
                 ],
                 'progress' => $pct,
             ];
@@ -234,7 +233,7 @@ final class AccountDetailInsightsService
             $sixthKpi = [
                 'key' => 'minimum',
                 'label' => __('Of minimum'),
-                'value' => $pct !== null ? $pct.'%' : '—',
+                'value' => $pct !== null ? $pct . '%' : '—',
                 'sub' => InsightFormatter::money($min),
                 'icon' => 'heroicon-o-chart-bar',
                 'accent' => $balance < 0 ? 'rose' : ($pct !== null && $pct >= 100 ? 'emerald' : 'sky'),
@@ -252,30 +251,56 @@ final class AccountDetailInsightsService
      */
     private function masterCashContext(float $balance): array
     {
-        $pendingBank = BankTransaction::query()->whereIn('status', ['imported', 'mirrored'])->count();
+        $bankClearing = app(BankClearingMatchService::class);
+        $masterCash = Account::masterCash();
+        $pendingBankPost = $bankClearing->bankLinesAwaitingPostingCount();
+        $pendingBankMatch = $masterCash !== null
+            ? $bankClearing->pendingOperationalClearanceCountForMasterAccount($masterCash)
+            : 0;
         $pendingPostings = FundPosting::query()->where('status', 'pending')->count();
+
+        $sixthKpi = match (true) {
+            $pendingBankPost > 0 => [
+                'key' => 'queue',
+                'label' => __('To post'),
+                'value' => (string) $pendingBankPost,
+                'sub' => __('Bank lines'),
+                'icon' => 'heroicon-o-clock',
+                'accent' => 'amber',
+            ],
+            $pendingBankMatch > 0 => [
+                'key' => 'match',
+                'label' => __('Bank match'),
+                'value' => (string) $pendingBankMatch,
+                'sub' => __('Deposits & cash-outs'),
+                'icon' => 'heroicon-o-link',
+                'accent' => 'amber',
+            ],
+            default => [
+                'key' => 'queue',
+                'label' => __('To post'),
+                'value' => '0',
+                'sub' => __('Bank lines'),
+                'icon' => 'heroicon-o-clock',
+                'accent' => 'emerald',
+            ],
+        };
 
         return [
             'panels' => [
                 [
                     'title' => __('Operations queue'),
                     'rows' => [
-                        ['label' => __('Bank to post'), 'value' => (string) $pendingBank],
+                        ['label' => __('Bank to post'), 'value' => (string) $pendingBankPost],
+                        ['label' => __('Bank match'), 'value' => (string) $pendingBankMatch],
                         ['label' => __('Deposits'), 'value' => (string) $pendingPostings],
                         ['label' => __('On hand'), 'value' => InsightFormatter::money($balance)],
                     ],
-                    'url' => BankAccountsResource::getUrl('index', ['tab' => 'imports']),
+                    'url' => BankAccountsResource::listUrl('imports'),
                     'link_label' => __('Bank transactions'),
                 ],
             ],
-            'sixth_kpi' => [
-                'key' => 'queue',
-                'label' => __('To post'),
-                'value' => (string) $pendingBank,
-                'sub' => __('Bank lines'),
-                'icon' => 'heroicon-o-clock',
-                'accent' => $pendingBank > 0 ? 'amber' : 'emerald',
-            ],
+            'sixth_kpi' => $sixthKpi,
         ];
     }
 
@@ -285,7 +310,7 @@ final class AccountDetailInsightsService
     private function masterFundContext(float $balance): array
     {
         $loanExposure = (float) Loan::active()->get()->sum(
-            fn (Loan $loan): float => $loan->getOutstandingBalance()
+            fn(Loan $loan): float => $loan->getOutstandingBalance()
         );
         $coverage = $loanExposure > 0.01 ? round($balance / $loanExposure, 2) : null;
         $coveragePercent = $coverage !== null ? min(100, round($coverage * 100, 1)) : 100;
@@ -297,7 +322,7 @@ final class AccountDetailInsightsService
                     'rows' => [
                         ['label' => __('Master fund'), 'value' => InsightFormatter::money($balance)],
                         ['label' => __('Loan exposure'), 'value' => InsightFormatter::money($loanExposure)],
-                        ['label' => __('Coverage'), 'value' => $coverage !== null ? $coverage.'×' : '—'],
+                        ['label' => __('Coverage'), 'value' => $coverage !== null ? $coverage . '×' : '—'],
                     ],
                     'progress' => $coveragePercent,
                     'url' => LoanResource::getUrl('index'),
@@ -307,8 +332,8 @@ final class AccountDetailInsightsService
             'sixth_kpi' => [
                 'key' => 'coverage',
                 'label' => __('Coverage'),
-                'value' => $coverage !== null ? $coverage.'×' : '—',
-                'sub' => InsightFormatter::compactAmount($loanExposure).' '.__('exposure'),
+                'value' => $coverage !== null ? $coverage . '×' : '—',
+                'sub' => InsightFormatter::compactAmount($loanExposure) . ' ' . __('exposure'),
                 'icon' => 'heroicon-o-shield-check',
                 'accent' => $coverage !== null && $coverage >= 1 ? 'emerald' : 'amber',
             ],
@@ -352,6 +377,9 @@ final class AccountDetailInsightsService
      */
     private function masterReserveContext(Account $account, float $balance, string $type): array
     {
+        $pendingBankMatch = app(BankClearingMatchService::class)
+            ->pendingOperationalClearanceCountForMasterAccount($account);
+
         $fundedIn = (float) Transaction::query()
             ->where('account_id', $account->id)
             ->where('type', 'credit')
@@ -364,25 +392,42 @@ final class AccountDetailInsightsService
             ->where('description', 'like', '%(to master cash)%')
             ->sum('amount');
 
+        $rows = [
+            ['label' => __('Funded in'), 'value' => InsightFormatter::money($fundedIn)],
+            ['label' => __('Disbursed out'), 'value' => InsightFormatter::money($disbursedOut)],
+            ['label' => __('Available'), 'value' => InsightFormatter::money($balance)],
+        ];
+
+        if ($type === 'expense') {
+            $rows[] = ['label' => __('Bank match'), 'value' => (string) $pendingBankMatch];
+        }
+
         return [
             'panels' => [
                 [
                     'title' => __('Reserve flow'),
-                    'rows' => [
-                        ['label' => __('Funded in'), 'value' => InsightFormatter::money($fundedIn)],
-                        ['label' => __('Disbursed out'), 'value' => InsightFormatter::money($disbursedOut)],
-                        ['label' => __('Available'), 'value' => InsightFormatter::money($balance)],
-                    ],
+                    'rows' => $rows,
+                    'url' => $pendingBankMatch > 0 ? BankAccountsResource::listUrl('clearance') : null,
+                    'link_label' => $pendingBankMatch > 0 ? __('Pending bank match') : null,
                 ],
             ],
-            'sixth_kpi' => [
-                'key' => 'available',
-                'label' => __('Available'),
-                'value' => InsightFormatter::compactAmount($balance),
-                'sub' => __('Balance'),
-                'icon' => 'heroicon-o-wallet',
-                'accent' => $balance > 0 ? 'emerald' : 'amber',
-            ],
+            'sixth_kpi' => $pendingBankMatch > 0 && $type === 'expense'
+                ? [
+                    'key' => 'match',
+                    'label' => __('Bank match'),
+                    'value' => (string) $pendingBankMatch,
+                    'sub' => __('Expense payouts'),
+                    'icon' => 'heroicon-o-link',
+                    'accent' => 'amber',
+                ]
+                : [
+                    'key' => 'available',
+                    'label' => __('Available'),
+                    'value' => InsightFormatter::compactAmount($balance),
+                    'sub' => __('Balance'),
+                    'icon' => 'heroicon-o-wallet',
+                    'accent' => $balance > 0 ? 'emerald' : 'amber',
+                ],
         ];
     }
 
@@ -391,10 +436,13 @@ final class AccountDetailInsightsService
      */
     private function masterInvestContext(Account $account, float $balance): array
     {
+        $pendingBankMatch = app(BankClearingMatchService::class)
+            ->pendingOperationalClearanceCountForMasterAccount($account);
+
         $investedOut = (float) Transaction::query()
             ->where('account_id', $account->id)
             ->where('type', 'debit')
-            ->where('description', 'like', '%(to master cash)%')
+            ->where('description', 'like', '%(invest out)%')
             ->sum('amount');
 
         $returnsIn = (float) Transaction::query()
@@ -413,20 +461,32 @@ final class AccountDetailInsightsService
                         ['label' => __('Returns in'), 'value' => InsightFormatter::money($returnsIn)],
                         ['label' => __('Invested out'), 'value' => InsightFormatter::money($investedOut)],
                         ['label' => __('Net return'), 'value' => InsightFormatter::money($netReturn)],
+                        ['label' => __('Bank match'), 'value' => (string) $pendingBankMatch],
                     ],
+                    'url' => $pendingBankMatch > 0 ? BankAccountsResource::listUrl('clearance') : null,
+                    'link_label' => $pendingBankMatch > 0 ? __('Pending bank match') : null,
                 ],
             ],
-            'sixth_kpi' => [
-                'key' => 'return',
-                'label' => __('Net return'),
-                'value' => ($netReturn >= 0 ? '+' : '−').InsightFormatter::compactAmount($netReturn),
-                'sub' => __('Lifetime'),
-                'icon' => 'heroicon-o-arrow-path-rounded-square',
-                'accent' => $netReturn >= 0 ? 'emerald' : 'rose',
-                'value_class' => $netReturn >= 0
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-rose-600 dark:text-rose-400',
-            ],
+            'sixth_kpi' => $pendingBankMatch > 0
+                ? [
+                    'key' => 'match',
+                    'label' => __('Bank match'),
+                    'value' => (string) $pendingBankMatch,
+                    'sub' => __('Invest flows'),
+                    'icon' => 'heroicon-o-link',
+                    'accent' => 'amber',
+                ]
+                : [
+                    'key' => 'return',
+                    'label' => __('Net return'),
+                    'value' => ($netReturn >= 0 ? '+' : '−') . InsightFormatter::compactAmount($netReturn),
+                    'sub' => __('Lifetime'),
+                    'icon' => 'heroicon-o-arrow-path-rounded-square',
+                    'accent' => $netReturn >= 0 ? 'emerald' : 'rose',
+                    'value_class' => $netReturn >= 0
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-rose-600 dark:text-rose-400',
+                ],
         ];
     }
 
@@ -435,27 +495,44 @@ final class AccountDetailInsightsService
      */
     private function masterFeesContext(float $balance): array
     {
+        $masterFees = Account::masterFees();
+        $pendingBankMatch = $masterFees !== null
+            ? app(BankClearingMatchService::class)->pendingOperationalClearanceCountForMasterAccount($masterFees)
+            : 0;
+
         return [
             'panels' => [
                 [
                     'title' => __('Fees reserve'),
                     'rows' => [
                         ['label' => __('Held in fees'), 'value' => InsightFormatter::money($balance)],
+                        ['label' => __('Bank match'), 'value' => (string) $pendingBankMatch],
                     ],
-                    'url' => Account::masterCash()
-                        ? MasterAccountResource::getUrl('view', ['record' => Account::masterCash()])
-                        : null,
-                    'link_label' => __('Master cash'),
+                    'url' => $pendingBankMatch > 0
+                        ? BankAccountsResource::listUrl('clearance')
+                        : (Account::masterCash()
+                            ? MasterAccountResource::getUrl('view', ['record' => Account::masterCash()])
+                            : null),
+                    'link_label' => $pendingBankMatch > 0 ? __('Pending bank match') : __('Master cash'),
                 ],
             ],
-            'sixth_kpi' => [
-                'key' => 'held',
-                'label' => __('Held'),
-                'value' => InsightFormatter::compactAmount($balance),
-                'sub' => __('Fees'),
-                'icon' => 'heroicon-o-receipt-percent',
-                'accent' => 'violet',
-            ],
+            'sixth_kpi' => $pendingBankMatch > 0
+                ? [
+                    'key' => 'match',
+                    'label' => __('Bank match'),
+                    'value' => (string) $pendingBankMatch,
+                    'sub' => __('Fee payouts'),
+                    'icon' => 'heroicon-o-link',
+                    'accent' => 'amber',
+                ]
+                : [
+                    'key' => 'held',
+                    'label' => __('Held'),
+                    'value' => InsightFormatter::compactAmount($balance),
+                    'sub' => __('Fees'),
+                    'icon' => 'heroicon-o-receipt-percent',
+                    'accent' => 'violet',
+                ],
         ];
     }
 
@@ -464,7 +541,7 @@ final class AccountDetailInsightsService
      */
     private function buildHero(Account $account, float $balance, array $context): array
     {
-        if ($account->type === 'fund' && ! $account->is_master && $balance < 0) {
+        if ($account->type === 'fund' && !$account->is_master && $balance < 0) {
             return [
                 'tone' => 'warning',
                 'title' => __('Fund is below zero'),
@@ -473,20 +550,77 @@ final class AccountDetailInsightsService
         }
 
         if ($account->is_master && $account->type === 'cash') {
-            $pending = BankTransaction::query()->whereIn('status', ['imported', 'mirrored'])->count();
+            $bankClearing = app(BankClearingMatchService::class);
+            $pendingPost = $bankClearing->bankLinesAwaitingPostingCount();
+            $pendingMatch = $bankClearing->pendingOperationalClearanceCountForMasterAccount($account);
 
-            if ($pending > 0) {
+            if ($pendingPost > 0) {
                 return [
                     'tone' => 'warning',
                     'title' => __('Bank lines awaiting posting'),
-                    'subtitle' => trans_choice(':count transaction needs ledger posting|:count transactions need ledger posting', $pending, ['count' => $pending]),
-                    'cta_label' => __('Bank queue'),
-                    'cta_url' => BankAccountsResource::getUrl('index', ['tab' => 'imports']),
+                    'subtitle' => trans_choice(':count statement line needs posting to master cash|:count statement lines need posting to master cash', $pendingPost, ['count' => $pendingPost]),
+                    'cta_label' => __('Statement lines'),
+                    'cta_url' => BankAccountsResource::listUrl('imports'),
+                ];
+            }
+
+            if ($pendingMatch > 0) {
+                return [
+                    'tone' => 'warning',
+                    'title' => __('Deposits and cash-outs awaiting bank match'),
+                    'subtitle' => trans_choice(':count operation needs a bank statement match|:count operations need a bank statement match', $pendingMatch, ['count' => $pendingMatch]),
+                    'cta_label' => __('Pending bank match'),
+                    'cta_url' => BankAccountsResource::listUrl('clearance'),
                 ];
             }
         }
 
-        if (! $account->is_master && $account->type === 'cash' && $balance <= 0) {
+        if ($account->is_master && $account->type === 'expense') {
+            $pendingMatch = app(BankClearingMatchService::class)
+                ->pendingOperationalClearanceCountForMasterAccount($account);
+
+            if ($pendingMatch > 0) {
+                return [
+                    'tone' => 'warning',
+                    'title' => __('Expense disbursements awaiting bank match'),
+                    'subtitle' => trans_choice(':count disbursement needs a bank statement match|:count disbursements need a bank statement match', $pendingMatch, ['count' => $pendingMatch]),
+                    'cta_label' => __('Pending bank match'),
+                    'cta_url' => BankAccountsResource::listUrl('clearance'),
+                ];
+            }
+        }
+
+        if ($account->is_master && $account->type === 'invest') {
+            $pendingMatch = app(BankClearingMatchService::class)
+                ->pendingOperationalClearanceCountForMasterAccount($account);
+
+            if ($pendingMatch > 0) {
+                return [
+                    'tone' => 'warning',
+                    'title' => __('Invest flows awaiting bank match'),
+                    'subtitle' => trans_choice(':count operation needs a bank statement match|:count operations need a bank statement match', $pendingMatch, ['count' => $pendingMatch]),
+                    'cta_label' => __('Pending bank match'),
+                    'cta_url' => BankAccountsResource::listUrl('clearance'),
+                ];
+            }
+        }
+
+        if ($account->is_master && $account->type === 'fees') {
+            $pendingMatch = app(BankClearingMatchService::class)
+                ->pendingOperationalClearanceCountForMasterAccount($account);
+
+            if ($pendingMatch > 0) {
+                return [
+                    'tone' => 'warning',
+                    'title' => __('Fee disbursements awaiting bank match'),
+                    'subtitle' => trans_choice(':count disbursement needs a bank statement match|:count disbursements need a bank statement match', $pendingMatch, ['count' => $pendingMatch]),
+                    'cta_label' => __('Pending bank match'),
+                    'cta_url' => BankAccountsResource::listUrl('clearance'),
+                ];
+            }
+        }
+
+        if (!$account->is_master && $account->type === 'cash' && $balance <= 0) {
             $pending = FundPosting::query()
                 ->where('member_id', $account->member_id)
                 ->where('status', 'pending')
@@ -563,7 +697,7 @@ final class AccountDetailInsightsService
             [
                 'key' => 'net',
                 'label' => __('Net 30d'),
-                'value' => ($net30 >= 0 ? '+' : '−').InsightFormatter::compactAmount($net30),
+                'value' => ($net30 >= 0 ? '+' : '−') . InsightFormatter::compactAmount($net30),
                 'sub' => trans_choice(':count txn|:count txns', $txCount30, ['count' => $txCount30]),
                 'icon' => 'heroicon-o-arrows-right-left',
                 'accent' => $net30 >= 0 ? 'teal' : 'amber',

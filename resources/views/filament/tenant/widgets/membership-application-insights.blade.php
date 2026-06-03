@@ -197,6 +197,13 @@
                     <p class="text-[10px] text-gray-400">
                         {{ trans_choice(':count w/ fee|:count w/ fee', $fees['pending_with_fee'], ['count' => $fees['pending_with_fee']]) }}
                     </p>
+                    <p class="mt-0.5 text-[10px] text-rose-600 dark:text-rose-400">
+                        {{ __('Arrears: :count (:amount :currency)', [
+                            'count' => $fees['subscription_arrears_count'],
+                            'amount' => number_format($fees['subscription_arrears_total'], 0),
+                            'currency' => $currency,
+                        ]) }}
+                    </p>
                     <div class="mt-2">
                         <div class="mb-0.5 flex justify-between text-[10px] text-gray-500">
                             <span>{{ __('Receipts') }}</span>

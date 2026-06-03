@@ -9,6 +9,7 @@ use App\Filament\Support\AccountTransactionAmountColumn;
 use App\Filament\Support\AccountTransactionManualAdjustmentHeaderActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MasterExpenseHeaderActions;
+use App\Filament\Support\MasterFeesHeaderActions;
 use App\Filament\Support\MasterInvestHeaderActions;
 use App\Filament\Support\ViewActions\ViewAccountTransactionAction;
 use App\Models\Tenant\Account;
@@ -90,6 +91,10 @@ class TransactionsRelationManager extends RelationManager
                     $this->ledgerMutationAfter(),
                 ),
                 ...MasterInvestHeaderActions::make(
+                    fn (): Account => $this->getOwnerRecord(),
+                    $this->ledgerMutationAfter(),
+                ),
+                ...MasterFeesHeaderActions::make(
                     fn (): Account => $this->getOwnerRecord(),
                     $this->ledgerMutationAfter(),
                 ),

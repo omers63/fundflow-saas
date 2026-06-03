@@ -6,6 +6,8 @@ use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Support\UiLabelIcons;
 use App\Filament\Tenant\Resources\MasterAccounts\Pages\ListMasterAccounts;
 use App\Filament\Tenant\Resources\MasterAccounts\Pages\ViewMasterAccount;
+use App\Filament\Tenant\Resources\MasterAccounts\RelationManagers\BankLinesAwaitingPostingRelationManager;
+use App\Filament\Tenant\Resources\MasterAccounts\RelationManagers\PendingOperationalClearanceRelationManager;
 use App\Filament\Tenant\Resources\MasterAccounts\RelationManagers\TransactionsRelationManager;
 use App\Filament\Tenant\Resources\MasterAccounts\Tables\MasterAccountsTable;
 use App\Filament\Tenant\Support\TenantNavigation;
@@ -14,7 +16,9 @@ use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Livewire\Livewire;
 use UnitEnum;
 
@@ -45,7 +49,7 @@ class MasterAccountResource extends Resource
      */
     public static function tabTypes(): array
     {
-        return ['cash', 'fund', 'bank', 'expense', 'fees', 'invest'];
+        return ['cash', 'fund', 'bank', 'expense', 'fees', 'invest', 'suspense'];
     }
 
     /**
@@ -65,6 +69,7 @@ class MasterAccountResource extends Resource
             'expense' => __('Expense'),
             'fees' => __('Fees'),
             'invest' => __('Invest'),
+            'suspense' => __('Suspense'),
             'all' => __('All'),
             default => ucfirst($tab),
         };
@@ -109,6 +114,8 @@ class MasterAccountResource extends Resource
     public static function getRelations(): array
     {
         return [
+            BankLinesAwaitingPostingRelationManager::class,
+            PendingOperationalClearanceRelationManager::class,
             TransactionsRelationManager::class,
         ];
     }
@@ -122,6 +129,11 @@ class MasterAccountResource extends Resource
         }
 
         return static::getUrl('index', $parameters);
+    }
+
+    public static function getRecordTitle(?Model $record): string|Htmlable|null
+    {
+        return $record instanceof Account ? $record->displayLabel() : parent::getRecordTitle($record);
     }
 
     public static function getPages(): array

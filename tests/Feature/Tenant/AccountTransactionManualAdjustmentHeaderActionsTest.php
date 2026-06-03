@@ -54,7 +54,7 @@ test('manual credit and debit header actions are hidden for non-admin tenant use
         ->and($actions[1]->isHidden())->toBeTrue();
 });
 
-test('manual credit on a master account can tag a member', function () {
+test('manual credit on a master account can tag a member without mirroring', function () {
     $member = Member::create([
         'user_id' => User::create([
             'name' => 'Tagged Member',
@@ -71,7 +71,6 @@ test('manual credit on a master account can tag a member', function () {
     ]);
 
     $masterCash = Account::factory()->masterCash()->withBalance(0)->create();
-
     $memberCash = Account::factory()->cash()->for($member)->withBalance(0)->create();
 
     AccountingService::withoutMemberCashCollection(fn () => app(AccountingService::class)->postManualCredit(
@@ -86,10 +85,11 @@ test('manual credit on a master account can tag a member', function () {
 
     expect($txn->member_id)->toBe($member->id)
         ->and((float) $masterCash->fresh()->balance)->toBe(75.0)
-        ->and((float) $memberCash->fresh()->balance)->toBe(75.0);
+        ->and((float) $memberCash->fresh()->balance)->toBe(0.0)
+        ->and($masterCash->transactions()->count())->toBe(1);
 });
 
-test('manual credit on a member account uses the account member automatically', function () {
+test('manual credit on a member account uses the account member automatically without mirroring master cash', function () {
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 0, 'is_master' => true]);
 
     $member = Member::create([
@@ -136,7 +136,8 @@ test('manual credit on a member account uses the account member automatically', 
 
     expect($memberCash->transactions()->first()->member_id)->toBe($member->id)
         ->and((float) $memberCash->fresh()->balance)->toBe(50.0)
-        ->and((float) $masterCash->fresh()->balance)->toBe(50.0);
+        ->and((float) $masterCash->fresh()->balance)->toBe(0.0)
+        ->and($memberCash->transactions()->count())->toBe(1);
 });
 
 test('manual credit posts a transaction on the account', function () {
@@ -237,7 +238,7 @@ test('refund debits member cash and master cash', function () {
         ->and($masterCash->transactions()->where('type', 'debit')->count())->toBe(1);
 });
 
-test('manual credit on member fund mirrors to master fund', function () {
+test('manual credit on member fund only affects member fund', function () {
     Account::query()->delete();
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 0, 'is_master' => true]);
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 0, 'is_master' => true]);
@@ -262,10 +263,11 @@ test('manual credit on member fund mirrors to master fund', function () {
     app(AccountingService::class)->postManualCredit($memberFund, 120, 'Fund adjustment');
 
     expect((float) $memberFund->fresh()->balance)->toBe(120.0)
-        ->and((float) Account::masterFund()->fresh()->balance)->toBe(120.0);
+        ->and((float) Account::masterFund()->fresh()->balance)->toBe(0.0)
+        ->and($memberFund->transactions()->count())->toBe(1);
 });
 
-test('manual credit on master expense debits master cash', function () {
+test('manual credit on master expense only affects expense account', function () {
     Account::query()->delete();
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 500, 'is_master' => true]);
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 0, 'is_master' => true]);
@@ -274,10 +276,11 @@ test('manual credit on master expense debits master cash', function () {
     app(AccountingService::class)->postManualCredit($expense, 40, 'Expense top-up');
 
     expect((float) $expense->fresh()->balance)->toBe(40.0)
-        ->and((float) Account::masterCash()->fresh()->balance)->toBe(460.0);
+        ->and((float) Account::masterCash()->fresh()->balance)->toBe(500.0)
+        ->and($expense->transactions()->count())->toBe(1);
 });
 
-test('manual credit on master invest debits master fund', function () {
+test('manual credit on master invest only affects invest account', function () {
     Account::query()->delete();
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 0, 'is_master' => true]);
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 300, 'is_master' => true]);
@@ -286,10 +289,11 @@ test('manual credit on master invest debits master fund', function () {
     app(AccountingService::class)->postManualCredit($invest, 90, 'Invest top-up');
 
     expect((float) $invest->fresh()->balance)->toBe(90.0)
-        ->and((float) Account::masterFund()->fresh()->balance)->toBe(210.0);
+        ->and((float) Account::masterFund()->fresh()->balance)->toBe(300.0)
+        ->and($invest->transactions()->count())->toBe(1);
 });
 
-test('manual debit on master fees credits master cash', function () {
+test('manual debit on master fees only affects fees account', function () {
     Account::query()->delete();
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 100, 'is_master' => true]);
     $fees = Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 30, 'is_master' => true]);
@@ -297,7 +301,8 @@ test('manual debit on master fees credits master cash', function () {
     app(AccountingService::class)->postManualDebit($fees, 30, 'Fees reversal');
 
     expect((float) $fees->fresh()->balance)->toBe(0.0)
-        ->and((float) Account::masterCash()->fresh()->balance)->toBe(130.0);
+        ->and((float) Account::masterCash()->fresh()->balance)->toBe(100.0)
+        ->and($fees->transactions()->count())->toBe(1);
 });
 
 test('refund rejects amounts above member cash balance', function () {

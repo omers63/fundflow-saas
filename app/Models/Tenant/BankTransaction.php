@@ -27,6 +27,10 @@ class BankTransaction extends Model
         'fund_posting_id',
         'membership_application_id',
         'cash_out_request_id',
+        'expense_disbursement_id',
+        'fee_disbursement_id',
+        'invest_disbursement_id',
+        'invest_return_id',
         'duplicate_of_id',
         'master_cash_transaction_id',
         'master_bank_transaction_id',
@@ -66,6 +70,26 @@ class BankTransaction extends Model
     public function cashOutRequest(): BelongsTo
     {
         return $this->belongsTo(CashOutRequest::class);
+    }
+
+    public function expenseDisbursement(): BelongsTo
+    {
+        return $this->belongsTo(ExpenseDisbursement::class);
+    }
+
+    public function feeDisbursement(): BelongsTo
+    {
+        return $this->belongsTo(FeeDisbursement::class);
+    }
+
+    public function investDisbursement(): BelongsTo
+    {
+        return $this->belongsTo(InvestDisbursement::class);
+    }
+
+    public function investReturn(): BelongsTo
+    {
+        return $this->belongsTo(InvestReturn::class);
     }
 
     public function duplicateOf(): BelongsTo
@@ -127,7 +151,7 @@ class BankTransaction extends Model
 
     public function masterCashMirrorSummary(): ?string
     {
-        if (! in_array($this->status, ['mirrored', 'posted'], true)) {
+        if (!in_array($this->status, ['mirrored', 'posted'], true)) {
             return null;
         }
 
@@ -209,7 +233,7 @@ class BankTransaction extends Model
             BankStatement::query()
                 ->whereKey($transaction->bank_statement_id)
                 ->first()
-                ?->refreshRowCounts();
+                    ?->refreshRowCounts();
         });
     }
 }
