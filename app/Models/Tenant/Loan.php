@@ -3,6 +3,7 @@
 namespace App\Models\Tenant;
 
 use App\Services\Loans\LoanEarlySettlementService;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -221,7 +222,7 @@ class Loan extends Model
             ! $this->isGuarantorReleased() && $this->guarantor_member_id &&
             (float) $this->repaid_to_master >= (float) $this->master_portion
         ) {
-            $this->update(['guarantor_released_at' => now()]);
+            $this->update(['guarantor_released_at' => BusinessDay::now()]);
         }
     }
 
@@ -347,7 +348,7 @@ class Loan extends Model
 
         $this->update([
             'status' => 'completed',
-            'settled_at' => $settledAt ?? now(),
+            'settled_at' => $settledAt ?? BusinessDay::now(),
         ]);
     }
 

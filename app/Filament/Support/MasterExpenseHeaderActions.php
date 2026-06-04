@@ -7,6 +7,7 @@ namespace App\Filament\Support;
 use App\Models\Tenant\Account;
 use App\Services\AccountingService;
 use App\Services\MasterExpenseDisbursementService;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 use Closure;
 use Filament\Actions\Action;
@@ -122,7 +123,7 @@ final class MasterExpenseHeaderActions
         return [
             DateTimePicker::make('transacted_at')
                 ->label(__('Transaction date & time'))
-                ->default(now())
+                ->default(BusinessDay::now())
                 ->required()
                 ->native(false)
                 ->seconds(true),

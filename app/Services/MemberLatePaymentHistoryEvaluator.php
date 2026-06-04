@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
@@ -40,7 +41,7 @@ class MemberLatePaymentHistoryEvaluator
         $this->lateContributionPeriods = [];
         $this->lateRepaymentPeriods = [];
 
-        $now = now();
+        $now = BusinessDay::now();
         [$lastMonth, $lastYear] = $this->delinquencyEvaluator->lastClosedPeriodMonthYear($now);
 
         $joined = $member->joined_at instanceof Carbon

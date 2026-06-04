@@ -13,6 +13,7 @@ use App\Models\Tenant\Member;
 use App\Notifications\Tenant\CashOutRequestAcceptedNotification;
 use App\Notifications\Tenant\CashOutRequestRejectedNotification;
 use App\Notifications\Tenant\NewCashOutRequestNotification;
+use App\Support\BusinessDay;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -26,8 +27,7 @@ final class MemberCashOutService
         private OperationalReviewWorkflowService $reviewWorkflow,
         private SyntheticBankStatementFactory $syntheticStatements,
         private BankClearanceLinkageResolver $clearanceLinkageResolver,
-    ) {
-    }
+    ) {}
 
     public function availableCashForWithdrawal(Member $member, ?CashOutRequest $excludeRequest = null): float
     {
@@ -59,7 +59,7 @@ final class MemberCashOutService
     public function reservedForNextEmi(Member $member): float
     {
         $installment = LoanInstallment::query()
-            ->whereHas('loan', fn($query) => $query
+            ->whereHas('loan', fn ($query) => $query
                 ->where('member_id', $member->id)
                 ->where('status', 'active'))
             ->whereIn('status', ['pending', 'overdue'])
@@ -123,7 +123,7 @@ final class MemberCashOutService
         );
 
         DB::transaction(function () use ($request, $member, $memberCash, $amount, $reviewedBy, $remarks): void {
-            $reviewedAt = now();
+            $reviewedAt = BusinessDay::now();
             $description = __('Cash out #:id – :name', [
                 'id' => $request->id,
                 'name' => $member->name,
@@ -132,7 +132,7 @@ final class MemberCashOutService
             $this->accounting->debitMemberCashWithMasterMirror(
                 $memberCash,
                 $amount,
-                $description . ' ' . __('(cash out)'),
+                $description.' '.__('(cash out)'),
                 __('(cash out mirror)'),
                 $request,
                 null,
@@ -175,7 +175,7 @@ final class MemberCashOutService
         $this->assertRemarksProvided($remarks, __('Provide a reason for rejection.'));
 
         DB::transaction(function () use ($request, $reviewedBy, $remarks): void {
-            $this->reviewWorkflow->markReviewed($request, 'rejected', $reviewedBy, $remarks, now());
+            $this->reviewWorkflow->markReviewed($request, 'rejected', $reviewedBy, $remarks, BusinessDay::now());
 
             $this->notifyMemberAboutCashOut($request, false);
         });

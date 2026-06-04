@@ -10,7 +10,9 @@ use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\ContributionService;
+use App\Support\BusinessDaySettings;
 use App\Support\ContributionCollectionStatus;
+use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
@@ -74,6 +76,39 @@ test('posting contribution debits member cash and credits member fund and master
     expect($member->fundAccount->fresh()->balance)->toBe('5000.00');
     expect(Account::masterFund()->balance)->toBe('5000.00');
     expect(Account::masterCash()->balance)->toBe('0.00');
+});
+
+test('posting contribution uses configured business day for posted_at and ledger dates', function () {
+    BusinessDaySettings::saveFromForm('2026-07-20');
+
+    $member = Member::create([
+        'member_number' => 'MEM-BDAY',
+        'name' => 'Business Day Member',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    Account::masterCash()->update(['balance' => 5000]);
+    $member->cashAccount->update(['balance' => 5000]);
+
+    $contribution = $this->service->recordContribution($member, '2026-07-01');
+    $contribution->update(['payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT]);
+    $this->service->postContribution($contribution);
+
+    $contribution->refresh();
+
+    expect($contribution->posted_at?->toDateString())->toBe('2026-07-20')
+        ->and($contribution->paid_at?->toDateString())->toBe('2026-07-20');
+
+    $ledgerDate = Transaction::query()
+        ->where('reference_type', Contribution::class)
+        ->where('reference_id', $contribution->id)
+        ->where('account_id', $member->cashAccount->id)
+        ->value('transacted_at');
+
+    expect(Carbon::parse((string) $ledgerDate)->toDateString())->toBe('2026-07-20');
 });
 
 test('posting contribution tags master cash mirror with member name and id', function () {

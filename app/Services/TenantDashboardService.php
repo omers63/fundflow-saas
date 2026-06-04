@@ -29,6 +29,7 @@ use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\User;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Support\BusinessDay;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Lang;
 use App\Support\PublicPageSettings;
@@ -52,7 +53,7 @@ final class TenantDashboardService
      */
     public function snapshot(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $currency = InsightFormatter::currency();
         $user = Auth::user();
         assert($user instanceof User);

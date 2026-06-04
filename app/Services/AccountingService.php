@@ -10,6 +10,7 @@ use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
+use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -135,7 +136,7 @@ class AccountingService
                 throw new InvalidArgumentException(__('Leg :n requires an account.', ['n' => $index + 1]));
             }
 
-            if (!in_array($type, ['debit', 'credit'], true)) {
+            if (! in_array($type, ['debit', 'credit'], true)) {
                 throw new InvalidArgumentException(__('Leg :n type must be debit or credit.', ['n' => $index + 1]));
             }
 
@@ -220,7 +221,7 @@ class AccountingService
                 'reference_type' => $reference ? get_class($reference) : null,
                 'reference_id' => $reference?->id,
                 'description' => $description,
-                'transacted_at' => $transactedAt ?? now(),
+                'transacted_at' => $transactedAt ?? BusinessDay::now(),
             ]);
         });
 
@@ -260,7 +261,7 @@ class AccountingService
                 'reference_type' => $reference ? get_class($reference) : null,
                 'reference_id' => $reference?->id,
                 'description' => $description,
-                'transacted_at' => $transactedAt ?? now(),
+                'transacted_at' => $transactedAt ?? BusinessDay::now(),
             ]);
         });
     }
@@ -287,7 +288,7 @@ class AccountingService
 
         $type = (string) ($data['type'] ?? $transaction->type);
 
-        if (!in_array($type, ['credit', 'debit'], true)) {
+        if (! in_array($type, ['credit', 'debit'], true)) {
             throw new InvalidArgumentException(__('Type must be credit or debit.'));
         }
 
@@ -299,7 +300,7 @@ class AccountingService
 
         $transactedAt = $data['transacted_at'] ?? $transaction->transacted_at;
 
-        if (!$transactedAt instanceof CarbonInterface) {
+        if (! $transactedAt instanceof CarbonInterface) {
             $transactedAt = Carbon::parse($transactedAt);
         }
 
@@ -449,13 +450,13 @@ class AccountingService
             throw new InvalidArgumentException(__('Transaction has no account.'));
         }
 
-        if (!$this->canSplitTransaction($original)) {
+        if (! $this->canSplitTransaction($original)) {
             throw new InvalidArgumentException(__('This transaction cannot be split.'));
         }
 
         $originalAmount = round((float) $original->amount, 2);
         $partTotal = round(array_sum(array_map(
-            fn(array $part): float => round((float) ($part['amount'] ?? 0), 2),
+            fn (array $part): float => round((float) ($part['amount'] ?? 0), 2),
             $parts,
         )), 2);
 
@@ -543,7 +544,7 @@ class AccountingService
             'reason' => $trimmed,
         ]);
 
-        if (!$account->is_master && $account->type === 'cash') {
+        if (! $account->is_master && $account->type === 'cash') {
             return $counterType === 'credit'
                 ? $this->creditMemberCashWithMasterMirror(
                     $account,
@@ -565,7 +566,7 @@ class AccountingService
                 );
         }
 
-        if (!$account->is_master && $account->type === 'fund') {
+        if (! $account->is_master && $account->type === 'fund') {
             return $counterType === 'credit'
                 ? $this->creditMemberFundWithMasterMirror(
                     $account,
@@ -681,7 +682,7 @@ class AccountingService
      */
     public function validateBalancedJournalForReference(Transaction $transaction): ?string
     {
-        if (!$this->shouldValidateBalancedReference($transaction)) {
+        if (! $this->shouldValidateBalancedReference($transaction)) {
             return null;
         }
 
@@ -833,7 +834,7 @@ class AccountingService
 
         $memberForCollection = null;
 
-        if ($direction === 'credit' && !$account->is_master && $account->type === 'cash' && $account->member_id !== null) {
+        if ($direction === 'credit' && ! $account->is_master && $account->type === 'cash' && $account->member_id !== null) {
             $memberForCollection = Member::query()->find((int) $account->member_id);
         }
 
@@ -856,7 +857,7 @@ class AccountingService
 
     protected function assertMasterInvestAccount(Account $account): void
     {
-        if (!$account->is_master || $account->type !== 'invest') {
+        if (! $account->is_master || $account->type !== 'invest') {
             throw new InvalidArgumentException(__('Account must be the master invest account.'));
         }
     }
@@ -1185,7 +1186,7 @@ class AccountingService
         $base = trim($description);
 
         if ($memberId === null) {
-            return $base === '' ? trim($mirrorSuffix) : $base . ' ' . trim($mirrorSuffix);
+            return $base === '' ? trim($mirrorSuffix) : $base.' '.trim($mirrorSuffix);
         }
 
         $memberName = Member::query()->whereKey($memberId)->value('name');
@@ -1197,12 +1198,12 @@ class AccountingService
             ]);
         }
 
-        return $base === '' ? trim($mirrorSuffix) : $base . ' ' . trim($mirrorSuffix);
+        return $base === '' ? trim($mirrorSuffix) : $base.' '.trim($mirrorSuffix);
     }
 
     private function assertMasterReserveAccount(Account $account): void
     {
-        if (!$account->is_master || !in_array($account->type, ['expense', 'fees', 'invest'], true)) {
+        if (! $account->is_master || ! in_array($account->type, ['expense', 'fees', 'invest'], true)) {
             throw new InvalidArgumentException(__('Reserve account must be a master expense, fees, or investment account.'));
         }
     }
@@ -1322,7 +1323,7 @@ class AccountingService
 
     private function guardMemberCashDebitDuringAutoCollection(Account $account, float $amount): void
     {
-        if (!self::$memberCashSettlementActive || $account->is_master || $account->type !== 'cash') {
+        if (! self::$memberCashSettlementActive || $account->is_master || $account->type !== 'cash') {
             return;
         }
 
@@ -1343,7 +1344,7 @@ class AccountingService
             return null;
         }
 
-        if (!Member::query()->whereKey($memberId)->exists()) {
+        if (! Member::query()->whereKey($memberId)->exists()) {
             throw new InvalidArgumentException(__('Selected member does not exist.'));
         }
 
@@ -1362,7 +1363,7 @@ class AccountingService
                 'is_master' => false,
             ],
             [
-                'name' => $member->name . ' - Cash',
+                'name' => $member->name.' - Cash',
                 'balance' => 0,
             ],
         );
@@ -1374,7 +1375,7 @@ class AccountingService
                 'is_master' => false,
             ],
             [
-                'name' => $member->name . ' - Fund',
+                'name' => $member->name.' - Fund',
                 'balance' => 0,
             ],
         );
@@ -1412,6 +1413,7 @@ class AccountingService
 
         $periodLabel = $contribution->period?->format('M Y') ?? '';
         $description = __('Contribution — :period', ['period' => $periodLabel]);
+        $postedAt = BusinessDay::now();
 
         if ($contribution->payment_method === Contribution::PAYMENT_METHOD_CASH_ACCOUNT) {
             $this->debitMemberCashWithMasterMirror(
@@ -1420,6 +1422,7 @@ class AccountingService
                 $description,
                 __('(contribution mirror)'),
                 $contribution,
+                $postedAt,
             );
         }
 
@@ -1429,6 +1432,7 @@ class AccountingService
             $description,
             __('(contribution mirror)'),
             $contribution,
+            $postedAt,
         );
     }
 
@@ -1453,6 +1457,7 @@ class AccountingService
         $description = __('Contribution late fee — :period', [
             'period' => $contribution->period?->format('M Y') ?? '',
         ]);
+        $postedAt = BusinessDay::now();
 
         $this->debitMemberCashWithMasterMirror(
             $memberCash,
@@ -1460,8 +1465,9 @@ class AccountingService
             $description,
             __('(contribution late fee mirror)'),
             $contribution,
+            $postedAt,
         );
-        $this->credit($masterFees, $lateFee, $description, $contribution);
+        $this->credit($masterFees, $lateFee, $description, $contribution, $postedAt);
     }
 
     /**
@@ -1480,7 +1486,7 @@ class AccountingService
             ->where('reference_type', Contribution::class)
             ->where('reference_id', $contribution->id)
             ->where('type', 'debit')
-            ->where('description', 'like', $descriptionPrefix . '%');
+            ->where('description', 'like', $descriptionPrefix.'%');
 
         if ($cashAccountId === null) {
             return $query->whereRaw('0 = 1');
@@ -1508,7 +1514,7 @@ class AccountingService
             ->where('reference_type', LoanInstallment::class)
             ->where('reference_id', $installment->id)
             ->where('type', 'debit')
-            ->where('description', 'like', $descriptionPrefix . '%');
+            ->where('description', 'like', $descriptionPrefix.'%');
 
         if ($cashAccountId === null) {
             return 0.0;
@@ -1576,10 +1582,10 @@ class AccountingService
             $description,
             __('(EMI late fee mirror)'),
             $installment,
-            now(),
+            BusinessDay::now(),
             $member->id,
         );
-        $this->credit($masterFees, $lateFee, $description, $installment, now(), $member->id);
+        $this->credit($masterFees, $lateFee, $description, $installment, BusinessDay::now(), $member->id);
     }
 
     public function reverseInstallmentLateFee(LoanInstallment $installment, float $lateFee): void
@@ -1676,8 +1682,8 @@ class AccountingService
             throw new RuntimeException(__('Insufficient parent cash balance.'));
         }
 
-        $debitDesc = trim(__('Transfer to :name', ['name' => $dependent->name]) . ($note ? " — {$note}" : ''));
-        $creditDesc = trim(__('Transfer from :name', ['name' => $parent->name]) . ($note ? " — {$note}" : ''));
+        $debitDesc = trim(__('Transfer to :name', ['name' => $dependent->name]).($note ? " — {$note}" : ''));
+        $creditDesc = trim(__('Transfer from :name', ['name' => $parent->name]).($note ? " — {$note}" : ''));
 
         DB::transaction(function () use ($parentCash, $dependentCash, $amount, $debitDesc, $creditDesc): void {
             self::withoutMemberCashCollection(function () use ($parentCash, $dependentCash, $amount, $debitDesc, $creditDesc): void {

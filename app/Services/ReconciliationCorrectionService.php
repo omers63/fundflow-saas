@@ -11,6 +11,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\Transaction;
+use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
 use InvalidArgumentException;
 
@@ -248,7 +249,7 @@ class ReconciliationCorrectionService
             'status' => ReconciliationException::STATUS_RESOLVED,
             'resolution_action' => self::ACTION_MANUAL_CORRECTION,
             'resolution_notes' => $notes,
-            'resolved_at' => now(),
+            'resolved_at' => BusinessDay::now(),
         ]);
     }
 

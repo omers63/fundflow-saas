@@ -8,6 +8,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\User;
+use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
 use Illuminate\Support\Facades\Auth;
 use InvalidArgumentException;
@@ -42,7 +43,7 @@ class ReconciliationResolutionService
             'status' => ReconciliationException::STATUS_RESOLVED,
             'resolution_action' => self::ACTION_RESOLVED,
             'resolution_notes' => $notes,
-            'resolved_at' => now(),
+            'resolved_at' => BusinessDay::now(),
             'assigned_to' => $exception->assigned_to ?? Auth::guard('tenant')->id(),
         ]);
 
@@ -60,7 +61,7 @@ class ReconciliationResolutionService
             'resolution_action' => self::ACTION_ESCALATED,
             'resolution_notes' => $reason,
             'severity' => $this->escalatedSeverity($exception->severity),
-            'sla_deadline' => now()->endOfDay(),
+            'sla_deadline' => BusinessDay::now()->endOfDay(),
             'assigned_to' => $exception->assigned_to ?? Auth::guard('tenant')->id(),
         ]);
 
@@ -87,7 +88,7 @@ class ReconciliationResolutionService
             'status' => ReconciliationException::STATUS_RESOLVED,
             'resolution_action' => self::ACTION_WRITE_OFF,
             'resolution_notes' => $reason,
-            'resolved_at' => now(),
+            'resolved_at' => BusinessDay::now(),
             'auto_resolve_attempted' => true,
             'auto_resolve_reason' => __('Written off to reconciliation suspense'),
             'assigned_to' => $exception->assigned_to ?? Auth::guard('tenant')->id(),
@@ -110,7 +111,7 @@ class ReconciliationResolutionService
             'status' => ReconciliationException::STATUS_RESOLVED,
             'resolution_action' => self::ACTION_ACCEPT_OVERRIDE,
             'resolution_notes' => $reason,
-            'resolved_at' => now(),
+            'resolved_at' => BusinessDay::now(),
             'assigned_to' => $exception->assigned_to ?? Auth::guard('tenant')->id(),
         ]);
 
@@ -178,7 +179,7 @@ class ReconciliationResolutionService
 
         $exception->update([
             'status' => ReconciliationException::STATUS_RESOLVED,
-            'resolved_at' => now(),
+            'resolved_at' => BusinessDay::now(),
         ]);
 
         $this->auditResolution($exception, ReconciliationCorrectionService::ACTION_REVERSED, $reason);
@@ -201,7 +202,7 @@ class ReconciliationResolutionService
 
         $exception->update([
             'status' => ReconciliationException::STATUS_RESOLVED,
-            'resolved_at' => now(),
+            'resolved_at' => BusinessDay::now(),
         ]);
 
         $this->auditResolution($exception, ReconciliationCorrectionService::ACTION_MANUAL_CORRECTION, $reason);
@@ -239,7 +240,7 @@ class ReconciliationResolutionService
 
         $exception->update([
             'status' => ReconciliationException::STATUS_RESOLVED,
-            'resolved_at' => now(),
+            'resolved_at' => BusinessDay::now(),
         ]);
 
         $this->auditResolution($exception, ReconciliationCorrectionService::ACTION_MANUAL_CORRECTION, $reason);
@@ -259,7 +260,7 @@ class ReconciliationResolutionService
 
         $exception->update([
             'status' => ReconciliationException::STATUS_RESOLVED,
-            'resolved_at' => now(),
+            'resolved_at' => BusinessDay::now(),
         ]);
 
         $this->auditResolution(

@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
+use App\Support\BusinessDay;
 use Carbon\CarbonInterface;
 
 final class MembershipApprovalPostingPipeline
@@ -13,8 +14,7 @@ final class MembershipApprovalPostingPipeline
     public function __construct(
         private readonly MembershipSubscriptionFeeService $subscriptionFees,
         private readonly MembershipApplicationImportCutoffService $importCutoffs,
-    ) {
-    }
+    ) {}
 
     public function run(
         MembershipApplication $application,
@@ -37,7 +37,7 @@ final class MembershipApprovalPostingPipeline
     ): MembershipApplication {
         $application->update([
             'status' => 'approved',
-            'reviewed_at' => $reviewedAt ?? now(),
+            'reviewed_at' => $reviewedAt ?? BusinessDay::now(),
             'member_id' => $member->id,
             'household_email' => $member->household_email,
         ]);
@@ -47,7 +47,7 @@ final class MembershipApprovalPostingPipeline
 
     private function prepareImportCutoffIfNeeded(MembershipApplication $application, Member $member): void
     {
-        if (!$application->wasImportedFromCsv()) {
+        if (! $application->wasImportedFromCsv()) {
             return;
         }
 

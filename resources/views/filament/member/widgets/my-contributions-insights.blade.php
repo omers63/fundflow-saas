@@ -131,58 +131,59 @@
                     'headerStat' => $d['summary']['posted_last_12'],
                 ])
             </div>
+        </div>
 
-            <div
-                class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 md:col-span-3">
-                <div class="border-b border-gray-100 px-3 py-1.5 dark:border-gray-700">
-                    <div class="flex items-center gap-1.5">
-                        <x-heroicon-o-chart-pie class="h-3.5 w-3.5 text-violet-500" />
-                        <h4 class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            {{ __('Your rhythm') }}</h4>
+        <div
+            class="ff-member-contributions-rhythm w-full overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div class="border-b border-gray-100 px-3 py-1.5 dark:border-gray-700">
+                <div class="flex items-center gap-1.5">
+                    <x-heroicon-o-chart-pie class="h-3.5 w-3.5 text-violet-500" />
+                    <h4 class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        {{ __('Your rhythm') }}</h4>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 gap-3 px-3 py-3 sm:grid-cols-2 lg:grid-cols-12 lg:items-start">
+                <div class="flex items-center gap-2 lg:col-span-3">
+                    <div
+                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-sm font-bold text-white tabular-nums">
+                        {{ $d['consistency']['display'] }}
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-xs font-semibold text-gray-900 dark:text-white">{{ __('On-time rate') }}</p>
+                        <p class="text-[10px] text-gray-400">
+                            {{ __(':posted of :liable cycles', ['posted' => $d['consistency']['posted'], 'liable' => $d['consistency']['liable']]) }}
+                        </p>
                     </div>
                 </div>
-                <div class="space-y-2 px-3 py-2">
-                    <div class="flex items-center gap-2">
-                        <div
-                            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-sm font-bold text-white tabular-nums">
-                            {{ $d['consistency']['display'] }}
-                        </div>
-                        <div class="min-w-0">
-                            <p class="text-xs font-semibold text-gray-900 dark:text-white">{{ __('On-time rate') }}</p>
-                            <p class="text-[10px] text-gray-400">
-                                {{ __(':posted of :liable cycles', ['posted' => $d['consistency']['posted'], 'liable' => $d['consistency']['liable']]) }}
-                            </p>
-                        </div>
-                    </div>
-                    <div class="flex items-center justify-between rounded-lg bg-violet-50 px-2 py-1.5 dark:bg-violet-950/30">
-                        <span class="text-[10px] text-violet-800 dark:text-violet-200">{{ __('Posted streak') }}</span>
-                        <span class="text-sm font-bold tabular-nums text-violet-700 dark:text-violet-300">
-                            {{ trans_choice(':count mo|:count mos', $d['streak'], ['count' => $d['streak']]) }}
-                        </span>
-                    </div>
-                    @if (count($d['method_breakdown']) > 0)
-                        <div class="space-y-1">
-                            <p class="text-[9px] font-semibold uppercase tracking-wide text-gray-400">{{ __('How you pay') }}</p>
-                            @foreach ($d['method_breakdown'] as $tier)
-                                @php $width = $maxMethod > 0 ? round(($tier['count'] / $maxMethod) * 100) : 0; @endphp
-                                <div>
-                                    <div class="mb-0.5 flex justify-between text-[9px]">
-                                        <span class="truncate text-gray-600 dark:text-gray-300">{{ $tier['label'] }}</span>
-                                        <span class="tabular-nums text-gray-400">{{ $tier['count'] }}</span>
-                                    </div>
-                                    <div class="h-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
-                                        <div class="h-full rounded-full bg-violet-500"
-                                            style="width: {{ max($tier['count'] > 0 ? 8 : 0, $width) }}%"></div>
-                                    </div>
+                <div
+                    class="flex items-center justify-between rounded-lg bg-violet-50 px-3 py-2 dark:bg-violet-950/30 sm:col-span-1 lg:col-span-3">
+                    <span class="text-[10px] text-violet-800 dark:text-violet-200">{{ __('Posted streak') }}</span>
+                    <span class="text-sm font-bold tabular-nums text-violet-700 dark:text-violet-300">
+                        {{ trans_choice(':count mo|:count mos', $d['streak'], ['count' => $d['streak']]) }}
+                    </span>
+                </div>
+                @if (count($d['method_breakdown']) > 0)
+                    <div class="space-y-1 sm:col-span-2 lg:col-span-4">
+                        <p class="text-[9px] font-semibold uppercase tracking-wide text-gray-400">{{ __('How you pay') }}</p>
+                        @foreach ($d['method_breakdown'] as $tier)
+                            @php $width = $maxMethod > 0 ? round(($tier['count'] / $maxMethod) * 100) : 0; @endphp
+                            <div>
+                                <div class="mb-0.5 flex justify-between text-[9px]">
+                                    <span class="truncate text-gray-600 dark:text-gray-300">{{ $tier['label'] }}</span>
+                                    <span class="tabular-nums text-gray-400">{{ $tier['count'] }}</span>
                                 </div>
-                            @endforeach
-                        </div>
-                    @endif
-                    <p class="text-[9px] text-gray-400">
-                        {{ __('Monthly target') }}:
-                        <span class="font-semibold text-gray-600 dark:text-gray-300">{{ $d['monthly'] }}</span>
-                    </p>
-                </div>
+                                <div class="h-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
+                                    <div class="h-full rounded-full bg-violet-500"
+                                        style="width: {{ max($tier['count'] > 0 ? 8 : 0, $width) }}%"></div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
+                <p class="text-[9px] text-gray-400 lg:col-span-2 lg:self-center lg:text-right">
+                    {{ __('Monthly target') }}:
+                    <span class="font-semibold text-gray-600 dark:text-gray-300">{{ $d['monthly'] }}</span>
+                </p>
             </div>
         </div>
     </div>

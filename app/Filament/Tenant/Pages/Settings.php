@@ -9,6 +9,8 @@ use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\BankTemplate;
 use App\Models\Tenant\Setting;
 use App\Support\ArabicDisplaySettings;
+use App\Support\BusinessDay;
+use App\Support\BusinessDaySettings;
 use App\Support\CommunicationSettings;
 use App\Support\ContributionPolicySettings;
 use App\Support\ImportDateFormats;
@@ -19,8 +21,10 @@ use App\Support\NotificationSettings;
 use App\Support\PublicPageSettings;
 use App\Support\StatementSettings;
 use BackedEnum;
+use Carbon\Carbon;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
@@ -95,6 +99,7 @@ class Settings extends Page implements HasForms
 
         $this->form->fill([
             'currency' => $general['currency'] ?? 'USD',
+            'business_day' => BusinessDaySettings::forForm(),
             'member_number_prefix' => $memberNumber['prefix'],
             'member_number_separator' => $memberNumber['separator'],
             'member_number_padding' => $memberNumber['padding'],
@@ -161,6 +166,30 @@ class Settings extends Page implements HasForms
                                             ->searchable()
                                             ->options(static::currencyOptions())
                                             ->helperText(__('The primary currency used for all transactions.')),
+                                    ]),
+                                Section::make(__('Business calendar'))
+                                    ->description(__('Set a custom date that the application treats as today. Useful for testing contribution cycles, loan eligibility, and delinquency in the future or past.'))
+                                    ->columns(2)
+                                    ->schema([
+                                        DatePicker::make('business_day')
+                                            ->label(__('Current business day'))
+                                            ->native(false)
+                                            ->placeholder(__('Use real calendar date'))
+                                            ->helperText(__('Leave empty to use the real calendar date. Time of day still follows the server clock.')),
+                                        Placeholder::make('business_day_effective')
+                                            ->label(__('Effective today'))
+                                            ->content(function (Get $get): string {
+                                                $configured = $get('business_day');
+
+                                                if (filled($configured)) {
+                                                    return __('App date: :business · Calendar: :calendar', [
+                                                        'business' => Carbon::parse((string) $configured)->toFormattedDateString(),
+                                                        'calendar' => BusinessDay::calendarToday()->toFormattedDateString(),
+                                                    ]);
+                                                }
+
+                                                return BusinessDay::calendarToday()->toFormattedDateString();
+                                            }),
                                     ]),
                                 Section::make(__('Member numbers'))
                                     ->description(__('Controls how IDs are generated for new members (manual create and approved applications). Existing numbers are not changed.'))
@@ -815,6 +844,7 @@ class Settings extends Page implements HasForms
         $state = $this->form->getState();
 
         Setting::set('general', 'currency', $state['currency']);
+        BusinessDaySettings::saveFromForm($state['business_day'] ?? null);
         MemberNumberSettings::save([
             'prefix' => $state['member_number_prefix'],
             'separator' => $state['member_number_separator'],

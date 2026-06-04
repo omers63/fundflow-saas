@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Tenant\FundAuditLog;
 use App\Models\Tenant\Member;
+use App\Support\BusinessDay;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 
@@ -18,7 +19,7 @@ class FundAuditLogService
         ?Member $member = null,
         ?array $payload = null,
     ): FundAuditLog {
-        $occurredAt = now();
+        $occurredAt = BusinessDay::now();
         $operatorId = Auth::guard('tenant')->id();
 
         $payloadJson = json_encode($payload ?? [], JSON_THROW_ON_ERROR);

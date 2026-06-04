@@ -4,6 +4,7 @@ namespace App\Filament\Tenant\Resources\Members\Schemas;
 
 use App\Models\Tenant\Member;
 use App\Services\MemberMonthlyAllocationService;
+use App\Support\BusinessDay;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -61,7 +62,7 @@ class MemberForm
                             }),
                         DatePicker::make('joined_at')
                             ->required()
-                            ->default(now()),
+                            ->default(BusinessDay::now()),
                         Select::make('status')
                             ->options(Member::statusOptions())
                             ->default('active')

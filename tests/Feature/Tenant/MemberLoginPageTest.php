@@ -4,6 +4,7 @@ use App\Livewire\Tenant\MemberLoginPage;
 use App\Models\Central\Tenant;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use Livewire\Livewire;
@@ -61,6 +62,18 @@ test('member login page renders reference-style card', function () {
         ->assertSee(__('Sign in to your member portal account'), false)
         ->assertSee(__('Not a member yet?'), false)
         ->assertDontSee('fi-simple-header', false);
+});
+
+test('member can sign in through custom login page when business day is overridden', function () {
+    Setting::set('general', 'business_day', '2024-01-15');
+
+    Livewire::test(MemberLoginPage::class)
+        ->set('email', 'alice@fund.test')
+        ->set('password', 'password')
+        ->call('login')
+        ->assertRedirect('/member');
+
+    expect(auth('tenant')->id())->toBe($this->memberUser->id);
 });
 
 test('member can sign in through custom login page', function () {

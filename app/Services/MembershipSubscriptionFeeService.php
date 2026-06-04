@@ -8,6 +8,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\Transaction;
+use App\Support\BusinessDay;
 use App\Support\PublicPageSettings;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -98,7 +99,7 @@ class MembershipSubscriptionFeeService
             throw new InvalidArgumentException(__('Member cash account is not configured.'));
         }
 
-        $transferDate = $application->membership_fee_transfer_date ?? now();
+        $transferDate = $application->membership_fee_transfer_date ?? BusinessDay::now();
 
         $postSubscriptionFee = function () use ($application, $member, $transferred, $settledFee, $arrears, $masterFees, $memberCash, $transferDate): void {
             DB::transaction(function () use ($application, $member, $transferred, $settledFee, $arrears, $masterFees, $memberCash, $transferDate): void {

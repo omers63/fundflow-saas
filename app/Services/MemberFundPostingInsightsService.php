@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Member;
+use App\Support\BusinessDay;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
 use Carbon\Carbon;
@@ -73,7 +74,7 @@ final class MemberFundPostingInsightsService
      */
     private function monthlySparkline(Member $member): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
         $monthCounts = [];
 

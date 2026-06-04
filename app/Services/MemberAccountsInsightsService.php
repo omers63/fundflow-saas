@@ -13,6 +13,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
+use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
@@ -54,7 +55,7 @@ final class MemberAccountsInsightsService
         $activeLoanCount = Loan::active()->count();
         $pendingContributions = Contribution::query()->where('status', 'pending')->count();
 
-        $since = Carbon::now()->subDays(30);
+        $since = BusinessDay::now()->subDays(30);
         $activity = Transaction::query()
             ->whereHas('account', fn ($query) => $query->where('is_master', false))
             ->where('transacted_at', '>=', $since)
@@ -70,7 +71,7 @@ final class MemberAccountsInsightsService
         $activityNet = $activityCredits - $activityDebits;
         $activityTxCount = (int) ($activity->tx_count ?? 0);
 
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
         $monthTotals = [];
 

@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\FundPostings\Schemas;
 
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Support\BusinessDay;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
@@ -41,8 +42,8 @@ class FundPostingForm
                         DatePicker::make('posting_date')
                             ->label(__('Date of transfer'))
                             ->required()
-                            ->default(now())
-                            ->maxDate(now()),
+                            ->default(BusinessDay::now())
+                            ->maxDate(BusinessDay::now()),
                         TextInput::make('amount')
                             ->label(__('Amount'))
                             ->numeric()

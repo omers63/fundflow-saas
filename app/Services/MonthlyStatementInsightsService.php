@@ -9,6 +9,7 @@ use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MonthlyStatement;
 use App\Models\Tenant\Setting;
+use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
@@ -21,7 +22,7 @@ final class MonthlyStatementInsightsService
      */
     public function snapshot(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $latestPeriod = $now->copy()->subMonthNoOverflow()->format('Y-m');
         $currency = Setting::get('general', 'currency', 'USD');
         $statementsUrl = MonthlyStatementResource::getUrl('index');
@@ -115,7 +116,7 @@ final class MonthlyStatementInsightsService
             return [];
         }
 
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $currency = Setting::get('general', 'currency', 'USD');
 
         $total = MonthlyStatement::query()->where('member_id', $memberId)->count();
@@ -223,7 +224,7 @@ final class MonthlyStatementInsightsService
      */
     private function sixMonthTrend(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestPeriod = $now->copy()->subMonths(5)->format('Y-m');
         $periodTotals = [];
 
@@ -278,7 +279,7 @@ final class MonthlyStatementInsightsService
      */
     private function weeklySparkline(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
         $currentWeekEnd = $now->copy()->endOfWeek();
         $weekCounts = [];

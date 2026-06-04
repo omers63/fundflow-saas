@@ -14,6 +14,7 @@ use App\Services\Loans\LoanLifecycleService;
 use App\Services\Loans\LoanQueueOrderingService;
 use App\Services\Loans\LoanRepaymentService;
 use App\Services\LoanService;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
@@ -43,7 +44,7 @@ final class LoanFilamentActions
                 'is_emergency' => $record->is_emergency,
                 'has_grace_cycle' => $record->has_grace_cycle ?? true,
                 'grace_cycles' => $record->grace_cycles ?? ($record->has_grace_cycle ? 1 : 0),
-                'approved_at' => now(),
+                'approved_at' => BusinessDay::now(),
             ])
             ->schema(fn (Loan $record): array => [
                 TextInput::make('amount_approved')
@@ -96,7 +97,7 @@ final class LoanFilamentActions
                             (bool) ($data['is_emergency'] ?? false),
                             $graceCycles > 0,
                             $graceCycles,
-                            isset($data['approved_at']) ? Carbon::parse((string) $data['approved_at']) : now(),
+                            isset($data['approved_at']) ? Carbon::parse((string) $data['approved_at']) : BusinessDay::now(),
                         );
                     },
                     __('Cannot approve'),
@@ -203,7 +204,7 @@ final class LoanFilamentActions
                         ->label(__('Disbursement date'))
                         ->seconds(false)
                         ->native(false)
-                        ->default(now())
+                        ->default(BusinessDay::now())
                         ->required(),
                 ];
             })
@@ -214,7 +215,7 @@ final class LoanFilamentActions
                         $record,
                         (float) $data['amount'],
                         filled($data['notes'] ?? null) ? (string) $data['notes'] : null,
-                        isset($data['disbursed_at']) ? Carbon::parse((string) $data['disbursed_at']) : now(),
+                        isset($data['disbursed_at']) ? Carbon::parse((string) $data['disbursed_at']) : BusinessDay::now(),
                         (bool) ($data['force'] ?? false),
                     ),
                     __('Disbursement failed'),
@@ -243,7 +244,7 @@ final class LoanFilamentActions
                     ->label(__('Payout date'))
                     ->seconds(false)
                     ->native(false)
-                    ->default(now())
+                    ->default(BusinessDay::now())
                     ->required(),
             ])
             ->action(function (Loan $record, array $data, Action $action, LoanLifecycleService $lifecycle): void {
@@ -251,7 +252,7 @@ final class LoanFilamentActions
                     $action,
                     fn () => $lifecycle->markBankPayout(
                         $record,
-                        isset($data['payout_at']) ? Carbon::parse((string) $data['payout_at']) : now(),
+                        isset($data['payout_at']) ? Carbon::parse((string) $data['payout_at']) : BusinessDay::now(),
                     ),
                     __('Could not record payout'),
                 )) {

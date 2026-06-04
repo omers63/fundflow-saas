@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\MembershipApplications\Schemas;
 
 use App\Models\Tenant\MembershipApplication;
+use App\Support\BusinessDay;
 use App\Support\PublicPageSettings;
 use App\Support\StorageFilename;
 use Filament\Forms\Components\DatePicker;
@@ -91,7 +92,7 @@ class MembershipApplicationForm
                     DatePicker::make('date_of_birth')
                         ->label(__('Date of birth'))
                         ->native(false)
-                        ->maxDate(now()),
+                        ->maxDate(BusinessDay::now()),
                     TextInput::make('city')
                         ->label(__('City'))
                         ->maxLength(100),
@@ -205,7 +206,7 @@ class MembershipApplicationForm
                         ->minValue(0),
                     DatePicker::make('membership_fee_transfer_date')
                         ->label(__('Transfer date'))
-                        ->maxDate(now()),
+                        ->maxDate(BusinessDay::now()),
                     TextInput::make('membership_fee_transfer_reference')
                         ->label(__('Transfer reference'))
                         ->maxLength(255),

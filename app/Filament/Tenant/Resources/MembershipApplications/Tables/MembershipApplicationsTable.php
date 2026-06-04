@@ -10,6 +10,7 @@ use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Models\Tenant\MembershipApplication;
 use App\Services\MembershipApplicationApprovalService;
+use App\Support\BusinessDay;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -105,7 +106,7 @@ class MembershipApplicationsTable
                         ->action(function ($record, Component $livewire) {
                             $record->update([
                                 'status' => 'rejected',
-                                'reviewed_at' => now(),
+                                'reviewed_at' => BusinessDay::now(),
                             ]);
                             Notification::make()->title(__('Application rejected'))->warning()->send();
 
@@ -174,7 +175,7 @@ class MembershipApplicationsTable
                                     }
                                     $record->update([
                                         'status' => 'rejected',
-                                        'reviewed_at' => now(),
+                                        'reviewed_at' => BusinessDay::now(),
                                     ]);
                                     $rejected++;
                                 }

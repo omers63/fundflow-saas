@@ -9,6 +9,7 @@ use App\Notifications\Tenant\LoanDefaultGuarantorNotification;
 use App\Notifications\Tenant\LoanDefaultWarningNotification;
 use App\Notifications\Tenant\LoanSettledNotification;
 use App\Services\ContributionCycleService;
+use App\Support\BusinessDay;
 use Illuminate\Support\Facades\DB;
 
 class LoanDefaultService
@@ -99,7 +100,7 @@ class LoanDefaultService
             if ($loan->isReadyToSettle()) {
                 $loan->update([
                     'status' => 'completed',
-                    'settled_at' => now(),
+                    'settled_at' => BusinessDay::now(),
                 ]);
 
                 try {
@@ -140,12 +141,12 @@ class LoanDefaultService
 
                 $due = $installment->due_date;
                 $deadline = $this->cycles->deadline((int) $due->month, (int) $due->year);
-                $days = $this->lateFees->daysPastDue($deadline, now());
+                $days = $this->lateFees->daysPastDue($deadline, BusinessDay::now());
                 $feeAmount = $this->lateFees->repaymentLateFeeForDays($days);
 
                 $installment->update([
                     'status' => 'paid',
-                    'paid_at' => now(),
+                    'paid_at' => BusinessDay::now(),
                     'paid_by_guarantor' => true,
                     'is_late' => $days >= 1,
                     'late_fee_amount' => $feeAmount > 0.00001 ? $feeAmount : null,

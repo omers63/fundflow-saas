@@ -12,6 +12,7 @@ use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTemplate;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\FundPosting;
+use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Insights\InsightKpi;
@@ -26,7 +27,7 @@ final class BankAccountsInsightsService
     {
         $currency = InsightFormatter::currency();
         $activeTab = BankAccountsResource::resolveListBankAccountsTab();
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $bankClearing = app(BankClearingMatchService::class);
 
         $statementLineQuery = $bankClearing->applyRealBankStatementLinesScope(BankTransaction::query());
@@ -69,7 +70,7 @@ final class BankAccountsInsightsService
         $masterCash = (float) (Account::masterCash()?->balance ?? 0);
         $masterBank = (float) (Account::masterBank()?->balance ?? 0);
 
-        $since = Carbon::now()->subDays(30);
+        $since = BusinessDay::now()->subDays(30);
         $importedAmount = (float) (clone $statementLineQuery)
             ->where('status', 'imported')
             ->where('transaction_date', '>=', $since)

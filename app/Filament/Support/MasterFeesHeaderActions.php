@@ -10,6 +10,7 @@ use App\Models\Tenant\Setting;
 use App\Services\MasterFeeDeductionService;
 use App\Services\MasterFeeDisbursementService;
 use App\Services\MemberFeeArrearsService;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 use Closure;
 use Filament\Actions\Action;
@@ -82,7 +83,7 @@ final class MasterFeesHeaderActions
                     }),
                 DateTimePicker::make('transacted_at')
                     ->label(__('Transaction date & time'))
-                    ->default(now())
+                    ->default(BusinessDay::now())
                     ->required()
                     ->native(false)
                     ->seconds(true),
@@ -167,7 +168,7 @@ final class MasterFeesHeaderActions
         return [
             DateTimePicker::make('transacted_at')
                 ->label(__('Transaction date & time'))
-                ->default(now())
+                ->default(BusinessDay::now())
                 ->required()
                 ->native(false)
                 ->seconds(true),

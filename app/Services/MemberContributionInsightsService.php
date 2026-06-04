@@ -12,10 +12,10 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Concerns\EnrichesMemberPortalDashboard;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
-use Carbon\Carbon;
 
 final class MemberContributionInsightsService
 {
@@ -55,7 +55,7 @@ final class MemberContributionInsightsService
         $lateFeesTotal = (float) (clone $query)->posted()->sum('late_fee_amount');
         $postedAmountLast12 = (float) (clone $query)
             ->posted()
-            ->where('posted_at', '>=', now()->subMonths(12))
+            ->where('posted_at', '>=', BusinessDay::now()->subMonths(12))
             ->sum('amount');
 
         $openPeriodRow = (clone $query)->forPeriod($openMonth, $openYear)->first();
@@ -78,7 +78,7 @@ final class MemberContributionInsightsService
             : 100;
 
         $deadline = $this->cycles->deadline($openMonth, $openYear);
-        $daysUntilDeadline = (int) max(0, now()->diffInDays($deadline, false));
+        $daysUntilDeadline = (int) max(0, BusinessDay::now()->diffInDays($deadline, false));
 
         $arrears = $this->delinquency->memberArrearsSummary($member);
         $monthly = (float) $member->monthly_contribution_amount;
@@ -344,7 +344,7 @@ final class MemberContributionInsightsService
         $onTime = 0;
 
         for ($i = 1; $i <= 12; $i++) {
-            $month = Carbon::now()->subMonths($i)->startOfMonth();
+            $month = BusinessDay::now()->subMonths($i)->startOfMonth();
             $m = (int) $month->month;
             $y = (int) $month->year;
 
@@ -378,7 +378,7 @@ final class MemberContributionInsightsService
         $streak = 0;
 
         for ($i = 1; $i <= 24; $i++) {
-            $month = Carbon::now()->subMonths($i)->startOfMonth();
+            $month = BusinessDay::now()->subMonths($i)->startOfMonth();
             $m = (int) $month->month;
             $y = (int) $month->year;
 
@@ -404,7 +404,7 @@ final class MemberContributionInsightsService
      */
     private function postedContributionsByPeriod(Member $member, int $monthsBack): array
     {
-        $oldestMonth = Carbon::now()->subMonths($monthsBack)->startOfMonth();
+        $oldestMonth = BusinessDay::now()->subMonths($monthsBack)->startOfMonth();
         $oldestPeriod = Contribution::periodDate((int) $oldestMonth->month, (int) $oldestMonth->year);
 
         return Contribution::query()

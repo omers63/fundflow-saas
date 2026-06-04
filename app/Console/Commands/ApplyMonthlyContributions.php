@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Console\Concerns\EnsuresBatchPostingAllowed;
 use App\Services\ContributionCycleService;
+use App\Support\BusinessDay;
 use Illuminate\Console\Command;
 
 class ApplyMonthlyContributions extends Command
@@ -25,7 +26,7 @@ class ApplyMonthlyContributions extends Command
         $year = $this->option('year') ? (int) $this->option('year') : null;
 
         if ($month === null || $year === null) {
-            $previous = now()->subMonthNoOverflow();
+            $previous = BusinessDay::now()->subMonthNoOverflow();
             $month = (int) $previous->month;
             $year = (int) $previous->year;
         }

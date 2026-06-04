@@ -10,6 +10,7 @@ use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationRe
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
@@ -21,7 +22,7 @@ final class MemberInsightsService
      */
     public function snapshot(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $membersUrl = MemberResource::getUrl('index');
 
         $total = Member::query()->count();
@@ -152,7 +153,7 @@ final class MemberInsightsService
      */
     private function sixMonthJoinTrend(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
         $monthCounts = [];
 
@@ -195,7 +196,7 @@ final class MemberInsightsService
      */
     private function weeklyJoinSparkline(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
         $currentWeekEnd = $now->copy()->endOfWeek();
         $weekCounts = [];

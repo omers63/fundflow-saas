@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
+use App\Support\BusinessDay;
 use App\Support\ImportDateFormats;
 use Illuminate\Http\UploadedFile;
 
@@ -30,7 +31,7 @@ class BankImportService
             'bank_template_id' => $bankTemplateId,
             'status' => 'processing',
             'imported_by' => $importedBy,
-            'imported_at' => now(),
+            'imported_at' => BusinessDay::now(),
         ]);
 
         try {
@@ -115,7 +116,7 @@ class BankImportService
                         'hash' => $hash,
                         'raw_data' => json_encode($rawData),
                         'is_cleared' => true,
-                        'cleared_at' => now(),
+                        'cleared_at' => BusinessDay::now(),
                     ]));
 
                     $imported++;

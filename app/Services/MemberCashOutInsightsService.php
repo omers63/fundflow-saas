@@ -8,6 +8,7 @@ use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
 use App\Filament\Member\Resources\MyCashOutRequests\MyCashOutRequestResource;
 use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Member;
+use App\Support\BusinessDay;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
 use Carbon\Carbon;
@@ -215,7 +216,7 @@ final class MemberCashOutInsightsService
      */
     private function monthlySparkline(Member $member): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
         $monthCounts = [];
 

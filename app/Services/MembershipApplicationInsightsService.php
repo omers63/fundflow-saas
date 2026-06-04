@@ -9,6 +9,7 @@ use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationRe
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\Setting;
+use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use Carbon\Carbon;
 
@@ -19,7 +20,7 @@ final class MembershipApplicationInsightsService
      */
     public function snapshot(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
 
         $pending = MembershipApplication::query()->where('status', 'pending')->count();
         $approved = MembershipApplication::query()->where('status', 'approved')->count();
@@ -207,7 +208,7 @@ final class MembershipApplicationInsightsService
      */
     private function sixMonthTrend(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
         $monthTotals = [];
 
@@ -270,7 +271,7 @@ final class MembershipApplicationInsightsService
      */
     private function weeklySparkline(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
         $currentWeekEnd = $now->copy()->endOfWeek();
         $weekCounts = [];

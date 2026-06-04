@@ -7,6 +7,7 @@ namespace App\Filament\Support;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Setting;
 use App\Services\AccountingService;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 use Closure;
 use Filament\Actions\Action;
@@ -169,7 +170,7 @@ final class AccountTransactionManualAdjustmentHeaderActions
         $fields = [
             DateTimePicker::make('transacted_at')
                 ->label(__('Transaction date & time'))
-                ->default(now())
+                ->default(BusinessDay::now())
                 ->required()
                 ->native(false)
                 ->seconds(true),
@@ -214,7 +215,7 @@ final class AccountTransactionManualAdjustmentHeaderActions
                 )),
             DateTimePicker::make('transacted_at')
                 ->label(__('Transaction date & time'))
-                ->default(now())
+                ->default(BusinessDay::now())
                 ->required()
                 ->native(false)
                 ->seconds(true),

@@ -258,6 +258,20 @@
     max-width: none;
 }
 
+.fi-body.fi-panel-member .fi-page-member-contributions .fi-page-content {
+    max-width: none;
+}
+
+.fi-body.fi-panel-member .fi-page-member-contributions .fi-wi-widget {
+    grid-column: 1 / -1;
+}
+
+.fi-body.fi-panel-member .ff-member-contributions-insights,
+.fi-body.fi-panel-member .ff-member-contributions-rhythm {
+    width: 100%;
+    max-width: none;
+}
+
 .fi-body.fi-panel-member .ff-member-dashboard-hero {
     animation: ff-member-dashboard-glow 8s ease-in-out infinite alternate;
 }

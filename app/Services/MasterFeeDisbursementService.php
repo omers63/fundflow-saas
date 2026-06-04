@@ -8,6 +8,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\FeeDisbursement;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 use DateTimeInterface;
 use Illuminate\Support\Facades\DB;
@@ -47,7 +48,7 @@ final class MasterFeeDisbursementService
             throw new InvalidArgumentException(__('Description is required.'));
         }
 
-        $transactedAt = $transactedAt ?? now();
+        $transactedAt = $transactedAt ?? BusinessDay::now();
 
         return ReconciliationService::withoutRealtimeChecks(function () use ($masterFees, $amount, $description, $transactedAt): FeeDisbursement {
             return DB::transaction(function () use ($masterFees, $amount, $description, $transactedAt): FeeDisbursement {

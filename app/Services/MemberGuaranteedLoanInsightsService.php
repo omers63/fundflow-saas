@@ -10,6 +10,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Support\BusinessDay;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Loans\LoanUserFacingStage;
 use App\Support\Tenant\CurrentMember;
@@ -292,7 +293,7 @@ final class MemberGuaranteedLoanInsightsService
      */
     private function monthlySparkline(Member $member): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
         $monthCounts = [];
 

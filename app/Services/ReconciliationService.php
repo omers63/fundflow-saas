@@ -17,6 +17,7 @@ use App\Models\Tenant\Transaction;
 use App\Services\Loans\LateFeeService;
 use App\Services\Loans\LoanLedgerService;
 use App\Support\BatchPostingGate;
+use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
 use App\Support\ContributionPolicySettings;
 use App\Support\InstallmentCollectionStatus;
@@ -63,8 +64,7 @@ class ReconciliationService
         protected LoanLedgerService $loanLedger,
         protected LateFeeService $lateFees,
         protected ContributionCollectionCycleService $contributionCollection,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array{halted: bool, raised: int, resolved: int, critical: int}
@@ -186,7 +186,7 @@ class ReconciliationService
             return;
         }
 
-        if (!in_array($transaction->account->type, ['cash', 'fund'], true)) {
+        if (! in_array($transaction->account->type, ['cash', 'fund'], true)) {
             return;
         }
 
@@ -230,7 +230,7 @@ class ReconciliationService
             return;
         }
 
-        if (!in_array($transaction->account->type, ['cash', 'fund'], true)) {
+        if (! in_array($transaction->account->type, ['cash', 'fund'], true)) {
             return;
         }
 
@@ -271,7 +271,7 @@ class ReconciliationService
     {
         $description = (string) $transaction->description;
 
-        if (!str_contains(strtolower($description), 'late fee')) {
+        if (! str_contains(strtolower($description), 'late fee')) {
             return;
         }
 
@@ -345,7 +345,7 @@ class ReconciliationService
                     return;
                 }
 
-                if (now()->greaterThan($this->contributionCycles->cycleDueEndAt($month, $year))) {
+                if (BusinessDay::now()->greaterThan($this->contributionCycles->cycleDueEndAt($month, $year))) {
                     $this->raiseOnce('PENDING_PAST_WINDOW_CLOSE', 'contribution', 'medium', null, [
                         'contribution_id' => $contribution->id,
                         'member_id' => $contribution->member_id,
@@ -389,7 +389,7 @@ class ReconciliationService
                     ->where('reference_id', $contribution->id)
                     ->exists();
 
-                if (!$hasCashDebit) {
+                if (! $hasCashDebit) {
                     $this->raiseOnce('ORPHAN_MASTER_FUND_CREDIT', 'contribution', 'high', (float) $contribution->amount, [
                         'contribution_id' => $contribution->id,
                         'member_id' => $contribution->member_id,
@@ -411,7 +411,7 @@ class ReconciliationService
                         ->where('reference_id', $contribution->id)
                         ->exists();
 
-                    if (!$hasMasterCredit) {
+                    if (! $hasMasterCredit) {
                         $this->raiseOnce('CONTRIBUTION_MISSING_MASTER_CREDIT', 'contribution', 'high', (float) $contribution->amount, [
                             'contribution_id' => $contribution->id,
                             'member_id' => $contribution->member_id,
@@ -439,7 +439,7 @@ class ReconciliationService
                     ->where('reference_id', $contribution->id)
                     ->exists();
 
-                if (!$hasMemberFundCredit) {
+                if (! $hasMemberFundCredit) {
                     $this->raiseOnce('CONTRIBUTION_MEMBER_FUND_MISSING', 'contribution', 'high', (float) $contribution->amount, [
                         'contribution_id' => $contribution->id,
                         'member_id' => $contribution->member_id,
@@ -522,7 +522,7 @@ class ReconciliationService
         LoanInstallment::query()
             ->where('status', 'overdue')
             ->whereNull('overdue_since')
-            ->whereHas('loan', fn($q) => $q->whereIn('status', ['active', 'transferred']))
+            ->whereHas('loan', fn ($q) => $q->whereIn('status', ['active', 'transferred']))
             ->each(function (LoanInstallment $installment) use (&$count): void {
                 $this->raiseOnce('EMI_OVERDUE_WITHOUT_CLOCK', 'emi', 'medium', null, [
                     'installment_id' => $installment->id,
@@ -551,13 +551,13 @@ class ReconciliationService
                     ->exists();
 
                 $masterFundDebited = Transaction::query()
-                    ->whereHas('account', fn($q) => $q->where('is_master', true)->where('type', 'fund'))
+                    ->whereHas('account', fn ($q) => $q->where('is_master', true)->where('type', 'fund'))
                     ->where('type', 'debit')
                     ->where('reference_type', $loan->getMorphClass())
                     ->where('reference_id', $loan->id)
                     ->exists();
 
-                if ($masterFundDebited && !$hasPayout) {
+                if ($masterFundDebited && ! $hasPayout) {
                     $this->raiseOnce('DISBURSEMENT_MEMBER_CASH_MISSING', 'loan', 'high', (float) $loan->amount_disbursed, [
                         'loan_id' => $loan->id,
                         'member_id' => $loan->member_id,
@@ -614,7 +614,7 @@ class ReconciliationService
                     ->where('reference_id', $installment->id)
                     ->exists();
 
-                if (!$hasRepaymentCredit) {
+                if (! $hasRepaymentCredit) {
                     $this->raiseOnce('EMI_COLLECTED_LEDGER_MISSING', 'emi', 'medium', (float) $installment->amount, [
                         'installment_id' => $installment->id,
                         'loan_id' => $loan->id,
@@ -660,7 +660,7 @@ class ReconciliationService
                     ->where('type', 'debit')
                     ->where('reference_type', $installment->getMorphClass())
                     ->where('reference_id', $installment->id)
-                    ->whereHas('account', fn($q) => $q->where('type', 'cash')->where('is_master', false))
+                    ->whereHas('account', fn ($q) => $q->where('type', 'cash')->where('is_master', false))
                     ->exists();
 
                 $guarantorDebited = Transaction::query()
@@ -668,7 +668,7 @@ class ReconciliationService
                     ->where('type', 'debit')
                     ->where('reference_type', $installment->getMorphClass())
                     ->where('reference_id', $installment->id)
-                    ->whereHas('account', fn($q) => $q->where('type', 'fund')->where('is_master', false))
+                    ->whereHas('account', fn ($q) => $q->where('type', 'fund')->where('is_master', false))
                     ->exists();
 
                 if ($borrowerDebited && $guarantorDebited) {
@@ -731,7 +731,7 @@ class ReconciliationService
         $count = 0;
         $staleDays = ContributionPolicySettings::stalePendingDays();
         $tolerance = ContributionPolicySettings::reconTolerance();
-        $staleCutoff = now()->subDays($staleDays);
+        $staleCutoff = BusinessDay::now()->subDays($staleDays);
 
         $scan = $this->bankClearing->scanMatchExceptions();
 
@@ -747,7 +747,7 @@ class ReconciliationService
         $unmatchedImportedAmounts = BankTransaction::query()
             ->whereIn('id', $unmatchedImportedIds)
             ->pluck('amount', 'id')
-            ->map(fn($amount): float => (float) $amount)
+            ->map(fn ($amount): float => (float) $amount)
             ->all();
 
         foreach ($unmatchedImportedIds as $importedId) {
@@ -796,7 +796,7 @@ class ReconciliationService
         FundPosting::query()
             ->where('status', 'accepted')
             ->whereNull('bank_transaction_id')
-            ->where('reviewed_at', '<', now()->subDays(ContributionPolicySettings::cashDepositUnbankedDays()))
+            ->where('reviewed_at', '<', BusinessDay::now()->subDays(ContributionPolicySettings::cashDepositUnbankedDays()))
             ->get(['id', 'member_id', 'amount'])
             ->each(function (FundPosting $posting) use (&$count): void {
                 $this->raiseOnce('CASH_DEPOSIT_UNBANKED', 'bank_clearing', 'medium', (float) $posting->amount, [
@@ -837,7 +837,7 @@ class ReconciliationService
 
         $masterFees = (float) (Account::query()->where('is_master', true)->where('type', 'fees')->value('balance') ?? 0);
         $masterFeesLedgerQuery = Transaction::query()
-            ->whereHas('account', fn($q) => $q->where('is_master', true)->where('type', 'fees'));
+            ->whereHas('account', fn ($q) => $q->where('is_master', true)->where('type', 'fees'));
         $netPostedFees = (float) ((clone $masterFeesLedgerQuery)->where('type', 'credit')->sum('amount')
             - (clone $masterFeesLedgerQuery)->where('type', 'debit')->sum('amount'));
 
@@ -876,7 +876,7 @@ class ReconciliationService
             ->each(function (Contribution $contribution) use (&$count, $tolerance): void {
                 $days = $this->lateFees->daysPastDue(
                     Carbon::parse($contribution->overdue_since),
-                    now(),
+                    BusinessDay::now(),
                 );
                 $expectedTier = ContributionCollectionStatus::tierForDays($days);
 
@@ -932,7 +932,7 @@ class ReconciliationService
             default => false,
         };
 
-        return !$allowed;
+        return ! $allowed;
     }
 
     protected function reconcileMemberInvariants(): int
@@ -987,7 +987,7 @@ class ReconciliationService
 
         $final = $this->masterInvariants->check();
 
-        if (!$final['balanced']) {
+        if (! $final['balanced']) {
             if ($final['cash_delta'] > $tolerance) {
                 $this->raiseOnce('MASTER_CASH_POOL_DRIFT', 'master_account', 'critical', $final['cash_delta'], [
                     'master_cash' => $final['master_cash'],
@@ -1293,7 +1293,7 @@ class ReconciliationService
             );
             $exception->update([
                 'status' => ReconciliationException::STATUS_RESOLVED,
-                'resolved_at' => now(),
+                'resolved_at' => BusinessDay::now(),
                 'auto_resolve_attempted' => true,
                 'auto_resolve_reason' => __('EMI over-collection refunded'),
             ]);
@@ -1359,7 +1359,7 @@ class ReconciliationService
             $this->accounting->credit(
                 $transaction->account,
                 $amount,
-                __('RECON_AUTO_FEE_EXEMPTION_REVERSAL') . ': ' . $transaction->description,
+                __('RECON_AUTO_FEE_EXEMPTION_REVERSAL').': '.$transaction->description,
                 $transaction,
             );
             $fees = Account::masterFees();
@@ -1421,7 +1421,7 @@ class ReconciliationService
             'status' => ReconciliationException::STATUS_RESOLVED,
             'auto_resolve_attempted' => $auto,
             'auto_resolve_reason' => $reason,
-            'resolved_at' => now(),
+            'resolved_at' => BusinessDay::now(),
         ]);
     }
 
@@ -1435,13 +1435,13 @@ class ReconciliationService
         ?float $amountDelta = null,
         array $entities = [],
     ): ReconciliationException {
-        $fingerprint = hash('sha256', $code . '|' . $domain . '|' . json_encode($entities, JSON_THROW_ON_ERROR));
+        $fingerprint = hash('sha256', $code.'|'.$domain.'|'.json_encode($entities, JSON_THROW_ON_ERROR));
 
         $existing = ReconciliationException::query()
             ->open()
             ->where('exception_code', $code)
             ->get()
-            ->first(fn(ReconciliationException $row): bool => $this->fingerprint($row) === $fingerprint);
+            ->first(fn (ReconciliationException $row): bool => $this->fingerprint($row) === $fingerprint);
 
         if ($existing) {
             return $existing;
@@ -1461,10 +1461,10 @@ class ReconciliationService
         array $entities = [],
     ): ReconciliationException {
         $sla = match ($severity) {
-            'critical' => now(),
-            'high' => now()->endOfDay(),
-            'medium' => now()->addHours(48),
-            default => now()->addDays(7),
+            'critical' => BusinessDay::now(),
+            'high' => BusinessDay::now()->endOfDay(),
+            'medium' => BusinessDay::now()->addHours(48),
+            default => BusinessDay::now()->addDays(7),
         };
 
         return ReconciliationException::create([
@@ -1475,13 +1475,13 @@ class ReconciliationService
             'affected_entities' => $entities,
             'status' => ReconciliationException::STATUS_OPEN,
             'sla_deadline' => $sla,
-            'raised_at' => now(),
+            'raised_at' => BusinessDay::now(),
         ]);
     }
 
     protected function fingerprint(ReconciliationException $exception): string
     {
-        return hash('sha256', $exception->exception_code . '|' . $exception->domain . '|' . json_encode(
+        return hash('sha256', $exception->exception_code.'|'.$exception->domain.'|'.json_encode(
             $exception->affected_entities ?? [],
             JSON_THROW_ON_ERROR,
         ));

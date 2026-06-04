@@ -8,6 +8,7 @@ use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\CashOutRequests\CashOutRequestResource;
 use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Setting;
+use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
@@ -21,7 +22,7 @@ final class CashOutRequestInsightsService
      */
     public function snapshot(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
 
         $pending = CashOutRequest::query()->where('status', 'pending')->count();
         $accepted = CashOutRequest::query()->where('status', 'accepted')->count();
@@ -262,7 +263,7 @@ final class CashOutRequestInsightsService
      */
     private function sixMonthTrend(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
         $monthTotals = [];
 
@@ -325,7 +326,7 @@ final class CashOutRequestInsightsService
      */
     private function weeklySparkline(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
         $currentWeekEnd = $now->copy()->endOfWeek();
         $weekCounts = [];

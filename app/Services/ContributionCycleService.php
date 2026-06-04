@@ -10,6 +10,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Notifications\Tenant\ContributionDueNotification;
 use App\Services\Loans\LateFeeService;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -58,7 +59,7 @@ class ContributionCycleService
 
     public function isLate(int $month, int $year): bool
     {
-        return now()->greaterThan($this->deadline($month, $year));
+        return BusinessDay::now()->greaterThan($this->deadline($month, $year));
     }
 
     public function periodLabel(int $month, int $year): string
@@ -85,7 +86,7 @@ class ContributionCycleService
      */
     public function currentOpenPeriod(): array
     {
-        $now = now();
+        $now = BusinessDay::now();
         $cursor = $now->copy()->startOfMonth();
 
         for ($i = 0; $i < 15; $i++) {
@@ -299,7 +300,7 @@ class ContributionCycleService
 
     public function lateFeeForContributionPeriod(int $month, int $year, ?Carbon $at = null): float
     {
-        $at = $at ?? now();
+        $at = $at ?? BusinessDay::now();
         $deadline = $this->deadline($month, $year);
         $days = $this->lateFees->daysPastDue($deadline, $at);
 

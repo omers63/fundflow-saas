@@ -10,6 +10,7 @@ use App\Models\Tenant\Member;
 use App\Notifications\Tenant\LoanRepaymentAppliedNotification;
 use App\Notifications\Tenant\LoanRepaymentDueNotification;
 use App\Services\ContributionCycleService;
+use App\Support\BusinessDay;
 use App\Support\DatabaseDialect;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -34,7 +35,7 @@ class LoanRepaymentService
 
     public function isLate(int $month, int $year): bool
     {
-        return now()->greaterThan($this->deadline($month, $year));
+        return BusinessDay::now()->greaterThan($this->deadline($month, $year));
     }
 
     public function periodLabel(int $month, int $year): string
@@ -138,7 +139,7 @@ class LoanRepaymentService
         $member = $loan->member;
         $amount = (float) $installment->amount;
         $deadline = $this->deadline($month, $year);
-        $days = $this->lateFees->daysPastDue($deadline, now());
+        $days = $this->lateFees->daysPastDue($deadline, BusinessDay::now());
         $lateFee = $this->lateFees->repaymentLateFeeForDays($days);
         $isLate = $days >= 1;
         $required = $amount + $lateFee;
@@ -165,7 +166,7 @@ class LoanRepaymentService
             // 2. Mark installment paid (observer posts to fund accounts + updates repaid_to_master)
             $installment->update([
                 'status' => 'paid',
-                'paid_at' => now(),
+                'paid_at' => BusinessDay::now(),
                 'is_late' => $isLate,
                 'late_fee_amount' => $lateFee > 0 ? $lateFee : null,
             ]);
@@ -291,7 +292,7 @@ class LoanRepaymentService
         }
 
         $deadline = $this->deadline($month, $year);
-        $days = $this->lateFees->daysPastDue($deadline, now());
+        $days = $this->lateFees->daysPastDue($deadline, BusinessDay::now());
         $lateFee = $this->lateFees->repaymentLateFeeForDays($days);
         $required = (float) $installment->amount + $lateFee;
 
@@ -308,7 +309,7 @@ class LoanRepaymentService
             $installment = $this->installmentForPeriod($loan, $month, $year);
             $amount = (float) ($installment?->amount ?? 0);
             $deadline = $this->deadline($month, $year);
-            $days = $this->lateFees->daysPastDue($deadline, now());
+            $days = $this->lateFees->daysPastDue($deadline, BusinessDay::now());
             $lateFee = $this->lateFees->repaymentLateFeeForDays($days);
         }
 

@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -102,7 +103,7 @@ class MemberOpeningBalanceService
                 $member->update([
                     'opening_cash_balance' => $cashBalance,
                     'opening_fund_balance' => $fundBalance,
-                    'opening_balances_posted_at' => now(),
+                    'opening_balances_posted_at' => BusinessDay::now(),
                 ]);
             });
         });

@@ -8,6 +8,7 @@ use App\Models\Tenant\Account;
 use App\Services\AccountingService;
 use App\Services\MasterInvestDisbursementService;
 use App\Services\MasterInvestReturnService;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 use Closure;
 use Filament\Actions\Action;
@@ -153,7 +154,7 @@ final class MasterInvestHeaderActions
         return [
             DateTimePicker::make('transacted_at')
                 ->label(__('Transaction date & time'))
-                ->default(now())
+                ->default(BusinessDay::now())
                 ->required()
                 ->native(false)
                 ->seconds(true),

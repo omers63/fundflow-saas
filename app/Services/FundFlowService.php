@@ -6,6 +6,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Member;
 use App\Support\BankTransactionWorkflow;
+use App\Support\BusinessDay;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -112,7 +113,7 @@ class FundFlowService
                 'status' => 'posted',
                 'member_id' => $member->id,
                 'is_cleared' => true,
-                'cleared_at' => now(),
+                'cleared_at' => BusinessDay::now(),
             ]);
 
         });

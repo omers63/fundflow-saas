@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Tenant\User;
+use App\Support\BusinessDay;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Notification;
 
@@ -24,7 +25,7 @@ final class OperationalReviewWorkflowService
         $record->update(array_merge([
             'status' => $status,
             'reviewed_by' => $reviewedBy,
-            'reviewed_at' => $reviewedAt ?? now(),
+            'reviewed_at' => $reviewedAt ?? BusinessDay::now(),
             'admin_remarks' => $remarks,
         ], $extraUpdates));
     }

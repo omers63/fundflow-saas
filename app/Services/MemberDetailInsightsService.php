@@ -15,6 +15,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
@@ -128,7 +129,7 @@ final class MemberDetailInsightsService
                     ? Carbon::parse((string) $member->joined_at)->format('d M Y')
                     : null,
                 'tenure_months' => $member->joined_at
-                    ? (int) Carbon::parse((string) $member->joined_at)->diffInMonths(now())
+                    ? (int) Carbon::parse((string) $member->joined_at)->diffInMonths(BusinessDay::now())
                     : null,
                 'is_parent' => $member->isParent(),
                 'parent_name' => $member->parent?->name,
@@ -556,7 +557,7 @@ final class MemberDetailInsightsService
             return array_fill(0, 8, 0);
         }
 
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestDay = $now->copy()->subDays(7)->startOfDay();
         $dayCounts = [];
 

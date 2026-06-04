@@ -8,6 +8,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\InvestReturn;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 use DateTimeInterface;
 use Illuminate\Support\Facades\DB;
@@ -23,8 +24,7 @@ final class MasterInvestReturnService
         private BankTransactionClearanceService $bankClearance,
         private SyntheticBankStatementFactory $syntheticStatements,
         private BankClearanceLinkageResolver $clearanceLinkageResolver,
-    ) {
-    }
+    ) {}
 
     public function record(
         Account $masterInvest,
@@ -44,7 +44,7 @@ final class MasterInvestReturnService
             throw new InvalidArgumentException(__('Description is required.'));
         }
 
-        $transactedAt = $transactedAt ?? now();
+        $transactedAt = $transactedAt ?? BusinessDay::now();
 
         return ReconciliationService::withoutRealtimeChecks(function () use ($masterInvest, $amount, $description, $transactedAt): InvestReturn {
             return DB::transaction(function () use ($masterInvest, $amount, $description, $transactedAt): InvestReturn {
@@ -62,7 +62,7 @@ final class MasterInvestReturnService
                 $this->accounting->credit(
                     $masterInvest,
                     $amount,
-                    $ledgerDescription . ' ' . __('(investment return)'),
+                    $ledgerDescription.' '.__('(investment return)'),
                     $investReturn,
                     $transactedAt,
                 );
@@ -94,7 +94,7 @@ final class MasterInvestReturnService
 
     private function assertMasterInvestAccount(Account $account): void
     {
-        if (!$account->is_master || $account->type !== 'invest') {
+        if (! $account->is_master || $account->type !== 'invest') {
             throw new InvalidArgumentException(__('Account must be the master invest account.'));
         }
     }

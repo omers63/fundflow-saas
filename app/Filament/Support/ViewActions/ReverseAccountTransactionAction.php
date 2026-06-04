@@ -8,6 +8,7 @@ use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DateTimePicker;
@@ -138,7 +139,7 @@ final class ReverseAccountTransactionAction
                 ->helperText(__('Appears in the counter-entry description for audit purposes.')),
             DateTimePicker::make('transacted_at')
                 ->label(__('Transaction date & time'))
-                ->default(now())
+                ->default(BusinessDay::now())
                 ->required()
                 ->native(false)
                 ->seconds(true),

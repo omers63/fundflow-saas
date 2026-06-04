@@ -8,6 +8,7 @@ use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Setting;
+use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
@@ -21,7 +22,7 @@ final class FundPostingInsightsService
      */
     public function snapshot(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
 
         $pending = FundPosting::query()->where('status', 'pending')->count();
         $accepted = FundPosting::query()->where('status', 'accepted')->count();
@@ -218,7 +219,7 @@ final class FundPostingInsightsService
      */
     private function sixMonthTrend(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
         $monthTotals = [];
 
@@ -281,7 +282,7 @@ final class FundPostingInsightsService
      */
     private function weeklySparkline(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
         $currentWeekEnd = $now->copy()->endOfWeek();
         $weekCounts = [];

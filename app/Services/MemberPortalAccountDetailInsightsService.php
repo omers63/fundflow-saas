@@ -14,6 +14,7 @@ use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
+use App\Support\BusinessDay;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
 use Carbon\Carbon;
@@ -42,7 +43,7 @@ final class MemberPortalAccountDetailInsightsService
 
         $currency = InsightFormatter::currency();
         $balance = (float) $account->balance;
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $since = $now->copy()->subDays(30);
 
         $stats30 = Transaction::query()

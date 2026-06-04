@@ -19,6 +19,7 @@ use App\Notifications\Tenant\LoanPartialDisbursementNotification;
 use App\Notifications\Tenant\LoanRejectedNotification;
 use App\Notifications\Tenant\LoanSubmittedNotification;
 use App\Notifications\Tenant\NewLoanApplicationNotification;
+use App\Support\BusinessDay;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -133,7 +134,7 @@ final class LoanLifecycleService
             'has_grace_cycle' => $hasGraceCycle,
             'grace_cycles' => max(0, min(2, $graceCycles ?? ($hasGraceCycle ? 1 : 0))),
             'status' => 'pending',
-            'applied_at' => now(),
+            'applied_at' => BusinessDay::now(),
         ]);
 
         $this->notifyMember($loan, new LoanSubmittedNotification($loan));
@@ -197,7 +198,7 @@ final class LoanLifecycleService
             $threshold,
         );
 
-        $at = $approvedAt ?? now();
+        $at = $approvedAt ?? BusinessDay::now();
 
         $loan->update([
             'status' => 'approved',
@@ -233,7 +234,7 @@ final class LoanLifecycleService
         $loan->update([
             'status' => 'rejected',
             'rejection_reason' => $reason,
-            'rejected_at' => now(),
+            'rejected_at' => BusinessDay::now(),
         ]);
 
         $this->notifyMember($loan, new LoanRejectedNotification($reason));
@@ -248,7 +249,7 @@ final class LoanLifecycleService
         $loan->update([
             'status' => 'cancelled',
             'cancellation_reason' => $reason,
-            'cancelled_at' => now(),
+            'cancelled_at' => BusinessDay::now(),
         ]);
     }
 
@@ -287,7 +288,7 @@ final class LoanLifecycleService
         }
 
         $memberFundBalanceBefore = (float) ($loan->member->fundAccount?->balance ?? 0);
-        $at = $disbursedAt ?? now();
+        $at = $disbursedAt ?? BusinessDay::now();
 
         $disbursement = LoanDisbursement::create([
             'loan_id' => $loan->id,
@@ -345,7 +346,7 @@ final class LoanLifecycleService
             throw new InvalidArgumentException(__('Loan must be fully disbursed on the ledger before bank payout.'));
         }
 
-        $loan->update(['payout_at' => $payoutAt ?? now()]);
+        $loan->update(['payout_at' => $payoutAt ?? BusinessDay::now()]);
     }
 
     private function activateAfterFullDisbursement(

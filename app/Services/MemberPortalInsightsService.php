@@ -22,6 +22,7 @@ use App\Models\Tenant\MonthlyStatement;
 use App\Services\Concerns\EnrichesMemberPortalDashboard;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanEligibilityOverrideRequestService;
+use App\Support\BusinessDay;
 use App\Support\Insights\InsightFormatter;
 use App\Support\LoanSettings;
 use App\Support\PublicPageSettings;
@@ -74,7 +75,7 @@ final class MemberPortalInsightsService
         $unreadMessages = (int) DirectMessage::query()
             ->where('to_user_id', $member->user_id)
             ->whereNull('read_at')
-            ->whereHas('sender', fn($q) => $q->where('is_admin', true))
+            ->whereHas('sender', fn ($q) => $q->where('is_admin', true))
             ->count();
 
         $latestStatement = MonthlyStatement::query()
@@ -170,7 +171,7 @@ final class MemberPortalInsightsService
                 'status_label' => Loan::statusOptions()[$activeLoan->status] ?? $activeLoan->status,
                 'outstanding' => InsightFormatter::money($loanOutstanding),
                 'repay_percent' => $repayPercent,
-                'installments' => $installmentsPaid . '/' . $installmentsTotal,
+                'installments' => $installmentsPaid.'/'.$installmentsTotal,
                 'installments_paid' => $installmentsPaid,
                 'installments_total' => $installmentsTotal,
                 'overdue_count' => $installmentsOverdue,
@@ -244,7 +245,7 @@ final class MemberPortalInsightsService
                 ->latest()
                 ->limit(4)
                 ->get()
-                ->map(fn(FundPosting $posting): array => [
+                ->map(fn (FundPosting $posting): array => [
                     'amount' => InsightFormatter::money((float) $posting->amount),
                     'status' => $posting->status,
                     'status_label' => match ($posting->status) {
@@ -299,7 +300,7 @@ final class MemberPortalInsightsService
         int $pendingDeposits,
         array $arrears,
     ): array {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $hour = (int) $now->format('G');
         $periodLabel = match (true) {
             $hour < 12 => __('Good morning'),
@@ -314,7 +315,7 @@ final class MemberPortalInsightsService
 
         $attentionCount = ($unreadMessages > 0 ? 1 : 0)
             + ($pendingDeposits > 0 ? 1 : 0)
-            + (!$postedThisCycle ? 1 : 0)
+            + (! $postedThisCycle ? 1 : 0)
             + (($arrears['has_arrears'] ?? false) || ($arrears['is_delinquent'] ?? false) ? 1 : 0);
 
         $defaultSubtitle = $attentionCount > 0
@@ -368,7 +369,7 @@ final class MemberPortalInsightsService
             ];
         }
 
-        if (!$postedThisCycle) {
+        if (! $postedThisCycle) {
             $pills[] = [
                 'label' => __('Contribution not posted :period', [
                     'period' => $cycles->periodLabel($curMonth, $curYear),
@@ -443,7 +444,7 @@ final class MemberPortalInsightsService
             ? mb_substr($parts[array_key_last($parts)], 0, 1)
             : '';
 
-        return mb_strtoupper($first . $last);
+        return mb_strtoupper($first.$last);
     }
 
     /**
@@ -649,7 +650,7 @@ final class MemberPortalInsightsService
                 'icon' => 'heroicon-o-document-plus',
                 'tone' => 'loan',
                 'badge' => null,
-                'visible' => $eligible && !$pendingLoan,
+                'visible' => $eligible && ! $pendingLoan,
             ],
             [
                 'label' => __('Request eligibility review'),
@@ -660,7 +661,7 @@ final class MemberPortalInsightsService
                 'icon' => 'heroicon-o-shield-exclamation',
                 'tone' => 'loan',
                 'badge' => $hasPendingOverrideRequest ? __('Pending') : null,
-                'visible' => !$eligible && ($canRequestOverride || $hasPendingOverrideRequest),
+                'visible' => ! $eligible && ($canRequestOverride || $hasPendingOverrideRequest),
             ],
             [
                 'label' => __('Statements'),
@@ -706,7 +707,7 @@ final class MemberPortalInsightsService
      */
     private function contributionSparkline(Member $member): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
         $monthCounts = [];
 

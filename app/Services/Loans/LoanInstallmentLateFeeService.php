@@ -7,6 +7,7 @@ namespace App\Services\Loans;
 use App\Models\Tenant\LoanInstallment;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
+use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
 use App\Support\ContributionPolicySettings;
 use App\Support\InstallmentCollectionStatus;
@@ -50,7 +51,7 @@ class LoanInstallmentLateFeeService
 
         $days = $this->lateFees->daysPastDue(
             Carbon::parse($installment->overdue_since),
-            now(),
+            BusinessDay::now(),
         );
 
         $newTier = ContributionCollectionStatus::tierForDays($days);

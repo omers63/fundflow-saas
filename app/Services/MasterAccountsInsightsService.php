@@ -11,6 +11,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
+use App\Support\BusinessDay;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Insights\InsightKpi;
 use Carbon\Carbon;
@@ -39,7 +40,7 @@ final class MasterAccountsInsightsService
         $coverage = $loanExposure > 0.01 ? round($masterFund / $loanExposure, 2) : null;
         $coveragePercent = $coverage !== null ? min(100, round($coverage * 100, 1)) : 100;
 
-        $since = Carbon::now()->subDays(30);
+        $since = BusinessDay::now()->subDays(30);
         $activity = Transaction::query()
             ->whereHas('account', fn ($query) => $query->where('is_master', true))
             ->where('transacted_at', '>=', $since)
@@ -81,8 +82,8 @@ final class MasterAccountsInsightsService
             ->count();
 
         $sparklineCounts = [];
-        $sparklineWindowStart = Carbon::now()->subDays(6)->startOfDay();
-        $sparklineWindowEnd = Carbon::now()->endOfDay();
+        $sparklineWindowStart = BusinessDay::now()->subDays(6)->startOfDay();
+        $sparklineWindowEnd = BusinessDay::now()->endOfDay();
 
         Transaction::query()
             ->whereHas('account', fn ($query) => $query->where('is_master', true))
@@ -101,7 +102,7 @@ final class MasterAccountsInsightsService
 
         $sparkline = [];
         for ($i = 6; $i >= 0; $i--) {
-            $day = Carbon::now()->subDays($i)->startOfDay()->toDateString();
+            $day = BusinessDay::now()->subDays($i)->startOfDay()->toDateString();
             $sparkline[] = $sparklineCounts[$day] ?? 0;
         }
 

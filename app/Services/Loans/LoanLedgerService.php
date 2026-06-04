@@ -10,6 +10,7 @@ use App\Models\Tenant\LoanDisbursement;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
+use App\Support\BusinessDay;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -83,7 +84,7 @@ final class LoanLedgerService
                 'seq' => $seq,
                 'name' => $member->name,
             ]);
-            $at = $disbursedAt ?? now();
+            $at = $disbursedAt ?? BusinessDay::now();
 
             $this->accounting->debit($loanAccount, $amount, $label, $loan, $at, $member->id);
             $this->accounting->debitMemberFundWithMasterMirror(
@@ -140,7 +141,7 @@ final class LoanLedgerService
             'marker' => $marker,
         ]);
 
-        $this->accounting->credit($loanAccount, $memberPortion, $description, $loan, $postedAt ?? now(), $loan->member_id);
+        $this->accounting->credit($loanAccount, $memberPortion, $description, $loan, $postedAt ?? BusinessDay::now(), $loan->member_id);
     }
 
     public static function principalAmountCreditingMasterRepaidSlice(
@@ -201,7 +202,7 @@ final class LoanLedgerService
             $description,
             __('(loan repayment mirror)'),
             $installment,
-            $transactedAt ?? now(),
+            $transactedAt ?? BusinessDay::now(),
             $member->id,
         );
     }
@@ -225,7 +226,7 @@ final class LoanLedgerService
             $description,
             __('(guarantor default mirror)'),
             $installment,
-            now(),
+            BusinessDay::now(),
             $guarantor->id,
         );
     }

@@ -9,6 +9,7 @@ use App\Models\Tenant\Member;
 use App\Notifications\Tenant\ContributionPostedNotification;
 use App\Services\Loans\LateFeeService;
 use App\Services\Loans\LoanRepaymentService;
+use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
@@ -136,8 +137,8 @@ class ContributionService
 
             $contribution->update([
                 'status' => 'posted',
-                'posted_at' => now(),
-                'paid_at' => $contribution->paid_at ?? now(),
+                'posted_at' => BusinessDay::now(),
+                'paid_at' => $contribution->paid_at ?? BusinessDay::now(),
             ]);
         });
 
@@ -198,7 +199,7 @@ class ContributionService
 
         $deadline = $this->cycles->deadline($month, $year);
 
-        if (now()->greaterThan($deadline) && $contribution->overdue_since === null) {
+        if (BusinessDay::now()->greaterThan($deadline) && $contribution->overdue_since === null) {
             $contribution->update([
                 'collection_status' => ContributionCollectionStatus::OVERDUE,
                 'overdue_since' => $deadline,

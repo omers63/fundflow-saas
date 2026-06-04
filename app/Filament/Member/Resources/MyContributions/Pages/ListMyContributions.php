@@ -7,10 +7,21 @@ namespace App\Filament\Member\Resources\MyContributions\Pages;
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Widgets\MyContributionsInsightsWidget;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Support\Enums\Width;
 
 class ListMyContributions extends ListRecords
 {
     protected static string $resource = MyContributionResource::class;
+
+    protected Width|string|null $maxContentWidth = Width::Full;
+
+    /**
+     * @return array<string>
+     */
+    public function getPageClasses(): array
+    {
+        return ['fi-page-member-contributions'];
+    }
 
     public function getSubheading(): ?string
     {

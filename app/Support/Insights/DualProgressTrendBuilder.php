@@ -7,7 +7,7 @@ namespace App\Support\Insights;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Services\ContributionCycleService;
-use Carbon\Carbon;
+use App\Support\BusinessDay;
 
 final class DualProgressTrendBuilder
 {
@@ -33,7 +33,7 @@ final class DualProgressTrendBuilder
      */
     public static function sixMonthFundCollectionTrend(ContributionCycleService $cycles): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
         $oldestPeriod = Contribution::periodDate((int) $oldestMonth->month, (int) $oldestMonth->year);
         $periodTotals = [];
@@ -85,7 +85,7 @@ final class DualProgressTrendBuilder
      */
     public static function sixMonthMemberCollectionTrend(Member $member, ContributionCycleService $cycles): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
         $oldestPeriod = Contribution::periodDate((int) $oldestMonth->month, (int) $oldestMonth->year);
         $periodTotals = [];

@@ -1133,5 +1133,14 @@
     "Contributions": "المساهمات",
     "Loan repayments": "سداد القروض",
     "Your note": "ملاحظتك",
-    "Member number": "رقم العضو"
+    "Member number": "رقم العضو",
+    "Business calendar": "التقويم التشغيلي",
+    "Set a custom date that the application treats as today. Useful for testing contribution cycles, loan eligibility, and delinquency in the future or past.": "حدّد تاريخًا مخصصًا يعامله التطبيق كيوم اليوم. مفيد لاختبار دورات المساهمة وأهلية القروض والتأخر في المستقبل أو الماضي.",
+    "Current business day": "يوم العمل الحالي",
+    "Use real calendar date": "استخدام التاريخ الفعلي",
+    "Leave empty to use the real calendar date. Time of day still follows the server clock.": "اتركه فارغًا لاستخدام التاريخ الفعلي. وقت اليوم يتبع ساعة الخادم.",
+    "Effective today": "اليوم الفعلي للتطبيق",
+    "App date: :business · Calendar: :calendar": "تاريخ التطبيق: :business · التقويم: :calendar",
+    "Business day override active: app date is :business_day (calendar :calendar_day).": "تجاوز يوم العمل نشط: تاريخ التطبيق :business_day (التقويم :calendar_day).",
+    "Update under Settings → General.": "حدّث من الإعدادات ← عام."
 }

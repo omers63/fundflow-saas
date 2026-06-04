@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Resources\MembershipApplications\Pages;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Filament\Tenant\Widgets\MembershipApplicationInsightsWidget;
 use App\Services\MembershipApplicationImportService;
+use App\Support\BusinessDay;
 use App\Support\FilamentStoredUploadPath;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
@@ -52,7 +53,7 @@ class ListMembershipApplications extends ListRecords
                     DatePicker::make('arrears_cutoff_date')
                         ->label(__('Cut-off date'))
                         ->required()
-                        ->maxDate(now())
+                        ->maxDate(BusinessDay::now())
                         ->native(false)
                         ->helperText(__('Contribution cycles before this date are not treated as arrears on approval. Optional CSV columns post cut-off cash and fund balances to master and member accounts.')),
                 ])

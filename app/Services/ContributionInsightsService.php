@@ -8,6 +8,7 @@ use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Setting;
+use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
@@ -23,7 +24,7 @@ final class ContributionInsightsService
      */
     public function snapshot(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
 
         $pending = Contribution::query()->where('status', 'pending')->count();
@@ -181,7 +182,7 @@ final class ContributionInsightsService
      */
     private function weeklySparkline(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
         $currentWeekEnd = $now->copy()->endOfWeek();
         $weekCounts = [];

@@ -5,6 +5,7 @@ namespace App\Livewire\Tenant;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\MembershipEnrollmentService;
+use App\Support\BusinessDay;
 use App\Support\PublicPageSettings;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -92,7 +93,7 @@ class MembershipEnrollmentWizard extends Component
 
     public function mount(): void
     {
-        $this->enrollmentClosed = !PublicPageSettings::enrollmentIsOpen();
+        $this->enrollmentClosed = ! PublicPageSettings::enrollmentIsOpen();
         $this->resetMembershipFeeTransferFields();
     }
 
@@ -163,7 +164,7 @@ class MembershipEnrollmentWizard extends Component
 
     protected function resetMembershipFeeTransferFields(): void
     {
-        $this->membership_fee_transfer_date = now()->toDateString();
+        $this->membership_fee_transfer_date = BusinessDay::now()->toDateString();
         $this->syncMembershipFeeTransferAmount();
     }
 
@@ -219,7 +220,7 @@ class MembershipEnrollmentWizard extends Component
             $rules['membership_fee_transfer_amount'] = [
                 'required',
                 'numeric',
-                'min:' . $requiredFee,
+                'min:'.$requiredFee,
             ];
             $rules['membership_fee_transfer_reference'] = ['required', 'string', 'min:3', 'max:120'];
             $rules['membership_fee_receipt'] = ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'];

@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Services\Tenant\HouseholdMemberService;
+use App\Support\BusinessDay;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
 use RuntimeException;
@@ -17,8 +18,7 @@ class MembershipApplicationApprovalService
         private readonly HouseholdMemberService $householdMembers,
         private readonly MembershipSubscriptionFeeService $subscriptionFees,
         private readonly MembershipApprovalPostingPipeline $approvalPostingPipeline,
-    ) {
-    }
+    ) {}
 
     public function approve(MembershipApplication $application): Member
     {
@@ -43,8 +43,8 @@ class MembershipApplicationApprovalService
     public function approveMany(Collection $applications): array
     {
         $ordered = $applications
-            ->filter(fn(MembershipApplication $application): bool => $application->status === 'pending')
-            ->sortBy(fn(MembershipApplication $application): int => $application->parent_application_id === null ? 0 : 1)
+            ->filter(fn (MembershipApplication $application): bool => $application->status === 'pending')
+            ->sortBy(fn (MembershipApplication $application): int => $application->parent_application_id === null ? 0 : 1)
             ->values();
 
         $members = [];
@@ -109,6 +109,6 @@ class MembershipApplicationApprovalService
 
     private function finalizeApprovedApplication(MembershipApplication $application, Member $member): Member
     {
-        return $this->approvalPostingPipeline->run($application, $member, now());
+        return $this->approvalPostingPipeline->run($application, $member, BusinessDay::now());
     }
 }

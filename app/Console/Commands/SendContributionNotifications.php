@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Services\ContributionCycleService;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 
@@ -20,7 +21,7 @@ class SendContributionNotifications extends Command
         $year = $this->option('year') ? (int) $this->option('year') : null;
 
         if ($month === null || $year === null) {
-            $previous = now()->subMonthNoOverflow();
+            $previous = BusinessDay::now()->subMonthNoOverflow();
             $month = (int) $previous->month;
             $year = (int) $previous->year;
         }

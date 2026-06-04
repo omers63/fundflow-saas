@@ -14,6 +14,7 @@ use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
+use App\Support\BusinessDay;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
@@ -30,7 +31,7 @@ final class AccountDetailInsightsService
 
         $currency = InsightFormatter::currency();
         $balance = (float) $account->balance;
-        $since = Carbon::now()->subDays(30);
+        $since = BusinessDay::now()->subDays(30);
 
         $stats30 = Transaction::query()
             ->where('account_id', $account->id)
@@ -49,8 +50,8 @@ final class AccountDetailInsightsService
         $totalTx = Transaction::query()->where('account_id', $account->id)->count();
 
         $sparklineCounts = [];
-        $sparklineWindowStart = Carbon::now()->subDays(6)->startOfDay();
-        $sparklineWindowEnd = Carbon::now()->endOfDay();
+        $sparklineWindowStart = BusinessDay::now()->subDays(6)->startOfDay();
+        $sparklineWindowEnd = BusinessDay::now()->endOfDay();
 
         Transaction::query()
             ->where('account_id', $account->id)
@@ -69,7 +70,7 @@ final class AccountDetailInsightsService
 
         $sparkline = [];
         for ($i = 6; $i >= 0; $i--) {
-            $day = Carbon::now()->subDays($i)->startOfDay()->toDateString();
+            $day = BusinessDay::now()->subDays($i)->startOfDay()->toDateString();
             $sparkline[] = $sparklineCounts[$day] ?? 0;
         }
 
@@ -79,7 +80,7 @@ final class AccountDetailInsightsService
             ->orderByDesc('transacted_at')
             ->limit(5)
             ->get()
-            ->map(fn(Transaction $transaction): array => [
+            ->map(fn (Transaction $transaction): array => [
                 'id' => $transaction->id,
                 'transacted_at' => $transaction->transacted_at?->format('M j, H:i'),
                 'type' => $transaction->type,
@@ -225,7 +226,7 @@ final class AccountDetailInsightsService
                 'rows' => [
                     ['label' => __('Monthly minimum'), 'value' => InsightFormatter::money($min)],
                     ['label' => __('Current fund'), 'value' => InsightFormatter::money($balance)],
-                    ['label' => __('Of minimum'), 'value' => $pct !== null ? $pct . '%' : '—'],
+                    ['label' => __('Of minimum'), 'value' => $pct !== null ? $pct.'%' : '—'],
                 ],
                 'progress' => $pct,
             ];
@@ -233,7 +234,7 @@ final class AccountDetailInsightsService
             $sixthKpi = [
                 'key' => 'minimum',
                 'label' => __('Of minimum'),
-                'value' => $pct !== null ? $pct . '%' : '—',
+                'value' => $pct !== null ? $pct.'%' : '—',
                 'sub' => InsightFormatter::money($min),
                 'icon' => 'heroicon-o-chart-bar',
                 'accent' => $balance < 0 ? 'rose' : ($pct !== null && $pct >= 100 ? 'emerald' : 'sky'),
@@ -310,7 +311,7 @@ final class AccountDetailInsightsService
     private function masterFundContext(float $balance): array
     {
         $loanExposure = (float) Loan::active()->get()->sum(
-            fn(Loan $loan): float => $loan->getOutstandingBalance()
+            fn (Loan $loan): float => $loan->getOutstandingBalance()
         );
         $coverage = $loanExposure > 0.01 ? round($balance / $loanExposure, 2) : null;
         $coveragePercent = $coverage !== null ? min(100, round($coverage * 100, 1)) : 100;
@@ -322,7 +323,7 @@ final class AccountDetailInsightsService
                     'rows' => [
                         ['label' => __('Master fund'), 'value' => InsightFormatter::money($balance)],
                         ['label' => __('Loan exposure'), 'value' => InsightFormatter::money($loanExposure)],
-                        ['label' => __('Coverage'), 'value' => $coverage !== null ? $coverage . '×' : '—'],
+                        ['label' => __('Coverage'), 'value' => $coverage !== null ? $coverage.'×' : '—'],
                     ],
                     'progress' => $coveragePercent,
                     'url' => LoanResource::getUrl('index'),
@@ -332,8 +333,8 @@ final class AccountDetailInsightsService
             'sixth_kpi' => [
                 'key' => 'coverage',
                 'label' => __('Coverage'),
-                'value' => $coverage !== null ? $coverage . '×' : '—',
-                'sub' => InsightFormatter::compactAmount($loanExposure) . ' ' . __('exposure'),
+                'value' => $coverage !== null ? $coverage.'×' : '—',
+                'sub' => InsightFormatter::compactAmount($loanExposure).' '.__('exposure'),
                 'icon' => 'heroicon-o-shield-check',
                 'accent' => $coverage !== null && $coverage >= 1 ? 'emerald' : 'amber',
             ],
@@ -479,7 +480,7 @@ final class AccountDetailInsightsService
                 : [
                     'key' => 'return',
                     'label' => __('Net return'),
-                    'value' => ($netReturn >= 0 ? '+' : '−') . InsightFormatter::compactAmount($netReturn),
+                    'value' => ($netReturn >= 0 ? '+' : '−').InsightFormatter::compactAmount($netReturn),
                     'sub' => __('Lifetime'),
                     'icon' => 'heroicon-o-arrow-path-rounded-square',
                     'accent' => $netReturn >= 0 ? 'emerald' : 'rose',
@@ -541,7 +542,7 @@ final class AccountDetailInsightsService
      */
     private function buildHero(Account $account, float $balance, array $context): array
     {
-        if ($account->type === 'fund' && !$account->is_master && $balance < 0) {
+        if ($account->type === 'fund' && ! $account->is_master && $balance < 0) {
             return [
                 'tone' => 'warning',
                 'title' => __('Fund is below zero'),
@@ -620,7 +621,7 @@ final class AccountDetailInsightsService
             }
         }
 
-        if (!$account->is_master && $account->type === 'cash' && $balance <= 0) {
+        if (! $account->is_master && $account->type === 'cash' && $balance <= 0) {
             $pending = FundPosting::query()
                 ->where('member_id', $account->member_id)
                 ->where('status', 'pending')
@@ -697,7 +698,7 @@ final class AccountDetailInsightsService
             [
                 'key' => 'net',
                 'label' => __('Net 30d'),
-                'value' => ($net30 >= 0 ? '+' : '−') . InsightFormatter::compactAmount($net30),
+                'value' => ($net30 >= 0 ? '+' : '−').InsightFormatter::compactAmount($net30),
                 'sub' => trans_choice(':count txn|:count txns', $txCount30, ['count' => $txCount30]),
                 'icon' => 'heroicon-o-arrows-right-left',
                 'accent' => $net30 >= 0 ? 'teal' : 'amber',

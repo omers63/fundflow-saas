@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
+use App\Support\BusinessDay;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
@@ -55,8 +56,8 @@ final class BankStatementDetailInsightsService
             ->count();
 
         $sparklineCounts = [];
-        $sparklineWindowStart = Carbon::now()->subDays(6)->startOfDay();
-        $sparklineWindowEnd = Carbon::now()->endOfDay();
+        $sparklineWindowStart = BusinessDay::now()->subDays(6)->startOfDay();
+        $sparklineWindowEnd = BusinessDay::now()->endOfDay();
 
         BankTransaction::query()
             ->where('bank_statement_id', $statement->id)
@@ -75,7 +76,7 @@ final class BankStatementDetailInsightsService
 
         $sparkline = [];
         for ($i = 6; $i >= 0; $i--) {
-            $day = Carbon::now()->subDays($i)->startOfDay()->toDateString();
+            $day = BusinessDay::now()->subDays($i)->startOfDay()->toDateString();
             $sparkline[] = $sparklineCounts[$day] ?? 0;
         }
 

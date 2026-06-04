@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Tenant\MembershipApplication;
+use App\Support\BusinessDay;
 use App\Support\PublicPageSettings;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -167,7 +168,7 @@ class MembershipApplicationImportService
         $dateOfBirth = null;
         if ($dobRaw !== '') {
             $dateOfBirth = $this->parseFlexibleDateToDateString($dobRaw, 'date_of_birth');
-            if ($dateOfBirth > now()->toDateString()) {
+            if ($dateOfBirth > BusinessDay::now()->toDateString()) {
                 throw new \InvalidArgumentException('date_of_birth cannot be in the future.');
             }
         }
@@ -355,12 +356,12 @@ class MembershipApplicationImportService
         $raw = $this->cell($row, 'transfer_date');
 
         if ($raw === '') {
-            return now()->toDateString();
+            return BusinessDay::now()->toDateString();
         }
 
         $date = $this->parseFlexibleDateToDateString($raw, 'transfer_date');
 
-        if ($date > now()->toDateString()) {
+        if ($date > BusinessDay::now()->toDateString()) {
             throw new \InvalidArgumentException(__('Transfer date cannot be in the future.'));
         }
 
@@ -375,7 +376,7 @@ class MembershipApplicationImportService
 
         $date = $this->parseFlexibleDateToDateString(trim($value), 'cut-off date');
 
-        if ($date > now()->toDateString()) {
+        if ($date > BusinessDay::now()->toDateString()) {
             throw new \InvalidArgumentException(__('Cut-off date cannot be in the future.'));
         }
 

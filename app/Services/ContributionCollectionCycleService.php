@@ -11,6 +11,7 @@ use App\Services\Loans\LateFeeService;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanInstallmentCollectionService;
 use App\Services\Loans\LoanRepaymentService;
+use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
 use App\Support\ContributionPolicySettings;
 use App\Support\LoanSettings;
@@ -647,7 +648,7 @@ class ContributionCollectionCycleService
 
         $days = $this->lateFees->daysPastDue(
             Carbon::parse($contribution->overdue_since),
-            now(),
+            BusinessDay::now(),
         );
 
         $newTier = ContributionCollectionStatus::tierForDays($days);
@@ -759,8 +760,8 @@ class ContributionCollectionCycleService
             'status' => 'posted',
             'collection_status' => ContributionCollectionStatus::COLLECTED,
             'amount_collected' => $amountDue,
-            'posted_at' => now(),
-            'paid_at' => $contribution->paid_at ?? now(),
+            'posted_at' => BusinessDay::now(),
+            'paid_at' => $contribution->paid_at ?? BusinessDay::now(),
             'is_late' => $preserveLate,
         ]);
     }

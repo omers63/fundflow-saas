@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Tenant\BankTransaction;
+use App\Support\BusinessDay;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -22,7 +23,7 @@ final class BankTransactionClearanceService
         array $importedUpdates,
     ): void {
         DB::transaction(function () use ($uncleared, $imported, $importedUpdates): void {
-            $clearedAt = now();
+            $clearedAt = BusinessDay::now();
 
             $uncleared->update([
                 'is_cleared' => true,

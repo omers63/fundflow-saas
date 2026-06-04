@@ -13,6 +13,7 @@ use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
 use App\Models\Tenant\MonthlyStatement;
 use App\Models\Tenant\Setting;
 use App\Services\MonthlyStatementService;
+use App\Support\BusinessDay;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -63,7 +64,7 @@ class MonthlyStatementsTable
                 Action::make('pdf')
                     ->label(__('Download PDF'))
                     ->icon('heroicon-o-arrow-down-tray')
-                    ->url(fn(MonthlyStatement $record): string => route('tenant.admin.statement.pdf', $record))
+                    ->url(fn (MonthlyStatement $record): string => route('tenant.admin.statement.pdf', $record))
                     ->openUrlInNewTab(),
                 Action::make('regenerate')
                     ->label(__('Regenerate'))
@@ -97,7 +98,7 @@ class MonthlyStatementsTable
                         ->schema([
                             TextInput::make('period')
                                 ->label(__('Period (YYYY-MM)'))
-                                ->placeholder(now()->subMonthNoOverflow()->format('Y-m'))
+                                ->placeholder(BusinessDay::now()->subMonthNoOverflow()->format('Y-m'))
                                 ->required(),
                         ])
                         ->action(function (array $data, Component $livewire): void {

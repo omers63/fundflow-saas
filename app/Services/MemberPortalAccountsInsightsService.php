@@ -14,6 +14,7 @@ use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
+use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
@@ -46,7 +47,7 @@ final class MemberPortalAccountsInsightsService
             ->where('is_master', false)
             ->pluck('id');
 
-        $since = Carbon::now()->subDays(30);
+        $since = BusinessDay::now()->subDays(30);
         $activity = Transaction::query()
             ->whereIn('account_id', $accountIds)
             ->where('transacted_at', '>=', $since)
@@ -81,8 +82,8 @@ final class MemberPortalAccountsInsightsService
         $trend = $this->sixMonthTrend($accountIds);
 
         $sparklineCounts = [];
-        $sparklineWindowStart = Carbon::now()->subDays(6)->startOfDay();
-        $sparklineWindowEnd = Carbon::now()->endOfDay();
+        $sparklineWindowStart = BusinessDay::now()->subDays(6)->startOfDay();
+        $sparklineWindowEnd = BusinessDay::now()->endOfDay();
 
         Transaction::query()
             ->whereIn('account_id', $accountIds)
@@ -101,7 +102,7 @@ final class MemberPortalAccountsInsightsService
 
         $sparkline = [];
         for ($i = 6; $i >= 0; $i--) {
-            $day = Carbon::now()->subDays($i)->startOfDay()->toDateString();
+            $day = BusinessDay::now()->subDays($i)->startOfDay()->toDateString();
             $sparkline[] = $sparklineCounts[$day] ?? 0;
         }
 
@@ -352,7 +353,7 @@ final class MemberPortalAccountsInsightsService
             return [];
         }
 
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
         $monthTotals = [];
 

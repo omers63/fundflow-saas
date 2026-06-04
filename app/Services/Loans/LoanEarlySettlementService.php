@@ -6,6 +6,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Notifications\Tenant\LoanEarlySettledNotification;
 use App\Services\ContributionCycleService;
+use App\Support\BusinessDay;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -36,7 +37,7 @@ class LoanEarlySettlementService
         $m = (int) $due->month;
         $y = (int) $due->year;
         $deadline = $this->cycle->deadline($m, $y);
-        $days = $this->lateFees->daysPastDue($deadline, now());
+        $days = $this->lateFees->daysPastDue($deadline, BusinessDay::now());
 
         return $this->lateFees->repaymentLateFeeForDays($days);
     }
@@ -109,7 +110,7 @@ class LoanEarlySettlementService
 
                 $installment->update([
                     'status' => 'paid',
-                    'paid_at' => now(),
+                    'paid_at' => BusinessDay::now(),
                     'is_late' => $isLate,
                     'late_fee_amount' => $lateFee > 0 ? $lateFee : null,
                 ]);
@@ -126,7 +127,7 @@ class LoanEarlySettlementService
             $loan->refresh();
             $loan->update([
                 'status' => 'early_settled',
-                'settled_at' => now(),
+                'settled_at' => BusinessDay::now(),
             ]);
         });
 
@@ -204,7 +205,7 @@ class LoanEarlySettlementService
                 if ($newCollected >= (float) $installment->amount - 0.00001) {
                     $installment->update([
                         'status' => 'paid',
-                        'paid_at' => now(),
+                        'paid_at' => BusinessDay::now(),
                         'amount_collected' => (float) $installment->amount,
                         'collection_status' => 'collected',
                         'late_fee_amount' => $lateFee > 0 ? $lateFee : null,

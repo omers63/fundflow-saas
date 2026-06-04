@@ -12,6 +12,7 @@ use App\Models\Tenant\Setting;
 use App\Services\ContributionCycleService;
 use App\Services\FundAuditLogService;
 use App\Services\MemberDelinquencyEvaluator;
+use App\Support\BusinessDay;
 use App\Support\InstallmentCollectionStatus;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -207,7 +208,7 @@ class LoanDelinquencyService
 
                 $due = $installment->due_date;
                 $deadline = $this->cycles->deadline((int) $due->month, (int) $due->year);
-                $days = $this->lateFees->daysPastDue($deadline, now());
+                $days = $this->lateFees->daysPastDue($deadline, BusinessDay::now());
                 $feeAmt = $this->lateFees->repaymentLateFeeForDays($days);
 
                 $installment->update([
@@ -391,7 +392,7 @@ class LoanDelinquencyService
         return $this->buildUnpaidContributionPeriods(
             $member,
             $this->memberContributionsByPeriodWithinLookback($member),
-            now(),
+            BusinessDay::now(),
         );
     }
 
@@ -456,7 +457,7 @@ class LoanDelinquencyService
                 foreach ($this->buildUnpaidContributionPeriods(
                     $member,
                     $contributionsByPeriod,
-                    now(),
+                    BusinessDay::now(),
                     $globalExemptions[$member->id] ?? false,
                 ) as $period) {
                     $rows->push([
@@ -496,7 +497,7 @@ class LoanDelinquencyService
         $memberIds = $members->pluck('id')->map(fn ($id): int => (int) $id)->all();
         $globalExemptions = $this->preloadGlobalContributionExemptions($memberIds);
         $preloadedContributions = $this->memberContributionsByPeriodForMembers($memberIds);
-        $now = now();
+        $now = BusinessDay::now();
 
         foreach ($members as $member) {
             $count += count($this->buildUnpaidContributionPeriods(
@@ -605,7 +606,7 @@ class LoanDelinquencyService
     {
         $due = $installment->due_date;
 
-        return now()->greaterThan(
+        return BusinessDay::now()->greaterThan(
             $this->cycles->deadline((int) $due->month, (int) $due->year)
         );
     }

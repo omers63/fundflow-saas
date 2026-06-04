@@ -10,6 +10,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\ContributionCycleService;
+use App\Support\BusinessDay;
 use App\Support\InstallmentCollectionStatus;
 use Illuminate\Support\Facades\DB;
 
@@ -26,7 +27,9 @@ class LoanInstallmentCollectionService
 
     public function onMemberCashIncreased(Member $member): void
     {
-        $this->collectOpenInstallments($member);
+        [$month, $year] = $this->cycles->currentOpenPeriod();
+
+        $this->collectOpenInstallments($member, $month, $year, throughOpenPeriod: true);
     }
 
     public function onMemberCashIncreasedForPeriod(Member $member, int $month, int $year): void
@@ -34,8 +37,12 @@ class LoanInstallmentCollectionService
         $this->collectOpenInstallments($member, $month, $year);
     }
 
-    protected function collectOpenInstallments(Member $member, ?int $month = null, ?int $year = null): void
-    {
+    protected function collectOpenInstallments(
+        Member $member,
+        ?int $month = null,
+        ?int $year = null,
+        bool $throughOpenPeriod = false,
+    ): void {
         $query = LoanInstallment::query()
             ->whereIn('status', ['pending', 'overdue'])
             ->where(function ($q): void {
@@ -47,17 +54,32 @@ class LoanInstallmentCollectionService
                     ->where('member_id', $member->id);
             });
 
-        if ($month !== null && $year !== null) {
+        if ($month !== null && $year !== null && ! $throughOpenPeriod) {
             $query->whereYear('due_date', $year)->whereMonth('due_date', $month);
         }
 
-        $query->orderBy('due_date')
-            ->each(function (LoanInstallment $installment) use ($member): void {
-                $member = $member->fresh() ?? $member;
-                $member->unsetRelation('accounts');
+        $installments = $query->orderBy('due_date')->get();
 
-                $this->attemptCollection($installment, $member);
+        if ($month !== null && $year !== null && $throughOpenPeriod) {
+            $throughKey = sprintf('%04d-%02d', $year, $month);
+
+            $installments = $installments->filter(function (LoanInstallment $installment) use ($throughKey): bool {
+                $due = $installment->due_date;
+
+                if ($due === null) {
+                    return false;
+                }
+
+                return sprintf('%04d-%02d', (int) $due->year, (int) $due->month) <= $throughKey;
             });
+        }
+
+        foreach ($installments as $installment) {
+            $member = $member->fresh() ?? $member;
+            $member->unsetRelation('accounts');
+
+            $this->attemptCollection($installment, $member);
+        }
     }
 
     public function attemptCollection(LoanInstallment $installment, ?Member $member = null): string
@@ -119,7 +141,7 @@ class LoanInstallmentCollectionService
     {
         $due = $installment->due_date;
         $deadline = $this->cycles->deadline((int) $due->month, (int) $due->year);
-        $days = $this->lateFees->daysPastDue($deadline, now());
+        $days = $this->lateFees->daysPastDue($deadline, BusinessDay::now());
         $computed = $this->lateFees->repaymentLateFeeForDays($days);
 
         return max($computed, (float) ($installment->late_fee_amount ?? 0));
@@ -176,7 +198,7 @@ class LoanInstallmentCollectionService
 
         $installment->update([
             'status' => 'paid',
-            'paid_at' => now(),
+            'paid_at' => BusinessDay::now(),
             'is_late' => $isLate,
             'late_fee_amount' => $lateFee > 0.00001 ? $lateFee : ($installment->late_fee_amount ?? null),
             'amount_collected' => (float) $installment->amount,

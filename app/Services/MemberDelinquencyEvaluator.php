@@ -8,6 +8,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
 use Carbon\Carbon;
 
@@ -48,7 +49,7 @@ class MemberDelinquencyEvaluator
         $this->repaymentMissPeriods = [];
         $this->contributionExemptStarts = [];
 
-        $now = now();
+        $now = BusinessDay::now();
         [$lastM, $lastY] = $this->lastClosedPeriodMonthYear($now);
 
         $joined = $member->joined_at instanceof Carbon
@@ -166,7 +167,7 @@ class MemberDelinquencyEvaluator
     protected function repaymentMiss(Member $member, int $month, int $year): bool
     {
         $deadline = $this->cycles->deadline($month, $year);
-        if (now()->lessThanOrEqualTo($deadline)) {
+        if (BusinessDay::now()->lessThanOrEqualTo($deadline)) {
             return false;
         }
 

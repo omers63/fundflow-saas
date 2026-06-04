@@ -8,6 +8,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\FundAuditLogService;
+use App\Support\BusinessDay;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -47,8 +48,8 @@ class LoanGuarantorTransferService
                 'member_id' => $guarantor->id,
                 'status' => 'transferred',
                 'lifecycle_stage' => 'transferred',
-                'transferred_to_guarantor_at' => now(),
-                'guarantor_liability_transferred_at' => now(),
+                'transferred_to_guarantor_at' => BusinessDay::now(),
+                'guarantor_liability_transferred_at' => BusinessDay::now(),
             ]);
 
             $borrower->update(['status' => 'suspended']);
@@ -88,7 +89,7 @@ class LoanGuarantorTransferService
 
         $remaining = $obligation;
         $number = 1;
-        $due = now()->addMonthNoOverflow()->startOfMonth()->addDays(4);
+        $due = BusinessDay::now()->addMonthNoOverflow()->startOfMonth()->addDays(4);
 
         while ($remaining > 0.01) {
             $amount = min($emi, $remaining);

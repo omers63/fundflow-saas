@@ -8,6 +8,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\FeeDeduction;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
+use App\Support\BusinessDay;
 use DateTimeInterface;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -51,7 +52,7 @@ final class MasterFeeDeductionService
             throw new InvalidArgumentException(__('Description is required.'));
         }
 
-        $transactedAt = $transactedAt ?? now();
+        $transactedAt = $transactedAt ?? BusinessDay::now();
 
         return ReconciliationService::withoutRealtimeChecks(function () use ($member, $memberCash, $masterFees, $amount, $description, $transactedAt): FeeDeduction {
             return AccountingService::withoutMemberCashCollection(function () use ($member, $memberCash, $masterFees, $amount, $description, $transactedAt): FeeDeduction {

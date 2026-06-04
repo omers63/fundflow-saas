@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Models\Tenant\Member;
 use App\Services\MonthlyStatementService;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 
@@ -18,7 +19,7 @@ class GenerateMonthlyStatements extends Command
     public function handle(MonthlyStatementService $service): int
     {
         $period = $this->option('period')
-            ?: now()->subMonthNoOverflow()->format('Y-m');
+            ?: BusinessDay::now()->subMonthNoOverflow()->format('Y-m');
 
         $notify = (bool) $this->option('notify');
         $memberId = $this->option('member');

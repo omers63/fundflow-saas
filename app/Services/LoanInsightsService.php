@@ -22,6 +22,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanEligibilityOverrideRequestService;
+use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightKpi;
 use App\Support\Loans\LoanUserFacingStage;
@@ -52,7 +53,7 @@ final class LoanInsightsService
      */
     public function portfolioSnapshot(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $currency = Setting::get('general', 'currency', 'USD');
 
         $pending = Loan::query()->pending()->count();
@@ -156,7 +157,7 @@ final class LoanInsightsService
                 ['key' => 'active', 'label' => __('Active'), 'value' => (string) $active, 'sub' => __('Repaying'), 'icon' => 'heroicon-o-banknotes', 'accent' => 'emerald', 'active' => true],
                 ['key' => 'outstanding', 'label' => __('Outstanding'), 'value' => $this->formatMoneyCompact($outstanding, $currency), 'sub' => __('Portfolio'), 'icon' => 'heroicon-o-scale', 'accent' => 'violet', 'active' => $outstanding > 0],
                 ['key' => 'overdue', 'label' => __('Overdue'), 'value' => (string) $overdueCount, 'sub' => __('Installments'), 'icon' => 'heroicon-o-exclamation-triangle', 'accent' => 'rose', 'active' => $overdueCount > 0, 'value_class' => $overdueCount > 0 ? 'text-rose-600 dark:text-rose-400' : null],
-                ['key' => 'new', 'label' => __('New/mo'), 'value' => (string) $newThisMonth, 'sub' => $this->monthOverMonthChange($newThisMonth, $newLastMonth) !== null ? __(':percent%', ['percent' => $this->monthOverMonthChange($newThisMonth, $newLastMonth)]) : now()->format('M'), 'icon' => 'heroicon-o-sparkles', 'accent' => 'sky', 'active' => true, 'mom' => $this->monthOverMonthChange($newThisMonth, $newLastMonth)],
+                ['key' => 'new', 'label' => __('New/mo'), 'value' => (string) $newThisMonth, 'sub' => $this->monthOverMonthChange($newThisMonth, $newLastMonth) !== null ? __(':percent%', ['percent' => $this->monthOverMonthChange($newThisMonth, $newLastMonth)]) : BusinessDay::now()->format('M'), 'icon' => 'heroicon-o-sparkles', 'accent' => 'sky', 'active' => true, 'mom' => $this->monthOverMonthChange($newThisMonth, $newLastMonth)],
                 ['key' => 'disbursed', 'label' => __('Disbursed'), 'value' => $this->formatMoneyCompact($disbursedThisMonth, $currency), 'sub' => __('This month'), 'icon' => 'heroicon-o-arrow-trending-up', 'accent' => 'teal', 'active' => true],
             ], [
                 'pending' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'pending']]),
@@ -275,7 +276,7 @@ final class LoanInsightsService
      */
     public function queueSnapshot(string $activeTab): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $currency = Setting::get('general', 'currency', 'USD');
 
         $needsDecision = Loan::query()->needsDecision()->count();
@@ -781,7 +782,7 @@ final class LoanInsightsService
      */
     private function buildSixMonthLoanVolumeBuckets(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
         $monthTotals = [];
 
@@ -844,7 +845,7 @@ final class LoanInsightsService
      */
     private function weeklyApplicationSparkline(): array
     {
-        $now = Carbon::now();
+        $now = BusinessDay::now();
         $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
         $currentWeekEnd = $now->copy()->endOfWeek();
         $weekCounts = [];
