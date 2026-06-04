@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\Loans\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
+use App\Filament\Support\ActionModalFailure;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -17,7 +18,6 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
-use Throwable;
 
 class RepaymentsRelationManager extends RelationManager
 {
@@ -54,15 +54,18 @@ class RepaymentsRelationManager extends RelationManager
                     ->label(__('Early settle'))
                     ->icon('heroicon-o-check-badge')
                     ->color('success')
-                    ->visible(fn(): bool => $this->getOwnerRecord()->status === 'active')
+                    ->visible(fn (): bool => $this->getOwnerRecord()->status === 'active')
                     ->requiresConfirmation()
-                    ->action(function (LoanService $service): void {
-                        try {
-                            $service->earlySettle($this->getOwnerRecord());
-                            Notification::make()->title(__('Loan early settled'))->success()->send();
-                        } catch (Throwable $e) {
-                            Notification::make()->title(__('Settlement failed'))->body($e->getMessage())->danger()->send();
+                    ->action(function (Action $action, LoanService $service): void {
+                        if (! ActionModalFailure::attemptThrowable(
+                            $action,
+                            fn () => $service->earlySettle($this->getOwnerRecord()),
+                            __('Settlement failed'),
+                        )) {
+                            return;
                         }
+
+                        Notification::make()->title(__('Loan early settled'))->success()->send();
                     }),
             ])
             ->recordActions(TableRecordActionGroups::wrap([]))

@@ -13,6 +13,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
+use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
 
@@ -114,8 +115,6 @@ final class MemberAccountsInsightsService
             ];
         }
 
-        $maxTrend = max(1.0, (float) collect($trend)->max('total'));
-
         $atRiskMembers = Member::query()
             ->active()
             ->with(['accounts' => fn ($query) => $query->whereIn('type', ['cash', 'fund'])->where('is_master', false)])
@@ -167,8 +166,7 @@ final class MemberAccountsInsightsService
             'activity_debits' => $activityDebits,
             'activity_net' => $activityNet,
             'activity_tx_count' => $activityTxCount,
-            'trend' => $trend,
-            'max_trend' => $maxTrend,
+            'trend' => DualProgressTrendBuilder::mapVolumeTrend($trend, 'credits', 'debits'),
             'at_risk_members' => $atRiskMembers,
             'urls' => [
                 'index' => $indexUrl,

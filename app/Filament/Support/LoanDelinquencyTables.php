@@ -9,9 +9,12 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
+use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -197,103 +200,120 @@ final class LoanDelinquencyTables
         $currency = Setting::get('general', 'currency', 'USD');
         $delinquency = app(LoanDelinquencyService::class);
 
-        return $table
-            ->query(null)
-            ->records(function (?string $search, ?string $sortColumn, ?string $sortDirection, ?array $filters) use ($delinquency): Collection {
-                $filters ??= [];
+        return TableGrouping::apply(
+            $table
+                ->query(null)
+                ->records(function (?string $search, ?string $sortColumn, ?string $sortDirection, ?array $filters) use ($delinquency): Collection {
+                    $filters ??= [];
 
-                $memberId = isset($filters['member_id']['value'])
-                    ? (int) $filters['member_id']['value']
-                    : null;
+                    $memberId = isset($filters['member_id']['value'])
+                        ? (int) $filters['member_id']['value']
+                        : null;
 
-                if ($memberId === 0) {
-                    $memberId = null;
-                }
+                    if ($memberId === 0) {
+                        $memberId = null;
+                    }
 
-                $records = $delinquency->contributionArrearsTableRecords($memberId);
+                    $records = $delinquency->contributionArrearsTableRecords($memberId);
 
-                return $delinquency->filterContributionArrearsRecords(
-                    $records,
-                    $search,
-                    $sortColumn,
-                    $sortDirection,
-                    $memberId,
-                );
-            })
-            ->summaries(pageCondition: false, allTableCondition: false)
-            ->columnManager(false)
-            ->columns([
-                TextColumn::make('member_name')
-                    ->label(__('Member'))
-                    ->searchable(false)
-                    ->sortable(false)
-                    ->wrap()
-                    ->url(MemberTableColumns::memberIdEditUrl(...)),
-                TextColumn::make('member_number')
-                    ->label(__('Number'))
-                    ->searchable(false)
-                    ->sortable(false)
-                    ->url(MemberTableColumns::memberIdEditUrl(...)),
-                TextColumn::make('period_label')
-                    ->label(__('Period'))
-                    ->searchable(false)
-                    ->sortable(false),
-                TextColumn::make('year')
-                    ->label(__('Year'))
-                    ->sortable(false)
-                    ->toggleable(false),
-                TextColumn::make('month')
-                    ->label(__('Month'))
-                    ->sortable(false)
-                    ->toggleable(false),
-                TextColumn::make('contribution_status')
-                    ->label(__('Contribution'))
-                    ->badge()
-                    ->sortable(false)
-                    ->formatStateUsing(fn (?string $state): string => $delinquency->contributionStatusLabel((string) $state))
-                    ->color(fn (?string $state): string => $delinquency->contributionStatusColor((string) $state)),
-                TextColumn::make('monthly_contribution_amount')
-                    ->label(__('Monthly'))
-                    ->sortable(false)
-                    ->money($currency)
-                    ->summarize([]),
-                TextColumn::make('late_fee')
-                    ->label(__('Late fee'))
-                    ->sortable(false)
-                    ->money($currency)
-                    ->summarize([]),
-                TextColumn::make('member_status')
-                    ->label(__('Member status'))
-                    ->badge()
-                    ->sortable(false)
-                    ->formatStateUsing(fn (?string $state): string => Member::statusOptions()[(string) $state] ?? (string) $state)
-                    ->color(fn (?string $state): string => Member::statusBadgeColor((string) $state))
-                    ->toggleable(false),
-            ])
-            ->defaultSort('year', 'desc')
-            ->headerActions([
-                ContributionListTableHeaderActions::delinquencyToolsGroup(),
-            ])
-            ->filters([
-                SelectFilter::make('member_id')
-                    ->label(__('Member'))
-                    ->options(fn (): array => Member::query()
-                        ->whereIn('id', $delinquency->contributionArrearsMemberIds() ?: [0])
-                        ->orderBy('name')
-                        ->pluck('name', 'id')
-                        ->all())
-                    ->searchable(),
-            ])
-            ->recordActions(TableRecordActionGroups::wrap([
-                self::viewMemberFromArrearsAction(),
-            ]))
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    TableToolbar::refreshBulkAction(),
-                ]),
-            ])
-            ->emptyStateHeading(__('No contribution arrears'))
-            ->emptyStateDescription(__('Each row is one period after the deadline without a posted contribution (since the member joined).'));
+                    return $delinquency->filterContributionArrearsRecords(
+                        $records,
+                        $search,
+                        $sortColumn,
+                        $sortDirection,
+                        $memberId,
+                    );
+                })
+                ->summaries(pageCondition: false, allTableCondition: false)
+                ->columnManager(true)
+                ->columns([
+                    TextColumn::make('member_name')
+                        ->label(__('Member'))
+                        ->searchable(false)
+                        ->sortable(false)
+                        ->wrap()
+                        ->url(fn (mixed $state, mixed $record): ?string => MemberTableColumns::resolveMemberUrl('member_name', $record)),
+                    TextColumn::make('member_number')
+                        ->label(__('Number'))
+                        ->searchable(false)
+                        ->sortable(false)
+                        ->toggleable()
+                        ->url(fn (mixed $state, mixed $record): ?string => MemberTableColumns::resolveMemberUrl('member_number', $record)),
+                    TextColumn::make('period_label')
+                        ->label(__('Period'))
+                        ->searchable(false)
+                        ->sortable(false),
+                    TextColumn::make('year')
+                        ->label(__('Year'))
+                        ->sortable(false)
+                        ->toggleable(isToggledHiddenByDefault: true),
+                    TextColumn::make('month')
+                        ->label(__('Month'))
+                        ->sortable(false)
+                        ->toggleable(isToggledHiddenByDefault: true),
+                    TextColumn::make('contribution_status')
+                        ->label(__('Contribution'))
+                        ->badge()
+                        ->sortable(false)
+                        ->formatStateUsing(fn (?string $state): string => $delinquency->contributionStatusLabel((string) $state))
+                        ->color(fn (?string $state): string => $delinquency->contributionStatusColor((string) $state)),
+                    TextColumn::make('monthly_contribution_amount')
+                        ->label(__('Monthly'))
+                        ->sortable(false)
+                        ->money($currency)
+                        ->summarize([]),
+                    TextColumn::make('late_fee')
+                        ->label(__('Late fee'))
+                        ->sortable(false)
+                        ->money($currency)
+                        ->summarize([]),
+                    TextColumn::make('member_status')
+                        ->label(__('Member status'))
+                        ->badge()
+                        ->sortable(false)
+                        ->formatStateUsing(fn (?string $state): string => Member::statusOptions()[(string) $state] ?? (string) $state)
+                        ->color(fn (?string $state): string => Member::statusBadgeColor((string) $state))
+                        ->toggleable(isToggledHiddenByDefault: true),
+                ])
+                ->defaultSort('year', 'desc')
+                ->filters([
+                    SelectFilter::make('member_id')
+                        ->label(__('Member'))
+                        ->searchable()
+                        ->getSearchResultsUsing(function (string $search): array {
+                            $needle = trim($search);
+
+                            if ($needle === '') {
+                                return [];
+                            }
+
+                            return Member::query()
+                                ->whereIn('status', ['active', 'delinquent'])
+                                ->where(function ($query) use ($needle): void {
+                                    $query->where('name', 'like', "%{$needle}%")
+                                        ->orWhere('member_number', 'like', "%{$needle}%");
+                                })
+                                ->orderBy('name')
+                                ->limit(50)
+                                ->pluck('name', 'id')
+                                ->all();
+                        })
+                        ->getOptionLabelUsing(fn ($value): ?string => Member::query()->find($value)?->name),
+                ])
+                ->recordActions(TableRecordActionGroups::wrap([
+                    self::applyContributionArrearsAction(),
+                    self::viewMemberFromArrearsAction(),
+                ]))
+                ->toolbarActions([
+                    BulkActionGroup::make([
+                        self::applyContributionArrearsBulkAction(),
+                        TableToolbar::refreshBulkAction(),
+                    ]),
+                ])
+                ->emptyStateHeading(__('No contribution arrears'))
+                ->emptyStateDescription(__('Each row is one period after the deadline without a posted contribution (since the member joined).')),
+            TableGrouping::delinquencyContributionArrears(),
+        );
     }
 
     public static function viewLoanInstallmentAction(): Action
@@ -318,5 +338,90 @@ final class LoanDelinquencyTables
             ->label(__('View member'))
             ->icon(Heroicon::OutlinedEye)
             ->url(MemberTableColumns::memberIdEditUrl(...));
+    }
+
+    public static function applyContributionArrearsAction(): Action
+    {
+        return Action::make('apply_single')
+            ->label(__('Apply now'))
+            ->icon('heroicon-o-check')
+            ->color('success')
+            ->requiresConfirmation()
+            ->modalDescription(fn (array $record): string => __('Post contribution from cash for :period.', [
+                'period' => $record['period_label'],
+            ]))
+            ->action(function (array $record, Action $action, Component $livewire): void {
+                $outcome = self::applyContributionArrearsRecord($record);
+
+                if ($outcome === 'skipped') {
+                    return;
+                }
+
+                $member = Member::query()->find((int) $record['member_id']);
+                ContributionTableActions::notifyApplyOutcome($outcome, $member?->name, $action);
+                ContributionTableActions::refreshContributionViews($livewire);
+            });
+    }
+
+    public static function applyContributionArrearsBulkAction(): BulkAction
+    {
+        return BulkAction::make('applySelected')
+            ->label(__('Apply now'))
+            ->icon('heroicon-o-check')
+            ->color('success')
+            ->requiresConfirmation()
+            ->modalDescription(__('Post contributions from member cash for each selected period.'))
+            ->action(function (BulkAction $action, Collection $records, Component $livewire): void {
+                $applied = 0;
+                $skipped = 0;
+
+                foreach ($records as $record) {
+                    $row = is_array($record) ? $record : (array) $record;
+                    $outcome = self::applyContributionArrearsRecord($row);
+
+                    if ($outcome === 'applied') {
+                        $applied++;
+                    } else {
+                        $skipped++;
+                    }
+                }
+
+                Notification::make()
+                    ->title(__('Bulk apply complete'))
+                    ->body(__(':applied applied, :skipped skipped or could not apply.', [
+                        'applied' => $applied,
+                        'skipped' => $skipped,
+                    ]))
+                    ->color($applied > 0 ? 'success' : 'warning')
+                    ->send();
+
+                ContributionTableActions::refreshContributionViews($livewire);
+
+                if ($applied === 0 && $skipped > 0) {
+                    ActionModalFailure::present(
+                        $action,
+                        __(':skipped period(s) could not be applied. Check cash balances and exemptions.', ['skipped' => $skipped]),
+                        __('Bulk apply complete'),
+                    );
+                }
+            });
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     */
+    private static function applyContributionArrearsRecord(array $record): string
+    {
+        $member = Member::query()->find((int) ($record['member_id'] ?? 0));
+
+        if ($member === null) {
+            return 'skipped';
+        }
+
+        return app(ContributionCycleService::class)->applyContributionForMemberForPeriod(
+            $member,
+            (int) $record['month'],
+            (int) $record['year'],
+        );
     }
 }

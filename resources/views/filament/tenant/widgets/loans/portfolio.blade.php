@@ -1,5 +1,4 @@
 @php
-    $maxTrend = max(1, collect($d['trend'])->max('total'));
     $maxStatus = max(1, collect($d['status_breakdown'])->max('count'));
     $sparkMax = max(1, max($d['sparkline']));
     $pipeline = $d['pipeline'];
@@ -27,6 +26,15 @@
             @endif
         </div>
         <div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-5">
+            @if (($pipeline['pending_eligibility_reviews'] ?? 0) > 0)
+                <a href="{{ $pipeline['eligibility_reviews_url'] }}"
+                    class="col-span-3 flex items-center justify-between gap-2 border-b border-gray-100 bg-amber-50/70 px-3 py-2 text-left transition hover:bg-amber-100/80 dark:border-gray-700 dark:bg-amber-950/20 dark:hover:bg-amber-950/30 sm:col-span-5">
+                    <span class="text-[11px] font-semibold text-amber-800 dark:text-amber-200">
+                        {{ trans_choice(':count eligibility review pending|:count eligibility reviews pending', $pipeline['pending_eligibility_reviews'], ['count' => $pipeline['pending_eligibility_reviews']]) }}
+                    </span>
+                    <span class="text-[10px] font-medium text-amber-700 dark:text-amber-300">{{ __('Review') }} →</span>
+                </a>
+            @endif
             <a href="{{ $pipeline['queue_needs_decision_url'] }}" class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-amber-50/70 dark:hover:bg-amber-950/20">
                 <span class="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ $pipeline['needs_decision'] }}</span>
                 <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Decision') }}</span>
@@ -128,40 +136,10 @@
         </div>
     </div>
 
-    <div class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 dark:border-gray-700">
-            <div class="flex items-center gap-1.5">
-                <x-heroicon-o-chart-bar class="h-4 w-4 text-indigo-500" />
-                <h4 class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">{{ __('6-month loan volume') }}</h4>
-            </div>
-            <div class="flex flex-wrap gap-3 text-[10px] text-gray-500">
-                <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-sm bg-emerald-500"></span>{{ __('Active') }}</span>
-                <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-sm bg-amber-400"></span>{{ __('Pending') }}</span>
-                <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-sm bg-violet-500"></span>{{ __('Closed') }}</span>
-            </div>
-        </div>
-        <div class="px-3 py-3">
-            <div class="flex h-20 items-end gap-1.5 sm:gap-2">
-                @foreach ($d['trend'] as $month)
-                    @php
-                        $stackTotal = max(1, $month['total']);
-                        $activeH = round(($month['active'] / $stackTotal) * 100);
-                        $pendingH = round(($month['pending'] / $stackTotal) * 100);
-                        $completedH = max(0, 100 - $activeH - $pendingH);
-                        $barH = max(12, (int) round(($month['total'] / $maxTrend) * 100));
-                    @endphp
-                    <div class="flex flex-1 flex-col items-center gap-0.5">
-                        <span class="text-[10px] font-semibold tabular-nums text-gray-500">{{ $month['total'] ?: '·' }}</span>
-                        <div class="flex w-full max-w-[2.25rem] flex-col justify-end overflow-hidden rounded-t-md ring-1 ring-gray-200/60 dark:ring-gray-600" style="height: {{ $barH }}%">
-                            @if ($month['active'] > 0)<div class="w-full bg-emerald-500" style="height: {{ max(3, $activeH) }}%"></div>@endif
-                            @if ($month['pending'] > 0)<div class="w-full bg-amber-400" style="height: {{ max(3, $pendingH) }}%"></div>@endif
-                            @if ($month['completed'] > 0)<div class="w-full bg-violet-500" style="height: {{ max(3, $completedH) }}%"></div>@endif
-                            @if ($month['total'] === 0)<div class="h-0.5 w-full bg-gray-200 dark:bg-gray-600"></div>@endif
-                        </div>
-                        <span class="text-[10px] text-gray-400">{{ $month['label'] }}</span>
-                    </div>
-                @endforeach
-            </div>
-        </div>
-    </div>
+    @include('filament.partials.insights.six-month-workflow-panel', [
+        'title' => __('6-month loan volume'),
+        'trend' => $d['trend'],
+        'primaryLabel' => __('Closed'),
+        'secondaryLabel' => __('Decided'),
+    ])
 </div>

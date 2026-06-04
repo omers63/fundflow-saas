@@ -34,7 +34,7 @@ final class OperationalReviewWorkflowService
         User::query()
             ->where('is_admin', true)
             ->each(function (User $admin) use ($notification): void {
-                $admin->notify($notification);
+                $admin->notify(clone $notification);
             });
     }
 }

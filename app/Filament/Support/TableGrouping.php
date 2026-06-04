@@ -51,7 +51,7 @@ final class TableGrouping
     public static function collapsible(array $groups): array
     {
         return array_map(
-            fn(Group $group): Group => $group->collapsible(),
+            fn (Group $group): Group => $group->collapsible(),
             $groups,
         );
     }
@@ -65,7 +65,7 @@ final class TableGrouping
             Group::make('type')
                 ->label(__('Type'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(Transaction $record): string => $record->type === 'credit'
+                ->getTitleFromRecordUsing(fn (Transaction $record): string => $record->type === 'credit'
                     ? __('Credit')
                     : __('Debit')),
             Group::make('transacted_at')
@@ -97,7 +97,7 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(BankTransaction $record): string => match ($record->status) {
+                ->getTitleFromRecordUsing(fn (BankTransaction $record): string => match ($record->status) {
                     'imported' => __('Imported'),
                     'mirrored' => __('Mirrored'),
                     'posted' => __('Posted'),
@@ -111,7 +111,7 @@ final class TableGrouping
             Group::make('member.name')
                 ->label(__('Member'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(BankTransaction $record): string => $record->member?->name ?? __('Unassigned')),
+                ->getTitleFromRecordUsing(fn (BankTransaction $record): string => $record->member?->name ?? __('Unassigned')),
         ];
     }
 
@@ -124,11 +124,11 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(Member $record): string => Member::statusOptions()[$record->status] ?? ucfirst((string) $record->status)),
-            Group::make('parent.name')
+                ->getTitleFromRecordUsing(fn (Member $record): string => Member::statusOptions()[$record->status] ?? ucfirst((string) $record->status)),
+            Group::make('parent_member_id')
                 ->label(__('Parent'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(Member $record): string => $record->parent?->name ?? __('Independent')),
+                ->getTitleFromRecordUsing(fn (Member $record): string => $record->parent?->name ?? __('Independent')),
             Group::make('joined_at')
                 ->label(__('Joined'))
                 ->date(),
@@ -146,7 +146,7 @@ final class TableGrouping
             $groups[] = Group::make('type')
                 ->label(__('Account type'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn($record): string => match ($record->type) {
+                ->getTitleFromRecordUsing(fn ($record): string => match ($record->type) {
                     'cash' => __('Cash'),
                     'fund' => __('Fund'),
                     default => ucfirst((string) $record->type),
@@ -169,7 +169,7 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(Loan $record): string => match ($record->status) {
+                ->getTitleFromRecordUsing(fn (Loan $record): string => match ($record->status) {
                     'pending' => __('Pending'),
                     'approved' => __('Approved'),
                     'disbursed' => __('Disbursed'),
@@ -201,7 +201,7 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(Contribution $record): string => match ($record->status) {
+                ->getTitleFromRecordUsing(fn (Contribution $record): string => match ($record->status) {
                     'pending' => __('Pending'),
                     'posted' => __('Posted'),
                     'failed' => __('Failed'),
@@ -230,7 +230,7 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(FundPosting $record): string => match ($record->status) {
+                ->getTitleFromRecordUsing(fn (FundPosting $record): string => match ($record->status) {
                     'pending' => __('Pending'),
                     'accepted' => __('Accepted'),
                     'rejected' => __('Rejected'),
@@ -259,7 +259,7 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(BankStatement $record): string => match ($record->status) {
+                ->getTitleFromRecordUsing(fn (BankStatement $record): string => match ($record->status) {
                     'pending' => __('Pending'),
                     'processing' => __('Processing'),
                     'completed' => __('Completed'),
@@ -272,7 +272,7 @@ final class TableGrouping
             Group::make('bank_name')
                 ->label(__('Bank'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(BankStatement $record): string => filled($record->bank_name)
+                ->getTitleFromRecordUsing(fn (BankStatement $record): string => filled($record->bank_name)
                     ? (string) $record->bank_name
                     : __('Unknown bank')),
         ];
@@ -287,7 +287,7 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(MembershipApplication $record): string => match ($record->status) {
+                ->getTitleFromRecordUsing(fn (MembershipApplication $record): string => match ($record->status) {
                     'pending' => __('Pending'),
                     'approved' => __('Approved'),
                     'rejected' => __('Rejected'),
@@ -296,7 +296,7 @@ final class TableGrouping
             Group::make('application_type')
                 ->label(__('Application type'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(MembershipApplication $record): string => ucfirst((string) $record->application_type)),
+                ->getTitleFromRecordUsing(fn (MembershipApplication $record): string => ucfirst((string) $record->application_type)),
             Group::make('created_at')
                 ->label(__('Submitted'))
                 ->date(),
@@ -315,7 +315,7 @@ final class TableGrouping
             Group::make('loan_id')
                 ->label(__('Loan'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(LoanRepayment $record): string => __('Loan #:id', [
+                ->getTitleFromRecordUsing(fn (LoanRepayment $record): string => __('Loan #:id', [
                     'id' => $record->loan_id,
                 ])),
         ];
@@ -339,7 +339,7 @@ final class TableGrouping
             Group::make('member.name')
                 ->label(__('Member'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(FundAuditLog $record): string => $record->member?->name ?? __('—')),
+                ->getTitleFromRecordUsing(fn (FundAuditLog $record): string => $record->member?->name ?? __('—')),
         ];
     }
 
@@ -352,7 +352,7 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(ReconciliationException $record): string => match ($record->status) {
+                ->getTitleFromRecordUsing(fn (ReconciliationException $record): string => match ($record->status) {
                     ReconciliationException::STATUS_OPEN => __('Open'),
                     ReconciliationException::STATUS_RESOLVED => __('Resolved'),
                     ReconciliationException::STATUS_ESCALATED => __('Escalated'),
@@ -361,12 +361,30 @@ final class TableGrouping
             Group::make('severity')
                 ->label(__('Severity'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(ReconciliationException $record): string => ucfirst((string) $record->severity)),
+                ->getTitleFromRecordUsing(fn (ReconciliationException $record): string => ucfirst((string) $record->severity)),
             Group::make('domain')
                 ->label(__('Domain'))
                 ->titlePrefixedWithLabel(false),
             Group::make('raised_at')
                 ->label(__('Raised'))
+                ->date(),
+        ];
+    }
+
+    /**
+     * @return array<int, Group>
+     */
+    public static function loanEligibilityOverrideRequests(): array
+    {
+        return [
+            Group::make('status')
+                ->label(__('Status'))
+                ->titlePrefixedWithLabel(false),
+            Group::make('member.name')
+                ->label(__('Member'))
+                ->titlePrefixedWithLabel(false),
+            Group::make('created_at')
+                ->label(__('Submitted'))
                 ->date(),
         ];
     }
@@ -421,7 +439,7 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(LoanInstallment $record): string => match ($record->status) {
+                ->getTitleFromRecordUsing(fn (LoanInstallment $record): string => match ($record->status) {
                     'pending' => __('Pending'),
                     'paid' => __('Paid'),
                     'overdue' => __('Overdue'),
@@ -462,7 +480,7 @@ final class TableGrouping
             Group::make('read_at')
                 ->label(__('Read state'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(DirectMessage $record): string => $record->read_at !== null
+                ->getTitleFromRecordUsing(fn (DirectMessage $record): string => $record->read_at !== null
                     ? __('Read')
                     : __('Unread')),
             Group::make('created_at')
@@ -480,7 +498,7 @@ final class TableGrouping
             Group::make('is_active')
                 ->label(__('Active'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(LoanTier|FundTier $record): string => $record->is_active
+                ->getTitleFromRecordUsing(fn (LoanTier|FundTier $record): string => $record->is_active
                     ? __('Active')
                     : __('Inactive')),
         ];
@@ -495,7 +513,7 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(SystemJobRun $record): string => match ($record->status) {
+                ->getTitleFromRecordUsing(fn (SystemJobRun $record): string => match ($record->status) {
                     SystemJobRun::STATUS_SUCCESS => __('Success'),
                     SystemJobRun::STATUS_FAILED => __('Failed'),
                     SystemJobRun::STATUS_RUNNING => __('Running'),
@@ -507,7 +525,7 @@ final class TableGrouping
             Group::make('trigger')
                 ->label(__('Trigger'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(SystemJobRun $record): string => match ($record->trigger) {
+                ->getTitleFromRecordUsing(fn (SystemJobRun $record): string => match ($record->trigger) {
                     SystemJobRun::TRIGGER_SCHEDULE => __('Scheduled'),
                     SystemJobRun::TRIGGER_MANUAL => __('Manual'),
                     default => ucfirst((string) $record->trigger),
@@ -527,7 +545,7 @@ final class TableGrouping
             Group::make('last_status')
                 ->label(__('Last status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(array $record): string => match ($record['last_status'] ?? null) {
+                ->getTitleFromRecordUsing(fn (array $record): string => match ($record['last_status'] ?? null) {
                     SystemJobRun::STATUS_SUCCESS => __('Success'),
                     SystemJobRun::STATUS_FAILED => __('Failed'),
                     SystemJobRun::STATUS_RUNNING => __('Running'),
@@ -545,17 +563,17 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(Loan $record): string => Loan::statusOptions()[$record->status] ?? ucfirst((string) $record->status)),
+                ->getTitleFromRecordUsing(fn (Loan $record): string => Loan::statusOptions()[$record->status] ?? ucfirst((string) $record->status)),
             Group::make('is_emergency')
                 ->label(__('Emergency'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(Loan $record): string => $record->is_emergency
+                ->getTitleFromRecordUsing(fn (Loan $record): string => $record->is_emergency
                     ? __('Emergency')
                     : __('Standard')),
             Group::make('fundTier.label')
                 ->label(__('Fund tier'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(Loan $record): string => $record->fundTier?->label ?? __('—')),
+                ->getTitleFromRecordUsing(fn (Loan $record): string => $record->fundTier?->label ?? __('—')),
         ];
     }
 
@@ -574,7 +592,7 @@ final class TableGrouping
             Group::make('year')
                 ->label(__('Year'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(array $record): string => (string) ($record['year'] ?? __('Unknown'))),
+                ->getTitleFromRecordUsing(fn (array $record): string => (string) ($record['year'] ?? __('Unknown'))),
         ];
     }
 
@@ -587,14 +605,14 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(Loan $record): string => Loan::statusOptions()[$record->status] ?? ucfirst((string) $record->status)),
+                ->getTitleFromRecordUsing(fn (Loan $record): string => Loan::statusOptions()[$record->status] ?? ucfirst((string) $record->status)),
             Group::make('member.name')
                 ->label(__('Borrower'))
                 ->titlePrefixedWithLabel(false),
             Group::make('guarantor.name')
                 ->label(__('Guarantor'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(Loan $record): string => $record->guarantor?->name ?? __('—')),
+                ->getTitleFromRecordUsing(fn (Loan $record): string => $record->guarantor?->name ?? __('—')),
         ];
     }
 
@@ -607,11 +625,11 @@ final class TableGrouping
             Group::make('plan.name')
                 ->label(__('Plan'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(Tenant $record): string => $record->plan?->name ?? __('—')),
+                ->getTitleFromRecordUsing(fn (Tenant $record): string => $record->plan?->name ?? __('—')),
             Group::make('is_provisioned')
                 ->label(__('Provisioned'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(Tenant $record): string => $record->is_provisioned
+                ->getTitleFromRecordUsing(fn (Tenant $record): string => $record->is_provisioned
                     ? __('Provisioned')
                     : __('Pending')),
             Group::make('created_at')
@@ -632,7 +650,7 @@ final class TableGrouping
             Group::make('is_active')
                 ->label(__('Active'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(Plan $record): string => $record->is_active
+                ->getTitleFromRecordUsing(fn (Plan $record): string => $record->is_active
                     ? __('Active')
                     : __('Inactive')),
         ];
@@ -647,7 +665,7 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(Invoice $record): string => ucfirst((string) $record->status)),
+                ->getTitleFromRecordUsing(fn (Invoice $record): string => ucfirst((string) $record->status)),
             Group::make('tenant.name')
                 ->label(__('Tenant'))
                 ->titlePrefixedWithLabel(false),
@@ -666,7 +684,7 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(Subscription $record): string => ucfirst((string) $record->status)),
+                ->getTitleFromRecordUsing(fn (Subscription $record): string => ucfirst((string) $record->status)),
             Group::make('plan.name')
                 ->label(__('Plan'))
                 ->titlePrefixedWithLabel(false),

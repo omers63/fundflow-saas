@@ -622,10 +622,16 @@
     }
 
     .member-login-profile-card__name {
+        width: 100%;
         font-size: 0.8125rem;
         font-weight: 600;
         color: #0f172a;
         line-height: 1.25;
+    }
+
+    .member-login-profile-card__name .ff-arabic-name {
+        max-width: 100%;
+        text-align: center;
     }
 
     .member-login-profile-card__role {

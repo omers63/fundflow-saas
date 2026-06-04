@@ -4,7 +4,9 @@ namespace App\Filament\Tenant\Resources\FundPostings;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Support\DatabaseNotificationsRefresh;
+use App\Filament\Tenant\Resources\FundPostings\Pages\CreateFundPosting;
 use App\Filament\Tenant\Resources\FundPostings\Pages\ListFundPostings;
+use App\Filament\Tenant\Resources\FundPostings\Schemas\FundPostingForm;
 use App\Filament\Tenant\Resources\FundPostings\Tables\FundPostingsTable;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Filament\Tenant\Widgets\FundPostingInsightsWidget;
@@ -12,6 +14,7 @@ use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Member;
 use BackedEnum;
 use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Livewire\Component;
@@ -37,7 +40,12 @@ class FundPostingResource extends Resource
 
     public static function canCreate(): bool
     {
-        return false;
+        return auth()->guard('tenant')->check();
+    }
+
+    public static function form(Schema $schema): Schema
+    {
+        return FundPostingForm::configure($schema);
     }
 
     public static function table(Table $table): Table
@@ -98,6 +106,7 @@ class FundPostingResource extends Resource
     {
         return [
             'index' => ListFundPostings::route('/'),
+            'create' => CreateFundPosting::route('/create'),
         ];
     }
 

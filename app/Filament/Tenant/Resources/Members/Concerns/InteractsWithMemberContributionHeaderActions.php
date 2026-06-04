@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\Members\Concerns;
 
+use App\Filament\Support\ContributionTableActions;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
@@ -48,23 +49,10 @@ trait InteractsWithMemberContributionHeaderActions
                 [$month, $year] = $cycles->parseContributionCycleKey($data['cycle']);
                 $outcome = $cycles->applyContributionForMemberForPeriod($member, $month, $year);
 
-                Notification::make()
-                    ->title($outcome === 'applied' ? __('Contribution applied') : __('Could not apply'))
-                    ->body(match ($outcome) {
-                        'applied' => __('Posted successfully.'),
-                        'insufficient' => __('Insufficient cash.'),
-                        'exempt' => __('Member is exempt while loan installments are pending.'),
-                        default => $outcome,
-                    })
-                    ->color($outcome === 'applied' ? 'success' : 'warning')
-                    ->send();
+                ContributionTableActions::notifyApplyOutcome($outcome, $member->name);
 
-                if ($outcome === 'applied') {
-                    MemberResource::dispatchMemberDetailInsightsRefresh($this->resolveContributionRefreshTarget());
-
-                    if (method_exists($this, 'resetTable')) {
-                        $this->resetTable();
-                    }
+                if (in_array($outcome, ['applied', 'partial'], true)) {
+                    ContributionTableActions::refreshContributionViews($this->resolveContributionRefreshTarget());
                 }
             });
     }

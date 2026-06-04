@@ -21,7 +21,6 @@ use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Utilities\Get;
 use Illuminate\Support\Facades\Auth;
-use Throwable;
 
 /**
  * Header actions for the master fees account transaction table.
@@ -99,23 +98,19 @@ final class MasterFeesHeaderActions
                     ->rows(2)
                     ->maxLength(500),
             ])
-            ->action(function (array $data, MasterFeeDeductionService $feeDeductions): void {
+            ->action(function (array $data, Action $action, MasterFeeDeductionService $feeDeductions): void {
                 $member = Member::query()->findOrFail($data['member_id']);
 
-                try {
-                    $feeDeductions->deduct(
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $feeDeductions->deduct(
                         $member,
                         (float) $data['amount'],
                         (string) $data['description'],
                         Carbon::parse($data['transacted_at']),
-                    );
-                } catch (Throwable $exception) {
-                    Notification::make()
-                        ->title(__('Fee deduction failed'))
-                        ->body($exception->getMessage())
-                        ->danger()
-                        ->send();
-
+                    ),
+                    __('Fee deduction failed'),
+                )) {
                     return;
                 }
 
@@ -134,23 +129,19 @@ final class MasterFeesHeaderActions
             ->modalDescription(__('Debits master fees only, then creates a pending bank line to match when the payment appears on an imported statement.'))
             ->modalWidth('md')
             ->schema(self::disburseFormSchema())
-            ->action(function (array $data, MasterFeeDisbursementService $feeDisbursements) use ($resolveAccount): void {
+            ->action(function (array $data, Action $action, MasterFeeDisbursementService $feeDisbursements) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
-                try {
-                    $feeDisbursements->disburse(
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $feeDisbursements->disburse(
                         $account,
                         (float) $data['amount'],
                         (string) $data['description'],
                         Carbon::parse($data['transacted_at']),
-                    );
-                } catch (Throwable $exception) {
-                    Notification::make()
-                        ->title(__('Disbursement failed'))
-                        ->body($exception->getMessage())
-                        ->danger()
-                        ->send();
-
+                    ),
+                    __('Disbursement failed'),
+                )) {
                     return;
                 }
 

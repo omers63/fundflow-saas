@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Filament\Member\Pages\ApplyForLoan;
-use App\Filament\Member\Pages\LoanCalculator;
 use App\Filament\Member\Pages\MyProfilePage;
 use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
@@ -22,6 +21,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\MonthlyStatement;
 use App\Services\Concerns\EnrichesMemberPortalDashboard;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Services\Loans\LoanEligibilityOverrideRequestService;
 use App\Support\Insights\InsightFormatter;
 use App\Support\LoanSettings;
 use App\Support\PublicPageSettings;
@@ -74,7 +74,7 @@ final class MemberPortalInsightsService
         $unreadMessages = (int) DirectMessage::query()
             ->where('to_user_id', $member->user_id)
             ->whereNull('read_at')
-            ->whereHas('sender', fn ($q) => $q->where('is_admin', true))
+            ->whereHas('sender', fn($q) => $q->where('is_admin', true))
             ->count();
 
         $latestStatement = MonthlyStatement::query()
@@ -118,7 +118,20 @@ final class MemberPortalInsightsService
 
         $firstName = trim(explode(' ', $member->name)[0] ?: $member->name);
 
-        $hero = $this->buildHero($member, $arrears, $activeLoan, $eligibility, $pendingDeposits, $unreadMessages);
+        $overrideRequests = app(LoanEligibilityOverrideRequestService::class);
+        $canRequestOverride = $overrideRequests->canSubmit($member);
+        $hasPendingOverrideRequest = $overrideRequests->pendingRequestFor($member) !== null;
+
+        $hero = $this->buildHero(
+            $member,
+            $arrears,
+            $activeLoan,
+            $eligibility,
+            $pendingDeposits,
+            $unreadMessages,
+            $canRequestOverride,
+            $hasPendingOverrideRequest,
+        );
 
         return [
             'member' => [
@@ -157,7 +170,7 @@ final class MemberPortalInsightsService
                 'status_label' => Loan::statusOptions()[$activeLoan->status] ?? $activeLoan->status,
                 'outstanding' => InsightFormatter::money($loanOutstanding),
                 'repay_percent' => $repayPercent,
-                'installments' => $installmentsPaid.'/'.$installmentsTotal,
+                'installments' => $installmentsPaid . '/' . $installmentsTotal,
                 'installments_paid' => $installmentsPaid,
                 'installments_total' => $installmentsTotal,
                 'overdue_count' => $installmentsOverdue,
@@ -165,8 +178,11 @@ final class MemberPortalInsightsService
             ] : null,
             'eligibility' => [
                 'eligible' => $eligibility['eligible'],
-                'reason' => $eligibility['reason'] ?? null,
+                'reason' => $eligibility['reasons'][0] ?? null,
                 'max_amount' => InsightFormatter::money(LoanSettings::maxLoanAmountForMember($fundBalance)),
+                'can_request_override' => $canRequestOverride,
+                'has_pending_override_request' => $hasPendingOverrideRequest,
+                'request_url' => MyLoanResource::getUrl('index', ['requestOverride' => 1]),
             ],
             'cycle' => [
                 'period_label' => $cycles->periodLabel($curMonth, $curYear),
@@ -197,7 +213,6 @@ final class MemberPortalInsightsService
                 'monthly_contribution' => InsightFormatter::money($monthly),
             ],
             'trend' => $trend,
-            'trend_max' => max(1, (int) collect($trend)->max('posted')),
             'recent_activity' => $this->recentMemberTransactions($member),
             'recent_contributions' => $this->recentMemberContributions($member),
             'relation_summaries' => $this->memberRelationSummaries(
@@ -221,13 +236,15 @@ final class MemberPortalInsightsService
                 $latestStatement !== null,
                 $guaranteedLoansCount > 0,
                 $unreadMessages,
+                $canRequestOverride,
+                $hasPendingOverrideRequest,
             ),
             'recent_deposits' => FundPosting::query()
                 ->where('member_id', $member->id)
                 ->latest()
                 ->limit(4)
                 ->get()
-                ->map(fn (FundPosting $posting): array => [
+                ->map(fn(FundPosting $posting): array => [
                     'amount' => InsightFormatter::money((float) $posting->amount),
                     'status' => $posting->status,
                     'status_label' => match ($posting->status) {
@@ -297,7 +314,7 @@ final class MemberPortalInsightsService
 
         $attentionCount = ($unreadMessages > 0 ? 1 : 0)
             + ($pendingDeposits > 0 ? 1 : 0)
-            + (! $postedThisCycle ? 1 : 0)
+            + (!$postedThisCycle ? 1 : 0)
             + (($arrears['has_arrears'] ?? false) || ($arrears['is_delinquent'] ?? false) ? 1 : 0);
 
         $defaultSubtitle = $attentionCount > 0
@@ -351,7 +368,7 @@ final class MemberPortalInsightsService
             ];
         }
 
-        if (! $postedThisCycle) {
+        if (!$postedThisCycle) {
             $pills[] = [
                 'label' => __('Contribution not posted :period', [
                     'period' => $cycles->periodLabel($curMonth, $curYear),
@@ -426,12 +443,12 @@ final class MemberPortalInsightsService
             ? mb_substr($parts[array_key_last($parts)], 0, 1)
             : '';
 
-        return mb_strtoupper($first.$last);
+        return mb_strtoupper($first . $last);
     }
 
     /**
      * @param  array{has_arrears: bool, is_delinquent: bool}  $arrears
-     * @param  array{eligible: bool, reason?: string|null}  $eligibility
+     * @param  array{eligible: bool, reasons?: list<string>}  $eligibility
      * @return array{tone: string, title: string, subtitle: string, cta_label: ?string, cta_url: ?string}
      */
     private function buildHero(
@@ -441,6 +458,8 @@ final class MemberPortalInsightsService
         array $eligibility,
         int $pendingDeposits,
         int $unreadMessages,
+        bool $canRequestOverride = false,
+        bool $hasPendingOverrideRequest = false,
     ): array {
         if ($arrears['is_delinquent'] || $arrears['has_arrears']) {
             return [
@@ -479,6 +498,26 @@ final class MemberPortalInsightsService
                 'subtitle' => __('Maximum amount :amount', ['amount' => InsightFormatter::money(LoanSettings::maxLoanAmountForMember($member->getFundBalance()))]),
                 'cta_label' => __('Apply now'),
                 'cta_url' => ApplyForLoan::getUrl(),
+            ];
+        }
+
+        if ($hasPendingOverrideRequest) {
+            return [
+                'tone' => 'amber',
+                'title' => __('Eligibility review pending'),
+                'subtitle' => __('An administrator is reviewing your loan eligibility request.'),
+                'cta_label' => __('My loans'),
+                'cta_url' => MyLoanResource::getUrl('index'),
+            ];
+        }
+
+        if ($canRequestOverride) {
+            return [
+                'tone' => 'amber',
+                'title' => __('Not eligible for a loan'),
+                'subtitle' => $eligibility['reasons'][0] ?? __('Requirements not met'),
+                'cta_label' => __('Request review'),
+                'cta_url' => MyLoanResource::getUrl('index', ['requestOverride' => 1]),
             ];
         }
 
@@ -590,6 +629,8 @@ final class MemberPortalInsightsService
         bool $hasStatement,
         bool $hasGuaranteedLoans = false,
         int $unreadMessages = 0,
+        bool $canRequestOverride = false,
+        bool $hasPendingOverrideRequest = false,
     ): array {
         return [
             [
@@ -608,16 +649,18 @@ final class MemberPortalInsightsService
                 'icon' => 'heroicon-o-document-plus',
                 'tone' => 'loan',
                 'badge' => null,
-                'visible' => $eligible && ! $pendingLoan,
+                'visible' => $eligible && !$pendingLoan,
             ],
             [
-                'label' => __('Loan calculator'),
-                'description' => __('Estimate repayments'),
-                'url' => LoanCalculator::getUrl(),
-                'icon' => 'heroicon-o-calculator',
-                'tone' => 'calculator',
-                'badge' => null,
-                'visible' => true,
+                'label' => __('Request eligibility review'),
+                'description' => $hasPendingOverrideRequest
+                    ? __('Review pending with admin')
+                    : __('Ask admin to review blocked rules'),
+                'url' => MyLoanResource::getUrl('index', ['requestOverride' => 1]),
+                'icon' => 'heroicon-o-shield-exclamation',
+                'tone' => 'loan',
+                'badge' => $hasPendingOverrideRequest ? __('Pending') : null,
+                'visible' => !$eligible && ($canRequestOverride || $hasPendingOverrideRequest),
             ],
             [
                 'label' => __('Statements'),

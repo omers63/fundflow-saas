@@ -71,6 +71,19 @@ test('household login shows netflix style profile picker', function () {
         ->assertSee('Dependent User');
 });
 
+test('profile picker renders arabic names with rtl markup on english pages', function () {
+    $this->parentUser->update(['name' => 'محمد أحمد']);
+    $this->parent->update(['name' => 'محمد أحمد']);
+
+    Livewire::test(MemberLoginPage::class)
+        ->set('email', 'family@fund.test')
+        ->set('password', 'ParentPass123')
+        ->call('login')
+        ->assertSee('ff-arabic-name', false)
+        ->assertSee('dir="rtl"', false)
+        ->assertSee('<bdi dir="rtl" lang="ar" class="ff-arabic-name">محمد أحمد</bdi>', false);
+});
+
 test('parent can verify profile with pin and sign in', function () {
     Livewire::test(MemberLoginPage::class)
         ->set('email', 'family@fund.test')

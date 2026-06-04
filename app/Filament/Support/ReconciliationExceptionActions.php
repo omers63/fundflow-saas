@@ -67,7 +67,7 @@ final class ReconciliationExceptionActions
             ->label(__('View'))
             ->icon('heroicon-o-eye')
             ->modalHeading(fn (ReconciliationException $record): string => $record->exception_code)
-            ->modalWidth('2xl')
+            ->modalWidth('lg')
             ->schema(fn (ReconciliationException $record): array => [
                 Section::make(__('Exception details'))
                     ->columns(2)
@@ -133,7 +133,7 @@ final class ReconciliationExceptionActions
                     ->nullable()
                     ->default(fn (): ?int => Auth::guard('tenant')->id()),
             ])
-            ->action(function (ReconciliationException $record, array $data, ReconciliationResolutionService $resolver): void {
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
                 $resolver->assignTo($record, filled($data['assigned_to'] ?? null) ? (int) $data['assigned_to'] : null);
                 Notification::make()->title(__('Assignee updated'))->success()->send();
             });
@@ -161,7 +161,7 @@ final class ReconciliationExceptionActions
                     ->rows(3)
                     ->required(),
             ])
-            ->action(function (ReconciliationException $record, array $data, ReconciliationResolutionService $resolver): void {
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
                 $resolver->reclassify($record, (string) $data['exception_type'], (string) $data['notes']);
                 Notification::make()->title(__('Exception reclassified'))->success()->send();
             });
@@ -180,7 +180,7 @@ final class ReconciliationExceptionActions
                     ->required()
                     ->rows(3),
             ])
-            ->action(function (ReconciliationException $record, array $data, ReconciliationResolutionService $resolver): void {
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
                 $resolver->escalate($record, (string) $data['reason']);
                 Notification::make()->title(__('Exception escalated'))->success()->send();
             });
@@ -201,12 +201,12 @@ final class ReconciliationExceptionActions
                     ->required()
                     ->rows(3),
             ])
-            ->action(function (ReconciliationException $record, array $data, ReconciliationResolutionService $resolver): void {
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
                 try {
                     $resolver->writeOff($record, (string) $data['reason']);
                     Notification::make()->title(__('Exception written off'))->success()->send();
                 } catch (\InvalidArgumentException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    ActionModalFailure::present($action, $e->getMessage());
                 }
             });
     }
@@ -230,12 +230,12 @@ final class ReconciliationExceptionActions
                     ->required()
                     ->rows(4),
             ])
-            ->action(function (ReconciliationException $record, array $data, ReconciliationResolutionService $resolver): void {
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
                 try {
                     $resolver->acceptOverride($record, (string) $data['reason']);
                     Notification::make()->title(__('Exception accepted'))->success()->send();
                 } catch (\InvalidArgumentException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    ActionModalFailure::present($action, $e->getMessage());
                 }
             });
     }
@@ -250,11 +250,11 @@ final class ReconciliationExceptionActions
                 && (bool) Auth::guard('tenant')->user()?->is_admin)
             ->modalHeading(__('Post custom journal'))
             ->modalDescription(__('Build a balanced multi-leg entry linked to this exception. Debits must equal credits.'))
-            ->modalWidth('4xl')
+            ->modalWidth('3xl')
             ->fillForm(fn (ReconciliationException $record): array => ReconciliationJournalComposerSchema::defaultFormState($record))
             ->schema(fn (ReconciliationException $record): array => ReconciliationJournalComposerSchema::schema($record))
             ->requiresConfirmation()
-            ->action(function (ReconciliationException $record, array $data, ReconciliationResolutionService $resolver): void {
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
                 try {
                     $resolver->postCorrection($record, 'custom_journal', $data);
                     Notification::make()
@@ -263,7 +263,7 @@ final class ReconciliationExceptionActions
                         ->success()
                         ->send();
                 } catch (\InvalidArgumentException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    ActionModalFailure::present($action, $e->getMessage());
                 }
             });
     }
@@ -318,12 +318,12 @@ final class ReconciliationExceptionActions
                     ->rows(3),
             ])
             ->requiresConfirmation()
-            ->action(function (ReconciliationException $record, array $data, ReconciliationResolutionService $resolver): void {
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
                 try {
                     $resolver->postCorrection($record, (string) $data['correction_type'], $data);
                     Notification::make()->title(__('Correction posted'))->success()->send();
                 } catch (\InvalidArgumentException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    ActionModalFailure::present($action, $e->getMessage());
                 }
             });
     }
@@ -353,7 +353,7 @@ final class ReconciliationExceptionActions
                     ->rows(3),
             ])
             ->requiresConfirmation()
-            ->action(function (ReconciliationException $record, array $data, ReconciliationResolutionService $resolver): void {
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
                 try {
                     $resolver->reverseTransaction(
                         $record,
@@ -363,7 +363,7 @@ final class ReconciliationExceptionActions
                     );
                     Notification::make()->title(__('Transaction reversed'))->success()->send();
                 } catch (\InvalidArgumentException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    ActionModalFailure::present($action, $e->getMessage());
                 }
             });
     }
@@ -401,7 +401,7 @@ final class ReconciliationExceptionActions
                     ->rows(3),
             ])
             ->requiresConfirmation()
-            ->action(function (ReconciliationException $record, array $data, ReconciliationResolutionService $resolver): void {
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
                 try {
                     $resolver->postMemberCashCorrection(
                         $record,
@@ -412,7 +412,7 @@ final class ReconciliationExceptionActions
                     );
                     Notification::make()->title(__('Correction posted'))->success()->send();
                 } catch (\InvalidArgumentException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    ActionModalFailure::present($action, $e->getMessage());
                 }
             });
     }
@@ -448,7 +448,7 @@ final class ReconciliationExceptionActions
                     ->rows(3),
             ])
             ->requiresConfirmation()
-            ->action(function (ReconciliationException $record, array $data, ReconciliationResolutionService $resolver): void {
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
                 try {
                     $resolver->postEmiOverpaymentRefund(
                         $record,
@@ -458,7 +458,7 @@ final class ReconciliationExceptionActions
                     );
                     Notification::make()->title(__('EMI overpayment refunded'))->success()->send();
                 } catch (\InvalidArgumentException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    ActionModalFailure::present($action, $e->getMessage());
                 }
             });
     }
@@ -506,7 +506,7 @@ final class ReconciliationExceptionActions
                     ->required()
                     ->rows(3),
             ])
-            ->action(function (ReconciliationException $record, array $data, ReconciliationResolutionService $resolver): void {
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
                 try {
                     $resolver->resolveAmbiguousBankMatch(
                         $record,
@@ -516,7 +516,7 @@ final class ReconciliationExceptionActions
                     );
                     Notification::make()->title(__('Bank match cleared'))->success()->send();
                 } catch (\InvalidArgumentException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    ActionModalFailure::present($action, $e->getMessage());
                 }
             });
     }
@@ -534,7 +534,7 @@ final class ReconciliationExceptionActions
                     ->rows(3)
                     ->required(),
             ])
-            ->action(function (ReconciliationException $record, array $data, ReconciliationResolutionService $resolver): void {
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
                 $resolver->resolveManually($record, (string) $data['resolution_notes']);
                 Notification::make()->title(__('Exception resolved'))->success()->send();
             });

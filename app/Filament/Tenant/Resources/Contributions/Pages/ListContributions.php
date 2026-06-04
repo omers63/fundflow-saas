@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tenant\Resources\Contributions\Pages;
 
+use App\Filament\Support\ContributionListTableHeaderActions;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Widgets\ContributionInsightsWidget;
 use App\Services\ContributionCycleService;
@@ -14,6 +15,11 @@ use Illuminate\Database\Eloquent\Builder;
 class ListContributions extends ListRecords
 {
     protected static string $resource = ContributionResource::class;
+
+    protected function getHeaderActions(): array
+    {
+        return ContributionListTableHeaderActions::pageHeaderActions();
+    }
 
     protected function makeTable(): Table
     {
@@ -124,24 +130,51 @@ class ListContributions extends ListRecords
 
     public function getTabs(): array
     {
-        $pending = ContributionResource::openCyclePendingCount();
-
         return [
             'collect' => Tab::make(ContributionResource::listTabLabel('collect'))
-                ->badge($pending > 0 ? (string) $pending : null)
+                ->badge(fn (): ?string => $this->collectTabBadge())
                 ->badgeColor('warning'),
             'collected' => Tab::make(ContributionResource::listTabLabel('collected')),
             'ledger' => Tab::make(ContributionResource::listTabLabel('ledger')),
             'arrears' => Tab::make(ContributionResource::listTabLabel('arrears'))
-                ->badge((string) ContributionResource::contributionArrearsPeriodCount())
+                ->badge(fn (): ?string => $this->arrearsTabBadge())
                 ->badgeColor('warning'),
         ];
+    }
+
+    protected function collectTabBadge(): ?string
+    {
+        $pending = ContributionResource::openCyclePendingCount();
+
+        return $pending > 0 ? (string) $pending : null;
+    }
+
+    protected function arrearsTabBadge(): ?string
+    {
+        $count = ContributionResource::contributionArrearsPeriodCount(
+            $this->arrearsMemberFilterFromTable(),
+        );
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    protected function arrearsMemberFilterFromTable(): ?int
+    {
+        $value = $this->tableFilters['member_id']['value'] ?? null;
+
+        if (blank($value)) {
+            return ContributionResource::memberFilterFromRequest();
+        }
+
+        $memberId = (int) $value;
+
+        return $memberId > 0 ? $memberId : null;
     }
 
     protected function getTableQueryStringIdentifier(): ?string
     {
         $tab = ContributionResource::resolveListTab();
 
-        return $tab === 'ledger' ? null : 'contributions-'.$tab;
+        return $tab === 'collect' ? null : 'contributions-'.$tab;
     }
 }

@@ -9,6 +9,7 @@ use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationRe
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\Setting;
+use App\Support\Insights\DualProgressTrendBuilder;
 use Carbon\Carbon;
 
 final class MembershipApplicationInsightsService
@@ -261,7 +262,7 @@ final class MembershipApplicationInsightsService
             ];
         }
 
-        return $trend;
+        return DualProgressTrendBuilder::mapWorkflowTrend($trend, 'approved', 'rejected');
     }
 
     /**

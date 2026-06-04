@@ -9,6 +9,7 @@ use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MonthlyStatement;
 use App\Models\Tenant\Setting;
+use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Route;
@@ -261,7 +262,15 @@ final class MonthlyStatementInsightsService
             ];
         }
 
-        return $trend;
+        return array_map(
+            fn (array $month): array => DualProgressTrendBuilder::buildWorkflowMonthRow(
+                $month['label'],
+                $month['total'],
+                $month['notified'],
+                $month['total'] - $month['pending'],
+            ),
+            $trend,
+        );
     }
 
     /**

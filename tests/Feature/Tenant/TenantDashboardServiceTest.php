@@ -56,6 +56,8 @@ test('tenant dashboard snapshot includes greeting and workspace links', function
         ->and($snapshot['balances'])->toHaveCount(3)
         ->and($snapshot['workspace_sections'])->not->toBeEmpty()
         ->and($snapshot['contribution_trend'])->toHaveCount(6)
+        ->and($snapshot['loan_trend'])->toHaveCount(6)
+        ->and($snapshot['loan_trend'][0])->toHaveKeys(['label', 'total', 'active', 'pending', 'completed'])
         ->and(
             collect($snapshot['workspace_sections'])
                 ->flatMap(fn (array $s): array => $s['links'])

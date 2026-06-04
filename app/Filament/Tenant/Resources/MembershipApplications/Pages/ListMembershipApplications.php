@@ -33,7 +33,7 @@ class ListMembershipApplications extends ListRecords
                 ->modalDescription(fn (): HtmlString => new HtmlString(
                     view('filament.tenant.membership-application-import-csv-help')->render()
                 ))
-                ->modalWidth('2xl')
+                ->modalWidth('lg')
                 ->schema([
                     FileUpload::make('csv_file')
                         ->label(__('CSV file'))

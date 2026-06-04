@@ -12,6 +12,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Concerns\EnrichesMemberPortalDashboard;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
 use Carbon\Carbon;
@@ -82,9 +83,8 @@ final class MemberContributionInsightsService
         $arrears = $this->delinquency->memberArrearsSummary($member);
         $monthly = (float) $member->monthly_contribution_amount;
 
-        $trend = $this->sixMonthAmountTrend($member);
-        $trendMax = max(1, (int) collect($trend)->max('posted_amount'));
-        $sparkline = collect($trend)->pluck('posted_amount')->map(fn (float $amount): int => (int) round($amount))->all();
+        $trend = DualProgressTrendBuilder::sixMonthMemberCollectionTrend($member, $this->cycles);
+        $sparkline = collect($trend)->pluck('collection_rate')->map(fn (int $rate): int => $rate)->all();
 
         $methodBreakdown = $this->paymentMethodBreakdown($member);
         $streak = $this->postedStreakMonths($member);
@@ -153,7 +153,6 @@ final class MemberContributionInsightsService
                 'is_delinquent' => $arrears['is_delinquent'] ?? false,
             ],
             'trend' => $trend,
-            'trend_max' => $trendMax,
             'sparkline' => $sparkline,
             'sparkline_max' => max(1, max($sparkline)),
             'method_breakdown' => $methodBreakdown,
@@ -401,72 +400,6 @@ final class MemberContributionInsightsService
     }
 
     /**
-     * @return list<array{label: string, posted: int, posted_amount: float, pending: int, failed: int}>
-     */
-    private function sixMonthAmountTrend(Member $member): array
-    {
-        $now = Carbon::now();
-        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
-        $oldestPeriod = Contribution::periodDate((int) $oldestMonth->month, (int) $oldestMonth->year);
-        $periodTotals = [];
-
-        Contribution::query()
-            ->where('member_id', $member->id)
-            ->where('period', '>=', $oldestPeriod)
-            ->get(['period', 'status', 'amount'])
-            ->each(function (Contribution $contribution) use (&$periodTotals): void {
-                $period = (string) $contribution->period;
-
-                if ($period === '') {
-                    return;
-                }
-
-                $periodTotals[$period] ??= [
-                    'posted' => 0,
-                    'posted_amount' => 0.0,
-                    'pending' => 0,
-                    'failed' => 0,
-                ];
-
-                if ($contribution->status === 'posted') {
-                    $periodTotals[$period]['posted']++;
-                    $periodTotals[$period]['posted_amount'] += (float) $contribution->amount;
-
-                    return;
-                }
-
-                if ($contribution->status === 'pending') {
-                    $periodTotals[$period]['pending']++;
-
-                    return;
-                }
-
-                if ($contribution->status === 'failed') {
-                    $periodTotals[$period]['failed']++;
-                }
-            });
-
-        $trend = [];
-
-        for ($i = 5; $i >= 0; $i--) {
-            $month = $now->copy()->subMonths($i)->startOfMonth();
-            $m = (int) $month->month;
-            $y = (int) $month->year;
-            $period = Contribution::periodDate($m, $y);
-
-            $trend[] = [
-                'label' => $month->locale(app()->getLocale())->translatedFormat('M'),
-                'posted' => (int) ($periodTotals[$period]['posted'] ?? 0),
-                'posted_amount' => (float) ($periodTotals[$period]['posted_amount'] ?? 0.0),
-                'pending' => (int) ($periodTotals[$period]['pending'] ?? 0),
-                'failed' => (int) ($periodTotals[$period]['failed'] ?? 0),
-            ];
-        }
-
-        return $trend;
-    }
-
-    /**
      * @return array<string, Contribution>
      */
     private function postedContributionsByPeriod(Member $member, int $monthsBack): array
@@ -479,7 +412,7 @@ final class MemberContributionInsightsService
             ->posted()
             ->where('period', '>=', $oldestPeriod)
             ->get(['period', 'is_late'])
-            ->keyBy(fn (Contribution $contribution): string => (string) $contribution->period)
+            ->keyBy(fn (Contribution $contribution): string => Contribution::normalizePeriodKey($contribution->period) ?? '')
             ->all();
     }
 

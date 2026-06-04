@@ -17,8 +17,8 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\MonthlyStatement;
 use App\Models\Tenant\Transaction;
 use App\Services\ContributionCycleService;
+use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
-use Carbon\Carbon;
 use Illuminate\Support\Str;
 
 trait EnrichesMemberPortalDashboard
@@ -143,26 +143,10 @@ trait EnrichesMemberPortalDashboard
      */
     protected function sixMonthContributionTrend(Member $member): array
     {
-        $trend = [];
-
-        for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i)->startOfMonth();
-            $m = (int) $month->month;
-            $y = (int) $month->year;
-
-            $posted = (int) Contribution::query()
-                ->where('member_id', $member->id)
-                ->forPeriod($m, $y)
-                ->posted()
-                ->count();
-
-            $trend[] = [
-                'label' => $month->locale(app()->getLocale())->translatedFormat('M'),
-                'posted' => $posted,
-            ];
-        }
-
-        return $trend;
+        return DualProgressTrendBuilder::sixMonthMemberCollectionTrend(
+            $member,
+            app(ContributionCycleService::class),
+        );
     }
 
     /**

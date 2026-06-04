@@ -23,7 +23,7 @@ final class ViewAccountTransactionAction
     public static function make(): ViewAction
     {
         return ViewAction::make()
-            ->modalWidth('2xl')
+            ->modalWidth('lg')
             ->modalHeading(fn (Transaction $record): string => filled($record->description)
                 ? $record->description
                 : __('Transaction #:id', ['id' => $record->id]))

@@ -81,7 +81,6 @@ test('member portal insights snapshot includes greeting and kpis', function () {
         'arrears',
         'fund_summary',
         'trend',
-        'trend_max',
         'recent_activity',
         'recent_contributions',
         'relation_summaries',

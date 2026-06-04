@@ -4,7 +4,6 @@
     $notes = $d['notes'];
     $bank = $d['bank'];
     $hero = $d['hero'];
-    $maxTrend = max(1, collect($d['trend'])->max('total'));
     $maxAmountTier = max(1, collect($d['amount_breakdown'])->max('count'));
     $sparkMax = max(1, max($d['sparkline']));
     $currency = $d['currency'];
@@ -183,57 +182,11 @@
             </div>
         </div>
 
-        <div
-            class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <div
-                class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 dark:border-gray-700">
-                <div class="flex items-center gap-1.5">
-                    <x-heroicon-o-chart-bar class="h-4 w-4 text-indigo-500" />
-                    <h4 class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                        {{ __('6-month volume & outcomes') }}</h4>
-                </div>
-                <div class="flex flex-wrap gap-3 text-[10px] text-gray-500">
-                    <span class="flex items-center gap-1"><span
-                            class="h-2 w-2 rounded-sm bg-emerald-500"></span>{{ __('Accepted') }}</span>
-                    <span class="flex items-center gap-1"><span
-                            class="h-2 w-2 rounded-sm bg-rose-500"></span>{{ __('Rejected') }}</span>
-                    <span class="flex items-center gap-1"><span
-                            class="h-2 w-2 rounded-sm bg-amber-400"></span>{{ __('Pending') }}</span>
-                </div>
-            </div>
-            <div class="px-3 py-3">
-                <div class="flex h-20 items-end gap-1.5 sm:gap-2">
-                    @foreach ($d['trend'] as $month)
-                        @php
-                            $stackTotal = max(1, $month['total']);
-                            $acceptedH = round(($month['accepted'] / $stackTotal) * 100);
-                            $rejectedH = round(($month['rejected'] / $stackTotal) * 100);
-                            $pendingH = max(0, 100 - $acceptedH - $rejectedH);
-                            $barH = max(12, (int) round(($month['total'] / $maxTrend) * 100));
-                        @endphp
-                        <div class="flex flex-1 flex-col items-center gap-0.5">
-                            <span
-                                class="text-[10px] font-semibold tabular-nums text-gray-500">{{ $month['total'] ?: '·' }}</span>
-                            <div class="flex w-full max-w-[2.25rem] flex-col justify-end overflow-hidden rounded-t-md ring-1 ring-gray-200/60 dark:ring-gray-600"
-                                style="height: {{ $barH }}%">
-                                @if ($month['accepted'] > 0)
-                                    <div class="w-full bg-emerald-500" style="height: {{ max(3, $acceptedH) }}%"></div>
-                                @endif
-                                @if ($month['rejected'] > 0)
-                                    <div class="w-full bg-rose-500" style="height: {{ max(3, $rejectedH) }}%"></div>
-                                @endif
-                                @if ($month['pending'] > 0)
-                                    <div class="w-full bg-amber-400" style="height: {{ max(3, $pendingH) }}%"></div>
-                                @endif
-                                @if ($month['total'] === 0)
-                                    <div class="h-0.5 w-full bg-gray-200 dark:bg-gray-600"></div>
-                                @endif
-                            </div>
-                            <span class="text-[10px] text-gray-400">{{ $month['label'] }}</span>
-                        </div>
-                    @endforeach
-                </div>
-            </div>
-        </div>
+        @include('filament.partials.insights.six-month-workflow-panel', [
+            'title' => __('6-month volume & outcomes'),
+            'trend' => $d['trend'],
+            'primaryLabel' => __('Accepted'),
+            'secondaryLabel' => __('Decided'),
+        ])
     </div>
 </div>

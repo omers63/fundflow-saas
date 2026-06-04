@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tenant\Resources\MembershipApplications\Tables;
 
+use App\Filament\Support\ActionModalFailure;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -20,7 +21,6 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Collection;
-use InvalidArgumentException;
 use Livewire\Component;
 
 class MembershipApplicationsTable
@@ -76,16 +76,16 @@ class MembershipApplicationsTable
                         ->color('success')
                         ->requiresConfirmation()
                         ->hidden(fn ($record) => $record->status !== 'pending')
-                        ->action(function (MembershipApplication $record, Component $livewire): void {
-                            try {
-                                $member = app(MembershipApplicationApprovalService::class)->approve($record);
-                            } catch (InvalidArgumentException $exception) {
-                                Notification::make()
-                                    ->title(__('Approval blocked'))
-                                    ->body($exception->getMessage())
-                                    ->danger()
-                                    ->send();
+                        ->action(function (MembershipApplication $record, Action $action, Component $livewire): void {
+                            $member = null;
 
+                            if (! ActionModalFailure::attempt(
+                                $action,
+                                function () use ($record, &$member): void {
+                                    $member = app(MembershipApplicationApprovalService::class)->approve($record);
+                                },
+                                __('Approval blocked'),
+                            )) {
                                 return;
                             }
 

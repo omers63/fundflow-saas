@@ -72,7 +72,6 @@
 
             @include('filament.member.widgets.partials.portal-trend-activity', [
                 'trend' => $d['trend'] ?? [],
-                'trendMax' => $d['trend_max'] ?? 1,
                 'recentActivity' => $d['recent_activity'] ?? [],
                 'quickLinks' => $d['quick_links'] ?? [],
             ])

@@ -1,71 +1,143 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Loans;
 
+use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
-use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Setting;
+use App\Services\ContributionCycleService;
+use App\Services\MemberLatePaymentHistoryEvaluator;
+use App\Support\ContributionCollectionStatus;
+use App\Support\LoanEligibilityGate;
 use App\Support\LoanSettings;
 
 class LoanEligibilityService
 {
-    public function isEligible(Member $member): bool
+    public function __construct(
+        protected ContributionCycleService $cycles,
+        protected LoanDelinquencyService $delinquency,
+        protected MemberLatePaymentHistoryEvaluator $latePaymentHistory,
+        protected LoanEligibilityOverrideService $overrides,
+    ) {}
+
+    public function isEligible(Member $member, ?array $skipGates = null): bool
     {
-        return empty($this->getIneligibilityReason($member));
+        return $this->getIneligibilityReason($member, $skipGates) === '';
     }
 
-    public function getIneligibilityReason(Member $member): string
+    public function getIneligibilityReason(Member $member, ?array $skipGates = null): string
     {
-        if (! $member->isActive()) {
-            return 'Your membership status is not active.';
+        $failed = $this->getFailedGates($member, $skipGates);
+
+        return $failed !== [] ? reset($failed) : '';
+    }
+
+    /**
+     * @param  list<string>|null  $skipGates
+     * @return array<string, string> gate => reason
+     */
+    public function getFailedGates(Member $member, ?array $skipGates = null): array
+    {
+        $skip = array_flip(array_merge(
+            $this->overrides->overriddenGatesFor($member),
+            $skipGates ?? [],
+        ));
+
+        $failed = [];
+
+        if (! isset($skip[LoanEligibilityGate::MEMBERSHIP_STATUS]) && ! $member->isActive()) {
+            $failed[LoanEligibilityGate::MEMBERSHIP_STATUS] = __('Your membership status is not active.');
         }
 
-        $maxActive = LoanSettings::maxActiveLoans();
-        $activeLoanCount = Loan::query()
+        if (! isset($skip[LoanEligibilityGate::ACTIVE_LOAN])) {
+            $maxActive = LoanSettings::maxActiveLoans();
+            $activeLoanCount = Loan::query()
+                ->where('member_id', $member->id)
+                ->whereIn('status', ['pending', 'approved', 'partially_disbursed', 'active', 'transferred'])
+                ->count();
+
+            if ($activeLoanCount >= $maxActive) {
+                $failed[LoanEligibilityGate::ACTIVE_LOAN] = __('You already have :count loan(s) in progress (maximum :max). Cancel a pending loan or fully settle an active loan before applying again.', [
+                    'count' => $activeLoanCount,
+                    'max' => $maxActive,
+                ]);
+            }
+        }
+
+        if (! isset($skip[LoanEligibilityGate::MEMBERSHIP_TENURE])) {
+            $start = $member->loanEligibilityStartDate();
+            if ($start === null) {
+                $failed[LoanEligibilityGate::OTHER] = __('Membership start date is not set. Set membership date on the member or application.');
+            } else {
+                $requiredMonths = LoanSettings::eligibilityMonths();
+                $eligibleFrom = $start->copy()->addMonths($requiredMonths);
+                if ($eligibleFrom->isFuture()) {
+                    $failed[LoanEligibilityGate::MEMBERSHIP_TENURE] = __('You are not yet eligible for a loan. Eligibility starts on :date (:months months from membership start).', [
+                        'date' => $eligibleFrom->format('d M Y'),
+                        'months' => $requiredMonths,
+                    ]);
+                }
+            }
+        }
+
+        if (! isset($skip[LoanEligibilityGate::MIN_FUND_BALANCE])) {
+            $minFund = LoanSettings::minFundBalance();
+            $fundBal = (float) ($member->fundAccount?->balance ?? 0);
+            if ($fundBal < $minFund) {
+                $failed[LoanEligibilityGate::MIN_FUND_BALANCE] = __('Your fund account balance (:balance) must be at least :minimum to be eligible.', [
+                    'balance' => number_format($fundBal, 2),
+                    'minimum' => number_format($minFund, 2),
+                ]);
+            }
+        }
+
+        if (! isset($skip[LoanEligibilityGate::DELINQUENCY])) {
+            if ($this->hasPendingContributionCollections($member)) {
+                $failed[LoanEligibilityGate::DELINQUENCY] = __('You have an unsettled contribution collection from a previous cycle. Clear it before applying for a loan.');
+            } elseif ($this->delinquency->memberHasArrearsExcludingOpenCycle($member)) {
+                $failed[LoanEligibilityGate::DELINQUENCY] = __('You have outstanding contribution arrears or overdue loan installments. Clear them before applying for a loan.');
+            } else {
+                $lateHistory = $this->latePaymentHistory->evaluate($member);
+
+                if (
+                    $this->latePaymentHistory->shouldBlockLoanEligibility(
+                        $lateHistory['trailing_consecutive'],
+                        $lateHistory['rolling_total'],
+                    )
+                ) {
+                    if ($lateHistory['trailing_consecutive'] >= LoanSettings::latePaymentConsecutiveThreshold()) {
+                        $failed[LoanEligibilityGate::DELINQUENCY] = __('You have :count consecutive late contribution or repayment cycles (limit :limit).', [
+                            'count' => $lateHistory['trailing_consecutive'],
+                            'limit' => LoanSettings::latePaymentConsecutiveThreshold(),
+                        ]);
+                    } else {
+                        $failed[LoanEligibilityGate::DELINQUENCY] = __('You have :count late contribution or repayment cycles in the last :months months (limit :limit).', [
+                            'count' => $lateHistory['rolling_total'],
+                            'months' => LoanSettings::latePaymentLookbackMonths(),
+                            'limit' => LoanSettings::latePaymentRollingThreshold(),
+                        ]);
+                    }
+                }
+            }
+        }
+
+        return $failed;
+    }
+
+    public function hasPendingContributionCollections(Member $member): bool
+    {
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $openPeriod = Contribution::periodDate($openMonth, $openYear);
+
+        return Contribution::query()
             ->where('member_id', $member->id)
-            ->whereIn('status', ['pending', 'approved', 'partially_disbursed', 'active', 'transferred'])
-            ->count();
-
-        if ($activeLoanCount >= $maxActive) {
-            return __('You already have :count loan(s) in progress (maximum :max). Cancel a pending loan or fully settle an active loan before applying again.', [
-                'count' => $activeLoanCount,
-                'max' => $maxActive,
-            ]);
-        }
-
-        $start = $member->loanEligibilityStartDate();
-        if ($start === null) {
-            return 'Membership start date is not set. Set membership date on the member or application.';
-        }
-
-        // Must have been a member for the required number of months (non-mutating date math)
-        $requiredMonths = LoanSettings::eligibilityMonths();
-        $eligibleFrom = $start->copy()->addMonths($requiredMonths);
-        if ($eligibleFrom->isFuture()) {
-            $since = $eligibleFrom->format('d M Y');
-
-            return "You are not yet eligible for a loan. Eligibility starts on {$since} "
-                ."({$requiredMonths} months from membership start).";
-        }
-
-        // Fund account must meet the minimum balance
-        $minFund = LoanSettings::minFundBalance();
-        $fundBal = (float) ($member->fundAccount?->balance ?? 0);
-        if ($fundBal < $minFund) {
-            return 'Your fund account balance (SAR '.number_format($fundBal, 2).') '
-                .'must be at least SAR '.number_format($minFund).' to be eligible.';
-        }
-
-        // No overdue installments on any loan
-        $hasOverdue = LoanInstallment::whereHas('loan', fn ($q) => $q->where('member_id', $member->id))
-            ->where('status', 'overdue')
+            ->where('period', '!=', $openPeriod)
+            ->whereIn('collection_status', ContributionCollectionStatus::openCollectionStates())
             ->exists();
-        if ($hasOverdue) {
-            return 'You have overdue loan installments. Please clear all overdue payments first.';
-        }
-
-        return '';
     }
 
     /**

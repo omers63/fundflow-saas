@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
+use App\Notifications\Tenant\ContributionPostedNotification;
 use App\Services\Loans\LateFeeService;
 use App\Services\Loans\LoanRepaymentService;
 use App\Support\ContributionCollectionStatus;
@@ -54,18 +55,52 @@ class ContributionService
 
     public function recordContribution(Member $member, string $period, ?float $amount = null): Contribution
     {
+        [$month, $year] = Contribution::monthYearFromPeriod($period);
+
+        $existing = Contribution::findForMemberPeriod($member->id, $month, $year);
+
+        if ($existing !== null) {
+            return $existing;
+        }
+
+        if (Contribution::memberPeriodRecordExists($member->id, $month, $year)) {
+            throw ValidationException::withMessages([
+                'period' => [
+                    __('A deleted contribution still occupies :period. Restore it or permanently remove it before creating a new one.', [
+                        'period' => $this->periodLabel($month, $year),
+                    ]),
+                ],
+            ]);
+        }
+
         $due = (float) ($amount ?? $member->monthly_contribution_amount);
 
-        return Contribution::create([
-            'member_id' => $member->id,
-            'period' => $period,
-            'amount' => $due,
-            'amount_due' => $due,
-            'amount_collected' => 0,
-            'status' => 'pending',
-            'collection_status' => ContributionCollectionStatus::PENDING,
-            'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
-        ]);
+        try {
+            return Contribution::create([
+                'member_id' => $member->id,
+                'period' => Contribution::periodDate($month, $year),
+                'amount' => $due,
+                'amount_due' => $due,
+                'amount_collected' => 0,
+                'status' => 'pending',
+                'collection_status' => ContributionCollectionStatus::PENDING,
+                'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            $existing = Contribution::findForMemberPeriod($member->id, $month, $year);
+
+            if ($existing !== null) {
+                return $existing;
+            }
+
+            throw ValidationException::withMessages([
+                'period' => [
+                    __('A contribution already exists for :period.', [
+                        'period' => $this->periodLabel($month, $year),
+                    ]),
+                ],
+            ]);
+        }
     }
 
     public function postContribution(Contribution $contribution): void
@@ -109,6 +144,29 @@ class ContributionService
         if (LoanSettings::autoAllocateLoanRepayment()) {
             app(LoanRepaymentService::class)->applyOpenPeriodRepaymentForMember($contribution->member);
         }
+
+        $this->notifyMemberOfPostedContribution($contribution);
+    }
+
+    public function notifyMemberOfPostedContribution(Contribution $contribution): void
+    {
+        $contribution->loadMissing('member.user');
+
+        $user = $contribution->member?->user;
+
+        if ($user === null) {
+            return;
+        }
+
+        try {
+            $user->notify(new ContributionPostedNotification($contribution->fresh()));
+        } catch (\Throwable $exception) {
+            logger()->error('ContributionService: posted notification failed', [
+                'contribution_id' => $contribution->id,
+                'member_id' => $contribution->member_id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -118,12 +176,6 @@ class ContributionService
      */
     public function applyForPeriod(Member $member, int $month, int $year, array &$results = []): string
     {
-        if (Contribution::activePeriodExists($member->id, $month, $year)) {
-            $results['skipped'][] = $member;
-
-            return 'already_contributed';
-        }
-
         if ($member->isExemptFromContributions($month, $year)) {
             $results['skipped'][] = $member;
 
@@ -138,24 +190,10 @@ class ContributionService
             return 'exempt';
         }
 
-        $period = Contribution::periodDate($month, $year);
-        $contribution = Contribution::query()
-            ->where('member_id', $member->id)
-            ->where('period', $period)
-            ->first();
+        $contribution = $this->resolveContributionForPeriodApply($member, $month, $year, $amount, $results);
 
         if ($contribution === null) {
-            $contribution = Contribution::create([
-                'member_id' => $member->id,
-                'period' => $period,
-                'amount' => $amount,
-                'amount_due' => $amount,
-                'amount_collected' => 0,
-                'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
-                'status' => 'pending',
-                'collection_status' => ContributionCollectionStatus::PENDING,
-                'cycle_open_cash_balance' => $member->getCashBalance(),
-            ]);
+            return 'already_contributed';
         }
 
         $deadline = $this->cycles->deadline($month, $year);
@@ -171,7 +209,7 @@ class ContributionService
         }
 
         try {
-            $outcome = $this->collectionCycle->attemptCollection($contribution);
+            $outcome = $this->collectionCycle->attemptCollection($contribution, manualApply: true);
         } catch (UniqueConstraintViolationException|ValidationException) {
             $results['skipped'][] = $member;
 
@@ -206,6 +244,87 @@ class ContributionService
     }
 
     /**
+     * @param  array<string, mixed>  $results
+     */
+    private function resolveContributionForPeriodApply(
+        Member $member,
+        int $month,
+        int $year,
+        float $amount,
+        array &$results,
+    ): ?Contribution {
+        if (Contribution::periodFullyPosted($member->id, $month, $year)) {
+            $results['skipped'][] = $member;
+
+            return null;
+        }
+
+        $contribution = Contribution::findForMemberPeriod($member->id, $month, $year, withTrashed: true);
+
+        if ($contribution?->trashed()) {
+            $contribution->forceDelete();
+            $contribution = null;
+        }
+
+        if ($contribution !== null) {
+            return $contribution;
+        }
+
+        $period = Contribution::periodDate($month, $year);
+
+        try {
+            return Contribution::create([
+                'member_id' => $member->id,
+                'period' => $period,
+                'amount' => $amount,
+                'amount_due' => $amount,
+                'amount_collected' => 0,
+                'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+                'status' => 'pending',
+                'collection_status' => ContributionCollectionStatus::PENDING,
+                'cycle_open_cash_balance' => $member->getCashBalance(),
+            ]);
+        } catch (UniqueConstraintViolationException|ValidationException) {
+            $contribution = Contribution::findForMemberPeriod($member->id, $month, $year, withTrashed: true);
+
+            if ($contribution?->trashed()) {
+                $contribution->forceDelete();
+
+                try {
+                    return Contribution::create([
+                        'member_id' => $member->id,
+                        'period' => $period,
+                        'amount' => $amount,
+                        'amount_due' => $amount,
+                        'amount_collected' => 0,
+                        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+                        'status' => 'pending',
+                        'collection_status' => ContributionCollectionStatus::PENDING,
+                        'cycle_open_cash_balance' => $member->getCashBalance(),
+                    ]);
+                } catch (UniqueConstraintViolationException|ValidationException) {
+                    $contribution = Contribution::findForMemberPeriod($member->id, $month, $year, withTrashed: true);
+                }
+            }
+
+            if ($contribution === null) {
+                $results['skipped'][] = $member;
+
+                return null;
+            }
+
+            if ($contribution->trashed()) {
+                $contribution->forceDelete();
+                $results['skipped'][] = $member;
+
+                return null;
+            }
+
+            return $contribution;
+        }
+    }
+
+    /**
      * @return array{applied: Collection, insufficient: Collection, skipped: Collection}
      */
     public function applyContributionsForPeriod(int $month, int $year): array
@@ -235,21 +354,7 @@ class ContributionService
             [$month, $year] = $this->cycles->currentOpenPeriod();
         }
 
-        $period = Contribution::periodDate($month, $year);
-        $count = 0;
-
-        Member::active()->each(function (Member $member) use ($period, &$count): void {
-            $exists = Contribution::where('member_id', $member->id)
-                ->where('period', $period)
-                ->exists();
-
-            if (! $exists && (float) $member->monthly_contribution_amount > 0 && ! $member->isExemptFromContributions((int) date('m', strtotime($period)), (int) date('Y', strtotime($period)))) {
-                $this->recordContribution($member, $period);
-                $count++;
-            }
-        });
-
-        return $count;
+        return $this->collectionCycle->initializeOpenPeriod($month, $year);
     }
 
     public function periodLabel(int $month, int $year): string
@@ -283,6 +388,10 @@ class ContributionService
 
     public function deleteContribution(Contribution $contribution): void
     {
+        if (! $contribution->isDeletableByAdmin()) {
+            throw new InvalidArgumentException(__('Cycle and import contributions cannot be deleted. Use reconciliation or reversal tools to correct ledger entries.'));
+        }
+
         AccountingService::withoutMemberCashCollection(function () use ($contribution): void {
             DB::transaction(function () use ($contribution): void {
                 $contribution->loadMissing('member');

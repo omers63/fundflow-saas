@@ -11,6 +11,7 @@ use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
 use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
+use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\LoanEligibilityOverrideRequestResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\LoanTiers\LoanTierResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
@@ -22,6 +23,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanEligibilityOverrideRequest;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\ReconciliationException;
@@ -68,8 +70,12 @@ final class TenantDashboardService
         $pendingDeposits = FundPosting::query()->where('status', 'pending')->count();
         $pendingApplications = MembershipApplication::query()->where('status', 'pending')->count();
         $loanQueueCount = Loan::query()->inQueue()->count();
+        $pendingEligibilityReviews = LoanEligibilityOverrideRequest::isTableReady()
+            ? LoanEligibilityOverrideRequest::pending()->count()
+            : 0;
         $openReconciliationCount = $this->openReconciliationCount();
         $attentionTotal = $pendingContributions + $pendingDeposits + $pendingApplications + $loanQueueCount
+            + $pendingEligibilityReviews
             + ($delinquencyCounts['overdue_installments'] ?? 0)
             + ($delinquencyCounts['contribution_arrears_periods'] ?? 0)
             + $openReconciliationCount;
@@ -100,12 +106,13 @@ final class TenantDashboardService
                 $pendingDeposits,
                 $pendingApplications,
                 $loanQueueCount,
+                $pendingEligibilityReviews,
                 $delinquencyCounts,
                 $bankSnapshot,
                 $openReconciliationCount,
             ),
             'contribution_trend' => $this->contributionTrend($now),
-            'loan_trend' => $loanPortfolio['trend'] ?? [],
+            'loan_trend' => $this->loanInsights->sixMonthLoanVolumeTrend(),
             'loan_pipeline' => $loanPortfolio['pipeline'] ?? [],
             'workspace_sections' => $this->workspaceSections(),
             'sparkline' => $masterSnapshot['sparkline'] ?? [],
@@ -370,11 +377,28 @@ final class TenantDashboardService
         int $pendingDeposits,
         int $pendingApplications,
         int $loanQueueCount,
+        int $pendingEligibilityReviews,
         array $delinquencyCounts,
         array $bankSnapshot,
         int $openReconciliationCount,
     ): array {
         $cards = [];
+
+        if ($pendingEligibilityReviews > 0) {
+            $cards[] = [
+                'title' => Lang::ui('Eligibility reviews'),
+                'body' => Lang::uiText(trans_choice(
+                    ':count member eligibility review pending|:count member eligibility reviews pending',
+                    $pendingEligibilityReviews,
+                    ['count' => $pendingEligibilityReviews],
+                )),
+                'tone' => 'amber',
+                'icon' => 'heroicon-o-shield-exclamation',
+                'url' => LoanEligibilityOverrideRequestResource::listUrl([
+                    'status' => ['value' => 'pending'],
+                ]),
+            ];
+        }
 
         if ($openReconciliationCount > 0) {
             $cards[] = [

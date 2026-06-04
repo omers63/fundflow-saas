@@ -15,6 +15,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
@@ -113,7 +114,7 @@ final class MemberDetailInsightsService
 
         $cashAccount = $member->cashAccount;
         $fundAccount = $member->fundAccount;
-        $trend = $this->sixMonthContributionTrend($member);
+        $trend = DualProgressTrendBuilder::sixMonthMemberCollectionTrend($member, app(ContributionCycleService::class));
         $sparkline = $this->cashActivitySparkline($member);
 
         return [
@@ -208,7 +209,6 @@ final class MemberDetailInsightsService
                     : null,
             ],
             'trend' => $trend,
-            'trend_max' => max(1, (int) collect($trend)->max('posted')),
             'sparkline' => $sparkline,
             'sparkline_max' => max(1, max($sparkline)),
             'recent_contributions' => $this->recentContributions($member),
@@ -543,49 +543,6 @@ final class MemberDetailInsightsService
         }
 
         return $steps;
-    }
-
-    /**
-     * @return list<array{label: string, posted: int, missed: int, total: int}>
-     */
-    private function sixMonthContributionTrend(Member $member): array
-    {
-        $now = Carbon::now();
-        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
-        $periodPostedCounts = [];
-
-        Contribution::query()
-            ->where('member_id', $member->id)
-            ->posted()
-            ->where('period', '>=', $oldestMonth->toDateString())
-            ->get(['period'])
-            ->each(function (Contribution $contribution) use (&$periodPostedCounts): void {
-                $period = $contribution->period;
-
-                if ($period === null) {
-                    return;
-                }
-
-                $key = Carbon::parse((string) $period)->startOfMonth()->toDateString();
-                $periodPostedCounts[$key] = ($periodPostedCounts[$key] ?? 0) + 1;
-            });
-
-        $trend = [];
-
-        for ($i = 5; $i >= 0; $i--) {
-            $month = $now->copy()->subMonths($i)->startOfMonth();
-            $key = $month->toDateString();
-            $posted = $periodPostedCounts[$key] ?? 0;
-
-            $trend[] = [
-                'label' => $month->format('M'),
-                'posted' => $posted,
-                'missed' => $posted > 0 ? 0 : 1,
-                'total' => max(1, $posted),
-            ];
-        }
-
-        return $trend;
     }
 
     /**

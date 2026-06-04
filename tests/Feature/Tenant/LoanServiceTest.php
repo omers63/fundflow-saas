@@ -3,12 +3,16 @@
 use App\Filament\Tenant\Clusters\LoanQueuePage;
 use App\Filament\Tenant\Clusters\LoansCluster;
 use App\Models\Tenant\Account;
+use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
+use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanLifecycleService;
 use App\Services\LoanService;
+use App\Support\ContributionCollectionStatus;
+use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -31,7 +35,7 @@ beforeEach(function () {
 function createEligibleLoanMember(AccountingService $accounting, float $fundBalance = 15000): Member
 {
     $member = Member::create([
-        'member_number' => 'MEM-' . uniqid(),
+        'member_number' => 'MEM-'.uniqid(),
         'name' => 'Test Member',
         'monthly_contribution_amount' => 5000,
         'joined_at' => now()->subMonths(18),
@@ -40,6 +44,32 @@ function createEligibleLoanMember(AccountingService $accounting, float $fundBala
     $accounting->createMemberAccounts($member);
     $member->fundAccount()->update(['balance' => $fundBalance]);
     $member->cashAccount()->update(['balance' => $fundBalance]);
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $cursor = $member->joined_at->copy()->startOfMonth();
+
+    while ($cursor->lte(Carbon::create($openYear, $openMonth, 1)->endOfMonth())) {
+        $month = (int) $cursor->month;
+        $year = (int) $cursor->year;
+
+        if ((float) $member->monthly_contribution_amount > 0 && ! $member->isExemptFromContributions($month, $year)) {
+            Contribution::create([
+                'member_id' => $member->id,
+                'period' => Contribution::periodDate($month, $year),
+                'amount' => $member->monthly_contribution_amount,
+                'amount_due' => $member->monthly_contribution_amount,
+                'amount_collected' => $member->monthly_contribution_amount,
+                'status' => 'posted',
+                'collection_status' => ContributionCollectionStatus::COLLECTED,
+                'posted_at' => $cursor->copy()->endOfMonth(),
+                'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+                'is_late' => false,
+            ]);
+        }
+
+        $cursor->addMonthNoOverflow();
+    }
 
     return $member->fresh()->load(['fundAccount', 'cashAccount']);
 }
@@ -170,7 +200,7 @@ test('pending loan can be rejected with reason', function () {
 test('loan amount cannot exceed configured maximum for member', function () {
     $member = createEligibleLoanMember($this->accounting, 10000);
 
-    expect(fn() => $this->service->applyForLoan($member, 50000))
+    expect(fn () => $this->service->applyForLoan($member, 50000))
         ->toThrow(InvalidArgumentException::class);
 });
 

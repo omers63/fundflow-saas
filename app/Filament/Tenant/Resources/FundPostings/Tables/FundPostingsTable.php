@@ -92,14 +92,14 @@ class FundPostingsTable
                         ->color('success')
                         ->requiresConfirmation()
                         ->modalHeading(__('Accept deposit'))
-                        ->modalWidth('2xl')
-                        ->fillForm(ViewFundPostingAction::fillFormFromRecord())
+                        ->modalDescription(fn ($record): string => ViewFundPostingAction::confirmationSummary($record))
+                        ->modalWidth('md')
                         ->hidden(fn ($record) => $record->status !== 'pending')
-                        ->schema(fn (): array => ViewFundPostingAction::modalSchemaWith([
+                        ->schema([
                             Textarea::make('admin_remarks')
                                 ->label(__('Remarks (optional)'))
                                 ->rows(2),
-                        ]))
+                        ])
                         ->action(function ($record, array $data, FundPostingService $service, Component $livewire) {
                             $service->accept($record, auth()->id(), $data['admin_remarks'] ?? null);
                             Notification::make()->title(__('Deposit accepted'))->success()->send();
@@ -112,15 +112,15 @@ class FundPostingsTable
                         ->color('danger')
                         ->requiresConfirmation()
                         ->modalHeading(__('Reject deposit'))
-                        ->modalWidth('2xl')
-                        ->fillForm(ViewFundPostingAction::fillFormFromRecord())
+                        ->modalDescription(fn ($record): string => ViewFundPostingAction::confirmationSummary($record))
+                        ->modalWidth('md')
                         ->hidden(fn ($record) => $record->status !== 'pending')
-                        ->schema(fn (): array => ViewFundPostingAction::modalSchemaWith([
+                        ->schema([
                             Textarea::make('admin_remarks')
                                 ->label(__('Reason for rejection'))
                                 ->required()
                                 ->rows(2),
-                        ]))
+                        ])
                         ->action(function ($record, array $data, FundPostingService $service, Component $livewire) {
                             $service->reject($record, auth()->id(), $data['admin_remarks']);
                             Notification::make()->title(__('Deposit rejected'))->send();

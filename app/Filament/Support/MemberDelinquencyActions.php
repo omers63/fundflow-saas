@@ -82,14 +82,17 @@ final class MemberDelinquencyActions
                     ->label(__('Force restore (ignore outstanding arrears)'))
                     ->helperText(__('Use only when arrears are being handled outside the system.')),
             ])
-            ->action(function (Member $record, array $data, LoanDelinquencyService $delinquency, Component $livewire): void {
-                try {
-                    $delinquency->restoreMemberActive($record, (bool) ($data['force'] ?? false));
-                    Notification::make()->title(__('Member restored to active'))->success()->send();
-                    self::refreshMembersList($livewire);
-                } catch (Throwable $e) {
-                    Notification::make()->title(__('Cannot restore'))->body($e->getMessage())->danger()->send();
+            ->action(function (Member $record, array $data, Action $action, LoanDelinquencyService $delinquency, Component $livewire): void {
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $delinquency->restoreMemberActive($record, (bool) ($data['force'] ?? false)),
+                    __('Cannot restore'),
+                )) {
+                    return;
                 }
+
+                Notification::make()->title(__('Member restored to active'))->success()->send();
+                self::refreshMembersList($livewire);
             });
     }
 

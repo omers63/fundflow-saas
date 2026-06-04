@@ -16,6 +16,7 @@ use App\Support\ContributionPolicySettings;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Facades\DB;
 
@@ -28,8 +29,7 @@ class ContributionCollectionCycleService
         protected AccountingService $accounting,
         protected ContributionCycleService $cycles,
         protected LateFeeService $lateFees,
-    ) {
-    }
+    ) {}
 
     public function initializeOpenPeriod(int $month, int $year): int
     {
@@ -47,26 +47,25 @@ class ContributionCollectionCycleService
                 return;
             }
 
-            if (
-                Contribution::query()
-                    ->where('member_id', $member->id)
-                    ->where('period', $period)
-                    ->exists()
-            ) {
+            if (Contribution::memberPeriodRecordExists($member->id, $month, $year)) {
                 return;
             }
 
-            Contribution::create([
-                'member_id' => $member->id,
-                'period' => $period,
-                'amount' => $amountDue,
-                'amount_due' => $amountDue,
-                'amount_collected' => 0,
-                'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
-                'status' => 'pending',
-                'collection_status' => ContributionCollectionStatus::PENDING,
-                'cycle_open_cash_balance' => $member->getCashBalance(),
-            ]);
+            try {
+                Contribution::create([
+                    'member_id' => $member->id,
+                    'period' => $period,
+                    'amount' => $amountDue,
+                    'amount_due' => $amountDue,
+                    'amount_collected' => 0,
+                    'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+                    'status' => 'pending',
+                    'collection_status' => ContributionCollectionStatus::PENDING,
+                    'cycle_open_cash_balance' => $member->getCashBalance(),
+                ]);
+            } catch (UniqueConstraintViolationException) {
+                return;
+            }
 
             $created++;
         });
@@ -92,12 +91,16 @@ class ContributionCollectionCycleService
         return $this->attemptCollection($contribution);
     }
 
-    public function attemptCollection(Contribution $contribution): string
+    public function attemptCollection(Contribution $contribution, bool $manualApply = false): string
     {
-        if (
-            $contribution->status === 'posted'
-            || $contribution->collection_status === ContributionCollectionStatus::COLLECTED
-        ) {
+        if ($contribution->status === 'posted') {
+            return 'collected';
+        }
+
+        if ($contribution->collection_status === ContributionCollectionStatus::COLLECTED) {
+            $this->markCollected($contribution);
+            $this->afterContributionPosted($contribution);
+
             return 'collected';
         }
 
@@ -105,7 +108,9 @@ class ContributionCollectionCycleService
         $member = $contribution->member;
 
         if (
-            $contribution->period !== null && !$this->memberPeriodEligibleForAutoCollection(
+            ! $manualApply
+            && $contribution->period !== null
+            && ! $this->memberPeriodEligibleForAutoCollection(
                 $member,
                 (int) $contribution->period->month,
                 (int) $contribution->period->year,
@@ -195,7 +200,7 @@ class ContributionCollectionCycleService
     protected function settleDirectMemberCash(Member $member): void
     {
         foreach ($this->orderedCollectiblePeriodsForAutoCollection($member) as [$month, $year]) {
-            if (!$this->settleSingleContributionPeriod($member, $month, $year)) {
+            if (! $this->settleSingleContributionPeriod($member, $month, $year)) {
                 break;
             }
         }
@@ -215,7 +220,7 @@ class ContributionCollectionCycleService
                 break;
             }
 
-            if (!$this->settleSingleContributionPeriod($member, $month, $year)) {
+            if (! $this->settleSingleContributionPeriod($member, $month, $year)) {
                 break;
             }
         }
@@ -245,7 +250,7 @@ class ContributionCollectionCycleService
             $year = (int) $period->year;
             $key = $period->format('Y-m');
 
-            if (!$this->memberPeriodEligibleForAutoCollection($member, $month, $year)) {
+            if (! $this->memberPeriodEligibleForAutoCollection($member, $month, $year)) {
                 continue;
             }
 
@@ -464,7 +469,7 @@ class ContributionCollectionCycleService
 
     public function syncContributionLateFeesBeforeCollection(Contribution $contribution): void
     {
-        if (!$this->contributionEligibleForArrearLateFees($contribution)) {
+        if (! $this->contributionEligibleForArrearLateFees($contribution)) {
             return;
         }
 
@@ -497,7 +502,7 @@ class ContributionCollectionCycleService
                 }
             }
 
-            if (!$progress) {
+            if (! $progress) {
                 break;
             }
         }
@@ -564,7 +569,7 @@ class ContributionCollectionCycleService
             ->whereNotNull('overdue_since')
             ->with('member')
             ->each(function (Contribution $contribution) use (&$updated): void {
-                if (!$this->contributionEligibleForArrearLateFees($contribution)) {
+                if (! $this->contributionEligibleForArrearLateFees($contribution)) {
                     return;
                 }
 
@@ -617,7 +622,7 @@ class ContributionCollectionCycleService
                             'late_fee_tier' => null,
                             'overdue_since' => null,
                             'is_late' => false,
-                            'notes' => trim(($contribution->notes ?? '') . ' ' . __('Dismissed: before contribution arrears cut-off.')),
+                            'notes' => trim(($contribution->notes ?? '').' '.__('Dismissed: before contribution arrears cut-off.')),
                         ]);
 
                         DB::table('contributions')->where('id', $contribution->id)->delete();
@@ -632,7 +637,7 @@ class ContributionCollectionCycleService
 
     public function applyLateFeeTierForContribution(Contribution $contribution): bool
     {
-        if (!$this->contributionEligibleForArrearLateFees($contribution)) {
+        if (! $this->contributionEligibleForArrearLateFees($contribution)) {
             return false;
         }
 
@@ -778,6 +783,8 @@ class ContributionCollectionCycleService
 
     protected function afterContributionPosted(Contribution $contribution): void
     {
+        app(ContributionService::class)->notifyMemberOfPostedContribution($contribution);
+
         if (LoanSettings::autoAllocateLoanRepayment()) {
             app(LoanRepaymentService::class)->applyOpenPeriodRepaymentForMember($contribution->member);
         }
@@ -794,7 +801,7 @@ class ContributionCollectionCycleService
 
     protected function contributionRecordMissingForPeriod(Member $member, int $month, int $year): bool
     {
-        return !Contribution::query()
+        return ! Contribution::query()
             ->where('member_id', $member->id)
             ->forPeriod($month, $year)
             ->exists();

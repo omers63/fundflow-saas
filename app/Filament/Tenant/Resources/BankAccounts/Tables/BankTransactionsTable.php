@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tenant\Resources\BankAccounts\Tables;
 
+use App\Filament\Support\ActionModalFailure;
 use App\Filament\Support\BankTransactionTableActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
@@ -166,17 +167,15 @@ class BankTransactionsTable
                                 ->required()
                                 ->helperText(__('Only imported CSV statement lines within amount and date tolerance are listed.')),
                         ])
-                        ->action(function (BankTransaction $record, array $data, BankClearingMatchService $matching): void {
+                        ->action(function (BankTransaction $record, array $data, Action $action, BankClearingMatchService $matching): void {
                             $imported = BankTransaction::findOrFail($data['imported_transaction_id']);
 
                             if (! $matching->isImportedMatchCandidate($imported)) {
-                                Notification::make()
-                                    ->title(__('That statement line cannot be matched'))
-                                    ->body(__('Choose a bank import line that is not already linked to a posting.'))
-                                    ->danger()
-                                    ->send();
-
-                                return;
+                                ActionModalFailure::present(
+                                    $action,
+                                    __('Choose a bank import line that is not already linked to a posting.'),
+                                    __('That statement line cannot be matched'),
+                                );
                             }
 
                             $matching->clearMatchPair($record, $imported);

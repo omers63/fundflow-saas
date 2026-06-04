@@ -29,6 +29,9 @@ final class LoanSettings
             'max_active_loans' => 1,
             'require_guarantor_above_fund_balance' => true,
             'auto_allocate_loan_repayment' => false,
+            'late_payment_consecutive_threshold' => 3,
+            'late_payment_rolling_threshold' => 15,
+            'late_payment_lookback_months' => 60,
         ];
     }
 
@@ -98,6 +101,21 @@ final class LoanSettings
     public static function maxActiveLoans(): int
     {
         return max(1, (int) self::get('max_active_loans', 1));
+    }
+
+    public static function latePaymentConsecutiveThreshold(): int
+    {
+        return max(1, (int) self::get('late_payment_consecutive_threshold', 3));
+    }
+
+    public static function latePaymentRollingThreshold(): int
+    {
+        return max(1, (int) self::get('late_payment_rolling_threshold', 15));
+    }
+
+    public static function latePaymentLookbackMonths(): int
+    {
+        return max(1, (int) self::get('late_payment_lookback_months', 60));
     }
 
     public static function guarantorRequiredForAmount(Member $member, float $amount): bool

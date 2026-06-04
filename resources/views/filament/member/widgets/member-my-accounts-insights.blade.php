@@ -79,44 +79,12 @@
                 </ul>
             </div>
 
-            <div
-                class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 md:col-span-7">
-                <div class="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-1.5 dark:border-gray-700">
-                    <div class="flex items-center gap-1.5">
-                        <x-heroicon-o-chart-bar class="h-3.5 w-3.5 text-emerald-500" />
-                        <h4 class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            {{ __('6-month ledger volume') }}</h4>
-                    </div>
-                    <div class="flex gap-2 text-[9px] text-gray-400">
-                        <span class="flex items-center gap-0.5"><span class="h-1.5 w-1.5 rounded-sm bg-emerald-500"></span>{{ __('In') }}</span>
-                        <span class="flex items-center gap-0.5"><span class="h-1.5 w-1.5 rounded-sm bg-rose-400"></span>{{ __('Out') }}</span>
-                    </div>
-                </div>
-                <div class="px-2.5 py-2">
-                    <div class="flex h-16 items-end gap-1">
-                        @foreach ($d['trend'] as $month)
-                            @php
-                                $barH = max(10, (int) round(($month['total'] / $d['trend_max']) * 100));
-                                $creditH = $month['total'] > 0 ? (int) round(($month['credits'] / $month['total']) * 100) : 0;
-                            @endphp
-                            <div class="flex flex-1 flex-col items-center gap-0.5">
-                                <span class="text-[9px] font-semibold tabular-nums text-gray-400">
-                                    {{ $month['total'] > 0 ? \App\Support\Insights\InsightFormatter::compactAmount($month['total']) : '·' }}
-                                </span>
-                                <div class="flex w-full max-w-[2rem] flex-col justify-end overflow-hidden rounded-t-md ring-1 ring-gray-200/50 dark:ring-gray-600"
-                                    style="height: {{ $barH }}%">
-                                    @if ($month['credits'] > 0)
-                                        <div class="w-full bg-emerald-500" style="height: {{ max(3, $creditH) }}%"></div>
-                                    @endif
-                                    @if ($month['debits'] > 0)
-                                        <div class="w-full bg-rose-400" style="height: {{ max(3, 100 - $creditH) }}%"></div>
-                                    @endif
-                                </div>
-                                <span class="text-[9px] text-gray-400">{{ $month['label'] }}</span>
-                            </div>
-                        @endforeach
-                    </div>
-                </div>
+            <div class="md:col-span-7">
+                @include('filament.partials.insights.six-month-volume-panel', [
+                    'title' => __('6-month ledger volume'),
+                    'trend' => $d['trend'],
+                    'compact' => true,
+                ])
             </div>
         </div>
     </div>

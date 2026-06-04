@@ -13,6 +13,58 @@ use Illuminate\Contracts\Support\Htmlable;
 
 final class MemberTableColumns
 {
+    /**
+     * @var list<string>
+     */
+    private const MEMBER_LINK_COLUMNS = [
+        'member.name',
+        'member_name',
+        'member_number',
+        'loan.member.name',
+        'loan.guarantor.name',
+        'guarantor.name',
+        'user.name',
+    ];
+
+    public static function shouldLinkColumn(string $columnName): bool
+    {
+        if (in_array($columnName, self::MEMBER_LINK_COLUMNS, true)) {
+            return true;
+        }
+
+        return $columnName === 'name';
+    }
+
+    public static function resolveMemberUrl(string $columnName, mixed $record): ?string
+    {
+        if ($record instanceof Member) {
+            if (in_array($columnName, ['name', 'user.name', 'member_number'], true)) {
+                return self::memberRecordEditUrl($record);
+            }
+        }
+
+        if (in_array($columnName, ['member_name', 'member_number'], true)) {
+            $memberId = self::extractMemberId($record);
+
+            return $memberId !== null
+                ? self::memberIdEditUrl(['member_id' => $memberId])
+                : null;
+        }
+
+        $member = self::resolveMemberModel($columnName, $record);
+
+        return $member instanceof Member ? self::memberRecordEditUrl($member) : null;
+    }
+
+    public static function applyMemberLinkToTextColumn(TextColumn $column): TextColumn
+    {
+        $columnName = $column->getName();
+
+        return $column->url(
+            fn (mixed $state, mixed $record): ?string => self::resolveMemberUrl($columnName, $record),
+        );
+    }
+
     public static function number(
         string $column = 'member_number',
         ?string $label = null,
@@ -23,7 +75,9 @@ final class MemberTableColumns
             $textColumn->label($label);
         }
 
-        return $textColumn->url(self::memberRecordEditUrl(...));
+        return $textColumn->url(
+            fn (mixed $state, Member $record): string => self::memberRecordEditUrl($record),
+        );
     }
 
     public static function name(
@@ -37,19 +91,19 @@ final class MemberTableColumns
         }
 
         return self::applyArabicNameTypography($textColumn)
-            ->url(self::memberRecordEditUrl(...));
+            ->url(fn (mixed $state, Member $record): string => self::memberRecordEditUrl($record));
     }
 
     public static function relationNumber(?string $label = null): TextColumn
     {
         return self::number('member.member_number', $label ?? __('Member #'))
-            ->url(self::relatedMemberEditUrl(...));
+            ->url(fn (mixed $state, mixed $record): ?string => self::relatedMemberEditUrl($record));
     }
 
     public static function relationName(?string $label = null): TextColumn
     {
         return self::name('member.name', $label)
-            ->url(self::relatedMemberEditUrl(...));
+            ->url(fn (mixed $state, mixed $record): ?string => self::relatedMemberEditUrl($record));
     }
 
     public static function applyArabicNameTypography(TextColumn $column): TextColumn
@@ -89,5 +143,35 @@ final class MemberTableColumns
     public static function memberIdEditUrl(array $record): string
     {
         return MemberResource::getUrl('edit', ['record' => $record['member_id']]);
+    }
+
+    private static function extractMemberId(mixed $record): ?int
+    {
+        if (is_array($record)) {
+            return isset($record['member_id']) ? (int) $record['member_id'] : null;
+        }
+
+        if (is_object($record) && isset($record->member_id)) {
+            return (int) $record->member_id;
+        }
+
+        return null;
+    }
+
+    private static function resolveMemberModel(string $columnName, mixed $record): ?Member
+    {
+        if (! is_object($record)) {
+            return null;
+        }
+
+        return match ($columnName) {
+            'member.name' => $record->member instanceof Member ? $record->member : null,
+            'loan.member.name' => ($record->loan?->member ?? $record->member ?? null) instanceof Member
+                ? ($record->loan?->member ?? $record->member)
+                : null,
+            'guarantor.name' => $record->guarantor instanceof Member ? $record->guarantor : null,
+            'loan.guarantor.name' => $record->loan?->guarantor instanceof Member ? $record->loan->guarantor : null,
+            default => null,
+        };
     }
 }

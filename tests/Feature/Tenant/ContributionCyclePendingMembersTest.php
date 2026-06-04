@@ -137,3 +137,45 @@ test('pending members exclude loan-exempt members and non-posted contribution ro
 
     Carbon::setTestNow();
 });
+
+test('pending members query can order by member cash account balance', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+
+    [$month, $year] = $this->cycles->currentOpenPeriod();
+
+    $lowCash = Member::create([
+        'member_number' => 'MEM-LOW',
+        'name' => 'Low Cash',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($lowCash);
+    $lowCash->cashAccount->update(['balance' => 100]);
+
+    $highCash = Member::create([
+        'member_number' => 'MEM-HIGH',
+        'name' => 'High Cash',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($highCash);
+    $highCash->cashAccount->update(['balance' => 9000]);
+
+    $orderedIds = $this->cycles->pendingMembersQueryForPeriod($month, $year)
+        ->orderBy(
+            Account::query()
+                ->select('balance')
+                ->whereColumn('accounts.member_id', 'members.id')
+                ->where('type', 'cash')
+                ->where('is_master', false)
+                ->limit(1),
+            'desc',
+        )
+        ->pluck('members.id');
+
+    expect($orderedIds->first())->toBe($highCash->id);
+
+    Carbon::setTestNow();
+});

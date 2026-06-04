@@ -40,7 +40,14 @@ test('portfolio snapshot returns pipeline counts and hero', function () {
 
     expect($snapshot)->toHaveKeys(['hero', 'kpis', 'pipeline', 'trend', 'currency'])
         ->and($snapshot['pipeline']['needs_decision'])->toBe(1)
-        ->and($snapshot['hero']['tone'])->toBe('amber');
+        ->and($snapshot['hero']['tone'])->toBe('amber')
+        ->and($snapshot['trend'])->toHaveCount(6)
+        ->and($snapshot['trend'][0])->toHaveKeys(['label', 'expected_count', 'collection_rate']);
+
+    $volumeTrend = $this->service->sixMonthLoanVolumeTrend();
+
+    expect($volumeTrend)->toHaveCount(6)
+        ->and($volumeTrend[0])->toHaveKeys(['label', 'total', 'active', 'pending', 'completed']);
 });
 
 test('loan detail snapshot includes stepper and relation summaries', function () {

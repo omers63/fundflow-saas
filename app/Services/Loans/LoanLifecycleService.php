@@ -34,15 +34,17 @@ final class LoanLifecycleService
     ) {}
 
     /**
-     * @return array{eligible: bool, reasons: string[]}
+     * @return array{eligible: bool, reasons: string[], failed_gates: array<string, string>}
      */
-    public function checkEligibility(Member $member): array
+    public function checkEligibility(Member $member, ?array $skipGates = null): array
     {
-        $reason = $this->eligibility->getIneligibilityReason($member);
+        $failedGates = $this->eligibility->getFailedGates($member, $skipGates);
+        $reason = $failedGates !== [] ? reset($failedGates) : '';
 
         return [
             'eligible' => $reason === '',
             'reasons' => $reason !== '' ? [$reason] : [],
+            'failed_gates' => $failedGates,
         ];
     }
 
@@ -82,10 +84,20 @@ final class LoanLifecycleService
         ?string $witness1Phone = null,
         ?string $witness2Name = null,
         ?string $witness2Phone = null,
+        bool $adminOverrideEligibility = false,
+        ?string $eligibilityOverrideReason = null,
     ): Loan {
-        $check = $this->checkEligibility($member);
-        if (! $check['eligible']) {
-            throw new InvalidArgumentException(implode(' ', $check['reasons']));
+        $failedGates = $this->eligibility->getFailedGates($member);
+
+        if ($failedGates !== [] && ! $adminOverrideEligibility) {
+            throw new InvalidArgumentException(implode(' ', array_values($failedGates)));
+        }
+
+        if ($adminOverrideEligibility && $failedGates !== []) {
+            $reason = trim((string) $eligibilityOverrideReason);
+            if ($reason === '') {
+                throw new InvalidArgumentException(__('An override reason is required when bypassing loan eligibility.'));
+            }
         }
 
         if ($error = $this->validateLoanAmount($member, $amountRequested)) {
@@ -137,6 +149,15 @@ final class LoanLifecycleService
         User::query()->where('is_admin', true)->each(
             fn (User $admin): mixed => $admin->notify(new NewLoanApplicationNotification($loan))
         );
+
+        if ($adminOverrideEligibility && $failedGates !== []) {
+            app(LoanEligibilityOverrideService::class)->recordMany(
+                (int) $member->id,
+                array_keys($failedGates),
+                trim((string) $eligibilityOverrideReason),
+                (int) $loan->id,
+            );
+        }
 
         return $loan;
     }

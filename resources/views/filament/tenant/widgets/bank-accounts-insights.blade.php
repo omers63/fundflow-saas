@@ -71,30 +71,12 @@
     </div>
 
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div
-            class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <div
-                class="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 dark:border-gray-700">
-                <div class="flex items-center gap-1.5">
-                    <x-heroicon-o-chart-bar class="h-4 w-4 text-violet-500" />
-                    <h4 class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                        {{ __('Import volume') }}
-                    </h4>
-                </div>
-            </div>
-            <div class="flex h-20 items-end gap-1.5 px-3 py-3">
-                @foreach ($d['trend'] as $month)
-                    @php $barH = max(12, (int) round(($month['count'] / $d['max_trend']) * 100)); @endphp
-                    <div class="flex flex-1 flex-col items-center gap-0.5">
-                        <span
-                            class="text-[10px] font-semibold tabular-nums text-gray-500">{{ $month['count'] ?: '·' }}</span>
-                        <div class="w-full max-w-[2.25rem] rounded-t-md bg-violet-500/80 dark:bg-violet-400/70"
-                            style="height: {{ $barH }}%"></div>
-                        <span class="text-[10px] text-gray-400">{{ $month['label'] }}</span>
-                    </div>
-                @endforeach
-            </div>
-        </div>
+        @include('filament.partials.insights.six-month-dual-progress-panel', [
+            'title' => __('Import volume'),
+            'trend' => $d['trend'],
+            'primaryLabel' => __('Imports'),
+            'secondaryLabel' => __('Peak'),
+        ])
 
         <div
             class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">

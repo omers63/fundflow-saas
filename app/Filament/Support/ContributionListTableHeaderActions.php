@@ -17,7 +17,10 @@ final class ContributionListTableHeaderActions
 {
     public static function cycleActionGroup(string $color = 'primary'): ActionGroup
     {
-        return ActionGroup::make(ContributionCycleHeaderActions::make())
+        return ActionGroup::make([
+            ...ContributionCycleHeaderActions::make(),
+            self::generatePendingAction(),
+        ])
             ->label(__('Cycle actions'))
             ->icon('heroicon-o-arrow-path-rounded-square')
             ->color($color)
@@ -27,21 +30,24 @@ final class ContributionListTableHeaderActions
     public static function delinquencyToolsGroup(): ActionGroup
     {
         return ActionGroup::make(LoanDelinquencyHeaderActions::make())
-            ->label(__('Delinquency tools'))
+            ->label(__('Delinquencies'))
             ->icon('heroicon-o-exclamation-triangle')
-            ->color('gray')
+            ->color('warning')
             ->button();
     }
 
     /**
+     * Contributions list page header (all tabs).
+     *
      * @return list<Action|ActionGroup>
      */
-    public static function ledgerActions(): array
+    public static function pageHeaderActions(): array
     {
         return [
-            self::cycleActionGroup('gray'),
-            CreateAction::make(),
-            self::generatePendingAction(),
+            CreateAction::make()
+                ->label(__('New contribution')),
+            self::cycleActionGroup('primary'),
+            self::delinquencyToolsGroup(),
         ];
     }
 

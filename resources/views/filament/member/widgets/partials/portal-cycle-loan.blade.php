@@ -98,6 +98,15 @@
             @if ($eligibility['eligible'] ?? false)
                 <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
                     {{ __('Up to :amount', ['amount' => $eligibility['max_amount']]) }}</p>
+            @elseif ($eligibility['has_pending_override_request'] ?? false)
+                <p class="mt-2 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                    {{ __('Eligibility review pending with admin.') }}
+                </p>
+            @elseif ($eligibility['can_request_override'] ?? false)
+                <a href="{{ $eligibility['request_url'] }}"
+                    class="mt-2 inline-block text-[10px] font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+                    {{ __('Request eligibility review') }} →
+                </a>
             @endif
             <p class="mt-2 text-[10px] text-gray-400 dark:text-gray-500">
                 {{ __('Total posted') }}: {{ $fundSummary['contributions_total'] }}

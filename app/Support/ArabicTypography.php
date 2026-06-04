@@ -9,7 +9,10 @@ use Illuminate\Support\HtmlString;
 
 final class ArabicTypography
 {
-    private const ARABIC_SEGMENT_PATTERN = '/(\p{Arabic}+(?:\p{M}*\p{Arabic}*)*)/u';
+    /**
+     * Split mixed-script labels into Arabic runs, Latin runs, and neutral punctuation.
+     */
+    private const DISPLAY_SEGMENT_PATTERN = '/(\p{Arabic}+(?:[\s·\-‐‑‒–—]*\p{Arabic}+)*|\p{Latin}+(?:[\s\-]*\p{Latin}+)*|[^\p{Arabic}\p{Latin}]+)/u';
 
     /**
      * Column names that typically hold a person or fund display name.
@@ -58,12 +61,23 @@ final class ArabicTypography
             return new HtmlString(e($text));
         }
 
-        return self::wrapRtlSegments($text, ArabicDisplaySettings::enhancedNameStyle());
+        if (! preg_match('/\p{Latin}/u', $text)) {
+            return self::wrapArabicName($text);
+        }
+
+        return self::wrapMixedScriptSegments($text);
     }
 
-    private static function wrapRtlSegments(string $text, bool $useNameClass): Htmlable
+    private static function wrapArabicName(string $text): Htmlable
     {
-        $parts = preg_split(self::ARABIC_SEGMENT_PATTERN, $text, -1, PREG_SPLIT_DELIM_CAPTURE);
+        return new HtmlString(
+            '<bdi dir="rtl" lang="ar" class="ff-arabic-name">'.e($text).'</bdi>',
+        );
+    }
+
+    private static function wrapMixedScriptSegments(string $text): Htmlable
+    {
+        $parts = preg_split(self::DISPLAY_SEGMENT_PATTERN, $text, -1, PREG_SPLIT_DELIM_CAPTURE);
 
         if ($parts === false) {
             return new HtmlString(e($text));
@@ -76,9 +90,8 @@ final class ArabicTypography
                 continue;
             }
 
-            if (preg_match('/\p{Arabic}/u', $part) === 1) {
-                $class = $useNameClass ? ' class="ff-arabic-name"' : '';
-                $html .= '<bdi dir="rtl" lang="ar"'.$class.'>'.e($part).'</bdi>';
+            if (preg_match('/\p{Arabic}/u', $part) === 1 && preg_match('/\p{Latin}/u', $part) !== 1) {
+                $html .= self::wrapArabicName($part)->toHtml();
             } else {
                 $html .= e($part);
             }
@@ -94,10 +107,6 @@ final class ArabicTypography
     {
         if (! self::containsArabic($text)) {
             return [];
-        }
-
-        if (! ArabicDisplaySettings::enhancedNameStyle()) {
-            return ['dir' => 'rtl', 'lang' => 'ar'];
         }
 
         return ['class' => 'ff-arabic-name', 'dir' => 'rtl', 'lang' => 'ar'];

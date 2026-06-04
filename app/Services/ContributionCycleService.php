@@ -180,7 +180,7 @@ class ContributionCycleService
                 $loan->where('status', 'active')
                     ->whereHas('installments', fn (Builder $installment): Builder => $installment->whereIn('status', ['pending', 'overdue']));
             })
-            ->with(['parent'])
+            ->with(['parent', 'cashAccount'])
             ->orderBy('name');
     }
 
@@ -191,6 +191,43 @@ class ContributionCycleService
             ->posted()
             ->with('member')
             ->orderByDesc('posted_at');
+    }
+
+    /**
+     * Members who should have a posted collection for the period (posted + still outstanding).
+     *
+     * @return array{expected_count: int, expected_amount: float}
+     */
+    public function expectedCollectionTargetsForPeriod(int $month, int $year): array
+    {
+        $postedMemberIds = Contribution::query()
+            ->forPeriod($month, $year)
+            ->posted()
+            ->pluck('member_id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->all();
+
+        $missingMembers = $this->pendingMembersQueryForPeriod($month, $year)
+            ->get(['id', 'monthly_contribution_amount']);
+
+        $memberIds = array_values(array_unique(array_merge(
+            $postedMemberIds,
+            $missingMembers->pluck('id')->map(fn (mixed $id): int => (int) $id)->all(),
+        )));
+
+        if ($memberIds === []) {
+            return [
+                'expected_count' => 0,
+                'expected_amount' => 0.0,
+            ];
+        }
+
+        return [
+            'expected_count' => count($memberIds),
+            'expected_amount' => (float) Member::query()
+                ->whereIn('id', $memberIds)
+                ->sum('monthly_contribution_amount'),
+        ];
     }
 
     /**

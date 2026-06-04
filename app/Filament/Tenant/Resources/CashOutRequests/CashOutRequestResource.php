@@ -4,7 +4,9 @@ namespace App\Filament\Tenant\Resources\CashOutRequests;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Support\DatabaseNotificationsRefresh;
+use App\Filament\Tenant\Resources\CashOutRequests\Pages\CreateCashOutRequest;
 use App\Filament\Tenant\Resources\CashOutRequests\Pages\ListCashOutRequests;
+use App\Filament\Tenant\Resources\CashOutRequests\Schemas\CashOutRequestForm;
 use App\Filament\Tenant\Resources\CashOutRequests\Tables\CashOutRequestsTable;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Filament\Tenant\Widgets\CashOutRequestInsightsWidget;
@@ -12,6 +14,7 @@ use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Member;
 use BackedEnum;
 use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Livewire\Component;
@@ -37,7 +40,12 @@ class CashOutRequestResource extends Resource
 
     public static function canCreate(): bool
     {
-        return false;
+        return auth()->guard('tenant')->check();
+    }
+
+    public static function form(Schema $schema): Schema
+    {
+        return CashOutRequestForm::configure($schema);
     }
 
     public static function table(Table $table): Table
@@ -116,6 +124,7 @@ class CashOutRequestResource extends Resource
     {
         return [
             'index' => ListCashOutRequests::route('/'),
+            'create' => CreateCashOutRequest::route('/create'),
         ];
     }
 }

@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
+use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\LoanEligibilityOverrideRequestResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\LoanTiers\LoanTierResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
@@ -14,11 +15,14 @@ use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanEligibilityOverrideRequest;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Services\Loans\LoanEligibilityOverrideRequestService;
+use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightKpi;
 use App\Support\Loans\LoanUserFacingStage;
 use Carbon\Carbon;
@@ -98,6 +102,12 @@ final class LoanInsightsService
             : null;
 
         $emergencyInQueue = Loan::query()->inQueue()->where('is_emergency', true)->count();
+        $pendingEligibilityReviews = LoanEligibilityOverrideRequest::isTableReady()
+            ? LoanEligibilityOverrideRequest::pending()->count()
+            : 0;
+        $eligibilityReviewsUrl = LoanEligibilityOverrideRequestResource::listUrl([
+            'status' => ['value' => 'pending'],
+        ]);
 
         $oldestPending = Loan::query()
             ->needsDecision()
@@ -111,23 +121,35 @@ final class LoanInsightsService
         return [
             'currency' => $currency,
             'hero' => [
-                'tone' => $queueTotal > 0 ? 'amber' : 'success',
-                'title' => $queueTotal > 0
-                    ? __('Loan operations need attention')
-                    : __('Loan pipeline is clear'),
-                'subtitle' => $queueTotal > 0
+                'tone' => ($queueTotal + $pendingEligibilityReviews) > 0 ? 'amber' : 'success',
+                'title' => $pendingEligibilityReviews > 0 && $queueTotal === 0
                     ? trans_choice(
-                        ':decision pending · :disburse ready · :payout awaiting bank',
-                        $queueTotal,
-                        [
-                            'decision' => $needsDecision,
-                            'disburse' => $readyToDisburse,
-                            'payout' => $awaitingPayout,
-                        ]
+                        ':count eligibility review pending|:count eligibility reviews pending',
+                        $pendingEligibilityReviews,
+                        ['count' => $pendingEligibilityReviews],
                     )
-                    : __('No loans waiting for decision, disbursement, or bank payout.'),
-                'cta_label' => $queueTotal > 0 ? __('Open queue') : null,
-                'cta_url' => $queueTotal > 0 ? LoanResource::getUrl('queue') : null,
+                    : ($queueTotal > 0
+                        ? __('Loan operations need attention')
+                        : __('Loan pipeline is clear')),
+                'subtitle' => $pendingEligibilityReviews > 0 && $queueTotal === 0
+                    ? __('Members asked for a loan eligibility override review.')
+                    : ($queueTotal > 0
+                        ? trans_choice(
+                            ':decision pending · :disburse ready · :payout awaiting bank',
+                            $queueTotal,
+                            [
+                                'decision' => $needsDecision,
+                                'disburse' => $readyToDisburse,
+                                'payout' => $awaitingPayout,
+                            ]
+                        )
+                        : __('No loans waiting for decision, disbursement, or bank payout.')),
+                'cta_label' => $pendingEligibilityReviews > 0 && $queueTotal === 0
+                    ? __('Review requests')
+                    : ($queueTotal > 0 ? __('Open queue') : null),
+                'cta_url' => $pendingEligibilityReviews > 0 && $queueTotal === 0
+                    ? $eligibilityReviewsUrl
+                    : ($queueTotal > 0 ? LoanResource::getUrl('queue') : null),
             ],
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'pending', 'label' => __('Pending'), 'value' => (string) $pending, 'sub' => __('Applications'), 'icon' => 'heroicon-o-clock', 'accent' => 'amber', 'active' => $pending > 0],
@@ -159,6 +181,8 @@ final class LoanInsightsService
                 'loans_url' => LoanResource::listUrl(),
                 'loans_active_url' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'active']]),
                 'loans_completed_url' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'completed']]),
+                'pending_eligibility_reviews' => $pendingEligibilityReviews,
+                'eligibility_reviews_url' => $eligibilityReviewsUrl,
             ],
             'status_breakdown' => $this->statusBreakdown(),
             'trend' => $this->sixMonthLoanTrend(),
@@ -612,21 +636,52 @@ final class LoanInsightsService
         }
 
         $eligibility = app(LoanService::class)->checkEligibility($member);
+        $overrideRequests = app(LoanEligibilityOverrideRequestService::class);
+        $canRequestOverride = $overrideRequests->canSubmit($member);
+        $hasPendingOverrideRequest = $overrideRequests->pendingRequestFor($member) !== null;
 
         $activeLoan = (clone $base)->where('status', 'active')->latest('applied_at')->first();
+
+        $heroSubtitle = $eligibility['eligible']
+            ? __('You may apply for a new loan when eligible.')
+            : ($eligibility['reasons'][0] ?? __('Not currently eligible'));
+
+        $heroCtaLabel = null;
+        $heroCtaUrl = null;
+
+        if ($hasPendingOverrideRequest && ! $eligibility['eligible']) {
+            $heroTone = 'amber';
+            $heroTitle = __('Eligibility review pending');
+            $heroSubtitle = __('An administrator is reviewing your loan eligibility request.');
+            $heroCtaLabel = __('My loans');
+            $heroCtaUrl = $this->memberLoansIndexUrl();
+        } elseif ($active > 0) {
+            $heroTone = 'sky';
+            $heroTitle = __('You have an active loan');
+        } elseif ($pending > 0) {
+            $heroTone = 'amber';
+            $heroTitle = __('Application under review');
+        } elseif (! $eligibility['eligible']) {
+            $heroTone = 'amber';
+            $heroTitle = __('Not eligible for a loan');
+
+            if ($canRequestOverride) {
+                $heroCtaLabel = __('Request review');
+                $heroCtaUrl = $this->memberLoansIndexUrl(requestOverride: true);
+            }
+        } else {
+            $heroTone = 'success';
+            $heroTitle = __('Ready to borrow');
+        }
 
         return [
             'currency' => $currency,
             'hero' => [
-                'tone' => $pending > 0 ? 'amber' : ($active > 0 ? 'sky' : 'success'),
-                'title' => $active > 0
-                    ? __('You have an active loan')
-                    : ($pending > 0 ? __('Application under review') : __('Ready to borrow')),
-                'subtitle' => $eligibility['eligible']
-                    ? __('You may apply for a new loan when eligible.')
-                    : ($eligibility['reason'] ?? __('Not currently eligible')),
-                'cta_label' => null,
-                'cta_url' => null,
+                'tone' => $heroTone,
+                'title' => $heroTitle,
+                'subtitle' => $heroSubtitle,
+                'cta_label' => $heroCtaLabel,
+                'cta_url' => $heroCtaUrl,
             ],
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'pending', 'label' => __('Pending'), 'value' => (string) $pending, 'sub' => __('Requests'), 'icon' => 'heroicon-o-clock', 'accent' => 'amber', 'active' => $pending > 0],
@@ -645,6 +700,12 @@ final class LoanInsightsService
             ]),
             'active_loan_id' => $activeLoan?->id,
             'eligible' => $eligibility['eligible'],
+            'eligibility' => [
+                'eligible' => $eligibility['eligible'],
+                'can_request_override' => $canRequestOverride,
+                'has_pending_override_request' => $hasPendingOverrideRequest,
+                'request_url' => $this->memberLoansIndexUrl(requestOverride: true),
+            ],
         ];
     }
 
@@ -690,9 +751,35 @@ final class LoanInsightsService
     }
 
     /**
+     * Raw monthly loan counts for stacked volume charts (tenant dashboard).
+     *
      * @return list<array{label: string, total: int, active: int, completed: int, pending: int}>
      */
+    public function sixMonthLoanVolumeTrend(): array
+    {
+        return $this->buildSixMonthLoanVolumeBuckets();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
     private function sixMonthLoanTrend(): array
+    {
+        return array_map(
+            fn (array $month): array => DualProgressTrendBuilder::buildWorkflowMonthRow(
+                $month['label'],
+                $month['total'],
+                $month['active'] + $month['completed'],
+                $month['total'] - $month['pending'],
+            ),
+            $this->buildSixMonthLoanVolumeBuckets(),
+        );
+    }
+
+    /**
+     * @return list<array{label: string, total: int, active: int, completed: int, pending: int}>
+     */
+    private function buildSixMonthLoanVolumeBuckets(): array
     {
         $now = Carbon::now();
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
@@ -825,13 +912,23 @@ final class LoanInsightsService
         return Filament::getCurrentPanel()?->getId() === 'member';
     }
 
-    private function memberLoansIndexUrl(?string $status = null): string
+    private function memberLoansIndexUrl(?string $status = null, bool $requestOverride = false): string
     {
-        if ($status === null) {
+        $parameters = [];
+
+        if ($status !== null) {
+            $parameters['filters'] = ['status' => ['value' => $status]];
+        }
+
+        if ($requestOverride) {
+            $parameters['requestOverride'] = 1;
+        }
+
+        if ($parameters === []) {
             return MyLoanResource::listUrl();
         }
 
-        return MyLoanResource::listUrl(['status' => ['value' => $status]]);
+        return MyLoanResource::getUrl('index', $parameters);
     }
 
     private function memberLoanViewUrl(Loan $loan): string

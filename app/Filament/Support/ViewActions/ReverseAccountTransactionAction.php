@@ -3,6 +3,7 @@
 namespace App\Filament\Support\ViewActions;
 
 use App\Filament\Support\AccountDetailInsightsRefresh;
+use App\Filament\Support\ActionModalFailure;
 use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
@@ -14,7 +15,6 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
-use Filament\Support\Exceptions\Halt;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\HtmlString;
@@ -35,20 +35,18 @@ final class ReverseAccountTransactionAction
             ->modalSubmitActionLabel(__('Reverse'))
             ->modalWidth('md')
             ->schema(fn (Transaction $record): array => self::formSchema($record))
-            ->action(function (Transaction $record, array $data, AccountingService $accounting): void {
+            ->action(function (Transaction $record, array $data, Action $action, AccountingService $accounting): void {
                 $reason = (string) $data['reason'];
                 $transactedAt = Carbon::parse($data['transacted_at']);
 
                 try {
                     if ((bool) ($data['reverse_all_related'] ?? false)) {
                         if (! $accounting->canUseFullSourceReversal($record)) {
-                            Notification::make()
-                                ->title(__('Reversal failed'))
-                                ->body(__('This transaction has no shared source — use single-entry reversal instead.'))
-                                ->danger()
-                                ->send();
-
-                            throw new Halt;
+                            ActionModalFailure::present(
+                                $action,
+                                __('This transaction has no shared source — use single-entry reversal instead.'),
+                                __('Reversal failed'),
+                            );
                         }
 
                         $count = $accounting->createFullSourceReversal($record, $reason, $transactedAt);
@@ -69,13 +67,7 @@ final class ReverseAccountTransactionAction
                         ->success()
                         ->send();
                 } catch (Throwable $exception) {
-                    Notification::make()
-                        ->title(__('Reversal failed'))
-                        ->body($exception->getMessage())
-                        ->danger()
-                        ->send();
-
-                    throw new Halt;
+                    ActionModalFailure::present($action, $exception->getMessage(), __('Reversal failed'));
                 }
             })
             ->after(fn (Transaction $record) => AccountDetailInsightsRefresh::dispatchLedgerChange((int) $record->account_id));

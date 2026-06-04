@@ -4,6 +4,7 @@ namespace App\Filament\Tenant\Resources\Loans\Pages;
 
 use App\Filament\Support\LoanDelinquencyHeaderActions;
 use App\Filament\Support\LoanDelinquencyTables;
+use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\LoanEligibilityOverrideRequestResource;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrides\LoanEligibilityOverrideResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
@@ -68,6 +69,12 @@ class ListLoans extends ListRecords
                 ->icon('heroicon-o-exclamation-triangle')
                 ->color('gray')
                 ->button(),
+            Action::make('eligibilityReviews')
+                ->label(__('Eligibility reviews'))
+                ->icon(Heroicon::OutlinedShieldExclamation)
+                ->badge(fn (): ?string => LoanEligibilityOverrideRequestResource::getNavigationBadge())
+                ->badgeColor('warning')
+                ->url(fn (): string => LoanEligibilityOverrideRequestResource::getUrl('index', panel: 'tenant')),
             Action::make('loanOverrides')
                 ->label(__('Loan overrides'))
                 ->icon(Heroicon::OutlinedShieldCheck)

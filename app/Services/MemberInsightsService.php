@@ -10,6 +10,7 @@ use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationRe
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
 
@@ -186,7 +187,7 @@ final class MemberInsightsService
             ];
         }
 
-        return $trend;
+        return DualProgressTrendBuilder::mapCountTrend($trend, 'total');
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\CashOutRequests\CashOutRequestResource;
 use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Setting;
+use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
 
@@ -316,7 +317,7 @@ final class CashOutRequestInsightsService
             ];
         }
 
-        return $trend;
+        return DualProgressTrendBuilder::mapWorkflowTrend($trend);
     }
 
     /**

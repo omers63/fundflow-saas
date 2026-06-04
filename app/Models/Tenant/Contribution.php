@@ -80,10 +80,16 @@ class Contribution extends Model
             $month = (int) $contribution->period->month;
             $year = (int) $contribution->period->year;
 
-            if (static::activePeriodExists((int) $contribution->member_id, $month, $year)) {
+            if (static::memberPeriodRecordExists((int) $contribution->member_id, $month, $year)) {
+                $existing = static::findForMemberPeriod((int) $contribution->member_id, $month, $year, withTrashed: true);
+
                 throw ValidationException::withMessages([
                     'period' => [
-                        __('A contribution already exists for :period.', [
+                        $existing?->trashed()
+                        ? __('A deleted contribution still occupies :period. Restore it or permanently remove it before creating a new one.', [
+                            'period' => Carbon::create($year, $month, 1)->translatedFormat('F Y'),
+                        ])
+                        : __('A contribution already exists for :period.', [
                             'period' => Carbon::create($year, $month, 1)->translatedFormat('F Y'),
                         ]),
                     ],
@@ -167,6 +173,58 @@ class Contribution extends Model
         return Carbon::create($year, $month, 1)->startOfMonth()->toDateString();
     }
 
+    /**
+     * Canonical Y-m-d period key for grouping and lookups (matches {@see periodDate()}).
+     */
+    public static function normalizePeriodKey(mixed $period): ?string
+    {
+        if ($period === null || $period === '') {
+            return null;
+        }
+
+        [$month, $year] = self::monthYearFromPeriod($period);
+
+        return self::periodDate($month, $year);
+    }
+
+    /**
+     * @return array{0: int, 1: int}
+     */
+    public static function monthYearFromPeriod(string|\DateTimeInterface $period): array
+    {
+        $date = Carbon::parse($period)->startOfMonth();
+
+        return [(int) $date->month, (int) $date->year];
+    }
+
+    public static function memberPeriodRecordExists(int $memberId, int $month, int $year, bool $withTrashed = true): bool
+    {
+        $query = static::query();
+
+        if ($withTrashed) {
+            $query->withTrashed();
+        }
+
+        return $query
+            ->where('member_id', $memberId)
+            ->forPeriod($month, $year)
+            ->exists();
+    }
+
+    public static function findForMemberPeriod(int $memberId, int $month, int $year, bool $withTrashed = false): ?self
+    {
+        $query = static::query();
+
+        if ($withTrashed) {
+            $query->withTrashed();
+        }
+
+        return $query
+            ->where('member_id', $memberId)
+            ->forPeriod($month, $year)
+            ->first();
+    }
+
     public static function activePeriodExists(int $memberId, int $month, int $year): bool
     {
         return static::query()
@@ -177,6 +235,28 @@ class Contribution extends Model
                     ->orWhere('collection_status', ContributionCollectionStatus::COLLECTED);
             })
             ->exists();
+    }
+
+    public static function periodFullyPosted(int $memberId, int $month, int $year): bool
+    {
+        return static::query()
+            ->where('member_id', $memberId)
+            ->forPeriod($month, $year)
+            ->posted()
+            ->exists();
+    }
+
+    public function isSystemGenerated(): bool
+    {
+        return in_array($this->payment_method, [
+            self::PAYMENT_METHOD_CASH_ACCOUNT,
+            self::PAYMENT_METHOD_IMPORT_CSV,
+        ], true);
+    }
+
+    public function isDeletableByAdmin(): bool
+    {
+        return ! $this->isSystemGenerated();
     }
 
     /**

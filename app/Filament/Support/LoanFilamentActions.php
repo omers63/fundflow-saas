@@ -28,7 +28,6 @@ use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Utilities\Get;
 use Illuminate\Support\HtmlString;
 use Livewire\Component;
-use Throwable;
 
 final class LoanFilamentActions
 {
@@ -86,21 +85,26 @@ final class LoanFilamentActions
                     })
                     ->columnSpanFull(),
             ])
-            ->action(function (Loan $record, array $data, LoanLifecycleService $lifecycle): void {
-                try {
-                    $graceCycles = (int) ($data['grace_cycles'] ?? 1);
-                    $lifecycle->approveLoan(
-                        $record,
-                        (float) $data['amount_approved'],
-                        (bool) ($data['is_emergency'] ?? false),
-                        $graceCycles > 0,
-                        $graceCycles,
-                        isset($data['approved_at']) ? Carbon::parse((string) $data['approved_at']) : now(),
-                    );
-                    Notification::make()->title(__('Loan approved'))->success()->send();
-                } catch (Throwable $e) {
-                    Notification::make()->title(__('Cannot approve'))->body($e->getMessage())->danger()->send();
+            ->action(function (Loan $record, array $data, Action $action, LoanLifecycleService $lifecycle): void {
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    function () use ($record, $data, $lifecycle): void {
+                        $graceCycles = (int) ($data['grace_cycles'] ?? 1);
+                        $lifecycle->approveLoan(
+                            $record,
+                            (float) $data['amount_approved'],
+                            (bool) ($data['is_emergency'] ?? false),
+                            $graceCycles > 0,
+                            $graceCycles,
+                            isset($data['approved_at']) ? Carbon::parse((string) $data['approved_at']) : now(),
+                        );
+                    },
+                    __('Cannot approve'),
+                )) {
+                    return;
                 }
+
+                Notification::make()->title(__('Loan approved'))->success()->send();
             });
     }
 
@@ -118,8 +122,15 @@ final class LoanFilamentActions
                     ->rows(3)
                     ->maxLength(1000),
             ])
-            ->action(function (Loan $record, array $data, LoanLifecycleService $lifecycle): void {
-                $lifecycle->rejectLoan($record, (string) $data['rejection_reason']);
+            ->action(function (Loan $record, array $data, Action $action, LoanLifecycleService $lifecycle): void {
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $lifecycle->rejectLoan($record, (string) $data['rejection_reason']),
+                    __('Cannot reject'),
+                )) {
+                    return;
+                }
+
                 Notification::make()->title(__('Loan rejected'))->success()->send();
             });
     }
@@ -132,8 +143,15 @@ final class LoanFilamentActions
             ->color('gray')
             ->visible(fn (Loan $record): bool => $record->status === 'pending')
             ->requiresConfirmation()
-            ->action(function (Loan $record, LoanLifecycleService $lifecycle): void {
-                $lifecycle->cancelLoan($record);
+            ->action(function (Loan $record, Action $action, LoanLifecycleService $lifecycle): void {
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $lifecycle->cancelLoan($record),
+                    __('Cannot cancel'),
+                )) {
+                    return;
+                }
+
                 Notification::make()->title(__('Application cancelled'))->success()->send();
             });
     }
@@ -189,22 +207,25 @@ final class LoanFilamentActions
                         ->required(),
                 ];
             })
-            ->action(function (Loan $record, array $data, LoanLifecycleService $lifecycle): void {
-                try {
-                    $lifecycle->disbursePartial(
+            ->action(function (Loan $record, array $data, Action $action, LoanLifecycleService $lifecycle): void {
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $lifecycle->disbursePartial(
                         $record,
                         (float) $data['amount'],
                         filled($data['notes'] ?? null) ? (string) $data['notes'] : null,
                         isset($data['disbursed_at']) ? Carbon::parse((string) $data['disbursed_at']) : now(),
                         (bool) ($data['force'] ?? false),
-                    );
-                    Notification::make()
-                        ->title($record->fresh()->isFullyDisbursed() ? __('Loan fully disbursed') : __('Partial disbursement recorded'))
-                        ->success()
-                        ->send();
-                } catch (Throwable $e) {
-                    Notification::make()->title(__('Disbursement failed'))->body($e->getMessage())->danger()->send();
+                    ),
+                    __('Disbursement failed'),
+                )) {
+                    return;
                 }
+
+                Notification::make()
+                    ->title($record->fresh()->isFullyDisbursed() ? __('Loan fully disbursed') : __('Partial disbursement recorded'))
+                    ->success()
+                    ->send();
             });
     }
 
@@ -225,16 +246,19 @@ final class LoanFilamentActions
                     ->default(now())
                     ->required(),
             ])
-            ->action(function (Loan $record, array $data, LoanLifecycleService $lifecycle): void {
-                try {
-                    $lifecycle->markBankPayout(
+            ->action(function (Loan $record, array $data, Action $action, LoanLifecycleService $lifecycle): void {
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $lifecycle->markBankPayout(
                         $record,
                         isset($data['payout_at']) ? Carbon::parse((string) $data['payout_at']) : now(),
-                    );
-                    Notification::make()->title(__('Bank payout recorded'))->success()->send();
-                } catch (Throwable $e) {
-                    Notification::make()->title(__('Could not record payout'))->body($e->getMessage())->danger()->send();
+                    ),
+                    __('Could not record payout'),
+                )) {
+                    return;
                 }
+
+                Notification::make()->title(__('Bank payout recorded'))->success()->send();
             });
     }
 
@@ -260,17 +284,20 @@ final class LoanFilamentActions
                     ->default('roll_up')
                     ->required(),
             ])
-            ->action(function (Loan $record, array $data, LoanEarlySettlementService $service): void {
-                try {
-                    $service->partialEarlySettle(
+            ->action(function (Loan $record, array $data, Action $action, LoanEarlySettlementService $service): void {
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $service->partialEarlySettle(
                         $record,
                         (float) $data['amount'],
                         (string) ($data['option'] ?? 'roll_up'),
-                    );
-                    Notification::make()->title(__('Partial settlement applied'))->success()->send();
-                } catch (Throwable $e) {
-                    Notification::make()->title(__('Partial settlement failed'))->body($e->getMessage())->danger()->send();
+                    ),
+                    __('Partial settlement failed'),
+                )) {
+                    return;
                 }
+
+                Notification::make()->title(__('Partial settlement applied'))->success()->send();
             });
     }
 
@@ -285,13 +312,16 @@ final class LoanFilamentActions
             ->modalDescription(fn (Loan $record): string => __('Pay all remaining installments from member cash. Required: :amount', [
                 'amount' => number_format(app(LoanEarlySettlementService::class)->requiredCash($record), 2),
             ]))
-            ->action(function (Loan $record, LoanService $service): void {
-                try {
-                    $service->earlySettle($record);
-                    Notification::make()->title(__('Loan early settled'))->success()->send();
-                } catch (Throwable $e) {
-                    Notification::make()->title(__('Settlement failed'))->body($e->getMessage())->danger()->send();
+            ->action(function (Loan $record, Action $action, LoanService $service): void {
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $service->earlySettle($record),
+                    __('Settlement failed'),
+                )) {
+                    return;
                 }
+
+                Notification::make()->title(__('Loan early settled'))->success()->send();
             });
     }
 
@@ -308,20 +338,19 @@ final class LoanFilamentActions
             ->requiresConfirmation()
             ->modalHeading(__('Transfer liability to guarantor'))
             ->modalDescription(__('Future overdue installments will be collected from the guarantor fund immediately instead of following the borrower warning cycle.'))
-            ->action(function (Loan $record, LoanDelinquencyService $delinquency): void {
-                try {
-                    $delinquency->transferGuarantorLiability($record);
-                    Notification::make()
-                        ->title(__('Guarantor liability active'))
-                        ->success()
-                        ->send();
-                } catch (Throwable $e) {
-                    Notification::make()
-                        ->title(__('Cannot transfer liability'))
-                        ->body($e->getMessage())
-                        ->danger()
-                        ->send();
+            ->action(function (Loan $record, Action $action, LoanDelinquencyService $delinquency): void {
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $delinquency->transferGuarantorLiability($record),
+                    __('Cannot transfer liability'),
+                )) {
+                    return;
                 }
+
+                Notification::make()
+                    ->title(__('Guarantor liability active'))
+                    ->success()
+                    ->send();
             });
     }
 
@@ -334,13 +363,16 @@ final class LoanFilamentActions
             ->visible(fn (Loan $record): bool => $record->transferred_to_guarantor_at !== null
                 && $record->original_borrower_member_id !== null)
             ->requiresConfirmation()
-            ->action(function (Loan $record, LoanDelinquencyService $delinquency): void {
-                try {
-                    $delinquency->reinstateSuspendedBorrower($record);
-                    Notification::make()->title(__('Borrower reinstated'))->success()->send();
-                } catch (Throwable $e) {
-                    Notification::make()->title(__('Cannot reinstate'))->body($e->getMessage())->danger()->send();
+            ->action(function (Loan $record, Action $action, LoanDelinquencyService $delinquency): void {
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $delinquency->reinstateSuspendedBorrower($record),
+                    __('Cannot reinstate'),
+                )) {
+                    return;
                 }
+
+                Notification::make()->title(__('Borrower reinstated'))->success()->send();
             });
     }
 
@@ -353,20 +385,19 @@ final class LoanFilamentActions
             ->visible(fn (Loan $record): bool => $record->guarantor_liability_transferred_at !== null)
             ->requiresConfirmation()
             ->modalDescription(__('Returns default handling to the standard borrower warning cycle.'))
-            ->action(function (Loan $record, LoanDelinquencyService $delinquency): void {
-                try {
-                    $delinquency->restoreBorrowerLiability($record);
-                    Notification::make()
-                        ->title(__('Borrower liability restored'))
-                        ->success()
-                        ->send();
-                } catch (Throwable $e) {
-                    Notification::make()
-                        ->title(__('Cannot restore liability'))
-                        ->body($e->getMessage())
-                        ->danger()
-                        ->send();
+            ->action(function (Loan $record, Action $action, LoanDelinquencyService $delinquency): void {
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $delinquency->restoreBorrowerLiability($record),
+                    __('Cannot restore liability'),
+                )) {
+                    return;
                 }
+
+                Notification::make()
+                    ->title(__('Borrower liability restored'))
+                    ->success()
+                    ->send();
             });
     }
 

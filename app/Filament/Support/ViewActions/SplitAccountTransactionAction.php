@@ -3,6 +3,7 @@
 namespace App\Filament\Support\ViewActions;
 
 use App\Filament\Support\AccountDetailInsightsRefresh;
+use App\Filament\Support\ActionModalFailure;
 use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
@@ -14,11 +15,9 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Utilities\Get;
-use Filament\Support\Exceptions\Halt;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\HtmlString;
-use Throwable;
 
 final class SplitAccountTransactionAction
 {
@@ -33,10 +32,10 @@ final class SplitAccountTransactionAction
             ->modalHeading(__('Split transaction'))
             ->modalDescription(fn (Transaction $record): string => self::modalDescription($record))
             ->modalSubmitActionLabel(__('Split into parts'))
-            ->modalWidth('3xl')
+            ->modalWidth('2xl')
             ->fillForm(fn (Transaction $record): array => self::defaultFormState($record))
             ->schema(fn (Transaction $record): array => self::formSchema($record))
-            ->action(function (Transaction $record, array $data, AccountingService $accounting): void {
+            ->action(function (Transaction $record, array $data, Action $action, AccountingService $accounting): void {
                 $parts = collect($data['parts'] ?? [])
                     ->map(fn (array $part): array => [
                         'amount' => (float) ($part['amount'] ?? 0),
@@ -44,16 +43,14 @@ final class SplitAccountTransactionAction
                     ])
                     ->all();
 
-                try {
-                    $accounting->splitTransaction($record, $parts);
-                } catch (Throwable $exception) {
-                    Notification::make()
-                        ->title(__('Split failed'))
-                        ->body($exception->getMessage())
-                        ->danger()
-                        ->send();
-
-                    throw new Halt;
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $accounting->splitTransaction($record, $parts),
+                        __('Split failed'),
+                    )
+                ) {
+                    return;
                 }
 
                 Notification::make()

@@ -10,6 +10,7 @@ uses(TestCase::class, InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
+    app()->setLocale('en');
 
     FundPosting::query()->delete();
     Member::query()->delete();
@@ -35,4 +36,26 @@ it('formats fund posting data for the view modal', function () {
         ->and($data['status_display'])->toBe('Pending')
         ->and($data['reference_display'])->toBe('REF-99')
         ->and($data['comments_display'])->toBe('Monthly contribution');
+});
+
+it('builds a compact confirmation summary for accept and reject modals', function () {
+    $member = Member::factory()->create(['name' => 'Jane Member']);
+
+    $posting = FundPosting::create([
+        'member_id' => $member->id,
+        'posting_date' => '2026-05-10',
+        'amount' => 1500.50,
+        'reference' => 'REF-99',
+        'comments' => 'Monthly contribution',
+        'status' => 'pending',
+    ]);
+
+    $summary = ViewFundPostingAction::confirmationSummary($posting);
+
+    expect($summary)
+        ->toContain('Jane Member')
+        ->toContain('1,500.50')
+        ->toContain('May 10, 2026')
+        ->toContain('REF-99')
+        ->toContain('Monthly contribution');
 });

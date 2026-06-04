@@ -12,6 +12,7 @@ use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTemplate;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\FundPosting;
+use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Insights\InsightKpi;
 use Carbon\Carbon;
@@ -91,18 +92,19 @@ final class BankAccountsInsightsService
                 $monthCounts[$key] = ($monthCounts[$key] ?? 0) + 1;
             });
 
-        $trend = [];
+        $rawTrend = [];
         for ($i = 5; $i >= 0; $i--) {
             $month = $now->copy()->subMonths($i)->startOfMonth();
             $key = $month->format('Y-m');
 
-            $trend[] = [
+            $rawTrend[] = [
                 'label' => $month->locale(app()->getLocale())->translatedFormat('M'),
                 'count' => $monthCounts[$key] ?? 0,
+                'total' => $monthCounts[$key] ?? 0,
             ];
         }
 
-        $maxTrend = max(1, (int) collect($trend)->max('count'));
+        $trend = DualProgressTrendBuilder::mapCountTrend($rawTrend, 'total');
 
         $recentStatements = BankStatement::query()
             ->orderByDesc('imported_at')
@@ -146,7 +148,6 @@ final class BankAccountsInsightsService
             'master_bank' => $masterBank,
             'imported_amount_30d' => $importedAmount,
             'trend' => $trend,
-            'max_trend' => $maxTrend,
             'recent_statements' => $recentStatements,
             'status_breakdown' => [
                 ['status' => 'imported', 'label' => __('Imported'), 'count' => $imported, 'color' => 'bg-amber-400'],

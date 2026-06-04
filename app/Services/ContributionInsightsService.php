@@ -8,6 +8,7 @@ use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Setting;
+use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
 
@@ -142,7 +143,7 @@ final class ContributionInsightsService
                 'collection_rate' => $collectionRate,
             ],
             'oldest_pending' => $oldestPending,
-            'trend' => $this->sixMonthTrend(),
+            'trend' => DualProgressTrendBuilder::sixMonthFundCollectionTrend($this->cycles),
             'sparkline' => $this->weeklySparkline(),
             'method_breakdown' => $methodBreakdown,
             'cycle' => [
@@ -173,64 +174,6 @@ final class ContributionInsightsService
         }
 
         return (int) round((($current - $previous) / $previous) * 100);
-    }
-
-    /**
-     * @return list<array{label: string, total: int, posted: int, pending: int, failed: int}>
-     */
-    private function sixMonthTrend(): array
-    {
-        $now = Carbon::now();
-        $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
-        $oldestPeriod = Contribution::periodDate((int) $oldestMonth->month, (int) $oldestMonth->year);
-        $periodTotals = [];
-
-        Contribution::query()
-            ->where('period', '>=', $oldestPeriod)
-            ->get(['period', 'status'])
-            ->each(function (Contribution $contribution) use (&$periodTotals): void {
-                $period = (string) $contribution->period;
-                $periodTotals[$period] ??= [
-                    'total' => 0,
-                    'posted' => 0,
-                    'pending' => 0,
-                    'failed' => 0,
-                ];
-                $periodTotals[$period]['total']++;
-
-                if ($contribution->status === 'posted') {
-                    $periodTotals[$period]['posted']++;
-
-                    return;
-                }
-
-                if ($contribution->status === 'pending') {
-                    $periodTotals[$period]['pending']++;
-
-                    return;
-                }
-
-                if ($contribution->status === 'failed') {
-                    $periodTotals[$period]['failed']++;
-                }
-            });
-
-        $trend = [];
-
-        for ($i = 5; $i >= 0; $i--) {
-            $month = $now->copy()->subMonths($i)->startOfMonth();
-            $period = Contribution::periodDate((int) $month->month, (int) $month->year);
-
-            $trend[] = [
-                'label' => $month->format('M'),
-                'total' => (int) ($periodTotals[$period]['total'] ?? 0),
-                'posted' => (int) ($periodTotals[$period]['posted'] ?? 0),
-                'pending' => (int) ($periodTotals[$period]['pending'] ?? 0),
-                'failed' => (int) ($periodTotals[$period]['failed'] ?? 0),
-            ];
-        }
-
-        return $trend;
     }
 
     /**

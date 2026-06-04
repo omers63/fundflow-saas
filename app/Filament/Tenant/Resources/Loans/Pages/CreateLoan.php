@@ -37,6 +37,10 @@ class CreateLoan extends CreateRecord
                 filled($data['guarantor_member_id'] ?? null) ? (int) $data['guarantor_member_id'] : null,
                 (bool) ($data['is_emergency'] ?? false),
                 (bool) ($data['has_grace_cycle'] ?? true),
+                adminOverrideEligibility: (bool) ($data['override_eligibility'] ?? false),
+                eligibilityOverrideReason: filled($data['eligibility_override_reason'] ?? null)
+                ? (string) $data['eligibility_override_reason']
+                : null,
             );
         } catch (Throwable $exception) {
             Notification::make()

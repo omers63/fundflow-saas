@@ -11,7 +11,6 @@ use App\Services\LoanService;
 use App\Support\Tenant\CurrentMember;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
-use Throwable;
 
 final class MemberLoanFilamentActions
 {
@@ -89,28 +88,26 @@ final class MemberLoanFilamentActions
                     'balance' => number_format($balance, 2),
                 ]);
             })
-            ->action(function (Loan $record, LoanService $loanService): void {
+            ->action(function (Loan $record, Action $action, LoanService $loanService): void {
                 $member = CurrentMember::get();
 
                 if ($member === null || (int) $record->member_id !== (int) $member->id) {
                     return;
                 }
 
-                try {
-                    $loanService->earlySettle($record);
-
-                    Notification::make()
-                        ->title(__('Loan paid in full'))
-                        ->body(__('Your loan has been settled early. Thank you.'))
-                        ->success()
-                        ->send();
-                } catch (Throwable $exception) {
-                    Notification::make()
-                        ->title(__('Payoff failed'))
-                        ->body($exception->getMessage())
-                        ->danger()
-                        ->send();
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $loanService->earlySettle($record),
+                    __('Payoff failed'),
+                )) {
+                    return;
                 }
+
+                Notification::make()
+                    ->title(__('Loan paid in full'))
+                    ->body(__('Your loan has been settled early. Thank you.'))
+                    ->success()
+                    ->send();
             });
     }
 }

@@ -15,7 +15,6 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
-use Throwable;
 
 /**
  * Header actions for the master expense account transaction table.
@@ -46,23 +45,19 @@ final class MasterExpenseHeaderActions
             ->modalDescription(__('Transfer funds from Master Fund into the Master Expense account.'))
             ->modalWidth('md')
             ->schema(self::formSchema(__('Expense funding from master fund')))
-            ->action(function (array $data, AccountingService $accounting) use ($resolveAccount): void {
+            ->action(function (array $data, Action $action, AccountingService $accounting) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
-                try {
-                    $accounting->fundReserveAccountFromMasterFund(
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $accounting->fundReserveAccountFromMasterFund(
                         $account,
                         (float) $data['amount'],
                         (string) $data['description'],
                         Carbon::parse($data['transacted_at']),
-                    );
-                } catch (Throwable $exception) {
-                    Notification::make()
-                        ->title(__('Funding failed'))
-                        ->body($exception->getMessage())
-                        ->danger()
-                        ->send();
-
+                    ),
+                    __('Funding failed'),
+                )) {
                     return;
                 }
 
@@ -89,23 +84,19 @@ final class MasterExpenseHeaderActions
             ->modalDescription(__('Debits master expense only, then creates a pending bank line to match when the payment appears on an imported statement.'))
             ->modalWidth('md')
             ->schema(self::formSchema())
-            ->action(function (array $data, MasterExpenseDisbursementService $expenseDisbursements) use ($resolveAccount): void {
+            ->action(function (array $data, Action $action, MasterExpenseDisbursementService $expenseDisbursements) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
-                try {
-                    $expenseDisbursements->disburse(
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $expenseDisbursements->disburse(
                         $account,
                         (float) $data['amount'],
                         (string) $data['description'],
                         Carbon::parse($data['transacted_at']),
-                    );
-                } catch (Throwable $exception) {
-                    Notification::make()
-                        ->title(__('Disbursement failed'))
-                        ->body($exception->getMessage())
-                        ->danger()
-                        ->send();
-
+                    ),
+                    __('Disbursement failed'),
+                )) {
                     return;
                 }
 

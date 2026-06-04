@@ -67,3 +67,11 @@ it('collapsible helper marks every group collapsible', function (): void {
         expect($group->isCollapsible())->toBeTrue();
     }
 });
+
+it('groups members by parent_member_id to avoid ambiguous self join when summarizing', function (): void {
+    $parentGroup = collect(TableGrouping::members())
+        ->first(fn (Group $group): bool => $group->getColumn() === 'parent_member_id');
+
+    expect($parentGroup)->not->toBeNull()
+        ->and($parentGroup->getColumn())->toBe('parent_member_id');
+});

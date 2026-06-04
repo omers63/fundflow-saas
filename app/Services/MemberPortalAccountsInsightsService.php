@@ -14,6 +14,7 @@ use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
+use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
 use Carbon\Carbon;
@@ -78,7 +79,6 @@ final class MemberPortalAccountsInsightsService
             ->exists();
 
         $trend = $this->sixMonthTrend($accountIds);
-        $trendMax = max(1.0, (float) collect($trend)->max('total'));
 
         $sparklineCounts = [];
         $sparklineWindowStart = Carbon::now()->subDays(6)->startOfDay();
@@ -141,7 +141,6 @@ final class MemberPortalAccountsInsightsService
             'pending_deposits' => $pendingDeposits,
             'posted_this_cycle' => $postedThisCycle,
             'trend' => $trend,
-            'trend_max' => $trendMax,
             'sparkline' => $sparkline,
             'sparkline_max' => max(1, max($sparkline)),
             'recent' => $recent,
@@ -398,6 +397,6 @@ final class MemberPortalAccountsInsightsService
             ];
         }
 
-        return $trend;
+        return DualProgressTrendBuilder::mapVolumeTrend($trend, 'credits', 'debits');
     }
 }

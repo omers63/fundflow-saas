@@ -10,6 +10,7 @@ use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\LoanEligibilityOverride;
 use App\Services\Loans\LoanEligibilityOverrideService;
+use App\Support\LoanEligibilityGate;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\Select;
@@ -25,19 +26,16 @@ class LoanEligibilityOverridesTable
         return TableGrouping::apply($table
             ->columns([
                 MemberTableColumns::relationName(),
-                TextColumn::make('gate')->searchable(),
+                TextColumn::make('gate')
+                    ->formatStateUsing(fn (string $state): string => LoanEligibilityGate::labels()[$state] ?? $state)
+                    ->searchable(),
                 TextColumn::make('reason')->wrap()->limit(80),
                 TextColumn::make('approver.name')->placeholder(__('—')),
                 TextColumn::make('created_at')->dateTime()->sortable(),
             ])
             ->filters([
                 SelectFilter::make('gate')
-                    ->options([
-                        'min_fund_balance' => __('Minimum fund balance'),
-                        'active_loan' => __('Active loan limit'),
-                        'delinquency' => __('Delinquency'),
-                        'other' => __('Other'),
-                    ]),
+                    ->options(LoanEligibilityGate::labels()),
                 DateColumnRangeFilter::make('created_at', __('Created')),
             ])
             ->headerActions([
@@ -48,12 +46,7 @@ class LoanEligibilityOverridesTable
                             ->searchable()
                             ->required(),
                         Select::make('gate')
-                            ->options([
-                                'min_fund_balance' => __('Minimum fund balance'),
-                                'active_loan' => __('Active loan limit'),
-                                'delinquency' => __('Delinquency'),
-                                'other' => __('Other'),
-                            ])
+                            ->options(LoanEligibilityGate::labels())
                             ->required(),
                         Textarea::make('reason')->required()->rows(3),
                     ])

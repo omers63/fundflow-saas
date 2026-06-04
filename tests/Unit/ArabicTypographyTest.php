@@ -19,6 +19,23 @@ it('detects arabic script in names', function () {
         ->and(ArabicTypography::containsArabic('John · محمد'))->toBeTrue();
 });
 
+it('wraps multi word arabic names in a single bdi', function () {
+    $html = ArabicTypography::display('محمد أحمد')->toHtml();
+
+    expect($html)
+        ->toMatch('/<bdi dir="rtl" lang="ar" class="ff-arabic-name">محمد أحمد<\/bdi>/')
+        ->and(substr_count($html, '<bdi'))->toBe(1);
+});
+
+it('groups arabic words in mixed script labels', function () {
+    $html = ArabicTypography::display('Ali · محمد أحمد')->toHtml();
+
+    expect($html)
+        ->toContain('Ali')
+        ->toMatch('/<bdi dir="rtl" lang="ar" class="ff-arabic-name">محمد أحمد<\/bdi>/')
+        ->and(substr_count($html, '<bdi'))->toBe(1);
+});
+
 it('wraps arabic segments with bdi when enhanced style is off', function () {
     ArabicDisplaySettings::save([
         'arabic_display_font' => ArabicDisplaySettings::FONT_NOTO_SANS,
@@ -30,7 +47,7 @@ it('wraps arabic segments with bdi when enhanced style is off', function () {
     expect($html)
         ->toContain('<bdi')
         ->toContain('dir="rtl"')
-        ->not->toContain('ff-arabic-name')
+        ->toContain('ff-arabic-name')
         ->toContain('فاطمة')
         ->toContain('Ali');
 });

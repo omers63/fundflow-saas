@@ -20,7 +20,7 @@ final class ViewBankTransactionAction
     public static function make(): ViewAction
     {
         return ViewAction::make()
-            ->modalWidth('3xl')
+            ->modalWidth('xl')
             ->modalHeading(fn (BankTransaction $record): string => filled($record->description)
                 ? $record->description
                 : __('Bank transaction #:id', ['id' => $record->id]))
@@ -116,12 +116,14 @@ final class ViewBankTransactionAction
 
     public static function configure(Table $table): Table
     {
-        return TableGrouping::apply($table
-            ->recordUrl(fn (): ?string => null)
-            ->recordAction(ViewAction::getDefaultName())
-            ->recordActions(TableRecordActionGroups::wrap([
-                self::make(),
-            ])),
-            TableGrouping::bankTransactions());
+        return TableGrouping::apply(
+            $table
+                ->recordUrl(fn (): ?string => null)
+                ->recordAction(ViewAction::getDefaultName())
+                ->recordActions(TableRecordActionGroups::wrap([
+                    self::make(),
+                ])),
+            TableGrouping::bankTransactions()
+        );
     }
 }

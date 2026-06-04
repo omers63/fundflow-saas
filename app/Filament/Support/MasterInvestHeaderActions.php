@@ -16,7 +16,6 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
-use Throwable;
 
 /**
  * Header actions for the master invest account transaction table.
@@ -34,28 +33,24 @@ final class MasterInvestHeaderActions
             ->label(__('Fund Invest'))
             ->icon('heroicon-o-arrow-down-circle')
             ->color('success')
-            ->visible(fn(): bool => self::isMasterInvestAdmin($resolveAccount))
+            ->visible(fn (): bool => self::isMasterInvestAdmin($resolveAccount))
             ->modalHeading(__('Fund Invest'))
             ->modalDescription(__('Transfer funds from Master Fund into the Master Invest account.'))
             ->modalWidth('md')
             ->schema(self::formSchema(__('Invest funding from master fund')))
-            ->action(function (array $data, AccountingService $accounting) use ($resolveAccount): void {
+            ->action(function (array $data, Action $action, AccountingService $accounting) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
-                try {
-                    $accounting->fundReserveAccountFromMasterFund(
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $accounting->fundReserveAccountFromMasterFund(
                         $account,
                         (float) $data['amount'],
                         (string) $data['description'],
                         Carbon::parse($data['transacted_at']),
-                    );
-                } catch (Throwable $exception) {
-                    Notification::make()
-                        ->title(__('Funding failed'))
-                        ->body($exception->getMessage())
-                        ->danger()
-                        ->send();
-
+                    ),
+                    __('Funding failed'),
+                )) {
                     return;
                 }
 
@@ -69,28 +64,24 @@ final class MasterInvestHeaderActions
             ->label(__('Disburse Invest'))
             ->icon('heroicon-o-arrow-up-circle')
             ->color('warning')
-            ->visible(fn(): bool => self::isMasterInvestAdmin($resolveAccount))
+            ->visible(fn (): bool => self::isMasterInvestAdmin($resolveAccount))
             ->modalHeading(__('Disburse Invest'))
             ->modalDescription(__('Debits master invest only, then creates a pending bank line to match when the payment appears on an imported statement.'))
             ->modalWidth('md')
             ->schema(self::formSchema())
-            ->action(function (array $data, MasterInvestDisbursementService $investDisbursements) use ($resolveAccount): void {
+            ->action(function (array $data, Action $action, MasterInvestDisbursementService $investDisbursements) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
-                try {
-                    $investDisbursements->disburse(
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $investDisbursements->disburse(
                         $account,
                         (float) $data['amount'],
                         (string) $data['description'],
                         Carbon::parse($data['transacted_at']),
-                    );
-                } catch (Throwable $exception) {
-                    Notification::make()
-                        ->title(__('Disbursement failed'))
-                        ->body($exception->getMessage())
-                        ->danger()
-                        ->send();
-
+                    ),
+                    __('Disbursement failed'),
+                )) {
                     return;
                 }
 
@@ -104,28 +95,24 @@ final class MasterInvestHeaderActions
             ->label(__('Record Return'))
             ->icon('heroicon-o-arrow-path-rounded-square')
             ->color('info')
-            ->visible(fn(): bool => self::isMasterInvestAdmin($resolveAccount))
+            ->visible(fn (): bool => self::isMasterInvestAdmin($resolveAccount))
             ->modalHeading(__('Record Return'))
             ->modalDescription(__('Credits master invest only, then creates a pending bank line to match when the receipt appears on an imported statement.'))
             ->modalWidth('md')
             ->schema(self::formSchema(__('Investment return')))
-            ->action(function (array $data, MasterInvestReturnService $investReturns) use ($resolveAccount): void {
+            ->action(function (array $data, Action $action, MasterInvestReturnService $investReturns) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
-                try {
-                    $investReturns->record(
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $investReturns->record(
                         $account,
                         (float) $data['amount'],
                         (string) $data['description'],
                         Carbon::parse($data['transacted_at']),
-                    );
-                } catch (Throwable $exception) {
-                    Notification::make()
-                        ->title(__('Return posting failed'))
-                        ->body($exception->getMessage())
-                        ->danger()
-                        ->send();
-
+                    ),
+                    __('Return posting failed'),
+                )) {
                     return;
                 }
 
@@ -149,7 +136,7 @@ final class MasterInvestHeaderActions
      */
     private static function isMasterInvestAdmin(Closure $resolveAccount): bool
     {
-        if (!(bool) Auth::guard('tenant')->user()?->is_admin) {
+        if (! (bool) Auth::guard('tenant')->user()?->is_admin) {
             return false;
         }
 

@@ -5,16 +5,24 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyLoans\Pages;
 
 use App\Filament\Member\Pages\ApplyForLoan;
-use App\Filament\Member\Pages\LoanCalculator;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Member\Widgets\MemberLoanInsightsWidget;
+use App\Filament\Support\RequestLoanEligibilityOverrideAction;
 use App\Services\LoanService;
+use App\Support\Tenant\CurrentMember;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
 
 class ListMyLoans extends ListRecords
 {
     protected static string $resource = MyLoanResource::class;
+
+    public function mount(): void
+    {
+        if (request()->boolean('requestOverride') && RequestLoanEligibilityOverrideAction::canRequest()) {
+            $this->mountAction('requestEligibilityOverride');
+        }
+    }
 
     protected function getHeaderWidgets(): array
     {
@@ -35,20 +43,17 @@ class ListMyLoans extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        $member = auth('tenant')->user()?->member;
+        $member = CurrentMember::get();
 
         return [
-            Action::make('calculator')
-                ->label(__('Loan calculator'))
-                ->icon('heroicon-o-calculator')
-                ->url(LoanCalculator::getUrl())
-                ->color('gray'),
+            RequestLoanEligibilityOverrideAction::make(),
+            RequestLoanEligibilityOverrideAction::pendingReviewAction(),
             Action::make('applyForLoan')
                 ->label(__('Apply for loan'))
                 ->icon('heroicon-o-plus')
                 ->color('primary')
                 ->url(ApplyForLoan::getUrl())
-                ->visible(fn (): bool => $member !== null && app(LoanService::class)->checkEligibility($member)['eligible']),
+                ->visible(fn(): bool => $member !== null && app(LoanService::class)->checkEligibility($member)['eligible']),
         ];
     }
 }

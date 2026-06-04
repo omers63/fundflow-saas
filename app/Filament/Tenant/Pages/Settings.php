@@ -110,6 +110,9 @@ class Settings extends Page implements HasForms
             'loan_require_guarantor_above_fund' => (bool) ($loan['require_guarantor_above_fund_balance'] ?? true),
             'loan_auto_allocate_repayment' => (bool) ($loan['auto_allocate_loan_repayment'] ?? false),
             'loan_default_grace_cycles' => $loan['default_grace_cycles'] ?? 2,
+            'loan_late_payment_consecutive' => $loan['late_payment_consecutive_threshold'] ?? 3,
+            'loan_late_payment_rolling' => $loan['late_payment_rolling_threshold'] ?? 15,
+            'loan_late_payment_lookback_months' => $loan['late_payment_lookback_months'] ?? 60,
             ...ContributionPolicySettings::allForForm(),
             ...StatementSettings::allForForm(),
             ...CommunicationSettings::allForForm(),
@@ -445,6 +448,30 @@ class Settings extends Page implements HasForms
                                             ->numeric()
                                             ->minValue(0)
                                             ->helperText(__('Optional hard cap (0 = no cap, use multiplier only).')),
+                                    ]),
+                                Section::make(__('Payment history gates'))
+                                    ->description(__('Members with pending collections, arrears, or too many late-settled cycles cannot apply for a loan.'))
+                                    ->columns(3)
+                                    ->schema([
+                                        TextInput::make('loan_late_payment_consecutive')
+                                            ->label(__('Consecutive late cycles'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(36)
+                                            ->required()
+                                            ->helperText(__('Block when this many closed cycles in a row were settled after the deadline.')),
+                                        TextInput::make('loan_late_payment_rolling')
+                                            ->label(__('Late cycles (rolling window)'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(240)
+                                            ->required(),
+                                        TextInput::make('loan_late_payment_lookback_months')
+                                            ->label(__('Rolling window (months)'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(240)
+                                            ->required(),
                                     ]),
                                 Section::make(__('Defaults'))
                                     ->columns(2)
@@ -807,6 +834,9 @@ class Settings extends Page implements HasForms
             'default_grace_cycles' => (int) ($state['loan_default_grace_cycles'] ?? 2),
             'require_guarantor_above_fund_balance' => (bool) ($state['loan_require_guarantor_above_fund'] ?? true),
             'auto_allocate_loan_repayment' => (bool) ($state['loan_auto_allocate_repayment'] ?? false),
+            'late_payment_consecutive_threshold' => max(1, min(36, (int) ($state['loan_late_payment_consecutive'] ?? 3))),
+            'late_payment_rolling_threshold' => max(1, min(240, (int) ($state['loan_late_payment_rolling'] ?? 15))),
+            'late_payment_lookback_months' => max(1, min(240, (int) ($state['loan_late_payment_lookback_months'] ?? 60))),
         ]);
 
         ContributionPolicySettings::saveFromForm($state);

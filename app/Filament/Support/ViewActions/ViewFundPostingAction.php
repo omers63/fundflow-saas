@@ -55,10 +55,35 @@ final class ViewFundPostingAction
         ];
     }
 
+    public static function confirmationSummary(FundPosting $record): string
+    {
+        $data = self::formatRecordData($record);
+
+        $lines = [
+            __('Member: :name', ['name' => $data['member_name']]),
+            __('Amount: :amount', ['amount' => $data['amount_display']]),
+            __('Date: :date', ['date' => $data['posting_date_display']]),
+        ];
+
+        if ($data['reference_display'] !== __('—')) {
+            $lines[] = __('Reference: :reference', ['reference' => $data['reference_display']]);
+        }
+
+        if ($data['comments_display'] !== __('—')) {
+            $lines[] = __('Comments: :comments', ['comments' => $data['comments_display']]);
+        }
+
+        if (filled($data['attachment_url'])) {
+            $lines[] = __('Receipt attached — use View to preview.');
+        }
+
+        return implode("\n\n", $lines);
+    }
+
     public static function make(): ViewAction
     {
         return ViewAction::make()
-            ->modalWidth('2xl')
+            ->modalWidth('lg')
             ->modalHeading(fn (FundPosting $record): string => __('Deposit — :name', [
                 'name' => $record->member->name,
             ]))
@@ -74,16 +99,6 @@ final class ViewFundPostingAction
     public static function schema(): array
     {
         return self::buildSections(readOnly: false);
-    }
-
-    /**
-     * Read-only detail blocks for accept / reject confirmation modals.
-     *
-     * @return array<int, Section>
-     */
-    public static function readOnlyDetailSchema(): array
-    {
-        return self::buildSections(readOnly: true);
     }
 
     /**
@@ -187,22 +202,5 @@ final class ViewFundPostingAction
         return $table
             ->recordUrl(fn (): ?string => null)
             ->recordAction(ViewAction::getDefaultName());
-    }
-
-    /**
-     * @param  array<int, Component>  $additionalFields
-     * @return array<int, Component>
-     */
-    public static function modalSchemaWith(array $additionalFields): array
-    {
-        return [
-            ...self::readOnlyDetailSchema(),
-            ...$additionalFields,
-        ];
-    }
-
-    public static function fillFormFromRecord(): \Closure
-    {
-        return fn (FundPosting $record): array => self::formatRecordData($record);
     }
 }

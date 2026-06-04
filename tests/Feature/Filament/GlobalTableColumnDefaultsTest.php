@@ -35,7 +35,9 @@ it('defaults table columns to toggleable, sortable, searchable, translateLabel, 
 it('title-cases resolved table header labels', function () {
     $column = TextColumn::make('example_field')->label('lower case header');
 
-    expect($column->getLabel())->toBe('Lower Case Header');
+    $label = $column->getLabel();
+
+    expect(is_object($label) ? (string) $label : $label)->toBe('Lower Case Header');
 });
 
 it('formats ui labels with title case', function () {

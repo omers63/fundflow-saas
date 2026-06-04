@@ -65,11 +65,11 @@ class ContributionResource extends Resource
      *
      * @param  array<string, array<string, mixed>>  $filters
      */
-    public static function listUrl(string $tab = 'ledger', array $filters = []): string
+    public static function listUrl(string $tab = 'collect', array $filters = []): string
     {
         $parameters = [];
 
-        if ($tab !== 'ledger') {
+        if ($tab !== 'collect') {
             $parameters['tab'] = $tab;
         }
 
@@ -99,6 +99,26 @@ class ContributionResource extends Resource
         return static::listUrl('arrears', static::memberFilter($member));
     }
 
+    public static function memberFilterFromRequest(): ?int
+    {
+        $value = request()->input('filters.member_id.value')
+            ?? request()->input('tableFilters.member_id.value');
+
+        if (blank($value)) {
+            return null;
+        }
+
+        $memberId = (int) $value;
+
+        return $memberId > 0 ? $memberId : null;
+    }
+
+    public static function contributionArrearsPeriodCount(?int $memberId = null): int
+    {
+        return app(LoanDelinquencyService::class)
+            ->countContributionArrearsPeriods($memberId);
+    }
+
     public static function ledgerUrlForMember(int|Member $member): string
     {
         return static::listUrl('ledger', static::memberFilter($member));
@@ -111,18 +131,20 @@ class ContributionResource extends Resource
         if ($livewire instanceof ListContributions && filled($livewire->activeTab)) {
             $tab = $livewire->activeTab;
         } else {
-            $tab = request()->string('tab')->toString() ?: 'ledger';
+            $tab = request()->string('tab')->toString() ?: 'collect';
         }
 
-        return in_array($tab, self::listTabKeys(), true) ? $tab : 'ledger';
+        return in_array($tab, self::listTabKeys(), true) ? $tab : 'collect';
     }
 
     public static function openCyclePendingCount(): int
     {
-        $cycles = app(ContributionCycleService::class);
-        [$month, $year] = $cycles->currentOpenPeriod();
+        return once(function (): int {
+            $cycles = app(ContributionCycleService::class);
+            [$month, $year] = $cycles->currentOpenPeriod();
 
-        return $cycles->pendingMembersQueryForPeriod($month, $year)->count();
+            return $cycles->pendingMembersQueryForPeriod($month, $year)->count();
+        });
     }
 
     public static function form(Schema $schema): Schema
@@ -140,11 +162,6 @@ class ContributionResource extends Resource
             ),
             default => ContributionsTable::configure($table),
         };
-    }
-
-    public static function contributionArrearsPeriodCount(): int
-    {
-        return count(app(LoanDelinquencyService::class)->contributionArrearsTableRecords());
     }
 
     public static function getPages(): array

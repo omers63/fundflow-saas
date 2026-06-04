@@ -39,9 +39,16 @@ final class BankTransactionTableActions
                     ->searchable()
                     ->required(),
             ])
-            ->action(function (BankTransaction $record, array $data, FundFlowService $service): void {
+            ->action(function (BankTransaction $record, array $data, Action $action, FundFlowService $service): void {
                 $member = Member::findOrFail($data['member_id']);
-                $service->ensureMirroredAndPostToMember($record, $member);
+
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $service->ensureMirroredAndPostToMember($record, $member),
+                    __('Could not post to member'),
+                )) {
+                    return;
+                }
 
                 Notification::make()
                     ->title(__('Posted to :name', ['name' => $member->name]))

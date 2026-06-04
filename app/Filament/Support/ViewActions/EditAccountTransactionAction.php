@@ -3,26 +3,25 @@
 namespace App\Filament\Support\ViewActions;
 
 use App\Filament\Support\AccountDetailInsightsRefresh;
+use App\Filament\Support\ActionModalFailure;
 use App\Filament\Support\MemberLedgerTagSelect;
 use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
+use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Section;
-use Filament\Support\Exceptions\Halt;
 use Illuminate\Support\Facades\Auth;
-use Throwable;
 
 final class EditAccountTransactionAction
 {
     public static function make(): EditAction
     {
         return EditAction::make()
-            ->modalWidth('2xl')
+            ->modalWidth('lg')
             ->authorize(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
             ->modalHeading(fn (Transaction $record): string => filled($record->description)
                 ? $record->description
@@ -30,18 +29,12 @@ final class EditAccountTransactionAction
             ->modalDescription(__('Changes to amount or type adjust this account balance. Linked source records are not updated here.'))
             ->fillForm(fn (Transaction $record): array => self::formData($record))
             ->schema(self::schema())
-            ->using(function (Transaction $record, array $data): void {
-                try {
-                    app(AccountingService::class)->updateTransaction($record, $data);
-                } catch (Throwable $exception) {
-                    Notification::make()
-                        ->title(__('Could not save transaction'))
-                        ->body($exception->getMessage())
-                        ->danger()
-                        ->send();
-
-                    throw new Halt;
-                }
+            ->using(function (Transaction $record, array $data, Action $action): void {
+                ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => app(AccountingService::class)->updateTransaction($record, $data),
+                    __('Could not save transaction'),
+                );
             })
             ->successNotificationTitle(__('Transaction updated'))
             ->after(fn (Transaction $record) => AccountDetailInsightsRefresh::dispatchLedgerChange((int) $record->account_id));

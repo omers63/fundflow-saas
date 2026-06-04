@@ -18,7 +18,6 @@ use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\HtmlString;
-use Throwable;
 
 /**
  * Header actions for account transaction tables: post a manual ledger credit or debit on the account.
@@ -41,24 +40,20 @@ final class AccountTransactionManualAdjustmentHeaderActions
             ->modalDescription(fn (): string => self::creditModalDescription($resolveAccount()))
             ->modalWidth('md')
             ->schema(fn (): array => self::formSchema($resolveAccount))
-            ->action(function (array $data, AccountingService $accounting) use ($resolveAccount): void {
+            ->action(function (array $data, Action $action, AccountingService $accounting) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
-                try {
-                    $accounting->postManualCredit(
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $accounting->postManualCredit(
                         $account,
                         (float) $data['amount'],
                         (string) $data['description'],
                         Carbon::parse($data['transacted_at']),
                         filled($data['member_id'] ?? null) ? (int) $data['member_id'] : null,
-                    );
-                } catch (Throwable $exception) {
-                    Notification::make()
-                        ->title(__('Credit failed'))
-                        ->body($exception->getMessage())
-                        ->danger()
-                        ->send();
-
+                    ),
+                    __('Credit failed'),
+                )) {
                     return;
                 }
 
@@ -77,24 +72,20 @@ final class AccountTransactionManualAdjustmentHeaderActions
             ->modalDescription(fn (): string => self::debitModalDescription($resolveAccount()))
             ->modalWidth('md')
             ->schema(fn (): array => self::formSchema($resolveAccount))
-            ->action(function (array $data, AccountingService $accounting) use ($resolveAccount): void {
+            ->action(function (array $data, Action $action, AccountingService $accounting) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
-                try {
-                    $accounting->postManualDebit(
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $accounting->postManualDebit(
                         $account,
                         (float) $data['amount'],
                         (string) $data['description'],
                         Carbon::parse($data['transacted_at']),
                         filled($data['member_id'] ?? null) ? (int) $data['member_id'] : null,
-                    );
-                } catch (Throwable $exception) {
-                    Notification::make()
-                        ->title(__('Debit failed'))
-                        ->body($exception->getMessage())
-                        ->danger()
-                        ->send();
-
+                    ),
+                    __('Debit failed'),
+                )) {
                     return;
                 }
 
@@ -122,23 +113,19 @@ final class AccountTransactionManualAdjustmentHeaderActions
             ->modalSubmitActionLabel(__('Post refund'))
             ->modalWidth('md')
             ->schema(fn (): array => self::refundFormSchema($resolveAccount))
-            ->action(function (array $data, AccountingService $accounting) use ($resolveAccount): void {
+            ->action(function (array $data, Action $action, AccountingService $accounting) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
-                try {
-                    $accounting->refundMemberCash(
+                if (! ActionModalFailure::attemptThrowable(
+                    $action,
+                    fn () => $accounting->refundMemberCash(
                         $account,
                         (float) $data['amount'],
                         (string) $data['description'],
                         Carbon::parse($data['transacted_at']),
-                    );
-                } catch (Throwable $exception) {
-                    Notification::make()
-                        ->title(__('Refund failed'))
-                        ->body($exception->getMessage())
-                        ->danger()
-                        ->send();
-
+                    ),
+                    __('Refund failed'),
+                )) {
                     return;
                 }
 

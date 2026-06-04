@@ -8,6 +8,7 @@ use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Setting;
+use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
 
@@ -272,7 +273,7 @@ final class FundPostingInsightsService
             ];
         }
 
-        return $trend;
+        return DualProgressTrendBuilder::mapWorkflowTrend($trend);
     }
 
     /**

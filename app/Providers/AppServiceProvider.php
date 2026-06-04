@@ -129,6 +129,13 @@ class AppServiceProvider extends ServiceProvider
                 ) {
                     $column = MemberTableColumns::applyArabicNameTypography($column);
                 }
+
+                if (
+                    Filament::getCurrentPanel()?->getId() === 'tenant'
+                    && MemberTableColumns::shouldLinkColumn($column->getName())
+                ) {
+                    $column = MemberTableColumns::applyMemberLinkToTextColumn($column);
+                }
             }
 
             return $column;
@@ -154,6 +161,17 @@ class AppServiceProvider extends ServiceProvider
                             is_scalar($state) ? (string) $state : null,
                         ),
                     );
+            }
+
+            if (
+                Filament::getCurrentPanel()?->getId() === 'tenant'
+                && MemberTableColumns::shouldLinkColumn($entry->getName())
+            ) {
+                $entryName = $entry->getName();
+
+                $entry = $entry->url(
+                    fn (mixed $record): ?string => MemberTableColumns::resolveMemberUrl($entryName, $record),
+                );
             }
 
             return $entry;

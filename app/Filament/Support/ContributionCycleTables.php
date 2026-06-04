@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
@@ -16,6 +17,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Livewire\Component;
 
 final class ContributionCycleTables
 {
@@ -27,9 +29,6 @@ final class ContributionCycleTables
 
         return TableGrouping::apply($table
             ->query(fn (): Builder => $cycles->pendingMembersQueryForPeriod($month, $year))
-            ->headerActions([
-                ContributionListTableHeaderActions::cycleActionGroup(),
-            ])
             ->heading(__('To collect – :period', ['period' => $cycles->periodLabel($month, $year)]))
             ->columns([
                 MemberTableColumns::number(label: __('Member #'))
@@ -47,7 +46,19 @@ final class ContributionCycleTables
                     ->label(__('Cash balance'))
                     ->state(fn (Member $record): float => $record->getCashBalance())
                     ->money($currency)
-                    ->alignEnd(),
+                    ->alignEnd()
+                    ->searchable(false)
+                    ->sortable(query: function (Builder $query, string $direction): void {
+                        $query->orderBy(
+                            Account::query()
+                                ->select('balance')
+                                ->whereColumn('accounts.member_id', 'members.id')
+                                ->where('type', 'cash')
+                                ->where('is_master', false)
+                                ->limit(1),
+                            $direction,
+                        );
+                    }),
                 TextColumn::make('coverage')
                     ->label(__('Ready'))
                     ->state(function (Member $record) use ($cycles, $month, $year): string {
@@ -58,7 +69,9 @@ final class ContributionCycleTables
                             : __('Insufficient');
                     })
                     ->badge()
-                    ->color(fn (string $state): string => $state === __('Yes') ? 'success' : 'warning'),
+                    ->color(fn (string $state): string => $state === __('Yes') ? 'success' : 'warning')
+                    ->searchable(false)
+                    ->sortable(false),
                 TextColumn::make('parent.name')
                     ->label(__('Parent'))
                     ->placeholder(__('—'))
@@ -70,24 +83,14 @@ final class ContributionCycleTables
                     ->icon('heroicon-o-check')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->action(function (Member $record) use ($month, $year, $cycles): void {
+                    ->action(function (Member $record, Action $action, Component $livewire) use ($month, $year, $cycles): void {
                         $outcome = $cycles->applyContributionForMemberForPeriod($record, $month, $year);
 
-                        Notification::make()
-                            ->title(match ($outcome) {
-                                'applied' => __('Contribution applied'),
-                                'already_contributed' => __('Already recorded'),
-                                'exempt' => __('Member exempt'),
-                                default => __('Could not apply'),
-                            })
-                            ->body(match ($outcome) {
-                                'applied' => __('Posted for :name.', ['name' => $record->name]),
-                                'insufficient' => __('Insufficient cash balance.'),
-                                'exempt' => __('Active loan with pending installments.'),
-                                default => $outcome,
-                            })
-                            ->color($outcome === 'applied' ? 'success' : 'warning')
-                            ->send();
+                        ContributionTableActions::notifyApplyOutcome($outcome, $record->name, $action);
+
+                        if (in_array($outcome, ['applied', 'partial'], true)) {
+                            ContributionTableActions::refreshContributionViews($livewire);
+                        }
                     }),
             ]))
             ->toolbarActions([
@@ -97,14 +100,14 @@ final class ContributionCycleTables
                         ->icon('heroicon-o-check')
                         ->color('success')
                         ->requiresConfirmation()
-                        ->action(function (Collection $records) use ($month, $year, $cycles): void {
+                        ->action(function (Collection $records, Component $livewire) use ($month, $year, $cycles): void {
                             $applied = 0;
                             $skipped = 0;
 
                             foreach ($records as $record) {
                                 $outcome = $cycles->applyContributionForMemberForPeriod($record, $month, $year);
 
-                                if ($outcome === 'applied') {
+                                if (in_array($outcome, ['applied', 'partial'], true)) {
                                     $applied++;
                                 } else {
                                     $skipped++;
@@ -119,6 +122,10 @@ final class ContributionCycleTables
                                 ]))
                                 ->color($applied > 0 ? 'success' : 'warning')
                                 ->send();
+
+                            if ($applied > 0) {
+                                ContributionTableActions::refreshContributionViews($livewire);
+                            }
                         }),
                     TableToolbar::refreshBulkAction(),
                 ]),
@@ -133,9 +140,6 @@ final class ContributionCycleTables
 
         return TableGrouping::apply($table
             ->query(fn (): Builder => $cycles->postedContributionsQueryForPeriod($month, $year))
-            ->headerActions([
-                ContributionListTableHeaderActions::cycleActionGroup(),
-            ])
             ->heading(__('Collected – :period', ['period' => $cycles->periodLabel($month, $year)]))
             ->columns([
                 MemberTableColumns::relationNumber(),

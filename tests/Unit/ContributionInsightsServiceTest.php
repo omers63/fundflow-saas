@@ -4,6 +4,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Services\ContributionCycleService;
 use App\Services\ContributionInsightsService;
+use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
 use Tests\TestCase;
@@ -55,4 +56,69 @@ test('insights snapshot aggregates contribution pipeline metrics', function () {
         ->and($snapshot['trend'])->toHaveCount(6)
         ->and($snapshot['sparkline'])->toHaveCount(8)
         ->and($snapshot['oldest_pending'])->not->toBeEmpty();
+});
+
+test('six month trend buckets contributions using normalized period keys', function () {
+    $member = Member::factory()->create();
+
+    $twoMonthsAgo = now()->subMonths(2)->startOfMonth();
+    $postedPeriod = Contribution::periodDate((int) $twoMonthsAgo->month, (int) $twoMonthsAgo->year);
+    $pendingMonth = now()->subMonths(3)->startOfMonth();
+    $pendingPeriod = Contribution::periodDate((int) $pendingMonth->month, (int) $pendingMonth->year);
+
+    Contribution::factory()->for($member)->posted()->create([
+        'period' => $postedPeriod,
+        'amount' => 750,
+    ]);
+
+    Contribution::factory()->for($member)->create([
+        'period' => $pendingPeriod,
+        'amount' => 500,
+        'status' => 'pending',
+    ]);
+
+    $trend = collect(app(ContributionInsightsService::class)->snapshot()['trend']);
+    $postedBucket = $trend->firstWhere('label', $twoMonthsAgo->locale(app()->getLocale())->translatedFormat('M'));
+    $pendingBucket = $trend->firstWhere('label', $pendingMonth->locale(app()->getLocale())->translatedFormat('M'));
+
+    expect($postedBucket)->not->toBeNull()
+        ->and($postedBucket['posted'])->toBe(1)
+        ->and($postedBucket['posted_amount'])->toBe(750.0)
+        ->and($pendingBucket)->not->toBeNull()
+        ->and($pendingBucket['posted'])->toBe(0)
+        ->and($pendingBucket['posted_amount'])->toBe(0.0);
+});
+
+test('six month trend expresses bars relative to expected collections', function () {
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+    ]);
+
+    Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+    ]);
+
+    [$month, $year] = app(ContributionCycleService::class)->currentOpenPeriod();
+    $period = Contribution::periodDate($month, $year);
+
+    Contribution::factory()->for($member)->posted()->create([
+        'period' => $period,
+        'amount' => 1000,
+    ]);
+
+    $bucket = collect(app(ContributionInsightsService::class)->snapshot()['trend'])
+        ->firstWhere('label', Carbon::create($year, $month, 1)->locale(app()->getLocale())->translatedFormat('M'));
+
+    expect($bucket)->not->toBeNull()
+        ->and($bucket['posted'])->toBe(1)
+        ->and($bucket['expected_count'])->toBe(2)
+        ->and($bucket['expected_amount'])->toBe(1500.0)
+        ->and($bucket['collection_rate'])->toBe(50)
+        ->and($bucket['amount_collection_rate'])->toBe(67)
+        ->and($bucket['tone'])->toBe('warning')
+        ->and($bucket['subtitle'])->toContain('1/2');
 });
