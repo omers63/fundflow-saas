@@ -105,7 +105,20 @@ test('parent can list dependents page', function () {
     Livewire::test(ListMyDependents::class)
         ->assertSuccessful()
         ->assertSee('Child Member')
-        ->assertSee('MEM-C001');
+        ->assertSee('MEM-C001')
+        ->assertTableActionDoesNotExist('view')
+        ->assertTableActionDoesNotExist('switchToPortal');
+});
+
+test('dependent table row links to impersonation route', function () {
+    $this->actingAs($this->parentUser, 'tenant');
+
+    $component = Livewire::test(ListMyDependents::class);
+    $recordUrl = $component->instance()->getTable()->getRecordUrl($this->dependent);
+
+    expect($recordUrl)->toBe(
+        route('tenant.member.dependents.impersonate', ['dependent' => $this->dependent]),
+    );
 });
 
 test('dependents insights snapshot summarizes household', function () {

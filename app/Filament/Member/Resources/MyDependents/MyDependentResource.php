@@ -6,7 +6,6 @@ namespace App\Filament\Member\Resources\MyDependents;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Member\Resources\MyDependents\Pages\ListMyDependents;
-use App\Filament\Member\Resources\MyDependents\Pages\ViewMyDependent;
 use App\Filament\Member\Resources\MyDependents\Tables\MyDependentsTable;
 use App\Filament\Member\Support\MemberNavigation;
 use App\Models\Tenant\Member;
@@ -87,7 +86,6 @@ class MyDependentResource extends Resource
     {
         return [
             'index' => ListMyDependents::route('/'),
-            'view' => ViewMyDependent::route('/{record}'),
         ];
     }
 }

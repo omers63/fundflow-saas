@@ -1,5 +1,6 @@
 <?php
 
+use App\Filament\Member\Pages\LoanCalculatorPage;
 use App\Filament\Member\Pages\MyContributionSettingsPage;
 use App\Filament\Member\Pages\MyNotificationPreferencesPage;
 use App\Filament\Member\Pages\SupportPage;
@@ -33,6 +34,7 @@ test('member resources use legacy navigation groups and sort order', function (s
             'accounts' => [MyAccountResource::class, MemberNavigation::GROUP_MY_FINANCE, MemberNavigation::SORT_ACCOUNTS],
             'loans' => [MyLoanResource::class, MemberNavigation::GROUP_LOANS, MemberNavigation::SORT_LOANS],
             'guaranteed loans' => [MyGuaranteedLoanResource::class, MemberNavigation::GROUP_LOANS, MemberNavigation::SORT_GUARANTEED_LOANS],
+            'loan calculator' => [LoanCalculatorPage::class, MemberNavigation::GROUP_LOANS, MemberNavigation::SORT_LOAN_CALCULATOR],
             'contribution settings' => [MyContributionSettingsPage::class, MemberNavigation::GROUP_SETTINGS, MemberNavigation::SORT_CONTRIBUTION_SETTINGS],
             'notification preferences' => [MyNotificationPreferencesPage::class, MemberNavigation::GROUP_SETTINGS, MemberNavigation::SORT_NOTIFICATION_PREFERENCES],
             'support' => [SupportPage::class, MemberNavigation::GROUP_SETTINGS, MemberNavigation::SORT_SUPPORT],

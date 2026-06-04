@@ -34,6 +34,8 @@ final class MemberNavigation
 
     public const SORT_GUARANTEED_LOANS = 3;
 
+    public const SORT_LOAN_CALCULATOR = 4;
+
     public const SORT_CONTRIBUTION_SETTINGS = 1;
 
     public const SORT_NOTIFICATION_PREFERENCES = 2;

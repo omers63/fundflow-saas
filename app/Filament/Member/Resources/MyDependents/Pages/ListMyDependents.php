@@ -14,7 +14,7 @@ class ListMyDependents extends ListRecords
 
     public function getSubheading(): ?string
     {
-        return __('View balances, cycle status, and switch into each dependent’s portal.');
+        return __('View balances and cycle status. Click a dependent to open their portal.');
     }
 
     /**

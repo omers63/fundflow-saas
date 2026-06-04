@@ -1,6 +1,7 @@
 <?php
 
 use App\Filament\Member\Pages\ApplyForLoan;
+use App\Filament\Member\Pages\LoanCalculatorPage;
 use App\Filament\Member\Pages\MemberDashboard;
 use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
@@ -17,6 +18,7 @@ use App\Support\PublicPageSettings;
 use Filament\Facades\Filament;
 use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
+use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -215,6 +217,17 @@ test('message resource scopes to member admin conversations', function () {
 
 test('apply for loan page is registered on member panel', function () {
     expect(ApplyForLoan::getSlug())->toBe('apply-for-loan');
+});
+
+test('loan calculator page renders for member', function () {
+    $this->actingAs($this->memberUserA, 'tenant');
+
+    Livewire::test(LoanCalculatorPage::class)
+        ->assertSuccessful()
+        ->assertSee(__('Loan calculator'))
+        ->assertSee(__('Estimate your loan repayment'))
+        ->set('loanAmount', 10000)
+        ->assertSet('loanAmount', 10000.0);
 });
 
 test('member panel has database notifications enabled', function () {

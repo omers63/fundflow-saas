@@ -4,18 +4,14 @@ declare(strict_types=1);
 
 namespace App\Filament\Member\Resources\MyDependents\Tables;
 
-use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
-use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\ContributionCycleService;
-use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -42,12 +38,12 @@ class MyDependentsTable
                     ->sortable(),
                 TextColumn::make('cash_balance')
                     ->label('Cash')
-                    ->state(fn(Member $record): float => $record->getCashBalance())
+                    ->state(fn (Member $record): float => $record->getCashBalance())
                     ->money($currency)
                     ->sortable(false),
                 TextColumn::make('fund_balance')
                     ->label('Fund')
-                    ->state(fn(Member $record): float => $record->getFundBalance())
+                    ->state(fn (Member $record): float => $record->getFundBalance())
                     ->money($currency)
                     ->sortable(false),
                 TextColumn::make('open_cycle_status')
@@ -85,25 +81,25 @@ class MyDependentsTable
                     }),
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn(string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
-                    ->color(fn(string $state): string => Member::statusBadgeColor($state)),
+                    ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
+                    ->color(fn (string $state): string => Member::statusBadgeColor($state)),
             ])
             ->filters([
                 SelectFilter::make('status')
                     ->options(Member::statusOptions()),
                 DateColumnRangeFilter::make('joined_at', __('Joined')),
             ])
-            ->recordUrl(fn(Model $record): string => MyDependentResource::getUrl('view', ['record' => $record]))
-            ->recordActions(TableRecordActionGroups::wrap([
-                ViewAction::make(),
-                Action::make('switchToPortal')
-                    ->label(__('Switch to portal'))
-                    ->icon('heroicon-o-arrow-right-end-on-rectangle')
-                    ->requiresConfirmation()
-                    ->modalDescription(__('You will switch into this dependent portal.'))
-                    ->url(fn(Member $record): string => route('tenant.member.dependents.impersonate', ['dependent' => $record]))
-                    ->visible(fn(Member $record): bool => !in_array($record->status, Member::PORTAL_BLOCKED_STATUSES, true)),
-            ]))
+            ->recordUrl(function (Model $record): ?string {
+                if (! $record instanceof Member) {
+                    return null;
+                }
+
+                if (in_array($record->status, Member::PORTAL_BLOCKED_STATUSES, true)) {
+                    return null;
+                }
+
+                return route('tenant.member.dependents.impersonate', ['dependent' => $record]);
+            })
             ->toolbarActions([
                 BulkActionGroup::make([
                     TableToolbar::refreshBulkAction(),
