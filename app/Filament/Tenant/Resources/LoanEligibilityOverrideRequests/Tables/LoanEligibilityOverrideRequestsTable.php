@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\Tables;
 
 use App\Filament\Support\ActionModalFailure;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\LoanListTableHeaderActions;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -31,6 +32,7 @@ class LoanEligibilityOverrideRequestsTable
     {
         return TableGrouping::apply(
             $table
+                ->headerActions(LoanListTableHeaderActions::eligibilityReviews())
                 ->columns([
                     MemberTableColumns::relationName(),
                     TextColumn::make('failed_gates')

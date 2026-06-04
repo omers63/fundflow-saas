@@ -35,6 +35,16 @@ class LoanQueuePage extends Page
         return LoanResource::getUrl('queue');
     }
 
+    /**
+     * Queue list is registered on {@see LoanResource}, not this redirect page.
+     *
+     * @return string|array<string>
+     */
+    public static function getNavigationItemActiveRoutePattern(): string|array
+    {
+        return LoanResource::getRouteBaseName().'.queue';
+    }
+
     public static function getNavigationBadge(): ?string
     {
         $count = Loan::query()->inQueue()->count();

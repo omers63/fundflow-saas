@@ -31,6 +31,8 @@ class LoanEmiCollectionPage extends Page implements HasTable
 
     protected static ?int $navigationSort = 3;
 
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $slug = 'emi-collection';
 
     protected static ?string $title = 'EMI collection';
@@ -46,11 +48,12 @@ class LoanEmiCollectionPage extends Page implements HasTable
 
     public function mount(): void
     {
-        $tab = request()->query('tab');
+        $legacyTab = request()->query('tab');
+        $filamentTab = is_string($legacyTab) && $legacyTab === 'collected'
+            ? 'emi_collected'
+            : 'emi_collect';
 
-        if (is_string($tab) && in_array($tab, ['collect', 'collected'], true)) {
-            $this->emiTab = $tab;
-        }
+        $this->redirect(LoanResource::listUrl($filamentTab), navigate: true);
     }
 
     public function setEmiTab(string $tab): void
@@ -104,9 +107,7 @@ class LoanEmiCollectionPage extends Page implements HasTable
 
     public static function url(string $tab = 'collect'): string
     {
-        $parameters = $tab !== 'collect' ? ['tab' => $tab] : [];
-
-        return static::getUrl($parameters);
+        return LoanResource::listUrl($tab === 'collected' ? 'emi_collected' : 'emi_collect');
     }
 
     protected function getHeaderActions(): array

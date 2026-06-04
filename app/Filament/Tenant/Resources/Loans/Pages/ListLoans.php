@@ -2,25 +2,38 @@
 
 namespace App\Filament\Tenant\Resources\Loans\Pages;
 
-use App\Filament\Support\LoanDelinquencyHeaderActions;
 use App\Filament\Support\LoanDelinquencyTables;
-use App\Filament\Tenant\Pages\LoanEmiCollectionPage;
-use App\Filament\Tenant\Resources\LoanEligibilityOverrides\LoanEligibilityOverrideResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
-use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
-use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
-use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Table;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
+use Livewire\Attributes\Url;
 
 class ListLoans extends ListRecords
 {
     protected static string $resource = LoanResource::class;
+
+    #[Url(as: 'tab')]
+    public ?string $activeTab = 'portfolio';
+
+    protected function makeTable(): Table
+    {
+        $tab = LoanResource::resolveListTab();
+
+        if (in_array($tab, ['emi_collect', 'emi_collected', 'overdue_installments', 'guarantor_exposure', 'eligibility_reviews'], true)) {
+            $table = $this->makeBaseTable();
+
+            static::getResource()::configureTable($table);
+
+            return $table;
+        }
+
+        return parent::makeTable();
+    }
 
     public function updatedActiveTab(): void
     {
@@ -56,6 +69,8 @@ class ListLoans extends ListRecords
     public function getSubheading(): string|Htmlable|null
     {
         return match (LoanResource::resolveListTab()) {
+            'emi_collect' => __('Members with pending EMIs through the open period. Apply from cash balance (open period and arrears only).'),
+            'emi_collected' => __('Installments already collected from member cash for the open period.'),
             'overdue_installments' => __('Active loans with installments past due. Run the delinquency check after cycle close to refresh statuses.'),
             'guarantor_exposure' => __('Loans in warning or with liability transferred to the guarantor.'),
             'eligibility_reviews' => __('Review member requests to bypass loan eligibility rules. Approved requests create standing overrides.'),
@@ -63,33 +78,9 @@ class ListLoans extends ListRecords
         };
     }
 
-    protected function getHeaderActions(): array
-    {
-        return [
-            Action::make('emi_collection')
-                ->label(__('EMI collection'))
-                ->icon(Heroicon::OutlinedBanknotes)
-                ->badge(fn (): ?string => LoanEmiCollectionPage::getNavigationBadge())
-                ->badgeColor('warning')
-                ->url(fn (): string => LoanEmiCollectionPage::getUrl()),
-            ActionGroup::make(LoanDelinquencyHeaderActions::make())
-                ->label(__('Delinquency tools'))
-                ->icon('heroicon-o-exclamation-triangle')
-                ->color('gray')
-                ->button()
-                ->visible(fn (): bool => LoanResource::resolveListTab() !== 'eligibility_reviews'),
-            Action::make('loanOverrides')
-                ->label(__('Loan overrides'))
-                ->icon(Heroicon::OutlinedShieldCheck)
-                ->url(fn (): string => LoanEligibilityOverrideResource::getUrl('index')),
-            CreateAction::make()
-                ->visible(fn (): bool => LoanResource::resolveListTab() !== 'eligibility_reviews'),
-        ];
-    }
-
     protected function getHeaderWidgets(): array
     {
-        if (LoanResource::resolveListTab() === 'eligibility_reviews') {
+        if (LoanResource::resolveListTab() === 'eligibility_reviews' && ! LoanEligibilityOverrideRequest::isTableReady()) {
             return [];
         }
 
@@ -110,15 +101,25 @@ class ListLoans extends ListRecords
     {
         return [
             ...parent::getWidgetData(),
-            'context' => in_array(LoanResource::resolveListTab(), ['overdue_installments', 'guarantor_exposure'], true)
-                ? 'delinquency'
-                : 'portfolio',
+            'context' => match (LoanResource::resolveListTab()) {
+                'emi_collect' => 'emi_collect',
+                'emi_collected' => 'emi_collected',
+                'overdue_installments', 'guarantor_exposure' => 'delinquency',
+                'eligibility_reviews' => 'eligibility_reviews',
+                default => 'portfolio',
+            },
         ];
     }
 
     public function getTabs(): array
     {
+        $emiPending = LoanResource::pendingEmiCollectionMemberCount();
+
         $tabs = [
+            'emi_collect' => Tab::make(LoanResource::listTabLabel('emi_collect'))
+                ->badge($emiPending > 0 ? (string) $emiPending : null)
+                ->badgeColor('warning'),
+            'emi_collected' => Tab::make(LoanResource::listTabLabel('emi_collected')),
             'portfolio' => Tab::make(LoanResource::listTabLabel('portfolio')),
             'overdue_installments' => Tab::make(LoanResource::listTabLabel('overdue_installments'))
                 ->badge((string) LoanResource::overdueInstallmentsCount())
@@ -147,6 +148,28 @@ class ListLoans extends ListRecords
             'eligibility_reviews' => LoanEligibilityOverrideRequest::query()->with(['member', 'reviewer']),
             default => parent::getTableQuery(),
         };
+    }
+
+    public function getTableColumnsSessionKey(): string
+    {
+        $tab = LoanResource::resolveListTab();
+
+        if (in_array($tab, ['emi_collect', 'emi_collected', 'overdue_installments', 'guarantor_exposure', 'eligibility_reviews'], true)) {
+            return 'tables.'.md5(static::class.'|'.$tab).'_columns';
+        }
+
+        return parent::getTableColumnsSessionKey();
+    }
+
+    public function getHasReorderedTableColumnsSessionKey(): string
+    {
+        $tab = LoanResource::resolveListTab();
+
+        if (in_array($tab, ['emi_collect', 'emi_collected', 'overdue_installments', 'guarantor_exposure', 'eligibility_reviews'], true)) {
+            return 'tables.'.md5(static::class.'|'.$tab).'_has_reordered_columns';
+        }
+
+        return parent::getHasReorderedTableColumnsSessionKey();
     }
 
     protected function getTableQueryStringIdentifier(): ?string

@@ -2,7 +2,6 @@
 
 namespace App\Filament\Tenant\Resources\Contributions\Pages;
 
-use App\Filament\Support\ContributionListTableHeaderActions;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Widgets\ContributionInsightsWidget;
 use App\Services\ContributionCycleService;
@@ -15,11 +14,6 @@ use Illuminate\Database\Eloquent\Builder;
 class ListContributions extends ListRecords
 {
     protected static string $resource = ContributionResource::class;
-
-    protected function getHeaderActions(): array
-    {
-        return ContributionListTableHeaderActions::pageHeaderActions();
-    }
 
     protected function makeTable(): Table
     {
@@ -128,6 +122,17 @@ class ListContributions extends ListRecords
         return 1;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    public function getWidgetData(): array
+    {
+        return [
+            ...parent::getWidgetData(),
+            'context' => ContributionResource::resolveListTab(),
+        ];
+    }
+
     public function getTabs(): array
     {
         return [
@@ -138,7 +143,7 @@ class ListContributions extends ListRecords
             'ledger' => Tab::make(ContributionResource::listTabLabel('ledger')),
             'arrears' => Tab::make(ContributionResource::listTabLabel('arrears'))
                 ->badge(fn (): ?string => $this->arrearsTabBadge())
-                ->badgeColor('warning'),
+                ->badgeColor('danger'),
         ];
     }
 

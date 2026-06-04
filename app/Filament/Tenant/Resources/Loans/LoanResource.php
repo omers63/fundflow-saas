@@ -4,6 +4,7 @@ namespace App\Filament\Tenant\Resources\Loans;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Support\LoanDelinquencyTables;
+use App\Filament\Support\LoanEmiCollectionTables;
 use App\Filament\Tenant\Clusters\LoansCluster;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\Tables\LoanEligibilityOverrideRequestsTable;
 use App\Filament\Tenant\Resources\Loans\Pages\CreateLoan;
@@ -21,6 +22,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Services\Loans\LoanEmiCollectionCatalogService;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -48,7 +50,7 @@ class LoanResource extends Resource
      */
     public static function listTabKeys(): array
     {
-        $tabs = ['portfolio', 'overdue_installments', 'guarantor_exposure'];
+        $tabs = ['emi_collect', 'emi_collected', 'portfolio', 'overdue_installments', 'guarantor_exposure'];
 
         if (LoanEligibilityOverrideRequest::isTableReady()) {
             $tabs[] = 'eligibility_reviews';
@@ -60,11 +62,21 @@ class LoanResource extends Resource
     public static function listTabLabel(string $tab): string
     {
         return match ($tab) {
+            'emi_collect' => __('EMI collection'),
+            'emi_collected' => __('EMI collected'),
             'overdue_installments' => __('Overdue installments'),
             'guarantor_exposure' => __('Guarantor exposure'),
             'eligibility_reviews' => __('Eligibility reviews'),
-            default => __('Portfolio'),
+            default => __('Loans'),
         };
+    }
+
+    public static function pendingEmiCollectionMemberCount(): int
+    {
+        $catalog = app(LoanEmiCollectionCatalogService::class);
+        [$month, $year] = $catalog->currentOpenPeriod();
+
+        return $catalog->pendingMemberCount($month, $year);
     }
 
     public static function listTabUrl(string $tab): string
@@ -151,6 +163,8 @@ class LoanResource extends Resource
         $livewire = Livewire::current();
 
         return match (self::resolveListTab()) {
+            'emi_collect' => LoanEmiCollectionTables::configurePendingMembersTable($table),
+            'emi_collected' => LoanEmiCollectionTables::configureCollectedTable($table),
             'overdue_installments' => LoanDelinquencyTables::configureOverdueInstallmentsTable($table),
             'guarantor_exposure' => LoanDelinquencyTables::configureGuarantorExposureTable(
                 $table,
@@ -176,6 +190,23 @@ class LoanResource extends Resource
             InstallmentsRelationManager::class,
             DisbursementsRelationManager::class,
             RepaymentsRelationManager::class,
+        ];
+    }
+
+    /**
+     * Exclude the queue page so cluster sub-nav can highlight "Loan queue" separately.
+     *
+     * @return string|array<string>
+     */
+    public static function getNavigationItemActiveRoutePattern(): string|array
+    {
+        $base = static::getRouteBaseName();
+
+        return [
+            "{$base}.index",
+            "{$base}.create",
+            "{$base}.view",
+            "{$base}.edit",
         ];
     }
 

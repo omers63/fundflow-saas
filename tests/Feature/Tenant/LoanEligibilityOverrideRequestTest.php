@@ -117,7 +117,9 @@ test('admin eligibility review queue lists pending member requests', function ()
     $this->actingAs($admin, 'tenant');
 
     Livewire::test(ListLoans::class, ['activeTab' => 'eligibility_reviews'])
-        ->assertCanSeeTableRecords([$request]);
+        ->assertCanSeeTableRecords([$request])
+        ->assertSee(__('Review outcomes'), false)
+        ->assertSee(__('Pending reviews'), false);
 });
 
 test('ineligible member can submit eligibility override request and notify admins', function () {

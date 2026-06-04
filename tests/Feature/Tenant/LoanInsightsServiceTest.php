@@ -4,9 +4,16 @@ use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanEligibilityOverrideRequest;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\User;
+use App\Services\AccountingService;
+use App\Services\ContributionCycleService;
 use App\Services\LoanInsightsService;
+use App\Services\Loans\LoanEligibilityOverrideRequestService;
+use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Route;
 use Tests\Concerns\InitializesTenancy;
@@ -79,6 +86,136 @@ test('loan detail snapshot includes stepper and relation summaries', function ()
     expect($snapshot)->toHaveKeys(['steps', 'kpis', 'progress', 'relation_summaries'])
         ->and($snapshot['steps'])->not->toBeEmpty()
         ->and($snapshot['relation_summaries'])->toHaveCount(3);
+});
+
+test('emi collect snapshot reports pending members and preview', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $cycles = app(ContributionCycleService::class);
+    [$month, $year] = $cycles->currentOpenPeriod();
+
+    $member = Member::create([
+        'member_number' => 'EMI-INS-1',
+        'name' => 'EMI Insights Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::create($year, $month, 10),
+        'status' => 'pending',
+    ]);
+
+    $snapshot = $this->service->forContext('emi_collect');
+
+    expect($snapshot)->toHaveKeys(['hero', 'kpis', 'pipeline', 'preview', 'open_period'])
+        ->and($snapshot['pipeline']['missing_open_period'])->toBe(1)
+        ->and($snapshot['preview'])->toHaveCount(1)
+        ->and($snapshot['hero']['tone'])->toBe('amber');
+
+    Carbon::setTestNow();
+});
+
+test('emi collected snapshot reports paid installments for open period', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $cycles = app(ContributionCycleService::class);
+    [$month, $year] = $cycles->currentOpenPeriod();
+
+    $member = Member::create([
+        'member_number' => 'EMI-INS-2',
+        'name' => 'EMI Collected Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 1000,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::create($year, $month, 10),
+        'status' => 'paid',
+        'paid_at' => Carbon::parse('2026-06-12'),
+    ]);
+
+    $snapshot = $this->service->forContext('emi_collected');
+
+    expect($snapshot)->toHaveKeys(['hero', 'kpis', 'pipeline', 'open_period'])
+        ->and($snapshot['pipeline']['collected_open_period'])->toBe(1)
+        ->and($snapshot['hero']['tone'])->toBe('success');
+
+    Carbon::setTestNow();
+});
+
+test('eligibility reviews snapshot reports pending pipeline and preview', function () {
+    if (! LoanEligibilityOverrideRequest::isTableReady()) {
+        $this->markTestSkipped('loan_eligibility_override_requests table not migrated');
+    }
+
+    $accounting = app(AccountingService::class);
+    $memberUser = User::create([
+        'name' => 'Review Insights Member',
+        'email' => 'review-insights@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => false,
+    ]);
+
+    $member = Member::create([
+        'user_id' => $memberUser->id,
+        'member_number' => 'MEM-'.uniqid(),
+        'name' => 'Review Insights Member',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subMonths(6),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($member);
+    $member->fundAccount->update(['balance' => 25000]);
+
+    app(LoanEligibilityOverrideRequestService::class)->submit($member, 'Please review my eligibility.');
+
+    $snapshot = $this->service->forContext('eligibility_reviews');
+
+    expect($snapshot)->toHaveKeys(['hero', 'kpis', 'pipeline', 'preview', 'top_blocked_rules'])
+        ->and($snapshot['pipeline']['pending'])->toBe(1)
+        ->and($snapshot['preview'])->toHaveCount(1)
+        ->and($snapshot['hero']['tone'])->toBe('amber');
 });
 
 test('fund tiers snapshot reports utilization', function () {

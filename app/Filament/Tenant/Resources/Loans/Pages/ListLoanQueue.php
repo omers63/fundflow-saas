@@ -6,17 +6,14 @@ namespace App\Filament\Tenant\Resources\Loans\Pages;
 
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\LoanFilamentActions;
+use App\Filament\Support\LoanListTableHeaderActions;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
-use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Setting;
-use App\Services\Loans\LoanQueueOrderingService;
-use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Tables\Columns\TextColumn;
@@ -48,6 +45,11 @@ class ListLoanQueue extends ListRecords
         return __('Review applications, disburse approved loans, and record bank payouts.');
     }
 
+    protected function getHeaderActions(): array
+    {
+        return [];
+    }
+
     protected function getHeaderWidgets(): array
     {
         return [
@@ -72,29 +74,6 @@ class ListLoanQueue extends ListRecords
         ];
     }
 
-    protected function getHeaderActions(): array
-    {
-        return [
-            Action::make('resequence')
-                ->label(__('Resequence queues'))
-                ->icon('heroicon-o-arrows-up-down')
-                ->requiresConfirmation()
-                ->action(function (): void {
-                    foreach (FundTier::query()->where('is_active', true)->pluck('id') as $tierId) {
-                        LoanQueueOrderingService::resequenceFundTier((int) $tierId);
-                    }
-                    Notification::make()
-                        ->title(__('Queues resequenced'))
-                        ->success()
-                        ->send();
-                }),
-            Action::make('allLoans')
-                ->label(__('All loans'))
-                ->icon('heroicon-o-document-text')
-                ->url(LoanResource::getUrl('index')),
-        ];
-    }
-
     public function getTabs(): array
     {
         return [
@@ -108,6 +87,15 @@ class ListLoanQueue extends ListRecords
                 ->badge((string) Loan::query()->awaitingBankPayout()->count())
                 ->badgeColor('gray'),
         ];
+    }
+
+    protected function makeTable(): Table
+    {
+        $table = $this->makeBaseTable()
+            ->query(fn (): Builder => $this->getTableQuery())
+            ->modifyQueryUsing($this->modifyQueryWithActiveTab(...));
+
+        return $this->table($table);
     }
 
     protected function getTableQuery(): Builder
@@ -129,6 +117,7 @@ class ListLoanQueue extends ListRecords
         $currency = Setting::get('general', 'currency', 'USD');
 
         return TableGrouping::apply($table
+            ->headerActions(LoanListTableHeaderActions::queue())
             ->columnManager(true)
             ->columns([
                 TextColumn::make('queue_position')
@@ -160,12 +149,12 @@ class ListLoanQueue extends ListRecords
                 TextColumn::make('is_emergency')
                     ->label(__('Emergency'))
                     ->badge()
-                    ->formatStateUsing(fn(bool $state): string => $state ? __('Yes') : __('No'))
-                    ->color(fn(bool $state): string => $state ? 'danger' : 'gray'),
+                    ->formatStateUsing(fn (bool $state): string => $state ? __('Yes') : __('No'))
+                    ->color(fn (bool $state): string => $state ? 'danger' : 'gray'),
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn(string $state): string => Loan::statusOptions()[$state] ?? $state)
-                    ->color(fn(string $state): string => Loan::statusColor($state)),
+                    ->formatStateUsing(fn (string $state): string => Loan::statusOptions()[$state] ?? $state)
+                    ->color(fn (string $state): string => Loan::statusColor($state)),
             ])
             ->filters([
                 SelectFilter::make('status')

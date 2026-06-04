@@ -8,6 +8,7 @@ use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\LoanEligibilityOverrideRequestResource;
+use App\Filament\Tenant\Resources\LoanEligibilityOverrides\LoanEligibilityOverrideResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\LoanTiers\LoanTierResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
@@ -15,6 +16,7 @@ use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanEligibilityOverride;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanTier;
@@ -22,9 +24,12 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanEligibilityOverrideRequestService;
+use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
+use App\Support\Insights\InsightFormatter;
 use App\Support\Insights\InsightKpi;
+use App\Support\LoanEligibilityGate;
 use App\Support\Loans\LoanUserFacingStage;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
@@ -44,6 +49,9 @@ final class LoanInsightsService
             'loan_detail' => $loan ? $this->loanDetailSnapshot($loan) : [],
             'member_portfolio' => $this->memberPortfolioSnapshot($memberId),
             'delinquency' => $this->delinquencySnapshot(),
+            'eligibility_reviews' => $this->eligibilityReviewsSnapshot(),
+            'emi_collect' => $this->emiCollectSnapshot(),
+            'emi_collected' => $this->emiCollectedSnapshot(),
             default => [],
         };
     }
@@ -274,6 +282,257 @@ final class LoanInsightsService
     /**
      * @return array<string, mixed>
      */
+    public function eligibilityReviewsSnapshot(): array
+    {
+        if (! LoanEligibilityOverrideRequest::isTableReady()) {
+            return [];
+        }
+
+        $now = BusinessDay::now();
+        $gateLabels = LoanEligibilityGate::labels();
+
+        $pending = LoanEligibilityOverrideRequest::query()->pending()->count();
+        $approved = LoanEligibilityOverrideRequest::query()->where('status', 'approved')->count();
+        $rejected = LoanEligibilityOverrideRequest::query()->where('status', 'rejected')->count();
+        $standingOverrides = LoanEligibilityOverride::query()->count();
+        $submittedThisMonth = LoanEligibilityOverrideRequest::query()
+            ->whereMonth('created_at', $now->month)
+            ->whereYear('created_at', $now->year)
+            ->count();
+
+        $oldestPending = LoanEligibilityOverrideRequest::query()
+            ->pending()
+            ->orderBy('created_at')
+            ->first();
+
+        $oldestPendingDays = $oldestPending?->created_at !== null
+            ? (int) Carbon::parse($oldestPending->created_at)->diffInDays($now)
+            : 0;
+
+        $gateCounts = [];
+
+        foreach (LoanEligibilityOverrideRequest::query()->pending()->get(['failed_gates']) as $request) {
+            foreach ($request->gateKeys() as $gate) {
+                $gateCounts[$gate] = ($gateCounts[$gate] ?? 0) + 1;
+            }
+        }
+
+        arsort($gateCounts);
+
+        $topBlockedRules = collect($gateCounts)
+            ->take(4)
+            ->map(fn (int $count, string $gate): array => [
+                'label' => $gateLabels[$gate] ?? $gate,
+                'count' => $count,
+            ])
+            ->values()
+            ->all();
+
+        $maxGateCount = max(1, collect($topBlockedRules)->max('count') ?? 0);
+
+        $preview = LoanEligibilityOverrideRequest::query()
+            ->pending()
+            ->with('member')
+            ->orderBy('created_at')
+            ->limit(5)
+            ->get()
+            ->map(fn (LoanEligibilityOverrideRequest $request): array => $this->eligibilityReviewRow($request, $now))
+            ->all();
+
+        $pendingUrl = LoanEligibilityOverrideRequestResource::listUrl([
+            'status' => ['value' => 'pending'],
+        ]);
+
+        return [
+            'hero' => [
+                'tone' => $pending > 0 ? 'amber' : 'success',
+                'title' => $pending > 0
+                    ? trans_choice(':count eligibility review pending|:count eligibility reviews pending', $pending, ['count' => $pending])
+                    : __('No pending eligibility reviews'),
+                'subtitle' => $pending > 0
+                    ? __('Oldest request waiting :days day(s). Approved reviews create standing overrides on the member record.', [
+                        'days' => $oldestPendingDays,
+                    ])
+                    : __('Members can request a review when loan eligibility rules block an application.'),
+                'cta_label' => $pending > 0 ? __('Review pending') : null,
+                'cta_url' => $pending > 0 ? $pendingUrl : null,
+            ],
+            'kpis' => InsightKpi::linkMany([
+                ['key' => 'pending', 'label' => __('Pending'), 'value' => (string) $pending, 'sub' => __('Awaiting review'), 'icon' => 'heroicon-o-clock', 'accent' => 'amber', 'active' => $pending > 0],
+                ['key' => 'approved', 'label' => __('Approved'), 'value' => (string) $approved, 'sub' => __('All time'), 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => $approved > 0],
+                ['key' => 'rejected', 'label' => __('Rejected'), 'value' => (string) $rejected, 'sub' => __('All time'), 'icon' => 'heroicon-o-x-circle', 'accent' => 'rose', 'active' => $rejected > 0],
+                ['key' => 'overrides', 'label' => __('Overrides'), 'value' => (string) $standingOverrides, 'sub' => __('Standing rules'), 'icon' => 'heroicon-o-shield-check', 'accent' => 'sky', 'active' => $standingOverrides > 0],
+                ['key' => 'submitted', 'label' => __('Submitted'), 'value' => (string) $submittedThisMonth, 'sub' => $now->format('M Y'), 'icon' => 'heroicon-o-inbox-arrow-down', 'accent' => 'violet', 'active' => $submittedThisMonth > 0],
+                ['key' => 'oldest', 'label' => __('Oldest wait'), 'value' => (string) $oldestPendingDays, 'sub' => __('Days'), 'icon' => 'heroicon-o-calendar-days', 'accent' => 'teal', 'active' => $oldestPendingDays > 0],
+            ], [
+                'pending' => $pendingUrl,
+                'approved' => LoanEligibilityOverrideRequestResource::listUrl(['status' => ['value' => 'approved']]),
+                'rejected' => LoanEligibilityOverrideRequestResource::listUrl(['status' => ['value' => 'rejected']]),
+                'overrides' => LoanEligibilityOverrideResource::getUrl('index'),
+                'submitted' => LoanResource::listUrl('eligibility_reviews'),
+                'oldest' => $pendingUrl,
+            ]),
+            'pipeline' => [
+                'pending' => $pending,
+                'approved' => $approved,
+                'rejected' => $rejected,
+                'standing_overrides' => $standingOverrides,
+                'pending_url' => $pendingUrl,
+                'approved_url' => LoanEligibilityOverrideRequestResource::listUrl(['status' => ['value' => 'approved']]),
+                'rejected_url' => LoanEligibilityOverrideRequestResource::listUrl(['status' => ['value' => 'rejected']]),
+                'overrides_url' => LoanEligibilityOverrideResource::getUrl('index'),
+            ],
+            'preview' => $preview,
+            'top_blocked_rules' => $topBlockedRules,
+            'max_gate_count' => $maxGateCount,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function emiCollectSnapshot(): array
+    {
+        $catalog = app(LoanEmiCollectionCatalogService::class);
+        [$month, $year] = $catalog->currentOpenPeriod();
+        $currency = Setting::get('general', 'currency', 'USD');
+        $periodLabel = $catalog->periodLabel($month, $year);
+        $metrics = $this->aggregateEmiCollectMetrics($catalog, $month, $year);
+
+        $pendingMembers = $metrics['pending_members'];
+        $collectedCount = $metrics['collected_count'];
+        $totalPendingEmis = $metrics['total_pending_emis'];
+        $readyWithCash = $metrics['ready_with_cash'];
+        $requiredCashTotal = $metrics['required_cash_total'];
+        $collectionRate = $metrics['collection_rate'];
+
+        $overdueInstallments = (int) LoanInstallment::query()
+            ->where('status', 'overdue')
+            ->whereHas('loan', fn ($q) => $q->whereIn('status', ['active', 'transferred']))
+            ->count();
+
+        $collectUrl = LoanResource::listTabUrl('emi_collect');
+
+        $preview = $catalog->membersWithCollectableEmisQuery($month, $year)
+            ->limit(5)
+            ->get()
+            ->map(fn (Member $member): array => $this->emiCollectPreviewRow($catalog, $member, $month, $year))
+            ->all();
+
+        return [
+            'currency' => $currency,
+            'open_period' => [
+                'label' => $periodLabel,
+                'collection_rate' => $collectionRate,
+                'missing_members' => $pendingMembers,
+            ],
+            'hero' => [
+                'tone' => $pendingMembers > 0 ? 'amber' : 'success',
+                'title' => $pendingMembers > 0
+                    ? __('EMI collection in progress')
+                    : __('Open period EMIs collected'),
+                'subtitle' => $pendingMembers > 0
+                    ? trans_choice(
+                        ':count member with EMIs to collect for :period|:count members with EMIs to collect for :period',
+                        $pendingMembers,
+                        ['count' => $pendingMembers, 'period' => $periodLabel],
+                    )
+                    : __('All collectable installments for :period are paid from member cash.', ['period' => $periodLabel]),
+                'cta_label' => $pendingMembers > 0 ? __('EMI collection') : null,
+                'cta_url' => $pendingMembers > 0 ? $collectUrl : null,
+            ],
+            'kpis' => InsightKpi::linkMany([
+                ['key' => 'missing', 'label' => __('To collect'), 'value' => (string) $pendingMembers, 'sub' => __('Members'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $pendingMembers > 0],
+                ['key' => 'collected', 'label' => __('Collected'), 'value' => (string) $collectedCount, 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => $collectedCount > 0],
+                ['key' => 'pending_emis', 'label' => __('Pending EMIs'), 'value' => (string) $totalPendingEmis, 'sub' => __('Installments'), 'icon' => 'heroicon-o-clock', 'accent' => 'sky', 'active' => $totalPendingEmis > 0],
+                ['key' => 'rate', 'label' => __('Collection'), 'value' => $collectionRate.'%', 'sub' => __('Open period'), 'icon' => 'heroicon-o-chart-pie', 'accent' => 'violet', 'active' => true],
+                ['key' => 'ready_cash', 'label' => __('Ready'), 'value' => (string) $readyWithCash, 'sub' => __('Sufficient cash'), 'icon' => 'heroicon-o-banknotes', 'accent' => 'teal', 'active' => $readyWithCash > 0],
+                ['key' => 'overdue', 'label' => __('Overdue'), 'value' => (string) $overdueInstallments, 'sub' => __('Installments'), 'icon' => 'heroicon-o-exclamation-triangle', 'accent' => 'rose', 'active' => $overdueInstallments > 0, 'value_class' => $overdueInstallments > 0 ? 'text-rose-600 dark:text-rose-400' : null],
+            ], [
+                'missing' => $collectUrl,
+                'collected' => LoanResource::listTabUrl('emi_collected'),
+                'pending_emis' => $collectUrl,
+                'rate' => $collectUrl,
+                'ready_cash' => $collectUrl,
+                'overdue' => LoanResource::listTabUrl('overdue_installments'),
+            ]),
+            'pipeline' => [
+                'missing_open_period' => $pendingMembers,
+                'collected_open_period' => $collectedCount,
+                'ready_with_cash' => $readyWithCash,
+                'required_cash' => $this->formatMoneyCompact($requiredCashTotal, $currency),
+                'overdue_installments' => $overdueInstallments,
+                'collect_url' => $collectUrl,
+                'collected_url' => LoanResource::listTabUrl('emi_collected'),
+                'overdue_url' => LoanResource::listTabUrl('overdue_installments'),
+            ],
+            'preview' => $preview,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function emiCollectedSnapshot(): array
+    {
+        $catalog = app(LoanEmiCollectionCatalogService::class);
+        [$month, $year] = $catalog->currentOpenPeriod();
+        $currency = Setting::get('general', 'currency', 'USD');
+        $periodLabel = $catalog->periodLabel($month, $year);
+        $metrics = $this->aggregateEmiCollectMetrics($catalog, $month, $year);
+
+        $collectedCount = $metrics['collected_count'];
+        $collectedAmount = (float) $catalog->collectedInstallmentsQuery($month, $year)->sum('amount');
+        $pendingMembers = $metrics['pending_members'];
+
+        $collectedUrl = LoanResource::listTabUrl('emi_collected');
+
+        return [
+            'currency' => $currency,
+            'open_period' => ['label' => $periodLabel],
+            'hero' => [
+                'tone' => 'success',
+                'title' => __('EMIs collected for :period', ['period' => $periodLabel]),
+                'subtitle' => trans_choice(
+                    ':count paid installment in the open period|:count paid installments in the open period',
+                    $collectedCount,
+                    ['count' => $collectedCount],
+                ).($pendingMembers > 0
+                    ? ' · '.trans_choice(':count member still on EMI collection|:count members still on EMI collection', $pendingMembers, ['count' => $pendingMembers])
+                    : ''),
+                'cta_label' => $pendingMembers > 0 ? __('EMI collection') : null,
+                'cta_url' => $pendingMembers > 0 ? LoanResource::listTabUrl('emi_collect') : null,
+            ],
+            'kpis' => InsightKpi::linkMany([
+                ['key' => 'collected', 'label' => __('Collected'), 'value' => (string) $collectedCount, 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => $collectedCount > 0],
+                ['key' => 'amount', 'label' => __('Amount'), 'value' => InsightFormatter::compactAmount($collectedAmount), 'sub' => $currency, 'icon' => 'heroicon-o-currency-dollar', 'accent' => 'teal', 'active' => $collectedAmount > 0],
+                ['key' => 'remaining', 'label' => __('Remaining'), 'value' => (string) $pendingMembers, 'sub' => __('Members'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $pendingMembers > 0],
+                ['key' => 'pending_emis', 'label' => __('Pending EMIs'), 'value' => (string) $metrics['total_pending_emis'], 'sub' => __('Installments'), 'icon' => 'heroicon-o-clock', 'accent' => 'sky', 'active' => $metrics['total_pending_emis'] > 0],
+                ['key' => 'collect', 'label' => __('To collect'), 'value' => (string) $pendingMembers, 'sub' => __('Open period'), 'icon' => 'heroicon-o-arrow-down-tray', 'accent' => 'violet', 'active' => $pendingMembers > 0],
+                ['key' => 'overdue', 'label' => __('Overdue'), 'value' => (string) LoanInstallment::query()
+                    ->where('status', 'overdue')
+                    ->whereHas('loan', fn ($q) => $q->whereIn('status', ['active', 'transferred']))
+                    ->count(), 'sub' => __('Installments'), 'icon' => 'heroicon-o-exclamation-triangle', 'accent' => 'rose', 'active' => true],
+            ], [
+                'collected' => $collectedUrl,
+                'amount' => $collectedUrl,
+                'remaining' => LoanResource::listTabUrl('emi_collect'),
+                'pending_emis' => LoanResource::listTabUrl('emi_collect'),
+                'collect' => LoanResource::listTabUrl('emi_collect'),
+                'overdue' => LoanResource::listTabUrl('overdue_installments'),
+            ]),
+            'pipeline' => [
+                'collected_open_period' => $collectedCount,
+                'missing_open_period' => $pendingMembers,
+                'collected_url' => $collectedUrl,
+                'collect_url' => LoanResource::listTabUrl('emi_collect'),
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     public function queueSnapshot(string $activeTab): array
     {
         $now = BusinessDay::now();
@@ -319,8 +578,6 @@ final class LoanInsightsService
                     $tabCount,
                     ['count' => $tabCount, 'total' => $total]
                 ),
-                'cta_label' => __('All loans'),
-                'cta_url' => LoanResource::getUrl('index'),
             ],
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'decision', 'label' => __('Decision'), 'value' => (string) $needsDecision, 'sub' => __('Pending'), 'icon' => 'heroicon-o-clipboard-document-check', 'accent' => 'amber', 'active' => $needsDecision > 0],
@@ -727,6 +984,103 @@ final class LoanInsightsService
             'is_emergency' => $loan->is_emergency,
             'view_url' => LoanResource::getUrl('view', ['record' => $loan]),
             'edit_url' => LoanResource::getUrl('edit', ['record' => $loan]),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    /**
+     * @return array{
+     *     pending_members: int,
+     *     collected_count: int,
+     *     total_pending_emis: int,
+     *     ready_with_cash: int,
+     *     required_cash_total: float,
+     *     collection_rate: int
+     * }
+     */
+    private function aggregateEmiCollectMetrics(LoanEmiCollectionCatalogService $catalog, int $month, int $year): array
+    {
+        $pendingMembers = $catalog->pendingMemberCount($month, $year);
+        $collectedCount = $catalog->collectedInstallmentsQuery($month, $year)->count();
+        $totalPendingEmis = 0;
+        $readyWithCash = 0;
+        $requiredCashTotal = 0.0;
+
+        foreach ($catalog->membersWithCollectableEmisQuery($month, $year)->get() as $member) {
+            $pending = $catalog->pendingInstallmentCountForMember($member, $month, $year);
+
+            if ($pending === 0) {
+                continue;
+            }
+
+            $totalPendingEmis += $pending;
+            $requiredCashTotal += $catalog->requiredCashForMember($member, $month, $year);
+
+            if ($catalog->memberHasSufficientCash($member, $month, $year)) {
+                $readyWithCash++;
+            }
+        }
+
+        $denominator = $collectedCount + $totalPendingEmis;
+        $collectionRate = $denominator > 0
+            ? (int) round(($collectedCount / $denominator) * 100)
+            : 0;
+
+        return [
+            'pending_members' => $pendingMembers,
+            'collected_count' => $collectedCount,
+            'total_pending_emis' => $totalPendingEmis,
+            'ready_with_cash' => $readyWithCash,
+            'required_cash_total' => $requiredCashTotal,
+            'collection_rate' => $collectionRate,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function emiCollectPreviewRow(
+        LoanEmiCollectionCatalogService $catalog,
+        Member $member,
+        int $month,
+        int $year,
+    ): array {
+        $pending = $catalog->pendingInstallmentCountForMember($member, $month, $year);
+        $required = $catalog->requiredCashForMember($member, $month, $year);
+        $currency = Setting::get('general', 'currency', 'USD');
+
+        return [
+            'member' => $member->name,
+            'pending_emis' => $pending,
+            'required_cash' => $this->formatMoneyCompact($required, $currency),
+            'has_cash' => $catalog->memberHasSufficientCash($member, $month, $year),
+            'filter_url' => LoanResource::listUrl('emi_collect', [
+                'tableSearch' => $member->name,
+            ]),
+        ];
+    }
+
+    private function eligibilityReviewRow(LoanEligibilityOverrideRequest $request, Carbon $now): array
+    {
+        $gateLabels = LoanEligibilityGate::labels();
+        $blockedRules = collect($request->gateKeys())
+            ->map(fn (string $gate): string => $gateLabels[$gate] ?? $gate)
+            ->take(2)
+            ->implode(', ');
+
+        return [
+            'id' => $request->id,
+            'member' => $request->member?->name ?? '—',
+            'blocked_rules' => $blockedRules !== '' ? $blockedRules : '—',
+            'days_waiting' => $request->created_at !== null
+                ? (int) Carbon::parse($request->created_at)->diffInDays($now)
+                : 0,
+            'filter_url' => LoanResource::listUrl('eligibility_reviews', [
+                'status' => ['value' => 'pending'],
+                'member_id' => ['value' => (string) $request->member_id],
+            ]),
         ];
     }
 

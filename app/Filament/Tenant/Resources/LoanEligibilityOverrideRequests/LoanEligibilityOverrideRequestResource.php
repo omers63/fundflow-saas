@@ -6,15 +6,12 @@ namespace App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Support\DatabaseNotificationsRefresh;
-use App\Filament\Tenant\Clusters\LoansCluster;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\Pages\ListLoanEligibilityOverrideRequests;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\Tables\LoanEligibilityOverrideRequestsTable;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
 use App\Models\Tenant\Member;
-use BackedEnum;
 use Filament\Resources\Resource;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Livewire\Component;
 
@@ -24,13 +21,9 @@ class LoanEligibilityOverrideRequestResource extends Resource
 
     protected static ?string $model = LoanEligibilityOverrideRequest::class;
 
-    protected static ?string $cluster = LoansCluster::class;
-
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldExclamation;
-
     protected static ?string $modelLabel = 'Eligibility review request';
 
-    protected static ?string $pluralModelLabel = 'Eligibility review requests';
+    protected static ?string $pluralModelLabel = 'Eligibility reviews';
 
     protected static bool $shouldRegisterNavigation = false;
 
@@ -42,7 +35,7 @@ class LoanEligibilityOverrideRequestResource extends Resource
 
     public static function shouldRegisterNavigation(): bool
     {
-        return LoanEligibilityOverrideRequest::isTableReady();
+        return false;
     }
 
     public static function table(Table $table): Table

@@ -7,6 +7,7 @@ use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Contributions\Pages\ListContributions;
 use App\Models\Central\Tenant;
 use App\Models\Tenant\User;
+use App\Services\ContributionInsightsService;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
@@ -55,15 +56,6 @@ test('contributions list has unified open cycle collect and collected tabs', fun
         ->assertSee(__('Collected'), false)
         ->assertSee(__('Ledger'), false);
 
-    foreach (['collect', 'collected', 'ledger', 'arrears'] as $tab) {
-        Livewire::test(ListContributions::class)
-            ->set('activeTab', $tab)
-            ->assertSee(__('New contribution'), false)
-            ->assertSee(__('Cycle actions'), false)
-            ->assertSee(__('Delinquencies'), false)
-            ->assertDontSee(__('Delinquency tools'), false);
-    }
-
     $url = ContributionResource::listTabUrl('collect');
     $path = parse_url($url, PHP_URL_PATH) ?? '/admin/contributions';
     $query = parse_url($url, PHP_URL_QUERY);
@@ -73,6 +65,46 @@ test('contributions list has unified open cycle collect and collected tabs', fun
     $this->get('http://'.$this->domain.$path)
         ->assertSuccessful()
         ->assertSee(__('To collect'), false);
+});
+
+test('contribution table header actions appear on the correct tabs', function () {
+    Livewire::test(ListContributions::class)
+        ->set('activeTab', 'collect')
+        ->assertTableActionExists('generateMonthly')
+        ->assertTableActionExists('runDelinquencyMaintenance')
+        ->assertTableActionDoesNotExist('create');
+
+    Livewire::test(ListContributions::class)
+        ->set('activeTab', 'ledger')
+        ->assertTableActionExists('create')
+        ->assertTableActionExists('generateMonthly')
+        ->assertTableActionDoesNotExist('runDelinquencyMaintenance');
+
+    Livewire::test(ListContributions::class)
+        ->set('activeTab', 'arrears')
+        ->assertTableActionExists('runDelinquencyMaintenance')
+        ->assertTableActionDoesNotExist('create')
+        ->assertTableActionDoesNotExist('generateMonthly');
+
+    Livewire::test(ListContributions::class)
+        ->set('activeTab', 'collected')
+        ->assertTableActionDoesNotExist('create')
+        ->assertTableActionDoesNotExist('generateMonthly')
+        ->assertTableActionDoesNotExist('runDelinquencyMaintenance');
+});
+
+test('contribution tab insights use context-specific snapshots', function () {
+    $service = app(ContributionInsightsService::class);
+
+    expect($service->forContext('collect'))
+        ->toHaveKey('hero')
+        ->and($service->forContext('collect')['pipeline'])
+        ->toHaveKeys(['collect_url', 'arrears_url']);
+
+    expect($service->forContext('arrears')['hero']['tone'])
+        ->toBeIn(['danger', 'success'])
+        ->and($service->forContext('arrears')['pipeline']['arrears_periods'])
+        ->toBeInt();
 });
 
 test('collect tab table search does not query virtual columns', function () {

@@ -15,40 +15,58 @@ use Livewire\Component;
 
 final class ContributionListTableHeaderActions
 {
-    public static function cycleActionGroup(string $color = 'primary'): ActionGroup
+    /**
+     * @return list<Action|ActionGroup>
+     */
+    public static function ledger(): array
+    {
+        return [
+            CreateAction::make()
+                ->label(__('New contribution')),
+            self::cycleCollectionGroup('primary'),
+        ];
+    }
+
+    /**
+     * @return list<Action|ActionGroup>
+     */
+    public static function collect(): array
+    {
+        return [
+            self::cycleCollectionGroup('primary'),
+            self::delinquencyToolsGroup('warning'),
+        ];
+    }
+
+    /**
+     * @return list<Action|ActionGroup>
+     */
+    public static function arrears(): array
+    {
+        return [
+            self::delinquencyToolsGroup('danger'),
+        ];
+    }
+
+    public static function cycleCollectionGroup(string $color = 'primary'): ActionGroup
     {
         return ActionGroup::make([
             ...ContributionCycleHeaderActions::make(),
             self::generatePendingAction(),
         ])
-            ->label(__('Cycle actions'))
+            ->label(__('Cycle collection'))
             ->icon('heroicon-o-arrow-path-rounded-square')
             ->color($color)
             ->button();
     }
 
-    public static function delinquencyToolsGroup(): ActionGroup
+    public static function delinquencyToolsGroup(string $color = 'warning'): ActionGroup
     {
         return ActionGroup::make(LoanDelinquencyHeaderActions::make())
             ->label(__('Delinquencies'))
             ->icon('heroicon-o-exclamation-triangle')
-            ->color('warning')
+            ->color($color)
             ->button();
-    }
-
-    /**
-     * Contributions list page header (all tabs).
-     *
-     * @return list<Action|ActionGroup>
-     */
-    public static function pageHeaderActions(): array
-    {
-        return [
-            CreateAction::make()
-                ->label(__('New contribution')),
-            self::cycleActionGroup('primary'),
-            self::delinquencyToolsGroup(),
-        ];
     }
 
     public static function generatePendingAction(): Action

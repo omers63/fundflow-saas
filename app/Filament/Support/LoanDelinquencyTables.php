@@ -60,6 +60,7 @@ final class LoanDelinquencyTables
 
         return TableGrouping::apply($table
             ->query(self::overdueInstallmentsQuery())
+            ->headerActions(LoanListTableHeaderActions::delinquency())
             ->columnManager(true)
             ->columns([
                 TextColumn::make('loan.member.name')
@@ -135,6 +136,7 @@ final class LoanDelinquencyTables
 
         return TableGrouping::apply($table
             ->query(self::guarantorExposureQuery())
+            ->headerActions(LoanListTableHeaderActions::delinquency())
             ->columnManager(true)
             ->columns([
                 TextColumn::make('member.name')
@@ -202,6 +204,7 @@ final class LoanDelinquencyTables
 
         return TableGrouping::apply(
             $table
+                ->headerActions(ContributionListTableHeaderActions::arrears())
                 ->query(null)
                 ->records(function (?string $search, ?string $sortColumn, ?string $sortDirection, ?array $filters) use ($delinquency): Collection {
                     $filters ??= [];

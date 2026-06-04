@@ -80,7 +80,7 @@ test('readiness report passes when tenant has no blocking items', function () {
     $report = app(FiscalCloseReadinessService::class)->assess();
 
     expect($report->canProceed())->toBeTrue()
-        ->and(collect($report->gates)->every(fn ($gate) => ! $gate->isFail()))->toBeTrue();
+        ->and(collect($report->gates)->every(fn($gate) => !$gate->isFail()))->toBeTrue();
 });
 
 test('readiness report fails when pending deposit exists', function () {
@@ -133,7 +133,9 @@ test('fiscal year close page renders for tenant admin', function () {
         ->assertSuccessful()
         ->assertSee(__('Run readiness checks'))
         ->callAction('run_readiness')
-        ->assertSet('readinessReport.can_proceed', true);
+        ->assertSet('readinessReport.can_proceed', true)
+        ->callAction('build_snapshot')
+        ->assertSet('activeClose.fiscal_year_label', 'FY2026');
 
     expect(FiscalYearClosePage::getUrl())->toContain('/admin/fiscal-year-close');
 });

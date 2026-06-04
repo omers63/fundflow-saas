@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Tenant\Clusters\LoanQueuePage;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Contributions\Pages\ListContributions;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
@@ -43,10 +44,37 @@ beforeEach(function () {
     $this->actingAs($admin, 'tenant');
 });
 
-test('loans list exposes delinquency maintenance actions', function () {
+test('loan queue sub-navigation active route targets queue page only', function () {
+    $base = LoanResource::getRouteBaseName();
+
+    expect(LoanQueuePage::getNavigationItemActiveRoutePattern())->toBe("{$base}.queue")
+        ->and(LoanResource::getNavigationItemActiveRoutePattern())->toBe([
+            "{$base}.index",
+            "{$base}.create",
+            "{$base}.view",
+            "{$base}.edit",
+        ]);
+});
+
+test('loans list defaults to portfolio tab', function () {
     Livewire::test(ListLoans::class)
-        ->call('mountAction', 'markOverdueInstallments')
-        ->callMountedAction()
+        ->assertSet('activeTab', 'portfolio');
+});
+
+test('emi collection tab loads on loans list', function () {
+    $path = parse_url(LoanResource::listTabUrl('emi_collect'), PHP_URL_PATH) ?? '/admin/loans';
+    $query = parse_url(LoanResource::listTabUrl('emi_collect'), PHP_URL_QUERY);
+
+    $this->get('http://'.$this->domain.$path.($query ? '?'.$query : ''))
+        ->assertSuccessful()
+        ->assertSee(__('EMI collection'), false);
+});
+
+test('loans list exposes delinquency maintenance actions on overdue tab', function () {
+    Livewire::test(ListLoans::class)
+        ->set('activeTab', 'overdue_installments')
+        ->mountTableAction('markOverdueInstallments')
+        ->callMountedTableAction()
         ->assertNotified();
 });
 

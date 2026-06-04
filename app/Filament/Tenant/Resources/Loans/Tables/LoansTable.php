@@ -4,6 +4,7 @@ namespace App\Filament\Tenant\Resources\Loans\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\LoanFilamentActions;
+use App\Filament\Support\LoanListTableHeaderActions;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Models\Tenant\Loan;
@@ -23,6 +24,7 @@ class LoansTable
 
         return TableGrouping::apply(
             $table
+                ->headerActions(LoanListTableHeaderActions::portfolio())
                 ->columnManager(true)
                 ->columns([
                     TextColumn::make('member.name')
@@ -44,12 +46,12 @@ class LoansTable
                         ->placeholder(__('—')),
                     TextColumn::make('outstanding')
                         ->label(__('Outstanding'))
-                        ->state(fn(Loan $record): float => $record->getOutstandingBalance())
+                        ->state(fn (Loan $record): float => $record->getOutstandingBalance())
                         ->money($currency),
                     TextColumn::make('status')
                         ->badge()
-                        ->formatStateUsing(fn(string $state): string => Loan::statusOptions()[$state] ?? $state)
-                        ->color(fn(string $state): string => Loan::statusColor($state)),
+                        ->formatStateUsing(fn (string $state): string => Loan::statusOptions()[$state] ?? $state)
+                        ->color(fn (string $state): string => Loan::statusColor($state)),
                     TextColumn::make('applied_at')
                         ->dateTime()
                         ->sortable(),
@@ -67,7 +69,7 @@ class LoansTable
                 ->recordActions(TableRecordActionGroups::wrap([
                     ViewAction::make(),
                     EditAction::make()
-                        ->hidden(fn(Loan $record): bool => !in_array($record->status, ['pending', 'approved'], true)),
+                        ->hidden(fn (Loan $record): bool => ! in_array($record->status, ['pending', 'approved'], true)),
                     ...LoanFilamentActions::workflowActions(),
                 ]))
                 ->toolbarActions([

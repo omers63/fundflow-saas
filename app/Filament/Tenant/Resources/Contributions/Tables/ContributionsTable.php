@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tenant\Resources\Contributions\Tables;
 
+use App\Filament\Support\ContributionListTableHeaderActions;
 use App\Filament\Support\ContributionTableActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
@@ -20,6 +21,7 @@ class ContributionsTable
     {
         return TableGrouping::apply(
             $table
+                ->headerActions(ContributionListTableHeaderActions::ledger())
                 ->columns([
                     TextColumn::make('member.name')
                         ->searchable()

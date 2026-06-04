@@ -36,16 +36,16 @@ This action debits the member’s **cash** for the **current open period** EMI (
 
 ## All members (EMI collection workspace)
 
-**Fund Management → Loans → EMI collection** (cluster sub-navigation)
+**Fund Management → Loans → Loans** — **EMI collection** tab (first tab; **EMI collected** for posted installments). Default tab when opening the list is **Loans** (portfolio).
 
 Mirrors **Contributions → To collect**:
 
 | Tab | Purpose |
 |-----|---------|
-| **To collect** | Members with pending EMIs through the open period (and arrears). Row **Apply now** or bulk **Apply now** debits cash via `LoanInstallmentCollectionService`. |
-| **Collected** | Installments already paid (due through the open period). |
+| **EMI collection** | Members with pending EMIs through the open period (and arrears). Row **Apply now** or bulk **Apply now** debits cash via `LoanInstallmentCollectionService`. |
+| **EMI collected** | Installments already paid (due through the open period). |
 
-Also reachable from **Loans** list header → **EMI collection**.
+**Eligibility reviews** is the last tab on the same Loans list (no separate cluster item).
 
 ---
 
@@ -115,7 +115,7 @@ Same economic effect as admin **Apply open-period repayment** for that member’
 |------|--------|
 | Post one member’s current EMI | **Loans** or **Loan queue** → **Apply open-period repayment** |
 | Pay off a loan early | Same places → **Early settle** (or partial early settle) |
-| Collect pending EMIs for all members (UI) | **Loans → EMI collection → To collect** (bulk or per member) |
+| Collect pending EMIs for all members (UI) | **Loans → EMI collection** tab (bulk or per member) |
 | Run EMI for all active loans (scheduled period) | **System → Jobs & commands** → **`loans:apply-repayments`** |
 | Collect after cash is credited | Often automatic; or **EMI collection** / **Contributions → To collect** (+ optional auto-allocate setting) |
 | View paid installments | **Members → Repayments** or **Loans → Repayment schedule** |
