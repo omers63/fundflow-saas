@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Resources\Loans;
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Support\LoanDelinquencyTables;
 use App\Filament\Tenant\Clusters\LoansCluster;
+use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\Tables\LoanEligibilityOverrideRequestsTable;
 use App\Filament\Tenant\Resources\Loans\Pages\CreateLoan;
 use App\Filament\Tenant\Resources\Loans\Pages\EditLoan;
 use App\Filament\Tenant\Resources\Loans\Pages\ListLoanQueue;
@@ -17,6 +18,7 @@ use App\Filament\Tenant\Resources\Loans\Schemas\LoanForm;
 use App\Filament\Tenant\Resources\Loans\Tables\LoansTable;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanEligibilityOverrideRequest;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
 use BackedEnum;
@@ -46,7 +48,13 @@ class LoanResource extends Resource
      */
     public static function listTabKeys(): array
     {
-        return ['portfolio', 'overdue_installments', 'guarantor_exposure'];
+        $tabs = ['portfolio', 'overdue_installments', 'guarantor_exposure'];
+
+        if (LoanEligibilityOverrideRequest::isTableReady()) {
+            $tabs[] = 'eligibility_reviews';
+        }
+
+        return $tabs;
     }
 
     public static function listTabLabel(string $tab): string
@@ -54,6 +62,7 @@ class LoanResource extends Resource
         return match ($tab) {
             'overdue_installments' => __('Overdue installments'),
             'guarantor_exposure' => __('Guarantor exposure'),
+            'eligibility_reviews' => __('Eligibility reviews'),
             default => __('Portfolio'),
         };
     }
@@ -78,7 +87,7 @@ class LoanResource extends Resource
             $parameters['filters'] = $filters;
         }
 
-        return static::getUrl('index', $parameters);
+        return static::getUrl('index', $parameters, panel: 'tenant');
     }
 
     /**
@@ -147,8 +156,18 @@ class LoanResource extends Resource
                 $table,
                 $livewire instanceof ListLoans ? $livewire : null,
             ),
+            'eligibility_reviews' => LoanEligibilityOverrideRequestsTable::configure($table),
             default => LoansTable::configure($table),
         };
+    }
+
+    public static function pendingEligibilityReviewsCount(): int
+    {
+        if (! LoanEligibilityOverrideRequest::isTableReady()) {
+            return 0;
+        }
+
+        return LoanEligibilityOverrideRequest::pending()->count();
     }
 
     public static function getRelations(): array
@@ -193,7 +212,7 @@ class LoanResource extends Resource
         );
 
         $livewire->js(
-            'setTimeout(() => window.Livewire.getByName(' . $targetName . ').forEach(w => w.$refresh()), 0)'
+            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
         );
     }
 }

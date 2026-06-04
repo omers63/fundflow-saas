@@ -119,4 +119,27 @@ class MemberOpeningBalanceService
             'entry_label' => $entryLabel,
         ]);
     }
+
+    /**
+     * Roll opening balances to closing snapshot values without posting ledger legs.
+     * Ledger history is retained until Phase 3 purge; new opening_* becomes the post-purge baseline.
+     */
+    public function rollForwardForFiscalClose(
+        Member $member,
+        float $cashBalance,
+        float $fundBalance,
+        string $entryLabel,
+    ): void {
+        $member->update([
+            'opening_cash_balance' => $cashBalance,
+            'opening_fund_balance' => $fundBalance,
+            'opening_balances_posted_at' => BusinessDay::now(),
+        ]);
+
+        $this->audit->log('FISCAL_CLOSE_ROLL_FORWARD', 'fiscal_close', $member, $member, [
+            'cash' => $cashBalance,
+            'fund' => $fundBalance,
+            'entry_label' => $entryLabel,
+        ]);
+    }
 }

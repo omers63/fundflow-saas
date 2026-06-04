@@ -9,7 +9,7 @@ use App\Filament\Support\DatabaseNotificationsRefresh;
 use App\Filament\Tenant\Clusters\LoansCluster;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\Pages\ListLoanEligibilityOverrideRequests;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\Tables\LoanEligibilityOverrideRequestsTable;
-use App\Filament\Tenant\Support\TenantNavigation;
+use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
 use App\Models\Tenant\Member;
 use BackedEnum;
@@ -17,7 +17,6 @@ use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Livewire\Component;
-use UnitEnum;
 
 class LoanEligibilityOverrideRequestResource extends Resource
 {
@@ -29,17 +28,11 @@ class LoanEligibilityOverrideRequestResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldExclamation;
 
-    protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
-
-    protected static ?string $navigationLabel = 'Eligibility reviews';
-
-    protected static ?int $navigationSort = 3;
-
     protected static ?string $modelLabel = 'Eligibility review request';
 
     protected static ?string $pluralModelLabel = 'Eligibility review requests';
 
-    protected static bool $shouldRegisterNavigation = true;
+    protected static bool $shouldRegisterNavigation = false;
 
     public static function canAccess(): bool
     {
@@ -78,18 +71,12 @@ class LoanEligibilityOverrideRequestResource extends Resource
      */
     public static function listUrl(array $filters = []): string
     {
-        $parameters = [];
-
-        if ($filters !== []) {
-            $parameters['tableFilters'] = $filters;
-        }
-
-        return static::getUrl('index', $parameters, panel: 'tenant');
+        return LoanResource::listUrl('eligibility_reviews', $filters);
     }
 
     public static function indexUrlForRequest(LoanEligibilityOverrideRequest $request): string
     {
-        return static::listUrl([
+        return LoanResource::listUrl('eligibility_reviews', [
             'status' => ['value' => 'pending'],
             'member_id' => ['value' => (string) $request->member_id],
         ]);

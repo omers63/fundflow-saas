@@ -82,7 +82,7 @@ test('cash increase only collects open period and arrears not future installment
     }
 
     AccountingService::withoutMemberCashCollection(
-        fn () => $this->accounting->credit($member->cashAccount, 5000, 'Large deposit'),
+        fn() => $this->accounting->credit($member->cashAccount, 5000, 'Large deposit'),
     );
 
     $this->collection->onMemberCashIncreased($member->fresh());
@@ -97,6 +97,62 @@ test('cash increase only collects open period and arrears not future installment
         ->and($statuses[2])->toBe('pending')
         ->and($statuses[3])->toBe('pending')
         ->and($statuses[4])->toBe('pending');
+});
+
+test('mar 5 due date is collected in february open period not march', function () {
+    Carbon::setTestNow(Carbon::parse('2026-02-06'));
+    [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+
+    expect([$openMonth, $openYear])->toBe([2, 2026]);
+
+    $member = Member::create([
+        'member_number' => 'MEM-EMI-MAR5',
+        'name' => 'Mar 5 Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2026-03-05'),
+        'status' => 'pending',
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 2,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2026-03-06'),
+        'status' => 'pending',
+    ]);
+
+    AccountingService::withoutMemberCashCollection(
+        fn() => $this->accounting->credit($member->cashAccount, 3000, 'Deposit'),
+    );
+
+    $this->collection->onMemberCashIncreased($member->fresh());
+
+    expect(LoanInstallment::query()->where('installment_number', 1)->value('status'))->toBe('paid')
+        ->and(LoanInstallment::query()->where('installment_number', 2)->value('status'))->toBe('pending');
 });
 
 test('cash increase for a specific period only collects that installment', function () {
@@ -138,7 +194,7 @@ test('cash increase for a specific period only collects that installment', funct
     }
 
     AccountingService::withoutMemberCashCollection(
-        fn () => $this->accounting->credit($member->cashAccount, 3000, 'Deposit'),
+        fn() => $this->accounting->credit($member->cashAccount, 3000, 'Deposit'),
     );
 
     $this->collection->onMemberCashIncreasedForPeriod($member->fresh(), 6, 2026);

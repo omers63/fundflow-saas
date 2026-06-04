@@ -87,21 +87,23 @@ final class LoanFilamentActions
                     ->columnSpanFull(),
             ])
             ->action(function (Loan $record, array $data, Action $action, LoanLifecycleService $lifecycle): void {
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    function () use ($record, $data, $lifecycle): void {
-                        $graceCycles = (int) ($data['grace_cycles'] ?? 1);
-                        $lifecycle->approveLoan(
-                            $record,
-                            (float) $data['amount_approved'],
-                            (bool) ($data['is_emergency'] ?? false),
-                            $graceCycles > 0,
-                            $graceCycles,
-                            isset($data['approved_at']) ? Carbon::parse((string) $data['approved_at']) : BusinessDay::now(),
-                        );
-                    },
-                    __('Cannot approve'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        function () use ($record, $data, $lifecycle): void {
+                            $graceCycles = (int) ($data['grace_cycles'] ?? 1);
+                            $lifecycle->approveLoan(
+                                $record,
+                                (float) $data['amount_approved'],
+                                (bool) ($data['is_emergency'] ?? false),
+                                $graceCycles > 0,
+                                $graceCycles,
+                                isset($data['approved_at']) ? Carbon::parse((string) $data['approved_at']) : BusinessDay::now(),
+                            );
+                        },
+                        __('Cannot approve'),
+                    )
+                ) {
                     return;
                 }
 
@@ -124,11 +126,13 @@ final class LoanFilamentActions
                     ->maxLength(1000),
             ])
             ->action(function (Loan $record, array $data, Action $action, LoanLifecycleService $lifecycle): void {
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $lifecycle->rejectLoan($record, (string) $data['rejection_reason']),
-                    __('Cannot reject'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $lifecycle->rejectLoan($record, (string) $data['rejection_reason']),
+                        __('Cannot reject'),
+                    )
+                ) {
                     return;
                 }
 
@@ -145,11 +149,13 @@ final class LoanFilamentActions
             ->visible(fn (Loan $record): bool => $record->status === 'pending')
             ->requiresConfirmation()
             ->action(function (Loan $record, Action $action, LoanLifecycleService $lifecycle): void {
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $lifecycle->cancelLoan($record),
-                    __('Cannot cancel'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $lifecycle->cancelLoan($record),
+                        __('Cannot cancel'),
+                    )
+                ) {
                     return;
                 }
 
@@ -209,17 +215,19 @@ final class LoanFilamentActions
                 ];
             })
             ->action(function (Loan $record, array $data, Action $action, LoanLifecycleService $lifecycle): void {
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $lifecycle->disbursePartial(
-                        $record,
-                        (float) $data['amount'],
-                        filled($data['notes'] ?? null) ? (string) $data['notes'] : null,
-                        isset($data['disbursed_at']) ? Carbon::parse((string) $data['disbursed_at']) : BusinessDay::now(),
-                        (bool) ($data['force'] ?? false),
-                    ),
-                    __('Disbursement failed'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $lifecycle->disbursePartial(
+                            $record,
+                            (float) $data['amount'],
+                            filled($data['notes'] ?? null) ? (string) $data['notes'] : null,
+                            isset($data['disbursed_at']) ? Carbon::parse((string) $data['disbursed_at']) : BusinessDay::now(),
+                            (bool) ($data['force'] ?? false),
+                        ),
+                        __('Disbursement failed'),
+                    )
+                ) {
                     return;
                 }
 
@@ -248,14 +256,16 @@ final class LoanFilamentActions
                     ->required(),
             ])
             ->action(function (Loan $record, array $data, Action $action, LoanLifecycleService $lifecycle): void {
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $lifecycle->markBankPayout(
-                        $record,
-                        isset($data['payout_at']) ? Carbon::parse((string) $data['payout_at']) : BusinessDay::now(),
-                    ),
-                    __('Could not record payout'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $lifecycle->markBankPayout(
+                            $record,
+                            isset($data['payout_at']) ? Carbon::parse((string) $data['payout_at']) : BusinessDay::now(),
+                        ),
+                        __('Could not record payout'),
+                    )
+                ) {
                     return;
                 }
 
@@ -286,15 +296,17 @@ final class LoanFilamentActions
                     ->required(),
             ])
             ->action(function (Loan $record, array $data, Action $action, LoanEarlySettlementService $service): void {
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $service->partialEarlySettle(
-                        $record,
-                        (float) $data['amount'],
-                        (string) ($data['option'] ?? 'roll_up'),
-                    ),
-                    __('Partial settlement failed'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $service->partialEarlySettle(
+                            $record,
+                            (float) $data['amount'],
+                            (string) ($data['option'] ?? 'roll_up'),
+                        ),
+                        __('Partial settlement failed'),
+                    )
+                ) {
                     return;
                 }
 
@@ -314,11 +326,13 @@ final class LoanFilamentActions
                 'amount' => number_format(app(LoanEarlySettlementService::class)->requiredCash($record), 2),
             ]))
             ->action(function (Loan $record, Action $action, LoanService $service): void {
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $service->earlySettle($record),
-                    __('Settlement failed'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $service->earlySettle($record),
+                        __('Settlement failed'),
+                    )
+                ) {
                     return;
                 }
 
@@ -340,11 +354,13 @@ final class LoanFilamentActions
             ->modalHeading(__('Transfer liability to guarantor'))
             ->modalDescription(__('Future overdue installments will be collected from the guarantor fund immediately instead of following the borrower warning cycle.'))
             ->action(function (Loan $record, Action $action, LoanDelinquencyService $delinquency): void {
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $delinquency->transferGuarantorLiability($record),
-                    __('Cannot transfer liability'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $delinquency->transferGuarantorLiability($record),
+                        __('Cannot transfer liability'),
+                    )
+                ) {
                     return;
                 }
 
@@ -365,11 +381,13 @@ final class LoanFilamentActions
                 && $record->original_borrower_member_id !== null)
             ->requiresConfirmation()
             ->action(function (Loan $record, Action $action, LoanDelinquencyService $delinquency): void {
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $delinquency->reinstateSuspendedBorrower($record),
-                    __('Cannot reinstate'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $delinquency->reinstateSuspendedBorrower($record),
+                        __('Cannot reinstate'),
+                    )
+                ) {
                     return;
                 }
 
@@ -387,11 +405,13 @@ final class LoanFilamentActions
             ->requiresConfirmation()
             ->modalDescription(__('Returns default handling to the standard borrower warning cycle.'))
             ->action(function (Loan $record, Action $action, LoanDelinquencyService $delinquency): void {
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $delinquency->restoreBorrowerLiability($record),
-                    __('Cannot restore liability'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $delinquency->restoreBorrowerLiability($record),
+                        __('Cannot restore liability'),
+                    )
+                ) {
                     return;
                 }
 
@@ -408,8 +428,11 @@ final class LoanFilamentActions
             ->label(__('Apply open-period repayment'))
             ->icon('heroicon-o-currency-dollar')
             ->color('primary')
-            ->visible(fn (Loan $record): bool => $record->status === 'active')
+            ->visible(fn (Loan $record): bool => $record->status === 'active'
+                && app(LoanRepaymentService::class)->shouldOfferOpenPeriodRepayment($record->member))
             ->requiresConfirmation()
+            ->modalDescription(fn (Loan $record): string => app(LoanRepaymentService::class)
+                ->openPeriodRepaymentModalDescription($record->member))
             ->action(function (Loan $record, LoanRepaymentService $repayments): void {
                 $member = $record->member;
                 $result = $repayments->applyOpenPeriodRepaymentForMember($member);
@@ -419,7 +442,10 @@ final class LoanFilamentActions
                         'applied' => __('Repayment applied'),
                         'insufficient' => __('Insufficient cash'),
                         default => __('Nothing to apply'),
-                    });
+                    })
+                    ->body($result === 'skipped'
+                        ? $repayments->openPeriodSkipMessage($member)
+                        : null);
 
                 match ($result) {
                     'applied' => $notification->success(),

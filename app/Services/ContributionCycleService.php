@@ -27,7 +27,8 @@ class ContributionCycleService
     public function __construct(
         protected AccountingService $accounting,
         protected LateFeeService $lateFees,
-    ) {}
+    ) {
+    }
 
     public function cycleStartDay(): int
     {
@@ -82,6 +83,59 @@ class ContributionCycleService
     }
 
     /**
+     * Whether a due date falls in the labelled cycle window (inclusive: start day through day before next cycle start).
+     */
+    public function dueDateFallsInCycle(Carbon|string $dueDate, int $month, int $year): bool
+    {
+        $due = Carbon::parse($dueDate)->startOfDay();
+
+        return $due->greaterThanOrEqualTo($this->cycleStartAt($month, $year))
+            && $due->lessThanOrEqualTo($this->cycleDueEndAt($month, $year)->startOfDay());
+    }
+
+    /**
+     * Resolve the contribution/EMI cycle label (month, year) that contains the given due date.
+     *
+     * @return array{0: int, 1: int}
+     */
+    public function cyclePeriodForDueDate(Carbon|string $dueDate): array
+    {
+        $due = Carbon::parse($dueDate)->startOfDay();
+        $cursor = $due->copy()->startOfMonth();
+
+        for ($i = 0; $i < 24; $i++) {
+            $m = (int) $cursor->month;
+            $y = (int) $cursor->year;
+
+            if ($this->dueDateFallsInCycle($due, $m, $y)) {
+                return [$m, $y];
+            }
+
+            $cursor->subMonthNoOverflow();
+        }
+
+        return [(int) $due->month, (int) $due->year];
+    }
+
+    public function isDueDateOnOrBeforeCycleEnd(Carbon|string $dueDate, int $throughMonth, int $throughYear): bool
+    {
+        return Carbon::parse($dueDate)->startOfDay()->lessThanOrEqualTo(
+            $this->cycleDueEndAt($throughMonth, $throughYear)->startOfDay(),
+        );
+    }
+
+    /**
+     * @return array{0: string, 1: string} cycle start and end dates (Y-m-d) for SQL due_date filters
+     */
+    public function cycleDueDateBounds(int $month, int $year): array
+    {
+        return [
+            $this->cycleStartAt($month, $year)->toDateString(),
+            $this->cycleDueEndAt($month, $year)->toDateString(),
+        ];
+    }
+
+    /**
      * @return array{0: int, 1: int}
      */
     public function currentOpenPeriod(): array
@@ -124,7 +178,7 @@ class ContributionCycleService
      */
     public function parseContributionCycleKey(string $key): array
     {
-        if (! preg_match('/^(\d{4})-(\d{2})$/', $key, $m)) {
+        if (!preg_match('/^(\d{4})-(\d{2})$/', $key, $m)) {
             throw new \InvalidArgumentException('Invalid contribution cycle key.');
         }
 
@@ -153,11 +207,11 @@ class ContributionCycleService
 
     public function memberCanApplyContributionForPeriod(Member $member, int $month, int $year): bool
     {
-        if (! $this->memberIsLiableForContributionPeriod($member, $month, $year)) {
+        if (!$this->memberIsLiableForContributionPeriod($member, $month, $year)) {
             return false;
         }
 
-        return ! Contribution::query()
+        return !Contribution::query()
             ->where('member_id', $member->id)
             ->forPeriod($month, $year)
             ->posted()
@@ -179,7 +233,7 @@ class ContributionCycleService
             })
             ->whereDoesntHave('loans', function (Builder $loan): void {
                 $loan->where('status', 'active')
-                    ->whereHas('installments', fn (Builder $installment): Builder => $installment->whereIn('status', ['pending', 'overdue']));
+                    ->whereHas('installments', fn(Builder $installment): Builder => $installment->whereIn('status', ['pending', 'overdue']));
             })
             ->with(['parent', 'cashAccount'])
             ->orderBy('name');
@@ -205,7 +259,7 @@ class ContributionCycleService
             ->forPeriod($month, $year)
             ->posted()
             ->pluck('member_id')
-            ->map(fn (mixed $id): int => (int) $id)
+            ->map(fn(mixed $id): int => (int) $id)
             ->all();
 
         $missingMembers = $this->pendingMembersQueryForPeriod($month, $year)
@@ -213,7 +267,7 @@ class ContributionCycleService
 
         $memberIds = array_values(array_unique(array_merge(
             $postedMemberIds,
-            $missingMembers->pluck('id')->map(fn (mixed $id): int => (int) $id)->all(),
+            $missingMembers->pluck('id')->map(fn(mixed $id): int => (int) $id)->all(),
         )));
 
         if ($memberIds === []) {
@@ -337,7 +391,7 @@ class ContributionCycleService
             return $principalShortfall + $lateFeeDue;
         }
 
-        if (! $this->memberCanApplyContributionForPeriod($member, $month, $year)) {
+        if (!$this->memberCanApplyContributionForPeriod($member, $month, $year)) {
             return 0.0;
         }
 
@@ -419,7 +473,7 @@ class ContributionCycleService
         $allocatedDependentIds = [];
         $periodLabel = $this->periodLabel($month, $year);
 
-        if (! $parent->dependents()->where('status', 'active')->exists()) {
+        if (!$parent->dependents()->where('status', 'active')->exists()) {
             return [
                 'transfers' => 0,
                 'details' => [__('This member has no active dependents.')],
@@ -445,13 +499,13 @@ class ContributionCycleService
             }
 
             if ($this->dependentAllocationExistsForPeriod($dependent, $month, $year)) {
-                $details[] = "{$dependent->name}: ".__('Allocation already completed for :period; collect from dependent cash.', ['period' => $periodLabel]);
+                $details[] = "{$dependent->name}: " . __('Allocation already completed for :period; collect from dependent cash.', ['period' => $periodLabel]);
 
                 continue;
             }
 
             if ($parent->getCashBalance() < $required - 0.00001) {
-                $details[] = "{$dependent->name}: ".__('Parent cash insufficient for full allocation (:amount).', [
+                $details[] = "{$dependent->name}: " . __('Parent cash insufficient for full allocation (:amount).', [
                     'amount' => number_format($required, 2),
                 ]);
 
@@ -477,7 +531,7 @@ class ContributionCycleService
                 });
                 $transfers++;
                 $allocatedDependentIds[] = $dependent->id;
-                $details[] = "{$dependent->name}: ".__('Transferred :amount for :period.', [
+                $details[] = "{$dependent->name}: " . __('Transferred :amount for :period.', [
                     'amount' => number_format($required, 2),
                     'period' => $periodLabel,
                 ]);

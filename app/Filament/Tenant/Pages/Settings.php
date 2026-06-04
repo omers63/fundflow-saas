@@ -8,11 +8,13 @@ use App\Filament\Tenant\Resources\LoanTiers\LoanTierResource;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\BankTemplate;
 use App\Models\Tenant\Setting;
+use App\Services\FiscalClose\FiscalClosePeriodResolver;
 use App\Support\ArabicDisplaySettings;
 use App\Support\BusinessDay;
 use App\Support\BusinessDaySettings;
 use App\Support\CommunicationSettings;
 use App\Support\ContributionPolicySettings;
+use App\Support\FiscalSettings;
 use App\Support\ImportDateFormats;
 use App\Support\Lang;
 use App\Support\LoanSettings;
@@ -44,6 +46,7 @@ use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\HtmlString;
 
 class Settings extends Page implements HasForms
 {
@@ -77,6 +80,7 @@ class Settings extends Page implements HasForms
         $notifications = NotificationSettings::all();
         $memberNumber = MemberNumberSettings::all();
         $public = PublicPageSettings::all();
+        $fiscal = FiscalSettings::forForm();
 
         $templates = BankTemplate::orderBy('name')->get()->map(fn (BankTemplate $t) => [
             'id' => $t->id,
@@ -100,6 +104,12 @@ class Settings extends Page implements HasForms
         $this->form->fill([
             'currency' => $general['currency'] ?? 'USD',
             'business_day' => BusinessDaySettings::forForm(),
+            'fiscal_year_start_month' => $fiscal['fiscal_year_start_month'],
+            'fiscal_year_start_day' => $fiscal['fiscal_year_start_day'],
+            'fiscal_current_year_label' => $fiscal['current_fiscal_year_label']
+                ?? app(FiscalClosePeriodResolver::class)->resolvePeriodContaining()->label,
+            'fiscal_books_closed_through' => $fiscal['books_closed_through'],
+            'fiscal_purge_policy' => $fiscal['purge_policy'],
             'member_number_prefix' => $memberNumber['prefix'],
             'member_number_separator' => $memberNumber['separator'],
             'member_number_padding' => $memberNumber['padding'],
@@ -234,6 +244,52 @@ class Settings extends Page implements HasForms
                                                 ]);
                                             })
                                             ->helperText(__('Based on existing members matching this pattern.')),
+                                    ]),
+                            ]),
+                        Tab::make(__('Fiscal calendar'))
+                            ->icon('heroicon-o-calendar-days')
+                            ->schema([
+                                Section::make(__('Fiscal year'))
+                                    ->description(__('Defines fiscal year boundaries for year-end close readiness. Business calendar (General tab) controls operational “today” for collection.'))
+                                    ->columns(2)
+                                    ->schema([
+                                        Select::make('fiscal_year_start_month')
+                                            ->label(__('Fiscal year starts in'))
+                                            ->options(collect(range(1, 12))->mapWithKeys(fn (int $m): array => [
+                                                $m => Carbon::create(2000, $m, 1)->translatedFormat('F'),
+                                            ])->all())
+                                            ->required()
+                                            ->native(false),
+                                        TextInput::make('fiscal_year_start_day')
+                                            ->label(__('Start day of month'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(28)
+                                            ->required(),
+                                        TextInput::make('fiscal_current_year_label')
+                                            ->label(__('Current fiscal year label'))
+                                            ->maxLength(16)
+                                            ->helperText(__('Display label, e.g. FY2025. Defaults from calendar when empty on save.')),
+                                        Select::make('fiscal_purge_policy')
+                                            ->label(__('Default purge policy'))
+                                            ->options(FiscalSettings::purgePolicyOptions())
+                                            ->required()
+                                            ->native(false)
+                                            ->helperText(__('Used when Phase 2+ purge is implemented.')),
+                                        Placeholder::make('fiscal_books_closed_through_display')
+                                            ->label(__('Books closed through'))
+                                            ->content(fn (Get $get): string => filled($get('fiscal_books_closed_through'))
+                                                ? Carbon::parse((string) $get('fiscal_books_closed_through'))->toFormattedDateString()
+                                                : __('Not set'))
+                                            ->helperText(__('Set automatically when a close is executed (Phase 2+).')),
+                                        Placeholder::make('fiscal_close_link')
+                                            ->label(__('Year-end close'))
+                                            ->columnSpanFull()
+                                            ->content(fn (): string => __('Run readiness checks on the Year-end close page.'))
+                                            ->helperText(new HtmlString(
+                                                '<a class="text-primary-600 underline" href="'.e(FiscalYearClosePage::getUrl()).'">'
+                                                .e(__('Open year-end close')).'</a>'
+                                            )),
                                     ]),
                             ]),
                         Tab::make(__('Public page'))
@@ -845,6 +901,14 @@ class Settings extends Page implements HasForms
 
         Setting::set('general', 'currency', $state['currency']);
         BusinessDaySettings::saveFromForm($state['business_day'] ?? null);
+        FiscalSettings::saveFromForm([
+            'fiscal_year_start_month' => $state['fiscal_year_start_month'],
+            'fiscal_year_start_day' => $state['fiscal_year_start_day'],
+            'purge_policy' => $state['fiscal_purge_policy'],
+            'current_fiscal_year_label' => filled($state['fiscal_current_year_label'] ?? null)
+                ? $state['fiscal_current_year_label']
+                : app(FiscalClosePeriodResolver::class)->resolvePeriodContaining()->label,
+        ]);
         MemberNumberSettings::save([
             'prefix' => $state['member_number_prefix'],
             'separator' => $state['member_number_separator'],

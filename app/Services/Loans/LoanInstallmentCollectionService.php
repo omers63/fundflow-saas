@@ -23,7 +23,8 @@ class LoanInstallmentCollectionService
         protected LoanLedgerService $ledger,
         protected LateFeeService $lateFees,
         protected ContributionCycleService $cycles,
-    ) {}
+    ) {
+    }
 
     public function onMemberCashIncreased(Member $member): void
     {
@@ -54,25 +55,16 @@ class LoanInstallmentCollectionService
                     ->where('member_id', $member->id);
             });
 
-        if ($month !== null && $year !== null && ! $throughOpenPeriod) {
-            $query->whereYear('due_date', $year)->whereMonth('due_date', $month);
+        if ($month !== null && $year !== null) {
+            if ($throughOpenPeriod) {
+                $query->whereDate('due_date', '<=', $this->cycles->cycleDueEndAt($month, $year)->toDateString());
+            } else {
+                [$start, $end] = $this->cycles->cycleDueDateBounds($month, $year);
+                $query->whereBetween('due_date', [$start, $end]);
+            }
         }
 
         $installments = $query->orderBy('due_date')->get();
-
-        if ($month !== null && $year !== null && $throughOpenPeriod) {
-            $throughKey = sprintf('%04d-%02d', $year, $month);
-
-            $installments = $installments->filter(function (LoanInstallment $installment) use ($throughKey): bool {
-                $due = $installment->due_date;
-
-                if ($due === null) {
-                    return false;
-                }
-
-                return sprintf('%04d-%02d', (int) $due->year, (int) $due->month) <= $throughKey;
-            });
-        }
 
         foreach ($installments as $installment) {
             $member = $member->fresh() ?? $member;
@@ -93,15 +85,14 @@ class LoanInstallmentCollectionService
         $member = $member?->fresh() ?? $loan->member;
         $member->unsetRelation('accounts');
 
-        if (! $loan instanceof Loan || ! in_array($loan->status, ['active', 'transferred'], true)) {
+        if (!$loan instanceof Loan || !in_array($loan->status, ['active', 'transferred'], true)) {
             return 'inactive';
         }
 
         $due = $installment->due_date;
-        $month = (int) $due->month;
-        $year = (int) $due->year;
+        [$cycleMonth, $cycleYear] = $this->cycles->cyclePeriodForDueDate($due);
 
-        if (Contribution::activePeriodExists((int) $member->id, $month, $year)) {
+        if (Contribution::activePeriodExists((int) $member->id, $cycleMonth, $cycleYear)) {
             return 'skipped_contribution_cycle';
         }
 
@@ -137,10 +128,24 @@ class LoanInstallmentCollectionService
         }
     }
 
+    public function requiredCashForInstallment(LoanInstallment $installment): float
+    {
+        if ($installment->isPaid()) {
+            return 0.0;
+        }
+
+        $principalRemaining = max(
+            0.0,
+            (float) $installment->amount - (float) ($installment->amount_collected ?? 0),
+        );
+
+        return $principalRemaining + $this->outstandingLateFee($installment);
+    }
+
     protected function outstandingLateFee(LoanInstallment $installment): float
     {
-        $due = $installment->due_date;
-        $deadline = $this->cycles->deadline((int) $due->month, (int) $due->year);
+        [$cycleMonth, $cycleYear] = $this->cycles->cyclePeriodForDueDate($installment->due_date);
+        $deadline = $this->cycles->deadline($cycleMonth, $cycleYear);
         $days = $this->lateFees->daysPastDue($deadline, BusinessDay::now());
         $computed = $this->lateFees->repaymentLateFeeForDays($days);
 
@@ -192,9 +197,8 @@ class LoanInstallmentCollectionService
         float $lateFee,
     ): string {
         $due = $installment->due_date;
-        $month = (int) $due->month;
-        $year = (int) $due->year;
-        $isLate = $this->cycles->isLate($month, $year);
+        [$cycleMonth, $cycleYear] = $this->cycles->cyclePeriodForDueDate($due);
+        $isLate = $this->cycles->isLate($cycleMonth, $cycleYear);
 
         $installment->update([
             'status' => 'paid',

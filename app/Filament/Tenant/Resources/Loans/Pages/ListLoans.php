@@ -4,10 +4,11 @@ namespace App\Filament\Tenant\Resources\Loans\Pages;
 
 use App\Filament\Support\LoanDelinquencyHeaderActions;
 use App\Filament\Support\LoanDelinquencyTables;
-use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\LoanEligibilityOverrideRequestResource;
+use App\Filament\Tenant\Pages\LoanEmiCollectionPage;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrides\LoanEligibilityOverrideResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
+use App\Models\Tenant\LoanEligibilityOverrideRequest;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\CreateAction;
@@ -57,6 +58,7 @@ class ListLoans extends ListRecords
         return match (LoanResource::resolveListTab()) {
             'overdue_installments' => __('Active loans with installments past due. Run the delinquency check after cycle close to refresh statuses.'),
             'guarantor_exposure' => __('Loans in warning or with liability transferred to the guarantor.'),
+            'eligibility_reviews' => __('Review member requests to bypass loan eligibility rules. Approved requests create standing overrides.'),
             default => __('Monitor the full loan portfolio, outstanding balances, and operational pipeline.'),
         };
     }
@@ -64,27 +66,33 @@ class ListLoans extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('emi_collection')
+                ->label(__('EMI collection'))
+                ->icon(Heroicon::OutlinedBanknotes)
+                ->badge(fn (): ?string => LoanEmiCollectionPage::getNavigationBadge())
+                ->badgeColor('warning')
+                ->url(fn (): string => LoanEmiCollectionPage::getUrl()),
             ActionGroup::make(LoanDelinquencyHeaderActions::make())
                 ->label(__('Delinquency tools'))
                 ->icon('heroicon-o-exclamation-triangle')
                 ->color('gray')
-                ->button(),
-            Action::make('eligibilityReviews')
-                ->label(__('Eligibility reviews'))
-                ->icon(Heroicon::OutlinedShieldExclamation)
-                ->badge(fn (): ?string => LoanEligibilityOverrideRequestResource::getNavigationBadge())
-                ->badgeColor('warning')
-                ->url(fn (): string => LoanEligibilityOverrideRequestResource::getUrl('index', panel: 'tenant')),
+                ->button()
+                ->visible(fn (): bool => LoanResource::resolveListTab() !== 'eligibility_reviews'),
             Action::make('loanOverrides')
                 ->label(__('Loan overrides'))
                 ->icon(Heroicon::OutlinedShieldCheck)
                 ->url(fn (): string => LoanEligibilityOverrideResource::getUrl('index')),
-            CreateAction::make(),
+            CreateAction::make()
+                ->visible(fn (): bool => LoanResource::resolveListTab() !== 'eligibility_reviews'),
         ];
     }
 
     protected function getHeaderWidgets(): array
     {
+        if (LoanResource::resolveListTab() === 'eligibility_reviews') {
+            return [];
+        }
+
         return [
             LoanInsightsWidget::class,
         ];
@@ -110,7 +118,7 @@ class ListLoans extends ListRecords
 
     public function getTabs(): array
     {
-        return [
+        $tabs = [
             'portfolio' => Tab::make(LoanResource::listTabLabel('portfolio')),
             'overdue_installments' => Tab::make(LoanResource::listTabLabel('overdue_installments'))
                 ->badge((string) LoanResource::overdueInstallmentsCount())
@@ -119,6 +127,16 @@ class ListLoans extends ListRecords
                 ->badge((string) LoanResource::guarantorExposureCount())
                 ->badgeColor('warning'),
         ];
+
+        if (LoanEligibilityOverrideRequest::isTableReady()) {
+            $pending = LoanResource::pendingEligibilityReviewsCount();
+
+            $tabs['eligibility_reviews'] = Tab::make(LoanResource::listTabLabel('eligibility_reviews'))
+                ->badge($pending > 0 ? (string) $pending : null)
+                ->badgeColor('warning');
+        }
+
+        return $tabs;
     }
 
     protected function getTableQuery(): Builder
@@ -126,6 +144,7 @@ class ListLoans extends ListRecords
         return match (LoanResource::resolveListTab()) {
             'overdue_installments' => LoanDelinquencyTables::overdueInstallmentsQuery(),
             'guarantor_exposure' => LoanDelinquencyTables::guarantorExposureQuery(),
+            'eligibility_reviews' => LoanEligibilityOverrideRequest::query()->with(['member', 'reviewer']),
             default => parent::getTableQuery(),
         };
     }

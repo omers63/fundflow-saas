@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\LocaleSwitchController;
 use App\Http\Controllers\Tenant\DirectMessageAttachmentController;
+use App\Http\Controllers\Tenant\FiscalCloseExportDownloadController;
 use App\Http\Controllers\Tenant\MembershipApplicationImportSampleController;
 use App\Http\Controllers\Tenant\StartDependentImpersonationController;
 use App\Http\Controllers\Tenant\StatementPdfController;
@@ -78,6 +79,9 @@ Route::middleware([
 
         Route::get('/admin/statements/{statement}/pdf', [StatementPdfController::class, 'admin'])
             ->name('tenant.admin.statement.pdf');
+
+        Route::get('/admin/fiscal-closes/{fiscalClose}/exports/{fileKey}', FiscalCloseExportDownloadController::class)
+            ->name('tenant.admin.fiscal-close.export');
 
         Route::get('/direct-messages/{message}/attachment/{index}', DirectMessageAttachmentController::class)
             ->whereNumber('index')

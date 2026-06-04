@@ -46,11 +46,17 @@ final class MemberLoanFilamentActions
 
                 $result = app(LoanRepaymentService::class)->applyOpenPeriodRepaymentForMember($member);
 
-                $notification = Notification::make()->title(match ($result) {
-                    'applied' => __('Payment applied'),
-                    'insufficient' => __('Insufficient cash balance'),
-                    default => __('Nothing to pay'),
-                });
+                $repayments = app(LoanRepaymentService::class);
+
+                $notification = Notification::make()
+                    ->title(match ($result) {
+                        'applied' => __('Payment applied'),
+                        'insufficient' => __('Insufficient cash balance'),
+                        default => __('Nothing to pay'),
+                    })
+                    ->body($result === 'skipped'
+                        ? $repayments->openPeriodSkipMessage($member)
+                        : null);
 
                 match ($result) {
                     'applied' => $notification->success(),
@@ -95,11 +101,13 @@ final class MemberLoanFilamentActions
                     return;
                 }
 
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $loanService->earlySettle($record),
-                    __('Payoff failed'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $loanService->earlySettle($record),
+                        __('Payoff failed'),
+                    )
+                ) {
                     return;
                 }
 

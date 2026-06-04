@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Member\Resources\MyLoans\Pages\ListMyLoans;
-use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\Pages\ListLoanEligibilityOverrideRequests;
+use App\Filament\Tenant\Resources\Loans\Pages\ListLoans;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\LoanEligibilityOverride;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
@@ -116,7 +116,7 @@ test('admin eligibility review queue lists pending member requests', function ()
     Filament::setCurrentPanel('tenant');
     $this->actingAs($admin, 'tenant');
 
-    Livewire::test(ListLoanEligibilityOverrideRequests::class)
+    Livewire::test(ListLoans::class, ['activeTab' => 'eligibility_reviews'])
         ->assertCanSeeTableRecords([$request]);
 });
 

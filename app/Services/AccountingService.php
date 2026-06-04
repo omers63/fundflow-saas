@@ -10,6 +10,7 @@ use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
+use App\Services\FiscalClose\FiscalClosePeriodResolver;
 use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
 use Carbon\Carbon;
@@ -203,6 +204,8 @@ class AccountingService
         ?DateTimeInterface $transactedAt = null,
         ?int $memberId = null,
     ): Transaction {
+        $this->assertBooksOpenFor($transactedAt);
+
         $memberId = $this->resolveTransactionMemberId($account, $memberId);
 
         $transaction = DB::transaction(function () use ($account, $amount, $description, $reference, $transactedAt, $memberId) {
@@ -241,6 +244,8 @@ class AccountingService
         ?DateTimeInterface $transactedAt = null,
         ?int $memberId = null,
     ): Transaction {
+        $this->assertBooksOpenFor($transactedAt);
+
         $memberId = $this->resolveTransactionMemberId($account, $memberId);
 
         return DB::transaction(function () use ($account, $amount, $description, $reference, $transactedAt, $memberId) {
@@ -1332,6 +1337,19 @@ class AccountingService
                 __('Insufficient member cash balance for auto-collection.'),
             );
         }
+    }
+
+    private function assertBooksOpenFor(?DateTimeInterface $transactedAt): void
+    {
+        if (! tenancy()->initialized) {
+            return;
+        }
+
+        $at = $transactedAt instanceof CarbonInterface
+            ? Carbon::instance($transactedAt)
+            : BusinessDay::now();
+
+        app(FiscalClosePeriodResolver::class)->assertNotClosed($at);
     }
 
     private function resolveTransactionMemberId(Account $account, ?int $memberId): ?int
