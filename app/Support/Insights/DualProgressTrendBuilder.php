@@ -89,15 +89,22 @@ final class DualProgressTrendBuilder
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
         $oldestPeriod = Contribution::periodDate((int) $oldestMonth->month, (int) $oldestMonth->year);
         $periodTotals = [];
+        $contributionsByPeriod = [];
 
         Contribution::query()
             ->where('member_id', $member->id)
             ->where('period', '>=', $oldestPeriod)
-            ->get(['period', 'status', 'amount'])
-            ->each(function (Contribution $contribution) use (&$periodTotals): void {
+            ->get(['period', 'status', 'amount', 'amount_due'])
+            ->each(function (Contribution $contribution) use (&$periodTotals, &$contributionsByPeriod): void {
                 $periodKey = Contribution::normalizePeriodKey($contribution->period);
 
-                if ($periodKey === null || $contribution->status !== 'posted') {
+                if ($periodKey === null) {
+                    return;
+                }
+
+                $contributionsByPeriod[$periodKey] ??= $contribution;
+
+                if ($contribution->status !== 'posted') {
                     return;
                 }
 
@@ -118,9 +125,10 @@ final class DualProgressTrendBuilder
             $period = Contribution::periodDate($m, $y);
             $posted = (int) ($periodTotals[$period]['posted'] ?? 0);
             $postedAmount = (float) ($periodTotals[$period]['posted_amount'] ?? 0.0);
-            $expected = self::memberExpectedTargets($member, $cycles, $m, $y);
+            $periodContribution = $contributionsByPeriod[$period] ?? null;
+            $expected = self::memberExpectedTargets($member, $cycles, $m, $y, $periodContribution);
 
-            $trend[] = self::buildCollectionMonthRow(
+            $trend[] = self::buildMemberCollectionMonthRow(
                 $month->locale(app()->getLocale())->translatedFormat('M'),
                 $posted,
                 $postedAmount,
@@ -140,8 +148,9 @@ final class DualProgressTrendBuilder
         ContributionCycleService $cycles,
         int $month,
         int $year,
+        ?Contribution $periodContribution = null,
     ): array {
-        if (! $cycles->memberCanApplyContributionForPeriod($member, $month, $year)) {
+        if (! $cycles->memberIsLiableForContributionPeriod($member, $month, $year)) {
             return [
                 'expected_count' => 0,
                 'expected_amount' => 0.0,
@@ -150,8 +159,58 @@ final class DualProgressTrendBuilder
 
         return [
             'expected_count' => 1,
-            'expected_amount' => (float) $member->monthly_contribution_amount,
+            'expected_amount' => self::memberPeriodDueAmount($member, $cycles, $month, $year, $periodContribution),
         ];
+    }
+
+    public static function memberPeriodDueAmount(
+        Member $member,
+        ContributionCycleService $cycles,
+        int $month,
+        int $year,
+        ?Contribution $periodContribution = null,
+    ): float {
+        if ($periodContribution !== null) {
+            return (float) ($periodContribution->amount_due ?? $periodContribution->amount);
+        }
+
+        [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+
+        if ($month === $openMonth && $year === $openYear) {
+            return (float) $member->monthly_contribution_amount;
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function buildMemberCollectionMonthRow(
+        string $label,
+        int $posted,
+        float $postedAmount,
+        int $expectedCount,
+        float $expectedAmount,
+    ): array {
+        $row = self::buildCollectionMonthRow(
+            $label,
+            $posted,
+            $postedAmount,
+            $expectedCount,
+            $expectedAmount,
+        );
+
+        $row['subtitle'] = self::memberCollectionSubtitle($posted, $postedAmount, $expectedAmount);
+        $row['tooltip'] = self::memberCollectionTooltip(
+            $posted,
+            $postedAmount,
+            $expectedAmount,
+            (int) $row['collection_rate'],
+            (int) $row['amount_collection_rate'],
+        );
+
+        return $row;
     }
 
     /**
@@ -380,5 +439,63 @@ final class DualProgressTrendBuilder
             'collected' => InsightFormatter::money($postedAmount),
             'expected_amount' => InsightFormatter::money($expectedAmount),
         ]);
+    }
+
+    private static function memberCollectionSubtitle(
+        int $posted,
+        float $postedAmount,
+        float $expectedAmount,
+    ): string {
+        if ($posted > 0 && $expectedAmount > 0) {
+            return __('Posted · :collected/:due', [
+                'collected' => InsightFormatter::compactAmount($postedAmount),
+                'due' => InsightFormatter::compactAmount($expectedAmount),
+            ]);
+        }
+
+        if ($posted > 0) {
+            return __('Posted · :amount', [
+                'amount' => InsightFormatter::compactAmount($postedAmount),
+            ]);
+        }
+
+        if ($expectedAmount > 0) {
+            return __('Not posted · due :due', [
+                'due' => InsightFormatter::compactAmount($expectedAmount),
+            ]);
+        }
+
+        return __('Not posted');
+    }
+
+    private static function memberCollectionTooltip(
+        int $posted,
+        float $postedAmount,
+        float $expectedAmount,
+        int $collectionRate,
+        int $amountCollectionRate,
+    ): string {
+        if ($posted > 0 && $expectedAmount > 0) {
+            return __(':rate% posted · :amount_rate% of cycle due · :collected/:due', [
+                'rate' => $collectionRate,
+                'amount_rate' => $amountCollectionRate,
+                'collected' => InsightFormatter::money($postedAmount),
+                'due' => InsightFormatter::money($expectedAmount),
+            ]);
+        }
+
+        if ($posted > 0) {
+            return __('Posted · :amount', [
+                'amount' => InsightFormatter::money($postedAmount),
+            ]);
+        }
+
+        if ($expectedAmount > 0) {
+            return __('Not posted · cycle due :due', [
+                'due' => InsightFormatter::money($expectedAmount),
+            ]);
+        }
+
+        return __('Not posted');
     }
 }

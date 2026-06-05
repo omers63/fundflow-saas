@@ -62,12 +62,16 @@
     flex-shrink: 0;
 }
 
-/* Keep language menu below the topbar trigger (do not flip upward). */
-.fi-body .fi-topbar .language-switch-dropdown .fi-dropdown-panel {
-    z-index: 50;
+/* Language switch: teleport-friendly stacking in crowded topbars. */
+.fi-body .fi-topbar .language-switch-dropdown.fi-dropdown {
+    position: relative;
 }
 
-/* User menu: stacking + placement when topbar is crowded (impersonation banner). */
+.fi-body .fi-topbar .language-switch-dropdown .fi-dropdown-panel {
+    z-index: 60;
+}
+
+/* User menu: stacking when topbar is crowded (impersonation banner). */
 .fi-body .fi-topbar .fi-user-menu.fi-dropdown {
     position: relative;
 }

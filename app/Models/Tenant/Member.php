@@ -270,19 +270,33 @@ class Member extends Model
 
     public function isExemptFromContributions(?int $month = null, ?int $year = null): bool
     {
-        if ($this->hasActiveLoanRepaymentObligation()) {
+        if ($month === null || $year === null) {
+            return $this->hasActiveLoanRepaymentObligation()
+                || $this->hasPartiallyDisbursedLoan();
+        }
+
+        if ($this->isInLoanGracePeriodForCycle($month, $year)) {
             return true;
         }
 
-        if ($this->hasPartiallyDisbursedLoan()) {
-            return true;
-        }
+        return $this->isInActiveLoanContributionExemptCycle($month, $year);
+    }
 
-        if ($month !== null && $year !== null && $this->isInLoanGracePeriodForCycle($month, $year)) {
-            return true;
-        }
+    public function isInActiveLoanContributionExemptCycle(int $month, int $year): bool
+    {
+        $periodKey = sprintf('%04d-%02d', $year, $month);
 
-        return false;
+        return Loan::query()
+            ->where('member_id', $this->id)
+            ->where('status', 'active')
+            ->whereNotNull('disbursed_at')
+            ->whereHas('installments', fn ($query) => $query->whereIn('status', ['pending', 'overdue']))
+            ->get(['disbursed_at'])
+            ->contains(function (Loan $loan) use ($periodKey): bool {
+                $disbursedAt = Carbon::parse((string) $loan->disbursed_at);
+
+                return sprintf('%04d-%02d', (int) $disbursedAt->year, (int) $disbursedAt->month) <= $periodKey;
+            });
     }
 
     public function hasActiveLoanRepaymentObligation(): bool

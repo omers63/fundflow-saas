@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Http\Livewire\LanguageSwitchComponent;
 use App\Models\Tenant\User;
 use App\Support\AppLocale;
 use App\Support\ShowsFundPublicShell;
@@ -13,11 +14,14 @@ use BezhanSalleh\LanguageSwitch\LanguageSwitch;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
+use Livewire\Livewire;
 
 class LocalizationServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
+        Livewire::component('language-switch-component', LanguageSwitchComponent::class);
+
         $this->configureLanguageSwitch();
         $this->listenForLocaleChanges();
     }

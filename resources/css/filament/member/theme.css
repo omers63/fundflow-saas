@@ -157,20 +157,24 @@
     color: #fff7ed;
 }
 
-/* Dropdown panels stay readable (float may keep panel in topbar subtree). */
-.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .fi-user-menu .fi-dropdown-panel {
+/* Dropdown panels stay readable (teleport may still inherit topbar text color). */
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .fi-user-menu .fi-dropdown-panel,
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .language-switch-dropdown .fi-dropdown-panel {
     z-index: 60;
     color: rgb(55 65 81);
     background-color: #fff;
 }
 
-.dark .fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .fi-user-menu .fi-dropdown-panel {
+.dark .fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .fi-user-menu .fi-dropdown-panel,
+.dark .fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .language-switch-dropdown .fi-dropdown-panel {
     color: rgb(243 244 246);
     background-color: rgb(17 24 39);
 }
 
 .fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .fi-user-menu .fi-dropdown-panel .fi-dropdown-list-item-label,
-.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .fi-user-menu .fi-dropdown-panel .fi-dropdown-header-label {
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .fi-user-menu .fi-dropdown-panel .fi-dropdown-header-label,
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .language-switch-dropdown .fi-dropdown-panel button,
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .language-switch-dropdown .fi-dropdown-panel span {
     color: inherit;
 }
 

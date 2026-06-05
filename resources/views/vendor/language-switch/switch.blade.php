@@ -1,7 +1,6 @@
 @php
     $resolvedRenderHook = $languageSwitch->getRenderHook();
-    $shouldTeleport = ! str_contains($resolvedRenderHook, '::sidebar.')
-        && ! str_contains($resolvedRenderHook, 'user-menu.');
+    $shouldTeleport = ! str_contains($resolvedRenderHook, '::sidebar.');
 @endphp
 
 <x-filament::dropdown
@@ -11,7 +10,7 @@
     :shift="true"
     :width="$isFlagsOnly ? 'w-fit fls-flag-only-width' : 'w-fit fls-dropdown-width'"
     :max-height="$maxHeight"
-    class="fi-dropdown fi-user-menu language-switch-dropdown"
+    class="fi-dropdown language-switch-dropdown"
     data-nosnippet="true"
 >
     <x-slot name="trigger">
@@ -55,7 +54,7 @@
             @if (! app()->isLocale($locale))
                 <button
                     type="button"
-                    wire:click="changeLocale('{{ $locale }}')"
+                    wire:click.stop="switchLocale('{{ $locale }}')"
                     @class([
                         'flex w-full items-center rounded-md p-1.5 outline-none transition-colors duration-75 fi-dropdown-list-item whitespace-nowrap disabled:pointer-events-none disabled:opacity-70 fi-dropdown-list-item-color-gray hover:bg-gray-950/5 focus:bg-gray-950/5 dark:hover:bg-white/5 dark:focus:bg-white/5',
                         'justify-center px-2 py-0.5' => $isFlagsOnly,

@@ -6,6 +6,7 @@ namespace App\Filament\Member\Resources\MyContributions\Pages;
 
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Widgets\MyContributionsInsightsWidget;
+use App\Filament\Support\MemberContributionFilamentActions;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Support\Enums\Width;
 
@@ -41,5 +42,12 @@ class ListMyContributions extends ListRecords
     public function getHeaderWidgetsColumns(): int|array
     {
         return 1;
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            MemberContributionFilamentActions::applyOpenPeriodContribution(),
+        ];
     }
 }

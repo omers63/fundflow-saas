@@ -6,12 +6,14 @@ use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Member\Resources\MyContributions\Pages\ListMyContributions;
 use App\Filament\Member\Resources\MyContributions\Tables\MyContributionsTable;
 use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Member\Widgets\MyContributionsInsightsWidget;
 use App\Models\Tenant\Contribution;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Livewire\Component;
 
 class MyContributionResource extends Resource
 {
@@ -68,5 +70,21 @@ class MyContributionResource extends Resource
         return [
             'index' => ListMyContributions::route('/'),
         ];
+    }
+
+    public static function dispatchInsightsRefresh(?Component $livewire): void
+    {
+        if ($livewire === null) {
+            return;
+        }
+
+        $targetName = json_encode(
+            app('livewire.factory')->resolveComponentName(MyContributionsInsightsWidget::class),
+            JSON_THROW_ON_ERROR
+        );
+
+        $livewire->js(
+            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
+        );
     }
 }

@@ -43,7 +43,7 @@ beforeEach(function () {
         'name' => 'Contrib Member',
         'email' => 'contrib@insights.test',
         'monthly_contribution_amount' => 1000,
-        'joined_at' => now()->subYear(),
+        'joined_at' => Carbon::parse('2026-05-01'),
         'status' => 'active',
     ]);
 
@@ -51,20 +51,27 @@ beforeEach(function () {
 });
 
 test('member contribution insights snapshot includes cycle and trend data', function () {
-    [$month, $year] = app(ContributionCycleService::class)->currentOpenPeriod();
-    $period = Contribution::periodDate($month, $year);
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
 
-    Contribution::factory()->for($this->member)->create([
-        'period' => $period,
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $openPeriod = Contribution::periodDate($openMonth, $openYear);
+
+    $previousCursor = Carbon::create($openYear, $openMonth, 1)->subMonthNoOverflow();
+    $previousPeriod = Contribution::periodDate((int) $previousCursor->month, (int) $previousCursor->year);
+
+    Contribution::factory()->for($this->member)->posted()->create([
+        'period' => $openPeriod,
         'amount' => 1000,
-        'status' => 'pending',
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
         'is_late' => false,
     ]);
 
     Contribution::factory()->for($this->member)->posted()->create([
-        'period' => now()->subMonths(2)->startOfMonth()->toDateString(),
+        'period' => $previousPeriod,
         'amount' => 1000,
         'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+        'is_late' => false,
     ]);
 
     $snapshot = app(MemberContributionInsightsService::class)->snapshot($this->member);
@@ -73,12 +80,77 @@ test('member contribution insights snapshot includes cycle and trend data', func
         ->and($snapshot['kpis'])->toHaveCount(6)
         ->and($snapshot['trend'])->toHaveCount(6)
         ->and($snapshot['open_cycle']['period_label'])->not->toBeEmpty()
-        ->and($snapshot['summary']['pending_count'])->toBe(1)
-        ->and($snapshot['summary']['posted_count'])->toBe(1);
+        ->and($snapshot['summary']['pending_count'])->toBe(0)
+        ->and($snapshot['summary']['posted_count'])->toBe(2)
+        ->and($snapshot['consistency']['posted'])->toBe(2)
+        ->and($snapshot['consistency']['liable'])->toBe(2)
+        ->and($snapshot['streak'])->toBe(2);
+
+    Carbon::setTestNow();
 });
 
 test('member contribution insights returns empty array without member', function () {
     expect(app(MemberContributionInsightsService::class)->snapshot(null))->toBe([]);
+});
+
+test('on-time rate counts pre-loan cycles when member is under active loan repayment', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    Loan::query()->delete();
+
+    $this->member->update(['joined_at' => Carbon::parse('2026-02-01')]);
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $march = Carbon::create(2026, 3, 1)->startOfMonth();
+    $february = Carbon::create(2026, 2, 1)->startOfMonth();
+
+    Contribution::factory()->for($this->member)->posted()->create([
+        'period' => Contribution::periodDate((int) $march->month, (int) $march->year),
+        'amount' => 1000,
+        'is_late' => false,
+    ]);
+
+    Contribution::factory()->for($this->member)->posted()->create([
+        'period' => Contribution::periodDate((int) $february->month, (int) $february->year),
+        'amount' => 1000,
+        'is_late' => false,
+    ]);
+
+    $loan = Loan::create([
+        'member_id' => $this->member->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'has_grace_cycle' => false,
+        'applied_at' => Carbon::parse('2026-04-01'),
+        'disbursed_at' => Carbon::parse('2026-04-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2026-06-05'),
+        'status' => 'pending',
+    ]);
+
+    expect($this->member->fresh()->isExemptFromContributions())->toBeTrue()
+        ->and($this->member->fresh()->isExemptFromContributions((int) $march->month, (int) $march->year))->toBeFalse()
+        ->and($this->member->fresh()->isExemptFromContributions($openMonth, $openYear))->toBeTrue();
+
+    $consistency = app(MemberContributionInsightsService::class)->snapshot($this->member->fresh())['consistency'];
+
+    expect($consistency['posted'])->toBe(2)
+        ->and($consistency['liable'])->toBe(2);
+
+    Carbon::setTestNow();
 });
 
 test('open cycle shows loan repayment instead of required cash during active loan', function () {

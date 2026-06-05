@@ -139,7 +139,7 @@
                     'title' => __('6-month payments'),
                     'trend' => $d['trend'],
                     'primaryLabel' => __('Posted'),
-                    'secondaryLabel' => __('Amount'),
+                    'secondaryLabel' => __('Cycle due'),
                     'compact' => true,
                     'headerStat' => $d['summary']['posted_last_12'],
                 ])

@@ -16,6 +16,7 @@ use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
+use Carbon\Carbon;
 
 final class MemberContributionInsightsService
 {
@@ -346,22 +347,14 @@ final class MemberContributionInsightsService
      */
     private function consistencyScore(Member $member): array
     {
-        $postedByPeriod = $this->postedContributionsByPeriod($member, 12);
+        $postedByPeriod = $this->postedContributionsByPeriod($member, 24);
         $liable = 0;
         $onTime = 0;
 
-        for ($i = 1; $i <= 12; $i++) {
-            $month = BusinessDay::now()->subMonths($i)->startOfMonth();
-            $m = (int) $month->month;
-            $y = (int) $month->year;
-
-            if (! $this->cycles->memberCanApplyContributionForPeriod($member, $m, $y)) {
-                continue;
-            }
-
+        foreach ($this->rhythmPeriodsBackward($member, 12) as ['month' => $month, 'year' => $year]) {
             $liable++;
 
-            $period = Contribution::periodDate($m, $y);
+            $period = Contribution::periodDate($month, $year);
             $row = $postedByPeriod[$period] ?? null;
 
             if ($row !== null && ! $row->is_late) {
@@ -382,28 +375,90 @@ final class MemberContributionInsightsService
     private function postedStreakMonths(Member $member): int
     {
         $postedByPeriod = $this->postedContributionsByPeriod($member, 24);
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $cursor = Carbon::create($openYear, $openMonth, 1)->startOfMonth();
         $streak = 0;
 
-        for ($i = 1; $i <= 24; $i++) {
-            $month = BusinessDay::now()->subMonths($i)->startOfMonth();
-            $m = (int) $month->month;
-            $y = (int) $month->year;
+        for ($i = 0; $i < 36; $i++) {
+            $month = (int) $cursor->month;
+            $year = (int) $cursor->year;
 
-            if (! $this->cycles->memberCanApplyContributionForPeriod($member, $m, $y)) {
+            if (! $this->cycles->memberIsLiableForContributionPeriod($member, $month, $year)) {
+                $cursor->subMonthNoOverflow();
+
                 continue;
             }
 
-            $period = Contribution::periodDate($m, $y);
-            $hasPosted = isset($postedByPeriod[$period]);
+            if ($this->openPeriodIsInProgress($member, $month, $year, $openMonth, $openYear)) {
+                $cursor->subMonthNoOverflow();
 
-            if (! $hasPosted) {
+                continue;
+            }
+
+            $period = Contribution::periodDate($month, $year);
+
+            if (! isset($postedByPeriod[$period])) {
                 break;
             }
 
             $streak++;
+            $cursor->subMonthNoOverflow();
         }
 
         return $streak;
+    }
+
+    /**
+     * @return list<array{month: int, year: int}>
+     */
+    private function rhythmPeriodsBackward(Member $member, int $maxLiablePeriods): array
+    {
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $cursor = Carbon::create($openYear, $openMonth, 1)->startOfMonth();
+        $periods = [];
+
+        for ($i = 0; $i < 48 && count($periods) < $maxLiablePeriods; $i++) {
+            $month = (int) $cursor->month;
+            $year = (int) $cursor->year;
+
+            if (! $this->cycles->memberIsLiableForContributionPeriod($member, $month, $year)) {
+                $cursor->subMonthNoOverflow();
+
+                continue;
+            }
+
+            if ($this->openPeriodIsInProgress($member, $month, $year, $openMonth, $openYear)) {
+                $cursor->subMonthNoOverflow();
+
+                continue;
+            }
+
+            $periods[] = [
+                'month' => $month,
+                'year' => $year,
+            ];
+            $cursor->subMonthNoOverflow();
+        }
+
+        return $periods;
+    }
+
+    private function openPeriodIsInProgress(
+        Member $member,
+        int $month,
+        int $year,
+        int $openMonth,
+        int $openYear,
+    ): bool {
+        if ($month !== $openMonth || $year !== $openYear) {
+            return false;
+        }
+
+        if (Contribution::periodFullyPosted($member->id, $month, $year)) {
+            return false;
+        }
+
+        return ! BusinessDay::now()->greaterThan($this->cycles->deadline($month, $year));
     }
 
     /**

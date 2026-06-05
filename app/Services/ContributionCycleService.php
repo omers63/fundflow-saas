@@ -27,8 +27,7 @@ class ContributionCycleService
     public function __construct(
         protected AccountingService $accounting,
         protected LateFeeService $lateFees,
-    ) {
-    }
+    ) {}
 
     public function cycleStartDay(): int
     {
@@ -178,7 +177,7 @@ class ContributionCycleService
      */
     public function parseContributionCycleKey(string $key): array
     {
-        if (!preg_match('/^(\d{4})-(\d{2})$/', $key, $m)) {
+        if (! preg_match('/^(\d{4})-(\d{2})$/', $key, $m)) {
             throw new \InvalidArgumentException('Invalid contribution cycle key.');
         }
 
@@ -191,7 +190,7 @@ class ContributionCycleService
             return false;
         }
 
-        if ($member->isExemptFromContributions()) {
+        if ($member->isExemptFromContributions($month, $year)) {
             return false;
         }
 
@@ -207,11 +206,11 @@ class ContributionCycleService
 
     public function memberCanApplyContributionForPeriod(Member $member, int $month, int $year): bool
     {
-        if (!$this->memberIsLiableForContributionPeriod($member, $month, $year)) {
+        if (! $this->memberIsLiableForContributionPeriod($member, $month, $year)) {
             return false;
         }
 
-        return !Contribution::query()
+        return ! Contribution::query()
             ->where('member_id', $member->id)
             ->forPeriod($month, $year)
             ->posted()
@@ -233,7 +232,7 @@ class ContributionCycleService
             })
             ->whereDoesntHave('loans', function (Builder $loan): void {
                 $loan->where('status', 'active')
-                    ->whereHas('installments', fn(Builder $installment): Builder => $installment->whereIn('status', ['pending', 'overdue']));
+                    ->whereHas('installments', fn (Builder $installment): Builder => $installment->whereIn('status', ['pending', 'overdue']));
             })
             ->with(['parent', 'cashAccount'])
             ->orderBy('name');
@@ -259,7 +258,7 @@ class ContributionCycleService
             ->forPeriod($month, $year)
             ->posted()
             ->pluck('member_id')
-            ->map(fn(mixed $id): int => (int) $id)
+            ->map(fn (mixed $id): int => (int) $id)
             ->all();
 
         $missingMembers = $this->pendingMembersQueryForPeriod($month, $year)
@@ -267,7 +266,7 @@ class ContributionCycleService
 
         $memberIds = array_values(array_unique(array_merge(
             $postedMemberIds,
-            $missingMembers->pluck('id')->map(fn(mixed $id): int => (int) $id)->all(),
+            $missingMembers->pluck('id')->map(fn (mixed $id): int => (int) $id)->all(),
         )));
 
         if ($memberIds === []) {
@@ -391,7 +390,7 @@ class ContributionCycleService
             return $principalShortfall + $lateFeeDue;
         }
 
-        if (!$this->memberCanApplyContributionForPeriod($member, $month, $year)) {
+        if (! $this->memberCanApplyContributionForPeriod($member, $month, $year)) {
             return 0.0;
         }
 
@@ -473,7 +472,7 @@ class ContributionCycleService
         $allocatedDependentIds = [];
         $periodLabel = $this->periodLabel($month, $year);
 
-        if (!$parent->dependents()->where('status', 'active')->exists()) {
+        if (! $parent->dependents()->where('status', 'active')->exists()) {
             return [
                 'transfers' => 0,
                 'details' => [__('This member has no active dependents.')],
@@ -499,13 +498,13 @@ class ContributionCycleService
             }
 
             if ($this->dependentAllocationExistsForPeriod($dependent, $month, $year)) {
-                $details[] = "{$dependent->name}: " . __('Allocation already completed for :period; collect from dependent cash.', ['period' => $periodLabel]);
+                $details[] = "{$dependent->name}: ".__('Allocation already completed for :period; collect from dependent cash.', ['period' => $periodLabel]);
 
                 continue;
             }
 
             if ($parent->getCashBalance() < $required - 0.00001) {
-                $details[] = "{$dependent->name}: " . __('Parent cash insufficient for full allocation (:amount).', [
+                $details[] = "{$dependent->name}: ".__('Parent cash insufficient for full allocation (:amount).', [
                     'amount' => number_format($required, 2),
                 ]);
 
@@ -531,7 +530,7 @@ class ContributionCycleService
                 });
                 $transfers++;
                 $allocatedDependentIds[] = $dependent->id;
-                $details[] = "{$dependent->name}: " . __('Transferred :amount for :period.', [
+                $details[] = "{$dependent->name}: ".__('Transferred :amount for :period.', [
                     'amount' => number_format($required, 2),
                     'period' => $periodLabel,
                 ]);

@@ -775,7 +775,7 @@ test('late fees settled column sums member cash debits only not master cash mirr
         ->where('reference_type', Contribution::class)
         ->where('reference_id', $contribution->id)
         ->where('type', 'debit')
-        ->where('description', 'like', __('Contribution late fee —').'%')
+        ->where('description', 'like', __('Contribution late fee —') . '%')
         ->count();
 
     expect($mirrorLegCount)->toBe(2);
@@ -860,6 +860,69 @@ test('pending past window close is not raised for contribution-exempt members', 
     expect(ReconciliationException::query()
         ->where('exception_code', 'PENDING_PAST_WINDOW_CLOSE')
         ->where('affected_entities->member_id', $member->id)
+        ->open()
+        ->exists())->toBeFalse();
+});
+
+test('loan disbursement reconciliation accepts mirrored member cash credits without cash payout suffix', function () {
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 200_000, 'is_master' => true]);
+    Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 200_000, 'is_master' => true]);
+
+    $member = Member::create([
+        'member_number' => 'RECON-DISB-1',
+        'name' => 'Disbursement Recon Member',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subMonths(18),
+        'status' => 'active',
+    ]);
+
+    $accounting = app(AccountingService::class);
+    $accounting->createMemberAccounts($member);
+
+    $loan = Loan::factory()->for($member)->create([
+        'status' => 'active',
+        'amount_approved' => 80_000,
+        'amount_disbursed' => 80_000,
+        'member_portion' => 40_000,
+        'master_portion' => 40_000,
+    ]);
+
+    foreach ([1 => 40_000, 2 => 40_000] as $sequence => $amount) {
+        $label = __('Loan #:id disbursement (#:seq) – :name', [
+            'id' => $loan->id,
+            'seq' => $sequence,
+            'name' => $member->name,
+        ]);
+
+        $accounting->debitMemberFundWithMasterMirror(
+            $member->fundAccount,
+            $amount,
+            $label,
+            __('(member fund share)'),
+            $loan,
+            memberId: $member->id,
+        );
+
+        $accounting->creditMemberCashWithMasterMirror(
+            $member->cashAccount,
+            $amount,
+            $label,
+            __('(cash payout mirror)'),
+            $loan,
+            memberId: $member->id,
+        );
+    }
+
+    ReconciliationException::query()->where('exception_code', 'DISBURSEMENT_MEMBER_CASH_MISSING')->delete();
+
+    $recon = app(ReconciliationService::class);
+    $method = new ReflectionMethod($recon, 'reconcileLoansAndEmi');
+    $method->setAccessible(true);
+    $method->invoke($recon);
+
+    expect(ReconciliationException::query()
+        ->where('exception_code', 'DISBURSEMENT_MEMBER_CASH_MISSING')
+        ->where('affected_entities->loan_id', $loan->id)
         ->open()
         ->exists())->toBeFalse();
 });
