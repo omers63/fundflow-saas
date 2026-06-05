@@ -59,6 +59,7 @@
                     <span @class([
                         'rounded px-1.5 py-0.5 text-[9px] font-bold uppercase',
                         'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' => $open['status_key'] === 'posted',
+                        'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200' => $open['status_key'] === 'loan_repayment',
                         'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => in_array($open['status_key'], ['exempt', 'short'], true),
                         'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' => in_array($open['status_key'], ['ready', 'waiting'], true),
                         'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300' => $open['status_key'] === 'na',
@@ -66,25 +67,37 @@
                 </div>
                 <div class="space-y-2 px-3 py-2 text-[11px] text-gray-600 dark:text-gray-300">
                     <p class="text-[10px] text-gray-400">{{ $open['window'] }}</p>
-                    <div class="grid grid-cols-2 gap-2">
-                        <div class="rounded-lg bg-gray-50 px-2 py-1.5 dark:bg-gray-900/50">
-                            <p class="text-[9px] uppercase tracking-wide text-gray-400">{{ __('Required cash') }}</p>
-                            <p class="font-bold tabular-nums text-gray-900 dark:text-white">{{ $open['required_cash'] }}</p>
+                    @if ($open['under_loan_repayment'] ?? false)
+                        <div class="rounded-lg bg-violet-50 px-2.5 py-2 dark:bg-violet-950/30">
+                            <p class="text-[9px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">
+                                {{ __('Status') }}</p>
+                            <p class="text-sm font-semibold text-violet-900 dark:text-violet-100">
+                                {{ $open['loan_repayment_message'] }}</p>
+                            <p class="mt-1 text-[10px] text-violet-700/80 dark:text-violet-300/80">
+                                {{ __('Contributions are paused while you repay your loan. Cash in your account applies to loan installments for this cycle.') }}
+                            </p>
                         </div>
-                        <div @class([
-                            'rounded-lg px-2 py-1.5',
-                            'bg-emerald-50 dark:bg-emerald-950/30' => $open['cash_ready'],
-                            'bg-amber-50 dark:bg-amber-950/30' => ! $open['cash_ready'],
-                        ])>
-                            <p class="text-[9px] uppercase tracking-wide text-gray-400">{{ __('Your cash') }}</p>
-                            <p @class([
-                                'font-bold tabular-nums',
-                                'text-emerald-700 dark:text-emerald-300' => $open['cash_ready'],
-                                'text-amber-700 dark:text-amber-300' => ! $open['cash_ready'],
-                            ])>{{ $open['cash_balance'] }}</p>
+                    @else
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="rounded-lg bg-gray-50 px-2 py-1.5 dark:bg-gray-900/50">
+                                <p class="text-[9px] uppercase tracking-wide text-gray-400">{{ __('Required cash') }}</p>
+                                <p class="font-bold tabular-nums text-gray-900 dark:text-white">{{ $open['required_cash'] }}</p>
+                            </div>
+                            <div @class([
+                                'rounded-lg px-2 py-1.5',
+                                'bg-emerald-50 dark:bg-emerald-950/30' => $open['cash_ready'],
+                                'bg-amber-50 dark:bg-amber-950/30' => ! $open['cash_ready'],
+                            ])>
+                                <p class="text-[9px] uppercase tracking-wide text-gray-400">{{ __('Your cash') }}</p>
+                                <p @class([
+                                    'font-bold tabular-nums',
+                                    'text-emerald-700 dark:text-emerald-300' => $open['cash_ready'],
+                                    'text-amber-700 dark:text-amber-300' => ! $open['cash_ready'],
+                                ])>{{ $open['cash_balance'] }}</p>
+                            </div>
                         </div>
-                    </div>
-                    @if (! $open['cash_ready'] && ($open['cash_shortfall_raw'] ?? 0) > 0)
+                    @endif
+                    @if (! ($open['under_loan_repayment'] ?? false) && ! $open['cash_ready'] && ($open['cash_shortfall_raw'] ?? 0) > 0)
 <div>
                             <div class="mb-0.5 flex justify-between text-[10px]">
                                 <span>{{ __('Cash readiness') }}</span>

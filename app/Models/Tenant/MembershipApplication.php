@@ -20,6 +20,8 @@ class MembershipApplication extends Model
         'email',
         'household_email',
         'parent_application_id',
+        'parent_member_id',
+        'submitted_by_user_id',
         'member_id',
         'password',
         'phone',
@@ -84,6 +86,16 @@ class MembershipApplication extends Model
         return $this->belongsTo(self::class, 'parent_application_id');
     }
 
+    public function parentMember(): BelongsTo
+    {
+        return $this->belongsTo(Member::class, 'parent_member_id');
+    }
+
+    public function submittedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'submitted_by_user_id');
+    }
+
     public function dependentApplications(): HasMany
     {
         return $this->hasMany(self::class, 'parent_application_id');
@@ -101,7 +113,13 @@ class MembershipApplication extends Model
 
     public function isHouseholdDependent(): bool
     {
-        return $this->parent_application_id !== null;
+        return $this->parent_application_id !== null
+            || $this->parent_member_id !== null;
+    }
+
+    public function isOnBehalfDependentApplication(): bool
+    {
+        return $this->parent_member_id !== null;
     }
 
     /**

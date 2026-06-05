@@ -200,6 +200,84 @@ test('contribution arrears tab bulk apply now posts selected periods', function 
     Carbon::setTestNow();
 });
 
+test('contribution arrears tab clear arrears waives period without posting cash', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+
+    $accounting = app(AccountingService::class);
+    $member = Member::create([
+        'member_number' => 'ARR-CLEAR-'.uniqid(),
+        'name' => 'Arrears Clear Member',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subMonths(18),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($member);
+    $member->cashAccount->update(['balance' => 0]);
+
+    $rows = app(LoanDelinquencyService::class)->contributionArrearsTableRecords($member->id);
+    expect($rows)->not->toBeEmpty();
+
+    $row = $rows->first();
+
+    Livewire::test(ListContributions::class)
+        ->set('activeTab', 'arrears')
+        ->callTableAction('clear_arrears', (string) $row['__key'], data: ['note' => 'Board approved'])
+        ->assertNotified();
+
+    $contribution = Contribution::query()
+        ->where('member_id', $member->id)
+        ->forPeriod((int) $row['month'], (int) $row['year'])
+        ->first();
+
+    expect($contribution)->not->toBeNull()
+        ->and($contribution->status)->toBe('waived')
+        ->and((float) $contribution->amount_collected)->toBe(0.0)
+        ->and($contribution->transactions()->count())->toBe(0);
+
+    $remaining = app(LoanDelinquencyService::class)->contributionArrearsTableRecords($member->id);
+    expect($remaining->contains(fn (array $r): bool => (int) $r['month'] === (int) $row['month']
+        && (int) $r['year'] === (int) $row['year']))->toBeFalse();
+
+    Carbon::setTestNow();
+});
+
+test('contribution arrears tab bulk clear arrears waives selected periods', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+
+    $accounting = app(AccountingService::class);
+    $member = Member::create([
+        'member_number' => 'ARR-BCLEAR-'.uniqid(),
+        'name' => 'Arrears Bulk Clear Member',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subMonths(18),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($member);
+
+    $rows = app(LoanDelinquencyService::class)->contributionArrearsTableRecords($member->id);
+    expect($rows->count())->toBeGreaterThanOrEqual(2);
+
+    $selected = $rows->take(2);
+    $keys = $selected->pluck('__key')->map(fn ($key): string => (string) $key)->all();
+
+    Livewire::test(ListContributions::class)
+        ->set('activeTab', 'arrears')
+        ->callTableBulkAction('clearSelected', $keys)
+        ->assertNotified();
+
+    foreach ($selected as $row) {
+        expect(
+            Contribution::query()
+                ->where('member_id', $member->id)
+                ->forPeriod((int) $row['month'], (int) $row['year'])
+                ->where('status', 'waived')
+                ->exists()
+        )->toBeTrue();
+    }
+
+    Carbon::setTestNow();
+});
+
 test('contribution arrears member filter scopes tab count to one member', function () {
     Carbon::setTestNow(Carbon::create(2026, 5, 20));
 

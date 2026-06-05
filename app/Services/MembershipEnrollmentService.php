@@ -52,6 +52,9 @@ class MembershipEnrollmentService
      *     membership_fee_transfer_reference?: string|null,
      *     membership_fee_receipt?: UploadedFile|null,
      *     membership_fee_required_amount?: float|null,
+     *     parent_member_id?: int|null,
+     *     submitted_by_user_id?: int|null,
+     *     household_email?: string|null,
      * }  $data
      */
     public function submitApplication(array $data): MembershipApplication
@@ -78,6 +81,9 @@ class MembershipEnrollmentService
         return MembershipApplication::create([
             'name' => $data['name'],
             'email' => $data['email'],
+            'household_email' => $data['household_email'] ?? null,
+            'parent_member_id' => $data['parent_member_id'] ?? null,
+            'submitted_by_user_id' => $data['submitted_by_user_id'] ?? null,
             'password' => $data['password'],
             'phone' => $data['phone'] ?? $data['mobile_phone'],
             'application_type' => $data['application_type'],

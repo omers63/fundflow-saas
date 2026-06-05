@@ -51,7 +51,10 @@ final class MemberDetailInsightsService
 
         $exempt = $member->isExemptFromContributions();
         $canApply = $cycles->memberCanApplyContributionForPeriod($member, $curMonth, $curYear);
-        $requiredCash = $cycles->requiredCashForMemberPeriod($member, $curMonth, $curYear);
+        $underLoanRepayment = $member->hasActiveLoanRepaymentObligation();
+        $requiredCash = $underLoanRepayment
+            ? 0.0
+            : $cycles->requiredCashForMemberPeriod($member, $curMonth, $curYear);
         $cashReady = $cashBalance >= $requiredCash;
 
         $cycleStatus = $this->resolveCycleStatus(
@@ -158,6 +161,10 @@ final class MemberDetailInsightsService
                 'status_key' => $cycleStatus['key'],
                 'status_label' => $cycleStatus['label'],
                 'status_tone' => $cycleStatus['tone'],
+                'under_loan_repayment' => $underLoanRepayment,
+                'loan_repayment_message' => $underLoanRepayment
+                    ? __('Under loan repayment')
+                    : null,
                 'required_cash' => InsightFormatter::money($requiredCash),
                 'cash_ready' => $cashReady,
                 'posted' => $postedThisPeriod,
@@ -454,6 +461,16 @@ final class MemberDetailInsightsService
                 'label' => __('Posted for :period', ['period' => $period]),
                 'short' => __('Posted'),
                 'tone' => 'emerald',
+                'period' => $period,
+            ];
+        }
+
+        if ($member->hasActiveLoanRepaymentObligation()) {
+            return [
+                'key' => 'loan_repayment',
+                'label' => __('Under loan repayment'),
+                'short' => __('Loan EMI'),
+                'tone' => 'violet',
                 'period' => $period,
             ];
         }

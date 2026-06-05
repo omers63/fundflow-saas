@@ -28,6 +28,7 @@ final class LoanSettings
             'guarantor_transfer_missed_threshold' => 3,
             'max_active_loans' => 1,
             'require_guarantor_above_fund_balance' => true,
+            'member_funding_split_pct' => 50,
             'auto_allocate_loan_repayment' => false,
             'late_payment_consecutive_threshold' => 3,
             'late_payment_rolling_threshold' => 15,
@@ -93,6 +94,94 @@ final class LoanSettings
         return (bool) self::get('require_guarantor_above_fund_balance', true);
     }
 
+    /**
+     * Share of each approved loan amount funded from the member fund account (0–100).
+     */
+    public static function memberFundingSplitPercent(): float
+    {
+        $stored = self::get('member_funding_split_pct', null);
+
+        if ($stored !== null) {
+            return max(0.0, min(100.0, (float) $stored));
+        }
+
+        if ((bool) self::get('fifty_fifty_funding_split', false)) {
+            return 50.0;
+        }
+
+        return 50.0;
+    }
+
+    public static function masterFundingSplitPercent(): float
+    {
+        return round(100.0 - self::memberFundingSplitPercent(), 2);
+    }
+
+    /**
+     * Member vs. master portions of an approved loan amount for a chosen application strategy.
+     *
+     * @return array{member_portion: float, master_portion: float}
+     */
+    public static function resolveFundingPortions(
+        float $loanAmount,
+        float $memberFundBalance,
+        ?string $fundingStrategy = null,
+    ): array {
+        if ($loanAmount <= 0) {
+            return ['member_portion' => 0.0, 'master_portion' => 0.0];
+        }
+
+        $strategy = LoanFundingStrategy::normalize($fundingStrategy);
+
+        if ($strategy === LoanFundingStrategy::SPLIT_PERCENTAGE) {
+            $memberPortion = round($loanAmount * (self::memberFundingSplitPercent() / 100), 2);
+
+            return [
+                'member_portion' => $memberPortion,
+                'master_portion' => round($loanAmount - $memberPortion, 2),
+            ];
+        }
+
+        $memberPortion = round(min(max(0.0, $memberFundBalance), $loanAmount), 2);
+
+        return [
+            'member_portion' => $memberPortion,
+            'master_portion' => round($loanAmount - $memberPortion, 2),
+        ];
+    }
+
+    /**
+     * Fund balance the member must hold to cover their share at disbursement.
+     */
+    public static function requiredMemberFundForLoanAmount(float $loanAmount, ?string $fundingStrategy = null): float
+    {
+        if ($loanAmount <= 0) {
+            return 0.0;
+        }
+
+        $strategy = LoanFundingStrategy::normalize($fundingStrategy);
+
+        if ($strategy === LoanFundingStrategy::SPLIT_PERCENTAGE) {
+            return round($loanAmount * (self::memberFundingSplitPercent() / 100), 2);
+        }
+
+        return $loanAmount;
+    }
+
+    public static function excessFundCashOutAmount(
+        float $loanAmount,
+        float $memberFundBalance,
+        ?string $fundingStrategy = null,
+    ): float {
+        if (LoanFundingStrategy::normalize($fundingStrategy) !== LoanFundingStrategy::SPLIT_PERCENTAGE) {
+            return 0.0;
+        }
+
+        $portions = self::resolveFundingPortions($loanAmount, $memberFundBalance, $fundingStrategy);
+
+        return round(max(0.0, $memberFundBalance - $portions['member_portion']), 2);
+    }
+
     public static function autoAllocateLoanRepayment(): bool
     {
         return (bool) self::get('auto_allocate_loan_repayment', false);
@@ -118,13 +207,16 @@ final class LoanSettings
         return max(1, (int) self::get('late_payment_lookback_months', 60));
     }
 
-    public static function guarantorRequiredForAmount(Member $member, float $amount): bool
-    {
+    public static function guarantorRequiredForAmount(
+        Member $member,
+        float $amount,
+        ?string $fundingStrategy = null,
+    ): bool {
         if (! self::requireGuarantorAboveFundBalance()) {
             return false;
         }
 
-        return $amount > $member->getFundBalance() + 0.01;
+        return self::requiredMemberFundForLoanAmount($amount, $fundingStrategy) > $member->getFundBalance() + 0.01;
     }
 
     /**

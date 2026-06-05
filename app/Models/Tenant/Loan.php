@@ -4,6 +4,7 @@ namespace App\Models\Tenant;
 
 use App\Services\Loans\LoanEarlySettlementService;
 use App\Support\BusinessDay;
+use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -63,6 +64,8 @@ class Loan extends Model
         'rejection_reason',
         'cancellation_reason',
         'is_emergency',
+        'funding_strategy',
+        'cash_out_excess_fund',
         'payout_at',
         'rejected_at',
         'cancelled_at',
@@ -80,6 +83,7 @@ class Loan extends Model
             'late_repayment_amount' => 'decimal:2',
             'settlement_threshold' => 'decimal:4',
             'is_emergency' => 'boolean',
+            'cash_out_excess_fund' => 'boolean',
             'applied_at' => 'datetime',
             'approved_at' => 'datetime',
             'disbursed_at' => 'datetime',
@@ -363,23 +367,23 @@ class Loan extends Model
      *   installments = ceil( (master_portion + settlement_threshold × loan_amount)
      *                        / min_monthly_installment )
      *
-     * Where:
-     *   master_portion  = loan_amount − min(max(0, member_fund_balance), loan_amount)
-     *   settlement_threshold × loan_amount = the extra 16% (configurable) the
-     *     member must accumulate in their fund account to achieve full settlement.
+     * Where member/master portions follow {@see LoanSettings::resolveFundingPortions()}.
      */
     public static function computeInstallmentsCount(
         float $loanAmount,
         float $memberFundBalance,
         float $minMonthlyInstallment,
         float $settlementThresholdPct,
+        ?string $fundingStrategy = null,
     ): int {
-        $memberPortion = min(max(0.0, $memberFundBalance), $loanAmount);
-        $masterPortion = $loanAmount - $memberPortion;
-        $settlementAmt = $loanAmount * $settlementThresholdPct;
-        $totalToRepay = $masterPortion + $settlementAmt;
+        $portions = LoanSettings::resolveFundingPortions($loanAmount, $memberFundBalance, $fundingStrategy);
 
-        return max(1, (int) ceil($totalToRepay / max(1, $minMonthlyInstallment)));
+        return self::computeInstallmentsCountFromPortions(
+            $loanAmount,
+            $portions['member_portion'],
+            $minMonthlyInstallment,
+            $settlementThresholdPct,
+        );
     }
 
     /**

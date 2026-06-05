@@ -11,6 +11,8 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Support\BusinessDay;
+use App\Support\LoanFundingStrategy;
+use App\Support\LoanSettings;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -55,6 +57,7 @@ final class LoanLedgerService
         LoanDisbursement $disbursementRecord,
         ?CarbonInterface $disbursedAt = null,
         bool $allowNegativeMasterFundBalance = false,
+        ?float $memberFundBalanceAtDisbursement = null,
     ): void {
         $member = $loan->member;
         $this->ensureMemberAccounts($member);
@@ -69,13 +72,39 @@ final class LoanLedgerService
             throw new RuntimeException(__('Required accounts are not configured.'));
         }
 
-        DB::transaction(function () use ($loan, $member, $memberFund, $masterFund, $memberCash, $loanAccount, $amount, $disbursementRecord, $disbursedAt, $allowNegativeMasterFundBalance): void {
+        $approved = (float) ($loan->amount_approved ?: $loan->amount);
+        $fundBal = $memberFundBalanceAtDisbursement ?? (float) $memberFund->balance;
+        $strategy = LoanFundingStrategy::normalize($loan->funding_strategy);
+        $portions = LoanSettings::resolveFundingPortions($approved, $fundBal, $strategy);
+        $ratio = $approved > 0 ? $amount / $approved : 1.0;
+        $memberFundDebit = round($portions['member_portion'] * $ratio, 2);
+        $masterFundDebit = round($portions['master_portion'] * $ratio, 2);
+        $fullMasterPortion = round($portions['master_portion'], 2);
+        $isSplitStrategy = $strategy === LoanFundingStrategy::SPLIT_PERCENTAGE;
+        $fundBalForMemberPortionCheck = $memberFundBalanceAtDisbursement ?? (float) $memberFund->balance;
+        $willCompleteDisbursement = ((float) $loan->amount_disbursed + $amount) >= $approved - 0.01;
+
+        if (
+            $isSplitStrategy
+            && $willCompleteDisbursement
+            && ! $allowNegativeMasterFundBalance
+            && ($memberFundDebit + $fullMasterPortion) > (float) $masterFund->balance + 0.01
+        ) {
+            throw new RuntimeException(__('Insufficient master fund balance.'));
+        }
+
+        DB::transaction(function () use ($loan, $member, $memberFund, $masterFund, $memberCash, $loanAccount, $amount, $memberFundDebit, $masterFundDebit, $fullMasterPortion, $disbursementRecord, $disbursedAt, $allowNegativeMasterFundBalance, $isSplitStrategy, $fundBalForMemberPortionCheck, $approved, $strategy, $memberFundBalanceAtDisbursement, $willCompleteDisbursement): void {
             if (
-                ! $allowNegativeMasterFundBalance
-                && $amount > 0
-                && (float) $masterFund->fresh()->balance < $amount
+                ! $isSplitStrategy
+                && ! $allowNegativeMasterFundBalance
+                && $masterFundDebit > 0
+                && (float) $masterFund->fresh()->balance < $masterFundDebit
             ) {
                 throw new RuntimeException(__('Insufficient master fund balance.'));
+            }
+
+            if ($memberFundDebit > $fundBalForMemberPortionCheck + 0.01) {
+                throw new RuntimeException(__('Insufficient member fund balance for disbursement.'));
             }
 
             $seq = $loan->disbursements()->count();
@@ -87,15 +116,30 @@ final class LoanLedgerService
             $at = $disbursedAt ?? BusinessDay::now();
 
             $this->accounting->debit($loanAccount, $amount, $label, $loan, $at, $member->id);
-            $this->accounting->debitMemberFundWithMasterMirror(
-                $memberFund,
-                $amount,
-                $label,
-                __('(master funded)'),
-                $loan,
-                $at,
-                $member->id,
-            );
+
+            if ($memberFundDebit > 0.00001) {
+                $this->accounting->debitMemberFundWithMasterMirror(
+                    $memberFund,
+                    $memberFundDebit,
+                    $label,
+                    __('(member fund share)'),
+                    $loan,
+                    $at,
+                    $member->id,
+                );
+            }
+
+            if (! $isSplitStrategy && $masterFundDebit > 0.00001) {
+                $this->accounting->debit(
+                    $masterFund,
+                    $masterFundDebit,
+                    $label.' '.__('(master fund share)'),
+                    $loan,
+                    $at,
+                    $member->id,
+                );
+            }
+
             $this->accounting->creditMemberCashWithMasterMirror(
                 $memberCash,
                 $amount,
@@ -107,11 +151,89 @@ final class LoanLedgerService
             );
 
             $disbursementRecord->update([
-                'member_portion' => 0,
-                'master_portion' => $amount,
+                'member_portion' => $memberFundDebit,
+                'master_portion' => $masterFundDebit,
             ]);
 
             $loan->increment('amount_disbursed', $amount);
+
+            if (! $isSplitStrategy || ! $willCompleteDisbursement) {
+                return;
+            }
+
+            if ($loan->cash_out_excess_fund) {
+                $excess = LoanSettings::excessFundCashOutAmount(
+                    $approved,
+                    $memberFundBalanceAtDisbursement ?? (float) $memberFund->fresh()->balance,
+                    $strategy,
+                );
+
+                if ($excess > 0.00001) {
+                    $this->transferMemberFundBalanceToCash($loan, $excess, $at);
+                    $memberFund->refresh();
+                }
+            }
+
+            if ($fullMasterPortion > 0.00001) {
+                $this->accounting->debitMemberFundWithMasterMirror(
+                    $memberFund,
+                    $fullMasterPortion,
+                    $label,
+                    __('(master fund share)'),
+                    $loan,
+                    $at,
+                    $member->id,
+                );
+            }
+        });
+    }
+
+    public function transferMemberFundBalanceToCash(
+        Loan $loan,
+        float $amount,
+        ?CarbonInterface $transactedAt = null,
+    ): void {
+        if ($amount <= 0.00001) {
+            return;
+        }
+
+        $loan->loadMissing('member');
+        $member = $loan->member;
+        $this->ensureMemberAccounts($member);
+
+        $memberFund = $member->fundAccount;
+        $memberCash = $member->cashAccount;
+
+        if ($memberFund === null || $memberCash === null) {
+            throw new RuntimeException(__('Member fund and cash accounts are required.'));
+        }
+
+        if ($member->getFundBalance() < $amount - 0.00001) {
+            throw new RuntimeException(__('Insufficient fund balance for the requested transfer.'));
+        }
+
+        $description = __('Loan #:id — excess fund to cash', ['id' => $loan->id]);
+        $at = $transactedAt ?? BusinessDay::now();
+
+        DB::transaction(function () use ($member, $memberFund, $memberCash, $amount, $description, $loan, $at): void {
+            $this->accounting->debitMemberFundWithMasterMirror(
+                $memberFund,
+                $amount,
+                $description,
+                __('(master fund mirror)'),
+                $loan,
+                $at,
+                $member->id,
+            );
+            $this->accounting->creditMemberCashWithMasterMirror(
+                $memberCash,
+                $amount,
+                $description,
+                __('(master cash mirror)'),
+                $loan,
+                $at,
+                $member->id,
+            );
         });
     }
 

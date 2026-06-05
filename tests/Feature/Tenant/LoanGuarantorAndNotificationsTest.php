@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Tenant\Account;
+use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
@@ -9,10 +10,14 @@ use App\Notifications\Tenant\GuarantorLoanApplicationNotification;
 use App\Notifications\Tenant\LoanSubmittedNotification;
 use App\Notifications\Tenant\NewLoanApplicationNotification;
 use App\Services\AccountingService;
+use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanLifecycleService;
+use App\Support\ContributionCollectionStatus;
 use App\Support\LoanSettings;
 use App\Support\MemberNotificationChannels;
 use App\Support\NotificationSettings;
+use Carbon\Carbon;
+use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Notification;
 use Tests\Concerns\InitializesTenancy;
 
@@ -77,7 +82,41 @@ beforeEach(function () {
     // Fund balance eligible but below loan request amount (guarantor required)
     app(AccountingService::class)->credit($this->borrower->fundAccount, 8000, 'Seed fund');
     app(AccountingService::class)->credit($this->guarantor->fundAccount, 8000, 'Seed fund');
+
+    seedPostedContributionsForLoanEligibility($this->borrower);
+    seedPostedContributionsForLoanEligibility($this->guarantor);
+
+    Filament::setCurrentPanel('tenant');
 });
+
+function seedPostedContributionsForLoanEligibility(Member $member): void
+{
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $cursor = $member->joined_at->copy()->startOfMonth();
+
+    while ($cursor->lte(Carbon::create($openYear, $openMonth, 1)->endOfMonth())) {
+        $month = (int) $cursor->month;
+        $year = (int) $cursor->year;
+
+        if ((float) $member->monthly_contribution_amount > 0 && ! $member->isExemptFromContributions($month, $year)) {
+            Contribution::create([
+                'member_id' => $member->id,
+                'period' => Contribution::periodDate($month, $year),
+                'amount' => $member->monthly_contribution_amount,
+                'amount_due' => $member->monthly_contribution_amount,
+                'amount_collected' => $member->monthly_contribution_amount,
+                'status' => 'posted',
+                'collection_status' => ContributionCollectionStatus::COLLECTED,
+                'posted_at' => $cursor->copy()->endOfMonth(),
+                'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+                'is_late' => false,
+            ]);
+        }
+
+        $cursor->addMonthNoOverflow();
+    }
+}
 
 test('loan apply requires guarantor when amount exceeds fund balance', function () {
     LoanSettings::save(['require_guarantor_above_fund_balance' => true]);
@@ -94,6 +133,7 @@ test('loan apply requires guarantor when amount exceeds fund balance', function 
         $this->guarantor->id,
         false,
         true,
+        1,
         'Witness One',
         '+966511111111',
     );
@@ -103,7 +143,17 @@ test('loan apply requires guarantor when amount exceeds fund balance', function 
 
     Notification::assertSentTo($this->borrowerUser, LoanSubmittedNotification::class);
     Notification::assertSentTo($this->guarantorUser, GuarantorLoanApplicationNotification::class);
-    Notification::assertSentTo($this->admin, NewLoanApplicationNotification::class);
+    Notification::assertSentTo(
+        $this->admin,
+        NewLoanApplicationNotification::class,
+        function (NewLoanApplicationNotification $notification, array $channels) use ($loan): bool {
+            $payload = $notification->toDatabase($this->admin);
+
+            return in_array('database', $channels, true)
+                && ($payload['format'] ?? null) === 'filament'
+                && str_contains((string) ($payload['actions'][0]['url'] ?? ''), (string) $loan->id);
+        },
+    );
 });
 
 test('member notification channels include sms when configured', function () {

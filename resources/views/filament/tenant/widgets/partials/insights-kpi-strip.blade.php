@@ -38,6 +38,12 @@
                 $iconClass = $accentIcon[$accent] ?? 'text-gray-400';
                 $barOpacity = ($card['active'] ?? true) ? 'opacity-100' : 'opacity-25';
                 $tag = filled($card['url'] ?? null) ? 'a' : 'div';
+                $labelText = ui_label($card['label']);
+                $subText = ui_label($card['sub']);
+                $valueText = (string) $card['value'];
+                if (!empty($card['suffix'] ?? null)) {
+                    $valueText .= ' ' . $card['suffix'];
+                }
             @endphp
             <{{ $tag }}
                 @if ($tag === 'a')
@@ -60,16 +66,16 @@
                         ])>{{ $card['mom'] >= 0 ? '↑' : '↓' }}{{ abs($card['mom']) }}%</span>
                     @endif
                 </div>
-                <p class="mt-0.5 truncate pl-1 text-[10px] font-medium uppercase tracking-wide text-gray-500">
-                    {{ ui_label($card['label']) }}</p>
-                <p @class([
+                <x-ff-stat-line :text="$labelText"
+                    class="mt-0.5 truncate pl-1 text-[10px] font-medium uppercase tracking-wide text-gray-500" />
+                <x-ff-stat-line :text="$valueText" @class([
                     'truncate pl-1 text-lg font-bold tabular-nums leading-tight',
                     $card['value_class'] ?? 'text-gray-900 dark:text-white',
                 ])>
                     {{ $card['value'] }}@if (!empty($card['suffix'] ?? null))<span
-                            class="text-[10px] font-normal text-gray-400">{{ $card['suffix'] }}</span>@endif
-                </p>
-                <p class="truncate pl-1 text-[10px] text-gray-400">{{ ui_label($card['sub']) }}</p>
+                    class="text-[10px] font-normal text-gray-400">{{ $card['suffix'] }}</span>@endif
+                </x-ff-stat-line>
+                <x-ff-stat-line :text="$subText" class="truncate pl-1 text-[10px] text-gray-400" />
             </{{ $tag }}>
         @endforeach
     </div>

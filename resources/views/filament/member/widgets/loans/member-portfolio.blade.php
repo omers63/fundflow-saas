@@ -11,11 +11,12 @@
                 @php
                     $accent = $card['accent'] ?? ['sky', 'violet', 'emerald', 'amber'][$i % 4];
                 @endphp
-                <div class="ff-app-insights-kpi ff-member-stat-card px-2.5 py-2" data-accent="{{ $accent }}">
-                    <p class="text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ ui_label($card['label']) }}
-                    </p>
-                    <p class="text-lg font-bold tabular-nums text-gray-900 dark:text-white">{{ $card['value'] }}</p>
-                    <p class="text-[10px] text-gray-400">{{ ui_label($card['sub']) }}</p>
+                <div class="ff-app-insights-kpi ff-member-stat-card min-w-0 px-2.5 py-2" data-accent="{{ $accent }}">
+                    <x-ff-stat-line :text="ui_label($card['label'])"
+                        class="truncate text-[10px] font-medium uppercase tracking-wide text-gray-500" />
+                    <x-ff-stat-line :text="(string) $card['value']"
+                        class="truncate text-lg font-bold tabular-nums text-gray-900 dark:text-white" />
+                    <x-ff-stat-line :text="ui_label($card['sub'])" class="truncate text-[10px] text-gray-400" />
                 </div>
             @endforeach
         </div>

@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
+use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -23,14 +24,18 @@ final class MemberLoanCalculatorService
      *     total_repay: float
      * }>
      */
-    public function calculationsForAmount(float $loanAmount, Member $member): array
-    {
+    public function calculationsForAmount(
+        float $loanAmount,
+        Member $member,
+        ?string $fundingStrategy = null,
+    ): array {
         if ($loanAmount <= 0) {
             return [];
         }
 
         $fundBalance = $member->getFundBalance();
         $settlementPct = LoanSettings::settlementThreshold();
+        $strategy = LoanFundingStrategy::normalize($fundingStrategy);
         $results = [];
 
         foreach ($this->activeTiers() as $tier) {
@@ -38,14 +43,16 @@ final class MemberLoanCalculatorService
                 continue;
             }
 
-            $memberPortion = min(max(0.0, $fundBalance), $loanAmount);
-            $masterPortion = $loanAmount - $memberPortion;
+            $portions = LoanSettings::resolveFundingPortions($loanAmount, $fundBalance, $strategy);
+            $memberPortion = $portions['member_portion'];
+            $masterPortion = $portions['master_portion'];
             $minInstallment = (float) $tier->min_monthly_installment;
             $installments = Loan::computeInstallmentsCount(
                 $loanAmount,
                 $fundBalance,
                 $minInstallment,
                 $settlementPct,
+                $strategy,
             );
             $settlementAmt = $loanAmount * $settlementPct;
             $totalToRepay = $masterPortion + $settlementAmt;

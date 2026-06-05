@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\Tenant\Account;
+use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
@@ -75,7 +76,7 @@ test('open period repayment applies installment due mar 5 within february cycle'
     ]);
 
     AccountingService::withoutMemberCashCollection(
-        fn() => $this->accounting->credit($member->cashAccount, 2000, 'Deposit'),
+        fn () => $this->accounting->credit($member->cashAccount, 2000, 'Deposit'),
     );
 
     expect($this->repayments->shouldOfferOpenPeriodRepayment($member->fresh()))->toBeTrue()
@@ -156,10 +157,64 @@ test('open period repayment applies february installment when business date is i
     ]);
 
     AccountingService::withoutMemberCashCollection(
-        fn() => $this->accounting->credit($member->cashAccount, 2000, 'Deposit'),
+        fn () => $this->accounting->credit($member->cashAccount, 2000, 'Deposit'),
     );
 
     expect($this->repayments->shouldOfferOpenPeriodRepayment($member->fresh()))->toBeTrue()
+        ->and($this->repayments->applyOpenPeriodRepaymentForMember($member->fresh()))->toBe('applied')
+        ->and(LoanInstallment::query()->where('loan_id', $loan->id)->value('status'))->toBe('paid');
+});
+
+test('open period repayment applies when member is loan exempt despite posted contribution in same cycle', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-02'));
+
+    [$month, $year] = $this->cycles->currentOpenPeriod();
+
+    expect([$month, $year])->toBe([5, 2026]);
+
+    $member = Member::create([
+        'member_number' => 'OPEN-PER-3',
+        'name' => 'May Cycle Borrower',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    Contribution::factory()->for($member)->posted()->create([
+        'period' => Contribution::periodDate($month, $year),
+        'amount' => 500,
+    ]);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2026-06-05'),
+        'status' => 'pending',
+    ]);
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->accounting->credit($member->cashAccount, 2000, 'Deposit'),
+    );
+
+    expect($member->fresh()->isExemptFromContributions())->toBeTrue()
+        ->and($this->repayments->shouldOfferOpenPeriodRepayment($member->fresh()))->toBeTrue()
         ->and($this->repayments->applyOpenPeriodRepaymentForMember($member->fresh()))->toBe('applied')
         ->and(LoanInstallment::query()->where('loan_id', $loan->id)->value('status'))->toBe('paid');
 });

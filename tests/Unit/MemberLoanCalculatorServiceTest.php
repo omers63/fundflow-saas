@@ -7,6 +7,7 @@ use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Services\MemberLoanCalculatorService;
+use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use Tests\Concerns\InitializesTenancy;
 use Tests\TestCase;
@@ -64,4 +65,18 @@ test('calculations match tier split and installment count', function () {
 test('returns empty when amount is zero or out of tier range', function () {
     expect($this->service->calculationsForAmount(0, $this->member))->toBe([])
         ->and($this->service->calculationsForAmount(99_999, $this->member))->toBe([]);
+});
+
+test('uses split percentage strategy when selected', function () {
+    LoanSettings::save(['member_funding_split_pct' => 30]);
+    $this->member->fundAccount->update(['balance' => 20_000]);
+
+    $calc = $this->service->calculationsForAmount(
+        10_000,
+        $this->member->fresh(),
+        LoanFundingStrategy::SPLIT_PERCENTAGE,
+    )[0];
+
+    expect($calc['member_portion'])->toBe(3000.0)
+        ->and($calc['master_portion'])->toBe(7000.0);
 });

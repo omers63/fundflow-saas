@@ -22,8 +22,7 @@ class LoanRepaymentService
     public function __construct(
         protected LoanLedgerService $ledger,
         protected LateFeeService $lateFees,
-    ) {
-    }
+    ) {}
 
     // =========================================================================
     // Deadline helpers (mirrors ContributionCycleService)
@@ -61,7 +60,7 @@ class LoanRepaymentService
             ->each(function (Loan $loan) use ($month, $year, $deadline, &$notified) {
                 // Find the installment due in this period
                 $installment = $this->installmentForPeriod($loan, $month, $year);
-                if (!$installment || $installment->isPaid()) {
+                if (! $installment || $installment->isPaid()) {
                     return;
                 }
 
@@ -119,13 +118,15 @@ class LoanRepaymentService
     {
         $installment = $this->installmentForPeriod($loan, $month, $year);
 
-        if (!$installment || $installment->isPaid()) {
+        if (! $installment || $installment->isPaid()) {
             $results['skipped'][] = $loan;
 
             return 'skipped';
         }
 
-        if (Contribution::activePeriodExists((int) $loan->member_id, $month, $year)) {
+        $member = $loan->member;
+
+        if (Contribution::blocksLoanRepaymentForMemberPeriod($member, $month, $year)) {
             logger()->warning('LoanRepaymentService: skipping scheduled repayment — contribution row exists for same cycle', [
                 'loan_id' => $loan->id,
                 'member_id' => $loan->member_id,
@@ -136,8 +137,6 @@ class LoanRepaymentService
 
             return 'skipped';
         }
-
-        $member = $loan->member;
         $amount = (float) $installment->amount;
         $deadline = $this->deadline($month, $year);
         $days = $this->lateFees->daysPastDue($deadline, BusinessDay::now());
@@ -150,7 +149,7 @@ class LoanRepaymentService
             ->where('is_master', false)
             ->first();
 
-        if (!$cashAccount || (float) $cashAccount->balance < $required) {
+        if (! $cashAccount || (float) $cashAccount->balance < $required) {
             $results['insufficient'][] = [
                 'loan' => $loan,
                 'balance' => (float) ($cashAccount?->balance ?? 0),
@@ -220,12 +219,12 @@ class LoanRepaymentService
     ): string {
         $installment->loadMissing('loan.member.user');
         $loan = $installment->loan;
-        if (!$loan instanceof Loan || $installment->isPaid()) {
+        if (! $loan instanceof Loan || $installment->isPaid()) {
             return 'skipped';
         }
 
         $member = $loan->member;
-        if (!$member instanceof Member) {
+        if (! $member instanceof Member) {
             return 'skipped';
         }
 
@@ -235,7 +234,7 @@ class LoanRepaymentService
             ->where('is_master', false)
             ->first();
         $required = (float) $installment->amount + max(0.0, $lateFee);
-        if (!$cashAccount || (float) $cashAccount->balance + 0.00001 < $required) {
+        if (! $cashAccount || (float) $cashAccount->balance + 0.00001 < $required) {
             return 'insufficient';
         }
 
@@ -275,7 +274,7 @@ class LoanRepaymentService
         [$month, $year] = app(ContributionCycleService::class)->currentOpenPeriod();
         $installment = $this->installmentForPeriod($loan, $month, $year);
 
-        return $installment !== null && !$installment->isPaid();
+        return $installment !== null && ! $installment->isPaid();
     }
 
     public function hasInsufficientCashForOpenPeriodRepayment(Member $member): bool
@@ -327,7 +326,7 @@ class LoanRepaymentService
             ])
             : __('Deposits match the repayment run.');
 
-        return $base . ' ' . $note;
+        return $base.' '.$note;
     }
 
     /**
@@ -352,7 +351,7 @@ class LoanRepaymentService
                 ->orderBy('due_date')
                 ->first();
 
-            if ($next !== null && !$cycles->dueDateFallsInCycle($next->due_date, $month, $year)) {
+            if ($next !== null && ! $cycles->dueDateFallsInCycle($next->due_date, $month, $year)) {
                 return __('No unpaid installment in the open period (:period). The next EMI is due :date (:next_period cycle).', [
                     'period' => $periodLabel,
                     'date' => $next->due_date->toFormattedDateString(),
@@ -365,7 +364,7 @@ class LoanRepaymentService
             ]);
         }
 
-        if (Contribution::activePeriodExists((int) $member->id, $month, $year)) {
+        if (Contribution::blocksLoanRepaymentForMemberPeriod($member, $month, $year)) {
             return __('Repayment for :period is skipped while an active contribution row exists for the same cycle.', [
                 'period' => $periodLabel,
             ]);
@@ -433,7 +432,7 @@ class LoanRepaymentService
             ->orderByDesc('month')
             ->limit($limit)
             ->get()
-            ->map(fn($r) => [
+            ->map(fn ($r) => [
                 'period_label' => $this->periodLabel((int) $r->month, (int) $r->year),
                 'month' => (int) $r->month,
                 'year' => (int) $r->year,

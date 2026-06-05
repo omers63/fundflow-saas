@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Filament\Member\Resources\MyDependents\Tables;
 
+use App\Filament\Member\Resources\MyDependents\Support\MyDependentTableActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\DependentAllocationChange;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\ContributionCycleService;
@@ -16,6 +18,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class MyDependentsTable
 {
@@ -36,6 +39,27 @@ class MyDependentsTable
                     ->label('Monthly contribution')
                     ->money($currency)
                     ->sortable(),
+                TextColumn::make('last_allocation_change')
+                    ->label('Last changed')
+                    ->state(function (Member $record) use ($currency): ?string {
+                        if (! Schema::hasTable('dependent_allocation_changes')) {
+                            return null;
+                        }
+
+                        $last = DependentAllocationChange::query()
+                            ->where('dependent_member_id', $record->id)
+                            ->latest()
+                            ->first();
+
+                        if ($last === null) {
+                            return null;
+                        }
+
+                        $dir = $last->isIncrease() ? '↑' : '↓';
+
+                        return "{$dir} {$last->deltaLabel($currency)} · {$last->created_at->diffForHumans()}";
+                    })
+                    ->placeholder(__('Never changed')),
                 TextColumn::make('cash_balance')
                     ->label('Cash')
                     ->state(fn (Member $record): float => $record->getCashBalance())
@@ -87,8 +111,13 @@ class MyDependentsTable
             ->filters([
                 SelectFilter::make('status')
                     ->options(Member::statusOptions()),
+                SelectFilter::make('monthly_contribution_amount')
+                    ->label(__('Monthly contribution'))
+                    ->options(Member::contributionAmountOptions()),
                 DateColumnRangeFilter::make('joined_at', __('Joined')),
             ])
+            ->headerActions(MyDependentTableActions::headerActions())
+            ->recordActions(MyDependentTableActions::recordActions())
             ->recordUrl(function (Model $record): ?string {
                 if (! $record instanceof Member) {
                     return null;

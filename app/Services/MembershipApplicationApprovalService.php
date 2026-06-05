@@ -30,6 +30,10 @@ class MembershipApplicationApprovalService
             return $this->approveDependent($application);
         }
 
+        if ($application->parent_member_id !== null) {
+            return $this->approveOnBehalfDependent($application);
+        }
+
         return $this->approveParent($application);
     }
 
@@ -73,6 +77,28 @@ class MembershipApplicationApprovalService
         $this->subscriptionFees->assertCanApprove($application);
 
         $member = $this->householdMembers->createFromApplication($application);
+        $member = $this->finalizeApprovedApplication($application, $member);
+
+        $this->linkSubmittedDependentsToParent($member);
+
+        return $member;
+    }
+
+    private function approveOnBehalfDependent(MembershipApplication $application): Member
+    {
+        $parentMember = Member::query()->find($application->parent_member_id);
+
+        if ($parentMember === null) {
+            throw new RuntimeException(__('Parent member record could not be found.'));
+        }
+
+        if (in_array($parentMember->status, Member::PORTAL_BLOCKED_STATUSES, true)) {
+            throw new InvalidArgumentException(__('The sponsoring parent member cannot accept dependents while their membership is not active.'));
+        }
+
+        $this->subscriptionFees->assertCanApprove($application);
+
+        $member = $this->householdMembers->createFromApplication($application, $parentMember);
 
         return $this->finalizeApprovedApplication($application, $member);
     }
@@ -110,5 +136,38 @@ class MembershipApplicationApprovalService
     private function finalizeApprovedApplication(MembershipApplication $application, Member $member): Member
     {
         return $this->approvalPostingPipeline->run($application, $member, BusinessDay::now());
+    }
+
+    private function linkSubmittedDependentsToParent(Member $parentMember): void
+    {
+        $parentUserId = $parentMember->user_id;
+
+        if ($parentUserId === null) {
+            return;
+        }
+
+        $applications = MembershipApplication::query()
+            ->where('submitted_by_user_id', $parentUserId)
+            ->whereNull('parent_application_id')
+            ->whereNull('parent_member_id')
+            ->where('status', 'approved')
+            ->whereNotNull('member_id')
+            ->get();
+
+        foreach ($applications as $application) {
+            $dependentMember = Member::query()->find($application->member_id);
+
+            if ($dependentMember === null || $dependentMember->parent_member_id !== null) {
+                continue;
+            }
+
+            $this->householdMembers->assignToHousehold(
+                $dependentMember,
+                $parentMember,
+                strtolower(trim((string) $application->email)),
+            );
+
+            $application->update(['parent_member_id' => $parentMember->id]);
+        }
     }
 }

@@ -50,6 +50,16 @@ trait EnrichesMemberPortalDashboard
             ];
         }
 
+        if ($member->hasActiveLoanRepaymentObligation()) {
+            return [
+                'key' => 'loan_repayment',
+                'label' => __('Under loan repayment'),
+                'short' => __('Loan EMI'),
+                'tone' => 'violet',
+                'period' => $period,
+            ];
+        }
+
         if ($exempt) {
             return [
                 'key' => 'exempt',

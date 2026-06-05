@@ -20,8 +20,7 @@ class LoanEmiCollectionCatalogService
     public function __construct(
         protected ContributionCycleService $cycles,
         protected LoanInstallmentCollectionService $installmentCollection,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array{0: int, 1: int}
@@ -115,7 +114,7 @@ class LoanEmiCollectionCatalogService
 
                 [$cycleMonth, $cycleYear] = $this->cycles->cyclePeriodForDueDate($installment->due_date);
 
-                return !Contribution::activePeriodExists((int) $member->id, $cycleMonth, $cycleYear);
+                return ! Contribution::blocksLoanRepaymentForMemberPeriod($member, $cycleMonth, $cycleYear);
             })
             ->values();
     }
@@ -183,7 +182,7 @@ class LoanEmiCollectionCatalogService
         return LoanInstallment::query()
             ->where('status', 'paid')
             ->whereBetween('due_date', [$start, $end])
-            ->whereHas('loan', fn(Builder $loan): Builder => $loan->whereIn('status', ['active', 'transferred', 'completed', 'early_settled']))
+            ->whereHas('loan', fn (Builder $loan): Builder => $loan->whereIn('status', ['active', 'transferred', 'completed', 'early_settled']))
             ->with(['loan.member'])
             ->orderByDesc('paid_at');
     }

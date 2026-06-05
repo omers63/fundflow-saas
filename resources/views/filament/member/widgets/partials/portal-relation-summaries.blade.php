@@ -23,13 +23,13 @@
                 <div class="absolute inset-y-0 left-0 w-0.5 {{ $bar }}"></div>
                 <div class="flex items-center gap-1.5 pl-1">
                     <x-dynamic-component :component="$card['icon']" class="h-3.5 w-3.5 text-gray-400" />
-                    <p class="truncate text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-                        {{ ui_label($card['label']) }}
-                    </p>
+                    <x-ff-stat-line :text="ui_label($card['label'])"
+                        class="truncate text-[10px] font-semibold uppercase tracking-wider text-gray-500" />
                 </div>
-                <p class="mt-1 truncate pl-1 text-sm font-bold text-gray-900 dark:text-white">{{ $card['value'] }}</p>
+                <x-ff-stat-line :text="(string) $card['value']"
+                    class="mt-1 truncate pl-1 text-sm font-bold text-gray-900 dark:text-white" />
                 @if (filled($card['hint'] ?? null))
-                    <p class="truncate pl-1 text-[10px] text-gray-400">{{ $card['hint'] }}</p>
+                    <x-ff-stat-line :text="ui_label($card['hint'])" class="truncate pl-1 text-[10px] text-gray-400" />
                 @endif
             </a>
         @endforeach

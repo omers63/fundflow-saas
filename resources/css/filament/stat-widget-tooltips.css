@@ -1,0 +1,32 @@
+/* Truncate stat widget text; full copy shown via native title tooltip on hover. */
+
+.fi-body .fi-wi-stats-overview-stat {
+    min-width: 0;
+}
+
+.fi-body .fi-wi-stats-overview-stat-content {
+    min-width: 0;
+}
+
+.fi-body .fi-wi-stats-overview-stat-label-ctn {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.fi-body .fi-wi-stats-overview-stat-label,
+.fi-body .fi-wi-stats-overview-stat-value,
+.fi-body .fi-wi-stats-overview-stat-description,
+.fi-body .fi-wi-stats-overview-stat-description span {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fi-body .ff-app-insights-kpi,
+.fi-body .ff-member-stat-card,
+.fi-body .ff-tenant-stat-card,
+.fi-body .ff-dashboard-gauge {
+    min-width: 0;
+}

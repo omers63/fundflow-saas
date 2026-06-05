@@ -70,6 +70,7 @@
                     <span @class([
                         'rounded px-1.5 py-0.5 text-[9px] font-bold uppercase',
                         'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' => $d['cycle']['status_key'] === 'posted',
+                        'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200' => $d['cycle']['status_key'] === 'loan_repayment',
                         'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => in_array($d['cycle']['status_key'], ['exempt', 'short'], true),
                         'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' => in_array($d['cycle']['status_key'], ['ready', 'waiting'], true),
                         'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300' => $d['cycle']['status_key'] === 'na',
@@ -80,10 +81,16 @@
                         <span class="text-gray-500">{{ __('Period') }}</span>
                         <span class="font-semibold text-gray-900 dark:text-white">{{ $d['cycle']['period_label'] }}</span>
                     </div>
-                    <div class="flex justify-between gap-2">
-                        <span class="text-gray-500">{{ __('Required cash') }}</span>
-                        <span class="font-semibold tabular-nums">{{ $d['cycle']['required_cash'] }}</span>
-                    </div>
+                    @if ($d['cycle']['under_loan_repayment'] ?? false)
+                        <p class="rounded-lg bg-violet-50 px-2 py-1.5 text-sm font-semibold text-violet-900 dark:bg-violet-950/30 dark:text-violet-100">
+                            {{ $d['cycle']['loan_repayment_message'] ?? __('Under loan repayment') }}
+                        </p>
+                    @else
+                        <div class="flex justify-between gap-2">
+                            <span class="text-gray-500">{{ __('Required cash') }}</span>
+                            <span class="font-semibold tabular-nums">{{ $d['cycle']['required_cash'] }}</span>
+                        </div>
+                    @endif
                     @if ($d['fund_summary']['fund_minimum_pct'] !== null)
                         <div>
                             <div class="mb-0.5 flex justify-between text-[10px] text-gray-500">

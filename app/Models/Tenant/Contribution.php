@@ -237,6 +237,19 @@ class Contribution extends Model
             ->exists();
     }
 
+    /**
+     * Whether a posted/collected contribution blocks loan repayment for the same cycle.
+     * Members exempt from contributions (e.g. active loan EMI) may still repay installments.
+     */
+    public static function blocksLoanRepaymentForMemberPeriod(Member $member, int $month, int $year): bool
+    {
+        if ($member->isExemptFromContributions($month, $year)) {
+            return false;
+        }
+
+        return self::activePeriodExists((int) $member->id, $month, $year);
+    }
+
     public static function periodFullyPosted(int $memberId, int $month, int $year): bool
     {
         return static::query()

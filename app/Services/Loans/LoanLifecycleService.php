@@ -19,7 +19,9 @@ use App\Notifications\Tenant\LoanPartialDisbursementNotification;
 use App\Notifications\Tenant\LoanRejectedNotification;
 use App\Notifications\Tenant\LoanSubmittedNotification;
 use App\Notifications\Tenant\NewLoanApplicationNotification;
+use App\Services\OperationalReviewWorkflowService;
 use App\Support\BusinessDay;
+use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -32,6 +34,7 @@ final class LoanLifecycleService
     public function __construct(
         private LoanLedgerService $ledger,
         private LoanEligibilityService $eligibility,
+        private OperationalReviewWorkflowService $reviewWorkflow,
     ) {}
 
     /**
@@ -87,6 +90,8 @@ final class LoanLifecycleService
         ?string $witness2Phone = null,
         bool $adminOverrideEligibility = false,
         ?string $eligibilityOverrideReason = null,
+        ?string $fundingStrategy = null,
+        bool $cashOutExcessFund = false,
     ): Loan {
         $failedGates = $this->eligibility->getFailedGates($member);
 
@@ -105,7 +110,13 @@ final class LoanLifecycleService
             throw new InvalidArgumentException($error);
         }
 
-        if (LoanSettings::guarantorRequiredForAmount($member, $amountRequested) && $guarantorMemberId === null) {
+        $fundingStrategy = LoanFundingStrategy::normalize($fundingStrategy);
+
+        if ($fundingStrategy === LoanFundingStrategy::MEMBER_FUND_TOPUP) {
+            $cashOutExcessFund = false;
+        }
+
+        if (LoanSettings::guarantorRequiredForAmount($member, $amountRequested, $fundingStrategy) && $guarantorMemberId === null) {
             throw new InvalidArgumentException(__('A guarantor is required when the loan amount exceeds your fund balance.'));
         }
 
@@ -131,6 +142,8 @@ final class LoanLifecycleService
             'witness2_name' => $witness2Name,
             'witness2_phone' => $witness2Phone,
             'is_emergency' => $isEmergency,
+            'funding_strategy' => $fundingStrategy,
+            'cash_out_excess_fund' => $cashOutExcessFund,
             'has_grace_cycle' => $hasGraceCycle,
             'grace_cycles' => max(0, min(2, $graceCycles ?? ($hasGraceCycle ? 1 : 0))),
             'status' => 'pending',
@@ -147,9 +160,7 @@ final class LoanLifecycleService
             }
         }
 
-        User::query()->where('is_admin', true)->each(
-            fn (User $admin): mixed => $admin->notify(new NewLoanApplicationNotification($loan))
-        );
+        $this->reviewWorkflow->notifyAdmins(new NewLoanApplicationNotification($loan));
 
         if ($adminOverrideEligibility && $failedGates !== []) {
             app(LoanEligibilityOverrideService::class)->recordMany(
@@ -191,9 +202,11 @@ final class LoanLifecycleService
 
         $fundBal = (float) ($loan->member->fundAccount?->balance ?? 0);
         $threshold = LoanSettings::settlementThreshold();
-        $count = Loan::computeInstallmentsCount(
+        $strategy = LoanFundingStrategy::normalize($loan->funding_strategy);
+        $portions = LoanSettings::resolveFundingPortions($amountApproved, $fundBal, $strategy);
+        $count = Loan::computeInstallmentsCountFromPortions(
             $amountApproved,
-            $fundBal,
+            $portions['member_portion'],
             (float) $loanTier->min_monthly_installment,
             $threshold,
         );
@@ -289,7 +302,6 @@ final class LoanLifecycleService
 
         $memberFundBalanceBefore = (float) ($loan->member->fundAccount?->balance ?? 0);
         $at = $disbursedAt ?? BusinessDay::now();
-
         $disbursement = LoanDisbursement::create([
             'loan_id' => $loan->id,
             'amount' => $amount,
@@ -307,6 +319,7 @@ final class LoanLifecycleService
                 $disbursement,
                 $at,
                 $allowNegativeMasterFundBalance,
+                $memberFundBalanceBefore,
             );
         } catch (Throwable $e) {
             $disbursement->delete();
@@ -357,15 +370,26 @@ final class LoanLifecycleService
         $amountApproved = (float) $loan->amount_approved;
         $minInstall = (float) ($loan->loanTier?->min_monthly_installment ?? 1000);
         $threshold = (float) $loan->settlement_threshold;
-        $count = Loan::computeInstallmentsCount($amountApproved, $memberFundBalanceBefore, $minInstall, $threshold);
+        $strategy = LoanFundingStrategy::normalize($loan->funding_strategy);
+        $portions = LoanSettings::resolveFundingPortions($amountApproved, $memberFundBalanceBefore, $strategy);
+        $memberPortion = $portions['member_portion'];
+        $masterPortion = $portions['master_portion'];
+        $count = Loan::computeInstallmentsCountFromPortions($amountApproved, $memberPortion, $minInstall, $threshold);
 
         $graceCycles = $loan->grace_cycles ?? ($loan->has_grace_cycle ? 1 : 0);
         $exemption = Loan::computeExemptionAndFirstRepayment(Carbon::parse($disbursedAt), (int) $graceCycles);
         $exemption = Loan::finalizeExemptionForDisbursement($loan->member, $exemption, Carbon::parse($disbursedAt));
 
-        DB::transaction(function () use ($loan, $disbursedAt, $exemption, $count, $minInstall, $amountApproved, $memberFundBalanceBefore): void {
-            $memberPortion = min(max(0.0, $memberFundBalanceBefore), $amountApproved);
-            $masterPortion = $amountApproved - $memberPortion;
+        DB::transaction(function () use ($loan, $disbursedAt, $exemption, $count, $minInstall, $memberPortion, $masterPortion, $memberFundBalanceBefore): void {
+            if ($memberPortion > $memberFundBalanceBefore + 0.01) {
+                throw new InvalidArgumentException(__(
+                    'Member fund balance (:balance) is insufficient for the member portion (:portion).',
+                    [
+                        'balance' => number_format($memberFundBalanceBefore, 2),
+                        'portion' => number_format($memberPortion, 2),
+                    ],
+                ));
+            }
 
             $loan->update([
                 'status' => 'active',

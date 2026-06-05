@@ -176,6 +176,7 @@ class LoanDelinquencyService
             'pending' => __('Pending'),
             'failed' => __('Failed'),
             'missing' => __('Missing'),
+            'waived' => __('Waived'),
             default => ucfirst($status),
         };
     }
@@ -186,6 +187,7 @@ class LoanDelinquencyService
             'pending' => 'warning',
             'failed' => 'danger',
             'missing' => 'gray',
+            'waived' => 'info',
             default => 'gray',
         };
     }
@@ -759,7 +761,7 @@ class LoanDelinquencyService
             $contributionPeriod = Contribution::periodDate($month, $year);
             $contribution = $postedContributionsByPeriod[$contributionPeriod] ?? null;
 
-            if (in_array($contribution?->status, ['posted', 'failed'], true)) {
+            if (in_array($contribution?->status, ['posted', 'failed', 'waived'], true)) {
                 $cursor->subMonthNoOverflow();
 
                 continue;

@@ -67,6 +67,15 @@
     z-index: 50;
 }
 
+/* User menu: stacking + placement when topbar is crowded (impersonation banner). */
+.fi-body .fi-topbar .fi-user-menu.fi-dropdown {
+    position: relative;
+}
+
+.fi-body .fi-topbar .fi-user-menu .fi-dropdown-panel {
+    z-index: 60;
+}
+
 /* Table cells: allow flex children to shrink so wrapped text can use full width */
 .fi-body .fi-ta-cell .fi-ta-col {
     min-width: 0;

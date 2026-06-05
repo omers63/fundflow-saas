@@ -51,10 +51,19 @@
 
     <div>
         <label for="email" class="mb-1.5 block text-sm font-medium text-gray-700">
-            {{ __('Email address') }} <span class="text-red-500">*</span>
+            @if (!empty($onBehalfMode))
+                {{ __('Household email') }} <span class="text-red-500">*</span>
+            @else
+                {{ __('Email address') }} <span class="text-red-500">*</span>
+            @endif
         </label>
-        <input wire:model="email" type="email" id="email"
-            class="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+        <input wire:model="email" type="email" id="email" @readonly(!empty($onBehalfMode))
+            class="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 @if (!empty($onBehalfMode)) cursor-not-allowed opacity-80 @endif">
+        @if (!empty($onBehalfMode))
+            <p class="mt-1 text-sm text-gray-500">
+                {{ __('Dependent applications use your household email for login and notifications.') }}
+            </p>
+        @endif
         @error('email') <p class="mt-1 text-sm text-red-500">{{ $message }}</p> @enderror
     </div>
 

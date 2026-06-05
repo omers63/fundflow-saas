@@ -7,11 +7,13 @@ namespace App\Filament\Support;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Contribution;
+use App\Services\ContributionLatePostingClearanceService;
 use App\Services\ContributionService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Component;
@@ -115,6 +117,113 @@ final class ContributionTableActions
                     ->send();
 
                 self::refreshContributionViews($livewire);
+            });
+    }
+
+    public static function clearLatePosting(): Action
+    {
+        return Action::make('clear_late_posting')
+            ->label(__('Clear late posting'))
+            ->icon('heroicon-o-clock')
+            ->color('gray')
+            ->requiresConfirmation()
+            ->visible(fn (Contribution $record): bool => LateSettledArrearsTableStyling::contributionWasSettledLate($record))
+            ->modalHeading(__('Clear late posting'))
+            ->modalDescription(fn (Contribution $record): string => __('Remove the late flag for :period. Cash and posted status stay unchanged; this period will no longer count toward late payment history.', [
+                'period' => $record->period?->translatedFormat('F Y') ?? '#'.$record->id,
+            ]))
+            ->schema([
+                Textarea::make('note')
+                    ->label(__('Note (optional)'))
+                    ->maxLength(500)
+                    ->rows(2),
+            ])
+            ->action(function (Contribution $record, array $data, Action $action, Component $livewire): void {
+                $note = is_string($data['note'] ?? null) ? $data['note'] : null;
+
+                try {
+                    $outcome = app(ContributionLatePostingClearanceService::class)->clearContribution($record, $note);
+                } catch (\InvalidArgumentException $exception) {
+                    ActionModalFailure::present($action, $exception->getMessage(), __('Could not clear late posting'));
+
+                    return;
+                }
+
+                if ($outcome === 'already_clear') {
+                    Notification::make()
+                        ->title(__('Already on time'))
+                        ->body(__('This contribution is not marked as late.'))
+                        ->info()
+                        ->send();
+
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__('Late posting cleared'))
+                    ->body(__(':period will count as on time for eligibility.', [
+                        'period' => $record->period?->translatedFormat('F Y') ?? '#'.$record->id,
+                    ]))
+                    ->success()
+                    ->send();
+
+                self::refreshContributionViews($livewire);
+            });
+    }
+
+    public static function clearLatePostingBulk(): BulkAction
+    {
+        return BulkAction::make('clearLatePostingSelected')
+            ->label(__('Clear late posting'))
+            ->icon('heroicon-o-clock')
+            ->color('gray')
+            ->requiresConfirmation()
+            ->modalHeading(__('Clear late posting'))
+            ->modalDescription(__('Remove the late flag from selected posted rows. Cash and status are unchanged.'))
+            ->schema([
+                Textarea::make('note')
+                    ->label(__('Note (optional)'))
+                    ->maxLength(500)
+                    ->rows(2),
+            ])
+            ->action(function (BulkAction $action, Collection $records, array $data, Component $livewire): void {
+                $note = is_string($data['note'] ?? null) ? $data['note'] : null;
+                $lateRows = $records->filter(
+                    fn (mixed $record): bool => $record instanceof Contribution
+                    && LateSettledArrearsTableStyling::contributionWasSettledLate($record),
+                );
+
+                if ($lateRows->isEmpty()) {
+                    ActionModalFailure::present(
+                        $action,
+                        __('None of the selected rows are posted late contributions.'),
+                        __('Could not clear late posting'),
+                    );
+
+                    return;
+                }
+
+                $summary = app(ContributionLatePostingClearanceService::class)->clearMany($lateRows, $note);
+
+                Notification::make()
+                    ->title(__('Bulk clear complete'))
+                    ->body(__(':cleared cleared · :already already on time · :skipped skipped', [
+                        'cleared' => $summary['cleared'],
+                        'already' => $summary['already_clear'],
+                        'skipped' => $summary['skipped'],
+                    ]))
+                    ->color($summary['cleared'] > 0 ? 'success' : 'warning')
+                    ->send();
+
+                self::refreshContributionViews($livewire);
+
+                if ($summary['cleared'] === 0) {
+                    ActionModalFailure::present(
+                        $action,
+                        __('No late flags were removed. Selected rows may already be on time or are not posted late contributions.'),
+                        __('Bulk clear complete'),
+                    );
+                }
             });
     }
 

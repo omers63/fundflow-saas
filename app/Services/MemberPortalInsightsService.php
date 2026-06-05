@@ -113,7 +113,10 @@ final class MemberPortalInsightsService
             $curMonth,
             $curYear,
         );
-        $requiredCash = $cycles->requiredCashForMemberPeriod($member, $curMonth, $curYear);
+        $underLoanRepayment = $member->hasActiveLoanRepaymentObligation();
+        $requiredCash = $underLoanRepayment
+            ? 0.0
+            : $cycles->requiredCashForMemberPeriod($member, $curMonth, $curYear);
         $sparkline = $this->contributionSparkline($member);
         $trend = $this->sixMonthContributionTrend($member);
 
@@ -192,6 +195,10 @@ final class MemberPortalInsightsService
                 'status_key' => $cycleStatus['key'],
                 'status_label' => $cycleStatus['label'],
                 'status_tone' => $cycleStatus['tone'],
+                'under_loan_repayment' => $underLoanRepayment,
+                'loan_repayment_message' => $underLoanRepayment
+                    ? __('Under loan repayment')
+                    : null,
                 'required_cash' => InsightFormatter::money($requiredCash),
                 'contributions_url' => MyContributionResource::getUrl('index'),
             ],

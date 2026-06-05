@@ -9,11 +9,13 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Services\ContributionArrearsClearanceService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
+use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -305,11 +307,13 @@ final class LoanDelinquencyTables
                 ])
                 ->recordActions(TableRecordActionGroups::wrap([
                     self::applyContributionArrearsAction(),
+                    self::clearContributionArrearsAction(),
                     self::viewMemberFromArrearsAction(),
                 ]))
                 ->toolbarActions([
                     BulkActionGroup::make([
                         self::applyContributionArrearsBulkAction(),
+                        self::clearContributionArrearsBulkAction(),
                         TableToolbar::refreshBulkAction(),
                     ]),
                 ])
@@ -405,6 +409,108 @@ final class LoanDelinquencyTables
                         $action,
                         __(':skipped period(s) could not be applied. Check cash balances and exemptions.', ['skipped' => $skipped]),
                         __('Bulk apply complete'),
+                    );
+                }
+            });
+    }
+
+    public static function clearContributionArrearsAction(): Action
+    {
+        return Action::make('clear_arrears')
+            ->label(__('Clear arrears'))
+            ->icon('heroicon-o-x-circle')
+            ->color('gray')
+            ->requiresConfirmation()
+            ->modalHeading(__('Clear contribution arrears'))
+            ->modalDescription(fn (array $record): string => __('Waive :period for :name without debiting cash. Pending late fees are reversed.', [
+                'period' => $record['period_label'],
+                'name' => $record['member_name'],
+            ]))
+            ->schema([
+                Textarea::make('note')
+                    ->label(__('Note (optional)'))
+                    ->maxLength(500)
+                    ->rows(2),
+            ])
+            ->action(function (array $record, array $data, Action $action, Component $livewire): void {
+                $note = is_string($data['note'] ?? null) ? $data['note'] : null;
+
+                try {
+                    $outcome = app(ContributionArrearsClearanceService::class)->clearArrearsRecord($record, $note);
+                } catch (\InvalidArgumentException $exception) {
+                    ActionModalFailure::present($action, $exception->getMessage(), __('Could not clear arrears'));
+
+                    return;
+                }
+
+                if ($outcome === 'already_clear') {
+                    Notification::make()
+                        ->title(__('Already clear'))
+                        ->body(__('This period is already posted or waived.'))
+                        ->info()
+                        ->send();
+
+                    return;
+                }
+
+                if ($outcome === 'skipped') {
+                    Notification::make()
+                        ->title(__('Could not clear arrears'))
+                        ->warning()
+                        ->send();
+
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__('Arrears cleared'))
+                    ->body(__(':period waived for :name.', [
+                        'period' => $record['period_label'],
+                        'name' => $record['member_name'],
+                    ]))
+                    ->success()
+                    ->send();
+
+                ContributionTableActions::refreshContributionViews($livewire);
+            });
+    }
+
+    public static function clearContributionArrearsBulkAction(): BulkAction
+    {
+        return BulkAction::make('clearSelected')
+            ->label(__('Clear arrears'))
+            ->icon('heroicon-o-x-circle')
+            ->color('gray')
+            ->requiresConfirmation()
+            ->modalHeading(__('Clear contribution arrears'))
+            ->modalDescription(__('Waive the selected periods without debiting member cash. Pending late fees are reversed.'))
+            ->schema([
+                Textarea::make('note')
+                    ->label(__('Note (optional)'))
+                    ->maxLength(500)
+                    ->rows(2),
+            ])
+            ->action(function (BulkAction $action, Collection $records, array $data, Component $livewire): void {
+                $note = is_string($data['note'] ?? null) ? $data['note'] : null;
+                $summary = app(ContributionArrearsClearanceService::class)->clearManyRecords($records, $note);
+
+                Notification::make()
+                    ->title(__('Bulk clear complete'))
+                    ->body(__(':cleared cleared · :already already clear · :skipped skipped', [
+                        'cleared' => $summary['cleared'],
+                        'already' => $summary['already_clear'],
+                        'skipped' => $summary['skipped'],
+                    ]))
+                    ->color($summary['cleared'] > 0 ? 'success' : 'warning')
+                    ->send();
+
+                ContributionTableActions::refreshContributionViews($livewire);
+
+                if ($summary['cleared'] === 0 && ($summary['skipped'] > 0 || $summary['already_clear'] > 0)) {
+                    ActionModalFailure::present(
+                        $action,
+                        __('No periods were waived. Rows may already be clear or the member is exempt for that cycle.'),
+                        __('Bulk clear complete'),
                     );
                 }
             });

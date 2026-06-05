@@ -23,8 +23,7 @@ class LoanInstallmentCollectionService
         protected LoanLedgerService $ledger,
         protected LateFeeService $lateFees,
         protected ContributionCycleService $cycles,
-    ) {
-    }
+    ) {}
 
     public function onMemberCashIncreased(Member $member): void
     {
@@ -85,14 +84,14 @@ class LoanInstallmentCollectionService
         $member = $member?->fresh() ?? $loan->member;
         $member->unsetRelation('accounts');
 
-        if (!$loan instanceof Loan || !in_array($loan->status, ['active', 'transferred'], true)) {
+        if (! $loan instanceof Loan || ! in_array($loan->status, ['active', 'transferred'], true)) {
             return 'inactive';
         }
 
         $due = $installment->due_date;
         [$cycleMonth, $cycleYear] = $this->cycles->cyclePeriodForDueDate($due);
 
-        if (Contribution::activePeriodExists((int) $member->id, $cycleMonth, $cycleYear)) {
+        if (Contribution::blocksLoanRepaymentForMemberPeriod($member, $cycleMonth, $cycleYear)) {
             return 'skipped_contribution_cycle';
         }
 

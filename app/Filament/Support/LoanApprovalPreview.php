@@ -8,6 +8,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanTier;
+use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use Illuminate\Support\HtmlString;
 
@@ -30,10 +31,12 @@ final class LoanApprovalPreview
         }
 
         $minInstall = (float) $loanTier->min_monthly_installment;
-        $memberPortion = min(max(0.0, $fundBal), $previewApproved);
-        $masterPortion = $previewApproved - $memberPortion;
+        $strategy = LoanFundingStrategy::normalize($loan->funding_strategy);
+        $portions = LoanSettings::resolveFundingPortions($previewApproved, $fundBal, $strategy);
+        $memberPortion = $portions['member_portion'];
+        $masterPortion = $portions['master_portion'];
         $settleAmt = $previewApproved * $threshold;
-        $count = Loan::computeInstallmentsCount($previewApproved, $fundBal, $minInstall, $threshold);
+        $count = Loan::computeInstallmentsCount($previewApproved, $fundBal, $minInstall, $threshold, $strategy);
 
         $fundTier = $isEmergency
             ? FundTier::emergency()
@@ -51,6 +54,7 @@ final class LoanApprovalPreview
             [__('Fund tier'), $fundTierLabel],
             [__('Fund tier pool'), number_format($declaredPool, 2).' '.$currency],
             [__('Master fund balance'), number_format($masterFundBal, 2).' '.$currency],
+            [__('Funding strategy'), LoanFundingStrategy::options()[$strategy] ?? $strategy],
             [__('Member fund balance'), number_format($fundBal, 2).' '.$currency],
             [__('Member portion'), number_format($memberPortion, 2).' '.$currency],
             [__('Master portion'), number_format($masterPortion, 2).' '.$currency],

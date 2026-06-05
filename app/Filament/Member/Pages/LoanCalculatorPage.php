@@ -9,6 +9,8 @@ use App\Filament\Member\Support\MemberNavigation;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Setting;
 use App\Services\MemberLoanCalculatorService;
+use App\Support\LoanFundingStrategy;
+use App\Support\LoanSettings;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
 use Filament\Pages\Page;
@@ -32,6 +34,8 @@ class LoanCalculatorPage extends Page
     protected string $view = 'filament.member.pages.loan-calculator';
 
     public float $loanAmount = 0;
+
+    public string $fundingStrategy = LoanFundingStrategy::MEMBER_FUND_TOPUP;
 
     public static function canAccess(): bool
     {
@@ -67,7 +71,11 @@ class LoanCalculatorPage extends Page
             return [];
         }
 
-        return app(MemberLoanCalculatorService::class)->calculationsForAmount($this->loanAmount, $member);
+        return app(MemberLoanCalculatorService::class)->calculationsForAmount(
+            $this->loanAmount,
+            $member,
+            $this->fundingStrategy,
+        );
     }
 
     /**
@@ -93,10 +101,28 @@ class LoanCalculatorPage extends Page
         return Setting::get('general', 'currency', 'USD');
     }
 
+    /**
+     * @return array<string, string>
+     */
+    public function getFundingStrategyOptionsProperty(): array
+    {
+        return LoanFundingStrategy::options();
+    }
+
+    public function getMemberFundingSplitPercentProperty(): float
+    {
+        return LoanSettings::memberFundingSplitPercent();
+    }
+
+    public function getMasterFundingSplitPercentProperty(): float
+    {
+        return LoanSettings::masterFundingSplitPercent();
+    }
+
     public function formatTierRange(LoanTier $tier): string
     {
         $currency = $this->currency;
 
-        return number_format((float) $tier->min_amount, 0) . ' – ' . number_format((float) $tier->max_amount, 0) . ' ' . $currency;
+        return number_format((float) $tier->min_amount, 0).' – '.number_format((float) $tier->max_amount, 0).' '.$currency;
     }
 }

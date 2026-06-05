@@ -20,14 +20,14 @@ beforeEach(function () {
 test('manual credit and debit header actions are visible for tenant admins', function () {
     $admin = User::create([
         'name' => 'Admin',
-        'email' => 'admin-manual-txn-'.uniqid('', true).'@test.com',
+        'email' => 'admin-manual-txn-' . uniqid('', true) . '@test.com',
         'password' => bcrypt('password'),
         'is_admin' => true,
     ]);
     $this->actingAs($admin, 'tenant');
 
     $account = Account::factory()->masterCash()->create();
-    $actions = AccountTransactionManualAdjustmentHeaderActions::make(fn () => $account);
+    $actions = AccountTransactionManualAdjustmentHeaderActions::make(fn() => $account);
 
     expect($actions)->toHaveCount(3)
         ->and($actions[0]->getName())->toBe('manualCredit')
@@ -41,14 +41,14 @@ test('manual credit and debit header actions are visible for tenant admins', fun
 test('manual credit and debit header actions are hidden for non-admin tenant users', function () {
     $user = User::create([
         'name' => 'Member',
-        'email' => 'member-manual-txn-'.uniqid('', true).'@test.com',
+        'email' => 'member-manual-txn-' . uniqid('', true) . '@test.com',
         'password' => bcrypt('password'),
         'is_admin' => false,
     ]);
     $this->actingAs($user, 'tenant');
 
     $account = Account::factory()->masterCash()->create();
-    $actions = AccountTransactionManualAdjustmentHeaderActions::make(fn () => $account);
+    $actions = AccountTransactionManualAdjustmentHeaderActions::make(fn() => $account);
 
     expect($actions[0]->isHidden())->toBeTrue()
         ->and($actions[1]->isHidden())->toBeTrue();
@@ -58,13 +58,13 @@ test('manual credit on a master account can tag a member without mirroring', fun
     $member = Member::create([
         'user_id' => User::create([
             'name' => 'Tagged Member',
-            'email' => 'tagged-member-'.uniqid('', true).'@test.com',
+            'email' => 'tagged-member-' . uniqid('', true) . '@test.com',
             'password' => bcrypt('password'),
             'is_admin' => false,
         ])->id,
         'member_number' => 'MEM-TAG-1',
         'name' => 'Tagged Member',
-        'email' => 'tagged-member-'.uniqid('', true).'@test.com',
+        'email' => 'tagged-member-' . uniqid('', true) . '@test.com',
         'monthly_contribution_amount' => 500,
         'joined_at' => now(),
         'status' => 'active',
@@ -73,7 +73,7 @@ test('manual credit on a master account can tag a member without mirroring', fun
     $masterCash = Account::factory()->masterCash()->withBalance(0)->create();
     $memberCash = Account::factory()->cash()->for($member)->withBalance(0)->create();
 
-    AccountingService::withoutMemberCashCollection(fn () => app(AccountingService::class)->postManualCredit(
+    AccountingService::withoutMemberCashCollection(fn() => app(AccountingService::class)->postManualCredit(
         $masterCash,
         75,
         'Tagged master credit',
@@ -95,13 +95,13 @@ test('manual credit on a member account uses the account member automatically wi
     $member = Member::create([
         'user_id' => User::create([
             'name' => 'Account Member',
-            'email' => 'account-member-'.uniqid('', true).'@test.com',
+            'email' => 'account-member-' . uniqid('', true) . '@test.com',
             'password' => bcrypt('password'),
             'is_admin' => false,
         ])->id,
         'member_number' => 'MEM-ACC-1',
         'name' => 'Account Member',
-        'email' => 'account-member-'.uniqid('', true).'@test.com',
+        'email' => 'account-member-' . uniqid('', true) . '@test.com',
         'monthly_contribution_amount' => 500,
         'joined_at' => now(),
         'status' => 'active',
@@ -110,13 +110,13 @@ test('manual credit on a member account uses the account member automatically wi
     $otherMember = Member::create([
         'user_id' => User::create([
             'name' => 'Other Member',
-            'email' => 'other-member-'.uniqid('', true).'@test.com',
+            'email' => 'other-member-' . uniqid('', true) . '@test.com',
             'password' => bcrypt('password'),
             'is_admin' => false,
         ])->id,
         'member_number' => 'MEM-OTH-1',
         'name' => 'Other Member',
-        'email' => 'other-member-'.uniqid('', true).'@test.com',
+        'email' => 'other-member-' . uniqid('', true) . '@test.com',
         'monthly_contribution_amount' => 500,
         'joined_at' => now(),
         'status' => 'active',
@@ -124,7 +124,7 @@ test('manual credit on a member account uses the account member automatically wi
 
     $memberCash = Account::factory()->cash()->for($member)->withBalance(0)->create();
 
-    AccountingService::withoutMemberCashCollection(fn () => app(AccountingService::class)->postManualCredit(
+    AccountingService::withoutMemberCashCollection(fn() => app(AccountingService::class)->postManualCredit(
         $memberCash,
         50,
         'Member cash credit',
@@ -143,7 +143,7 @@ test('manual credit on a member account uses the account member automatically wi
 test('manual credit posts a transaction on the account', function () {
     $admin = User::create([
         'name' => 'Admin',
-        'email' => 'admin-manual-credit-'.uniqid('', true).'@test.com',
+        'email' => 'admin-manual-credit-' . uniqid('', true) . '@test.com',
         'password' => bcrypt('password'),
         'is_admin' => true,
     ]);
@@ -183,7 +183,7 @@ test('manual credit can use a custom transaction datetime', function () {
 test('refund header action is visible only on member cash accounts', function () {
     $admin = User::create([
         'name' => 'Admin',
-        'email' => 'admin-refund-visible-'.uniqid('', true).'@test.com',
+        'email' => 'admin-refund-visible-' . uniqid('', true) . '@test.com',
         'password' => bcrypt('password'),
         'is_admin' => true,
     ]);
@@ -194,15 +194,15 @@ test('refund header action is visible only on member cash accounts', function ()
     $memberCash = Account::factory()->cash()->create();
     $memberFund = Account::factory()->fund()->create();
 
-    $cashActions = AccountTransactionManualAdjustmentHeaderActions::make(fn () => $memberCash);
-    $fundActions = AccountTransactionManualAdjustmentHeaderActions::make(fn () => $memberFund);
-    $masterActions = AccountTransactionManualAdjustmentHeaderActions::make(fn () => Account::masterCash());
+    $cashActions = AccountTransactionManualAdjustmentHeaderActions::make(fn() => $memberCash);
+    $fundActions = AccountTransactionManualAdjustmentHeaderActions::make(fn() => $memberFund);
+    $masterActions = AccountTransactionManualAdjustmentHeaderActions::make(fn() => Account::masterCash());
 
     expect($cashActions)->toHaveCount(3)
         ->and(collect($cashActions)->map->getName()->all())->toContain('refundMemberCash')
         ->and($cashActions[2]->isHidden())->toBeFalse()
-        ->and(collect($fundActions)->first(fn ($action) => $action->getName() === 'refundMemberCash')->isHidden())->toBeTrue()
-        ->and(collect($masterActions)->first(fn ($action) => $action->getName() === 'refundMemberCash')->isHidden())->toBeTrue();
+        ->and(collect($fundActions)->first(fn($action) => $action->getName() === 'refundMemberCash')->isHidden())->toBeTrue()
+        ->and(collect($masterActions)->first(fn($action) => $action->getName() === 'refundMemberCash')->isHidden())->toBeTrue();
 });
 
 test('refund debits member cash and master cash', function () {
@@ -213,13 +213,13 @@ test('refund debits member cash and master cash', function () {
     $member = Member::create([
         'user_id' => User::create([
             'name' => 'Refund Member',
-            'email' => 'refund-member-'.uniqid('', true).'@test.com',
+            'email' => 'refund-member-' . uniqid('', true) . '@test.com',
             'password' => bcrypt('password'),
             'is_admin' => false,
         ])->id,
         'member_number' => 'MEM-REF-1',
         'name' => 'Refund Member',
-        'email' => 'refund-member-'.uniqid('', true).'@test.com',
+        'email' => 'refund-member-' . uniqid('', true) . '@test.com',
         'monthly_contribution_amount' => 500,
         'joined_at' => now(),
         'status' => 'active',
@@ -238,6 +238,44 @@ test('refund debits member cash and master cash', function () {
         ->and($masterCash->transactions()->where('type', 'debit')->count())->toBe(1);
 });
 
+test('manual debit on member fund may exceed balance and go negative', function () {
+    Account::query()->delete();
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 0, 'is_master' => true]);
+    Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 0, 'is_master' => true]);
+
+    $member = Member::create([
+        'user_id' => User::create([
+            'name' => 'Fund Debit Member',
+            'email' => 'fund-debit-member-' . uniqid('', true) . '@test.com',
+            'password' => bcrypt('password'),
+            'is_admin' => false,
+        ])->id,
+        'member_number' => 'MEM-FND-DEB',
+        'name' => 'Fund Debit Member',
+        'email' => 'fund-debit-member-' . uniqid('', true) . '@test.com',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now(),
+        'status' => 'active',
+    ]);
+
+    $memberFund = Account::factory()->fund()->for($member)->withBalance(53_000)->create();
+
+    app(AccountingService::class)->postManualDebit($memberFund, 80_000, 'Loan allocation adjustment');
+
+    expect((float) $memberFund->fresh()->balance)->toBe(-27_000.0)
+        ->and((float) Account::masterFund()->fresh()->balance)->toBe(0.0)
+        ->and($memberFund->transactions()->where('type', 'debit')->count())->toBe(1);
+});
+
+test('manual debit on member cash still requires sufficient balance', function () {
+    Account::query()->delete();
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 0, 'is_master' => true]);
+
+    $memberCash = Account::factory()->cash()->withBalance(100)->create();
+
+    app(AccountingService::class)->postManualDebit($memberCash, 150, 'Too much');
+})->throws(InvalidArgumentException::class);
+
 test('manual credit on member fund only affects member fund', function () {
     Account::query()->delete();
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 0, 'is_master' => true]);
@@ -246,13 +284,13 @@ test('manual credit on member fund only affects member fund', function () {
     $member = Member::create([
         'user_id' => User::create([
             'name' => 'Fund Member',
-            'email' => 'fund-member-'.uniqid('', true).'@test.com',
+            'email' => 'fund-member-' . uniqid('', true) . '@test.com',
             'password' => bcrypt('password'),
             'is_admin' => false,
         ])->id,
         'member_number' => 'MEM-FND-1',
         'name' => 'Fund Member',
-        'email' => 'fund-member-'.uniqid('', true).'@test.com',
+        'email' => 'fund-member-' . uniqid('', true) . '@test.com',
         'monthly_contribution_amount' => 500,
         'joined_at' => now(),
         'status' => 'active',

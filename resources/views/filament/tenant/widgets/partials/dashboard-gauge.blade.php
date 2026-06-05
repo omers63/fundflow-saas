@@ -11,6 +11,9 @@
     };
     $pct = min(100, max(0, (float) ($gauge['percent'] ?? 0)));
     $dash = round($pct * 0.88, 1);
+    $gaugeLabel = ui_label($gauge['label']);
+    $gaugeSub = ui_label($gauge['sub']);
+    $gaugeValue = (string) ($gauge['value'] ?? '');
 @endphp
 
 <a href="{{ $gauge['url'] ?? '#' }}"
@@ -22,12 +25,11 @@
                 @class([$stroke['fill'], 'ff-gauge-ring transition-all duration-700 ease-out'])
                 stroke-dasharray="{{ $dash }}, 100" pathLength="100" />
         </svg>
-        <span @class(['absolute inset-0 flex items-center justify-center text-sm font-bold tabular-nums', $stroke['text']])>
+        <span @class(['absolute inset-0 flex items-center justify-center text-sm font-bold tabular-nums', $stroke['text']]) title="{{ $gaugeValue }}">
             {{ $gauge['value'] }}
         </span>
     </div>
-    <p class="mt-1.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
-        {{ ui_label($gauge['label']) }}
-    </p>
-    <p class="mt-0.5 line-clamp-2 text-center text-[10px] text-gray-400">{{ ui_label($gauge['sub']) }}</p>
+    <x-ff-stat-line :text="$gaugeLabel"
+        class="mt-1.5 truncate text-center text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300" />
+    <x-ff-stat-line :text="$gaugeSub" class="mt-0.5 line-clamp-2 text-center text-[10px] text-gray-400" />
 </a>

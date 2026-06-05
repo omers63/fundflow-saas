@@ -81,10 +81,12 @@ class ContributionsRelationManager extends RelationManager
                     $this->buildMemberContributeAction(),
                 ])
                 ->recordActions(TableRecordActionGroups::wrap([
+                    ContributionTableActions::clearLatePosting(),
                     ContributionTableActions::delete(),
                 ]))
                 ->toolbarActions([
                     BulkActionGroup::make([
+                        ContributionTableActions::clearLatePostingBulk(),
                         ContributionTableActions::deleteBulk(),
                         TableToolbar::refreshBulkAction(),
                     ]),

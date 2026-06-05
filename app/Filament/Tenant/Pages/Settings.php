@@ -123,6 +123,7 @@ class Settings extends Page implements HasForms
             'loan_max_loan_amount' => $loan['max_loan_amount'] ?? 0,
             'loan_settlement_threshold_pct' => ($loan['settlement_threshold_pct'] ?? 0.16) * 100,
             'loan_require_guarantor_above_fund' => (bool) ($loan['require_guarantor_above_fund_balance'] ?? true),
+            'loan_member_funding_split_pct' => (float) ($loan['member_funding_split_pct'] ?? 50),
             'loan_auto_allocate_repayment' => (bool) ($loan['auto_allocate_loan_repayment'] ?? false),
             'loan_default_grace_cycles' => $loan['default_grace_cycles'] ?? 2,
             'loan_late_payment_consecutive' => $loan['late_payment_consecutive_threshold'] ?? 3,
@@ -594,7 +595,18 @@ class Settings extends Page implements HasForms
                                             ->helperText(__('Missed repayment cycles before guarantor liability steps apply.')),
                                         Toggle::make('loan_require_guarantor_above_fund')
                                             ->label(__('Require guarantor above fund balance'))
-                                            ->helperText(__('When the requested amount exceeds the member fund balance, a guarantor is mandatory on apply.')),
+                                            ->helperText(__('When the member share of the loan exceeds their fund balance, a guarantor is mandatory on apply.')),
+                                        TextInput::make('loan_member_funding_split_pct')
+                                            ->label(__('Member fund share (%)'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->maxValue(100)
+                                            ->step(0.1)
+                                            ->suffix('%')
+                                            ->required()
+                                            ->helperText(fn (Get $get): string => __('Used when a member chooses the configured split at loan application. Master fund share: :pct%.', [
+                                                'pct' => number_format(100 - (float) ($get('loan_member_funding_split_pct') ?? 50), 1),
+                                            ])),
                                         Toggle::make('loan_auto_allocate_repayment')
                                             ->label(__('Auto-allocate posted contributions to loan'))
                                             ->helperText(__('After a contribution is posted, apply open-period loan repayment from member cash when possible.')),
@@ -927,6 +939,7 @@ class Settings extends Page implements HasForms
             'settlement_threshold_pct' => ((float) ($state['loan_settlement_threshold_pct'] ?? 16)) / 100,
             'default_grace_cycles' => (int) ($state['loan_default_grace_cycles'] ?? 2),
             'require_guarantor_above_fund_balance' => (bool) ($state['loan_require_guarantor_above_fund'] ?? true),
+            'member_funding_split_pct' => max(0, min(100, (float) ($state['loan_member_funding_split_pct'] ?? 50))),
             'auto_allocate_loan_repayment' => (bool) ($state['loan_auto_allocate_repayment'] ?? false),
             'late_payment_consecutive_threshold' => max(1, min(36, (int) ($state['loan_late_payment_consecutive'] ?? 3))),
             'late_payment_rolling_threshold' => max(1, min(240, (int) ($state['loan_late_payment_rolling'] ?? 15))),

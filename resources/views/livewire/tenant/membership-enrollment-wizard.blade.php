@@ -52,10 +52,18 @@
         <div class="mx-auto max-w-4xl px-4 sm:px-6">
             <header class="mb-8 text-center">
                 <h1 class="mb-3 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-                    {{ __('Apply for membership') }}
+                    @if (! empty($onBehalfMode))
+                        {{ __('Apply for a dependent') }}
+                    @else
+                        {{ __('Apply for membership') }}
+                    @endif
                 </h1>
                 <p class="mx-auto max-w-2xl text-lg text-gray-600">
-                    {{ __('Complete the form below to join :fund.', ['fund' => $fundName]) }}
+                    @if (! empty($onBehalfMode))
+                        {{ __('Submit a membership application for a dependent under your household.') }}
+                    @else
+                        {{ __('Complete the form below to join :fund.', ['fund' => $fundName]) }}
+                    @endif
                 </p>
                 <div class="mt-4 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
                     @include('livewire.tenant.partials.enrollment.download-membership-application-form')

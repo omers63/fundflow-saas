@@ -1,5 +1,6 @@
 @import '../../../../vendor/filament/filament/resources/css/theme.css';
 @import '../mobile-panels.css';
+@import '../stat-widget-tooltips.css';
 @import './stat-cards.css';
 
 @source '../../../../vendor/bezhansalleh/filament-language-switch/resources/views/**/*.blade.php';
@@ -129,6 +130,9 @@
 /* Impersonation — reddish animated topbar + banner */
 .fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) {
     position: relative;
+    flex-wrap: wrap;
+    row-gap: 0.375rem;
+    padding-block: 0.5rem;
     background: linear-gradient(
         120deg,
         #7c2d12 0%,
@@ -141,8 +145,37 @@
     animation: ff-impersonation-roll 5s linear infinite, ff-impersonation-topbar-flash 1.4s ease-in-out infinite;
 }
 
-.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) * {
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) {
     color: #fff7ed;
+}
+
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .fi-topbar-open-sidebar-btn,
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .fi-topbar-close-sidebar-btn,
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .fi-topbar-database-notifications-btn,
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .language-switch-trigger,
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .language-switch-trigger span {
+    color: #fff7ed;
+}
+
+/* Dropdown panels stay readable (float may keep panel in topbar subtree). */
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .fi-user-menu .fi-dropdown-panel {
+    z-index: 60;
+    color: rgb(55 65 81);
+    background-color: #fff;
+}
+
+.dark .fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .fi-user-menu .fi-dropdown-panel {
+    color: rgb(243 244 246);
+    background-color: rgb(17 24 39);
+}
+
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .fi-user-menu .fi-dropdown-panel .fi-dropdown-list-item-label,
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .fi-user-menu .fi-dropdown-panel .fi-dropdown-header-label {
+    color: inherit;
+}
+
+.fi-body.fi-panel-member .fi-topbar:has(.ff-impersonation-banner) .fi-topbar-end {
+    flex-shrink: 0;
 }
 
 .fi-body.fi-panel-member .ff-impersonation-banner {
@@ -150,6 +183,8 @@
     align-items: center;
     gap: 0.5rem;
     margin-inline: 0.5rem;
+    max-width: min(100%, calc(100vw - 8rem));
+    min-width: 0;
     padding: 0.375rem 0.75rem;
     border: 1px solid #fed7aa;
     border-radius: 9999px;
@@ -174,6 +209,8 @@
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
     color: #fff7ed !important;
     text-shadow: 0 1px 1px rgb(0 0 0 / 0.3);

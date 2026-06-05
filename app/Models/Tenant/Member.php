@@ -86,6 +86,11 @@ class Member extends Model
         return $this->hasMany(self::class, 'parent_member_id');
     }
 
+    public function allocationChangesReceived(): HasMany
+    {
+        return $this->hasMany(DependentAllocationChange::class, 'dependent_member_id');
+    }
+
     public function accounts(): HasMany
     {
         return $this->hasMany(Account::class);

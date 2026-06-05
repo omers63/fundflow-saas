@@ -12,13 +12,16 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanLifecycleService;
 use App\Services\LoanService;
+use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
@@ -83,6 +86,8 @@ class ApplyForLoan extends Page implements HasForms
 
         $this->form->fill([
             'has_grace_cycle' => true,
+            'funding_strategy' => LoanFundingStrategy::MEMBER_FUND_TOPUP,
+            'cash_out_excess_fund' => false,
         ]);
     }
 
@@ -131,8 +136,16 @@ class ApplyForLoan extends Page implements HasForms
                                         ->pluck('name', 'id')
                                 )
                                 ->searchable()
-                                ->required(fn (Get $get): bool => $member && LoanSettings::guarantorRequiredForAmount($member, (float) ($get('amount') ?? 0)))
-                                ->nullable(fn (Get $get): bool => ! $member || ! LoanSettings::guarantorRequiredForAmount($member, (float) ($get('amount') ?? 0))),
+                                ->required(fn (Get $get): bool => $member && LoanSettings::guarantorRequiredForAmount(
+                                    $member,
+                                    (float) ($get('amount') ?? 0),
+                                    (string) ($get('funding_strategy') ?? LoanFundingStrategy::MEMBER_FUND_TOPUP),
+                                ))
+                                ->nullable(fn (Get $get): bool => ! $member || ! LoanSettings::guarantorRequiredForAmount(
+                                    $member,
+                                    (float) ($get('amount') ?? 0),
+                                    (string) ($get('funding_strategy') ?? LoanFundingStrategy::MEMBER_FUND_TOPUP),
+                                )),
                             Select::make('grace_cycles')
                                 ->label(__('Grace cycles before first repayment'))
                                 ->options([
@@ -143,6 +156,33 @@ class ApplyForLoan extends Page implements HasForms
                                 ->default(1)
                                 ->required()
                                 ->native(false),
+                            Radio::make('funding_strategy')
+                                ->label(__('How should this loan be funded?'))
+                                ->options(LoanFundingStrategy::options())
+                                ->default(LoanFundingStrategy::MEMBER_FUND_TOPUP)
+                                ->required()
+                                ->live(),
+                            Toggle::make('cash_out_excess_fund')
+                                ->label(__('Move remaining fund balance to cash at disbursement'))
+                                ->helperText(function (Get $get) use ($member, $currency): ?string {
+                                    $amount = (float) ($get('amount') ?? 0);
+                                    if ($amount <= 0 || $member === null) {
+                                        return __('Available when you choose the configured fund split. Any fund balance above your loan share can be credited to your cash account when the loan is disbursed.');
+                                    }
+                                    $excess = LoanSettings::excessFundCashOutAmount(
+                                        $amount,
+                                        $member->getFundBalance(),
+                                        LoanFundingStrategy::SPLIT_PERCENTAGE,
+                                    );
+
+                                    return $excess > 0
+                                        ? __('Estimated transfer at disbursement: :amount :currency', [
+                                            'amount' => number_format($excess, 2),
+                                            'currency' => $currency,
+                                        ])
+                                        : __('You have no fund balance above your configured share for this amount.');
+                                })
+                                ->visible(fn (Get $get): bool => ($get('funding_strategy') ?? LoanFundingStrategy::MEMBER_FUND_TOPUP) === LoanFundingStrategy::SPLIT_PERCENTAGE),
                         ]),
                     Step::make(__('Purpose'))
                         ->icon(Heroicon::OutlinedChatBubbleLeftEllipsis)
@@ -186,8 +226,9 @@ class ApplyForLoan extends Page implements HasForms
                                     $tier = LoanTier::forAmount($amount);
                                     $install = (float) ($tier?->min_monthly_installment ?? 0);
                                     $fundBal = $member?->getFundBalance() ?? 0;
+                                    $strategy = (string) ($get('funding_strategy') ?? LoanFundingStrategy::MEMBER_FUND_TOPUP);
                                     $months = $tier
-                                        ? Loan::computeInstallmentsCount($amount, $fundBal, $install, LoanSettings::settlementThreshold())
+                                        ? Loan::computeInstallmentsCount($amount, $fundBal, $install, LoanSettings::settlementThreshold(), $strategy)
                                         : 0;
                                     $text = $install > 0
                                         ? number_format($install, 2).' '.$currency.' / '.__('month')
@@ -201,6 +242,15 @@ class ApplyForLoan extends Page implements HasForms
                             Placeholder::make('review_purpose')
                                 ->label(__('Purpose'))
                                 ->content(fn (Get $get): HtmlString => new HtmlString(nl2br(e((string) ($get('purpose') ?? ''))))),
+                            Placeholder::make('review_funding')
+                                ->label(__('Funding'))
+                                ->content(fn (Get $get): string => LoanFundingStrategy::options()[(string) ($get('funding_strategy') ?? LoanFundingStrategy::MEMBER_FUND_TOPUP)] ?? '—'),
+                            Placeholder::make('review_cash_out')
+                                ->label(__('Excess fund to cash'))
+                                ->visible(fn (Get $get): bool => ($get('funding_strategy') ?? '') === LoanFundingStrategy::SPLIT_PERCENTAGE)
+                                ->content(fn (Get $get): string => ($get('cash_out_excess_fund') ?? false)
+                                    ? __('Yes, at disbursement')
+                                    : __('No')),
                         ]),
                 ])
                     ->submitAction(new HtmlString(Blade::render(<<<'BLADE'
@@ -236,6 +286,8 @@ class ApplyForLoan extends Page implements HasForms
                 filled($data['witness1_phone'] ?? null) ? (string) $data['witness1_phone'] : null,
                 filled($data['witness2_name'] ?? null) ? (string) $data['witness2_name'] : null,
                 filled($data['witness2_phone'] ?? null) ? (string) $data['witness2_phone'] : null,
+                fundingStrategy: (string) ($data['funding_strategy'] ?? LoanFundingStrategy::MEMBER_FUND_TOPUP),
+                cashOutExcessFund: (bool) ($data['cash_out_excess_fund'] ?? false),
             );
 
             Notification::make()

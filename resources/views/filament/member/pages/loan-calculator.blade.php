@@ -19,9 +19,13 @@
     'amount' => number_format($this->memberFundBalance, 2),
 ]) }}
                         {{ __('and the active loan tier settings.') }}
+                        {{ __('If you choose the configured split at application, :member% comes from your fund and :master% from the master fund.', [
+                            'member' => number_format($this->memberFundingSplitPercent, 1),
+                            'master' => number_format($this->masterFundingSplitPercent, 1),
+                        ]) }}
                         {{ __('The :percent% settlement threshold is included.', [
-    'percent' => round($this->settlementPct * 100),
-]) }}
+                            'percent' => round($this->settlementPct * 100),
+                        ]) }}
                     </p>
                 </div>
             </div>
@@ -32,6 +36,17 @@
             <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 {{ __('Loan amount') }} ({{ $currency }})
             </label>
+            <div class="mb-4">
+                <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ __('Funding approach') }}
+                </label>
+                <select wire:model.live="fundingStrategy"
+                    class="block w-full rounded-lg border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:max-w-md">
+                    @foreach ($this->fundingStrategyOptions as $value => $label)
+                        <option value="{{ $value }}">{{ $label }}</option>
+                    @endforeach
+                </select>
+            </div>
             <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                 <input type="number" wire:model.live.debounce.400ms="loanAmount" min="0" step="500"
                     placeholder="{{ __('e.g. 20000') }}"

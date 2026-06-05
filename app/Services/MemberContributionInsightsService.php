@@ -69,7 +69,10 @@ final class MemberContributionInsightsService
             $openYear,
         );
 
-        $requiredCash = $this->cycles->requiredCashForMemberPeriod($member, $openMonth, $openYear);
+        $underLoanRepayment = $member->hasActiveLoanRepaymentObligation();
+        $requiredCash = $underLoanRepayment
+            ? 0.0
+            : $this->cycles->requiredCashForMemberPeriod($member, $openMonth, $openYear);
         $cashBalance = $member->getCashBalance();
         $cashShortfall = max(0.0, $requiredCash - $cashBalance);
         $cashReady = $cashShortfall <= 0.0;
@@ -125,6 +128,10 @@ final class MemberContributionInsightsService
                 'status_key' => $cycleStatus['key'],
                 'status_label' => $cycleStatus['label'],
                 'status_tone' => $cycleStatus['tone'],
+                'under_loan_repayment' => $underLoanRepayment,
+                'loan_repayment_message' => $underLoanRepayment
+                    ? __('Under loan repayment')
+                    : null,
                 'is_late' => $this->cycles->isLate($openMonth, $openYear),
                 'days_until_deadline' => $daysUntilDeadline,
                 'deadline_label' => $deadline->locale(app()->getLocale())->translatedFormat('j M Y'),

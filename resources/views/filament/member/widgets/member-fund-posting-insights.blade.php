@@ -39,9 +39,11 @@
                         ['label' => __('Accepted'), 'value' => $d['accepted'], 'accent' => 'emerald'],
                         ['label' => __('Rejected'), 'value' => $d['rejected'], 'accent' => 'rose'],
                     ] as $card)
-                        <div class="ff-app-insights-kpi ff-member-stat-card px-3 py-2.5 text-center" data-accent="{{ $card['accent'] }}">
-                            <p class="text-lg font-bold tabular-nums text-gray-900 dark:text-white">{{ $card['value'] }}</p>
-                            <p class="text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ $card['label'] }}</p>
+                        <div class="ff-app-insights-kpi ff-member-stat-card min-w-0 px-3 py-2.5 text-center" data-accent="{{ $card['accent'] }}">
+                            <x-ff-stat-line :text="(string) $card['value']"
+                                class="truncate text-lg font-bold tabular-nums text-gray-900 dark:text-white" />
+                            <x-ff-stat-line :text="ui_label($card['label'])"
+                                class="truncate text-[10px] font-medium uppercase tracking-wide text-gray-500" />
                         </div>
                     @endforeach
                 </div>

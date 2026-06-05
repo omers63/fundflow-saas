@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Tenant;
 
+use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\MembershipEnrollmentService;
@@ -91,10 +92,28 @@ class MembershipEnrollmentWizard extends Component
 
     public bool $enrollmentClosed = false;
 
+    public bool $onBehalfMode = false;
+
+    public ?int $parentMemberId = null;
+
     public function mount(): void
     {
         $this->enrollmentClosed = ! PublicPageSettings::enrollmentIsOpen();
         $this->resetMembershipFeeTransferFields();
+
+        $loggedInMember = auth('tenant')->check()
+            ? Member::query()->where('user_id', auth('tenant')->id())->first()
+            : null;
+
+        $this->onBehalfMode = request()->boolean('on_behalf')
+            && $loggedInMember !== null
+            && $loggedInMember->isParent();
+
+        $this->parentMemberId = $this->onBehalfMode ? $loggedInMember?->id : null;
+
+        if ($this->onBehalfMode && $loggedInMember !== null) {
+            $this->email = (string) ($loggedInMember->household_email ?: $loggedInMember->email ?: $loggedInMember->user?->email);
+        }
     }
 
     /**
@@ -184,12 +203,14 @@ class MembershipEnrollmentWizard extends Component
         $rules = [
             'applicationType' => ['required', 'in:new,resume,renew'],
             'name' => ['required', 'string', 'max:255'],
-            'email' => [
-                'required',
-                'email',
-                'max:255',
-                Rule::unique(User::class, 'email'),
-            ],
+            'email' => $this->onBehalfMode
+                ? ['required', 'email', 'max:255']
+                : [
+                    'required',
+                    'email',
+                    'max:255',
+                    Rule::unique(User::class, 'email'),
+                ],
             'password' => ['required', 'string', Password::defaults(), 'confirmed'],
             'gender' => ['nullable', 'in:male,female,other'],
             'marital_status' => ['nullable', 'in:single,married,divorced,widowed,other'],
@@ -356,6 +377,11 @@ class MembershipEnrollmentWizard extends Component
             'membership_fee_required_amount' => $this->requiresFeePayment()
                 ? $this->currentApplicationFeeAmount()
                 : null,
+            'parent_member_id' => $this->parentMemberId,
+            'submitted_by_user_id' => $this->onBehalfMode ? auth('tenant')->id() : null,
+            'household_email' => $this->onBehalfMode && $this->parentMemberId !== null
+                ? Member::query()->find($this->parentMemberId)?->household_email
+                : null,
         ]);
 
         $this->submitted = true;
@@ -364,6 +390,7 @@ class MembershipEnrollmentWizard extends Component
     public function render(): View
     {
         return view('livewire.tenant.membership-enrollment-wizard', [
+            'onBehalfMode' => $this->onBehalfMode,
             'fundName' => PublicPageSettings::fundName(tenant('name')),
             'currency' => Setting::get('general', 'currency', 'USD') ?? 'USD',
             'fees' => [
