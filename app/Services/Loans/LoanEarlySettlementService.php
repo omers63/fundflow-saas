@@ -61,10 +61,31 @@ class LoanEarlySettlementService
     public function hasSufficientCash(Loan $loan): bool
     {
         $loan->member->unsetRelation('accounts');
-        $balance = (float) $loan->member->cash_balance;
+        $balance = $loan->member->getCashBalance();
         $required = $this->requiredCash($loan);
 
         return $required <= 0.00001 || $balance >= $required - 0.00001;
+    }
+
+    /**
+     * Apply early settlement for a lump sum. Full payoff when amount covers all remaining installments;
+     * otherwise applies partial settlement with the chosen schedule option.
+     *
+     * @param  'roll_up'|'skip_future'  $option
+     *
+     * @throws \InvalidArgumentException|\RuntimeException
+     */
+    public function settle(Loan $loan, float $amount, string $option = 'roll_up', bool $sendNotification = true): void
+    {
+        $required = $this->requiredCash($loan);
+
+        if ($amount >= $required - 0.00001) {
+            $this->earlySettle($loan, $sendNotification);
+
+            return;
+        }
+
+        $this->partialEarlySettle($loan, $amount, $option);
     }
 
     /**
@@ -89,7 +110,7 @@ class LoanEarlySettlementService
         $required = $this->requiredCash($loan);
         $member = $loan->member;
         $member->unsetRelation('accounts');
-        $cash = (float) $member->cash_balance;
+        $cash = $member->getCashBalance();
 
         if ($cash < $required - 0.00001) {
             throw new \RuntimeException(
@@ -112,7 +133,7 @@ class LoanEarlySettlementService
                     'status' => 'paid',
                     'paid_at' => BusinessDay::now(),
                     'is_late' => $isLate,
-                    'late_fee_amount' => $lateFee > 0 ? $lateFee : null,
+                    'late_fee_amount' => $lateFee > 0 ? $lateFee : 0,
                 ]);
 
                 if ($isLate) {
@@ -169,7 +190,7 @@ class LoanEarlySettlementService
         $loan->loadMissing(['member', 'installments']);
         $member = $loan->member;
         $member->unsetRelation('accounts');
-        $cash = (float) $member->cash_balance;
+        $cash = $member->getCashBalance();
 
         if ($cash < $amount - 0.00001) {
             throw new \RuntimeException(__('Insufficient cash for partial settlement.'));
@@ -208,7 +229,7 @@ class LoanEarlySettlementService
                         'paid_at' => BusinessDay::now(),
                         'amount_collected' => (float) $installment->amount,
                         'collection_status' => 'collected',
-                        'late_fee_amount' => $lateFee > 0 ? $lateFee : null,
+                        'late_fee_amount' => $lateFee > 0 ? $lateFee : 0,
                     ]);
                 } else {
                     $installment->update([

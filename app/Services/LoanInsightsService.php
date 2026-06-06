@@ -67,10 +67,9 @@ final class LoanInsightsService
         $pending = Loan::query()->pending()->count();
         $needsDecision = Loan::query()->needsDecision()->count();
         $readyToDisburse = Loan::query()->readyToDisburse()->count();
-        $awaitingPayout = Loan::query()->awaitingBankPayout()->count();
         $active = Loan::query()->where('status', 'active')->count();
         $completed = Loan::query()->whereIn('status', ['completed', 'early_settled'])->count();
-        $queueTotal = $needsDecision + $readyToDisburse + $awaitingPayout;
+        $queueTotal = $needsDecision + $readyToDisburse;
 
         $outstanding = (float) LoanInstallment::query()
             ->whereIn('status', ['pending', 'overdue'])
@@ -144,15 +143,14 @@ final class LoanInsightsService
                     ? __('Members asked for a loan eligibility override review.')
                     : ($queueTotal > 0
                         ? trans_choice(
-                            ':decision pending · :disburse ready · :payout awaiting bank',
+                            ':decision pending · :disburse ready',
                             $queueTotal,
                             [
                                 'decision' => $needsDecision,
                                 'disburse' => $readyToDisburse,
-                                'payout' => $awaitingPayout,
                             ]
                         )
-                        : __('No loans waiting for decision, disbursement, or bank payout.')),
+                        : __('No loans waiting for decision or disbursement.')),
                 'cta_label' => $pendingEligibilityReviews > 0 && $queueTotal === 0
                     ? __('Review requests')
                     : ($queueTotal > 0 ? __('Open queue') : null),
@@ -179,14 +177,12 @@ final class LoanInsightsService
             'pipeline' => [
                 'needs_decision' => $needsDecision,
                 'ready_to_disburse' => $readyToDisburse,
-                'awaiting_payout' => $awaitingPayout,
                 'active' => $active,
                 'completed' => $completed,
                 'approved_month' => $approvedThisMonth,
                 'queue_url' => LoanResource::getUrl('queue'),
                 'queue_needs_decision_url' => LoanResource::queueUrl('needs_decision'),
                 'queue_ready_to_disburse_url' => LoanResource::queueUrl('ready_to_disburse'),
-                'queue_awaiting_payout_url' => LoanResource::queueUrl('awaiting_payout'),
                 'loans_url' => LoanResource::listUrl(),
                 'loans_active_url' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'active']]),
                 'loans_completed_url' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'completed']]),
@@ -509,10 +505,18 @@ final class LoanInsightsService
                 ['key' => 'remaining', 'label' => __('Remaining'), 'value' => (string) $pendingMembers, 'sub' => __('Members'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $pendingMembers > 0],
                 ['key' => 'pending_emis', 'label' => __('Pending EMIs'), 'value' => (string) $metrics['total_pending_emis'], 'sub' => __('Installments'), 'icon' => 'heroicon-o-clock', 'accent' => 'sky', 'active' => $metrics['total_pending_emis'] > 0],
                 ['key' => 'collect', 'label' => __('To collect'), 'value' => (string) $pendingMembers, 'sub' => __('Open period'), 'icon' => 'heroicon-o-arrow-down-tray', 'accent' => 'violet', 'active' => $pendingMembers > 0],
-                ['key' => 'overdue', 'label' => __('Overdue'), 'value' => (string) LoanInstallment::query()
-                    ->where('status', 'overdue')
-                    ->whereHas('loan', fn ($q) => $q->whereIn('status', ['active', 'transferred']))
-                    ->count(), 'sub' => __('Installments'), 'icon' => 'heroicon-o-exclamation-triangle', 'accent' => 'rose', 'active' => true],
+                [
+                    'key' => 'overdue',
+                    'label' => __('Overdue'),
+                    'value' => (string) LoanInstallment::query()
+                        ->where('status', 'overdue')
+                        ->whereHas('loan', fn ($q) => $q->whereIn('status', ['active', 'transferred']))
+                        ->count(),
+                    'sub' => __('Installments'),
+                    'icon' => 'heroicon-o-exclamation-triangle',
+                    'accent' => 'rose',
+                    'active' => true,
+                ],
             ], [
                 'collected' => $collectedUrl,
                 'amount' => $collectedUrl,
@@ -540,12 +544,10 @@ final class LoanInsightsService
 
         $needsDecision = Loan::query()->needsDecision()->count();
         $readyToDisburse = Loan::query()->readyToDisburse()->count();
-        $awaitingPayout = Loan::query()->awaitingBankPayout()->count();
-        $total = $needsDecision + $readyToDisburse + $awaitingPayout;
+        $total = $needsDecision + $readyToDisburse;
 
         $tabQuery = match ($activeTab) {
             'ready_to_disburse' => Loan::query()->readyToDisburse(),
-            'awaiting_payout' => Loan::query()->awaitingBankPayout(),
             default => Loan::query()->needsDecision(),
         };
 
@@ -570,7 +572,6 @@ final class LoanInsightsService
                 'tone' => $total > 0 ? 'amber' : 'success',
                 'title' => match ($activeTab) {
                     'ready_to_disburse' => __('Loans ready to disburse'),
-                    'awaiting_payout' => __('Awaiting bank payout'),
                     default => __('Applications awaiting decision'),
                 },
                 'subtitle' => trans_choice(
@@ -582,14 +583,12 @@ final class LoanInsightsService
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'decision', 'label' => __('Decision'), 'value' => (string) $needsDecision, 'sub' => __('Pending'), 'icon' => 'heroicon-o-clipboard-document-check', 'accent' => 'amber', 'active' => $needsDecision > 0],
                 ['key' => 'disburse', 'label' => __('Disburse'), 'value' => (string) $readyToDisburse, 'sub' => __('Approved'), 'icon' => 'heroicon-o-currency-dollar', 'accent' => 'sky', 'active' => $readyToDisburse > 0],
-                ['key' => 'payout', 'label' => __('Payout'), 'value' => (string) $awaitingPayout, 'sub' => __('Bank'), 'icon' => 'heroicon-o-building-library', 'accent' => 'indigo', 'active' => $awaitingPayout > 0],
                 ['key' => 'tab_total', 'label' => __('Tab total'), 'value' => $this->formatMoneyCompact($tabExposure, $currency), 'sub' => __('Exposure'), 'icon' => 'heroicon-o-scale', 'accent' => 'violet', 'active' => true],
                 ['key' => 'emergency', 'label' => __('Emergency'), 'value' => (string) $emergency, 'sub' => __('In queue'), 'icon' => 'heroicon-o-bolt', 'accent' => 'rose', 'active' => $emergency > 0],
                 ['key' => 'queue', 'label' => __('Queue'), 'value' => (string) $total, 'sub' => __('All stages'), 'icon' => 'heroicon-o-queue-list', 'accent' => 'teal', 'active' => true],
             ], [
                 'decision' => LoanResource::queueUrl('needs_decision'),
                 'disburse' => LoanResource::queueUrl('ready_to_disburse'),
-                'payout' => LoanResource::queueUrl('awaiting_payout'),
                 'tab_total' => LoanResource::queueUrl($activeTab),
                 'emergency' => LoanResource::getUrl('queue'),
                 'queue' => LoanResource::getUrl('queue'),
@@ -597,17 +596,14 @@ final class LoanInsightsService
             'pipeline' => [
                 'needs_decision' => $needsDecision,
                 'ready_to_disburse' => $readyToDisburse,
-                'awaiting_payout' => $awaitingPayout,
                 'queue_url' => LoanResource::getUrl('queue'),
                 'queue_needs_decision_url' => LoanResource::queueUrl('needs_decision'),
                 'queue_ready_to_disburse_url' => LoanResource::queueUrl('ready_to_disburse'),
-                'queue_awaiting_payout_url' => LoanResource::queueUrl('awaiting_payout'),
             ],
             'preview' => $preview,
             'tab_labels' => [
                 'needs_decision' => __('Needs decision'),
                 'ready_to_disburse' => __('Ready to disburse'),
-                'awaiting_payout' => __('Awaiting bank payout'),
             ],
         ];
     }
@@ -830,7 +826,7 @@ final class LoanInsightsService
                 'status' => $nextInstallment->status,
                 'is_overdue' => $nextInstallment->status === 'overdue',
             ] : null,
-            'relation_summaries' => [
+            'relation_summaries' => array_values(array_filter([
                 [
                     'key' => 'installments',
                     'label' => __('Repayment schedule'),
@@ -847,15 +843,15 @@ final class LoanInsightsService
                     'accent' => 'indigo',
                     'icon' => 'heroicon-o-arrow-down-tray',
                 ],
-                [
+                $loan->repayments->isNotEmpty() ? [
                     'key' => 'repayments',
-                    'label' => __('Manual repayments'),
+                    'label' => __('Imported/legacy repayments'),
                     'value' => $this->formatMoneyCompact((float) $loan->repayments->sum('amount'), $currency),
-                    'hint' => __('Legacy rows · schedule drives balance'),
+                    'hint' => __('Imported rows · schedule drives balance'),
                     'accent' => 'violet',
                     'icon' => 'heroicon-o-receipt-refund',
-                ],
-            ],
+                ] : null,
+            ])),
             'guarantor' => $loan->guarantor ? [
                 'name' => $loan->guarantor->name,
                 'released' => $loan->isGuarantorReleased(),

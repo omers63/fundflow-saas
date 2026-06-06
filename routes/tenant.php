@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\LocaleSwitchController;
 use App\Http\Controllers\Tenant\DirectMessageAttachmentController;
 use App\Http\Controllers\Tenant\FiscalCloseExportDownloadController;
+use App\Http\Controllers\Tenant\LoanImportSampleController;
 use App\Http\Controllers\Tenant\MembershipApplicationImportSampleController;
 use App\Http\Controllers\Tenant\StartDependentImpersonationController;
 use App\Http\Controllers\Tenant\StatementPdfController;
@@ -57,6 +58,9 @@ Route::middleware([
 
     Route::get('/downloads/membership-application-import-sample', MembershipApplicationImportSampleController::class)
         ->name('tenant.downloads.membership-application-import-sample');
+
+    Route::get('/downloads/loan-import-sample', LoanImportSampleController::class)
+        ->name('tenant.downloads.loan-import-sample');
 
     Route::get('/manifest.json', TenantManifestController::class)
         ->name('tenant.manifest');

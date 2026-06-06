@@ -349,19 +349,6 @@ final class LoanLifecycleService
         }
     }
 
-    public function markBankPayout(Loan $loan, ?CarbonInterface $payoutAt = null): void
-    {
-        if (! in_array($loan->status, ['approved', 'partially_disbursed', 'active'], true)) {
-            throw new InvalidArgumentException(__('Bank payout can only be recorded for approved or active loans.'));
-        }
-
-        if (! $loan->isFullyDisbursed()) {
-            throw new InvalidArgumentException(__('Loan must be fully disbursed on the ledger before bank payout.'));
-        }
-
-        $loan->update(['payout_at' => $payoutAt ?? BusinessDay::now()]);
-    }
-
     private function activateAfterFullDisbursement(
         Loan $loan,
         CarbonInterface $disbursedAt,

@@ -42,7 +42,7 @@ class ListLoanQueue extends ListRecords
 
     public function getSubheading(): string|Htmlable|null
     {
-        return __('Review applications, disburse approved loans, and record bank payouts.');
+        return __('Review applications and disburse approved loans.');
     }
 
     protected function getHeaderActions(): array
@@ -83,9 +83,6 @@ class ListLoanQueue extends ListRecords
             'ready_to_disburse' => Tab::make(__('Ready to disburse'))
                 ->badge((string) Loan::query()->readyToDisburse()->count())
                 ->badgeColor('info'),
-            'awaiting_payout' => Tab::make(__('Awaiting bank payout'))
-                ->badge((string) Loan::query()->awaitingBankPayout()->count())
-                ->badgeColor('gray'),
         ];
     }
 
@@ -107,7 +104,6 @@ class ListLoanQueue extends ListRecords
 
         return match ($this->activeTab ?? 'needs_decision') {
             'ready_to_disburse' => $query->readyToDisburse(),
-            'awaiting_payout' => $query->awaitingBankPayout(),
             default => $query->needsDecision(),
         };
     }

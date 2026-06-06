@@ -77,11 +77,6 @@ class LoanService
         $this->lifecycle->disbursePartial($loan, $toDisburse);
     }
 
-    public function payoutLoan(Loan $loan): void
-    {
-        $this->lifecycle->markBankPayout($loan);
-    }
-
     public function recordRepayment(Loan $loan, float $amount, ?string $notes = null): LoanRepayment
     {
         if ($loan->status !== 'active') {
@@ -111,6 +106,14 @@ class LoanService
     public function earlySettle(Loan $loan): void
     {
         $this->earlySettlement->earlySettle($loan);
+    }
+
+    /**
+     * @param  'roll_up'|'skip_future'  $option
+     */
+    public function settleLoan(Loan $loan, float $amount, string $option = 'roll_up'): void
+    {
+        $this->earlySettlement->settle($loan, $amount, $option);
     }
 
     public static function computeMonthlyRepayment(float $amount, float $interestRate, int $termMonths): float

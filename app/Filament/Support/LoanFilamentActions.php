@@ -238,106 +238,76 @@ final class LoanFilamentActions
             });
     }
 
-    public static function markBankPayout(): Action
+    public static function earlySettle(): Action
     {
-        return Action::make('markBankPayout')
-            ->label(__('Mark bank payout'))
-            ->icon('heroicon-o-arrow-up-tray')
-            ->color('warning')
-            ->visible(fn (Loan $record): bool => $record->status === 'active' && $record->payout_at === null)
-            ->requiresConfirmation()
-            ->modalDescription(__('Confirm the loan proceeds were sent to the member bank account.'))
-            ->schema([
-                DateTimePicker::make('payout_at')
-                    ->label(__('Payout date'))
-                    ->seconds(false)
-                    ->native(false)
-                    ->default(BusinessDay::now())
-                    ->required(),
-            ])
-            ->action(function (Loan $record, array $data, Action $action, LoanLifecycleService $lifecycle): void {
-                if (
-                    ! ActionModalFailure::attemptThrowable(
-                        $action,
-                        fn () => $lifecycle->markBankPayout(
-                            $record,
-                            isset($data['payout_at']) ? Carbon::parse((string) $data['payout_at']) : BusinessDay::now(),
-                        ),
-                        __('Could not record payout'),
-                    )
-                ) {
-                    return;
-                }
-
-                Notification::make()->title(__('Bank payout recorded'))->success()->send();
-            });
-    }
-
-    public static function partialEarlySettle(): Action
-    {
-        return Action::make('partialEarlySettle')
-            ->label(__('Partial early settlement'))
-            ->icon('heroicon-o-banknotes')
-            ->color('info')
+        return Action::make('earlySettle')
+            ->label(__('Early settlement'))
+            ->icon('heroicon-o-check-badge')
+            ->color('success')
             ->visible(fn (Loan $record): bool => $record->status === 'active')
-            ->schema([
-                TextInput::make('amount')
-                    ->label(__('Amount'))
-                    ->numeric()
-                    ->required()
-                    ->minValue(0.01),
-                Select::make('option')
-                    ->label(__('Schedule option'))
-                    ->options([
-                        'roll_up' => __('Roll remaining into last installment'),
-                        'skip_future' => __('Skip future installments'),
-                    ])
-                    ->default('roll_up')
-                    ->required(),
+            ->fillForm(fn (Loan $record): array => [
+                'amount' => app(LoanEarlySettlementService::class)->requiredCash($record),
+                'option' => 'roll_up',
             ])
-            ->action(function (Loan $record, array $data, Action $action, LoanEarlySettlementService $service): void {
+            ->schema(fn (Loan $record): array => self::earlySettlementFormSchema($record))
+            ->action(function (Loan $record, array $data, Action $action, LoanService $service): void {
                 if (
                     ! ActionModalFailure::attemptThrowable(
                         $action,
-                        fn () => $service->partialEarlySettle(
+                        fn () => $service->settleLoan(
                             $record,
                             (float) $data['amount'],
                             (string) ($data['option'] ?? 'roll_up'),
                         ),
-                        __('Partial settlement failed'),
-                    )
-                ) {
-                    return;
-                }
-
-                Notification::make()->title(__('Partial settlement applied'))->success()->send();
-            });
-    }
-
-    public static function earlySettle(): Action
-    {
-        return Action::make('earlySettle')
-            ->label(__('Early settle'))
-            ->icon('heroicon-o-check-badge')
-            ->color('success')
-            ->visible(fn (Loan $record): bool => $record->status === 'active')
-            ->requiresConfirmation()
-            ->modalDescription(fn (Loan $record): string => __('Pay all remaining installments from member cash. Required: :amount', [
-                'amount' => number_format(app(LoanEarlySettlementService::class)->requiredCash($record), 2),
-            ]))
-            ->action(function (Loan $record, Action $action, LoanService $service): void {
-                if (
-                    ! ActionModalFailure::attemptThrowable(
-                        $action,
-                        fn () => $service->earlySettle($record),
                         __('Settlement failed'),
                     )
                 ) {
                     return;
                 }
 
-                Notification::make()->title(__('Loan early settled'))->success()->send();
+                Notification::make()->title(__('Early settlement applied'))->success()->send();
             });
+    }
+
+    /**
+     * @return array<int, \Filament\Forms\Components\Component|\Filament\Schemas\Components\Component>
+     */
+    public static function earlySettlementFormSchema(Loan $record): array
+    {
+        $settlement = app(LoanEarlySettlementService::class);
+        $required = $settlement->requiredCash($record);
+        $record->loadMissing('member');
+        $record->member->unsetRelation('accounts');
+        $balance = $record->member->getCashBalance();
+
+        return [
+            Placeholder::make('settlement_summary')
+                ->label(__('Settlement summary'))
+                ->content(new HtmlString(
+                    __('Full payoff requires :required. Member cash balance: :balance.', [
+                        'required' => '<strong>'.number_format($required, 2).'</strong>',
+                        'balance' => '<strong>'.number_format($balance, 2).'</strong>',
+                    ])
+                )),
+            TextInput::make('amount')
+                ->label(__('Amount'))
+                ->numeric()
+                ->required()
+                ->minValue(0.01)
+                ->maxValue(max(0.01, $balance))
+                ->default($required)
+                ->helperText(__('Enter the full payoff amount or a smaller lump sum.')),
+            Select::make('option')
+                ->label(__('Schedule option'))
+                ->options([
+                    'roll_up' => __('Roll remaining into last installment'),
+                    'skip_future' => __('Skip future installments'),
+                ])
+                ->default('roll_up')
+                ->required()
+                ->visible(fn (Get $get): bool => (float) ($get('amount') ?? 0) < $required - 0.00001)
+                ->helperText(__('Choose how to adjust the remaining schedule when paying less than the full balance.')),
+        ];
     }
 
     public static function transferGuarantorLiability(): Action
@@ -468,8 +438,6 @@ final class LoanFilamentActions
                 self::approve(),
                 self::reject(),
                 self::disburse(),
-                self::markBankPayout(),
-                self::partialEarlySettle(),
                 self::earlySettle(),
                 self::applyOpenRepayment(),
                 self::transferGuarantorLiability(),

@@ -27,11 +27,6 @@ final class LoanTableActions
         return LoanFilamentActions::disburse();
     }
 
-    public static function payout(): Action
-    {
-        return LoanFilamentActions::markBankPayout();
-    }
-
     public static function recordRepayment(): Action
     {
         return LoanFilamentActions::applyOpenRepayment();

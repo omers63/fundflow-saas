@@ -121,7 +121,7 @@
                 </div>
                 <span class="text-[10px] text-gray-400">{{ $d['open_period_label'] }}</span>
             </div>
-            <div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-5">
+            <div class="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-4">
                 <a href="{{ $pipeline['queue_needs_decision_url'] }}"
                     class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-amber-50/70 dark:hover:bg-amber-950/20">
                     <span
@@ -133,12 +133,6 @@
                     <span
                         class="text-xl font-bold tabular-nums text-sky-600 dark:text-sky-400">{{ $pipeline['ready_to_disburse'] }}</span>
                     <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Disburse') }}</span>
-                </a>
-                <a href="{{ $pipeline['queue_awaiting_payout_url'] }}"
-                    class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-indigo-50/70 dark:hover:bg-indigo-950/20">
-                    <span
-                        class="text-xl font-bold tabular-nums text-indigo-600 dark:text-indigo-400">{{ $pipeline['awaiting_payout'] }}</span>
-                    <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Payout') }}</span>
                 </a>
                 <a href="{{ $pipeline['loans_active_url'] }}"
                     class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-emerald-50/70 dark:hover:bg-emerald-950/20">

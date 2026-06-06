@@ -392,4 +392,144 @@ final class LoanLedgerService
         $loan->refresh();
         $loan->releaseGuarantorIfDue();
     }
+
+    /**
+     * Disburse an imported loan using explicit member/master portions from CSV (historical migration).
+     */
+    public function postImportedLoanDisbursementWithPortions(
+        Loan $loan,
+        float $memberPortion,
+        float $masterPortion,
+        ?CarbonInterface $disbursedAt = null,
+        bool $allowNegativeMasterFundBalance = false,
+    ): LoanDisbursement {
+        $totalAmount = round((float) $loan->amount_approved, 2);
+        $sum = round($memberPortion + $masterPortion, 2);
+
+        if (abs($sum - $totalAmount) > 0.02) {
+            throw new RuntimeException(
+                __('member_portion + master_portion must equal amount_approved (within 0.02).')
+            );
+        }
+
+        if ($memberPortion < -0.02 || $masterPortion < -0.02) {
+            throw new RuntimeException(__('Portions cannot be negative.'));
+        }
+
+        $member = $loan->member;
+        $this->ensureMemberAccounts($member);
+        $loanAccount = $this->ensureLoanAccount($loan);
+
+        $memberFund = $member->fundAccount;
+        $masterFund = Account::masterFund();
+        $memberCash = $member->cashAccount;
+
+        if ($memberFund === null || $masterFund === null || $memberCash === null) {
+            throw new RuntimeException(__('Required accounts are not configured.'));
+        }
+
+        $at = $disbursedAt ?? BusinessDay::now();
+        $label = __('Loan #:id disbursement (import) – :name', [
+            'id' => $loan->id,
+            'name' => $member->name,
+        ]);
+
+        $disbursement = LoanDisbursement::create([
+            'loan_id' => $loan->id,
+            'amount' => $totalAmount,
+            'member_portion' => $memberPortion,
+            'master_portion' => $masterPortion,
+            'disbursed_at' => $at,
+            'disbursed_by_id' => auth('tenant')->id(),
+            'notes' => __('CSV import'),
+        ]);
+
+        DB::transaction(function () use ($loan, $member, $memberFund, $masterFund, $memberCash, $loanAccount, $label, $totalAmount, $memberPortion, $masterPortion, $at, $allowNegativeMasterFundBalance, $disbursement): void {
+            $masterFundLocked = Account::query()->lockForUpdate()->findOrFail($masterFund->id);
+
+            if (
+                ! $allowNegativeMasterFundBalance
+                && $masterPortion > 0.00001
+                && (float) $masterFundLocked->balance < $masterPortion
+            ) {
+                throw new RuntimeException(__('Insufficient master fund balance.'));
+            }
+
+            $this->accounting->debit($loanAccount, $totalAmount, $label, $loan, $at, $member->id);
+
+            if ($memberPortion > 0.00001) {
+                $principalLabel = $label.' '.__('(member portion applied to principal)');
+                $this->accounting->credit($loanAccount, $memberPortion, $principalLabel, $loan, $at, $member->id);
+                $this->accounting->debitMemberFundWithMasterMirror(
+                    $memberFund,
+                    $memberPortion,
+                    $label,
+                    __('(member fund share)'),
+                    $loan,
+                    $at,
+                    $member->id,
+                );
+            }
+
+            if ($masterPortion > 0.00001) {
+                $this->accounting->debit(
+                    $masterFundLocked,
+                    $masterPortion,
+                    $label.' '.__('(master fund share)'),
+                    $loan,
+                    $at,
+                    $member->id,
+                );
+            }
+
+            AccountingService::withoutMemberCashCollection(function () use ($memberCash, $totalAmount, $label, $loan, $at, $member): void {
+                $this->accounting->creditMemberCashWithMasterMirror(
+                    $memberCash,
+                    $totalAmount,
+                    $label,
+                    __('(cash payout mirror)'),
+                    $loan,
+                    $at,
+                    $member->id,
+                );
+            });
+
+            $loan->update([
+                'member_portion' => $memberPortion,
+                'master_portion' => $masterPortion,
+                'amount_disbursed' => $totalAmount,
+            ]);
+
+            $disbursement->update([
+                'member_portion' => $memberPortion,
+                'master_portion' => $masterPortion,
+            ]);
+        });
+
+        return $disbursement->fresh();
+    }
+
+    /**
+     * Apply cumulative repayments already collected before go-live (CSV import).
+     */
+    public function postImportedLoanRepayments(Loan $loan, float $totalRepaid): void
+    {
+        if ($totalRepaid <= 0.00001) {
+            return;
+        }
+
+        $member = $loan->member;
+        $this->ensureMemberAccounts($member);
+
+        $description = __('Loan #:id repayments (import, bulk) – :name', [
+            'id' => $loan->id,
+            'name' => $member->name,
+        ]);
+
+        DB::transaction(function () use ($loan, $member, $description, $totalRepaid): void {
+            Loan::query()->whereKey($loan->getKey())->lockForUpdate()->firstOrFail();
+
+            $this->postLoanPrincipalRepayment($loan, $totalRepaid, $description, $loan, $member->id);
+        });
+    }
 }

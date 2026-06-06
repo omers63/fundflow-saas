@@ -127,10 +127,6 @@ class ViewLoan extends ViewRecord
                     TextEntry::make('disbursed_at')
                         ->dateTime()
                         ->placeholder(__('—')),
-                    TextEntry::make('payout_at')
-                        ->label(__('Bank payout'))
-                        ->dateTime()
-                        ->placeholder(__('—')),
                     TextEntry::make('settled_at')
                         ->dateTime()
                         ->placeholder(__('—')),

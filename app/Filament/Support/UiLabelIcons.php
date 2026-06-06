@@ -35,10 +35,8 @@ class UiLabelIcons
         'transactions' => Heroicon::OutlinedArrowsRightLeft,
         'needs-decision' => Heroicon::OutlinedClipboardDocumentCheck,
         'ready-to-disburse' => Heroicon::OutlinedRocketLaunch,
-        'awaiting-payout' => Heroicon::OutlinedBuildingLibrary,
         'needs_decision' => Heroicon::OutlinedClipboardDocumentCheck,
         'ready_to_disburse' => Heroicon::OutlinedRocketLaunch,
-        'awaiting_payout' => Heroicon::OutlinedBuildingLibrary,
         // Relation managers
         'accounts' => Heroicon::OutlinedWallet,
         'contributions' => Heroicon::OutlinedChartBar,

@@ -6,18 +6,17 @@ namespace App\Filament\Tenant\Resources\Loans\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
-use App\Filament\Support\ActionModalFailure;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\LoanFilamentActions;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Models\Tenant\Loan;
 use App\Models\Tenant\Setting;
-use App\Services\LoanService;
-use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
-use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class RepaymentsRelationManager extends RelationManager
 {
@@ -25,7 +24,13 @@ class RepaymentsRelationManager extends RelationManager
 
     protected static string $relationship = 'repayments';
 
-    protected static ?string $title = 'Legacy repayments';
+    protected static ?string $title = 'Imported/legacy repayments';
+
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        return $ownerRecord instanceof Loan
+            && $ownerRecord->repayments()->exists();
+    }
 
     public function table(Table $table): Table
     {
@@ -50,23 +55,7 @@ class RepaymentsRelationManager extends RelationManager
             ])
             ->defaultSort('paid_at', 'desc')
             ->headerActions([
-                Action::make('earlySettle')
-                    ->label(__('Early settle'))
-                    ->icon('heroicon-o-check-badge')
-                    ->color('success')
-                    ->visible(fn (): bool => $this->getOwnerRecord()->status === 'active')
-                    ->requiresConfirmation()
-                    ->action(function (Action $action, LoanService $service): void {
-                        if (! ActionModalFailure::attemptThrowable(
-                            $action,
-                            fn () => $service->earlySettle($this->getOwnerRecord()),
-                            __('Settlement failed'),
-                        )) {
-                            return;
-                        }
-
-                        Notification::make()->title(__('Loan early settled'))->success()->send();
-                    }),
+                LoanFilamentActions::earlySettle(),
             ])
             ->recordActions(TableRecordActionGroups::wrap([]))
             ->toolbarActions([

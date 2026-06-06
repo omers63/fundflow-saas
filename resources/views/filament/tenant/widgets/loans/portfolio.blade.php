@@ -25,10 +25,10 @@
                 <span class="rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-bold text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">{{ __(':count emergency', ['count' => $d['emergency_in_queue']]) }}</span>
             @endif
         </div>
-        <div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-5">
+        <div class="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-4">
             @if (($pipeline['pending_eligibility_reviews'] ?? 0) > 0)
                 <a href="{{ $pipeline['eligibility_reviews_url'] }}"
-                    class="col-span-3 flex items-center justify-between gap-2 border-b border-gray-100 bg-amber-50/70 px-3 py-2 text-left transition hover:bg-amber-100/80 dark:border-gray-700 dark:bg-amber-950/20 dark:hover:bg-amber-950/30 sm:col-span-5">
+                    class="col-span-2 flex items-center justify-between gap-2 border-b border-gray-100 bg-amber-50/70 px-3 py-2 text-left transition hover:bg-amber-100/80 dark:border-gray-700 dark:bg-amber-950/20 dark:hover:bg-amber-950/30 sm:col-span-4">
                     <span class="text-[11px] font-semibold text-amber-800 dark:text-amber-200">
                         {{ trans_choice(':count eligibility review pending|:count eligibility reviews pending', $pipeline['pending_eligibility_reviews'], ['count' => $pipeline['pending_eligibility_reviews']]) }}
                     </span>
@@ -42,10 +42,6 @@
             <a href="{{ $pipeline['queue_ready_to_disburse_url'] }}" class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-sky-50/70 dark:hover:bg-sky-950/20">
                 <span class="text-xl font-bold tabular-nums text-sky-600 dark:text-sky-400">{{ $pipeline['ready_to_disburse'] }}</span>
                 <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Disburse') }}</span>
-            </a>
-            <a href="{{ $pipeline['queue_awaiting_payout_url'] }}" class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-indigo-50/70 dark:hover:bg-indigo-950/20">
-                <span class="text-xl font-bold tabular-nums text-indigo-600 dark:text-indigo-400">{{ $pipeline['awaiting_payout'] }}</span>
-                <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Payout') }}</span>
             </a>
             <a href="{{ $pipeline['loans_active_url'] }}" class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-emerald-50/70 dark:hover:bg-emerald-950/20">
                 <span class="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{{ $pipeline['active'] }}</span>

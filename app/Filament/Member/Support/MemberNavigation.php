@@ -42,6 +42,8 @@ final class MemberNavigation
 
     public const SORT_SUPPORT = 3;
 
+    public const SORT_BUSINESS_DAY_TEST = 4;
+
     /**
      * @return list<string>
      */

@@ -203,17 +203,3 @@ test('loan amount cannot exceed configured maximum for member', function () {
     expect(fn () => $this->service->applyForLoan($member, 50000))
         ->toThrow(InvalidArgumentException::class);
 });
-
-test('bank payout timestamp can be recorded after full disbursement', function () {
-    $member = createEligibleLoanMember($this->accounting, 30000);
-    Account::masterFund()->update(['balance' => 100000]);
-    Account::masterCash()->update(['balance' => 100000]);
-
-    $loan = $this->service->applyForLoan($member, 15000);
-    $this->service->approveLoan($loan, 15000);
-    $this->service->disburseLoan($loan);
-    $this->service->payoutLoan($loan);
-
-    $loan->refresh();
-    expect($loan->payout_at)->not->toBeNull();
-});

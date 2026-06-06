@@ -71,7 +71,7 @@ final class MemberLoanFilamentActions
     public static function earlySettle(): Action
     {
         return Action::make('earlySettle')
-            ->label(__('Pay off loan early'))
+            ->label(__('Early settlement'))
             ->icon('heroicon-o-check-badge')
             ->color('success')
             ->visible(function (Loan $record): bool {
@@ -81,20 +81,13 @@ final class MemberLoanFilamentActions
                     && (int) $record->member_id === (int) $member->id
                     && $record->status === 'active';
             })
-            ->requiresConfirmation()
-            ->modalHeading(__('Early loan payoff'))
-            ->modalDescription(function (Loan $record): string {
-                $required = app(LoanEarlySettlementService::class)->requiredCash($record);
-                $member = $record->member;
-                $member->unsetRelation('accounts');
-                $balance = (float) $member->cash_balance;
-
-                return __('Pay all remaining installments from your cash account. Required: :required. Your cash balance: :balance.', [
-                    'required' => number_format($required, 2),
-                    'balance' => number_format($balance, 2),
-                ]);
-            })
-            ->action(function (Loan $record, Action $action, LoanService $loanService): void {
+            ->modalHeading(__('Early loan settlement'))
+            ->fillForm(fn (Loan $record): array => [
+                'amount' => app(LoanEarlySettlementService::class)->requiredCash($record),
+                'option' => 'roll_up',
+            ])
+            ->schema(fn (Loan $record): array => LoanFilamentActions::earlySettlementFormSchema($record))
+            ->action(function (Loan $record, array $data, Action $action, LoanService $loanService): void {
                 $member = CurrentMember::get();
 
                 if ($member === null || (int) $record->member_id !== (int) $member->id) {
@@ -104,16 +97,20 @@ final class MemberLoanFilamentActions
                 if (
                     ! ActionModalFailure::attemptThrowable(
                         $action,
-                        fn () => $loanService->earlySettle($record),
-                        __('Payoff failed'),
+                        fn () => $loanService->settleLoan(
+                            $record,
+                            (float) $data['amount'],
+                            (string) ($data['option'] ?? 'roll_up'),
+                        ),
+                        __('Settlement failed'),
                     )
                 ) {
                     return;
                 }
 
                 Notification::make()
-                    ->title(__('Loan paid in full'))
-                    ->body(__('Your loan has been settled early. Thank you.'))
+                    ->title(__('Early settlement applied'))
+                    ->body(__('Your settlement has been recorded. Thank you.'))
                     ->success()
                     ->send();
             });

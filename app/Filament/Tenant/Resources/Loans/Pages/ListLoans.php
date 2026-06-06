@@ -74,7 +74,8 @@ class ListLoans extends ListRecords
             'overdue_installments' => __('Active loans with installments past due. Run the delinquency check after cycle close to refresh statuses.'),
             'guarantor_exposure' => __('Loans in warning or with liability transferred to the guarantor.'),
             'eligibility_reviews' => __('Review member requests to bypass loan eligibility rules. Approved requests create standing overrides.'),
-            default => __('Monitor the full loan portfolio, outstanding balances, and operational pipeline.'),
+            default => __('Track the full lifecycle of every loan — from application through disbursement to settlement.
+                Monitor the full loan portfolio, outstanding balances, and operational pipeline.'),
         };
     }
 

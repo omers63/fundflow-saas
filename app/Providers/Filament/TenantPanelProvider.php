@@ -61,8 +61,8 @@ class TenantPanelProvider extends PanelProvider
             ->widgets([])
             ->databaseNotifications(isLazy: false)
             ->databaseNotificationsPolling(DatabaseNotificationsRefresh::pollingInterval())
-            ->renderHook(PanelsRenderHook::TOPBAR_START, fn (): HtmlString => new HtmlString(
-                view('partials.business-day-banner')->render()
+            ->renderHook(PanelsRenderHook::FOOTER, fn (): HtmlString => new HtmlString(
+                view('partials.status-footer-banners')->render()
             ))
             ->renderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(
                 view('partials.arabic-fonts')->render()

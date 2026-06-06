@@ -2,8 +2,8 @@
     'steps' => [],
 ])
 
-<nav aria-label="{{ __('Loan progress') }}" class="mb-4 w-full">
-    <ol class="m-0 flex list-none flex-row items-stretch gap-1 p-0 sm:gap-1.5">
+<nav aria-label="{{ __('Loan progress') }}" class="mb-4 w-full overflow-x-auto">
+    <ol class="m-0 flex min-w-max list-none flex-row items-stretch gap-1 p-0 sm:min-w-0 sm:gap-1.5">
         @foreach ($steps as $index => $step)
             @php
                 $number = $index + 1;
@@ -13,7 +13,7 @@
             @endphp
             <li
                 @class([
-                    'flex min-w-0 flex-1 flex-col items-center rounded-lg border px-1 py-1.5 text-center transition-all sm:px-1.5 sm:py-2',
+                    'flex min-w-[4.5rem] flex-1 flex-col items-center rounded-lg border px-1 py-1.5 text-center transition-all sm:min-w-0 sm:px-1.5 sm:py-2',
                     'border-primary-500 bg-primary-50/80 ring-1 ring-primary-500/25 dark:bg-primary-500/10' => $isCurrent,
                     'border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/30 dark:bg-emerald-500/10' => $isComplete && ! $isCurrent,
                     'border-gray-200 bg-white dark:border-white/10 dark:bg-gray-900/40' => ! $isCurrent && ! $isComplete,

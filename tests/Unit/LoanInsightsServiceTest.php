@@ -69,7 +69,8 @@ test('loan detail snapshot includes stepper and relation summaries', function ()
 
     expect($snapshot)->toHaveKeys(['steps', 'kpis', 'progress', 'relation_summaries'])
         ->and($snapshot['steps'])->not->toBeEmpty()
-        ->and($snapshot['relation_summaries'])->toHaveCount(3);
+        ->and(collect($snapshot['steps'])->pluck('key'))->toContain('under_review')
+        ->and($snapshot['relation_summaries'])->toHaveCount(2);
 });
 
 test('fund tiers snapshot reports utilization', function () {

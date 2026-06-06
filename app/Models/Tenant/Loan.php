@@ -589,13 +589,6 @@ class Loan extends Model
             ->whereRaw('COALESCE(amount_disbursed, 0) < COALESCE(amount_approved, amount_requested, 0)');
     }
 
-    /** Fully disbursed on ledger but bank payout not recorded. */
-    public function scopeAwaitingBankPayout($query)
-    {
-        return $query->where('status', 'active')
-            ->whereNull('payout_at');
-    }
-
     /**
      * @return array<string, string>
      */

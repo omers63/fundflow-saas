@@ -67,7 +67,7 @@ test('emi collection tab loads on loans list', function () {
 
     $this->get('http://'.$this->domain.$path.($query ? '?'.$query : ''))
         ->assertSuccessful()
-        ->assertSee(__('EMI collection'), false);
+        ->assertSee(__('EMI To Collect'), false);
 });
 
 test('loans list exposes delinquency maintenance actions on overdue tab', function () {

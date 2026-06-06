@@ -62,7 +62,7 @@ class LoanResource extends Resource
     public static function listTabLabel(string $tab): string
     {
         return match ($tab) {
-            'emi_collect' => __('EMI collection'),
+            'emi_collect' => __('EMI To Collect'),
             'emi_collected' => __('EMI collected'),
             'overdue_installments' => __('Overdue installments'),
             'guarantor_exposure' => __('Guarantor exposure'),
