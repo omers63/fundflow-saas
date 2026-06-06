@@ -9,6 +9,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\SmsTransaction;
 use App\Models\Tenant\Transaction;
 use App\Services\FiscalClose\FiscalClosePeriodResolver;
 use App\Support\BusinessDay;
@@ -137,7 +138,7 @@ class AccountingService
                 throw new InvalidArgumentException(__('Leg :n requires an account.', ['n' => $index + 1]));
             }
 
-            if (!in_array($type, ['debit', 'credit'], true)) {
+            if (! in_array($type, ['debit', 'credit'], true)) {
                 throw new InvalidArgumentException(__('Leg :n type must be debit or credit.', ['n' => $index + 1]));
             }
 
@@ -293,7 +294,7 @@ class AccountingService
 
         $type = (string) ($data['type'] ?? $transaction->type);
 
-        if (!in_array($type, ['credit', 'debit'], true)) {
+        if (! in_array($type, ['credit', 'debit'], true)) {
             throw new InvalidArgumentException(__('Type must be credit or debit.'));
         }
 
@@ -305,7 +306,7 @@ class AccountingService
 
         $transactedAt = $data['transacted_at'] ?? $transaction->transacted_at;
 
-        if (!$transactedAt instanceof CarbonInterface) {
+        if (! $transactedAt instanceof CarbonInterface) {
             $transactedAt = Carbon::parse($transactedAt);
         }
 
@@ -455,13 +456,13 @@ class AccountingService
             throw new InvalidArgumentException(__('Transaction has no account.'));
         }
 
-        if (!$this->canSplitTransaction($original)) {
+        if (! $this->canSplitTransaction($original)) {
             throw new InvalidArgumentException(__('This transaction cannot be split.'));
         }
 
         $originalAmount = round((float) $original->amount, 2);
         $partTotal = round(array_sum(array_map(
-            fn(array $part): float => round((float) ($part['amount'] ?? 0), 2),
+            fn (array $part): float => round((float) ($part['amount'] ?? 0), 2),
             $parts,
         )), 2);
 
@@ -549,7 +550,7 @@ class AccountingService
             'reason' => $trimmed,
         ]);
 
-        if (!$account->is_master && $account->type === 'cash') {
+        if (! $account->is_master && $account->type === 'cash') {
             return $counterType === 'credit'
                 ? $this->creditMemberCashWithMasterMirror(
                     $account,
@@ -571,7 +572,7 @@ class AccountingService
                 );
         }
 
-        if (!$account->is_master && $account->type === 'fund') {
+        if (! $account->is_master && $account->type === 'fund') {
             return $counterType === 'credit'
                 ? $this->creditMemberFundWithMasterMirror(
                     $account,
@@ -687,7 +688,7 @@ class AccountingService
      */
     public function validateBalancedJournalForReference(Transaction $transaction): ?string
     {
-        if (!$this->shouldValidateBalancedReference($transaction)) {
+        if (! $this->shouldValidateBalancedReference($transaction)) {
             return null;
         }
 
@@ -843,7 +844,7 @@ class AccountingService
 
         $memberForCollection = null;
 
-        if ($direction === 'credit' && !$account->is_master && $account->type === 'cash' && $account->member_id !== null) {
+        if ($direction === 'credit' && ! $account->is_master && $account->type === 'cash' && $account->member_id !== null) {
             $memberForCollection = Member::query()->find((int) $account->member_id);
         }
 
@@ -875,7 +876,7 @@ class AccountingService
 
     protected function assertMasterInvestAccount(Account $account): void
     {
-        if (!$account->is_master || $account->type !== 'invest') {
+        if (! $account->is_master || $account->type !== 'invest') {
             throw new InvalidArgumentException(__('Account must be the master invest account.'));
         }
     }
@@ -1204,7 +1205,7 @@ class AccountingService
         $base = trim($description);
 
         if ($memberId === null) {
-            return $base === '' ? trim($mirrorSuffix) : $base . ' ' . trim($mirrorSuffix);
+            return $base === '' ? trim($mirrorSuffix) : $base.' '.trim($mirrorSuffix);
         }
 
         $memberName = Member::query()->whereKey($memberId)->value('name');
@@ -1216,12 +1217,12 @@ class AccountingService
             ]);
         }
 
-        return $base === '' ? trim($mirrorSuffix) : $base . ' ' . trim($mirrorSuffix);
+        return $base === '' ? trim($mirrorSuffix) : $base.' '.trim($mirrorSuffix);
     }
 
     private function assertMasterReserveAccount(Account $account): void
     {
-        if (!$account->is_master || !in_array($account->type, ['expense', 'fees', 'invest'], true)) {
+        if (! $account->is_master || ! in_array($account->type, ['expense', 'fees', 'invest'], true)) {
             throw new InvalidArgumentException(__('Reserve account must be a master expense, fees, or investment account.'));
         }
     }
@@ -1341,7 +1342,7 @@ class AccountingService
 
     private function guardMemberCashDebitDuringAutoCollection(Account $account, float $amount): void
     {
-        if (!self::$memberCashSettlementActive || $account->is_master || $account->type !== 'cash') {
+        if (! self::$memberCashSettlementActive || $account->is_master || $account->type !== 'cash') {
             return;
         }
 
@@ -1354,7 +1355,7 @@ class AccountingService
 
     private function assertBooksOpenFor(?DateTimeInterface $transactedAt): void
     {
-        if (!tenancy()->initialized) {
+        if (! tenancy()->initialized) {
             return;
         }
 
@@ -1375,7 +1376,7 @@ class AccountingService
             return null;
         }
 
-        if (!Member::query()->whereKey($memberId)->exists()) {
+        if (! Member::query()->whereKey($memberId)->exists()) {
             throw new InvalidArgumentException(__('Selected member does not exist.'));
         }
 
@@ -1394,7 +1395,7 @@ class AccountingService
                 'is_master' => false,
             ],
             [
-                'name' => $member->name . ' - Cash',
+                'name' => $member->name.' - Cash',
                 'balance' => 0,
             ],
         );
@@ -1406,7 +1407,7 @@ class AccountingService
                 'is_master' => false,
             ],
             [
-                'name' => $member->name . ' - Fund',
+                'name' => $member->name.' - Fund',
                 'balance' => 0,
             ],
         );
@@ -1517,7 +1518,7 @@ class AccountingService
             ->where('reference_type', Contribution::class)
             ->where('reference_id', $contribution->id)
             ->where('type', 'debit')
-            ->where('description', 'like', $descriptionPrefix . '%');
+            ->where('description', 'like', $descriptionPrefix.'%');
 
         if ($cashAccountId === null) {
             return $query->whereRaw('0 = 1');
@@ -1545,7 +1546,7 @@ class AccountingService
             ->where('reference_type', LoanInstallment::class)
             ->where('reference_id', $installment->id)
             ->where('type', 'debit')
-            ->where('description', 'like', $descriptionPrefix . '%');
+            ->where('description', 'like', $descriptionPrefix.'%');
 
         if ($cashAccountId === null) {
             return 0.0;
@@ -1713,8 +1714,8 @@ class AccountingService
             throw new RuntimeException(__('Insufficient parent cash balance.'));
         }
 
-        $debitDesc = trim(__('Transfer to :name', ['name' => $dependent->name]) . ($note ? " — {$note}" : ''));
-        $creditDesc = trim(__('Transfer from :name', ['name' => $parent->name]) . ($note ? " — {$note}" : ''));
+        $debitDesc = trim(__('Transfer to :name', ['name' => $dependent->name]).($note ? " — {$note}" : ''));
+        $creditDesc = trim(__('Transfer from :name', ['name' => $parent->name]).($note ? " — {$note}" : ''));
 
         DB::transaction(function () use ($parentCash, $dependentCash, $amount, $debitDesc, $creditDesc): void {
             self::withoutMemberCashCollection(function () use ($parentCash, $dependentCash, $amount, $debitDesc, $creditDesc): void {
@@ -1736,5 +1737,86 @@ class AccountingService
         if ($triggerCollection) {
             $this->triggerMemberCashCollection($dependent->fresh() ?? $dependent);
         }
+    }
+
+    /**
+     * Post an SMS import row to member cash with master cash mirror.
+     */
+    public function postSmsTransactionToCash(SmsTransaction $tx, Member $member): void
+    {
+        if ($tx->isPosted()) {
+            return;
+        }
+
+        $amount = round((float) $tx->amount, 2);
+
+        if ($amount <= 0.00001) {
+            throw new InvalidArgumentException(__('SMS transaction amount must be greater than zero.'));
+        }
+
+        $this->createMemberAccounts($member);
+
+        $memberCash = $member->cashAccount;
+
+        if ($memberCash === null) {
+            throw new InvalidArgumentException(__('Member cash account is missing.'));
+        }
+
+        $transactedAt = $tx->transaction_date ?? BusinessDay::now();
+        $description = sprintf(
+            'SMS %s on %s — %s',
+            ucfirst((string) $tx->transaction_type),
+            $tx->transaction_date?->format('d M Y') ?? '?',
+            $tx->reference ?? mb_substr((string) $tx->raw_sms, 0, 80),
+        );
+        $mirrorSuffix = __('(SMS cash mirror)');
+
+        DB::transaction(function () use ($tx, $member, $memberCash, $amount, $description, $mirrorSuffix, $transactedAt): void {
+            if ($tx->transaction_type === 'credit') {
+                $this->creditMemberCashWithMasterMirror(
+                    $memberCash,
+                    $amount,
+                    $description,
+                    $mirrorSuffix,
+                    $tx,
+                    $transactedAt,
+                    $member->id,
+                );
+            } else {
+                $this->debitMemberCashWithMasterMirror(
+                    $memberCash,
+                    $amount,
+                    $description,
+                    $mirrorSuffix,
+                    $tx,
+                    $transactedAt,
+                    $member->id,
+                );
+            }
+
+            $tx->update([
+                'member_id' => $member->id,
+                'posted_at' => now(),
+                'posted_by' => auth('tenant')->id(),
+            ]);
+        });
+    }
+
+    /**
+     * Soft-delete an SMS row and reverse posted ledger lines when applicable.
+     */
+    public function safeDeleteSmsTransaction(SmsTransaction $tx): void
+    {
+        DB::transaction(function () use ($tx): void {
+            if ($tx->isPosted()) {
+                Transaction::query()
+                    ->where('reference_type', SmsTransaction::class)
+                    ->where('reference_id', $tx->id)
+                    ->orderByDesc('id')
+                    ->each(fn (Transaction $entry) => $this->deleteTransaction($entry));
+            }
+
+            $tx->delete();
+        });
     }
 }

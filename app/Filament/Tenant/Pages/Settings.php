@@ -44,6 +44,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\View as SchemaView;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\HtmlString;
@@ -70,6 +71,11 @@ class Settings extends Page implements HasForms
     public static function canAccess(): bool
     {
         return auth()->guard('tenant')->check();
+    }
+
+    public static function smsTemplatesUrl(): string
+    {
+        return static::getUrl(['settingsTab' => 'sms-templates::tab']);
     }
 
     public function mount(): void
@@ -169,6 +175,7 @@ class Settings extends Page implements HasForms
         return $schema
             ->schema([
                 Tabs::make('Settings')
+                    ->persistTabInQueryString('settingsTab')
                     ->tabs([
                         Tab::make('General')
                             ->icon('heroicon-o-cog-6-tooth')
@@ -745,6 +752,15 @@ class Settings extends Page implements HasForms
                                             ->collapsible()
                                             ->defaultItems(0)
                                             ->addActionLabel(__('Add template')),
+                                    ]),
+                            ]),
+                        Tab::make('SMS Templates')
+                            ->icon('heroicon-o-chat-bubble-bottom-center-text')
+                            ->schema([
+                                Section::make(__('SMS import templates'))
+                                    ->description(__('Parse bank alert SMS exports: column mapping, regex extraction, member auto-match, and duplicate rules. Used when importing SMS files under Bank Accounts → SMS.'))
+                                    ->schema([
+                                        SchemaView::make('filament.tenant.pages.partials.sms-import-templates-widget'),
                                     ]),
                             ]),
                     ]),

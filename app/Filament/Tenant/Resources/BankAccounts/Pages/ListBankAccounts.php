@@ -17,16 +17,87 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\RenderHook;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\View as SchemaView;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Attributes\Url;
 
 class ListBankAccounts extends ListRecords
 {
     protected static string $resource = BankAccountsResource::class;
+
+    /** @var 'bank'|'sms' */
+    #[Url(as: 'channel')]
+    public string $channel = 'bank';
+
+    /** @var 'transactions'|'history' */
+    #[Url(as: 'smsSubTab')]
+    public string $smsSubTab = 'transactions';
+
+    public function mount(): void
+    {
+        parent::mount();
+
+        if (!in_array($this->channel, ['bank', 'sms'], true)) {
+            $this->channel = 'bank';
+        }
+
+        if (!in_array($this->smsSubTab, ['transactions', 'history'], true)) {
+            $this->smsSubTab = 'transactions';
+        }
+
+        unset($this->cachedTabs);
+    }
+
+    public function setChannel(string $channel): void
+    {
+        if (!in_array($channel, ['bank', 'sms'], true)) {
+            return;
+        }
+
+        $this->channel = $channel;
+        unset($this->cachedTabs);
+
+        if ($channel === 'bank') {
+            if (blank($this->activeTab) || !array_key_exists($this->activeTab, $this->getCachedTabs())) {
+                $this->activeTab = $this->getDefaultActiveTab();
+            }
+
+            $this->reconfigureTableForActiveTab();
+            $this->refreshCachedHeaderActions();
+        }
+    }
+
+    public function updatedChannel(): void
+    {
+        unset($this->cachedTabs);
+
+        if ($this->channel === 'bank') {
+            if (blank($this->activeTab) || !array_key_exists($this->activeTab, $this->getCachedTabs())) {
+                $this->activeTab = $this->getDefaultActiveTab();
+            }
+
+            $this->reconfigureTableForActiveTab();
+            $this->refreshCachedHeaderActions();
+        }
+    }
+
+    public function setSmsSubTab(string $smsSubTab): void
+    {
+        if (!in_array($smsSubTab, ['transactions', 'history'], true)) {
+            return;
+        }
+
+        $this->smsSubTab = $smsSubTab;
+    }
 
     public function updatedActiveTab(): void
     {
@@ -60,7 +131,7 @@ class ListBankAccounts extends ListRecords
     {
         $sortColumn = $this->getTableSortColumn();
 
-        if ($sortColumn && ! $this->getTable()->getSortableVisibleColumn($sortColumn)) {
+        if ($sortColumn && !$this->getTable()->getSortableVisibleColumn($sortColumn)) {
             $this->tableSort = null;
         }
 
@@ -89,13 +160,17 @@ class ListBankAccounts extends ListRecords
 
     public function getTabs(): array
     {
+        if ($this->channel === 'sms') {
+            return [];
+        }
+
         return [
             'imports' => Tab::make(__('Statement lines'))
                 ->icon(Heroicon::OutlinedQueueList)
                 ->extraAttributes(['data-ff-tab-key' => 'imports', 'data-ff-tab-color' => TabLabelColors::forKey('imports')], merge: true),
             'clearance' => Tab::make(__('Pending bank match'))
                 ->icon(Heroicon::OutlinedLink)
-                ->badge(fn (): ?string => ($count = app(BankClearingMatchService::class)->pendingOperationalClearanceCount()) > 0
+                ->badge(fn(): ?string => ($count = app(BankClearingMatchService::class)->pendingOperationalClearanceCount()) > 0
                     ? (string) $count
                     : null)
                 ->extraAttributes(['data-ff-tab-key' => 'clearance', 'data-ff-tab-color' => TabLabelColors::forKey('clearance')], merge: true),
@@ -108,6 +183,25 @@ class ListBankAccounts extends ListRecords
         ];
     }
 
+    public function content(Schema $schema): Schema
+    {
+        return $schema->components([
+            SchemaView::make('filament.tenant.resources.bank-accounts.pages.bank-workspace')
+                ->viewData([
+                    'channel' => $this->channel,
+                    'smsSubTab' => $this->smsSubTab,
+                ]),
+            ...($this->channel === 'bank'
+                ? [
+                    $this->getTabsContentComponent(),
+                    RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
+                    EmbeddedTable::make(),
+                    RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
+                ]
+                : []),
+        ]);
+    }
+
     protected function getTableQuery(): Builder
     {
         $masterBankId = Account::masterBank()?->id;
@@ -115,8 +209,8 @@ class ListBankAccounts extends ListRecords
         return match (BankAccountsResource::resolveListBankAccountsTab()) {
             'ledger' => Transaction::query()->when(
                 $masterBankId !== null,
-                fn (Builder $query): Builder => $query->where('account_id', $masterBankId),
-                fn (Builder $query): Builder => $query->whereRaw('0 = 1'),
+                fn(Builder $query): Builder => $query->where('account_id', $masterBankId),
+                fn(Builder $query): Builder => $query->whereRaw('0 = 1'),
             ),
             'imports' => app(BankClearingMatchService::class)
                 ->applyRealBankStatementLinesScope(BankTransaction::query()),
@@ -128,7 +222,7 @@ class ListBankAccounts extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        if (BankAccountsResource::resolveListBankAccountsTab() !== 'imports') {
+        if ($this->channel !== 'bank' || BankAccountsResource::resolveListBankAccountsTab() !== 'imports') {
             return [];
         }
 
@@ -147,8 +241,8 @@ class ListBankAccounts extends ListRecords
                         ->storeFileNamesIn('original_filename'),
                     Select::make('bank_template_id')
                         ->label(__('Template'))
-                        ->options(fn () => BankTemplate::orderBy('name')->pluck('name', 'id'))
-                        ->default(fn () => BankTemplate::getDefault()?->id)
+                        ->options(fn() => BankTemplate::orderBy('name')->pluck('name', 'id'))
+                        ->default(fn() => BankTemplate::getDefault()?->id)
                         ->required()
                         ->helperText(__('Select the CSV template that matches this bank statement format.')),
                     TextInput::make('bank_name')
@@ -175,7 +269,7 @@ class ListBankAccounts extends ListRecords
 
                     $msg = __(':count transaction(s) imported', ['count' => $result['imported']]);
                     if ($result['duplicates'] > 0) {
-                        $msg .= ' '.__(':dup duplicate(s) skipped', ['dup' => $result['duplicates']]);
+                        $msg .= ' ' . __(':dup duplicate(s) skipped', ['dup' => $result['duplicates']]);
                     }
 
                     Notification::make()

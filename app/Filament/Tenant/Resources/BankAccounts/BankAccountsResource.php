@@ -49,7 +49,7 @@ class BankAccountsResource extends Resource
     public static function table(Table $table): Table
     {
         $afterLedgerMutation = Livewire::current() instanceof ListRecords
-            ? fn (): mixed => Livewire::current()->resetTable()
+            ? fn(): mixed => Livewire::current()->resetTable()
             : null;
 
         return match (self::resolveListBankAccountsTab()) {
@@ -74,6 +74,10 @@ class BankAccountsResource extends Resource
      */
     public static function resolveListBankAccountsTab(): string
     {
+        if (self::resolveChannel() === 'sms') {
+            return 'sms';
+        }
+
         $livewire = Livewire::current();
 
         if ($livewire instanceof ListBankAccounts && filled($livewire->activeTab)) {
@@ -84,19 +88,40 @@ class BankAccountsResource extends Resource
 
         return match ($tab) {
             'transactions' => 'imports',
-            'ledger', 'statements', 'imports', 'clearance' => $tab,
+            'ledger', 'statements', 'imports', 'clearance', 'sms' => $tab,
             default => 'imports',
         };
+    }
+
+    public static function resolveChannel(): string
+    {
+        $livewire = Livewire::current();
+
+        if ($livewire instanceof ListBankAccounts) {
+            return in_array($livewire->channel, ['bank', 'sms'], true) ? $livewire->channel : 'bank';
+        }
+
+        $channel = request()->string('channel')->toString();
+
+        return in_array($channel, ['bank', 'sms'], true) ? $channel : 'bank';
     }
 
     /**
      * @param  array<string, array<string, mixed>>  $filters
      */
-    public static function listUrl(string $tab = 'imports', array $filters = []): string
+    public static function listUrl(string $tab = 'imports', array $filters = [], string $channel = 'bank', string $smsSubTab = 'transactions'): string
     {
         $parameters = [];
 
-        if ($tab !== 'imports') {
+        if ($channel !== 'bank') {
+            $parameters['channel'] = $channel;
+        }
+
+        if ($channel === 'sms' && $smsSubTab === 'history') {
+            $parameters['smsSubTab'] = $smsSubTab;
+        }
+
+        if ($channel === 'bank' && $tab !== 'imports') {
             $parameters['tab'] = $tab;
         }
 

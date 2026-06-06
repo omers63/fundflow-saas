@@ -22,6 +22,9 @@ use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\ReconciliationException;
+use App\Models\Tenant\SmsImportSession;
+use App\Models\Tenant\SmsImportTemplate;
+use App\Models\Tenant\SmsTransaction;
 use App\Models\Tenant\SystemJobRun;
 use App\Models\Tenant\Transaction;
 use Filament\Tables\Grouping\Group;
@@ -501,6 +504,79 @@ final class TableGrouping
                 ->getTitleFromRecordUsing(fn (LoanTier|FundTier $record): string => $record->is_active
                     ? __('Active')
                     : __('Inactive')),
+        ];
+    }
+
+    /**
+     * @return array<int, Group>
+     */
+    public static function smsImportTemplates(): array
+    {
+        return [
+            Group::make('bank_name')
+                ->label(__('Bank'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn (SmsImportTemplate $record): string => filled($record->bank_name)
+                    ? (string) $record->bank_name
+                    : __('Any bank')),
+            Group::make('is_default')
+                ->label(__('Default'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn (SmsImportTemplate $record): string => $record->is_default
+                    ? __('Default template')
+                    : __('Non-default')),
+        ];
+    }
+
+    /**
+     * @return array<int, Group>
+     */
+    public static function smsImportSessions(): array
+    {
+        return [
+            Group::make('status')
+                ->label(__('Status'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn (SmsImportSession $record): string => match ($record->status) {
+                    'completed' => __('Completed'),
+                    'processing' => __('Processing'),
+                    'partially_completed' => __('Partially completed'),
+                    'failed' => __('Failed'),
+                    default => ucfirst(str_replace('_', ' ', (string) $record->status)),
+                }),
+            Group::make('bank_name')
+                ->label(__('Bank'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn (SmsImportSession $record): string => filled($record->bank_name)
+                    ? (string) $record->bank_name
+                    : __('No bank')),
+        ];
+    }
+
+    /**
+     * @return array<int, Group>
+     */
+    public static function smsTransactions(): array
+    {
+        return [
+            Group::make('posted_at')
+                ->label(__('Posting status'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn (SmsTransaction $record): string => $record->isPosted()
+                    ? __('Posted')
+                    : __('Unposted')),
+            Group::make('transaction_type')
+                ->label(__('Type'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn (SmsTransaction $record): string => $record->transaction_type === 'credit'
+                    ? __('Credit')
+                    : __('Debit')),
+            Group::make('bank_name')
+                ->label(__('Bank'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn (SmsTransaction $record): string => filled($record->bank_name)
+                    ? (string) $record->bank_name
+                    : __('No bank')),
         ];
     }
 
