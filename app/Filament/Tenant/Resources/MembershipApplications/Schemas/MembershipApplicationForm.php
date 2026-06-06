@@ -8,6 +8,7 @@ use App\Support\PublicPageSettings;
 use App\Support\StorageFilename;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -36,6 +37,8 @@ class MembershipApplicationForm
         ];
 
         if ($forCreate) {
+            $accountFields[] = Hidden::make('parent_member_id');
+            $accountFields[] = Hidden::make('household_email');
             $accountFields[] = TextInput::make('password')
                 ->label(__('Password'))
                 ->password()

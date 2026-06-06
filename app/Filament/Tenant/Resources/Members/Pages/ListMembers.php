@@ -5,7 +5,6 @@ namespace App\Filament\Tenant\Resources\Members\Pages;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Widgets\MemberInsightsWidget;
 use App\Models\Tenant\Member;
-use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
 use Illuminate\Contracts\Support\Htmlable;
@@ -25,9 +24,7 @@ class ListMembers extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        return [
-            CreateAction::make(),
-        ];
+        return [];
     }
 
     protected function getHeaderWidgets(): array
@@ -67,6 +64,6 @@ class ListMembers extends ListRecords
     {
         $tab = MemberResource::resolveListTab();
 
-        return $tab === 'all' ? null : 'members-' . $tab;
+        return $tab === 'all' ? null : 'members-'.$tab;
     }
 }

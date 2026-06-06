@@ -272,6 +272,22 @@ class Contribution extends Model
         return ! $this->isSystemGenerated();
     }
 
+    public function isCoreEditableByAdmin(): bool
+    {
+        return $this->payment_method === self::PAYMENT_METHOD_ADMIN
+            && in_array($this->status, ['pending', 'failed'], true);
+    }
+
+    public function isMetadataEditableByAdmin(): bool
+    {
+        return $this->payment_method === self::PAYMENT_METHOD_ADMIN;
+    }
+
+    public function isEditableByAdmin(): bool
+    {
+        return $this->isCoreEditableByAdmin() || $this->isMetadataEditableByAdmin();
+    }
+
     /**
      * @return array<string, string>
      */

@@ -111,7 +111,7 @@ test('my dependents table defines apply and bulk allocation header actions', fun
         ->map(fn ($action) => $action->getName())
         ->all();
 
-    expect($names)->toContain('apply_for_dependent', 'bulk_update_allocations');
+    expect($names)->toContain('apply_for_dependent', 'updateAllDependentAllocations');
 });
 
 test('parent can submit dependent application on behalf via enrollment service', function () {

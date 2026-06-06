@@ -5,9 +5,11 @@ declare(strict_types=1);
 use App\Models\Central\Tenant;
 use App\Models\Tenant\Setting;
 use App\Services\ContributionCycleService;
+use App\Session\WallClockDatabaseSessionHandler;
 use App\Support\BusinessDay;
 use App\Support\BusinessDaySettings;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -69,4 +71,36 @@ test('member login page keeps a valid session cookie when business day is overri
 
     expect($sessionCookie)->not->toBeNull()
         ->and($sessionCookie->getExpiresTime())->toBeGreaterThan(time());
+});
+
+test('database sessions expire on wall clock even when business day is overridden to the future', function () {
+    Setting::set('general', 'business_day', '2030-06-01');
+
+    Carbon::setTestNow(Carbon::parse('2030-06-01 12:00:00'));
+
+    config(['session.driver' => 'database', 'session.lifetime' => 120]);
+    app()->forgetInstance('session');
+    app()->forgetInstance('session.store');
+
+    $handler = app('session')->getHandler();
+
+    expect($handler)->toBeInstanceOf(WallClockDatabaseSessionHandler::class);
+
+    $sessionId = 'wall-clock-expiry-test';
+    $staleActivity = time() - (3 * 60 * 60);
+
+    DB::table(config('session.table'))->insert([
+        'id' => $sessionId,
+        'user_id' => null,
+        'ip_address' => '127.0.0.1',
+        'user_agent' => 'test',
+        'payload' => base64_encode(serialize([])),
+        'last_activity' => $staleActivity,
+    ]);
+
+    expect($handler->read($sessionId))->toBe('');
+
+    DB::table(config('session.table'))->where('id', $sessionId)->delete();
+
+    Carbon::setTestNow();
 });

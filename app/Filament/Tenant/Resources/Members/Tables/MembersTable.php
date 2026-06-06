@@ -4,6 +4,8 @@ namespace App\Filament\Tenant\Resources\Members\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MemberDelinquencyActions;
+use App\Filament\Support\MemberFilamentActions;
+use App\Filament\Support\MemberListTableHeaderActions;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -12,8 +14,8 @@ use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -24,6 +26,7 @@ class MembersTable
     {
         return TableGrouping::apply(
             $table
+                ->headerActions(MemberListTableHeaderActions::all())
                 ->columns([
                     MemberTableColumns::number()
                         ->searchable()
@@ -61,13 +64,16 @@ class MembersTable
                 ])
                 ->recordUrl(fn (Member $record): string => MemberResource::getUrl('edit', ['record' => $record]))
                 ->recordActions(TableRecordActionGroups::wrap([
+                    ViewAction::make()
+                        ->url(fn (Member $record): string => MemberResource::getUrl('edit', ['record' => $record])),
                     EditAction::make(),
+                    ...MemberFilamentActions::forMemberListRow(),
                     ...MemberDelinquencyActions::forMemberListRow(),
                 ]))
                 ->toolbarActions([
                     BulkActionGroup::make([
+                        ...MemberFilamentActions::forMemberListBulk(),
                         ...MemberDelinquencyActions::forMemberListBulk(),
-                        DeleteBulkAction::make(),
                         TableToolbar::refreshBulkAction(),
                     ]),
                 ])

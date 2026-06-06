@@ -21,7 +21,7 @@ beforeEach(function () {
 
     $tenant = Tenant::find('testing');
 
-    if ($tenant !== null && !$tenant->domains()->where('domain', 'testing.localhost')->exists()) {
+    if ($tenant !== null && ! $tenant->domains()->where('domain', 'testing.localhost')->exists()) {
         $tenant->domains()->create(['domain' => 'testing.localhost']);
     }
 
@@ -34,8 +34,8 @@ beforeEach(function () {
     ]), 'tenant');
 });
 
-test('contribution ledger list url uses filters query key for status', function () {
-    $url = ContributionResource::listUrl('ledger', ['status' => ['value' => 'pending']]);
+test('contribution contributions list url uses filters query key for status', function () {
+    $url = ContributionResource::listUrl('contributions', ['status' => ['value' => 'pending']]);
 
     expect($url)
         ->toContain('filters')

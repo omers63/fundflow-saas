@@ -44,6 +44,7 @@ final class LateSettledArrearsTableStyling
             'pending' => __('Pending'),
             'posted' => __('Posted'),
             'failed' => __('Failed'),
+            'waived' => __('Waived'),
             default => ucfirst((string) $contribution->status),
         };
     }
@@ -58,6 +59,7 @@ final class LateSettledArrearsTableStyling
             'pending' => 'warning',
             'posted' => 'success',
             'failed' => 'danger',
+            'waived' => 'info',
             default => 'gray',
         };
     }

@@ -7,12 +7,16 @@ use App\Models\Central\Tenant;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\Loans\LoanExportService;
 use App\Services\Loans\LoanImportService;
+use App\Services\Loans\LoanRepaymentExportService;
+use App\Services\Loans\LoanRepaymentImportService;
 use Filament\Facades\Filament;
 use Illuminate\Auth\Access\AuthorizationException;
 use Livewire\Livewire;
@@ -202,7 +206,7 @@ test('portfolio tab table includes import and export header actions', function (
         ->map(fn ($action) => $action->getName())
         ->all();
 
-    expect($names)->toContain('importLoans', 'exportLoans');
+    expect($names)->toContain('importLoans', 'exportLoans', 'importRepayments', 'exportRepayments');
 });
 
 test('emi collection tab table omits loan import export header actions', function () {
@@ -214,7 +218,9 @@ test('emi collection tab table omits loan import export header actions', functio
         ->all();
 
     expect($names)->not->toContain('importLoans')
-        ->and($names)->not->toContain('exportLoans');
+        ->and($names)->not->toContain('exportLoans')
+        ->and($names)->not->toContain('importRepayments')
+        ->and($names)->not->toContain('exportRepayments');
 });
 
 test('loan import sample download route returns csv', function () {
@@ -238,3 +244,148 @@ test('non-admin cannot import loans', function () {
 
     app(LoanImportService::class)->import($path);
 })->throws(AuthorizationException::class);
+
+test('loan repayment import creates legacy row and posts fund repayment', function () {
+    $member = createLoanImportMember($this->accounting, 'legacy-repayment@example.test', 20_000);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'loan_tier_id' => $this->loanTier->id,
+        'fund_tier_id' => $this->fundTier->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'interest_rate' => 0,
+        'term_months' => 10,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'member_portion' => 4000,
+        'master_portion' => 6000,
+        'purpose' => 'Repayment import test',
+        'installments_count' => 10,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(3),
+        'approved_at' => now()->subMonths(3),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    $csv = <<<CSV
+loan_number,amount,paid_at,notes
+{$loan->id},1500,2025-05-01 12:00:00,Historical bulk repayment
+CSV;
+
+    $result = app(LoanRepaymentImportService::class)->import(writeLoanImportCsv($csv));
+
+    expect($result)->toMatchArray(['created' => 1, 'failed' => 0]);
+
+    $repayment = LoanRepayment::query()->where('loan_id', $loan->id)->first();
+
+    expect($repayment)->not->toBeNull()
+        ->and((float) $repayment->amount)->toBe(1500.0)
+        ->and($repayment->notes)->toBe('Historical bulk repayment');
+
+    expect((float) $member->fresh()->fundAccount->balance)->toBe(21500.0);
+});
+
+test('loan repayment import marks installment paid without cash debit', function () {
+    $member = createLoanImportMember($this->accounting, 'installment-repayment@example.test', 20_000);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'loan_tier_id' => $this->loanTier->id,
+        'fund_tier_id' => $this->fundTier->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'interest_rate' => 0,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'member_portion' => 3000,
+        'master_portion' => 3000,
+        'purpose' => 'Installment import test',
+        'installments_count' => 6,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(2),
+        'approved_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonth(),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => now()->subWeek()->toDateString(),
+        'status' => 'pending',
+    ]);
+
+    $csv = <<<CSV
+repayment_type,loan_number,installment_number,amount,paid_at
+installment,{$loan->id},1,1000,2025-05-10 08:00:00
+CSV;
+
+    $result = app(LoanRepaymentImportService::class)->import(writeLoanImportCsv($csv));
+
+    expect($result)->toMatchArray(['created' => 1, 'failed' => 0]);
+
+    $installment = LoanInstallment::query()->where('loan_id', $loan->id)->firstOrFail();
+
+    expect($installment->status)->toBe('paid')
+        ->and((float) $member->fresh()->cashAccount->balance)->toBe(0.0)
+        ->and((float) $member->fresh()->fundAccount->balance)->toBe(21000.0);
+});
+
+test('loan repayment export streams legacy and installment rows', function () {
+    $member = createLoanImportMember($this->accounting, 'repayment-export@example.test');
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'loan_tier_id' => $this->loanTier->id,
+        'fund_tier_id' => $this->fundTier->id,
+        'amount' => 5000,
+        'amount_requested' => 5000,
+        'amount_approved' => 5000,
+        'interest_rate' => 0,
+        'term_months' => 5,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'member_portion' => 2000,
+        'master_portion' => 3000,
+        'purpose' => 'Repayment export test',
+        'installments_count' => 5,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(2),
+        'approved_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonth(),
+    ]);
+
+    $loan->repayments()->create([
+        'amount' => 800,
+        'paid_at' => now()->subDays(10),
+        'notes' => 'Legacy export row',
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => now()->subWeek()->toDateString(),
+        'status' => 'paid',
+        'paid_at' => now()->subDays(3),
+    ]);
+
+    ob_start();
+    app(LoanRepaymentExportService::class)->downloadCsv()->sendContent();
+    $content = ob_get_clean();
+
+    expect($content)->toContain('repayment_type')
+        ->and($content)->toContain('legacy')
+        ->and($content)->toContain('installment')
+        ->and($content)->toContain('Legacy export row');
+});
+
+test('loan repayment import sample download route returns csv', function () {
+    $this->get('http://'.$this->domain.'/downloads/loan-repayment-import-sample')
+        ->assertSuccessful()
+        ->assertDownload('loan-repayments-import-sample.csv');
+});

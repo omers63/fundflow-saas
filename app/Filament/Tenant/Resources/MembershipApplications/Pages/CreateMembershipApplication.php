@@ -4,6 +4,7 @@ namespace App\Filament\Tenant\Resources\MembershipApplications\Pages;
 
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Filament\Tenant\Resources\MembershipApplications\Schemas\MembershipApplicationForm;
+use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
@@ -12,6 +13,29 @@ use Filament\Schemas\Schema;
 class CreateMembershipApplication extends CreateRecord
 {
     protected static string $resource = MembershipApplicationResource::class;
+
+    public function mount(): void
+    {
+        parent::mount();
+
+        $parentMemberId = request()->integer('parent_member_id');
+
+        if ($parentMemberId <= 0) {
+            return;
+        }
+
+        $parent = Member::query()->find($parentMemberId);
+
+        if ($parent === null) {
+            return;
+        }
+
+        $this->form->fill([
+            'parent_member_id' => $parent->id,
+            'household_email' => $parent->email,
+            'application_type' => 'new',
+        ]);
+    }
 
     public function form(Schema $schema): Schema
     {
@@ -30,6 +54,10 @@ class CreateMembershipApplication extends CreateRecord
 
         if (filled($data['mobile_phone'] ?? null)) {
             $data['phone'] = $data['mobile_phone'];
+        }
+
+        if (filled($data['parent_member_id'] ?? null)) {
+            $data['submitted_by_user_id'] = auth('tenant')->id();
         }
 
         return $data;

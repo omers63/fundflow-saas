@@ -6,6 +6,7 @@ use App\Filament\Concerns\RegistersFundPublicShell;
 use App\Filament\Support\DatabaseNotificationsRefresh;
 use App\Filament\Tenant\Pages\Dashboard;
 use App\Filament\Tenant\Support\TenantNavigation;
+use App\Http\Middleware\UseWallClockForSessions;
 use App\Livewire\Tenant\TenantAdminLoginPage;
 use App\Support\PublicPageSettings;
 use Filament\Http\Middleware\Authenticate;
@@ -75,6 +76,7 @@ class TenantPanelProvider extends PanelProvider
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
+                UseWallClockForSessions::class,
                 AuthenticateSession::class,
                 ShareErrorsFromSession::class,
                 VerifyCsrfToken::class,

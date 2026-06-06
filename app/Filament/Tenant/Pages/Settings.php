@@ -82,7 +82,7 @@ class Settings extends Page implements HasForms
         $public = PublicPageSettings::all();
         $fiscal = FiscalSettings::forForm();
 
-        $templates = BankTemplate::orderBy('name')->get()->map(fn (BankTemplate $t) => [
+        $templates = BankTemplate::orderBy('name')->get()->map(fn(BankTemplate $t) => [
             'id' => $t->id,
             'name' => $t->name,
             'encoding' => $t->encoding ?? 'UTF-8',
@@ -101,9 +101,14 @@ class Settings extends Page implements HasForms
             'is_default' => $t->is_default,
         ])->toArray();
 
+        $reconciliation = Setting::getGroup('reconciliation');
+
         $this->form->fill([
             'currency' => $general['currency'] ?? 'USD',
             'business_day' => BusinessDaySettings::forForm(),
+            'reconciliation_bank_statement_balance' => $reconciliation['bank_statement_balance'] ?? null,
+            'reconciliation_bank_statement_date' => $reconciliation['bank_statement_date'] ?? null,
+            'reconciliation_bank_variance_critical' => filter_var($reconciliation['bank_variance_critical'] ?? false, FILTER_VALIDATE_BOOL),
             'fiscal_year_start_month' => $fiscal['fiscal_year_start_month'],
             'fiscal_year_start_day' => $fiscal['fiscal_year_start_day'],
             'fiscal_current_year_label' => $fiscal['current_fiscal_year_label']
@@ -202,6 +207,22 @@ class Settings extends Page implements HasForms
                                                 return BusinessDay::calendarToday()->toFormattedDateString();
                                             }),
                                     ]),
+                                Section::make(__('Reconciliation (bank vs book)'))
+                                    ->description(__('Optional declared bank closing balance merged into scheduled fund:reconcile runs and available as defaults on the reconciliation page.'))
+                                    ->columns(2)
+                                    ->schema([
+                                        TextInput::make('reconciliation_bank_statement_balance')
+                                            ->label(__('Statement / bank closing balance'))
+                                            ->numeric()
+                                            ->nullable(),
+                                        DatePicker::make('reconciliation_bank_statement_date')
+                                            ->label(__('Statement as-of date'))
+                                            ->native(false)
+                                            ->nullable(),
+                                        Toggle::make('reconciliation_bank_variance_critical')
+                                            ->label(__('Treat bank vs book variance as critical on scheduled runs'))
+                                            ->default(false),
+                                    ]),
                                 Section::make(__('Member numbers'))
                                     ->description(__('Controls how IDs are generated for new members (manual create and approved applications). Existing numbers are not changed.'))
                                     ->columns(2)
@@ -256,7 +277,7 @@ class Settings extends Page implements HasForms
                                     ->schema([
                                         Select::make('fiscal_year_start_month')
                                             ->label(__('Fiscal year starts in'))
-                                            ->options(collect(range(1, 12))->mapWithKeys(fn (int $m): array => [
+                                            ->options(collect(range(1, 12))->mapWithKeys(fn(int $m): array => [
                                                 $m => Carbon::create(2000, $m, 1)->translatedFormat('F'),
                                             ])->all())
                                             ->required()
@@ -279,17 +300,17 @@ class Settings extends Page implements HasForms
                                             ->helperText(__('Used when Phase 2+ purge is implemented.')),
                                         Placeholder::make('fiscal_books_closed_through_display')
                                             ->label(__('Books closed through'))
-                                            ->content(fn (Get $get): string => filled($get('fiscal_books_closed_through'))
+                                            ->content(fn(Get $get): string => filled($get('fiscal_books_closed_through'))
                                                 ? Carbon::parse((string) $get('fiscal_books_closed_through'))->toFormattedDateString()
                                                 : __('Not set'))
                                             ->helperText(__('Set automatically when a close is executed (Phase 2+).')),
                                         Placeholder::make('fiscal_close_link')
                                             ->label(__('Year-end close'))
                                             ->columnSpanFull()
-                                            ->content(fn (): string => __('Run readiness checks on the Year-end close page.'))
+                                            ->content(fn(): string => __('Run readiness checks on the Year-end close page.'))
                                             ->helperText(new HtmlString(
-                                                '<a class="text-primary-600 underline" href="'.e(FiscalYearClosePage::getUrl()).'">'
-                                                .e(__('Open year-end close')).'</a>'
+                                                '<a class="text-primary-600 underline" href="' . e(FiscalYearClosePage::getUrl()) . '">'
+                                                . e(__('Open year-end close')) . '</a>'
                                             )),
                                     ]),
                             ]),
@@ -358,8 +379,8 @@ class Settings extends Page implements HasForms
                                             ->label(__('Maximum active members'))
                                             ->numeric()
                                             ->minValue(1)
-                                            ->required(fn (Get $get): bool => ! ($get('membership_no_limit') ?? true))
-                                            ->hidden(fn (Get $get): bool => (bool) ($get('membership_no_limit') ?? true))
+                                            ->required(fn(Get $get): bool => !($get('membership_no_limit') ?? true))
+                                            ->hidden(fn(Get $get): bool => (bool) ($get('membership_no_limit') ?? true))
                                             ->helperText(__('Enrollment closes when active members reach this number.')),
                                     ]),
                                 Section::make(__('Membership fees'))
@@ -604,7 +625,7 @@ class Settings extends Page implements HasForms
                                             ->step(0.1)
                                             ->suffix('%')
                                             ->required()
-                                            ->helperText(fn (Get $get): string => __('Used when a member chooses the configured split at loan application. Master fund share: :pct%.', [
+                                            ->helperText(fn(Get $get): string => __('Used when a member chooses the configured split at loan application. Master fund share: :pct%.', [
                                                 'pct' => number_format(100 - (float) ($get('loan_member_funding_split_pct') ?? 50), 1),
                                             ])),
                                         Toggle::make('loan_auto_allocate_repayment')
@@ -616,10 +637,10 @@ class Settings extends Page implements HasForms
                                     ->schema([
                                         Placeholder::make('loan_tiers_link')
                                             ->label(__('Loan tiers'))
-                                            ->content(fn (): string => LoanTierResource::getUrl('index')),
+                                            ->content(fn(): string => LoanTierResource::getUrl('index')),
                                         Placeholder::make('fund_tiers_link')
                                             ->label(__('Fund tiers'))
-                                            ->content(fn (): string => FundTierResource::getUrl('index')),
+                                            ->content(fn(): string => FundTierResource::getUrl('index')),
                                     ]),
                             ]),
                         Tab::make(__('Statements'))
@@ -720,7 +741,7 @@ class Settings extends Page implements HasForms
                                             ->label('')
                                             ->schema(static::templateSchema())
                                             ->columns(1)
-                                            ->itemLabel(fn (array $state): ?string => $state['name'] ?? __('New template'))
+                                            ->itemLabel(fn(array $state): ?string => $state['name'] ?? __('New template'))
                                             ->collapsible()
                                             ->defaultItems(0)
                                             ->addActionLabel(__('Add template')),
@@ -805,7 +826,7 @@ class Settings extends Page implements HasForms
                     TextInput::make('date_column')
                         ->label('Date column')
                         ->required()
-                        ->helperText(fn (Get $get): string => ($get('has_header') ?? true)
+                        ->helperText(fn(Get $get): string => ($get('has_header') ?? true)
                             ? __('Header name, e.g. "Transaction Date"')
                             : __('0-based column index, e.g. 0')),
                 ]),
@@ -826,19 +847,19 @@ class Settings extends Page implements HasForms
                         ->columnSpanFull(),
                     TextInput::make('amount_column')
                         ->label('Amount column')
-                        ->required(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'single')
-                        ->visible(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'single')
-                        ->helperText(fn (Get $get): string => ($get('has_header') ?? true)
+                        ->required(fn(Get $get): bool => ($get('amount_mode') ?? 'single') === 'single')
+                        ->visible(fn(Get $get): bool => ($get('amount_mode') ?? 'single') === 'single')
+                        ->helperText(fn(Get $get): string => ($get('has_header') ?? true)
                             ? __('Header name, e.g. "Amount"')
                             : __('0-based index')),
                     TextInput::make('credit_column')
                         ->label('Credit column')
-                        ->required(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'split')
-                        ->visible(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'split'),
+                        ->required(fn(Get $get): bool => ($get('amount_mode') ?? 'single') === 'split')
+                        ->visible(fn(Get $get): bool => ($get('amount_mode') ?? 'single') === 'split'),
                     TextInput::make('debit_column')
                         ->label('Debit column')
-                        ->required(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'split')
-                        ->visible(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'split'),
+                        ->required(fn(Get $get): bool => ($get('amount_mode') ?? 'single') === 'split')
+                        ->visible(fn(Get $get): bool => ($get('amount_mode') ?? 'single') === 'split'),
                 ]),
 
             // --- Section 4: Optional column mappings ---
@@ -863,7 +884,7 @@ class Settings extends Page implements HasForms
                         ->columnSpanFull()
                         ->default(BankTemplate::defaultExtraColumns())
                         ->addActionLabel(__('Add column mapping'))
-                        ->itemLabel(fn (array $state): ?string => ! empty($state['key']) ? "{$state['key']} → {$state['column']}" : __('New mapping')),
+                        ->itemLabel(fn(array $state): ?string => !empty($state['key']) ? "{$state['key']} → {$state['column']}" : __('New mapping')),
                 ]),
 
             // --- Section 5: Duplicate detection ---
@@ -880,13 +901,13 @@ class Settings extends Page implements HasForms
 
                             foreach ($get('extra_columns') ?? [] as $mapping) {
                                 $key = $mapping['key'] ?? '';
-                                if ($key !== '' && ! isset($options[$key])) {
+                                if ($key !== '' && !isset($options[$key])) {
                                     $options[$key] = ucfirst($key);
                                 }
                             }
 
                             foreach ($get('duplicate_fields') ?? [] as $selected) {
-                                if (is_string($selected) && $selected !== '' && ! isset($options[$selected])) {
+                                if (is_string($selected) && $selected !== '' && !isset($options[$selected])) {
                                     $options[$selected] = ucfirst($selected);
                                 }
                             }
@@ -912,6 +933,9 @@ class Settings extends Page implements HasForms
         $state = $this->form->getState();
 
         Setting::set('general', 'currency', $state['currency']);
+        Setting::set('reconciliation', 'bank_statement_balance', $state['reconciliation_bank_statement_balance'] ?? '');
+        Setting::set('reconciliation', 'bank_statement_date', $state['reconciliation_bank_statement_date'] ?? '');
+        Setting::set('reconciliation', 'bank_variance_critical', ($state['reconciliation_bank_variance_critical'] ?? false) ? '1' : '0');
         BusinessDaySettings::saveFromForm($state['business_day'] ?? null);
         FiscalSettings::saveFromForm([
             'fiscal_year_start_month' => $state['fiscal_year_start_month'],
@@ -987,7 +1011,7 @@ class Settings extends Page implements HasForms
 
         foreach ($state['bank_templates'] ?? [] as $templateData) {
             $extras = collect($templateData['extra_columns'] ?? [])
-                ->filter(fn (array $row): bool => ! empty($row['key'] ?? null) && ($row['column'] ?? '') !== '')
+                ->filter(fn(array $row): bool => !empty($row['key'] ?? null) && ($row['column'] ?? '') !== '')
                 ->values()
                 ->all();
 
@@ -1013,7 +1037,7 @@ class Settings extends Page implements HasForms
                 'is_default' => (bool) ($templateData['is_default'] ?? false),
             ];
 
-            if (! empty($templateData['id'])) {
+            if (!empty($templateData['id'])) {
                 $template = BankTemplate::find($templateData['id']);
                 if ($template) {
                     $template->update($attrs);
@@ -1033,7 +1057,7 @@ class Settings extends Page implements HasForms
         }
 
         $deleteIds = array_diff($existingIds, $keptIds);
-        if (! empty($deleteIds)) {
+        if (!empty($deleteIds)) {
             BankTemplate::whereIn('id', $deleteIds)->delete();
         }
 

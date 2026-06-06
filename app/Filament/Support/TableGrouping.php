@@ -690,4 +690,37 @@ final class TableGrouping
                 ->titlePrefixedWithLabel(false),
         ];
     }
+
+    /**
+     * @return array<int, Group>
+     */
+    public static function databaseBackups(): array
+    {
+        return [
+            Group::make('driver')
+                ->label(__('Driver'))
+                ->titlePrefixedWithLabel(false),
+            Group::make('created_at')
+                ->label(__('Created'))
+                ->date(),
+        ];
+    }
+
+    /**
+     * @return array<int, Group>
+     */
+    public static function notificationLogs(): array
+    {
+        return [
+            Group::make('channel')
+                ->label(__('Channel'))
+                ->titlePrefixedWithLabel(false),
+            Group::make('status')
+                ->label(__('Status'))
+                ->titlePrefixedWithLabel(false),
+            Group::make('sent_at')
+                ->label(__('Sent'))
+                ->date(),
+        ];
+    }
 }

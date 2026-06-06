@@ -416,4 +416,56 @@ class ContributionService
             });
         });
     }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    public function updateAdminContribution(Contribution $contribution, array $data): Contribution
+    {
+        if (! $contribution->isEditableByAdmin()) {
+            throw new InvalidArgumentException(__('Cycle and import contributions cannot be edited. Use reconciliation or reversal tools to correct ledger entries.'));
+        }
+
+        if ($contribution->isCoreEditableByAdmin()) {
+            $memberId = (int) ($data['member_id'] ?? $contribution->member_id);
+            [$month, $year] = Contribution::monthYearFromPeriod((string) ($data['period'] ?? $contribution->period));
+            $periodDate = Contribution::periodDate($month, $year);
+
+            $duplicateExists = Contribution::query()
+                ->where('member_id', $memberId)
+                ->where('period', $periodDate)
+                ->whereKeyNot($contribution->id)
+                ->exists();
+
+            if ($duplicateExists) {
+                throw ValidationException::withMessages([
+                    'period' => [
+                        __('A contribution already exists for :period.', [
+                            'period' => $this->periodLabel($month, $year),
+                        ]),
+                    ],
+                ]);
+            }
+
+            $amount = (float) ($data['amount'] ?? $contribution->amount);
+
+            $contribution->update([
+                'member_id' => $memberId,
+                'period' => $periodDate,
+                'amount' => $amount,
+                'amount_due' => $amount,
+                'reference_number' => $data['reference_number'] ?? null,
+                'notes' => $data['notes'] ?? null,
+            ]);
+
+            return $contribution->fresh();
+        }
+
+        $contribution->update([
+            'reference_number' => $data['reference_number'] ?? null,
+            'notes' => $data['notes'] ?? null,
+        ]);
+
+        return $contribution->fresh();
+    }
 }

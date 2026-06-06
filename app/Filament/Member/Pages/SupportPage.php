@@ -6,6 +6,7 @@ namespace App\Filament\Member\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Member\Widgets\MyMemberRequestsTableWidget;
 use App\Models\Tenant\SupportRequest;
 use App\Models\Tenant\User;
 use App\Support\Tenant\CurrentMember;
@@ -42,6 +43,21 @@ class SupportPage extends Page
     public function getTitle(): string
     {
         return __('Support & requests');
+    }
+
+    /**
+     * @return array<class-string>
+     */
+    protected function getFooterWidgets(): array
+    {
+        return [
+            MyMemberRequestsTableWidget::class,
+        ];
+    }
+
+    public function getFooterWidgetsColumns(): int|array
+    {
+        return 1;
     }
 
     protected function getHeaderActions(): array

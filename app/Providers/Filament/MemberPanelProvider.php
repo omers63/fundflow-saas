@@ -10,6 +10,7 @@ use App\Filament\Member\Support\ReturnToParentPortalAction;
 use App\Filament\Support\DatabaseNotificationsRefresh;
 use App\Http\Middleware\AuthenticateMemberPanel;
 use App\Http\Middleware\SetFilamentPanelAuthGuard;
+use App\Http\Middleware\UseWallClockForSessions;
 use App\Livewire\Tenant\MemberLoginPage;
 use App\Support\PublicPageSettings;
 use Filament\Actions\Action;
@@ -95,6 +96,7 @@ class MemberPanelProvider extends PanelProvider
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
+                UseWallClockForSessions::class,
                 SetFilamentPanelAuthGuard::class,
                 AuthenticateSession::class,
                 ShareErrorsFromSession::class,

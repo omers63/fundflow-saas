@@ -31,6 +31,7 @@ final class ContributionInsightsService
             'collect' => $this->collectSnapshot(),
             'collected' => $this->collectedSnapshot(),
             'arrears' => $this->arrearsSnapshot(),
+            'contributions', 'ledger' => $this->ledgerSnapshot(),
             default => $this->ledgerSnapshot(),
         };
     }
@@ -109,9 +110,9 @@ final class ContributionInsightsService
             ], [
                 'missing' => $collectUrl,
                 'posted' => ContributionResource::listTabUrl('collected'),
-                'pending' => ContributionResource::listUrl('ledger', ['status' => ['value' => 'pending']]),
+                'pending' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'pending']]),
                 'rate' => $collectUrl,
-                'late' => ContributionResource::listUrl('ledger', ['status' => ['value' => 'pending']]),
+                'late' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'pending']]),
                 'arrears' => ContributionResource::listTabUrl('arrears'),
             ]),
             'pipeline' => [
@@ -122,7 +123,7 @@ final class ContributionInsightsService
                 'collect_url' => $collectUrl,
                 'collected_url' => ContributionResource::listTabUrl('collected'),
                 'arrears_url' => ContributionResource::listTabUrl('arrears'),
-                'ledger_pending_url' => ContributionResource::listUrl('ledger', ['status' => ['value' => 'pending']]),
+                'ledger_pending_url' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'pending']]),
             ],
         ];
     }
@@ -168,14 +169,14 @@ final class ContributionInsightsService
                 ['key' => 'posted', 'label' => __('Posted'), 'value' => (string) $postedOpenPeriod, 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => true],
                 ['key' => 'amount', 'label' => __('Amount'), 'value' => InsightFormatter::compactAmount($postedAmount), 'sub' => $currency, 'icon' => 'heroicon-o-currency-dollar', 'accent' => 'teal', 'active' => $postedAmount > 0],
                 ['key' => 'remaining', 'label' => __('Remaining'), 'value' => (string) $missingOpenPeriod, 'sub' => __('Members'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $missingOpenPeriod > 0],
-                ['key' => 'ledger', 'label' => __('Ledger'), 'value' => (string) Contribution::query()->posted()->count(), 'sub' => __('All time'), 'icon' => 'heroicon-o-book-open', 'accent' => 'sky', 'active' => true],
+                ['key' => 'contributions', 'label' => __('Contributions'), 'value' => (string) Contribution::query()->posted()->count(), 'sub' => __('All time'), 'icon' => 'heroicon-o-book-open', 'accent' => 'sky', 'active' => true],
                 ['key' => 'collect', 'label' => __('To collect'), 'value' => (string) $missingOpenPeriod, 'sub' => __('Open period'), 'icon' => 'heroicon-o-arrow-down-tray', 'accent' => 'violet', 'active' => $missingOpenPeriod > 0],
                 ['key' => 'arrears', 'label' => __('Arrears'), 'value' => (string) app(LoanDelinquencyService::class)->countContributionArrearsPeriods(), 'sub' => __('Past periods'), 'icon' => 'heroicon-o-banknotes', 'accent' => 'rose', 'active' => true],
             ], [
                 'posted' => $collectedUrl,
                 'amount' => $collectedUrl,
                 'remaining' => ContributionResource::listTabUrl('collect'),
-                'ledger' => ContributionResource::listUrl('ledger'),
+                'contributions' => ContributionResource::listUrl('contributions'),
                 'collect' => ContributionResource::listTabUrl('collect'),
                 'arrears' => ContributionResource::listTabUrl('arrears'),
             ]),
@@ -323,7 +324,7 @@ final class ContributionInsightsService
                 'amount_display' => InsightFormatter::money((float) $contribution->amount),
                 'is_late' => (bool) $contribution->is_late,
                 'days_waiting' => (int) Carbon::parse($contribution->created_at)->diffInDays($now),
-                'queue_url' => ContributionResource::listUrl('ledger', array_merge(
+                'queue_url' => ContributionResource::listUrl('contributions', array_merge(
                     ContributionResource::memberFilter((int) $contribution->member_id),
                     ['status' => ['value' => 'pending']],
                 )),
@@ -347,7 +348,7 @@ final class ContributionInsightsService
             ->all();
 
         $currency = Setting::get('general', 'currency', 'USD');
-        $contributionsUrl = ContributionResource::listUrl('ledger');
+        $contributionsUrl = ContributionResource::listUrl('contributions');
 
         return [
             'total' => $total,
@@ -386,9 +387,9 @@ final class ContributionInsightsService
                 'posted_contributions' => $posted,
                 'missing_open_period' => $missingOpenPeriod,
                 'contributions_url' => $contributionsUrl,
-                'contributions_pending_url' => ContributionResource::listUrl('ledger', ['status' => ['value' => 'pending']]),
-                'contributions_posted_url' => ContributionResource::listUrl('ledger', ['status' => ['value' => 'posted']]),
-                'contributions_failed_url' => ContributionResource::listUrl('ledger', ['status' => ['value' => 'failed']]),
+                'contributions_pending_url' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'pending']]),
+                'contributions_posted_url' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'posted']]),
+                'contributions_failed_url' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'failed']]),
                 'cycle_url' => ContributionResource::listTabUrl('collect'),
                 'members_url' => MemberResource::getUrl('index'),
                 'delinquency_url' => ContributionResource::listTabUrl('arrears'),

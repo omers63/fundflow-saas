@@ -5,11 +5,13 @@ namespace App\Filament\Tenant\Resources\Members\RelationManagers;
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\HouseholdDependentFilamentActions;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\Members\Concerns\InteractsWithMemberContributionHeaderActions;
+use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
@@ -55,11 +57,16 @@ class DependentsRelationManager extends RelationManager
                 DateColumnRangeFilter::make('joined_at', 'Joined'),
             ])
             ->headerActions([
+                ...HouseholdDependentFilamentActions::headerActions(fn (): Member => $this->getOwnerRecord()),
                 $this->buildMemberAllocateDependentsAction(),
             ])
-            ->recordActions(TableRecordActionGroups::wrap([]))
+            ->recordUrl(fn (Member $record): string => MemberResource::getUrl('edit', ['record' => $record]))
+            ->recordActions(TableRecordActionGroups::wrap(
+                HouseholdDependentFilamentActions::forRow(fn (): Member => $this->getOwnerRecord()),
+            ))
             ->toolbarActions([
                 BulkActionGroup::make([
+                    ...HouseholdDependentFilamentActions::forBulk(fn (): Member => $this->getOwnerRecord()),
                     TableToolbar::refreshBulkAction(),
                 ]),
             ])

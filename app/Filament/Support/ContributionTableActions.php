@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Filament\Support\ViewActions\ViewContributionAction;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Contribution;
@@ -13,6 +14,8 @@ use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Collection;
@@ -21,6 +24,18 @@ use Throwable;
 
 final class ContributionTableActions
 {
+    public static function view(): ViewAction
+    {
+        return ViewContributionAction::make();
+    }
+
+    public static function edit(): EditAction
+    {
+        return EditAction::make()
+            ->visible(fn (Contribution $record): bool => $record->isEditableByAdmin())
+            ->url(fn (Contribution $record): string => ContributionResource::getUrl('edit', ['record' => $record]));
+    }
+
     public static function delete(): DeleteAction
     {
         return DeleteAction::make()

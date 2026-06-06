@@ -26,13 +26,13 @@ class ReconciliationExceptionResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
 
-    protected static ?string $navigationLabel = 'Reconciliation';
+    protected static ?string $navigationLabel = 'Reconciliation exceptions';
 
     protected static ?string $modelLabel = 'Reconciliation exception';
 
     protected static ?string $pluralModelLabel = 'Reconciliation exceptions';
 
-    protected static ?int $navigationSort = TenantNavigation::SORT_RECONCILIATION;
+    protected static ?int $navigationSort = TenantNavigation::SORT_RECONCILIATION_EXCEPTIONS;
 
     protected static bool $shouldRegisterNavigation = true;
 
@@ -60,7 +60,7 @@ class ReconciliationExceptionResource extends Resource
 
     public static function getNavigationBadge(): ?string
     {
-        if (! Schema::hasTable('reconciliation_exceptions')) {
+        if (!Schema::hasTable('reconciliation_exceptions')) {
             return null;
         }
 

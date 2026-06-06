@@ -7,6 +7,7 @@ use App\Filament\Support\ContributionCycleTables;
 use App\Filament\Support\LoanDelinquencyTables;
 use App\Filament\Support\UiLabelIcons;
 use App\Filament\Tenant\Resources\Contributions\Pages\CreateContribution;
+use App\Filament\Tenant\Resources\Contributions\Pages\EditContribution;
 use App\Filament\Tenant\Resources\Contributions\Pages\ListContributions;
 use App\Filament\Tenant\Resources\Contributions\Schemas\ContributionForm;
 use App\Filament\Tenant\Resources\Contributions\Tables\ContributionsTable;
@@ -42,16 +43,27 @@ class ContributionResource extends Resource
      */
     public static function listTabKeys(): array
     {
-        return ['collect', 'collected', 'ledger', 'arrears'];
+        return ['contributions', 'collect', 'collected', 'arrears'];
+    }
+
+    public static function normalizeListTab(string $tab): string
+    {
+        if ($tab === 'ledger') {
+            return 'contributions';
+        }
+
+        return in_array($tab, self::listTabKeys(), true) ? $tab : 'contributions';
     }
 
     public static function listTabLabel(string $tab): string
     {
+        $tab = self::normalizeListTab($tab);
+
         return match ($tab) {
             'collect' => __('To collect'),
             'collected' => __('Collected'),
             'arrears' => __('Arrears'),
-            default => __('Ledger'),
+            default => __('Contributions'),
         };
     }
 
@@ -65,11 +77,12 @@ class ContributionResource extends Resource
      *
      * @param  array<string, array<string, mixed>>  $filters
      */
-    public static function listUrl(string $tab = 'collect', array $filters = []): string
+    public static function listUrl(string $tab = 'contributions', array $filters = []): string
     {
+        $tab = self::normalizeListTab($tab);
         $parameters = [];
 
-        if ($tab !== 'collect') {
+        if ($tab !== 'contributions') {
             $parameters['tab'] = $tab;
         }
 
@@ -121,7 +134,12 @@ class ContributionResource extends Resource
 
     public static function ledgerUrlForMember(int|Member $member): string
     {
-        return static::listUrl('ledger', static::memberFilter($member));
+        return static::contributionsUrlForMember($member);
+    }
+
+    public static function contributionsUrlForMember(int|Member $member): string
+    {
+        return static::listUrl('contributions', static::memberFilter($member));
     }
 
     public static function resolveListTab(): string
@@ -131,10 +149,10 @@ class ContributionResource extends Resource
         if ($livewire instanceof ListContributions && filled($livewire->activeTab)) {
             $tab = $livewire->activeTab;
         } else {
-            $tab = request()->string('tab')->toString() ?: 'collect';
+            $tab = request()->string('tab')->toString() ?: 'contributions';
         }
 
-        return in_array($tab, self::listTabKeys(), true) ? $tab : 'collect';
+        return self::normalizeListTab($tab);
     }
 
     public static function openCyclePendingCount(): int
@@ -169,6 +187,7 @@ class ContributionResource extends Resource
         return [
             'index' => ListContributions::route('/'),
             'create' => CreateContribution::route('/create'),
+            'edit' => EditContribution::route('/{record}/edit'),
         ];
     }
 

@@ -6,6 +6,8 @@ use App\Filament\Tenant\Pages\ContributionCyclePage;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Contributions\Pages\ListContributions;
 use App\Models\Central\Tenant;
+use App\Models\Tenant\Contribution;
+use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\ContributionInsightsService;
 use Filament\Facades\Filament;
@@ -36,61 +38,66 @@ beforeEach(function () {
     $this->actingAs($admin, 'tenant');
 });
 
-test('contributions list defaults to collect tab', function () {
+test('contributions list defaults to contributions tab', function () {
     Livewire::test(ListContributions::class)
         ->assertSuccessful()
-        ->assertSee(__('Members who still owe for the open period'), false);
+        ->assertSee(__('Full contribution history, filters, and manual posting.'), false);
 
     expect(ContributionResource::listUrl())
-        ->toBe(ContributionResource::listUrl('collect'))
+        ->toBe(ContributionResource::listUrl('contributions'))
         ->not->toContain('tab=');
 
-    expect(ContributionResource::listUrl('ledger'))
-        ->toContain('tab=ledger');
+    expect(ContributionResource::listUrl('collect'))
+        ->toContain('tab=collect');
 });
 
 test('contributions list has unified open cycle collect and collected tabs', function () {
     Livewire::test(ListContributions::class)
         ->assertSuccessful()
+        ->assertSee(__('Contributions'), false)
         ->assertSee(__('To collect'), false)
-        ->assertSee(__('Collected'), false)
-        ->assertSee(__('Ledger'), false);
+        ->assertSee(__('Collected'), false);
 
     $url = ContributionResource::listTabUrl('collect');
     $path = parse_url($url, PHP_URL_PATH) ?? '/admin/contributions';
     $query = parse_url($url, PHP_URL_QUERY);
 
-    expect($query)->toBeNull();
+    expect($query)->toBe('tab=collect');
 
-    $this->get('http://'.$this->domain.$path)
+    $this->get('http://'.$this->domain.$path.'?'.$query)
         ->assertSuccessful()
         ->assertSee(__('To collect'), false);
 });
 
 test('contribution table header actions appear on the correct tabs', function () {
     Livewire::test(ListContributions::class)
-        ->set('activeTab', 'collect')
-        ->assertTableActionExists('generateMonthly')
-        ->assertTableActionExists('runDelinquencyMaintenance')
-        ->assertTableActionDoesNotExist('create');
-
-    Livewire::test(ListContributions::class)
-        ->set('activeTab', 'ledger')
+        ->assertTableActionExists('importContributions')
+        ->assertTableActionExists('exportContributions')
         ->assertTableActionExists('create')
         ->assertTableActionExists('generateMonthly')
         ->assertTableActionDoesNotExist('runDelinquencyMaintenance');
 
     Livewire::test(ListContributions::class)
+        ->set('activeTab', 'collect')
+        ->assertTableActionExists('generateMonthly')
+        ->assertTableActionExists('runDelinquencyMaintenance')
+        ->assertTableActionDoesNotExist('create')
+        ->assertTableActionDoesNotExist('importContributions')
+        ->assertTableActionDoesNotExist('exportContributions');
+
+    Livewire::test(ListContributions::class)
         ->set('activeTab', 'arrears')
         ->assertTableActionExists('runDelinquencyMaintenance')
         ->assertTableActionDoesNotExist('create')
-        ->assertTableActionDoesNotExist('generateMonthly');
+        ->assertTableActionDoesNotExist('generateMonthly')
+        ->assertTableActionDoesNotExist('importContributions');
 
     Livewire::test(ListContributions::class)
         ->set('activeTab', 'collected')
         ->assertTableActionDoesNotExist('create')
         ->assertTableActionDoesNotExist('generateMonthly')
-        ->assertTableActionDoesNotExist('runDelinquencyMaintenance');
+        ->assertTableActionDoesNotExist('runDelinquencyMaintenance')
+        ->assertTableActionDoesNotExist('importContributions');
 });
 
 test('contribution tab insights use context-specific snapshots', function () {
@@ -112,6 +119,20 @@ test('collect tab table search does not query virtual columns', function () {
         ->set('activeTab', 'collect')
         ->set('tableSearch', 'ع')
         ->assertSuccessful();
+});
+
+test('contributions tab renders waived status without error', function () {
+    $member = Member::factory()->create(['status' => 'active']);
+
+    Contribution::factory()->for($member)->create([
+        'status' => 'waived',
+        'period' => now()->startOfMonth()->toDateString(),
+    ]);
+
+    Livewire::test(ListContributions::class)
+        ->set('activeTab', 'contributions')
+        ->assertSuccessful()
+        ->assertSee(__('Waived'), false);
 });
 
 test('legacy contribution cycle route redirects to collect tab', function () {

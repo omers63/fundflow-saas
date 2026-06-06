@@ -20,7 +20,7 @@
         'total' => $pipeline['members_url'],
         'new' => $pipeline['members_url'],
         'dependents' => $pipeline['members_url'],
-        'avg' => \App\Filament\Tenant\Resources\Contributions\ContributionResource::listUrl('ledger'),
+        'avg' => \App\Filament\Tenant\Resources\Contributions\ContributionResource::listUrl('contributions'),
     ]);
 @endphp
 

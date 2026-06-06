@@ -409,7 +409,7 @@ test('ledger post action notifies instead of erroring when cash is insufficient'
 
     Livewire::actingAs($admin, 'tenant')
         ->test(ListContributions::class)
-        ->set('activeTab', 'ledger')
+        ->set('activeTab', 'contributions')
         ->callTableAction('post', $contribution)
         ->assertSuccessful();
 
@@ -417,7 +417,7 @@ test('ledger post action notifies instead of erroring when cash is insufficient'
 
     Livewire::actingAs($admin, 'tenant')
         ->test(ListContributions::class)
-        ->set('activeTab', 'ledger')
+        ->set('activeTab', 'contributions')
         ->assertTableActionVisible('post', $contribution);
 
     Account::masterCash()->update(['balance' => 600]);
@@ -425,9 +425,125 @@ test('ledger post action notifies instead of erroring when cash is insufficient'
 
     Livewire::actingAs($admin, 'tenant')
         ->test(ListContributions::class)
-        ->set('activeTab', 'ledger')
+        ->set('activeTab', 'contributions')
         ->callTableAction('post', $contribution)
         ->assertSuccessful();
 
     expect($contribution->fresh()->status)->toBe('posted');
+});
+
+test('admin can update pending admin contribution core fields', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-EDIT-01',
+        'name' => 'Editable Member',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $contribution = $this->service->recordContribution($member, '2026-05-01');
+
+    $updated = $this->service->updateAdminContribution($contribution, [
+        'member_id' => $member->id,
+        'period' => '2026-06-01',
+        'amount' => 750,
+        'reference_number' => 'REF-001',
+        'notes' => 'Adjusted before posting',
+    ]);
+
+    expect($updated->period?->toDateString())->toBe('2026-06-01')
+        ->and((float) $updated->amount)->toBe(750.0)
+        ->and($updated->reference_number)->toBe('REF-001')
+        ->and($updated->notes)->toBe('Adjusted before posting');
+});
+
+test('posted admin contribution only updates reference metadata', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-EDIT-02',
+        'name' => 'Posted Metadata Member',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+    Account::masterCash()->update(['balance' => 500]);
+    $member->cashAccount->update(['balance' => 500]);
+
+    $contribution = $this->service->recordContribution($member, '2026-05-01');
+    $this->service->postContribution($contribution);
+
+    $updated = $this->service->updateAdminContribution($contribution->fresh(), [
+        'amount' => 999,
+        'reference_number' => 'POSTED-REF',
+        'notes' => 'Posted note',
+    ]);
+
+    expect((float) $updated->amount)->toBe(500.0)
+        ->and($updated->reference_number)->toBe('POSTED-REF')
+        ->and($updated->notes)->toBe('Posted note');
+});
+
+test('cycle contributions cannot be edited by admin', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-EDIT-03',
+        'name' => 'Cycle Member',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $contribution = Contribution::create([
+        'member_id' => $member->id,
+        'period' => '2026-05-01',
+        'amount' => 500,
+        'amount_due' => 500,
+        'amount_collected' => 0,
+        'status' => 'pending',
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+    ]);
+
+    expect($contribution->isEditableByAdmin())->toBeFalse();
+
+    expect(fn () => $this->service->updateAdminContribution($contribution, [
+        'notes' => 'Should fail',
+    ]))->toThrow(InvalidArgumentException::class);
+});
+
+test('contributions list exposes view and edit row actions', function () {
+    Filament::setCurrentPanel('tenant');
+
+    $admin = User::create([
+        'name' => 'Contribution View Admin',
+        'email' => 'contrib-view@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $member = Member::create([
+        'member_number' => 'MEM-VIEW-01',
+        'name' => 'View Row Member',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $adminContribution = $this->service->recordContribution($member, '2026-05-01');
+    $cycleContribution = Contribution::create([
+        'member_id' => $member->id,
+        'period' => '2026-04-01',
+        'amount' => 500,
+        'amount_due' => 500,
+        'amount_collected' => 0,
+        'status' => 'pending',
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+    ]);
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(ListContributions::class)
+        ->set('activeTab', 'contributions')
+        ->assertTableActionVisible('view', $adminContribution)
+        ->assertTableActionVisible('edit', $adminContribution)
+        ->assertTableActionVisible('view', $cycleContribution)
+        ->assertTableActionHidden('edit', $cycleContribution);
 });

@@ -3,13 +3,18 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\LocaleSwitchController;
+use App\Http\Controllers\Tenant\ContributionImportSampleController;
+use App\Http\Controllers\Tenant\DatabaseBackupDownloadController;
 use App\Http\Controllers\Tenant\DirectMessageAttachmentController;
 use App\Http\Controllers\Tenant\FiscalCloseExportDownloadController;
 use App\Http\Controllers\Tenant\LoanImportSampleController;
+use App\Http\Controllers\Tenant\LoanRepaymentImportSampleController;
+use App\Http\Controllers\Tenant\MemberImportSampleController;
 use App\Http\Controllers\Tenant\MembershipApplicationImportSampleController;
 use App\Http\Controllers\Tenant\StartDependentImpersonationController;
 use App\Http\Controllers\Tenant\StatementPdfController;
 use App\Http\Controllers\Tenant\StopImpersonationController;
+use App\Http\Controllers\Tenant\StoredDatabaseBackupDownloadController;
 use App\Http\Controllers\Tenant\TenantManifestController;
 use App\Http\Controllers\Tenant\TermsConditionsDownloadController;
 use App\Livewire\Tenant\ApplicationStatusPage;
@@ -62,6 +67,15 @@ Route::middleware([
     Route::get('/downloads/loan-import-sample', LoanImportSampleController::class)
         ->name('tenant.downloads.loan-import-sample');
 
+    Route::get('/downloads/loan-repayment-import-sample', LoanRepaymentImportSampleController::class)
+        ->name('tenant.downloads.loan-repayment-import-sample');
+
+    Route::get('/downloads/contribution-import-sample', ContributionImportSampleController::class)
+        ->name('tenant.downloads.contribution-import-sample');
+
+    Route::get('/downloads/member-import-sample', MemberImportSampleController::class)
+        ->name('tenant.downloads.member-import-sample');
+
     Route::get('/manifest.json', TenantManifestController::class)
         ->name('tenant.manifest');
 
@@ -86,6 +100,12 @@ Route::middleware([
 
         Route::get('/admin/fiscal-closes/{fiscalClose}/exports/{fileKey}', FiscalCloseExportDownloadController::class)
             ->name('tenant.admin.fiscal-close.export');
+
+        Route::get('/admin/system/backup-download', DatabaseBackupDownloadController::class)
+            ->name('tenant.admin.system.backup-download');
+
+        Route::get('/admin/system/backups/{databaseBackup}/download', StoredDatabaseBackupDownloadController::class)
+            ->name('tenant.admin.system.backup-stored-download');
 
         Route::get('/direct-messages/{message}/attachment/{index}', DirectMessageAttachmentController::class)
             ->whereNumber('index')

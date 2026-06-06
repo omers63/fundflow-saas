@@ -700,6 +700,115 @@ test('dependent allocation requires parent cash for the full period amount not a
         ->and(Contribution::query()->where('member_id', $dependent->id)->first()->status)->toBe('pending');
 });
 
+test('dependent allocation transfers only the cash shortfall for a cycle', function () {
+    $jan = now()->subMonths(2);
+
+    $parent = Member::create([
+        'member_number' => 'MEM-P06',
+        'name' => 'Parent Shortfall',
+        'email' => 'parent-shortfall@example.com',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => $jan->copy()->startOfMonth(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($parent);
+
+    $dependent = Member::create([
+        'member_number' => 'MEM-D06',
+        'name' => 'Child Shortfall',
+        'email' => 'child-shortfall@example.com',
+        'parent_member_id' => $parent->id,
+        'household_email' => 'parent-shortfall@example.com',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => $jan->copy()->startOfMonth(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($dependent);
+
+    AccountingService::withoutMemberCashCollection(fn () => $this->accounting->credit(
+        $parent->cashAccount,
+        100,
+        'Parent funding',
+    ));
+
+    AccountingService::withoutMemberCashCollection(fn () => $this->accounting->credit(
+        $dependent->cashAccount,
+        30,
+        'Partial dependent cash',
+    ));
+
+    Contribution::create([
+        'member_id' => $dependent->id,
+        'period' => Contribution::periodDate((int) $jan->month, (int) $jan->year),
+        'amount' => 100,
+        'amount_due' => 100,
+        'amount_collected' => 0,
+        'status' => 'pending',
+        'collection_status' => ContributionCollectionStatus::OVERDUE,
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+        'overdue_since' => $jan->copy()->endOfMonth(),
+        'is_late' => true,
+    ]);
+
+    $result = $this->cycles->applyDependentAllocationForParentForPeriod(
+        $parent->fresh(),
+        (int) $jan->month,
+        (int) $jan->year,
+    );
+
+    expect($result['transfers'])->toBe(1)
+        ->and((float) $parent->cashAccount->fresh()->balance)->toBe(30.0)
+        ->and((float) $dependent->cashAccount->fresh()->balance)->toBe(100.0);
+});
+
+test('allocation cycle options only include periods the parent can fully fund', function () {
+    $jan = now()->subMonths(2);
+
+    $parent = Member::create([
+        'member_number' => 'MEM-P07',
+        'name' => 'Parent Options',
+        'email' => 'parent-options@example.com',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => $jan->copy()->startOfMonth(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($parent);
+
+    $dependent = Member::create([
+        'member_number' => 'MEM-D07',
+        'name' => 'Child Options',
+        'email' => 'child-options@example.com',
+        'parent_member_id' => $parent->id,
+        'household_email' => 'parent-options@example.com',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => $jan->copy()->startOfMonth(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($dependent);
+
+    AccountingService::withoutMemberCashCollection(fn () => $this->accounting->credit(
+        $parent->cashAccount,
+        90,
+        'Limited parent cash',
+    ));
+
+    Contribution::create([
+        'member_id' => $dependent->id,
+        'period' => Contribution::periodDate((int) $jan->month, (int) $jan->year),
+        'amount' => 100,
+        'amount_due' => 100,
+        'amount_collected' => 0,
+        'status' => 'pending',
+        'collection_status' => ContributionCollectionStatus::OVERDUE,
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+        'overdue_since' => $jan->copy()->endOfMonth(),
+        'is_late' => true,
+    ]);
+
+    expect($this->cycles->allocationCycleSelectOptionsForParent($parent->fresh()))->toBe([])
+        ->and($this->cycles->shouldShowDependentAllocationAction($parent->fresh()))->toBeFalse();
+});
+
 test('household dependent allocation for a cycle runs before parent contribution settlement', function () {
     $jan = now()->subMonths(2);
 

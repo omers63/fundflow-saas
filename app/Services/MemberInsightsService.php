@@ -133,7 +133,7 @@ final class MemberInsightsService
                 'applications_url' => MembershipApplicationResource::getUrl('index'),
                 'applications_pending_url' => MembershipApplicationResource::listUrl(['status' => ['value' => 'pending']]),
                 'applications_approved_url' => MembershipApplicationResource::listUrl(['status' => ['value' => 'approved']]),
-                'contributions_url' => ContributionResource::listUrl('ledger', ['status' => ['value' => 'pending']]),
+                'contributions_url' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'pending']]),
                 'delinquency_url' => MemberResource::listTabUrl('delinquent'),
             ],
         ];

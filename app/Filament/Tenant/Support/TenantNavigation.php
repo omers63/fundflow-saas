@@ -24,6 +24,10 @@ final class TenantNavigation
 
     public const SORT_MEMBERS = 2;
 
+    public const SORT_MEMBER_REQUESTS = 21;
+
+    public const SORT_SUPPORT_REQUESTS = 22;
+
     public const SORT_DEPOSITS = 3;
 
     public const SORT_CASH_OUTS = 4;
@@ -37,7 +41,11 @@ final class TenantNavigation
     /** Last item in Fund Management (after statements, loans cluster, etc.). */
     public const SORT_RECONCILIATION = 8;
 
+    public const SORT_RECONCILIATION_EXCEPTIONS = 9;
+
     public const SORT_JOBS = 1;
+
+    public const SORT_SYSTEM_MAINTENANCE = 2;
 
     public const SORT_AUDIT_LOGS = 3;
 
@@ -46,6 +54,8 @@ final class TenantNavigation
     public const SORT_MIGRATIONS = 5;
 
     public const SORT_SETTINGS = 6;
+
+    public const SORT_NOTIFICATION_LOGS = 7;
 
     /**
      * @return list<string>
@@ -84,11 +94,11 @@ final class TenantNavigation
     {
         return [
             self::GROUP_ACCOUNTS => NavigationGroup::make()
-                ->label(fn (): string => self::groupLabel(self::GROUP_ACCOUNTS)),
+                ->label(fn(): string => self::groupLabel(self::GROUP_ACCOUNTS)),
             self::GROUP_FUND_MANAGEMENT => NavigationGroup::make()
-                ->label(fn (): string => self::groupLabel(self::GROUP_FUND_MANAGEMENT)),
+                ->label(fn(): string => self::groupLabel(self::GROUP_FUND_MANAGEMENT)),
             self::GROUP_SYSTEM => NavigationGroup::make()
-                ->label(fn (): string => self::groupLabel(self::GROUP_SYSTEM)),
+                ->label(fn(): string => self::groupLabel(self::GROUP_SYSTEM)),
         ];
     }
 }

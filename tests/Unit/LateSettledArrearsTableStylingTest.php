@@ -7,6 +7,15 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\LoanInstallment;
 use App\Support\ContributionCollectionStatus;
 
+test('waived contribution uses info styling', function () {
+    $contribution = new Contribution([
+        'status' => 'waived',
+        'is_late' => false,
+    ]);
+
+    expect(LateSettledArrearsTableStyling::contributionStatusColor($contribution))->toBe('info');
+});
+
 test('contribution settled late when posted with is_late', function () {
     $contribution = new Contribution([
         'status' => 'posted',

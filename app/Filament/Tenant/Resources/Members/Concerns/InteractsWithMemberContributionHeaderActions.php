@@ -10,8 +10,12 @@ use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Utilities\Get;
+use Illuminate\Support\HtmlString;
+use InvalidArgumentException;
 use Livewire\Component;
 
 trait InteractsWithMemberContributionHeaderActions
@@ -62,28 +66,105 @@ trait InteractsWithMemberContributionHeaderActions
         $cycles = app(ContributionCycleService::class);
 
         return Action::make('allocateDependents')
-            ->label(__('Allocate to dependents'))
-            ->icon('heroicon-o-users')
-            ->color('info')
-            ->visible(fn (): bool => ($member = $this->resolveMemberForContributionAction()) instanceof Member
-                && $member->dependents()->where('status', 'active')->exists())
-            ->schema([
-                Select::make('cycle')
-                    ->label(__('Cycle'))
-                    ->options(fn (): array => ($member = $this->resolveMemberForContributionAction()) instanceof Member
-                        ? $cycles->contributionCycleSelectOptionsForBulk()
-                        : [])
-                    ->required(),
-            ])
-            ->action(function (array $data) use ($cycles): void {
+            ->label(__('Allocate'))
+            ->icon('heroicon-o-arrow-right-circle')
+            ->color('warning')
+            ->visible(function () use ($cycles): bool {
+                $member = $this->resolveMemberForContributionAction();
+
+                return $member instanceof Member
+                    && $cycles->shouldShowDependentAllocationAction($member);
+            })
+            ->modalHeading(__('Allocate to dependents'))
+            ->modalDescription(
+                __('Choose the calendar month you are funding dependent cash for (arrears). Preview updates when you change the cycle.')
+            )
+            ->modalWidth('lg')
+            ->schema(function () use ($cycles): array {
+                $member = $this->resolveMemberForContributionAction();
+                $options = $member instanceof Member
+                    ? $cycles->allocationCycleSelectOptionsForParent($member)
+                    : [];
+
+                return [
+                    Select::make('cycle')
+                        ->label(__('Allocation cycle'))
+                        ->options($options)
+                        ->required()
+                        ->live()
+                        ->native(false)
+                        ->disabled($options === [])
+                        ->columnSpanFull(),
+                    Placeholder::make('breakdown')
+                        ->label('')
+                        ->content(function (Get $get) use ($cycles): HtmlString {
+                            $member = $this->resolveMemberForContributionAction();
+
+                            if (! $member instanceof Member) {
+                                return new HtmlString('');
+                            }
+
+                            $key = $get('cycle');
+
+                            if ($key === null || $key === '') {
+                                return new HtmlString(
+                                    '<p class="text-sm text-gray-500 dark:text-gray-400">'
+                                    .e(__('Select a cycle to preview.'))
+                                    .'</p>'
+                                );
+                            }
+
+                            try {
+                                [$month, $year] = $cycles->parseContributionCycleKey((string) $key);
+                            } catch (InvalidArgumentException) {
+                                return new HtmlString('');
+                            }
+
+                            return $cycles->dependentAllocationModalDescriptionForPeriod($member, $month, $year);
+                        })
+                        ->columnSpanFull(),
+                ];
+            })
+            ->fillForm(function () use ($cycles): array {
+                $member = $this->resolveMemberForContributionAction();
+
+                return [
+                    'cycle' => $member instanceof Member
+                        ? ($cycles->defaultAllocationCycleKeyForParent($member) ?? '')
+                        : '',
+                ];
+            })
+            ->action(function (array $data, Action $action) use ($cycles): void {
                 $member = $this->resolveMemberForContributionAction();
 
                 if ($member === null) {
                     return;
                 }
 
-                [$month, $year] = $cycles->parseContributionCycleKey($data['cycle']);
+                $key = $data['cycle'] ?? null;
+
+                if (! is_string($key) || $key === '') {
+                    Notification::make()
+                        ->title(__('Select an allocation cycle'))
+                        ->danger()
+                        ->send();
+
+                    return;
+                }
+
+                try {
+                    [$month, $year] = $cycles->parseContributionCycleKey($key);
+                } catch (InvalidArgumentException) {
+                    Notification::make()
+                        ->title(__('Invalid allocation cycle'))
+                        ->danger()
+                        ->send();
+
+                    return;
+                }
+
                 $result = $cycles->applyDependentAllocationForParentForPeriod($member, $month, $year);
+                $body = $cycles->formatAllocationResultDetailTableHtml($result['details']);
 
                 foreach ($result['allocated_dependent_ids'] as $dependentId) {
                     $dependent = Member::query()->find($dependentId);
@@ -93,11 +174,19 @@ trait InteractsWithMemberContributionHeaderActions
                     }
                 }
 
-                Notification::make()
-                    ->title(__(':count transfer(s) completed', ['count' => $result['transfers']]))
-                    ->body(implode("\n", $result['details']))
-                    ->success()
-                    ->send();
+                if ($result['transfers'] > 0) {
+                    Notification::make()
+                        ->title(__('Allocation completed'))
+                        ->body($body)
+                        ->success()
+                        ->send();
+                } else {
+                    Notification::make()
+                        ->title(__('Allocation'))
+                        ->body($body)
+                        ->warning()
+                        ->send();
+                }
 
                 MemberResource::dispatchMemberDetailInsightsRefresh($this->resolveContributionRefreshTarget());
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DependentCashAllocation;
 use App\Models\Tenant\Member;
@@ -15,6 +16,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\HtmlString;
 use RuntimeException;
 
 /**
@@ -462,6 +464,218 @@ class ContributionCycleService
             ->exists();
     }
 
+    public function memberBaseEligibleForDependentAllocation(Member $dependent, int $month, int $year): bool
+    {
+        if ($dependent->status !== 'active') {
+            return false;
+        }
+
+        if ((float) $dependent->monthly_contribution_amount <= 0) {
+            return false;
+        }
+
+        return ! $dependent->isExemptFromContributions($month, $year);
+    }
+
+    public function memberEligibleForDependentAllocationFunding(Member $dependent, int $month, int $year): bool
+    {
+        if (! $this->memberBaseEligibleForDependentAllocation($dependent, $month, $year)) {
+            return false;
+        }
+
+        return ! $this->dependentAllocationExistsForPeriod($dependent, $month, $year);
+    }
+
+    public function dependentAllocationShortfallForPeriod(Member $dependent, int $month, int $year): float
+    {
+        if (! $this->memberEligibleForDependentAllocationFunding($dependent, $month, $year)) {
+            return 0.0;
+        }
+
+        $required = $this->requiredCollectionCashForMemberPeriod($dependent, $month, $year);
+
+        return max(0.0, $required - $dependent->getCashBalance());
+    }
+
+    public function totalDependentShortfallForParentForPeriod(Member $parent, int $month, int $year): float
+    {
+        $parent->loadMissing(['dependents']);
+
+        $total = 0.0;
+
+        foreach ($parent->dependents()->where('status', 'active')->orderBy('member_number')->get() as $dependent) {
+            $total += $this->dependentAllocationShortfallForPeriod($dependent, $month, $year);
+        }
+
+        return $total;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function allocationCycleSelectOptionsForParent(Member $parent): array
+    {
+        $options = [];
+        [$curM, $curY] = $this->currentOpenPeriod();
+        $cursor = Carbon::create($curY, $curM, 1)->startOfMonth();
+
+        for ($i = 0; $i < self::CONTRIBUTION_CYCLE_LOOKBACK_MONTHS; $i++) {
+            $m = (int) $cursor->month;
+            $y = (int) $cursor->year;
+            $total = $this->totalDependentShortfallForParentForPeriod($parent, $m, $y);
+
+            if ($total <= 0.00001) {
+                $cursor->subMonthNoOverflow();
+
+                continue;
+            }
+
+            if ($parent->getCashBalance() < $total - 0.00001) {
+                $cursor->subMonthNoOverflow();
+
+                continue;
+            }
+
+            $options[$this->contributionCycleKey($m, $y)] = $this->periodLabel($m, $y);
+            $cursor->subMonthNoOverflow();
+        }
+
+        return $options;
+    }
+
+    public function defaultAllocationCycleKeyForParent(Member $parent): ?string
+    {
+        $options = $this->allocationCycleSelectOptionsForParent($parent);
+
+        if ($options === []) {
+            return null;
+        }
+
+        [$curM, $curY] = $this->currentOpenPeriod();
+        $preferred = $this->contributionCycleKey($curM, $curY);
+
+        return isset($options[$preferred]) ? $preferred : array_key_first($options);
+    }
+
+    public function shouldShowDependentAllocationAction(Member $parent): bool
+    {
+        if ($parent->status !== 'active') {
+            return false;
+        }
+
+        if (! $parent->dependents()->where('status', 'active')->exists()) {
+            return false;
+        }
+
+        return $this->allocationCycleSelectOptionsForParent($parent) !== [];
+    }
+
+    public function dependentAllocationModalDescriptionForPeriod(Member $parent, int $month, int $year): HtmlString
+    {
+        $parent->loadMissing(['dependents']);
+        $currency = Setting::get('general', 'currency', 'USD');
+        $parentCash = $parent->getCashBalance();
+        $periodLabel = $this->periodLabel($month, $year);
+        $totalShortfall = $this->totalDependentShortfallForParentForPeriod($parent, $month, $year);
+
+        $rowsHtml = '';
+
+        foreach ($parent->dependents()->where('status', 'active')->orderBy('member_number')->get() as $dependent) {
+            $shortfall = $this->dependentAllocationShortfallForPeriod($dependent, $month, $year);
+
+            if ($shortfall <= 0.00001) {
+                continue;
+            }
+
+            $required = $this->requiredCollectionCashForMemberPeriod($dependent, $month, $year);
+            $cash = $dependent->getCashBalance();
+            $name = e($dependent->name);
+
+            $rowsHtml .= '<tr class="border-b border-gray-100 last:border-0 dark:border-white/10">'
+                .'<td class="py-2.5 pr-3 text-gray-950 dark:text-white">'.$name.'</td>'
+                .'<td class="py-2.5 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">'.e(MoneyDisplay::format($cash, $currency)).'</td>'
+                .'<td class="py-2.5 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">'.e(MoneyDisplay::format($required, $currency)).'</td>'
+                .'<td class="py-2.5 text-right tabular-nums font-medium text-gray-950 dark:text-white">'.e(MoneyDisplay::format($shortfall, $currency)).'</td>'
+                .'</tr>';
+        }
+
+        if ($rowsHtml === '') {
+            $summary = '<p class="text-sm text-gray-600 dark:text-gray-400">'
+                .e(__('Your cash balance: :balance', ['balance' => MoneyDisplay::format($parentCash, $currency) ?? '']))
+                .'</p>'
+                .'<p class="mt-2 text-sm text-gray-600 dark:text-gray-400">'
+                .e(__('No dependent shortfalls for :period.', ['period' => $periodLabel]))
+                .'</p>';
+
+            return new HtmlString('<div class="space-y-1 text-sm">'.$summary.'</div>');
+        }
+
+        $table = '<div class="overflow-x-auto rounded-lg border border-gray-200 bg-white dark:border-white/10 dark:bg-gray-900/40">'
+            .'<table class="w-full min-w-[22rem] text-sm">'
+            .'<thead><tr class="border-b border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/5">'
+            .'<th scope="col" class="py-2.5 pl-3 pr-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Dependent')).'</th>'
+            .'<th scope="col" class="py-2.5 pr-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Cash')).'</th>'
+            .'<th scope="col" class="py-2.5 pr-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Needed')).'</th>'
+            .'<th scope="col" class="py-2.5 pr-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Transfer')).'</th>'
+            .'</tr></thead>'
+            .'<tbody>'.$rowsHtml.'</tbody>'
+            .'</table></div>';
+
+        $html = '<div class="space-y-4 text-sm">'
+            .'<p class="text-gray-600 dark:text-gray-400">'
+            .e(__('Your cash balance: :balance · Total to transfer: :total', [
+                'balance' => MoneyDisplay::format($parentCash, $currency) ?? '',
+                'total' => MoneyDisplay::format($totalShortfall, $currency) ?? '',
+            ]))
+            .'</p>'
+            .$table
+            .'<p class="text-xs leading-relaxed text-gray-500 dark:text-gray-400">'
+            .e(__('Confirming will move each transfer amount from your cash to that dependent\'s cash for :period.', [
+                'period' => $periodLabel,
+            ]))
+            .'</p>'
+            .'</div>';
+
+        return new HtmlString($html);
+    }
+
+    /**
+     * @param  list<string>  $lines
+     */
+    public function formatAllocationResultDetailTableHtml(array $lines): HtmlString
+    {
+        if ($lines === []) {
+            return new HtmlString('');
+        }
+
+        $rows = '';
+
+        foreach ($lines as $line) {
+            if (! str_contains($line, ':')) {
+                $rows .= '<tr><td colspan="2" class="py-2 text-sm text-gray-600 dark:text-gray-400">'.e($line).'</td></tr>';
+
+                continue;
+            }
+
+            [$name, $detail] = explode(':', $line, 2);
+            $rows .= '<tr class="border-b border-gray-100 last:border-0 dark:border-white/10">'
+                .'<td class="py-2 pr-3 align-top font-medium text-gray-950 dark:text-white">'.e(trim($name)).'</td>'
+                .'<td class="py-2 align-top text-gray-600 dark:text-gray-400">'.e(trim($detail)).'</td>'
+                .'</tr>';
+        }
+
+        return new HtmlString(
+            '<div class="overflow-x-auto rounded-lg border border-gray-200 bg-white text-left dark:border-white/10 dark:bg-gray-900/40">'
+            .'<table class="w-full min-w-[16rem] text-sm">'
+            .'<thead><tr class="border-b border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/5">'
+            .'<th scope="col" class="py-2 pl-3 pr-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Dependent')).'</th>'
+            .'<th scope="col" class="py-2 pr-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Result')).'</th>'
+            .'</tr></thead>'
+            .'<tbody>'.$rows.'</tbody>'
+            .'</table></div>'
+        );
+    }
+
     /**
      * @return array{transfers: int, details: list<string>, allocated_dependent_ids: list<int>}
      */
@@ -481,42 +695,64 @@ class ContributionCycleService
         }
 
         $parent->load(['dependents']);
+        $currency = Setting::get('general', 'currency', 'USD');
+        $totalShortfall = $this->totalDependentShortfallForParentForPeriod($parent, $month, $year);
+
+        if ($totalShortfall <= 0.00001) {
+            return [
+                'transfers' => 0,
+                'details' => [__('No dependent shortfalls to cover for :period.', ['period' => $periodLabel])],
+                'allocated_dependent_ids' => [],
+            ];
+        }
+
+        if ($parent->getCashBalance() < $totalShortfall - 0.00001) {
+            return [
+                'transfers' => 0,
+                'details' => [
+                    __('Parent cash (:cash) is insufficient to cover total shortfalls (:total).', [
+                        'cash' => MoneyDisplay::format($parent->getCashBalance(), $currency) ?? '',
+                        'total' => MoneyDisplay::format($totalShortfall, $currency) ?? '',
+                    ]),
+                ],
+                'allocated_dependent_ids' => [],
+            ];
+        }
 
         foreach ($parent->dependents()->where('status', 'active')->orderBy('member_number')->get() as $dependent) {
-            if ($dependent->isExemptFromContributions($month, $year) || (float) $dependent->monthly_contribution_amount <= 0) {
-                continue;
-            }
-
-            $required = $this->requiredCollectionCashForMemberPeriod($dependent, $month, $year);
-
-            if ($required <= 0.00001) {
-                continue;
-            }
-
-            if ($dependent->getCashBalance() >= $required - 0.00001) {
-                continue;
-            }
-
             if ($this->dependentAllocationExistsForPeriod($dependent, $month, $year)) {
-                $details[] = "{$dependent->name}: ".__('Allocation already completed for :period; collect from dependent cash.', ['period' => $periodLabel]);
+                $details[] = $this->dependentAllocationDetailLine(
+                    $dependent,
+                    __('Allocation for :period was already completed.', ['period' => $periodLabel]),
+                );
 
                 continue;
             }
 
-            if ($parent->getCashBalance() < $required - 0.00001) {
-                $details[] = "{$dependent->name}: ".__('Parent cash insufficient for full allocation (:amount).', [
-                    'amount' => number_format($required, 2),
-                ]);
+            if (! $this->memberBaseEligibleForDependentAllocation($dependent, $month, $year)) {
+                continue;
+            }
+
+            $shortfall = $this->dependentAllocationShortfallForPeriod($dependent, $month, $year);
+
+            if ($shortfall <= 0.00001) {
+                $required = $this->requiredCollectionCashForMemberPeriod($dependent, $month, $year);
+                $details[] = $this->dependentAllocationDetailLine(
+                    $dependent,
+                    __('Cash already covers :amount.', [
+                        'amount' => MoneyDisplay::format($required, $currency) ?? '',
+                    ]),
+                );
 
                 continue;
             }
 
             try {
-                DB::transaction(function () use ($parent, $dependent, $required, $periodLabel, $month, $year): void {
+                DB::transaction(function () use ($parent, $dependent, $shortfall, $periodLabel, $month, $year): void {
                     $this->accounting->fundDependentCashAccount(
                         $parent,
                         $dependent,
-                        $required,
+                        $shortfall,
                         __('Allocation — :period', ['period' => $periodLabel]),
                     );
 
@@ -525,18 +761,25 @@ class ContributionCycleService
                         'dependent_member_id' => $dependent->id,
                         'allocation_month' => $month,
                         'allocation_year' => $year,
-                        'amount' => $required,
+                        'amount' => $shortfall,
                     ]);
                 });
                 $transfers++;
                 $allocatedDependentIds[] = $dependent->id;
-                $details[] = "{$dependent->name}: ".__('Transferred :amount for :period.', [
-                    'amount' => number_format($required, 2),
-                    'period' => $periodLabel,
-                ]);
+                $details[] = $this->dependentAllocationDetailLine(
+                    $dependent,
+                    __('Transferred :amount for :period.', [
+                        'amount' => MoneyDisplay::format($shortfall, $currency) ?? '',
+                        'period' => $periodLabel,
+                    ]),
+                );
             } catch (RuntimeException $e) {
-                $details[] = "{$dependent->name}: {$e->getMessage()}";
+                $details[] = $this->dependentAllocationDetailLine($dependent, $e->getMessage());
             }
+        }
+
+        if ($transfers === 0 && $details === []) {
+            $details[] = __('No dependent shortfalls to cover for :period.', ['period' => $periodLabel]);
         }
 
         return [
@@ -544,5 +787,10 @@ class ContributionCycleService
             'details' => $details,
             'allocated_dependent_ids' => $allocatedDependentIds,
         ];
+    }
+
+    private function dependentAllocationDetailLine(Member $dependent, string $message): string
+    {
+        return $dependent->name.': '.$message;
     }
 }

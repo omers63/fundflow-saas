@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Filament\Tenant\Resources\Contributions\ContributionResource;
+use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
@@ -24,7 +26,9 @@ final class MemberDelinquencyActions
     {
         return [
             self::syncDelinquency(),
+            self::markDelinquent(),
             self::restoreActive(),
+            self::openDelinquencyWorkspace(),
         ];
     }
 
@@ -35,6 +39,7 @@ final class MemberDelinquencyActions
     {
         return [
             self::syncDelinquencyBulk(),
+            self::markDelinquentBulk(),
             self::restoreActiveBulk(),
         ];
     }
@@ -70,6 +75,54 @@ final class MemberDelinquencyActions
             });
     }
 
+    public static function markDelinquent(): Action
+    {
+        return Action::make('markMemberDelinquent')
+            ->label(__('Mark delinquent'))
+            ->icon('heroicon-o-exclamation-circle')
+            ->color('danger')
+            ->visible(fn (Member $record): bool => $record->status === 'active')
+            ->requiresConfirmation()
+            ->modalDescription(__('Blocks portal access and new loans until status is restored.'))
+            ->action(function (Member $record, Action $action, LoanDelinquencyService $delinquency, Component $livewire): void {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $delinquency->markMemberDelinquent($record),
+                        __('Cannot mark delinquent'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()->title(__('Marked delinquent'))->success()->send();
+                self::refreshMembersList($livewire);
+            });
+    }
+
+    public static function openDelinquencyWorkspace(): Action
+    {
+        return Action::make('openDelinquencyWorkspace')
+            ->label(__('Open delinquency workspace'))
+            ->icon('heroicon-o-arrow-top-right-on-square')
+            ->color('gray')
+            ->visible(fn (Member $record, LoanDelinquencyService $delinquency): bool => $record->status === 'delinquent'
+                || $delinquency->memberHasArrears($record))
+            ->url(function (Member $record, LoanDelinquencyService $delinquency): string {
+                $summary = $delinquency->memberArrearsSummary($record);
+
+                if (count($summary['unpaid_contribution_periods']) > 0) {
+                    return ContributionResource::arrearsUrlForMember($record);
+                }
+
+                if ($summary['overdue_installment_count'] > 0) {
+                    return LoanResource::overdueInstallmentsUrlForMember($record);
+                }
+
+                return MemberResource::getUrl('edit', ['record' => $record]);
+            });
+    }
+
     public static function restoreActive(): Action
     {
         return Action::make('restoreMemberActive')
@@ -83,11 +136,13 @@ final class MemberDelinquencyActions
                     ->helperText(__('Use only when arrears are being handled outside the system.')),
             ])
             ->action(function (Member $record, array $data, Action $action, LoanDelinquencyService $delinquency, Component $livewire): void {
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $delinquency->restoreMemberActive($record, (bool) ($data['force'] ?? false)),
-                    __('Cannot restore'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $delinquency->restoreMemberActive($record, (bool) ($data['force'] ?? false)),
+                        __('Cannot restore'),
+                    )
+                ) {
                     return;
                 }
 
@@ -124,6 +179,44 @@ final class MemberDelinquencyActions
                         'restored' => $restoredActive,
                     ]))
                     ->success()
+                    ->send();
+
+                self::refreshMembersList($livewire);
+            });
+    }
+
+    public static function markDelinquentBulk(): BulkAction
+    {
+        return BulkAction::make('markDelinquentSelected')
+            ->label(__('Mark delinquent'))
+            ->icon('heroicon-o-exclamation-circle')
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalDescription(__('Blocks portal access and new loans until status is restored.'))
+            ->action(function (Collection $records, LoanDelinquencyService $delinquency, Component $livewire): void {
+                $marked = 0;
+                $failed = 0;
+
+                foreach ($records as $record) {
+                    if (! $record instanceof Member || $record->status !== 'active') {
+                        continue;
+                    }
+
+                    try {
+                        $delinquency->markMemberDelinquent($record);
+                        $marked++;
+                    } catch (Throwable) {
+                        $failed++;
+                    }
+                }
+
+                Notification::make()
+                    ->title(__('Mark delinquent complete'))
+                    ->body(__(':marked marked · :failed could not be marked', [
+                        'marked' => $marked,
+                        'failed' => $failed,
+                    ]))
+                    ->color($failed > 0 ? 'warning' : 'success')
                     ->send();
 
                 self::refreshMembersList($livewire);

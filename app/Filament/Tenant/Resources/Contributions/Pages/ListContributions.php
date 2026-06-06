@@ -136,11 +136,11 @@ class ListContributions extends ListRecords
     public function getTabs(): array
     {
         return [
+            'contributions' => Tab::make(ContributionResource::listTabLabel('contributions')),
             'collect' => Tab::make(ContributionResource::listTabLabel('collect'))
                 ->badge(fn (): ?string => $this->collectTabBadge())
                 ->badgeColor('warning'),
             'collected' => Tab::make(ContributionResource::listTabLabel('collected')),
-            'ledger' => Tab::make(ContributionResource::listTabLabel('ledger')),
             'arrears' => Tab::make(ContributionResource::listTabLabel('arrears'))
                 ->badge(fn (): ?string => $this->arrearsTabBadge())
                 ->badgeColor('danger'),

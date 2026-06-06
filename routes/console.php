@@ -9,7 +9,9 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('fund:assert-master-invariants')->dailyAt('06:00');
+Schedule::command('fund:reconcile --daily')->dailyAt('06:20');
 Schedule::command('fund:nightly-reconciliation')->dailyAt('06:30');
+Schedule::command('fund:reconcile --monthly')->monthlyOn(2, '06:30');
 Schedule::command('contributions:init-cycle')->monthlyOn(1, '08:00');
 Schedule::command('contributions:notify')->monthlyOn(1, '09:00');
 Schedule::command('contributions:apply')->monthlyOn(5, '09:00');

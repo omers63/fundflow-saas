@@ -5,9 +5,11 @@ namespace App\Filament\Tenant\Resources\Contributions\Tables;
 use App\Filament\Support\ContributionListTableHeaderActions;
 use App\Filament\Support\ContributionTableActions;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\LateSettledArrearsTableStyling;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
@@ -21,7 +23,7 @@ class ContributionsTable
     {
         return TableGrouping::apply(
             $table
-                ->headerActions(ContributionListTableHeaderActions::ledger())
+                ->headerActions(ContributionListTableHeaderActions::contributions())
                 ->columns([
                     TextColumn::make('member.name')
                         ->searchable()
@@ -34,11 +36,11 @@ class ContributionsTable
                         ->sortable(),
                     TextColumn::make('status')
                         ->badge()
-                        ->color(fn (string $state): string => match ($state) {
-                            'pending' => 'warning',
-                            'posted' => 'success',
-                            'failed' => 'danger',
-                        })
+                        ->formatStateUsing(fn (string $state, Contribution $record): string => LateSettledArrearsTableStyling::contributionStatusLabel($record))
+                        ->color(fn (string $state, Contribution $record): string => LateSettledArrearsTableStyling::contributionStatusColor($record))
+                        ->tooltip(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionWasSettledLate($record)
+                            ? LateSettledArrearsTableStyling::eligibilityHint()
+                            : null)
                         ->description(fn (Contribution $record): ?string => $record->status === 'failed'
                             ? __('Insufficient member cash when posting was attempted.')
                             : null),
@@ -52,6 +54,7 @@ class ContributionsTable
                             'pending' => 'Pending',
                             'posted' => 'Posted',
                             'failed' => 'Failed',
+                            'waived' => 'Waived',
                         ]),
                     SelectFilter::make('member_id')
                         ->label('Member')
@@ -61,9 +64,14 @@ class ContributionsTable
                     DateColumnRangeFilter::make('period', 'Contribution period'),
                     DateColumnRangeFilter::make('posted_at', 'Posted'),
                 ])
+                ->recordClasses(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionRecordClasses($record))
+                ->recordUrl(fn (Contribution $record): string => ContributionResource::getUrl('edit', ['record' => $record]))
                 ->recordActions(TableRecordActionGroups::wrap([
-                    ContributionTableActions::delete(),
+                    ContributionTableActions::view(),
+                    ContributionTableActions::edit(),
                     ContributionTableActions::post(),
+                    ContributionTableActions::clearLatePosting(),
+                    ContributionTableActions::delete(),
                 ]))
                 ->toolbarActions([
                     BulkActionGroup::make([

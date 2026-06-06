@@ -11,6 +11,7 @@ use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tables\Columns\TextColumn;
+use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Members\Concerns\InteractsWithMemberContributionHeaderActions;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Setting;
@@ -80,7 +81,11 @@ class ContributionsRelationManager extends RelationManager
                 ->headerActions([
                     $this->buildMemberContributeAction(),
                 ])
+                ->recordUrl(fn (Contribution $record): string => ContributionResource::getUrl('edit', ['record' => $record]))
                 ->recordActions(TableRecordActionGroups::wrap([
+                    ContributionTableActions::view(),
+                    ContributionTableActions::edit(),
+                    ContributionTableActions::post(),
                     ContributionTableActions::clearLatePosting(),
                     ContributionTableActions::delete(),
                 ]))

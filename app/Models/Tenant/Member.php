@@ -76,6 +76,19 @@ class Member extends Model
         return $this->parent_member_id === null;
     }
 
+    public function householdHead(): self
+    {
+        if ($this->isParent()) {
+            return $this;
+        }
+
+        $parent = $this->relationLoaded('parent')
+            ? $this->parent
+            : $this->parent()->first();
+
+        return $parent ?? $this;
+    }
+
     public function parent(): BelongsTo
     {
         return $this->belongsTo(self::class, 'parent_member_id');

@@ -23,11 +23,13 @@ use App\Filament\Tables\Columns\ToggleColumn as AppToggleColumn;
 use App\Filament\Tables\Columns\ViewColumn as AppViewColumn;
 use App\Filament\Tables\Concerns\CapitalizesTableColumnHeaderLabel;
 use App\Http\Responses\FilamentLogoutResponse;
+use App\Listeners\LogNotificationDeliveryListener;
 use App\Listeners\RecordSystemJobRunListener;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Transaction;
 use App\Observers\LoanInstallmentObserver;
 use App\Observers\TransactionObserver;
+use App\Session\WallClockDatabaseSessionHandler;
 use App\Support\ArabicDisplaySettings;
 use App\Support\ArabicTypography;
 use Filament\Actions\Action as FilamentAction;
@@ -60,7 +62,9 @@ use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Notifications\Events\NotificationFailed;
 use Illuminate\Notifications\Events\NotificationSent;
+use Illuminate\Session\SessionManager;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
@@ -79,6 +83,20 @@ class AppServiceProvider extends ServiceProvider
             LogoutResponse::class,
             FilamentLogoutResponse::class,
         );
+
+        $this->app->afterResolving('session', function (SessionManager $manager): void {
+            $manager->extend('database', function (): WallClockDatabaseSessionHandler {
+                $config = config('session');
+                $connectionName = $config['connection'] ?? null;
+
+                return new WallClockDatabaseSessionHandler(
+                    $this->app['db']->connection($connectionName),
+                    $config['table'],
+                    $config['lifetime'],
+                    $this->app,
+                );
+            });
+        });
     }
 
     /**
@@ -103,6 +121,9 @@ class AppServiceProvider extends ServiceProvider
                 DatabaseNotificationsSentNow::dispatch($notifiable);
             }
         });
+
+        Event::listen(NotificationSent::class, [LogNotificationDeliveryListener::class, 'handleSent']);
+        Event::listen(NotificationFailed::class, [LogNotificationDeliveryListener::class, 'handleFailed']);
 
         Column::configureUsing(function (Column $column): Column {
             $column = $column
