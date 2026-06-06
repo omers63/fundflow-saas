@@ -2,11 +2,15 @@
 
 declare(strict_types=1);
 
+use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Models\Tenant\Setting;
+use App\Models\Tenant\User;
 use App\Services\ReconciliationReportService;
+use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Artisan;
+use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -89,4 +93,26 @@ test('bank options merge reconciliation settings group', function () {
         'declared_bank_date' => '2026-05-31',
         'bank_mismatch_treat_as_critical' => true,
     ]);
+});
+
+test('reconciliation page workspace tabs switch via livewire', function () {
+    $admin = User::create([
+        'name' => 'Recon Tabs Admin',
+        'email' => 'recon-tabs@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+    $this->actingAs($admin, 'tenant');
+
+    Livewire::test(ReconciliationOverviewPage::class)
+        ->assertSet('sideTab', 'overview')
+        ->set('sideTab', 'snapshots')
+        ->assertSet('sideTab', 'snapshots')
+        ->set('sideTab', 'methodology')
+        ->assertSet('sideTab', 'methodology')
+        ->set('sideTab', 'exceptions')
+        ->assertSet('sideTab', 'exceptions');
 });

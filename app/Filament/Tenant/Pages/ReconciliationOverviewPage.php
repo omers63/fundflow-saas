@@ -100,19 +100,9 @@ class ReconciliationOverviewPage extends Page implements HasTable
         }
     }
 
-    public function setSideTab(string $tab): void
+    public function updatedSideTab(?string $value): void
     {
-        if (!in_array($tab, ['overview', 'exceptions', 'snapshots', 'methodology'], true)) {
-            return;
-        }
-
-        if ($this->sideTab === $tab) {
-            return;
-        }
-
-        $this->sideTab = $tab;
-
-        if ($tab === 'exceptions') {
+        if ($value === 'exceptions') {
             $this->resetTable();
         }
     }
