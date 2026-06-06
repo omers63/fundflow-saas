@@ -3,7 +3,7 @@
         {{-- Sidebar --}}
         <aside class="mb-6 space-y-1 lg:mb-0">
             <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ __('Workspace') }}</p>
-            <button type="button" wire:click="$set('sideTab', 'overview')"
+            <button type="button" wire:click="setSideTab('overview')"
                 @class([
                     'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition',
                     'bg-primary-600 text-white shadow-sm dark:bg-primary-500' => $sideTab === 'overview',
@@ -12,7 +12,22 @@
                 <x-heroicon-o-chart-pie class="h-5 w-5 shrink-0" />
                 {{ __('Overview') }}
             </button>
-            <button type="button" wire:click="$set('sideTab', 'snapshots')"
+            <button type="button" wire:click="setSideTab('exceptions')"
+                @class([
+                    'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition',
+                    'bg-primary-600 text-white shadow-sm dark:bg-primary-500' => $sideTab === 'exceptions',
+                    'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5' => $sideTab !== 'exceptions',
+                ])>
+                <x-heroicon-o-shield-exclamation class="h-5 w-5 shrink-0" />
+                <span class="flex min-w-0 flex-1 items-center justify-between gap-2">
+                    <span>{{ __('Exceptions') }}</span>
+                    @php($openCount = $this->getOpenExceptionCount())
+                    @if ($openCount > 0)
+                        <span class="inline-flex min-w-[1.25rem] justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">{{ $openCount }}</span>
+                    @endif
+                </span>
+            </button>
+            <button type="button" wire:click="setSideTab('snapshots')"
                 @class([
                     'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition',
                     'bg-primary-600 text-white shadow-sm dark:bg-primary-500' => $sideTab === 'snapshots',
@@ -21,7 +36,7 @@
                 <x-heroicon-o-clipboard-document-list class="h-5 w-5 shrink-0" />
                 {{ __('Snapshots') }}
             </button>
-            <button type="button" wire:click="$set('sideTab', 'methodology')"
+            <button type="button" wire:click="setSideTab('methodology')"
                 @class([
                     'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition',
                     'bg-primary-600 text-white shadow-sm dark:bg-primary-500' => $sideTab === 'methodology',
@@ -43,7 +58,7 @@
                 </section>
 
                 @php($latest = $this->getLatestSnapshots()->first())
-                <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                     <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
                         <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Latest snapshot') }}</p>
                         <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
@@ -74,6 +89,19 @@
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ __('Rows awaiting cash post') }}</p>
                     </div>
                     <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
+                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Open exceptions') }}</p>
+                        <p class="mt-1 text-lg font-semibold tabular-nums {{ $this->getOpenExceptionCount() > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white' }}">
+                            {{ number_format($this->getOpenExceptionCount()) }}
+                        </p>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            @if ($this->getOpenExceptionCount() > 0)
+                                <button type="button" wire:click="setSideTab('exceptions')" class="font-semibold text-primary-600 hover:underline dark:text-primary-400">{{ __('Review queue') }}</button>
+                            @else
+                                {{ __('Operational queue clear') }}
+                            @endif
+                        </p>
+                    </div>
+                    <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
                         <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Ledger mismatches') }}</p>
                         <p class="mt-1 text-lg font-semibold tabular-nums text-gray-900 dark:text-white">
                             {{ $latest ? number_format($latest->report['checks']['ledger_balances']['mismatch_count'] ?? 0) : '—' }}
@@ -87,9 +115,20 @@
                     <ul class="mt-3 list-inside list-disc space-y-1 text-sm text-gray-600 dark:text-gray-400">
                         <li>{{ __('Use') }} <strong>{{ __('Run now (real-time)') }}</strong> {{ __('before sensitive operations or after bulk imports.') }}</li>
                         <li><strong>{{ __('Daily') }}</strong> {{ __('and') }} <strong>{{ __('monthly') }}</strong> {{ __('snapshots tag the reporting window for audit; full ledger checks always use the current database state.') }}</li>
+                        <li>{{ __('Open') }} <strong>{{ __('Exceptions') }}</strong> {{ __('for the nightly control queue — resolve, defer, or run the batch from header actions.') }}</li>
                         <li>{{ __('Open') }} <strong>{{ __('Snapshots') }}</strong> {{ __('to inspect history; download') }} <strong>JSON</strong> {{ __('(full machine-readable) or') }} <strong>PDF</strong> {{ __('(human-readable summary, truncated payload).') }}</li>
                         <li>{{ __('Optional') }} <strong>{{ __('statement balance') }}</strong> {{ __('on each run compares master cash (book) to your declared closing balance; scheduled runs read') }} <code class="text-xs">reconciliation.bank_statement_balance</code> {{ __('and') }} <code class="text-xs">reconciliation.bank_statement_date</code> {{ __('from settings.') }}</li>
                     </ul>
+                </div>
+            @elseif ($sideTab === 'exceptions')
+                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('Reconciliation exceptions') }}</h3>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ __('Operational issues raised by the nightly batch or realtime checks. Resolve individually or run the batch again from header actions.') }}</p>
+                    </div>
+                    <div wire:key="reconciliation-exceptions-table">
+                        {{ $this->table }}
+                    </div>
                 </div>
             @elseif ($sideTab === 'snapshots')
                 <div class="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900/60">
@@ -200,7 +239,7 @@
                     <h4 class="mt-6 text-sm font-semibold text-gray-900 dark:text-white">{{ __('Two complementary layers') }}</h4>
                     <ul class="text-sm text-gray-600 dark:text-gray-400">
                         <li><strong>{{ __('Audit snapshots') }}</strong> — {{ __('this page stores historical reports (realtime / daily / monthly) with full check payloads for period close and external audit.') }}</li>
-                        <li><strong>{{ __('Exception queue') }}</strong> — {{ __('Reconciliation exceptions (Fund Management) is the operational control layer refreshed nightly by') }} <code class="text-xs">fund:nightly-reconciliation</code> {{ __('with auto-resolve and admin actions.') }}</li>
+                        <li><strong>{{ __('Exception queue') }}</strong> — {{ __('the Exceptions tab is refreshed nightly by') }} <code class="text-xs">fund:nightly-reconciliation</code> {{ __('with auto-resolve and admin actions.') }}</li>
                     </ul>
                     <h4 class="mt-6 text-sm font-semibold text-gray-900 dark:text-white">{{ __('Checks') }}</h4>
                     <ul class="text-sm text-gray-600 dark:text-gray-400">

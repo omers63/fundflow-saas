@@ -7,8 +7,8 @@ use Illuminate\Support\Facades\App;
 use Tests\TestCase;
 
 uses(TestCase::class);
+use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrides\LoanEligibilityOverrideResource;
-use App\Filament\Tenant\Resources\ReconciliationExceptions\ReconciliationExceptionResource;
 use App\Filament\Tenant\Support\TenantNavigation;
 
 test('tenant navigation group keys are accounts fund management then system', function () {
@@ -18,10 +18,10 @@ test('tenant navigation group keys are accounts fund management then system', fu
         ->and(TenantNavigation::SORT_DEPOSITS)->toBeLessThan(TenantNavigation::SORT_CONTRIBUTIONS)
         ->and(TenantNavigation::SORT_STATEMENTS)->toBeLessThan(TenantNavigation::SORT_RECONCILIATION)
         ->and(TenantNavigation::groupKeys())->toBe([
-            TenantNavigation::GROUP_ACCOUNTS,
-            TenantNavigation::GROUP_FUND_MANAGEMENT,
-            TenantNavigation::GROUP_SYSTEM,
-        ]);
+                TenantNavigation::GROUP_ACCOUNTS,
+                TenantNavigation::GROUP_FUND_MANAGEMENT,
+                TenantNavigation::GROUP_SYSTEM,
+            ]);
 });
 
 test('contribution cycles page is hidden from navigation', function () {
@@ -29,9 +29,9 @@ test('contribution cycles page is hidden from navigation', function () {
 });
 
 test('reconciliation is last under fund management navigation group', function () {
-    expect(ReconciliationExceptionResource::getNavigationGroup())->toBe(TenantNavigation::GROUP_FUND_MANAGEMENT)
-        ->and(ReconciliationExceptionResource::shouldRegisterNavigation())->toBeTrue()
-        ->and(ReconciliationExceptionResource::getNavigationSort())->toBe(TenantNavigation::SORT_RECONCILIATION);
+    expect(ReconciliationOverviewPage::getNavigationGroup())->toBe(TenantNavigation::GROUP_FUND_MANAGEMENT)
+        ->and(ReconciliationOverviewPage::shouldRegisterNavigation())->toBeTrue()
+        ->and(ReconciliationOverviewPage::getNavigationSort())->toBe(TenantNavigation::SORT_RECONCILIATION);
 });
 
 test('loan overrides are hidden from navigation', function () {

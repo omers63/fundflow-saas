@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Filament\Tenant\Pages\JobsPage;
+use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Filament\Tenant\Pages\Settings;
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
@@ -18,7 +19,6 @@ use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
-use App\Filament\Tenant\Resources\ReconciliationExceptions\ReconciliationExceptionResource;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundPosting;
@@ -46,7 +46,8 @@ final class TenantDashboardService
         protected MasterAccountsInsightsService $masterAccounts,
         protected BankAccountsInsightsService $bankAccounts,
         protected LoanDelinquencyService $delinquency,
-    ) {}
+    ) {
+    }
 
     /**
      * @return array<string, mixed>
@@ -59,7 +60,7 @@ final class TenantDashboardService
         assert($user instanceof User);
 
         $masters = Account::master()->get()->keyBy('type');
-        $masterBalance = fn (string $type): float => (float) ($masters->get($type)?->balance ?? 0);
+        $masterBalance = fn(string $type): float => (float) ($masters->get($type)?->balance ?? 0);
 
         $loanPortfolio = $this->loanInsights->portfolioSnapshot();
         $masterSnapshot = $this->masterAccounts->snapshot();
@@ -363,7 +364,7 @@ final class TenantDashboardService
 
     private function openReconciliationCount(): int
     {
-        if (! Schema::hasTable('reconciliation_exceptions')) {
+        if (!Schema::hasTable('reconciliation_exceptions')) {
             return 0;
         }
 
@@ -411,7 +412,7 @@ final class TenantDashboardService
                 )),
                 'tone' => 'rose',
                 'icon' => 'heroicon-o-shield-exclamation',
-                'url' => ReconciliationExceptionResource::getUrl('index'),
+                'url' => ReconciliationOverviewPage::getUrl(['sideTab' => 'exceptions']),
             ];
         }
 
@@ -565,14 +566,14 @@ final class TenantDashboardService
                 'title' => Lang::ui('System'),
                 'links' => [
                     ['label' => Lang::ui('Jobs & commands'), 'icon' => 'heroicon-o-cpu-chip', 'url' => JobsPage::getUrl()],
-                    ['label' => Lang::ui('Reconciliation'), 'icon' => 'heroicon-o-shield-exclamation', 'url' => ReconciliationExceptionResource::getUrl('index')],
+                    ['label' => Lang::ui('Reconciliation'), 'icon' => 'heroicon-o-shield-exclamation', 'url' => ReconciliationOverviewPage::getUrl()],
                     ['label' => Lang::ui('Fund settings'), 'icon' => 'heroicon-o-cog-6-tooth', 'url' => Settings::getUrl()],
                 ],
             ],
         ];
 
         return array_map(
-            fn (array $section): array => [
+            fn(array $section): array => [
                 ...$section,
                 'links' => Lang::formatLabeledRows($section['links']),
             ],

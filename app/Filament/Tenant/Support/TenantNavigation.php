@@ -41,8 +41,6 @@ final class TenantNavigation
     /** Last item in Fund Management (after statements, loans cluster, etc.). */
     public const SORT_RECONCILIATION = 8;
 
-    public const SORT_RECONCILIATION_EXCEPTIONS = 9;
-
     public const SORT_JOBS = 1;
 
     public const SORT_SYSTEM_MAINTENANCE = 2;

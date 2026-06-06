@@ -8,7 +8,6 @@ use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
-use App\Filament\Tenant\Resources\ReconciliationExceptions\ReconciliationExceptionResource;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\SystemJobRun;
 use App\Services\ReconciliationService;
@@ -117,7 +116,7 @@ class JobsPage extends Page implements HasTable
             Action::make('open_reconciliation')
                 ->label(__('Reconciliation queue'))
                 ->icon('heroicon-o-shield-exclamation')
-                ->url(ReconciliationExceptionResource::getUrl('index')),
+                ->url(ReconciliationOverviewPage::getUrl(['sideTab' => 'exceptions'])),
             Action::make('run_reconciliation')
                 ->label(__('Run reconciliation'))
                 ->icon('heroicon-o-shield-check')

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Tenant\Pages\JobsPage;
+use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Filament\Tenant\Resources\FundAuditLogs\FundAuditLogResource;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrides\LoanEligibilityOverrideResource;
 use App\Filament\Tenant\Resources\ReconciliationExceptions\ReconciliationExceptionResource;
@@ -377,8 +378,8 @@ test('reconciliation resource registers in tenant panel navigation', function ()
     $this->actingAs($admin, 'tenant');
 
     expect(ReconciliationExceptionResource::canAccess())->toBeTrue()
-        ->and(ReconciliationExceptionResource::shouldRegisterNavigation())->toBeTrue()
-        ->and(ReconciliationExceptionResource::getUrl('index'))->toContain('reconciliation-exceptions');
+        ->and(ReconciliationExceptionResource::shouldRegisterNavigation())->toBeFalse()
+        ->and(ReconciliationOverviewPage::getUrl(['sideTab' => 'exceptions']))->toContain('reconciliation');
 });
 
 test('reconciliation exception records can be deleted individually or in bulk', function () {

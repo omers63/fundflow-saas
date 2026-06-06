@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Tenant\Resources\ReconciliationExceptions\Tables\ReconciliationExceptionsTable;
 use App\Filament\Tenant\Support\TenantNavigation;
+use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Services\ReconciliationPdfService;
 use App\Services\ReconciliationReportService;
+use App\Services\ReconciliationService;
 use BackedEnum;
 use Carbon\Carbon;
 use Filament\Actions\Action;
@@ -18,13 +21,17 @@ use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Concerns\InteractsWithTable;
+use Filament\Tables\Contracts\HasTable;
+use Filament\Tables\Table;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\Url;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use UnitEnum;
 
-class ReconciliationOverviewPage extends Page
+class ReconciliationOverviewPage extends Page implements HasTable
 {
+    use InteractsWithTable;
     use TranslatesPageNavigationLabel;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedScale;
@@ -39,7 +46,7 @@ class ReconciliationOverviewPage extends Page
 
     protected string $view = 'filament.tenant.pages.reconciliation';
 
-    /** @var 'overview'|'snapshots'|'methodology' */
+    /** @var 'overview'|'exceptions'|'snapshots'|'methodology' */
     #[Url]
     public string $sideTab = 'overview';
 
@@ -52,23 +59,81 @@ class ReconciliationOverviewPage extends Page
 
     public static function shouldRegisterNavigation(): bool
     {
-        return Schema::hasTable('reconciliation_snapshots');
+        return Schema::hasTable('reconciliation_exceptions')
+            || Schema::hasTable('reconciliation_snapshots');
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        if (!Schema::hasTable('reconciliation_exceptions')) {
+            return null;
+        }
+
+        try {
+            $count = ReconciliationException::query()->open()->count();
+
+            return $count > 0 ? (string) $count : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'danger';
     }
 
     public function getTitle(): string
     {
-        return __('Financial reconciliation');
+        return __('Reconciliation');
     }
 
     public function getSubheading(): ?string
     {
-        return __('Ledger integrity, bank vs book (optional), contributions, loans, pipeline — snapshots, JSON, and PDF.');
+        return __('Audit snapshots, exception queue, and ledger integrity checks.');
     }
 
     public function mount(): void
     {
-        if (!in_array($this->sideTab, ['overview', 'snapshots', 'methodology'], true)) {
+        if (!in_array($this->sideTab, ['overview', 'exceptions', 'snapshots', 'methodology'], true)) {
             $this->sideTab = 'overview';
+        }
+    }
+
+    public function setSideTab(string $tab): void
+    {
+        if (!in_array($tab, ['overview', 'exceptions', 'snapshots', 'methodology'], true)) {
+            return;
+        }
+
+        if ($this->sideTab === $tab) {
+            return;
+        }
+
+        $this->sideTab = $tab;
+
+        if ($tab === 'exceptions') {
+            $this->resetTable();
+        }
+    }
+
+    public function table(Table $table): Table
+    {
+        return ReconciliationExceptionsTable::configure(
+            $table->query(ReconciliationException::query())
+        );
+    }
+
+    public function getOpenExceptionCount(): int
+    {
+        if (!Schema::hasTable('reconciliation_exceptions')) {
+            return 0;
+        }
+
+        try {
+            return ReconciliationException::query()->open()->count();
+        } catch (\Throwable) {
+            return 0;
         }
     }
 
@@ -92,6 +157,30 @@ class ReconciliationOverviewPage extends Page
         ];
 
         return [
+            Action::make('run_nightly')
+                ->label(__('Run reconciliation batch'))
+                ->icon('heroicon-o-arrow-path')
+                ->color('warning')
+                ->visible($canRun)
+                ->requiresConfirmation()
+                ->action(function (): void {
+                    $result = app(ReconciliationService::class)->runNightlyBatch();
+
+                    Notification::make()
+                        ->title($result['halted']
+                            ? __('Reconciliation halted')
+                            : __('Reconciliation complete'))
+                        ->body(__('Raised: :raised | Resolved: :resolved', [
+                            'raised' => $result['raised'],
+                            'resolved' => $result['resolved'],
+                        ]))
+                        ->color($result['halted'] ? 'danger' : 'success')
+                        ->send();
+
+                    $this->resetTable();
+                    $this->dispatch('$refresh');
+                }),
+
             Action::make('run_realtime')
                 ->label(__('Run now (real-time)'))
                 ->icon('heroicon-o-play')
