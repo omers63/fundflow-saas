@@ -7,6 +7,8 @@ use App\Http\Controllers\Tenant\ContributionImportSampleController;
 use App\Http\Controllers\Tenant\DatabaseBackupDownloadController;
 use App\Http\Controllers\Tenant\DirectMessageAttachmentController;
 use App\Http\Controllers\Tenant\FiscalCloseExportDownloadController;
+use App\Http\Controllers\Tenant\LegacyPaymentClassifiedDownloadController;
+use App\Http\Controllers\Tenant\LegacyPaymentImportSampleController;
 use App\Http\Controllers\Tenant\LoanImportSampleController;
 use App\Http\Controllers\Tenant\LoanRepaymentImportSampleController;
 use App\Http\Controllers\Tenant\MemberImportSampleController;
@@ -76,10 +78,13 @@ Route::middleware([
     Route::get('/downloads/member-import-sample', MemberImportSampleController::class)
         ->name('tenant.downloads.member-import-sample');
 
+    Route::get('/downloads/legacy-payments-import-sample', LegacyPaymentImportSampleController::class)
+        ->name('tenant.downloads.legacy-payments-import-sample');
+
     Route::get('/manifest.json', TenantManifestController::class)
         ->name('tenant.manifest');
 
-    Route::get('/offline', fn () => view('offline'));
+    Route::get('/offline', fn() => view('offline'));
 
     Route::get('/storage/{path}', function (string $path) {
         return redirect(tenant_asset($path), 301);
@@ -106,6 +111,9 @@ Route::middleware([
 
         Route::get('/admin/system/backups/{databaseBackup}/download', StoredDatabaseBackupDownloadController::class)
             ->name('tenant.admin.system.backup-stored-download');
+
+        Route::get('/admin/legacy-migration/classify-payments', LegacyPaymentClassifiedDownloadController::class)
+            ->name('tenant.admin.legacy-migration.classify-payments');
 
         Route::get('/direct-messages/{message}/attachment/{index}', DirectMessageAttachmentController::class)
             ->whereNumber('index')
