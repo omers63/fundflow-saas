@@ -213,3 +213,136 @@
 .fi-body.fi-panel-tenant .ff-dashboard-balance:nth-child(3) {
   animation-delay: 0.12s;
 }
+
+/* System maintenance — unified page layout */
+.fi-body.fi-panel-tenant .fi-page-system-maintenance .fi-page-content {
+  max-width: none;
+}
+
+.fi-body.fi-panel-tenant .fi-page-system-maintenance .ff-system-maintenance {
+  max-width: 72rem;
+}
+
+.fi-body.fi-panel-tenant .ff-maintenance-panel {
+  overflow: visible;
+  border-radius: 0.75rem;
+  border: 1px solid rgb(229 231 235);
+  background-color: rgb(255 255 255);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-maintenance-panel {
+  border-color: rgb(255 255 255 / 0.1);
+  background-color: rgb(17 24 39);
+}
+
+.fi-body.fi-panel-tenant .ff-maintenance-panel__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  border-bottom: 1px solid rgb(243 244 246);
+  padding: 1rem 1.25rem;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-maintenance-panel__header {
+  border-bottom-color: rgb(255 255 255 / 0.08);
+}
+
+.fi-body.fi-panel-tenant .ff-maintenance-panel__header--muted {
+  align-items: center;
+  justify-content: space-between;
+  background-color: rgb(249 250 251);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-maintenance-panel__header--muted {
+  background-color: rgb(31 41 55 / 0.5);
+}
+
+.fi-body.fi-panel-tenant .ff-maintenance-panel__header--emerald {
+  background: linear-gradient(to right, rgb(236 253 245), rgb(240 253 250));
+}
+
+.dark .fi-body.fi-panel-tenant .ff-maintenance-panel__header--emerald {
+  background: linear-gradient(to right, rgb(6 78 59 / 0.2), rgb(19 78 74 / 0.2));
+}
+
+.fi-body.fi-panel-tenant .ff-maintenance-panel__header--blue {
+  background: linear-gradient(to right, rgb(248 250 252), rgb(239 246 255));
+}
+
+.dark .fi-body.fi-panel-tenant .ff-maintenance-panel__header--blue {
+  background: linear-gradient(to right, rgb(17 24 39), rgb(23 37 84 / 0.4));
+}
+
+.fi-body.fi-panel-tenant .ff-maintenance-panel__body {
+  padding: 1.25rem;
+}
+
+.fi-body.fi-panel-tenant .ff-maintenance-callout {
+  border-radius: 0.5rem;
+  border: 1px solid rgb(243 244 246);
+  background-color: rgb(249 250 251);
+  padding: 1rem;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-maintenance-callout {
+  border-color: rgb(255 255 255 / 0.08);
+  background-color: rgb(17 24 39 / 0.4);
+}
+
+.fi-body.fi-panel-tenant .ff-maintenance-stat {
+  border-radius: 0.5rem;
+  border: 1px solid rgb(243 244 246);
+  background-color: rgb(249 250 251);
+  padding: 1rem;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-maintenance-stat {
+  border-color: rgb(255 255 255 / 0.08);
+  background-color: rgb(17 24 39 / 0.5);
+}
+
+.fi-body.fi-panel-tenant .ff-maintenance-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.25rem;
+}
+
+.fi-body.fi-panel-tenant .ff-maintenance-danger-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgb(153 27 27);
+  background: linear-gradient(to bottom right, rgb(220 38 38), rgb(225 29 72));
+  padding: 1.25rem;
+  box-shadow: 0 4px 6px -1px rgb(127 29 29 / 0.25);
+}
+
+.fi-body.fi-panel-tenant .ff-system-maintenance .fi-wi-widget {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.fi-body.fi-panel-tenant .ff-system-maintenance .fi-wi-widget > .fi-section,
+.fi-body.fi-panel-tenant .ff-system-maintenance .fi-wi-widget > div > .fi-section {
+  overflow: visible;
+  border-radius: 0.75rem;
+  border: 1px solid rgb(229 231 235);
+  background-color: rgb(255 255 255);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-system-maintenance .fi-wi-widget > .fi-section,
+.dark .fi-body.fi-panel-tenant .ff-system-maintenance .fi-wi-widget > div > .fi-section {
+  border-color: rgb(255 255 255 / 0.1);
+  background-color: rgb(17 24 39);
+}
+
+.fi-body.fi-panel-tenant .ff-system-maintenance .fi-ta-ctn {
+  overflow: visible;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}

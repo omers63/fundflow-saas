@@ -6,14 +6,13 @@ namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Support\TenantNavigation;
-use App\Filament\Tenant\Widgets\DatabaseBackupOverviewWidget;
-use App\Filament\Tenant\Widgets\DatabaseBackupsTableWidget;
 use App\Services\DatabaseMaintenanceService;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Schema;
 use UnitEnum;
@@ -31,6 +30,8 @@ class SystemMaintenancePage extends Page
     protected static ?string $slug = 'system-maintenance';
 
     protected static ?int $navigationSort = TenantNavigation::SORT_SYSTEM_MAINTENANCE;
+
+    protected Width|string|null $maxContentWidth = Width::SevenExtraLarge;
 
     protected string $view = 'filament.tenant.pages.system-maintenance';
 
@@ -63,28 +64,17 @@ class SystemMaintenancePage extends Page
         return __('System maintenance');
     }
 
-    protected function getHeaderWidgets(): array
+    public function getSubheading(): ?string
     {
-        return [
-            DatabaseBackupOverviewWidget::class,
-        ];
+        return __('Back up your tenant database, review stored copies, and manage destructive purge operations.');
     }
 
-    protected function getFooterWidgets(): array
+    /**
+     * @return array<string>
+     */
+    public function getPageClasses(): array
     {
-        return [
-            DatabaseBackupsTableWidget::class,
-        ];
-    }
-
-    public function getHeaderWidgetsColumns(): int|array
-    {
-        return 1;
-    }
-
-    public function getFooterWidgetsColumns(): int|array
-    {
-        return 1;
+        return ['fi-page-system-maintenance'];
     }
 
     protected function getHeaderActions(): array
@@ -131,8 +121,8 @@ class SystemMaintenancePage extends Page
                 ->requiresConfirmation()
                 ->modalHeading(__('Purge tables without soft deletes?'))
                 ->modalDescription(
-                    __('All rows in each listed table will be permanently removed. ').
-                    __('Tables with a deleted_at column are skipped. ').
+                    __('All rows in each listed table will be permanently removed. ') .
+                    __('Tables with a deleted_at column are skipped. ') .
                     __('Users, permissions, sessions, queues, cache, and migrations are always preserved.')
                 )
                 ->schema([
