@@ -49,7 +49,7 @@ class BankAccountsResource extends Resource
     public static function table(Table $table): Table
     {
         $afterLedgerMutation = Livewire::current() instanceof ListRecords
-            ? fn(): mixed => Livewire::current()->resetTable()
+            ? fn (): mixed => Livewire::current()->resetTable()
             : null;
 
         return match (self::resolveListBankAccountsTab()) {
@@ -59,6 +59,7 @@ class BankAccountsResource extends Resource
             ),
             'imports', 'transactions' => BankTransactionsTable::configure(
                 $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Statement lines'))),
+                $afterLedgerMutation,
             ),
             'clearance' => PendingOperationalClearanceTable::configure(
                 $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Pending bank match'))),

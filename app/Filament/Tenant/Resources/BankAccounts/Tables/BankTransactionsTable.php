@@ -4,6 +4,7 @@ namespace App\Filament\Tenant\Resources\BankAccounts\Tables;
 
 use App\Filament\Support\ActionModalFailure;
 use App\Filament\Support\BankTransactionTableActions;
+use App\Filament\Support\BankWorkspaceImportTableHeaderActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -13,6 +14,7 @@ use App\Models\Tenant\Setting;
 use App\Services\BankClearingMatchService;
 use App\Services\FundFlowService;
 use App\Support\BankTransactionWorkflow;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -32,10 +34,13 @@ use Illuminate\Database\Eloquent\Collection;
 
 class BankTransactionsTable
 {
-    public static function configure(Table $table): Table
+    public static function configure(Table $table, ?Closure $afterImport = null): Table
     {
         return TableGrouping::apply(
             $table
+                ->headerActions([
+                    BankWorkspaceImportTableHeaderActions::bankStatementImportAction($afterImport),
+                ])
                 ->columns([
                     TextColumn::make('transaction_date')
                         ->date()

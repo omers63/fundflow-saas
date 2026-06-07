@@ -6,6 +6,7 @@ use App\Filament\Concerns\RegistersFundPublicShell;
 use App\Filament\Support\DatabaseNotificationsRefresh;
 use App\Filament\Tenant\Pages\Dashboard;
 use App\Filament\Tenant\Support\TenantNavigation;
+use App\Http\Middleware\StartWallClockSession;
 use App\Http\Middleware\UseWallClockForSessions;
 use App\Livewire\Tenant\TenantAdminLoginPage;
 use App\Support\PublicPageSettings;
@@ -21,7 +22,6 @@ use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
-use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\HtmlString;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -75,7 +75,7 @@ class TenantPanelProvider extends PanelProvider
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
-                StartSession::class,
+                StartWallClockSession::class,
                 UseWallClockForSessions::class,
                 AuthenticateSession::class,
                 ShareErrorsFromSession::class,

@@ -2,12 +2,14 @@
 
 use App\Http\Middleware\InitializeTenancyByDomainEarly;
 use App\Http\Middleware\SetApplicationLocale;
+use App\Http\Middleware\StartWallClockSession;
 use App\Http\Middleware\UseWallClockForSessions;
 use Filament\Http\Middleware\Authenticate as FilamentAuthenticate;
 use Filament\Http\Middleware\AuthenticateSession as FilamentAuthenticateSession;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Session\Middleware\StartSession;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -35,6 +37,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->prepend(InitializeTenancyByDomainEarly::class);
+        $middleware->web(replace: [
+            StartSession::class => StartWallClockSession::class,
+        ]);
         $middleware->web(append: [
             SetApplicationLocale::class,
             UseWallClockForSessions::class,

@@ -70,7 +70,34 @@ test('member login page keeps a valid session cookie when business day is overri
         ->first(fn ($cookie) => $cookie->getName() === config('session.cookie'));
 
     expect($sessionCookie)->not->toBeNull()
-        ->and($sessionCookie->getExpiresTime())->toBeGreaterThan(time());
+        ->and($sessionCookie->getExpiresTime())->toBeGreaterThan(time())
+        ->and($sessionCookie->getExpiresTime())->toBeLessThan(time() + (config('session.lifetime') * 60) + 120);
+});
+
+test('tenant admin login keeps session cookie expiry on wall clock when business day is overridden to the future', function () {
+    Setting::set('general', 'business_day', '2030-06-01');
+
+    Carbon::setTestNow(Carbon::parse('2030-06-01 12:00:00'));
+
+    $tenant = Tenant::find('testing');
+    $domain = 'testing.localhost';
+
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
+        $tenant->domains()->create(['domain' => $domain]);
+    }
+
+    $response = $this->get('http://'.$domain.'/admin/login');
+
+    $response->assertSuccessful();
+
+    $sessionCookie = collect($response->headers->getCookies())
+        ->first(fn ($cookie) => $cookie->getName() === config('session.cookie'));
+
+    expect($sessionCookie)->not->toBeNull()
+        ->and($sessionCookie->getExpiresTime())->toBeGreaterThan(time())
+        ->and($sessionCookie->getExpiresTime())->toBeLessThan(time() + (config('session.lifetime') * 60) + 120);
+
+    Carbon::setTestNow();
 });
 
 test('database sessions expire on wall clock even when business day is overridden to the future', function () {

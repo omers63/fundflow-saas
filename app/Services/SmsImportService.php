@@ -8,14 +8,58 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\SmsImportSession;
 use App\Models\Tenant\SmsImportTemplate;
 use App\Models\Tenant\SmsTransaction;
+use App\Support\BusinessDay;
 use App\Support\CsvStringParser;
 use Carbon\Carbon;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 final class SmsImportService
 {
-    public function import(SmsImportSession $session): void
+    /**
+     * Import an SMS CSV file (same flow as bank statement import, with automatic member match and cash posting).
+     *
+     * @return array{session: SmsImportSession, imported: int, duplicates: int, errors: int, posted: int}
+     */
+    public function importCsv(
+        UploadedFile $file,
+        string $relativeStoragePath,
+        ?int $importedBy = null,
+        ?string $bankName = null,
+        ?int $templateId = null,
+        ?string $notes = null,
+    ): array {
+        $template = $templateId !== null
+            ? SmsImportTemplate::query()->findOrFail($templateId)
+            : SmsImportTemplate::getDefault($bankName);
+
+        if ($template === null) {
+            throw new \RuntimeException(__('No SMS import template configured.'));
+        }
+
+        $session = SmsImportSession::query()->create([
+            'bank_name' => filled($bankName) ? $bankName : $template->bank_name,
+            'template_id' => $template->id,
+            'imported_by' => $importedBy,
+            'filename' => $file->getClientOriginalName(),
+            'file_path' => ltrim($relativeStoragePath, '/'),
+            'notes' => $notes,
+            'status' => 'pending',
+        ]);
+
+        $stats = $this->import($session);
+
+        return [
+            'session' => $session->fresh(),
+            ...$stats,
+        ];
+    }
+
+    /**
+     * @return array{imported: int, duplicates: int, errors: int, posted: int}
+     */
+    public function import(SmsImportSession $session): array
     {
         $session->update(['status' => 'processing']);
 
@@ -25,10 +69,10 @@ final class SmsImportService
             $session->update([
                 'status' => 'failed',
                 'error_log' => [__('SMS import template was not found.')],
-                'completed_at' => now(),
+                'completed_at' => BusinessDay::now(),
             ]);
 
-            return;
+            return ['imported' => 0, 'duplicates' => 0, 'errors' => 1, 'posted' => 0];
         }
 
         try {
@@ -39,6 +83,7 @@ final class SmsImportService
             $importedCount = 0;
             $duplicateCount = 0;
             $errorCount = 0;
+            $postedCount = 0;
 
             foreach ($rows as $lineNumber => $row) {
                 try {
@@ -51,7 +96,7 @@ final class SmsImportService
                     $duplicate = $this->findDuplicate($parsed, $template, $session->bank_name);
                     $matchedMemberId = $this->matchMember($parsed['raw_sms'], $template);
 
-                    SmsTransaction::query()->create([
+                    $tx = SmsTransaction::query()->create([
                         'bank_name' => $session->bank_name,
                         'import_session_id' => $session->id,
                         'member_id' => $matchedMemberId,
@@ -69,6 +114,10 @@ final class SmsImportService
                         $duplicateCount++;
                     } else {
                         $importedCount++;
+
+                        if ($this->tryAutoPost($tx, $session, $errors, $lineNumber)) {
+                            $postedCount++;
+                        }
                     }
                 } catch (Throwable $e) {
                     $errorCount++;
@@ -87,14 +136,49 @@ final class SmsImportService
                 'duplicate_count' => $duplicateCount,
                 'error_count' => $errorCount,
                 'error_log' => $errors !== [] ? $errors : null,
-                'completed_at' => now(),
+                'completed_at' => BusinessDay::now(),
             ]);
+
+            return [
+                'imported' => $importedCount,
+                'duplicates' => $duplicateCount,
+                'errors' => $errorCount,
+                'posted' => $postedCount,
+            ];
         } catch (Throwable $e) {
             $session->update([
                 'status' => 'failed',
                 'error_log' => [$e->getMessage()],
-                'completed_at' => now(),
+                'completed_at' => BusinessDay::now(),
             ]);
+
+            return ['imported' => 0, 'duplicates' => 0, 'errors' => 1, 'posted' => 0];
+        }
+    }
+
+    /**
+     * @param  list<string>  $errors
+     */
+    private function tryAutoPost(SmsTransaction $tx, SmsImportSession $session, array &$errors, int|string $lineNumber): bool
+    {
+        if ($tx->is_duplicate || $tx->member_id === null) {
+            return false;
+        }
+
+        $member = Member::query()->find($tx->member_id);
+
+        if ($member === null) {
+            return false;
+        }
+
+        try {
+            app(AccountingService::class)->postSmsTransactionToCash($tx->fresh(), $member);
+
+            return true;
+        } catch (Throwable $e) {
+            $errors[] = "Row {$lineNumber}: {$e->getMessage()}";
+
+            return false;
         }
     }
 
@@ -103,7 +187,7 @@ final class SmsImportService
      */
     private function parseCsv(string $filePath, SmsImportTemplate $template): array
     {
-        $fullPath = Storage::disk('local')->path($filePath);
+        $fullPath = $this->resolveCsvAbsolutePath($filePath);
         $content = file_get_contents($fullPath);
 
         if ($content === false) {
@@ -139,6 +223,15 @@ final class SmsImportService
         }
 
         return $rows;
+    }
+
+    private function resolveCsvAbsolutePath(string $filePath): string
+    {
+        if (Storage::disk('public')->exists($filePath)) {
+            return Storage::disk('public')->path($filePath);
+        }
+
+        return Storage::disk('local')->path($filePath);
     }
 
     /**

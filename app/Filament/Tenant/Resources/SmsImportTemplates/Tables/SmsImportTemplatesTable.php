@@ -7,6 +7,7 @@ namespace App\Filament\Tenant\Resources\SmsImportTemplates\Tables;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Resources\SmsImportTemplates\Pages\CreateSmsImportTemplate;
 use App\Support\Lang;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
@@ -14,6 +15,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -23,7 +25,17 @@ use Filament\Tables\Table;
 
 final class SmsImportTemplatesTable
 {
-    public static function configure(Table $table, bool $embedInBankWorkspace = false): Table
+    public static function createAction(bool $fromSettings = false): CreateAction
+    {
+        return CreateAction::make()
+            ->label(__('New SMS template'))
+            ->icon(Heroicon::OutlinedChatBubbleBottomCenterText)
+            ->url(fn (): string => CreateSmsImportTemplate::getUrl(
+                $fromSettings ? ['from' => 'settings'] : [],
+            ));
+    }
+
+    public static function configure(Table $table, bool $embedInBankWorkspace = false, bool $fromSettings = false): Table
     {
         return TableGrouping::apply($table
             ->heading($embedInBankWorkspace ? null : __('SMS import templates'))
@@ -72,8 +84,7 @@ final class SmsImportTemplatesTable
                 TrashedFilter::make(),
             ])
             ->headerActions([
-                CreateAction::make()
-                    ->label(__('New SMS template')),
+                self::createAction($fromSettings),
             ])
             ->recordActions(TableRecordActionGroups::wrap([
                 EditAction::make(),

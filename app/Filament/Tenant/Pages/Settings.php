@@ -3,12 +3,15 @@
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Support\SmsImportTemplateFieldsets;
 use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
 use App\Filament\Tenant\Resources\LoanTiers\LoanTierResource;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\BankTemplate;
 use App\Models\Tenant\Setting;
+use App\Models\Tenant\SmsImportTemplate;
 use App\Services\FiscalClose\FiscalClosePeriodResolver;
+use App\Services\SmsImportTemplateSyncService;
 use App\Support\ArabicDisplaySettings;
 use App\Support\BusinessDay;
 use App\Support\BusinessDaySettings;
@@ -44,7 +47,6 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
-use Filament\Schemas\Components\View as SchemaView;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\HtmlString;
@@ -107,6 +109,31 @@ class Settings extends Page implements HasForms
             'is_default' => $t->is_default,
         ])->toArray();
 
+        $smsTemplates = SmsImportTemplate::query()->orderBy('name')->get()->map(fn(SmsImportTemplate $t) => [
+            'id' => $t->id,
+            'bank_name' => $t->bank_name,
+            'name' => $t->name,
+            'is_default' => $t->is_default,
+            'delimiter' => $t->delimiter,
+            'encoding' => $t->encoding ?? 'UTF-8',
+            'has_header' => $t->has_header,
+            'skip_rows' => $t->skip_rows,
+            'sms_column' => $t->sms_column,
+            'date_column' => $t->date_column,
+            'date_format' => $t->date_format,
+            'amount_pattern' => $t->amount_pattern,
+            'date_pattern' => $t->date_pattern,
+            'date_pattern_format' => $t->date_pattern_format,
+            'reference_pattern' => $t->reference_pattern,
+            'credit_keywords' => $t->credit_keywords ?? ['credited', 'received', 'deposit', 'credit'],
+            'debit_keywords' => $t->debit_keywords ?? ['debited', 'paid', 'purchase', 'debit', 'withdraw'],
+            'default_transaction_type' => $t->default_transaction_type ?? 'credit',
+            'duplicate_match_fields' => $t->duplicate_match_fields ?? ['date', 'amount', 'reference'],
+            'duplicate_date_tolerance' => $t->duplicate_date_tolerance ?? 0,
+            'member_match_pattern' => $t->member_match_pattern,
+            'member_match_field' => $t->member_match_field ?? 'member_number',
+        ])->toArray();
+
         $reconciliation = Setting::getGroup('reconciliation');
 
         $this->form->fill([
@@ -150,6 +177,7 @@ class Settings extends Page implements HasForms
             'notifications_twilio_sms_from' => $notifications['twilio_sms_from'] ?? '',
             'notifications_twilio_whatsapp_from' => $notifications['twilio_whatsapp_from'] ?? '',
             'bank_templates' => $templates,
+            'sms_templates' => $smsTemplates,
             'fund_name_en' => filled($public['fund_name_en'] ?? null)
                 ? $public['fund_name_en']
                 : ($general['fund_name'] ?? 'Family Fund'),
@@ -758,9 +786,19 @@ class Settings extends Page implements HasForms
                             ->icon('heroicon-o-chat-bubble-bottom-center-text')
                             ->schema([
                                 Section::make(__('SMS import templates'))
-                                    ->description(__('Parse bank alert SMS exports: column mapping, regex extraction, member auto-match, and duplicate rules. Used when importing SMS files under Bank Accounts → SMS.'))
+                                    ->description(__('Define templates for parsing bank alert SMS exports. Select one as default per bank label (or globally when bank is blank).'))
                                     ->schema([
-                                        SchemaView::make('filament.tenant.pages.partials.sms-import-templates-widget'),
+                                        Repeater::make('sms_templates')
+                                            ->label('')
+                                            ->schema(SmsImportTemplateFieldsets::forSettingsRepeater())
+                                            ->columns(1)
+                                            ->itemLabel(fn(array $state): ?string => trim(
+                                                (filled($state['bank_name'] ?? null) ? $state['bank_name'] . ' — ' : '')
+                                                . ($state['name'] ?? __('New template'))
+                                            ))
+                                            ->collapsible()
+                                            ->defaultItems(0)
+                                            ->addActionLabel(__('Add template')),
                                     ]),
                             ]),
                     ]),
@@ -1085,6 +1123,8 @@ class Settings extends Page implements HasForms
                     ->update(['is_default' => false]);
             }
         }
+
+        app(SmsImportTemplateSyncService::class)->syncFromSettingsForm($state['sms_templates'] ?? []);
 
         Notification::make()
             ->title(__('Settings saved'))

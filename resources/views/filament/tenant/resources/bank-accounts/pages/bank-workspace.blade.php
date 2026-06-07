@@ -4,7 +4,7 @@
         <div>
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('Workspace') }}</h3>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {{ __('Switch between bank statement and SMS channels. SMS parsing templates are managed under Settings → SMS Templates.') }}
+                {{ __('Switch between bank statement and SMS channels. Parsing templates are managed under Settings.') }}
             </p>
         </div>
     </div>

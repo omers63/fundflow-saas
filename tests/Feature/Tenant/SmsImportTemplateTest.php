@@ -9,11 +9,34 @@ use App\Filament\Tenant\Resources\SmsImportTemplates\SmsImportTemplateResource;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\SmsImportTemplate;
 use App\Models\Tenant\User;
+use App\Services\SmsImportTemplateSyncService;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
+
+/**
+ * @return array<string, mixed>
+ */
+function sampleSmsTemplateRepeaterItem(array $overrides = []): array
+{
+    return array_merge([
+        'name' => 'Sample SMS Template',
+        'bank_name' => 'SNB',
+        'sms_column' => 'message',
+        'is_default' => false,
+        'delimiter' => ',',
+        'encoding' => 'UTF-8',
+        'has_header' => true,
+        'skip_rows' => 0,
+        'default_transaction_type' => 'credit',
+        'duplicate_match_fields' => ['date', 'amount', 'reference'],
+        'duplicate_date_tolerance' => 0,
+        'credit_keywords' => ['credited'],
+        'debit_keywords' => ['debited'],
+    ], $overrides);
+}
 
 beforeEach(function () {
     $this->initializeTenancy();
@@ -73,8 +96,6 @@ test('tenant admin can create sms import template with parsing rules', function 
 });
 
 test('only one default sms template per bank name scope', function () {
-    Filament::setCurrentPanel('tenant');
-
     $first = SmsImportTemplate::create([
         'name' => 'First',
         'bank_name' => 'SNB',
@@ -82,16 +103,17 @@ test('only one default sms template per bank name scope', function () {
         'is_default' => true,
     ]);
 
-    Livewire::actingAs($this->admin, 'tenant')
-        ->test(CreateSmsImportTemplate::class)
-        ->fillForm([
+    app(SmsImportTemplateSyncService::class)->syncFromSettingsForm([
+        sampleSmsTemplateRepeaterItem([
+            'id' => $first->id,
+            'name' => 'First',
+            'is_default' => false,
+        ]),
+        sampleSmsTemplateRepeaterItem([
             'name' => 'Second',
-            'bank_name' => 'SNB',
-            'sms_column' => 'text',
             'is_default' => true,
-        ])
-        ->call('create')
-        ->assertHasNoFormErrors();
+        ]),
+    ]);
 
     expect($first->fresh()->is_default)->toBeFalse()
         ->and(SmsImportTemplate::query()->where('name', 'Second')->value('is_default'))->toBeTrue();
@@ -102,11 +124,38 @@ test('sms import template resource is hidden from navigation', function () {
         ->and(SmsImportTemplateResource::getNavigationGroup())->toBe(TenantNavigation::GROUP_ACCOUNTS);
 });
 
-test('settings page exposes sms import templates tab', function () {
+test('settings page exposes collapsible sms import templates repeater', function () {
     Filament::setCurrentPanel('tenant');
+
+    SmsImportTemplate::create([
+        'name' => 'Existing SMS Template',
+        'bank_name' => 'SNB',
+        'sms_column' => 'message',
+        'is_default' => true,
+    ]);
 
     Livewire::actingAs($this->admin, 'tenant')
         ->test(Settings::class, ['settingsTab' => 'sms-templates::tab'])
         ->assertSuccessful()
-        ->assertSee(__('SMS import templates'));
+        ->assertSee(__('SMS import templates'))
+        ->assertSee('Existing SMS Template');
+});
+
+test('settings sync service creates sms templates from repeater payload', function () {
+    app(SmsImportTemplateSyncService::class)->syncFromSettingsForm([
+        sampleSmsTemplateRepeaterItem([
+            'name' => 'Inline SMS Template',
+            'bank_name' => 'Al-Rajhi',
+            'is_default' => true,
+            'amount_pattern' => '/SAR\s*(?P<amount>[\d,]+\.?\d*)/i',
+            'member_match_pattern' => '/Member[:\s]+(?P<member>M\d+)/',
+            'member_match_field' => 'member_number',
+        ]),
+    ]);
+
+    $template = SmsImportTemplate::query()->where('name', 'Inline SMS Template')->first();
+
+    expect($template)->not->toBeNull()
+        ->and($template->bank_name)->toBe('Al-Rajhi')
+        ->and($template->amount_pattern)->toContain('amount');
 });

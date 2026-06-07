@@ -1,33 +1,71 @@
 <?php
 
+use App\Filament\Support\BankWorkspaceImportTableHeaderActions;
 use App\Filament\Tenant\Resources\BankAccounts\Pages\ListBankAccounts;
+use App\Filament\Tenant\Widgets\SmsImportSessionsTableWidget;
+use App\Models\Tenant\User;
+use Filament\Facades\Filament;
+use Livewire\Livewire;
+use Tests\Concerns\InitializesTenancy;
 
-it('always registers the import statement header action', function () {
-    $page = new ListBankAccounts;
+uses(InitializesTenancy::class);
 
-    $method = new ReflectionMethod(ListBankAccounts::class, 'getHeaderActions');
-    $method->setAccessible(true);
-
-    $page->activeTab = 'imports';
-
-    $actions = $method->invoke($page);
-
-    expect($actions)->toHaveCount(1)
-        ->and($actions[0]->getName())->toBe('import');
+it('registers bank and sms import table header actions', function () {
+    expect(BankWorkspaceImportTableHeaderActions::bankStatementImportAction()->getName())->toBe('import')
+        ->and(BankWorkspaceImportTableHeaderActions::smsImportAction()->getName())->toBe('importSms');
 });
 
-it('shows the import statement action on every bank accounts tab', function () {
-    $page = new ListBankAccounts;
+it('shows the bank import action only on the statement lines tab', function () {
+    $this->initializeTenancy();
 
-    $method = new ReflectionMethod(ListBankAccounts::class, 'getHeaderActions');
-    $method->setAccessible(true);
+    $admin = User::create([
+        'name' => 'Bank Import Admin',
+        'email' => 'bank-import-admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
 
-    $import = $method->invoke($page)[0];
-    $import->livewire($page);
+    Filament::setCurrentPanel('tenant');
 
-    foreach (['imports', 'ledger', 'statements'] as $tab) {
-        $page->activeTab = $tab;
+    $importsComponent = Livewire::actingAs($admin, 'tenant')
+        ->test(ListBankAccounts::class, ['channel' => 'bank']);
 
-        expect($import->isHidden())->toBeFalse("import should be visible on tab {$tab}");
-    }
+    $importsHeaderNames = collect($importsComponent->instance()->getTable()->getHeaderActions())
+        ->map(fn ($action) => $action->getName())
+        ->all();
+
+    expect($importsHeaderNames)->toContain('import');
+
+    $ledgerComponent = Livewire::actingAs($admin, 'tenant')
+        ->test(ListBankAccounts::class, ['channel' => 'bank', 'activeTab' => 'ledger']);
+
+    $ledgerHeaderNames = collect($ledgerComponent->instance()->getTable()->getHeaderActions())
+        ->map(fn ($action) => $action->getName())
+        ->all();
+
+    expect($ledgerHeaderNames)->not->toContain('import');
+});
+
+it('shows the sms import action on the sms history table widget', function () {
+    $this->initializeTenancy();
+
+    $admin = User::create([
+        'name' => 'SMS Import Admin',
+        'email' => 'sms-table-import@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+
+    $component = Livewire::actingAs($admin, 'tenant')
+        ->test(SmsImportSessionsTableWidget::class);
+
+    $headerNames = collect($component->instance()->getTable()->getHeaderActions())
+        ->map(fn ($action) => $action->getName())
+        ->all();
+
+    expect($headerNames)->toContain('importSms');
 });

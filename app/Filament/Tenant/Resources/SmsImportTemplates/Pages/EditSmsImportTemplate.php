@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\SmsImportTemplates\Pages;
 
+use App\Filament\Tenant\Pages\Settings;
 use App\Filament\Tenant\Resources\SmsImportTemplates\SmsImportTemplateResource;
 use App\Models\Tenant\SmsImportTemplate;
 use Filament\Actions\DeleteAction;
@@ -14,6 +15,24 @@ use Filament\Resources\Pages\EditRecord;
 class EditSmsImportTemplate extends EditRecord
 {
     protected static string $resource = SmsImportTemplateResource::class;
+
+    public ?string $editFrom = null;
+
+    public function mount(int|string $record): void
+    {
+        parent::mount($record);
+
+        $this->editFrom ??= request()->query('from');
+    }
+
+    protected function getRedirectUrl(): ?string
+    {
+        if ($this->editFrom === 'settings') {
+            return Settings::smsTemplatesUrl();
+        }
+
+        return parent::getRedirectUrl();
+    }
 
     protected function getHeaderActions(): array
     {
