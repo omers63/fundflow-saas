@@ -13,7 +13,7 @@ final class AssociativeCsv
      */
     public static function read(string $absolutePath): array
     {
-        if (!is_readable($absolutePath)) {
+        if (! is_readable($absolutePath)) {
             throw new InvalidArgumentException(__('Cannot read the uploaded file.'));
         }
 
@@ -23,21 +23,17 @@ final class AssociativeCsv
             throw new InvalidArgumentException(__('Cannot read the uploaded file.'));
         }
 
-        $content = preg_replace('/^\xEF\xBB\xBF/', '', $content) ?? $content;
+        $content = self::stripUtf8Bom($content);
 
         $lines = preg_split('/\r\n|\r|\n/', $content);
-        $lines = array_values(array_filter($lines, fn($line) => trim((string) $line) !== ''));
+        $lines = array_values(array_filter($lines, fn ($line) => trim((string) $line) !== ''));
 
         if (count($lines) < 2) {
             return [];
         }
 
         $headerLine = array_shift($lines);
-        $headers = str_getcsv((string) $headerLine);
-        $headers = array_map(
-            fn($header) => strtolower(trim(str_replace(' ', '_', (string) $header))),
-            $headers,
-        );
+        $headers = self::normalizeHeaders(str_getcsv((string) $headerLine));
 
         $rows = [];
 
@@ -75,8 +71,14 @@ final class AssociativeCsv
         foreach ($rows as $row) {
             $line = [];
 
-            foreach ($headers as $header) {
-                $line[] = is_array($row) ? ($row[$header] ?? '') : '';
+            if (is_array($row) && array_is_list($row)) {
+                foreach ($headers as $index => $header) {
+                    $line[] = $row[$index] ?? '';
+                }
+            } else {
+                foreach ($headers as $header) {
+                    $line[] = is_array($row) ? ($row[$header] ?? '') : '';
+                }
             }
 
             fputcsv($handle, $line);
@@ -90,7 +92,7 @@ final class AssociativeCsv
      */
     public static function headers(string $absolutePath): array
     {
-        if (!is_readable($absolutePath)) {
+        if (! is_readable($absolutePath)) {
             return [];
         }
 
@@ -107,11 +109,30 @@ final class AssociativeCsv
             return [];
         }
 
-        $headers = str_getcsv($headerLine);
+        return self::normalizeHeaders(str_getcsv(self::stripUtf8Bom($headerLine)));
+    }
 
+    /**
+     * @param  list<string|null>  $headers
+     * @return list<string>
+     */
+    private static function normalizeHeaders(array $headers): array
+    {
         return array_values(array_filter(array_map(
-            fn($header) => strtolower(trim(str_replace(' ', '_', (string) $header))),
+            static fn (?string $header): string => self::normalizeHeader((string) $header),
             $headers,
         )));
+    }
+
+    private static function normalizeHeader(string $header): string
+    {
+        return strtolower(trim(str_replace(' ', '_', self::stripUtf8Bom($header))));
+    }
+
+    private static function stripUtf8Bom(string $value): string
+    {
+        $value = preg_replace('/^\xEF\xBB\xBF/', '', $value) ?? $value;
+
+        return ltrim($value, "\u{FEFF}");
     }
 }

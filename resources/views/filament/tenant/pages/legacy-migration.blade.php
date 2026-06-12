@@ -41,7 +41,7 @@
                         </li>
                         <li>
                             <strong class="text-gray-900 dark:text-white">{{ __('Prepare loans CSV') }}</strong>
-                            — {{ __('One row per active loan with amount_approved, disbursed_at, paid_installments_count, and total_amount_repaid.') }}
+                            — {{ __('One row per active loan with amount_approved, disbursed_at, paid_installments_count, total_amount_repaid, and optional guarantor_member_number or guarantor_name. Identify the borrower with member_number or member_name.') }}
                         </li>
                         <li>
                             <strong class="text-gray-900 dark:text-white">{{ __('Optional: payments CSV') }}</strong>
@@ -73,23 +73,16 @@
                 </header>
                 <div class="ff-maintenance-panel__body space-y-4 text-sm">
                     <p>
-                        <a href="{{ route('tenant.downloads.member-import-sample') }}" target="_blank" rel="noopener"
+                        <a href="{{ route('tenant.downloads.legacy-members-import-sample') }}" target="_blank" rel="noopener"
                             class="font-medium text-primary-600 hover:underline dark:text-primary-400">
                             {{ __('Download members sample CSV') }}
                         </a>
+                        <span class="text-gray-500 dark:text-gray-400">
+                            — {{ __('Uses the same member numbers, names, and emails as the loans and payments samples below.') }}
+                        </span>
                     </p>
                     @include('filament.tenant.partials.legacy-migration-column-table', [
-                        'columns' => [
-                            ['name', true, __('Full name')],
-                            ['email', true, __('Unique login email')],
-                            ['member_number', false, __('Stable ID from old system (recommended)')],
-                            ['monthly_contribution_amount', false, __('500–3000 in steps of 500')],
-                            ['joined_at', false, __('YYYY-MM-DD')],
-                            ['contribution_arrears_cutoff_date', false, __('Same as migration cut-off (per row or modal default)')],
-                            ['cutoff_cash_balance', false, __('Member cash wallet at cut-off')],
-                            ['cutoff_fund_balance', false, __('Member fund pool share at cut-off')],
-                            ['parent_member_number', false, __('For household dependents')],
-                        ],
+                        'columns' => \App\Support\LegacyMigrationSampleCsv::memberColumnDocs(),
                     ])
                 </div>
             </section>
@@ -105,22 +98,16 @@
                 </header>
                 <div class="ff-maintenance-panel__body space-y-4 text-sm">
                     <p>
-                        <a href="{{ route('tenant.downloads.loan-import-sample') }}" target="_blank" rel="noopener"
+                        <a href="{{ route('tenant.downloads.legacy-loans-import-sample') }}" target="_blank" rel="noopener"
                             class="font-medium text-primary-600 hover:underline dark:text-primary-400">
                             {{ __('Download loans sample CSV') }}
                         </a>
+                        <span class="text-gray-500 dark:text-gray-400">
+                            — {{ __('Borrower numbers and names match the members sample (import members first).') }}
+                        </span>
                     </p>
                     @include('filament.tenant.partials.legacy-migration-column-table', [
-                        'columns' => [
-                            ['member_email / member_number', true, __('Borrower identifier')],
-                            ['loan_status', true, __('active for open loans; completed when fully repaid')],
-                            ['amount_approved', true, __('Original approved principal')],
-                            ['disbursed_at', false, __('YYYY-MM-DD')],
-                            ['paid_installments_count', false, __('Number of EMIs already paid')],
-                            ['total_amount_repaid', false, __('Sum repaid to date (required if any EMIs paid)')],
-                            ['member_portion / master_portion', false, __('Optional funding split; defaults from fund balance')],
-                            ['installments_count', false, __('Total EMI count when known')],
-                        ],
+                        'columns' => \App\Support\LegacyMigrationSampleCsv::loanColumnDocs(),
                     ])
                 </div>
             </section>
@@ -142,55 +129,46 @@
                         </a>
                     </p>
                     @include('filament.tenant.partials.legacy-migration-column-table', [
-                        'columns' => [
-                            ['member_email / member_number', true, __('Who paid')],
-                            ['payment_date', true, __('YYYY-MM-DD')],
-                            ['amount', true, __('Payment amount')],
-                            ['payment_type', false, __('contribution, loan_repayment, ignore — leave blank to auto-suggest')],
-                            ['notes', false, __('Free text from old system')],
-                        ],
+                        'columns' => \App\Support\LegacyMigrationSampleCsv::paymentColumnDocs(),
                     ])
-
-                    @if ($classificationStats)
-                        <div class="ff-maintenance-callout">
-                            <p class="font-medium">{{ __('Last classification summary') }}</p>
-                            <ul class="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                                <li>{{ __('Contributions') }}: {{ $classificationStats['contribution'] ?? 0 }}</li>
-                                <li>{{ __('Loan repayments') }}: {{ $classificationStats['loan_repayment'] ?? 0 }}</li>
-                                <li>{{ __('Unclassified') }}: {{ $classificationStats['unclassified'] ?? 0 }}</li>
-                                <li>{{ __('Ignored') }}: {{ $classificationStats['ignore'] ?? 0 }}</li>
-                            </ul>
-                        </div>
-                    @endif
                 </div>
             </section>
         @endif
 
-        {{-- Upload form (steps 1 & 5) --}}
-        @if (in_array($currentStep, [1, 5], true))
+        {{-- Upload form (always mounted so file state persists across steps) --}}
+        <section class="ff-maintenance-panel">
+            <header class="ff-maintenance-panel__header ff-maintenance-panel__header--muted">
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ __('Upload files & settings') }}</h2>
+            </header>
+            <div class="ff-maintenance-panel__body">
+                {{ $this->form }}
+
+                <div class="mt-6 flex flex-wrap gap-3">
+                    <x-filament::button wire:click="previewMigration" color="gray">
+                        {{ __('Preview') }}
+                    </x-filament::button>
+                    <x-filament::button wire:click="classifyPayments" color="gray"
+                        wire:loading.attr="disabled">
+                        {{ __('Classify payments') }}
+                    </x-filament::button>
+                    <x-filament::button wire:click="runMigration(true)" color="warning">
+                        {{ __('Dry run') }}
+                    </x-filament::button>
+                    <x-filament::button wire:click="runMigration(false)" color="primary"
+                        wire:confirm="{{ __('Run the migration now? This writes members, loans, and optional payments to the database.') }}">
+                        {{ __('Run migration') }}
+                    </x-filament::button>
+                </div>
+            </div>
+        </section>
+
+        @if ($classificationStats)
             <section class="ff-maintenance-panel">
                 <header class="ff-maintenance-panel__header ff-maintenance-panel__header--muted">
-                    <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ __('Upload files & settings') }}</h2>
+                    <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ __('Payment classification results') }}</h2>
                 </header>
                 <div class="ff-maintenance-panel__body">
-                    {{ $this->form }}
-
-                    <div class="mt-6 flex flex-wrap gap-3">
-                        <x-filament::button wire:click="previewMigration" color="gray">
-                            {{ __('Preview') }}
-                        </x-filament::button>
-                        <x-filament::button wire:click="classifyPayments" color="gray"
-                            wire:loading.attr="disabled">
-                            {{ __('Classify payments') }}
-                        </x-filament::button>
-                        <x-filament::button wire:click="runMigration(true)" color="warning">
-                            {{ __('Dry run') }}
-                        </x-filament::button>
-                        <x-filament::button wire:click="runMigration(false)" color="primary"
-                            wire:confirm="{{ __('Run the migration now? This writes members, loans, and optional payments to the database.') }}">
-                            {{ __('Run migration') }}
-                        </x-filament::button>
-                    </div>
+                    @include('filament.tenant.partials.legacy-migration-classification-results')
                 </div>
             </section>
         @endif

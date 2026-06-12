@@ -130,7 +130,7 @@ final class ContributionListTableHeaderActions
 
                     Notification::make()
                         ->title(__('Contribution import finished'))
-                        ->body(new HtmlString(nl2br(e($body))))
+                        ->body(nl2br(e($body)))
                         ->color($result['failed'] > 0 || $result['errors'] !== [] ? 'warning' : 'success')
                         ->persistent()
                         ->send();

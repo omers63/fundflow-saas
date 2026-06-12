@@ -63,6 +63,24 @@ function writeMemberImportCsv(string $contents): string
     return $path;
 }
 
+test('member import creates member from member_number without email', function () {
+    $path = writeMemberImportCsv(
+        "member_number,name,monthly_contribution_amount\n".
+        "LEG-NO-EMAIL,Number Only Member,500\n"
+    );
+
+    $result = app(MemberImportService::class)->import($path, 'TempPass@123');
+
+    expect($result['created'])->toBe(1)
+        ->and($result['failed'])->toBe(0);
+
+    $member = Member::query()->where('member_number', 'LEG-NO-EMAIL')->first();
+
+    expect($member)->not->toBeNull()
+        ->and($member->name)->toBe('Number Only Member')
+        ->and($member->email)->toContain('@');
+});
+
 test('member import creates member with opening balances from csv', function () {
     $path = writeMemberImportCsv(
         "name,email,monthly_contribution_amount,joined_at,contribution_arrears_cutoff_date,cutoff_cash_balance,cutoff_fund_balance\n".

@@ -24,8 +24,10 @@ final class LegacyMigrationPreviewService
 
         return $this->preview(
             $absolutePath,
-            ['name', 'email'],
+            ['name'],
             [
+                'email' => __('No email column — portal login addresses will be auto-generated from member_number when omitted.'),
+                'member_number' => __('No member_number column — each row must have a unique name, or add member_number from your old system.'),
                 'cutoff_cash_balance' => __('No cut-off cash balances detected — members will start at zero cash unless you add cutoff_cash_balance or opening_cash_balance.'),
                 'cutoff_fund_balance' => __('No cut-off fund balances detected — members will start at zero fund unless you add cutoff_fund_balance or opening_fund_balance.'),
             ],
@@ -56,11 +58,11 @@ final class LegacyMigrationPreviewService
         $memberKeys = ['member_email', 'member_number', 'national_id', 'member_name', 'name'];
         $hasMember = array_intersect($memberKeys, $headers) !== [];
 
-        if (!$hasMember) {
-            $preview['missing_columns'][] = 'member_email|member_number|national_id|member_name';
+        if (! $hasMember) {
+            $preview['missing_columns'][] = 'member_number|member_name|national_id';
         }
 
-        if (!in_array('amount_approved', $headers, true) && !in_array('amount_requested', $headers, true)) {
+        if (! in_array('amount_approved', $headers, true) && ! in_array('amount_requested', $headers, true)) {
             $preview['missing_columns'][] = 'amount_approved';
         }
 
@@ -91,8 +93,8 @@ final class LegacyMigrationPreviewService
         $memberKeys = ['member_email', 'member_number', 'national_id', 'member_name', 'name'];
         $hasMember = array_intersect($memberKeys, $headers) !== [];
 
-        if (!$hasMember) {
-            $preview['missing_columns'][] = 'member_email|member_number|national_id|member_name';
+        if (! $hasMember) {
+            $preview['missing_columns'][] = 'member_number|member_name|national_id';
         }
 
         return $preview;
@@ -115,7 +117,7 @@ final class LegacyMigrationPreviewService
 
         $missing = array_values(array_filter(
             $requiredColumns,
-            fn(string $column): bool => !in_array($column, $headers, true),
+            fn (string $column): bool => ! in_array($column, $headers, true),
         ));
 
         $warnings = [];

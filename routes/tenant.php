@@ -7,6 +7,8 @@ use App\Http\Controllers\Tenant\ContributionImportSampleController;
 use App\Http\Controllers\Tenant\DatabaseBackupDownloadController;
 use App\Http\Controllers\Tenant\DirectMessageAttachmentController;
 use App\Http\Controllers\Tenant\FiscalCloseExportDownloadController;
+use App\Http\Controllers\Tenant\LegacyLoanImportSampleController;
+use App\Http\Controllers\Tenant\LegacyMemberImportSampleController;
 use App\Http\Controllers\Tenant\LegacyPaymentClassifiedDownloadController;
 use App\Http\Controllers\Tenant\LegacyPaymentImportSampleController;
 use App\Http\Controllers\Tenant\LoanImportSampleController;
@@ -78,13 +80,19 @@ Route::middleware([
     Route::get('/downloads/member-import-sample', MemberImportSampleController::class)
         ->name('tenant.downloads.member-import-sample');
 
+    Route::get('/downloads/legacy-members-import-sample', LegacyMemberImportSampleController::class)
+        ->name('tenant.downloads.legacy-members-import-sample');
+
+    Route::get('/downloads/legacy-loans-import-sample', LegacyLoanImportSampleController::class)
+        ->name('tenant.downloads.legacy-loans-import-sample');
+
     Route::get('/downloads/legacy-payments-import-sample', LegacyPaymentImportSampleController::class)
         ->name('tenant.downloads.legacy-payments-import-sample');
 
     Route::get('/manifest.json', TenantManifestController::class)
         ->name('tenant.manifest');
 
-    Route::get('/offline', fn() => view('offline'));
+    Route::get('/offline', fn () => view('offline'));
 
     Route::get('/storage/{path}', function (string $path) {
         return redirect(tenant_asset($path), 301);

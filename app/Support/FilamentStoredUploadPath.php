@@ -23,7 +23,7 @@ final class FilamentStoredUploadPath
         if (is_array($state)) {
             $paths = array_filter(
                 Arr::wrap($state),
-                static fn (mixed $v): bool => is_string($v) && trim($v) !== ''
+                static fn (mixed $value): bool => is_string($value) && trim($value) !== '',
             );
 
             $first = Arr::first($paths);
@@ -40,32 +40,81 @@ final class FilamentStoredUploadPath
     public static function tryResolveReadableCsvToAbsolutePath(mixed $state): ?array
     {
         if ($state instanceof TemporaryUploadedFile) {
-            $absolutePath = $state->getRealPath();
-            if ($absolutePath !== '' && is_readable($absolutePath)) {
-                return [
-                    'absolutePath' => $absolutePath,
-                    'relativePathForDeletion' => null,
-                ];
-            }
+            return self::resolveTemporaryUploadedFile($state);
+        }
 
-            return null;
+        if (is_array($state)) {
+            foreach (Arr::wrap($state) as $value) {
+                if ($value instanceof TemporaryUploadedFile) {
+                    $resolved = self::resolveTemporaryUploadedFile($value);
+
+                    if ($resolved !== null) {
+                        return $resolved;
+                    }
+                }
+
+                if (is_string($value) && trim($value) !== '') {
+                    $resolved = self::resolveStoredRelativePath(trim($value));
+
+                    if ($resolved !== null) {
+                        return $resolved;
+                    }
+                }
+
+                if (is_array($value)) {
+                    $resolved = self::tryResolveReadableCsvToAbsolutePath($value);
+
+                    if ($resolved !== null) {
+                        return $resolved;
+                    }
+                }
+            }
         }
 
         $relative = self::toRelativePath($state);
+
         if ($relative !== null) {
-            $absolutePath = Storage::disk('local')->path($relative);
-            if (is_readable($absolutePath)) {
-                return [
-                    'absolutePath' => $absolutePath,
-                    'relativePathForDeletion' => $relative,
-                ];
-            }
+            return self::resolveStoredRelativePath($relative);
         }
 
         if (is_string($state) && str_starts_with($state, '/') && is_readable($state)) {
             return [
                 'absolutePath' => $state,
                 'relativePathForDeletion' => null,
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{absolutePath: string, relativePathForDeletion: ?string}|null
+     */
+    private static function resolveTemporaryUploadedFile(TemporaryUploadedFile $file): ?array
+    {
+        $absolutePath = $file->getRealPath();
+
+        if ($absolutePath !== '' && is_readable($absolutePath)) {
+            return [
+                'absolutePath' => $absolutePath,
+                'relativePathForDeletion' => null,
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{absolutePath: string, relativePathForDeletion: ?string}|null
+     */
+    private static function resolveStoredRelativePath(string $relative): ?array
+    {
+        $absolutePath = Storage::disk('local')->path($relative);
+
+        if (is_readable($absolutePath)) {
+            return [
+                'absolutePath' => $absolutePath,
+                'relativePathForDeletion' => $relative,
             ];
         }
 

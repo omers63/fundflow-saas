@@ -25,6 +25,8 @@ use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use UnitEnum;
 
 class LegacyMigrationPage extends Page implements HasForms
@@ -59,6 +61,13 @@ class LegacyMigrationPage extends Page implements HasForms
 
     /** @var array<string, mixed>|null */
     public ?array $classificationStats = null;
+
+    /** @var list<string> */
+    public array $classificationErrors = [];
+
+    public bool $classifiedPaymentsReady = false;
+
+    private const CLASSIFIED_PAYMENTS_PATH = 'legacy-migration/last-classified-payments.csv';
 
     public static function canAccess(): bool
     {
@@ -115,16 +124,15 @@ class LegacyMigrationPage extends Page implements HasForms
                     ->label(__('Default member password'))
                     ->password()
                     ->revealable()
-                    ->required()
                     ->minLength(8)
-                    ->helperText(__('Used for imported members when the CSV password column is empty.')),
+                    ->helperText(__('Required to run the migration. Used for imported members when the CSV password column is empty.')),
                 FileUpload::make('members_csv')
                     ->label(__('Members CSV'))
                     ->disk('local')
                     ->directory('legacy-migration')
                     ->maxFiles(1)
                     ->acceptedFileTypes(['text/csv', 'text/plain', 'application/csv', 'application/vnd.ms-excel'])
-                    ->helperText(__('Required. Include cutoff_cash_balance and cutoff_fund_balance per member when known.')),
+                    ->helperText(__('Required. Wait until each file finishes uploading before preview or dry run.')),
                 FileUpload::make('loans_csv')
                     ->label(__('Loans CSV'))
                     ->disk('local')
@@ -138,8 +146,8 @@ class LegacyMigrationPage extends Page implements HasForms
                     ->directory('legacy-migration')
                     ->maxFiles(1)
                     ->acceptedFileTypes(['text/csv', 'text/plain', 'application/csv', 'application/vnd.ms-excel'])
-                    ->visible(fn(): bool => ($this->data['strategy'] ?? 'snapshot') === 'historical')
-                    ->helperText(__('Optional for historical strategy. Classify rows before import, or set payment_type explicitly.')),
+                    ->visible(fn (): bool => ($this->data['strategy'] ?? 'snapshot') === 'historical')
+                    ->helperText(__('Optional for historical strategy. Classify rows before import — members (and loans) CSV on this page are used to match payment rows.')),
             ]);
     }
 
@@ -150,12 +158,20 @@ class LegacyMigrationPage extends Page implements HasForms
 
     public function previewMigration(): void
     {
-        $paths = $this->resolveUploadedPaths();
+        try {
+            $state = $this->form->getState();
+        } catch (ValidationException $exception) {
+            $this->notifyFormValidationFailed($exception);
+
+            return;
+        }
+
+        $paths = $this->resolveUploadedPathsFromState($state);
 
         if ($paths['members'] === null) {
             Notification::make()
                 ->title(__('Members CSV required'))
-                ->body(__('Upload a members CSV before previewing.'))
+                ->body(__('Upload a members CSV and wait until it finishes uploading before previewing.'))
                 ->warning()
                 ->send();
 
@@ -167,7 +183,7 @@ class LegacyMigrationPage extends Page implements HasForms
         $this->lastPreview = [
             'members' => $previewService->previewMembers($paths['members']),
             'loans' => $previewService->previewLoans($paths['loans']),
-            'payments' => ($this->data['strategy'] ?? 'snapshot') === 'historical'
+            'payments' => ($state['strategy'] ?? 'snapshot') === 'historical'
                 ? $previewService->previewPayments($paths['payments'])
                 : null,
         ];
@@ -182,11 +198,30 @@ class LegacyMigrationPage extends Page implements HasForms
 
     public function classifyPayments(): void
     {
-        $paths = $this->resolveUploadedPaths();
+        try {
+            $state = $this->form->getState();
+        } catch (ValidationException $exception) {
+            $this->notifyFormValidationFailed($exception);
+
+            return;
+        }
+
+        if (($state['strategy'] ?? 'snapshot') !== 'historical') {
+            Notification::make()
+                ->title(__('Historical strategy required'))
+                ->body(__('Switch migration strategy to Historical to classify or import payments.'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $paths = $this->resolveUploadedPathsFromState($state);
 
         if ($paths['payments'] === null) {
             Notification::make()
                 ->title(__('Payments CSV required'))
+                ->body(__('Upload a payments CSV and wait until it finishes uploading before classifying.'))
                 ->warning()
                 ->send();
 
@@ -194,23 +229,54 @@ class LegacyMigrationPage extends Page implements HasForms
         }
 
         try {
-            $cutoff = filled($this->data['cutoff_date'] ?? null)
-                ? Carbon::parse((string) $this->data['cutoff_date'])
+            $cutoff = filled($state['cutoff_date'] ?? null)
+                ? Carbon::parse((string) $state['cutoff_date'])
                 : null;
 
-            $result = app(LegacyPaymentClassifierService::class)->classifyFile($paths['payments'], $cutoff);
+            $result = app(LegacyPaymentClassifierService::class)->classifyFile(
+                $paths['payments'],
+                $cutoff,
+                $paths['members'],
+                $paths['loans'],
+            );
             $this->classificationStats = $result['stats'];
+            $this->classificationErrors = array_slice($result['errors'] ?? [], 0, 10);
+            $this->classifiedPaymentsReady = $result['rows'] !== [];
+
+            if ($this->classifiedPaymentsReady) {
+                app(LegacyPaymentClassifierService::class)->writeClassifiedCsv(
+                    Storage::disk('local')->path(self::CLASSIFIED_PAYMENTS_PATH),
+                    $result['rows'],
+                );
+            }
+
+            $body = __('Contributions: :c · Loan repayments: :l · Unclassified: :u · Ignored: :i · Failed: :f', [
+                'c' => $result['stats']['contribution'],
+                'l' => $result['stats']['loan_repayment'],
+                'u' => $result['stats']['unclassified'],
+                'i' => $result['stats']['ignore'],
+                'f' => $result['stats']['failed'] ?? 0,
+            ]);
+
+            if (($result['errors'] ?? []) !== []) {
+                $preview = implode("\n", array_slice($result['errors'], 0, 5));
+                if (count($result['errors']) > 5) {
+                    $preview .= "\n… ".__('and :count more row error(s)', ['count' => count($result['errors']) - 5]);
+                }
+
+                $body .= "\n\n".$preview;
+            }
 
             Notification::make()
                 ->title(__('Payments classified'))
-                ->body(__('Contributions: :c · Loan repayments: :l · Unclassified: :u · Ignored: :i', [
-                    'c' => $result['stats']['contribution'],
-                    'l' => $result['stats']['loan_repayment'],
-                    'u' => $result['stats']['unclassified'],
-                    'i' => $result['stats']['ignore'],
-                ]))
-                ->success()
+                ->body($body.($this->classifiedPaymentsReady
+                    ? "\n\n".__('Download the full classified CSV from the results panel below.')
+                    : ''))
+                ->color(($result['stats']['failed'] ?? 0) > 0 ? 'warning' : 'success')
+                ->persistent(($result['stats']['failed'] ?? 0) > 0)
                 ->send();
+
+            $this->currentStep = 4;
         } catch (\Throwable $e) {
             Notification::make()
                 ->title(__('Classification failed'))
@@ -220,14 +286,34 @@ class LegacyMigrationPage extends Page implements HasForms
         }
     }
 
+    public function downloadClassifiedPayments(): StreamedResponse
+    {
+        abort_unless($this->classifiedPaymentsReady && Storage::disk('local')->exists(self::CLASSIFIED_PAYMENTS_PATH), 404);
+
+        return Storage::disk('local')->download(
+            self::CLASSIFIED_PAYMENTS_PATH,
+            'legacy-payments-classified.csv',
+            ['Content-Type' => 'text/csv'],
+        );
+    }
+
     public function runMigration(bool $dryRun = false): void
     {
-        $paths = $this->resolveUploadedPaths();
-        $password = (string) ($this->data['default_password'] ?? '');
+        try {
+            $state = $this->form->getState();
+        } catch (ValidationException $exception) {
+            $this->notifyFormValidationFailed($exception);
+
+            return;
+        }
+
+        $paths = $this->resolveUploadedPathsFromState($state);
+        $password = (string) ($state['default_password'] ?? '');
 
         if ($paths['members'] === null) {
             Notification::make()
                 ->title(__('Members CSV required'))
+                ->body(__('Upload a members CSV and wait until it finishes uploading before running the migration.'))
                 ->danger()
                 ->send();
 
@@ -246,12 +332,12 @@ class LegacyMigrationPage extends Page implements HasForms
 
         try {
             $this->lastRun = app(LegacyMigrationOrchestrator::class)->run([
-                'cutoff_date' => $this->data['cutoff_date'] ?? null,
+                'cutoff_date' => $state['cutoff_date'] ?? null,
                 'default_password' => $password,
                 'members_path' => $paths['members'],
                 'loans_path' => $paths['loans'],
                 'payments_path' => $paths['payments'],
-                'strategy' => $this->data['strategy'] ?? 'snapshot',
+                'strategy' => $state['strategy'] ?? 'snapshot',
             ], $dryRun);
 
             $members = $this->lastRun['members'];
@@ -279,19 +365,22 @@ class LegacyMigrationPage extends Page implements HasForms
                 ->persistent()
                 ->send();
         } finally {
-            $this->cleanupUploadedPaths($paths);
+            if (! $dryRun) {
+                $this->cleanupUploadedPaths($paths);
+            }
         }
     }
 
     /**
+     * @param  array<string, mixed>  $state
      * @return array{members: ?string, loans: ?string, payments: ?string, relatives: list<string>}
      */
-    private function resolveUploadedPaths(): array
+    private function resolveUploadedPathsFromState(array $state): array
     {
         $relatives = [];
-        $members = $this->resolveCsvPath($this->data['members_csv'] ?? null, $relatives);
-        $loans = $this->resolveCsvPath($this->data['loans_csv'] ?? null, $relatives);
-        $payments = $this->resolveCsvPath($this->data['payments_csv'] ?? null, $relatives);
+        $members = $this->resolveCsvPath($state['members_csv'] ?? null, $relatives);
+        $loans = $this->resolveCsvPath($state['loans_csv'] ?? null, $relatives);
+        $payments = $this->resolveCsvPath($state['payments_csv'] ?? null, $relatives);
 
         return [
             'members' => $members,
@@ -299,6 +388,15 @@ class LegacyMigrationPage extends Page implements HasForms
             'payments' => $payments,
             'relatives' => $relatives,
         ];
+    }
+
+    private function notifyFormValidationFailed(ValidationException $exception): void
+    {
+        Notification::make()
+            ->title(__('Check the form'))
+            ->body(collect($exception->errors())->flatten()->first() ?? __('Fix the highlighted fields and try again.'))
+            ->danger()
+            ->send();
     }
 
     /**

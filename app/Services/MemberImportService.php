@@ -8,10 +8,12 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\Tenant\HouseholdMemberService;
 use App\Support\BusinessDay;
+use App\Support\MemberUserEmail;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Throwable;
 
@@ -26,8 +28,8 @@ final class MemberImportService
     /**
      * Import members from a UTF-8 CSV file with a header row.
      *
-     * Required: name, email
-     * Optional: member_number, phone, monthly_contribution_amount, joined_at, status, password,
+     * Required: name and (email or member_number)
+     * Optional: member_number when email is provided, phone, monthly_contribution_amount, joined_at, status, password,
      * parent_member_number, parent_member_email, portal_pin, contribution_arrears_cutoff_date,
      * cutoff_cash_balance, cutoff_fund_balance
      *
@@ -96,29 +98,23 @@ final class MemberImportService
     private function importRow(array $row, string $defaultPassword, ?string $defaultArrearsCutoffDate): string
     {
         $name = trim($this->cell($row, 'name'));
-        $email = strtolower(trim($this->cell($row, 'email')));
-
-        if ($email === '') {
-            throw new InvalidArgumentException(__('email is required.'));
-        }
-
-        $validator = Validator::make(['email' => $email], ['email' => 'required|email']);
-
-        if ($validator->fails()) {
-            throw new InvalidArgumentException(__('Invalid email address.'));
-        }
 
         if ($name === '') {
             throw new InvalidArgumentException(__('name is required.'));
         }
 
         $memberNumber = $this->cell($row, 'member_number');
+        $explicitEmail = strtolower(trim($this->cell($row, 'email')));
 
         if ($memberNumber !== '' && Member::query()->where('member_number', $memberNumber)->exists()) {
             return 'skipped';
         }
 
-        if (Member::query()->where('email', $email)->exists() || User::query()->where('email', $email)->exists()) {
+        if ($explicitEmail !== '') {
+            if (Member::query()->where('email', $explicitEmail)->exists() || User::query()->where('email', $explicitEmail)->exists()) {
+                return 'skipped';
+            }
+        } elseif ($memberNumber === '' && Member::query()->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])->exists()) {
             return 'skipped';
         }
 
@@ -126,6 +122,7 @@ final class MemberImportService
         $plainPassword = strlen($password) >= 8 ? $password : $defaultPassword;
 
         $parentMember = $this->resolveParentMember($row);
+        $email = $this->resolveImportEmail($row, $name, $memberNumber, $parentMember);
         $monthlyContribution = $this->parseMonthlyContribution($row);
         $joinedAt = $this->parseJoinedAt($row);
         $status = $this->parseStatus($this->cell($row, 'status'));
@@ -239,6 +236,48 @@ final class MemberImportService
         }
 
         return null;
+    }
+
+    private function resolveImportEmail(array $row, string $name, string $memberNumber, ?Member $parentMember): string
+    {
+        $explicitEmail = strtolower(trim($this->cell($row, 'email')));
+
+        if ($explicitEmail !== '') {
+            $validator = Validator::make(['email' => $explicitEmail], ['email' => 'required|email']);
+
+            if ($validator->fails()) {
+                throw new InvalidArgumentException(__('Invalid email address.'));
+            }
+
+            return $explicitEmail;
+        }
+
+        if ($parentMember !== null) {
+            return '';
+        }
+
+        if ($memberNumber === '') {
+            $nameMatches = Member::query()
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+                ->count();
+
+            if ($nameMatches > 1) {
+                throw new InvalidArgumentException(__('Multiple members share this name — provide member_number.'));
+            }
+        }
+
+        $token = $memberNumber !== ''
+            ? (Str::slug($memberNumber, '.') ?: 'member')
+            : (Str::slug($name, '.') ?: 'member');
+
+        return app(MemberUserEmail::class)->resolveForNewMember(
+            $this->syntheticImportEmailFromToken($token),
+        );
+    }
+
+    private function syntheticImportEmailFromToken(string $token): string
+    {
+        return 'legacy.'.Str::lower($token).'@import.fundflow.local';
     }
 
     /**

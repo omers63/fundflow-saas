@@ -90,14 +90,15 @@ class LoanImportService
     private function importRow(array $row): void
     {
         $member = $this->resolveMember($row);
+        $guarantorMemberId = $this->resolveOptionalGuarantor($row, $member)?->id;
         $loanStatus = $this->parseLoanStatus($this->cell($row, 'loan_status'));
 
         match ($loanStatus) {
-            'pending' => $this->importPending($row, $member),
-            'approved' => $this->importApproved($row, $member),
-            'active' => $this->importDisbursed($row, $member, 'active', false),
-            'completed' => $this->importDisbursed($row, $member, 'completed', true),
-            'early_settled' => $this->importDisbursed($row, $member, 'early_settled', true),
+            'pending' => $this->importPending($row, $member, $guarantorMemberId),
+            'approved' => $this->importApproved($row, $member, $guarantorMemberId),
+            'active' => $this->importDisbursed($row, $member, 'active', false, $guarantorMemberId),
+            'completed' => $this->importDisbursed($row, $member, 'completed', true, $guarantorMemberId),
+            'early_settled' => $this->importDisbursed($row, $member, 'early_settled', true, $guarantorMemberId),
             default => throw new \InvalidArgumentException("Unsupported loan_status: {$loanStatus}"),
         };
     }
@@ -105,7 +106,7 @@ class LoanImportService
     /**
      * @param  array<string, string>  $row
      */
-    private function importPending(array $row, Member $member): void
+    private function importPending(array $row, Member $member, ?int $guarantorMemberId): void
     {
         $amountRequested = $this->parseAmountRequestedForPending($row);
         $amountApproved = $this->parseOptionalMoney($this->cell($row, 'amount_approved'), 'amount_approved');
@@ -133,13 +134,14 @@ class LoanImportService
             'status' => 'pending',
             'applied_at' => $appliedAt,
             'is_emergency' => $isEmergency,
+            'guarantor_member_id' => $guarantorMemberId,
         ]);
     }
 
     /**
      * @param  array<string, string>  $row
      */
-    private function importApproved(array $row, Member $member): void
+    private function importApproved(array $row, Member $member, ?int $guarantorMemberId): void
     {
         $amount = $this->parseMoney($this->cell($row, 'amount_approved'), 'amount_approved');
         if ($amount <= 0) {
@@ -177,6 +179,7 @@ class LoanImportService
             'approved_by_id' => auth('tenant')->id(),
             'settlement_threshold' => $threshold,
             'is_emergency' => $isEmergency,
+            'guarantor_member_id' => $guarantorMemberId,
         ]);
 
         LoanQueueOrderingService::resequenceFundTier($fundTier->id);
@@ -190,6 +193,7 @@ class LoanImportService
         Member $member,
         string $terminalStatus,
         bool $allPaid,
+        ?int $guarantorMemberId,
     ): void {
         $amount = $this->parseMoney($this->cell($row, 'amount_approved'), 'amount_approved');
         if ($amount <= 0) {
@@ -237,7 +241,7 @@ class LoanImportService
         $appliedAt = $this->parseOptionalDateTime($this->cell($row, 'applied_at')) ?? $disbursedAt;
         $approvedAt = $this->parseOptionalDateTime($this->cell($row, 'approved_at')) ?? $disbursedAt;
 
-        DB::transaction(function () use ($member, $loanTier, $fundTier, $amount, $amountRequested, $purpose, $count, $disbursedAt, $exemption, $threshold, $isEmergency, $memberPortion, $masterPortion, $paidCount, $minInstall, $totalRepaid, $terminalStatus, $settledAt, $appliedAt, $approvedAt): void {
+        DB::transaction(function () use ($member, $loanTier, $fundTier, $amount, $amountRequested, $purpose, $count, $disbursedAt, $exemption, $threshold, $isEmergency, $memberPortion, $masterPortion, $paidCount, $minInstall, $totalRepaid, $terminalStatus, $settledAt, $appliedAt, $approvedAt, $guarantorMemberId): void {
             $loan = Loan::create([
                 'member_id' => $member->id,
                 'loan_tier_id' => $loanTier?->id,
@@ -262,6 +266,7 @@ class LoanImportService
                 'is_emergency' => $isEmergency,
                 'member_portion' => $memberPortion,
                 'master_portion' => $masterPortion,
+                'guarantor_member_id' => $guarantorMemberId,
             ]);
 
             $this->ledger->postImportedLoanDisbursementWithPortions(
@@ -355,31 +360,75 @@ class LoanImportService
      */
     private function resolveMember(array $row): Member
     {
-        $email = strtolower($this->cell($row, 'member_email'));
-        $number = $this->cell($row, 'member_number');
-        $nationalId = $this->cell($row, 'national_id');
-        $memberName = $this->cell($row, 'member_name');
-        if ($memberName === '') {
-            $memberName = $this->cell($row, 'name');
+        return $this->resolveMemberFromIdentifiers(
+            email: strtolower($this->cell($row, 'member_email')),
+            number: $this->cell($row, 'member_number'),
+            nationalId: $this->cell($row, 'national_id'),
+            name: $this->cell($row, 'member_name') ?: $this->cell($row, 'name'),
+            subject: __('borrower'),
+        );
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     */
+    private function resolveOptionalGuarantor(array $row, Member $borrower): ?Member
+    {
+        $email = strtolower($this->cell($row, 'guarantor_member_email') ?: $this->cell($row, 'guarantor_email'));
+        $number = $this->cell($row, 'guarantor_member_number') ?: $this->cell($row, 'guarantor_number');
+        $name = $this->cell($row, 'guarantor_name');
+
+        if ($email === '' && $number === '' && $name === '') {
+            return null;
         }
 
-        if ($email === '' && $number === '' && $nationalId === '' && $memberName === '') {
-            throw new \InvalidArgumentException(__('Provide member_email, member_number, national_id, or member_name.'));
+        $guarantor = $this->resolveMemberFromIdentifiers(
+            email: $email,
+            number: $number,
+            nationalId: '',
+            name: $name,
+            subject: __('guarantor'),
+        );
+
+        if ((int) $guarantor->id === (int) $borrower->id) {
+            throw new \InvalidArgumentException(__('Guarantor cannot be the same member as the borrower.'));
+        }
+
+        return $guarantor;
+    }
+
+    private function resolveMemberFromIdentifiers(
+        string $email,
+        string $number,
+        string $nationalId,
+        string $name,
+        string $subject,
+    ): Member {
+        if ($email === '' && $number === '' && $nationalId === '' && $name === '') {
+            throw new \InvalidArgumentException(__(':subject: provide member_email, member_number, national_id, or member_name.', [
+                'subject' => ucfirst($subject),
+            ]));
         }
 
         if ($email !== '') {
             $member = Member::query()->whereRaw('LOWER(email) = ?', [$email])->first();
             if ($member === null) {
-                throw new \InvalidArgumentException("No member found for email: {$email}");
+                throw new \InvalidArgumentException(__(':subject: no member found for email :email.', [
+                    'subject' => ucfirst($subject),
+                    'email' => $email,
+                ]));
             }
 
             return $member;
         }
 
         if ($number !== '') {
-            $member = Member::where('member_number', $number)->first();
+            $member = Member::query()->where('member_number', $number)->first();
             if ($member === null) {
-                throw new \InvalidArgumentException("No member found for member_number: {$number}");
+                throw new \InvalidArgumentException(__(':subject: no member found for member_number :number.', [
+                    'subject' => ucfirst($subject),
+                    'number' => $number,
+                ]));
             }
 
             return $member;
@@ -394,35 +443,46 @@ class LoanImportService
                 ->values();
 
             if ($memberIds->isEmpty()) {
-                throw new \InvalidArgumentException("No member found for national_id: {$nationalId}");
+                throw new \InvalidArgumentException(__(':subject: no member found for national_id :id.', [
+                    'subject' => ucfirst($subject),
+                    'id' => $nationalId,
+                ]));
             }
 
             if ($memberIds->count() > 1) {
-                throw new \InvalidArgumentException(
-                    "Multiple members found for national_id: {$nationalId}. Use member_number or member_email."
-                );
+                throw new \InvalidArgumentException(__(':subject: multiple members found for national_id :id. Use member_number or member_email.', [
+                    'subject' => ucfirst($subject),
+                    'id' => $nationalId,
+                ]));
             }
 
-            $member = Member::find($memberIds->first());
+            $member = Member::query()->find($memberIds->first());
             if ($member === null) {
-                throw new \InvalidArgumentException("No member found for national_id: {$nationalId}");
+                throw new \InvalidArgumentException(__(':subject: no member found for national_id :id.', [
+                    'subject' => ucfirst($subject),
+                    'id' => $nationalId,
+                ]));
             }
 
             return $member;
         }
 
         $nameMatches = Member::query()
-            ->whereRaw('LOWER(name) = ?', [mb_strtolower($memberName)])
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
             ->get();
 
         if ($nameMatches->isEmpty()) {
-            throw new \InvalidArgumentException("No member found for member_name: {$memberName}");
+            throw new \InvalidArgumentException(__(':subject: no member found for member_name :name.', [
+                'subject' => ucfirst($subject),
+                'name' => $name,
+            ]));
         }
 
         if ($nameMatches->count() > 1) {
-            throw new \InvalidArgumentException(
-                "Multiple members found for member_name: {$memberName}. Use member_number, member_email, or national_id."
-            );
+            throw new \InvalidArgumentException(__(':subject: multiple members found for member_name :name. Use member_number, member_email, or national_id.', [
+                'subject' => ucfirst($subject),
+                'name' => $name,
+            ]));
         }
 
         return $nameMatches->first();

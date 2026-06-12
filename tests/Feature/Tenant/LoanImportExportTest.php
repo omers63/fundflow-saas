@@ -17,6 +17,9 @@ use App\Services\Loans\LoanExportService;
 use App\Services\Loans\LoanImportService;
 use App\Services\Loans\LoanRepaymentExportService;
 use App\Services\Loans\LoanRepaymentImportService;
+use App\Services\MemberImportService;
+use App\Support\AssociativeCsv;
+use App\Support\LegacyMigrationSampleCsv;
 use Filament\Facades\Filament;
 use Illuminate\Auth\Access\AuthorizationException;
 use Livewire\Livewire;
@@ -160,6 +163,80 @@ CSV;
 
     $member->refresh()->load('cashAccount', 'fundAccount');
     expect((float) $member->cashAccount->fresh()->balance)->toBe(10000.0);
+});
+
+test('loan import resolves borrower by member_name and assigns guarantor', function () {
+    $borrower = createLoanImportMember($this->accounting, 'borrower-by-name@example.test');
+    $borrower->update(['name' => 'Legacy Borrower By Name']);
+
+    $guarantor = createLoanImportMember($this->accounting, 'guarantor-by-number@example.test');
+    $guarantor->update([
+        'name' => 'Legacy Guarantor Person',
+        'member_number' => 'GUA-9001',
+    ]);
+
+    $csv = <<<'CSV'
+loan_status,member_name,amount_approved,member_portion,master_portion,disbursed_at,guarantor_member_number,guarantor_name
+active,Legacy Borrower By Name,5000,2500,2500,2024-07-01,GUA-9001,Legacy Guarantor Person
+CSV;
+
+    $path = writeLoanImportCsv($csv);
+    $result = app(LoanImportService::class)->import($path);
+
+    expect($result)->toMatchArray(['created' => 1, 'failed' => 0]);
+
+    $loan = Loan::query()->where('member_id', $borrower->id)->firstOrFail();
+
+    expect($loan->guarantor_member_id)->toBe($guarantor->id);
+});
+
+test('loan import rejects borrower and guarantor being the same member', function () {
+    $member = createLoanImportMember($this->accounting, 'self-guarantor@example.test');
+    $member->update(['name' => 'Self Guarantor Member', 'member_number' => 'SELF-001']);
+
+    $csv = <<<'CSV'
+loan_status,member_number,amount_approved,member_portion,master_portion,disbursed_at,guarantor_member_number
+active,SELF-001,5000,2500,2500,2024-07-01,SELF-001
+CSV;
+
+    $path = writeLoanImportCsv($csv);
+    $result = app(LoanImportService::class)->import($path);
+
+    expect($result['created'])->toBe(0)
+        ->and($result['failed'])->toBe(1)
+        ->and($result['errors'][0])->toContain(__('Guarantor cannot be the same member as the borrower.'));
+});
+
+test('legacy migration sample loan import assigns guarantors when members exist', function () {
+    $membersPath = storage_path('app/legacy-migration-loan-guarantor-members.csv');
+    $loansPath = storage_path('app/legacy-migration-loan-guarantor-loans.csv');
+
+    AssociativeCsv::write(
+        $membersPath,
+        LegacyMigrationSampleCsv::memberHeaders(),
+        LegacyMigrationSampleCsv::memberRows(),
+    );
+    AssociativeCsv::write(
+        $loansPath,
+        LegacyMigrationSampleCsv::loanHeaders(),
+        LegacyMigrationSampleCsv::loanRows(),
+    );
+
+    app(MemberImportService::class)->import($membersPath, 'password123', '2025-12-31');
+    app(LoanImportService::class)->import($loansPath);
+
+    $omar = Member::query()->where('member_number', 'MEM-1003')->firstOrFail();
+    $fatimah = Member::query()->where('member_number', 'MEM-1002')->firstOrFail();
+    Member::query()->where('member_number', 'MEM-1001')->firstOrFail();
+
+    $omarLoan = Loan::query()->where('member_id', $omar->id)->where('status', 'active')->firstOrFail();
+    $completedLoan = Loan::query()->where('member_id', Member::query()->where('member_number', 'MEM-1001')->value('id'))->where('status', 'completed')->firstOrFail();
+
+    expect($omarLoan->guarantor_member_id)->toBe($fatimah->id)
+        ->and($completedLoan->guarantor_member_id)->toBe($fatimah->id);
+
+    @unlink($membersPath);
+    @unlink($loansPath);
 });
 
 test('loan export streams csv with legacy-compatible headers', function () {

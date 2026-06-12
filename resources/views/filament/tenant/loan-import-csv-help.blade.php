@@ -19,38 +19,53 @@
                 <tr>
                     <td
                         class="w-44 bg-gray-50 px-3 py-2 font-semibold text-gray-700 dark:bg-white/5 dark:text-gray-200">
-                        {{ __('CSV format') }}</td>
+                        {{ __('CSV format') }}
+                    </td>
                     <td class="px-3 py-2">{{ __('UTF-8 CSV with a header row. Column order does not matter.') }}</td>
                 </tr>
                 <tr>
                     <td class="bg-gray-50 px-3 py-2 font-semibold text-gray-700 dark:bg-white/5 dark:text-gray-200">
-                        {{ __('Member identifier') }}</td>
+                        {{ __('Member identifier') }}
+                    </td>
                     <td class="px-3 py-2">
-                        {{ __('One of member_email, member_number, national_id, or member_name (or name).') }}</td>
+                        {{ __('One of member_email, member_number, national_id, or member_name (or name).') }}
+                    </td>
                 </tr>
                 <tr>
                     <td class="bg-gray-50 px-3 py-2 font-semibold text-gray-700 dark:bg-white/5 dark:text-gray-200">
-                        {{ __('loan_status') }}</td>
+                        {{ __('Guarantor') }}
+                    </td>
+                    <td class="px-3 py-2">
+                        {{ __('Optional guarantor_member_number (alias guarantor_number), guarantor_member_email, or guarantor_name — must match an existing member and cannot be the borrower.') }}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="bg-gray-50 px-3 py-2 font-semibold text-gray-700 dark:bg-white/5 dark:text-gray-200">
+                        {{ __('loan_status') }}
+                    </td>
                     <td class="px-3 py-2">{{ __('pending, approved, active (default), completed, or early_settled.') }}
                     </td>
                 </tr>
                 <tr>
                     <td class="bg-gray-50 px-3 py-2 font-semibold text-gray-700 dark:bg-white/5 dark:text-gray-200">
-                        {{ __('Amount columns') }}</td>
+                        {{ __('Amount columns') }}
+                    </td>
                     <td class="px-3 py-2">
                         {{ __('Pending: amount_requested or amount_approved. Approved/active: amount_approved required. Active: member_portion + master_portion = amount_approved (both may be omitted).') }}
                     </td>
                 </tr>
                 <tr>
                     <td class="bg-gray-50 px-3 py-2 font-semibold text-gray-700 dark:bg-white/5 dark:text-gray-200">
-                        {{ __('Repayment columns') }}</td>
+                        {{ __('Repayment columns') }}
+                    </td>
                     <td class="px-3 py-2">
                         {{ __('paid_installments_count and total_amount_repaid for partially or fully repaid active loans. Completed rows mark all installments paid.') }}
                     </td>
                 </tr>
                 <tr>
                     <td class="bg-gray-50 px-3 py-2 font-semibold text-gray-700 dark:bg-white/5 dark:text-gray-200">
-                        {{ __('Tier columns') }}</td>
+                        {{ __('Tier columns') }}
+                    </td>
                     <td class="px-3 py-2">
                         {{ __('loan_tier_number and fund_tier_number optional when tiers can be inferred; is_emergency=1 uses the emergency fund tier.') }}
                     </td>

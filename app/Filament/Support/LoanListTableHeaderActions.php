@@ -174,7 +174,7 @@ final class LoanListTableHeaderActions
 
                     Notification::make()
                         ->title(__('Loan import finished'))
-                        ->body(new HtmlString(nl2br(e($body))))
+                        ->body(nl2br(e($body)))
                         ->color($result['failed'] > 0 || $result['errors'] !== [] ? 'warning' : 'success')
                         ->persistent()
                         ->send();
@@ -276,7 +276,7 @@ final class LoanListTableHeaderActions
 
                     Notification::make()
                         ->title(__('Loan repayment import finished'))
-                        ->body(new HtmlString(nl2br(e($body))))
+                        ->body(nl2br(e($body)))
                         ->color($result['failed'] > 0 || $result['errors'] !== [] ? 'warning' : 'success')
                         ->persistent()
                         ->send();
