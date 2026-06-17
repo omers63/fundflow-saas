@@ -100,6 +100,52 @@ class Account extends Model
     }
 
     /**
+     * @return list<array{type: string, name: string}>
+     */
+    public static function defaultMasterAccountDefinitions(): array
+    {
+        return [
+            ['type' => 'cash', 'name' => 'Master Cash'],
+            ['type' => 'fund', 'name' => 'Master Fund'],
+            ['type' => 'bank', 'name' => 'Master Bank'],
+            ['type' => 'expense', 'name' => 'Master Expense'],
+            ['type' => 'fees', 'name' => 'Master Fees'],
+            ['type' => 'invest', 'name' => 'Master Invest'],
+            ['type' => 'suspense', 'name' => 'Master Suspense'],
+        ];
+    }
+
+    public static function ensureDefaultMasterAccounts(): void
+    {
+        foreach (self::defaultMasterAccountDefinitions() as $account) {
+            static::firstOrCreate(
+                ['type' => $account['type'], 'is_master' => true],
+                ['member_id' => null, 'name' => $account['name'], 'balance' => 0],
+            );
+        }
+    }
+
+    public static function ensureMasterSuspense(): self
+    {
+        $existing = static::masterSuspense();
+
+        if ($existing !== null) {
+            if ($existing->name !== 'Master Suspense') {
+                $existing->update(['name' => 'Master Suspense']);
+            }
+
+            return $existing->fresh();
+        }
+
+        return static::create([
+            'type' => 'suspense',
+            'name' => 'Master Suspense',
+            'balance' => 0,
+            'is_master' => true,
+        ]);
+    }
+
+    /**
      * User-facing label for master accounts (Filament list/view); ledger name stays unchanged.
      */
     public function displayLabel(): string

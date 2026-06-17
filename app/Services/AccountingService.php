@@ -1413,21 +1413,21 @@ class AccountingService
         );
     }
 
-    public function postContribution(Contribution $contribution): void
+    public function postContribution(Contribution $contribution, ?DateTimeInterface $transactedAt = null): void
     {
         $amount = (float) $contribution->amount;
         $lateFee = (float) ($contribution->late_fee_amount ?? 0);
 
-        DB::transaction(function () use ($contribution, $amount, $lateFee): void {
-            $this->postContributionPrincipal($contribution, $amount);
+        DB::transaction(function () use ($contribution, $amount, $lateFee, $transactedAt): void {
+            $this->postContributionPrincipal($contribution, $amount, $transactedAt);
 
             if ($lateFee > 0.00001) {
-                $this->postContributionLateFee($contribution, $lateFee);
+                $this->postContributionLateFee($contribution, $lateFee, $transactedAt);
             }
         });
     }
 
-    public function postContributionPrincipal(Contribution $contribution, float $amount): void
+    public function postContributionPrincipal(Contribution $contribution, float $amount, ?DateTimeInterface $transactedAt = null): void
     {
         if ($amount <= 0.00001) {
             return;
@@ -1445,7 +1445,7 @@ class AccountingService
 
         $periodLabel = $contribution->period?->format('M Y') ?? '';
         $description = __('Contribution — :period', ['period' => $periodLabel]);
-        $postedAt = BusinessDay::now();
+        $postedAt = $transactedAt ?? BusinessDay::now();
 
         if ($contribution->payment_method === Contribution::PAYMENT_METHOD_CASH_ACCOUNT) {
             $this->debitMemberCashWithMasterMirror(
@@ -1468,7 +1468,7 @@ class AccountingService
         );
     }
 
-    public function postContributionLateFee(Contribution $contribution, float $lateFee): void
+    public function postContributionLateFee(Contribution $contribution, float $lateFee, ?DateTimeInterface $transactedAt = null): void
     {
         if ($lateFee <= 0.00001) {
             return;
@@ -1489,7 +1489,7 @@ class AccountingService
         $description = __('Contribution late fee — :period', [
             'period' => $contribution->period?->format('M Y') ?? '',
         ]);
-        $postedAt = BusinessDay::now();
+        $postedAt = $transactedAt ?? BusinessDay::now();
 
         $this->debitMemberCashWithMasterMirror(
             $memberCash,

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models\Tenant;
 
 use App\Services\AccountingService;
+use App\Services\ContributionService;
 use App\Support\ContributionCollectionStatus;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -67,7 +68,11 @@ class Contribution extends Model
         static::creating(function (Contribution $contribution): void {
             $member = Member::query()->find((int) $contribution->member_id);
 
-            if ($member && $member->isExemptFromContributions()) {
+            if (
+                $member
+                && ! ContributionService::liveCollectionGuardsSuppressed()
+                && $member->isExemptFromContributions()
+            ) {
                 throw ValidationException::withMessages([
                     'member_id' => [__('This member has an active loan with pending repayments. Keep funds in cash until installments are paid.')],
                 ]);

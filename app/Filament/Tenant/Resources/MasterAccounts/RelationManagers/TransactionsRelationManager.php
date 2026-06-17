@@ -61,6 +61,8 @@ class TransactionsRelationManager extends RelationManager
                     ->label(__('Bank import'))
                     ->state(fn (Transaction $record): ?string => $record->bankImportSummary())
                     ->placeholder(__('—'))
+                    ->searchable(false)
+                    ->sortable(false)
                     ->wrap()
                     ->visible(fn (): bool => $this->getOwnerRecord()->is_master && $this->getOwnerRecord()->type === 'cash'),
             ])

@@ -5,18 +5,21 @@ declare(strict_types=1);
 use App\Filament\Tenant\Resources\Loans\Pages\ListLoans;
 use App\Models\Central\Tenant;
 use App\Models\Tenant\Account;
+use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\Loans\LoanExportService;
 use App\Services\Loans\LoanImportService;
 use App\Services\Loans\LoanRepaymentExportService;
 use App\Services\Loans\LoanRepaymentImportService;
+use App\Services\MemberCashOutService;
 use App\Services\MemberImportService;
 use App\Support\AssociativeCsv;
 use App\Support\LegacyMigrationSampleCsv;
@@ -161,8 +164,95 @@ CSV;
         ->and($loan->installments()->where('status', 'paid')->count())->toBe(2)
         ->and($loan->disbursements()->count())->toBe(1);
 
+    $cashOut = CashOutRequest::query()->where('member_id', $member->id)->firstOrFail();
+
+    expect($cashOut->status)->toBe('accepted')
+        ->and((float) $cashOut->amount)->toBe(10000.0)
+        ->and($cashOut->bank_transaction_id)->not->toBeNull()
+        ->and($cashOut->reviewed_at?->toDateString())->toBe('2024-06-01');
+
     $member->refresh()->load('cashAccount', 'fundAccount');
-    expect((float) $member->cashAccount->fresh()->balance)->toBe(10000.0);
+    expect((float) $member->cashAccount->fresh()->balance)->toBe(0.0);
+});
+
+test('loan import defaults disbursed loans to full member portion when portions are omitted', function () {
+    $member = createLoanImportMember($this->accounting, 'active-default-portions@example.test', 0);
+
+    $csv = <<<CSV
+loan_status,member_email,amount_approved,disbursed_at,paid_installments_count
+active,{$member->email},10000,2024-06-01,0
+CSV;
+
+    $path = writeLoanImportCsv($csv);
+    $result = app(LoanImportService::class)->import($path);
+
+    expect($result)->toMatchArray(['created' => 1, 'failed' => 0]);
+
+    $loan = Loan::query()->where('member_id', $member->id)->latest('id')->firstOrFail();
+    $member->refresh()->load('fundAccount', 'cashAccount');
+    $masterFund = Account::masterFund();
+
+    expect((float) $loan->member_portion)->toBe(10000.0)
+        ->and((float) $loan->master_portion)->toBe(0.0)
+        ->and((float) $member->fundAccount->balance)->toBe(-10000.0)
+        ->and((float) $masterFund->fresh()->balance)->toBe(490_000.0)
+        ->and((float) $member->cashAccount->balance)->toBe(0.0);
+});
+
+test('loan import mirrors explicit master portion through member fund not master-only debit', function () {
+    $member = createLoanImportMember($this->accounting, 'split-portions-mirror@example.test', 25_000);
+    $masterFundBefore = (float) Account::masterFund()->balance;
+
+    $csv = <<<CSV
+loan_status,member_email,amount_approved,member_portion,master_portion,disbursed_at,paid_installments_count
+active,{$member->email},10000,4000,6000,2024-06-01,0
+CSV;
+
+    $path = writeLoanImportCsv($csv);
+    $result = app(LoanImportService::class)->import($path);
+
+    expect($result)->toMatchArray(['created' => 1, 'failed' => 0]);
+
+    $member->refresh()->load('fundAccount');
+    $masterFund = Account::masterFund();
+
+    expect((float) $member->fundAccount->balance)->toBe(15000.0)
+        ->and((float) $masterFund->fresh()->balance)->toBe($masterFundBefore - 10000.0)
+        ->and(
+            Transaction::query()
+                ->where('account_id', $masterFund->id)
+                ->where('reference_type', Loan::class)
+                ->where('description', 'like', '%'.__('(master fund share)').'%')
+                ->where('type', 'debit')
+                ->exists()
+        )->toBeFalse();
+});
+
+test('loan import cash-out succeeds for a second loan when the member already has an active loan with emi reserve', function () {
+    $member = createLoanImportMember($this->accounting, 'second-loan-cashout@example.test', 50_000);
+
+    $firstCsv = <<<CSV
+loan_status,member_email,amount_approved,member_portion,master_portion,disbursed_at,paid_installments_count
+active,{$member->email},10000,5000,5000,2020-01-01,0
+CSV;
+
+    $secondCsv = <<<CSV
+loan_status,member_email,amount_approved,member_portion,master_portion,disbursed_at,paid_installments_count
+active,{$member->email},8000,4000,4000,2022-01-01,0
+CSV;
+
+    expect(app(LoanImportService::class)->import(writeLoanImportCsv($firstCsv)))->toMatchArray(['created' => 1, 'failed' => 0]);
+
+    $firstLoan = Loan::query()->where('member_id', $member->id)->orderBy('id')->firstOrFail();
+    expect($firstLoan->installments()->where('status', 'pending')->count())->toBeGreaterThan(0)
+        ->and(app(MemberCashOutService::class)->reservedForNextEmi($member->fresh()))->toBeGreaterThan(0.0);
+
+    $result = app(LoanImportService::class)->import(writeLoanImportCsv($secondCsv));
+
+    expect($result)->toMatchArray(['created' => 1, 'failed' => 0])
+        ->and(CashOutRequest::query()->where('member_id', $member->id)->count())->toBe(2)
+        ->and(CashOutRequest::query()->where('member_id', $member->id)->where('status', 'accepted')->count())->toBe(2)
+        ->and((float) $member->fresh()->cashAccount->balance)->toBe(0.0);
 });
 
 test('loan import resolves borrower by member_name and assigns guarantor', function () {
@@ -341,14 +431,29 @@ test('loan repayment import creates legacy row and posts fund repayment', functi
         'purpose' => 'Repayment import test',
         'installments_count' => 10,
         'status' => 'active',
-        'applied_at' => now()->subMonths(3),
-        'approved_at' => now()->subMonths(3),
-        'disbursed_at' => now()->subMonths(2),
+        'applied_at' => '2024-01-01',
+        'approved_at' => '2024-01-01',
+        'disbursed_at' => '2024-01-01',
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => '2025-04-01',
+        'status' => 'pending',
+    ]);
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 2,
+        'amount' => 1000,
+        'due_date' => '2025-05-01',
+        'status' => 'pending',
     ]);
 
     $csv = <<<CSV
 loan_number,amount,paid_at,notes
-{$loan->id},1500,2025-05-01 12:00:00,Historical bulk repayment
+{$loan->id},1500,2025-05-10 12:00:00,Historical bulk repayment
 CSV;
 
     $result = app(LoanRepaymentImportService::class)->import(writeLoanImportCsv($csv));
@@ -361,7 +466,9 @@ CSV;
         ->and((float) $repayment->amount)->toBe(1500.0)
         ->and($repayment->notes)->toBe('Historical bulk repayment');
 
-    expect((float) $member->fresh()->fundAccount->balance)->toBe(21500.0);
+    expect((float) $member->fresh()->fundAccount->balance)->toBe(21500.0)
+        ->and($loan->installments()->where('status', 'paid')->count())->toBe(1)
+        ->and($loan->installments()->where('status', 'pending')->count())->toBe(1);
 });
 
 test('loan repayment import marks installment paid without cash debit', function () {

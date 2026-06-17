@@ -8,6 +8,8 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\MembershipApplication;
+use App\Services\LegacyMigration\LegacyImportedLoanScheduleSyncService;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -19,6 +21,7 @@ final class LoanRepaymentImportService
 {
     public function __construct(
         private readonly LoanLedgerService $ledger,
+        private readonly LegacyImportedLoanScheduleSyncService $scheduleSync,
     ) {}
 
     /**
@@ -33,6 +36,8 @@ final class LoanRepaymentImportService
         $created = 0;
         $failed = 0;
         $errors = [];
+        /** @var list<int> $legacyLoanIds */
+        $legacyLoanIds = [];
 
         $rows = $this->parseAssociativeCsv($absolutePath);
 
@@ -50,12 +55,16 @@ final class LoanRepaymentImportService
             $lineNumber = $lineBase + $index;
 
             try {
-                $this->importRow($row);
+                $this->importRow($row, $legacyLoanIds);
                 $created++;
             } catch (Throwable $e) {
                 $failed++;
                 $errors[] = "Row {$lineNumber}: {$e->getMessage()}";
             }
+        }
+
+        if ($legacyLoanIds !== []) {
+            $this->scheduleSync->syncLoans($legacyLoanIds);
         }
 
         return [
@@ -85,8 +94,9 @@ final class LoanRepaymentImportService
 
     /**
      * @param  array<string, string>  $row
+     * @param  list<int>  $legacyLoanIds
      */
-    private function importRow(array $row): void
+    private function importRow(array $row, array &$legacyLoanIds): void
     {
         $loan = $this->resolveLoan($row);
         $this->assertMemberMatches($row, $loan);
@@ -100,13 +110,14 @@ final class LoanRepaymentImportService
             return;
         }
 
-        $this->importLegacyRow($row, $loan);
+        $this->importLegacyRow($row, $loan, $legacyLoanIds);
     }
 
     /**
      * @param  array<string, string>  $row
+     * @param  list<int>  $legacyLoanIds
      */
-    private function importLegacyRow(array $row, Loan $loan): void
+    private function importLegacyRow(array $row, Loan $loan, array &$legacyLoanIds): void
     {
         if (! in_array($loan->status, ['active', 'transferred', 'completed', 'early_settled'], true)) {
             throw new InvalidArgumentException(__('Loan must be active or settled to receive imported repayments.'));
@@ -117,15 +128,17 @@ final class LoanRepaymentImportService
         $notes = $this->cell($row, 'notes') ?: __('Imported from CSV');
 
         DB::transaction(function () use ($loan, $amount, $paidAt, $notes): void {
-            LoanRepayment::query()->create([
+            $repayment = LoanRepayment::query()->create([
                 'loan_id' => $loan->id,
                 'amount' => $amount,
                 'paid_at' => $paidAt,
                 'notes' => $notes,
             ]);
 
-            $this->ledger->postImportedLoanRepayments($loan->fresh(), $amount);
+            $this->ledger->postImportedLoanRepaymentWithCashFlow($loan->fresh(), $repayment, $amount, $paidAt);
         });
+
+        $legacyLoanIds[] = $loan->id;
     }
 
     /**

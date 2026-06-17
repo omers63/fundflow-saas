@@ -8,6 +8,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanDisbursement;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Support\BusinessDay;
@@ -359,6 +360,7 @@ final class LoanLedgerService
         string $description,
         Model $source,
         int $memberId,
+        ?CarbonInterface $transactedAt = null,
     ): void {
         $masterFund = Account::masterFund();
         $memberFund = $loan->member->fundAccount;
@@ -380,10 +382,10 @@ final class LoanLedgerService
             $description,
             __('(loan repayment mirror)'),
             $source,
-            null,
+            $transactedAt,
             $memberId,
         );
-        $this->accounting->credit($loanAccount, $amount, $description, $source, null, $memberId);
+        $this->accounting->credit($loanAccount, $amount, $description, $source, $transactedAt, $memberId);
 
         if ($repaidSlice > 0.00001) {
             $loan->increment('repaid_to_master', $repaidSlice);
@@ -472,10 +474,11 @@ final class LoanLedgerService
             }
 
             if ($masterPortion > 0.00001) {
-                $this->accounting->debit(
-                    $masterFundLocked,
+                $this->accounting->debitMemberFundWithMasterMirror(
+                    $memberFund,
                     $masterPortion,
-                    $label.' '.__('(master fund share)'),
+                    $label,
+                    __('(master fund share)'),
                     $loan,
                     $at,
                     $member->id,
@@ -530,6 +533,59 @@ final class LoanLedgerService
             Loan::query()->whereKey($loan->getKey())->lockForUpdate()->firstOrFail();
 
             $this->postLoanPrincipalRepayment($loan, $totalRepaid, $description, $loan, $member->id);
+        });
+    }
+
+    public function postImportedLoanRepaymentWithCashFlow(
+        Loan $loan,
+        LoanRepayment $repayment,
+        float $amount,
+        ?CarbonInterface $paidAt = null,
+    ): void {
+        if ($amount <= 0.00001) {
+            return;
+        }
+
+        $member = $loan->member;
+        $this->ensureMemberAccounts($member);
+        $cash = $member->cashAccount;
+
+        if ($cash === null) {
+            throw new RuntimeException(__('Member cash account is missing.'));
+        }
+
+        $at = $paidAt ?? BusinessDay::now();
+        $description = __('Loan #:id repayments (import, bulk) – :name', [
+            'id' => $loan->id,
+            'name' => $member->name,
+        ]);
+
+        DB::transaction(function () use ($loan, $member, $cash, $amount, $description, $repayment, $at): void {
+            Loan::query()->whereKey($loan->getKey())->lockForUpdate()->firstOrFail();
+
+            AccountingService::withoutMemberCashCollection(function () use ($cash, $amount, $description, $repayment, $at, $member): void {
+                $this->accounting->creditMemberCashWithMasterMirror(
+                    $cash,
+                    $amount,
+                    $description,
+                    __('(loan repayment cash-in mirror)'),
+                    $repayment,
+                    $at,
+                    $member->id,
+                );
+            });
+
+            $this->accounting->debitMemberCashWithMasterMirror(
+                $cash,
+                $amount,
+                $description,
+                __('(loan repayment mirror)'),
+                $repayment,
+                $at,
+                $member->id,
+            );
+
+            $this->postLoanPrincipalRepayment($loan, $amount, $description, $repayment, $member->id, $at);
         });
     }
 }

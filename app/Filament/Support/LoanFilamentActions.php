@@ -270,6 +270,52 @@ final class LoanFilamentActions
     }
 
     /**
+     * Early settlement for relation-manager table header actions (no row record).
+     */
+    public static function earlySettleForOwner(\Closure $resolveLoan): Action
+    {
+        return Action::make('earlySettle')
+            ->label(__('Early settlement'))
+            ->icon('heroicon-o-check-badge')
+            ->color('success')
+            ->visible(function () use ($resolveLoan): bool {
+                $record = $resolveLoan();
+
+                return $record->status === 'active';
+            })
+            ->fillForm(function () use ($resolveLoan): array {
+                $record = $resolveLoan();
+
+                return [
+                    'amount' => app(LoanEarlySettlementService::class)->requiredCash($record),
+                    'option' => 'roll_up',
+                ];
+            })
+            ->schema(function () use ($resolveLoan): array {
+                return self::earlySettlementFormSchema($resolveLoan());
+            })
+            ->action(function (array $data, Action $action, LoanService $service) use ($resolveLoan): void {
+                $record = $resolveLoan();
+
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $service->settleLoan(
+                            $record,
+                            (float) $data['amount'],
+                            (string) ($data['option'] ?? 'roll_up'),
+                        ),
+                        __('Settlement failed'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()->title(__('Early settlement applied'))->success()->send();
+            });
+    }
+
+    /**
      * @return array<int, \Filament\Forms\Components\Component|\Filament\Schemas\Components\Component>
      */
     public static function earlySettlementFormSchema(Loan $record): array

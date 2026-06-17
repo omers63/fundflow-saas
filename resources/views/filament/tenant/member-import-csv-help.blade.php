@@ -27,18 +27,18 @@
                         'joined_at' => [false, __('YYYY-MM-DD (default today)')],
                         'status' => [false, __('active, delinquent, suspended, withdrawn, terminated')],
                         'password' => [false, __('Portal password (≥8 chars; otherwise uses default from modal)')],
-                        'parent_member_number' => [false, __('Household parent member number')],
-                        'parent_member_email' => [false, __('Household parent email (alternative to number)')],
+                        'parent_member_number' => [false, __('Household parent member number (parent row may appear anywhere in the file)')],
+                        'parent_member_email' => [false, __('Household parent email (alternative to number; parent row may appear anywhere in the file)')],
                         'portal_pin' => [false, __('Optional household profile PIN')],
                         'contribution_arrears_cutoff_date' => [false, __('Migration cut-off; overrides modal default per row')],
                         'cutoff_cash_balance' => [false, __('Opening cash credited on import when cut-off date is set')],
                         'cutoff_fund_balance' => [false, __('Opening fund credited on import when cut-off date is set')],
                     ] as $col => [$required, $hint])
-                        <tr>
-                            <td class="px-3 py-2 font-mono text-gray-900 dark:text-gray-100">{{ $col }}</td>
-                            <td class="px-3 py-2">{{ $required ? __('Yes') : __('No') }}</td>
-                            <td class="px-3 py-2">{{ $hint }}</td>
-                        </tr>
+                            <tr>
+                                <td class="px-3 py-2 font-mono text-gray-900 dark:text-gray-100">{{ $col }}</td>
+                                <td class="px-3 py-2">{{ $required ? __('Yes') : __('No') }}</td>
+                                <td class="px-3 py-2">{{ $hint }}</td>
+                            </tr>
                 @endforeach
             </tbody>
         </table>

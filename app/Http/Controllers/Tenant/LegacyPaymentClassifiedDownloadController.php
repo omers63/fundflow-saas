@@ -20,7 +20,7 @@ class LegacyPaymentClassifiedDownloadController extends Controller
         ]);
 
         $relative = ltrim((string) $request->query('source'), '/');
-        $absolute = storage_path('app/' . $relative);
+        $absolute = storage_path('app/'.$relative);
 
         abort_unless(is_readable($absolute), 404);
 
@@ -40,7 +40,7 @@ class LegacyPaymentClassifiedDownloadController extends Controller
                 'payment_date',
                 'amount',
                 'payment_type',
-                'suggested_loan_number',
+                'loan_number',
                 'period',
                 'notes',
             ];
@@ -52,7 +52,7 @@ class LegacyPaymentClassifiedDownloadController extends Controller
                     $row['payment_date'],
                     $row['amount'],
                     $row['payment_type'],
-                    $row['suggested_loan_number'],
+                    $row['loan_number'],
                     $row['period'],
                     $row['notes'],
                 ]);

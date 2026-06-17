@@ -17,6 +17,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MonthlyStatement;
 use App\Services\Concerns\EnrichesMemberPortalDashboard;
@@ -75,7 +76,7 @@ final class MemberPortalInsightsService
         $unreadMessages = (int) DirectMessage::query()
             ->where('to_user_id', $member->user_id)
             ->whereNull('read_at')
-            ->whereHas('sender', fn ($q) => $q->where('is_admin', true))
+            ->whereHas('sender', fn($q) => $q->where('is_admin', true))
             ->count();
 
         $latestStatement = MonthlyStatement::query()
@@ -100,6 +101,10 @@ final class MemberPortalInsightsService
         $monthly = (float) $member->monthly_contribution_amount;
         $contributionsPosted = (int) ($contributionMetrics?->posted_count ?? 0);
         $contributionsPostedTotal = (float) ($contributionMetrics?->posted_total ?? 0.0);
+        $lifetimeRepaidTotal = (float) LoanRepayment::query()
+            ->whereHas('loan', fn($query) => $query->where('member_id', $member->id))
+            ->sum('amount');
+        $totalFundInflow = $contributionsPostedTotal + $lifetimeRepaidTotal + $cashBalance;
         $dependentsCount = $member->dependents()->count();
         $guaranteedLoansCount = (int) Loan::query()
             ->where('guarantor_member_id', $member->id)
@@ -166,6 +171,9 @@ final class MemberPortalInsightsService
                 $fundBalance,
                 $loanOutstanding,
                 $contributionsPosted,
+                $contributionsPostedTotal,
+                $lifetimeRepaidTotal,
+                $totalFundInflow,
                 $pendingDeposits,
                 $unreadMessages,
             ),
@@ -174,7 +182,7 @@ final class MemberPortalInsightsService
                 'status_label' => Loan::statusOptions()[$activeLoan->status] ?? $activeLoan->status,
                 'outstanding' => InsightFormatter::money($loanOutstanding),
                 'repay_percent' => $repayPercent,
-                'installments' => $installmentsPaid.'/'.$installmentsTotal,
+                'installments' => $installmentsPaid . '/' . $installmentsTotal,
                 'installments_paid' => $installmentsPaid,
                 'installments_total' => $installmentsTotal,
                 'overdue_count' => $installmentsOverdue,
@@ -252,7 +260,7 @@ final class MemberPortalInsightsService
                 ->latest()
                 ->limit(4)
                 ->get()
-                ->map(fn (FundPosting $posting): array => [
+                ->map(fn(FundPosting $posting): array => [
                     'amount' => InsightFormatter::money((float) $posting->amount),
                     'status' => $posting->status,
                     'status_label' => match ($posting->status) {
@@ -322,7 +330,7 @@ final class MemberPortalInsightsService
 
         $attentionCount = ($unreadMessages > 0 ? 1 : 0)
             + ($pendingDeposits > 0 ? 1 : 0)
-            + (! $postedThisCycle ? 1 : 0)
+            + (!$postedThisCycle ? 1 : 0)
             + (($arrears['has_arrears'] ?? false) || ($arrears['is_delinquent'] ?? false) ? 1 : 0);
 
         $defaultSubtitle = $attentionCount > 0
@@ -376,7 +384,7 @@ final class MemberPortalInsightsService
             ];
         }
 
-        if (! $postedThisCycle) {
+        if (!$postedThisCycle) {
             $pills[] = [
                 'label' => __('Contribution not posted :period', [
                     'period' => $cycles->periodLabel($curMonth, $curYear),
@@ -451,7 +459,7 @@ final class MemberPortalInsightsService
             ? mb_substr($parts[array_key_last($parts)], 0, 1)
             : '';
 
-        return mb_strtoupper($first.$last);
+        return mb_strtoupper($first . $last);
     }
 
     /**
@@ -557,39 +565,81 @@ final class MemberPortalInsightsService
         float $fundBalance,
         float $loanOutstanding,
         int $contributionsPosted,
+        float $contributionsPostedTotal,
+        float $lifetimeRepaidTotal,
+        float $totalFundInflow,
         int $pendingDeposits,
         int $unreadMessages,
     ): array {
         $cashKpi = InsightFormatter::moneyKpi($cashBalance);
         $fundKpi = InsightFormatter::moneyKpi($fundBalance);
+        $lifetimeContributionsKpi = InsightFormatter::moneyKpi($contributionsPostedTotal);
+        $lifetimeRepaidKpi = InsightFormatter::moneyKpi($lifetimeRepaidTotal);
+        $totalFundInflowKpi = InsightFormatter::moneyKpi($totalFundInflow);
 
         return [
             [
                 'label' => __('Cash'),
-                'value' => $cashKpi['display'],
+                'value' => $this->signedCompactAmount($cashBalance),
                 'sub' => $cashKpi['full'],
                 'icon' => 'heroicon-o-wallet',
-                'accent' => 'emerald',
+                'accent' => $cashKpi['is_negative'] ? 'rose' : 'emerald',
+                'value_class' => $cashKpi['is_negative']
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : 'text-gray-900 dark:text-white',
                 'url' => $member->cashAccount
                     ? MyAccountResource::getUrl('view', ['record' => $member->cashAccount])
                     : MyAccountResource::getUrl('index'),
             ],
             [
                 'label' => __('Fund'),
-                'value' => $fundKpi['display'],
+                'value' => $this->signedCompactAmount($fundBalance),
                 'sub' => $fundKpi['full'],
                 'icon' => 'heroicon-o-building-library',
-                'accent' => 'indigo',
+                'accent' => $fundKpi['is_negative'] ? 'rose' : 'indigo',
+                'value_class' => $fundKpi['is_negative']
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : 'text-gray-900 dark:text-white',
                 'url' => $member->fundAccount
                     ? MyAccountResource::getUrl('view', ['record' => $member->fundAccount])
                     : MyAccountResource::getUrl('index'),
             ],
             [
-                'label' => __('Contributions'),
-                'value' => (string) $contributionsPosted,
-                'sub' => __('Posted'),
+                'label' => __('Lifetime contributions'),
+                'value' => abs($contributionsPostedTotal) > 0.00001 ? $this->signedCompactAmount($contributionsPostedTotal) : '—',
+                'sub' => abs($contributionsPostedTotal) > 0.00001
+                    ? __(':count posted · :amount', [
+                        'count' => $contributionsPosted,
+                        'amount' => $lifetimeContributionsKpi['full'],
+                    ])
+                    : __('No contributions'),
                 'icon' => 'heroicon-o-banknotes',
-                'accent' => 'sky',
+                'accent' => $contributionsPostedTotal < 0 ? 'rose' : 'sky',
+                'value_class' => $contributionsPostedTotal < 0
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : 'text-gray-900 dark:text-white',
+                'url' => MyContributionResource::getUrl('index'),
+            ],
+            [
+                'label' => __('Lifetime repaid'),
+                'value' => abs($lifetimeRepaidTotal) > 0.00001 ? $this->signedCompactAmount($lifetimeRepaidTotal) : '—',
+                'sub' => abs($lifetimeRepaidTotal) > 0.00001 ? $lifetimeRepaidKpi['full'] : __('No repayments'),
+                'icon' => 'heroicon-o-arrow-uturn-left',
+                'accent' => $lifetimeRepaidTotal < 0 ? 'rose' : ($lifetimeRepaidTotal > 0 ? 'violet' : 'gray'),
+                'value_class' => $lifetimeRepaidTotal < 0
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : 'text-gray-900 dark:text-white',
+                'url' => MyLoanResource::getUrl('index'),
+            ],
+            [
+                'label' => __('Total fund inflow'),
+                'value' => abs($totalFundInflow) > 0.00001 ? $this->signedCompactAmount($totalFundInflow) : '—',
+                'sub' => abs($totalFundInflow) > 0.00001 ? $totalFundInflowKpi['full'] : __('No inflow yet'),
+                'icon' => 'heroicon-o-arrow-trending-up',
+                'accent' => $totalFundInflow < 0 ? 'rose' : ($totalFundInflow > 0 ? 'indigo' : 'gray'),
+                'value_class' => $totalFundInflow < 0
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : 'text-gray-900 dark:text-white',
                 'url' => MyContributionResource::getUrl('index'),
             ],
             [
@@ -617,6 +667,13 @@ final class MemberPortalInsightsService
                 'url' => MyMessageResource::getUrl('index'),
             ],
         ];
+    }
+
+    private function signedCompactAmount(float $amount): string
+    {
+        $display = InsightFormatter::compactAmount($amount);
+
+        return $amount < 0 ? '-' . $display : $display;
     }
 
     /**
@@ -657,7 +714,7 @@ final class MemberPortalInsightsService
                 'icon' => 'heroicon-o-document-plus',
                 'tone' => 'loan',
                 'badge' => null,
-                'visible' => $eligible && ! $pendingLoan,
+                'visible' => $eligible && !$pendingLoan,
             ],
             [
                 'label' => __('Request eligibility review'),
@@ -668,7 +725,7 @@ final class MemberPortalInsightsService
                 'icon' => 'heroicon-o-shield-exclamation',
                 'tone' => 'loan',
                 'badge' => $hasPendingOverrideRequest ? __('Pending') : null,
-                'visible' => ! $eligible && ($canRequestOverride || $hasPendingOverrideRequest),
+                'visible' => !$eligible && ($canRequestOverride || $hasPendingOverrideRequest),
             ],
             [
                 'label' => __('Statements'),

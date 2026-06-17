@@ -200,6 +200,15 @@
             </section>
         @endif
 
+        @if ($migrationRunning)
+            <section class="ff-maintenance-panel" wire:poll.5s="pollMigrationStatus">
+                <div class="ff-maintenance-panel__body flex items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
+                    <x-filament::loading-indicator class="h-5 w-5" />
+                    <p>{{ __('Migration is running in the background. Results will appear below when finished.') }}</p>
+                </div>
+            </section>
+        @endif
+
         @if ($lastRun)
             <section class="ff-maintenance-panel">
                 <header class="ff-maintenance-panel__header ff-maintenance-panel__header--muted">

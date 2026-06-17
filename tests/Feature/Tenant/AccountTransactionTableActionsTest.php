@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Filament\Support\ViewActions\ViewAccountTransactionAction;
 use App\Filament\Tenant\Resources\Accounts\Pages\ViewAccount;
 use App\Filament\Tenant\Resources\Accounts\RelationManagers\TransactionsRelationManager;
+use App\Filament\Tenant\Resources\MasterAccounts\Pages\ViewMasterAccount;
+use App\Filament\Tenant\Resources\MasterAccounts\RelationManagers\TransactionsRelationManager as MasterTransactionsRelationManager;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
@@ -91,6 +93,36 @@ test('admin can mount edit action from account transactions relation manager', f
         ->mountTableAction('edit', (string) $transaction->getKey());
 
     expect($component->instance()->getMountedAction()?->getName())->toBe('edit');
+});
+
+test('master cash transaction table search does not query virtual bank import column', function () {
+    $admin = User::create([
+        'name' => 'Admin',
+        'email' => 'admin-master-txn-search-'.uniqid('', true).'@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    $account = Account::masterCash();
+    $account->update(['balance' => 500]);
+
+    Transaction::factory()->for($account)->create([
+        'type' => 'credit',
+        'amount' => 500,
+        'balance_after' => 500,
+        'description' => 'Legacy migration extra cash — duplicate period',
+        'transacted_at' => now(),
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(MasterTransactionsRelationManager::class, [
+            'ownerRecord' => $account,
+            'pageClass' => ViewMasterAccount::class,
+        ])
+        ->searchTable('extra cash')
+        ->assertSuccessful();
 });
 
 test('delete transaction reverses balance and removes row', function () {

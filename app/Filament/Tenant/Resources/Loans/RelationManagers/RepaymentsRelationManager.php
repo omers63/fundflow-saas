@@ -55,7 +55,7 @@ class RepaymentsRelationManager extends RelationManager
             ])
             ->defaultSort('paid_at', 'desc')
             ->headerActions([
-                LoanFilamentActions::earlySettle(),
+                LoanFilamentActions::earlySettleForOwner(fn (): Loan => $this->getOwnerRecord()),
             ])
             ->recordActions(TableRecordActionGroups::wrap([]))
             ->toolbarActions([

@@ -13,6 +13,7 @@ use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -21,12 +22,60 @@ use InvalidArgumentException;
 
 class ContributionService
 {
+    private static int $postedNotificationDepth = 0;
+
+    private static int $liveCollectionGuardDepth = 0;
+
     public function __construct(
         public AccountingService $accounting,
         public ContributionCycleService $cycles,
         public LateFeeService $lateFees,
         public ContributionCollectionCycleService $collectionCycle,
     ) {}
+
+    /**
+     * @template TReturn
+     *
+     * @param  callable(): TReturn  $callback
+     * @return TReturn
+     */
+    public static function withoutPostedNotifications(callable $callback): mixed
+    {
+        self::$postedNotificationDepth++;
+
+        try {
+            return $callback();
+        } finally {
+            self::$postedNotificationDepth--;
+        }
+    }
+
+    public static function postedNotificationsSuppressed(): bool
+    {
+        return self::$postedNotificationDepth > 0;
+    }
+
+    /**
+     * @template TReturn
+     *
+     * @param  callable(): TReturn  $callback
+     * @return TReturn
+     */
+    public static function withoutLiveCollectionGuards(callable $callback): mixed
+    {
+        self::$liveCollectionGuardDepth++;
+
+        try {
+            return $callback();
+        } finally {
+            self::$liveCollectionGuardDepth--;
+        }
+    }
+
+    public static function liveCollectionGuardsSuppressed(): bool
+    {
+        return self::$liveCollectionGuardDepth > 0;
+    }
 
     public function getCycleStartDay(): int
     {
@@ -104,7 +153,7 @@ class ContributionService
         }
     }
 
-    public function postContribution(Contribution $contribution): void
+    public function postContribution(Contribution $contribution, ?CarbonInterface $postedAt = null): void
     {
         if ($contribution->status === 'posted') {
             return;
@@ -132,21 +181,24 @@ class ContributionService
             }
         }
 
-        DB::transaction(function () use ($contribution): void {
-            $this->accounting->postContribution($contribution);
+        DB::transaction(function () use ($contribution, $postedAt): void {
+            $effectivePostedAt = $postedAt ?? BusinessDay::now();
+            $this->accounting->postContribution($contribution, $effectivePostedAt);
 
             $contribution->update([
                 'status' => 'posted',
-                'posted_at' => BusinessDay::now(),
-                'paid_at' => $contribution->paid_at ?? BusinessDay::now(),
+                'posted_at' => $effectivePostedAt,
+                'paid_at' => $contribution->paid_at ?? $effectivePostedAt,
             ]);
         });
 
-        if (LoanSettings::autoAllocateLoanRepayment()) {
+        if (LoanSettings::autoAllocateLoanRepayment() && ! self::postedNotificationsSuppressed()) {
             app(LoanRepaymentService::class)->applyOpenPeriodRepaymentForMember($contribution->member);
         }
 
-        $this->notifyMemberOfPostedContribution($contribution);
+        if (! self::postedNotificationsSuppressed()) {
+            $this->notifyMemberOfPostedContribution($contribution);
+        }
     }
 
     public function notifyMemberOfPostedContribution(Contribution $contribution): void

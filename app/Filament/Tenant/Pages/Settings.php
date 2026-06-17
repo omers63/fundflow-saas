@@ -90,7 +90,7 @@ class Settings extends Page implements HasForms
         $public = PublicPageSettings::all();
         $fiscal = FiscalSettings::forForm();
 
-        $templates = BankTemplate::orderBy('name')->get()->map(fn(BankTemplate $t) => [
+        $templates = BankTemplate::orderBy('name')->get()->map(fn (BankTemplate $t) => [
             'id' => $t->id,
             'name' => $t->name,
             'encoding' => $t->encoding ?? 'UTF-8',
@@ -109,7 +109,7 @@ class Settings extends Page implements HasForms
             'is_default' => $t->is_default,
         ])->toArray();
 
-        $smsTemplates = SmsImportTemplate::query()->orderBy('name')->get()->map(fn(SmsImportTemplate $t) => [
+        $smsTemplates = SmsImportTemplate::query()->orderBy('name')->get()->map(fn (SmsImportTemplate $t) => [
             'id' => $t->id,
             'bank_name' => $t->bank_name,
             'name' => $t->name,
@@ -148,6 +148,7 @@ class Settings extends Page implements HasForms
                 ?? app(FiscalClosePeriodResolver::class)->resolvePeriodContaining()->label,
             'fiscal_books_closed_through' => $fiscal['books_closed_through'],
             'fiscal_purge_policy' => $fiscal['purge_policy'],
+            'member_number_format' => $memberNumber['format'],
             'member_number_prefix' => $memberNumber['prefix'],
             'member_number_separator' => $memberNumber['separator'],
             'member_number_padding' => $memberNumber['padding'],
@@ -262,45 +263,63 @@ class Settings extends Page implements HasForms
                                     ->description(__('Controls how IDs are generated for new members (manual create and approved applications). Existing numbers are not changed.'))
                                     ->columns(2)
                                     ->schema([
+                                        Select::make('member_number_format')
+                                            ->label(__('Number format'))
+                                            ->options(MemberNumberSettings::formatOptions())
+                                            ->required()
+                                            ->native(false)
+                                            ->live()
+                                            ->partiallyRenderComponentsAfterStateUpdated(self::memberNumberPreviewPartialTargets()),
                                         TextInput::make('member_number_prefix')
                                             ->label(__('Prefix'))
-                                            ->required()
+                                            ->required(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED)
                                             ->maxLength(20)
                                             ->regex('/^[A-Za-z0-9]+$/')
                                             ->validationMessages([
                                                 'regex' => __('Use letters and numbers only.'),
                                             ])
                                             ->live(onBlur: true)
-                                            ->helperText(__('Stored in uppercase (e.g. MEM, FUND).')),
+                                            ->partiallyRenderComponentsAfterStateUpdated(['member_number_preview'])
+                                            ->helperText(__('Stored in uppercase (e.g. MEM, FUND).'))
+                                            ->visible(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED),
                                         Select::make('member_number_separator')
                                             ->label(__('Separator'))
                                             ->options(MemberNumberSettings::separatorOptions())
-                                            ->required()
-                                            ->live(),
+                                            ->required(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED)
+                                            ->live()
+                                            ->partiallyRenderComponentsAfterStateUpdated(['member_number_preview'])
+                                            ->visible(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED),
                                         TextInput::make('member_number_padding')
                                             ->label(__('Sequence digits'))
                                             ->numeric()
                                             ->minValue(3)
                                             ->maxValue(8)
-                                            ->required()
+                                            ->required(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED)
                                             ->live(onBlur: true)
-                                            ->helperText(__('How many digits to use for the running number (e.g. 4 → 0001).')),
+                                            ->partiallyRenderComponentsAfterStateUpdated(['member_number_preview'])
+                                            ->helperText(__('How many digits to use for the running number (e.g. 4 → 0001).'))
+                                            ->visible(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED),
                                         Toggle::make('member_number_include_year')
                                             ->label(__('Include calendar year'))
                                             ->live()
-                                            ->helperText(__('When enabled, the year is inserted before the sequence (e.g. MEM-2026-0001). The sequence restarts each year.')),
+                                            ->partiallyRenderComponentsAfterStateUpdated(['member_number_preview'])
+                                            ->helperText(__('When enabled, the year is inserted before the sequence (e.g. MEM-2026-0001). The sequence restarts each year.'))
+                                            ->visible(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED),
                                         Placeholder::make('member_number_preview')
                                             ->label(__('Next number preview'))
                                             ->columnSpanFull()
                                             ->content(function (Get $get): string {
                                                 return MemberNumberSettings::preview([
+                                                    'format' => $get('member_number_format'),
                                                     'prefix' => $get('member_number_prefix'),
                                                     'separator' => $get('member_number_separator'),
                                                     'padding' => $get('member_number_padding'),
                                                     'include_year' => (bool) $get('member_number_include_year'),
                                                 ]);
                                             })
-                                            ->helperText(__('Based on existing members matching this pattern.')),
+                                            ->helperText(fn (Get $get): string => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_SEQUENTIAL
+                                                ? __('Based on highest numeric member number.')
+                                                : __('Based on existing members matching this pattern.')),
                                     ]),
                             ]),
                         Tab::make(__('Fiscal calendar'))
@@ -312,7 +331,7 @@ class Settings extends Page implements HasForms
                                     ->schema([
                                         Select::make('fiscal_year_start_month')
                                             ->label(__('Fiscal year starts in'))
-                                            ->options(collect(range(1, 12))->mapWithKeys(fn(int $m): array => [
+                                            ->options(collect(range(1, 12))->mapWithKeys(fn (int $m): array => [
                                                 $m => Carbon::create(2000, $m, 1)->translatedFormat('F'),
                                             ])->all())
                                             ->required()
@@ -335,17 +354,17 @@ class Settings extends Page implements HasForms
                                             ->helperText(__('Used when Phase 2+ purge is implemented.')),
                                         Placeholder::make('fiscal_books_closed_through_display')
                                             ->label(__('Books closed through'))
-                                            ->content(fn(Get $get): string => filled($get('fiscal_books_closed_through'))
+                                            ->content(fn (Get $get): string => filled($get('fiscal_books_closed_through'))
                                                 ? Carbon::parse((string) $get('fiscal_books_closed_through'))->toFormattedDateString()
                                                 : __('Not set'))
                                             ->helperText(__('Set automatically when a close is executed (Phase 2+).')),
                                         Placeholder::make('fiscal_close_link')
                                             ->label(__('Year-end close'))
                                             ->columnSpanFull()
-                                            ->content(fn(): string => __('Run readiness checks on the Year-end close page.'))
+                                            ->content(fn (): string => __('Run readiness checks on the Year-end close page.'))
                                             ->helperText(new HtmlString(
-                                                '<a class="text-primary-600 underline" href="' . e(FiscalYearClosePage::getUrl()) . '">'
-                                                . e(__('Open year-end close')) . '</a>'
+                                                '<a class="text-primary-600 underline" href="'.e(FiscalYearClosePage::getUrl()).'">'
+                                                .e(__('Open year-end close')).'</a>'
                                             )),
                                     ]),
                             ]),
@@ -414,8 +433,8 @@ class Settings extends Page implements HasForms
                                             ->label(__('Maximum active members'))
                                             ->numeric()
                                             ->minValue(1)
-                                            ->required(fn(Get $get): bool => !($get('membership_no_limit') ?? true))
-                                            ->hidden(fn(Get $get): bool => (bool) ($get('membership_no_limit') ?? true))
+                                            ->required(fn (Get $get): bool => ! ($get('membership_no_limit') ?? true))
+                                            ->hidden(fn (Get $get): bool => (bool) ($get('membership_no_limit') ?? true))
                                             ->helperText(__('Enrollment closes when active members reach this number.')),
                                     ]),
                                 Section::make(__('Membership fees'))
@@ -660,7 +679,7 @@ class Settings extends Page implements HasForms
                                             ->step(0.1)
                                             ->suffix('%')
                                             ->required()
-                                            ->helperText(fn(Get $get): string => __('Used when a member chooses the configured split at loan application. Master fund share: :pct%.', [
+                                            ->helperText(fn (Get $get): string => __('Used when a member chooses the configured split at loan application. Master fund share: :pct%.', [
                                                 'pct' => number_format(100 - (float) ($get('loan_member_funding_split_pct') ?? 50), 1),
                                             ])),
                                         Toggle::make('loan_auto_allocate_repayment')
@@ -672,10 +691,10 @@ class Settings extends Page implements HasForms
                                     ->schema([
                                         Placeholder::make('loan_tiers_link')
                                             ->label(__('Loan tiers'))
-                                            ->content(fn(): string => LoanTierResource::getUrl('index')),
+                                            ->content(fn (): string => LoanTierResource::getUrl('index')),
                                         Placeholder::make('fund_tiers_link')
                                             ->label(__('Fund tiers'))
-                                            ->content(fn(): string => FundTierResource::getUrl('index')),
+                                            ->content(fn (): string => FundTierResource::getUrl('index')),
                                     ]),
                             ]),
                         Tab::make(__('Statements'))
@@ -776,7 +795,7 @@ class Settings extends Page implements HasForms
                                             ->label('')
                                             ->schema(static::templateSchema())
                                             ->columns(1)
-                                            ->itemLabel(fn(array $state): ?string => $state['name'] ?? __('New template'))
+                                            ->itemLabel(fn (array $state): ?string => $state['name'] ?? __('New template'))
                                             ->collapsible()
                                             ->defaultItems(0)
                                             ->addActionLabel(__('Add template')),
@@ -792,9 +811,9 @@ class Settings extends Page implements HasForms
                                             ->label('')
                                             ->schema(SmsImportTemplateFieldsets::forSettingsRepeater())
                                             ->columns(1)
-                                            ->itemLabel(fn(array $state): ?string => trim(
-                                                (filled($state['bank_name'] ?? null) ? $state['bank_name'] . ' — ' : '')
-                                                . ($state['name'] ?? __('New template'))
+                                            ->itemLabel(fn (array $state): ?string => trim(
+                                                (filled($state['bank_name'] ?? null) ? $state['bank_name'].' — ' : '')
+                                                .($state['name'] ?? __('New template'))
                                             ))
                                             ->collapsible()
                                             ->defaultItems(0)
@@ -880,7 +899,7 @@ class Settings extends Page implements HasForms
                     TextInput::make('date_column')
                         ->label('Date column')
                         ->required()
-                        ->helperText(fn(Get $get): string => ($get('has_header') ?? true)
+                        ->helperText(fn (Get $get): string => ($get('has_header') ?? true)
                             ? __('Header name, e.g. "Transaction Date"')
                             : __('0-based column index, e.g. 0')),
                 ]),
@@ -901,19 +920,19 @@ class Settings extends Page implements HasForms
                         ->columnSpanFull(),
                     TextInput::make('amount_column')
                         ->label('Amount column')
-                        ->required(fn(Get $get): bool => ($get('amount_mode') ?? 'single') === 'single')
-                        ->visible(fn(Get $get): bool => ($get('amount_mode') ?? 'single') === 'single')
-                        ->helperText(fn(Get $get): string => ($get('has_header') ?? true)
+                        ->required(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'single')
+                        ->visible(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'single')
+                        ->helperText(fn (Get $get): string => ($get('has_header') ?? true)
                             ? __('Header name, e.g. "Amount"')
                             : __('0-based index')),
                     TextInput::make('credit_column')
                         ->label('Credit column')
-                        ->required(fn(Get $get): bool => ($get('amount_mode') ?? 'single') === 'split')
-                        ->visible(fn(Get $get): bool => ($get('amount_mode') ?? 'single') === 'split'),
+                        ->required(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'split')
+                        ->visible(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'split'),
                     TextInput::make('debit_column')
                         ->label('Debit column')
-                        ->required(fn(Get $get): bool => ($get('amount_mode') ?? 'single') === 'split')
-                        ->visible(fn(Get $get): bool => ($get('amount_mode') ?? 'single') === 'split'),
+                        ->required(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'split')
+                        ->visible(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'split'),
                 ]),
 
             // --- Section 4: Optional column mappings ---
@@ -938,7 +957,7 @@ class Settings extends Page implements HasForms
                         ->columnSpanFull()
                         ->default(BankTemplate::defaultExtraColumns())
                         ->addActionLabel(__('Add column mapping'))
-                        ->itemLabel(fn(array $state): ?string => !empty($state['key']) ? "{$state['key']} → {$state['column']}" : __('New mapping')),
+                        ->itemLabel(fn (array $state): ?string => ! empty($state['key']) ? "{$state['key']} → {$state['column']}" : __('New mapping')),
                 ]),
 
             // --- Section 5: Duplicate detection ---
@@ -955,13 +974,13 @@ class Settings extends Page implements HasForms
 
                             foreach ($get('extra_columns') ?? [] as $mapping) {
                                 $key = $mapping['key'] ?? '';
-                                if ($key !== '' && !isset($options[$key])) {
+                                if ($key !== '' && ! isset($options[$key])) {
                                     $options[$key] = ucfirst($key);
                                 }
                             }
 
                             foreach ($get('duplicate_fields') ?? [] as $selected) {
-                                if (is_string($selected) && $selected !== '' && !isset($options[$selected])) {
+                                if (is_string($selected) && $selected !== '' && ! isset($options[$selected])) {
                                     $options[$selected] = ucfirst($selected);
                                 }
                             }
@@ -999,11 +1018,13 @@ class Settings extends Page implements HasForms
                 ? $state['fiscal_current_year_label']
                 : app(FiscalClosePeriodResolver::class)->resolvePeriodContaining()->label,
         ]);
+        $memberNumber = MemberNumberSettings::all();
         MemberNumberSettings::save([
-            'prefix' => $state['member_number_prefix'],
-            'separator' => $state['member_number_separator'],
-            'padding' => (int) $state['member_number_padding'],
-            'include_year' => (bool) ($state['member_number_include_year'] ?? false),
+            'format' => $state['member_number_format'] ?? $memberNumber['format'],
+            'prefix' => $state['member_number_prefix'] ?? $memberNumber['prefix'],
+            'separator' => $state['member_number_separator'] ?? $memberNumber['separator'],
+            'padding' => (int) ($state['member_number_padding'] ?? $memberNumber['padding']),
+            'include_year' => (bool) ($state['member_number_include_year'] ?? $memberNumber['include_year']),
         ]);
         Setting::set('contribution', 'cycle_start_day', $state['cycle_start_day']);
 
@@ -1065,7 +1086,7 @@ class Settings extends Page implements HasForms
 
         foreach ($state['bank_templates'] ?? [] as $templateData) {
             $extras = collect($templateData['extra_columns'] ?? [])
-                ->filter(fn(array $row): bool => !empty($row['key'] ?? null) && ($row['column'] ?? '') !== '')
+                ->filter(fn (array $row): bool => ! empty($row['key'] ?? null) && ($row['column'] ?? '') !== '')
                 ->values()
                 ->all();
 
@@ -1091,7 +1112,7 @@ class Settings extends Page implements HasForms
                 'is_default' => (bool) ($templateData['is_default'] ?? false),
             ];
 
-            if (!empty($templateData['id'])) {
+            if (! empty($templateData['id'])) {
                 $template = BankTemplate::find($templateData['id']);
                 if ($template) {
                     $template->update($attrs);
@@ -1111,7 +1132,7 @@ class Settings extends Page implements HasForms
         }
 
         $deleteIds = array_diff($existingIds, $keptIds);
-        if (!empty($deleteIds)) {
+        if (! empty($deleteIds)) {
             BankTemplate::whereIn('id', $deleteIds)->delete();
         }
 
@@ -1130,6 +1151,20 @@ class Settings extends Page implements HasForms
             ->title(__('Settings saved'))
             ->success()
             ->send();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function memberNumberPreviewPartialTargets(): array
+    {
+        return [
+            'member_number_prefix',
+            'member_number_separator',
+            'member_number_padding',
+            'member_number_include_year',
+            'member_number_preview',
+        ];
     }
 
     /**

@@ -10,6 +10,8 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
+use App\Services\MemberCashOutService;
+use App\Support\LegacyMemberIdentifierResolver;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -20,6 +22,8 @@ class LoanImportService
 {
     public function __construct(
         private readonly LoanLedgerService $ledger,
+        private readonly LegacyMemberIdentifierResolver $memberResolver,
+        private readonly MemberCashOutService $cashOuts,
     ) {}
 
     /**
@@ -278,6 +282,14 @@ class LoanImportService
             );
             $loan->refresh();
 
+            $this->cashOuts->submitAndAcceptImportedLoanDisbursement(
+                $member,
+                (int) $loan->id,
+                $amount,
+                $disbursedAt,
+                auth('tenant')->id(),
+            );
+
             if ($totalRepaid > 0) {
                 $this->ledger->postImportedLoanRepayments($loan, $totalRepaid);
                 $loan->refresh();
@@ -323,14 +335,10 @@ class LoanImportService
         $masterCell = $this->cell($row, 'master_portion');
 
         if ($memberCell === '' && $masterCell === '') {
-            if (LoanSettings::memberFundingSplitPercent() === 50.0) {
-                $memberPortion = round($amount / 2, 2);
-                $masterPortion = round($amount - $memberPortion, 2);
-            } else {
-                $fundBal = (float) ($member->fundAccount()?->balance ?? 0);
-                $memberPortion = round(min(max(0.0, $fundBal), $amount), 2);
-                $masterPortion = round($amount - $memberPortion, 2);
-            }
+            // Legacy migration defaults to the baseline loan flow:
+            // member fund takes the full disbursement and can go negative.
+            $memberPortion = round($amount, 2);
+            $masterPortion = 0.0;
         } elseif ($memberCell === '') {
             $masterPortion = $this->parseMoney($masterCell, 'master_portion');
             $memberPortion = round($amount - $masterPortion, 2);
@@ -423,7 +431,13 @@ class LoanImportService
         }
 
         if ($number !== '') {
-            $member = Member::query()->where('member_number', $number)->first();
+            $member = $this->memberResolver->findByMemberNumber($number);
+
+            if ($member === null && $name !== '') {
+                $member = $this->memberResolver->findByName($name)
+                    ?? $this->memberResolver->findByLegacyHouseholdLabel($name);
+            }
+
             if ($member === null) {
                 throw new \InvalidArgumentException(__(':subject: no member found for member_number :number.', [
                     'subject' => ucfirst($subject),
@@ -471,13 +485,6 @@ class LoanImportService
             ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
             ->get();
 
-        if ($nameMatches->isEmpty()) {
-            throw new \InvalidArgumentException(__(':subject: no member found for member_name :name.', [
-                'subject' => ucfirst($subject),
-                'name' => $name,
-            ]));
-        }
-
         if ($nameMatches->count() > 1) {
             throw new \InvalidArgumentException(__(':subject: multiple members found for member_name :name. Use member_number, member_email, or national_id.', [
                 'subject' => ucfirst($subject),
@@ -485,7 +492,20 @@ class LoanImportService
             ]));
         }
 
-        return $nameMatches->first();
+        if ($nameMatches->count() === 1) {
+            return $nameMatches->first();
+        }
+
+        $member = $this->memberResolver->findByLegacyHouseholdLabel($name);
+
+        if ($member === null) {
+            throw new \InvalidArgumentException(__(':subject: no member found for member_name :name.', [
+                'subject' => ucfirst($subject),
+                'name' => $name,
+            ]));
+        }
+
+        return $member;
     }
 
     private function parseLoanStatus(string $value): string

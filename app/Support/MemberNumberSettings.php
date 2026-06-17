@@ -13,6 +13,10 @@ final class MemberNumberSettings
 {
     public const GROUP = 'member_number';
 
+    public const FORMAT_FORMATTED = 'formatted';
+
+    public const FORMAT_SEQUENTIAL = 'sequential';
+
     public const SEPARATOR_HYPHEN = '-';
 
     public const SEPARATOR_NONE = '';
@@ -27,11 +31,23 @@ final class MemberNumberSettings
     public static function defaults(): array
     {
         return [
+            'format' => self::FORMAT_FORMATTED,
             'prefix' => 'MEM',
             'separator' => self::SEPARATOR_HYPHEN,
             'padding' => 4,
             'include_year' => false,
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function formatOptions(): array
+    {
+        return Lang::transOptions([
+            self::FORMAT_FORMATTED => 'Formatted (prefix, separator, optional year)',
+            self::FORMAT_SEQUENTIAL => 'Sequential (1, 2, 3…)',
+        ]);
     }
 
     /**
@@ -55,6 +71,7 @@ final class MemberNumberSettings
         $stored = Setting::getGroup(self::GROUP);
 
         return [
+            'format' => self::normalizeFormat($stored['format'] ?? self::defaults()['format']),
             'prefix' => self::normalizePrefix((string) ($stored['prefix'] ?? self::defaults()['prefix'])),
             'separator' => self::normalizeSeparator($stored['separator'] ?? self::defaults()['separator']),
             'padding' => self::normalizePadding($stored['padding'] ?? self::defaults()['padding']),
@@ -67,13 +84,16 @@ final class MemberNumberSettings
      */
     public static function save(array $values): void
     {
-        Setting::set(self::GROUP, 'prefix', self::normalizePrefix((string) ($values['prefix'] ?? self::defaults()['prefix'])));
-        Setting::set(self::GROUP, 'separator', self::normalizeSeparator($values['separator'] ?? self::defaults()['separator']));
-        Setting::set(self::GROUP, 'padding', self::normalizePadding($values['padding'] ?? self::defaults()['padding']));
+        $merged = array_merge(self::all(), $values);
+
+        Setting::set(self::GROUP, 'format', self::normalizeFormat($merged['format']));
+        Setting::set(self::GROUP, 'prefix', self::normalizePrefix((string) $merged['prefix']));
+        Setting::set(self::GROUP, 'separator', self::normalizeSeparator($merged['separator']));
+        Setting::set(self::GROUP, 'padding', self::normalizePadding($merged['padding']));
         Setting::set(
             self::GROUP,
             'include_year',
-            filter_var($values['include_year'] ?? false, FILTER_VALIDATE_BOOLEAN) ? '1' : '0',
+            filter_var($merged['include_year'], FILTER_VALIDATE_BOOLEAN) ? '1' : '0',
         );
     }
 
@@ -82,9 +102,9 @@ final class MemberNumberSettings
      */
     public static function preview(array $overrides = []): string
     {
-        $config = array_merge(self::all(), $overrides);
+        $instance = self::fromConfig(array_merge(self::all(), $overrides));
 
-        return self::fromConfig($config)->compose(self::fromConfig($config)->nextSequence());
+        return $instance->compose($instance->nextSequence());
     }
 
     public static function generate(): string
@@ -100,6 +120,7 @@ final class MemberNumberSettings
     private static function fromConfig(array $config): self
     {
         return new self(
+            format: self::normalizeFormat($config['format'] ?? self::defaults()['format']),
             prefix: self::normalizePrefix((string) ($config['prefix'] ?? self::defaults()['prefix'])),
             separator: self::normalizeSeparator($config['separator'] ?? self::defaults()['separator']),
             padding: self::normalizePadding($config['padding'] ?? self::defaults()['padding']),
@@ -108,6 +129,7 @@ final class MemberNumberSettings
     }
 
     private function __construct(
+        private readonly string $format,
         private readonly string $prefix,
         private readonly string $separator,
         private readonly int $padding,
@@ -116,6 +138,10 @@ final class MemberNumberSettings
 
     public function compose(int $sequence, ?Carbon $at = null): string
     {
+        if ($this->format === self::FORMAT_SEQUENTIAL) {
+            return (string) $sequence;
+        }
+
         $at ??= now();
 
         $parts = [
@@ -137,22 +163,40 @@ final class MemberNumberSettings
 
     public function nextSequence(?Carbon $at = null): int
     {
+        return $this->maxMatchingSequence($at) + 1;
+    }
+
+    private function maxMatchingSequence(?Carbon $at = null): int
+    {
         $at ??= now();
-        $max = 0;
 
-        foreach (Member::query()->pluck('member_number') as $memberNumber) {
-            $parsed = $this->parseSequence((string) $memberNumber, $at);
-
-            if ($parsed !== null) {
-                $max = max($max, $parsed);
-            }
+        if ($this->format === self::FORMAT_SEQUENTIAL) {
+            return (int) (Member::query()
+                ->whereNotNull('member_number')
+                ->whereRaw("member_number REGEXP '^[0-9]+$'")
+                ->selectRaw('MAX(CAST(member_number AS UNSIGNED)) as max_seq')
+                ->value('max_seq') ?? 0);
         }
 
-        return $max + 1;
+        $pattern = $this->matchingMysqlPattern($at);
+
+        return (int) (Member::query()
+            ->whereNotNull('member_number')
+            ->whereRaw('member_number REGEXP ?', [$pattern])
+            ->selectRaw('MAX(CAST(RIGHT(member_number, ?) AS UNSIGNED)) as max_seq', [$this->padding])
+            ->value('max_seq') ?? 0);
     }
 
     public function parseSequence(string $memberNumber, ?Carbon $at = null): ?int
     {
+        if ($this->format === self::FORMAT_SEQUENTIAL) {
+            if (! preg_match('/^(\d+)$/', $memberNumber, $matches)) {
+                return null;
+            }
+
+            return (int) $matches[1];
+        }
+
         $at ??= now();
         $pattern = $this->matchingPattern($at);
 
@@ -165,25 +209,37 @@ final class MemberNumberSettings
 
     private function matchingPattern(Carbon $at): string
     {
+        return '/^'.$this->matchingBodyPattern($at, capture: true).'$/';
+    }
+
+    private function matchingMysqlPattern(Carbon $at): string
+    {
+        return '^'.$this->matchingBodyPattern($at, capture: false).'$';
+    }
+
+    private function matchingBodyPattern(Carbon $at, bool $capture): string
+    {
         $prefix = preg_quote($this->prefix, '/');
         $sep = $this->separator !== '' ? preg_quote($this->separator, '/') : '';
-        $digits = $this->padding;
+        $digits = $capture
+            ? '(\d{'.$this->padding.'})'
+            : '[0-9]{'.$this->padding.'}';
 
         if ($this->includeYear) {
             $year = preg_quote($at->format('Y'), '/');
 
             if ($sep !== '') {
-                return '/^'.$prefix.$sep.$year.$sep.'(\d{'.$digits.'})$/';
+                return $prefix.$sep.$year.$sep.$digits;
             }
 
-            return '/^'.$prefix.$year.'(\d{'.$digits.'})$/';
+            return $prefix.$year.$digits;
         }
 
         if ($sep !== '') {
-            return '/^'.$prefix.$sep.'(\d{'.$digits.'})$/';
+            return $prefix.$sep.$digits;
         }
 
-        return '/^'.$prefix.'(\d{'.$digits.'})$/';
+        return $prefix.$digits;
     }
 
     private static function normalizePrefix(string $prefix): string
@@ -216,5 +272,12 @@ final class MemberNumberSettings
         $padding = (int) $padding;
 
         return max(3, min(8, $padding));
+    }
+
+    private static function normalizeFormat(mixed $format): string
+    {
+        return in_array($format, [self::FORMAT_FORMATTED, self::FORMAT_SEQUENTIAL], true)
+            ? $format
+            : self::defaults()['format'];
     }
 }

@@ -85,21 +85,7 @@ class TenantDatabaseSeeder extends Seeder
             ],
         );
 
-        $masterAccounts = [
-            ['type' => 'cash', 'name' => 'Master Cash'],
-            ['type' => 'fund', 'name' => 'Master Fund'],
-            ['type' => 'bank', 'name' => 'Master Bank'],
-            ['type' => 'expense', 'name' => 'Master Expense'],
-            ['type' => 'fees', 'name' => 'Master Fees'],
-            ['type' => 'invest', 'name' => 'Master Invest'],
-        ];
-
-        foreach ($masterAccounts as $account) {
-            Account::firstOrCreate(
-                ['type' => $account['type'], 'is_master' => true],
-                ['member_id' => null, 'name' => $account['name'], 'balance' => 0],
-            );
-        }
+        Account::ensureDefaultMasterAccounts();
 
         $user = User::firstOrCreate(
             ['email' => 'admin@fundflow.sa'],

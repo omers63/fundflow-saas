@@ -6,6 +6,9 @@ namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Support\TenantNavigation;
+use App\Jobs\Tenant\RunLegacyMigrationPaymentsJob;
+use App\Models\Tenant\Loan;
+use App\Models\Tenant\Setting;
 use App\Services\LegacyMigration\LegacyMigrationOrchestrator;
 use App\Services\LegacyMigration\LegacyMigrationPreviewService;
 use App\Services\LegacyMigration\LegacyPaymentClassifierService;
@@ -67,7 +70,13 @@ class LegacyMigrationPage extends Page implements HasForms
 
     public bool $classifiedPaymentsReady = false;
 
-    private const CLASSIFIED_PAYMENTS_PATH = 'legacy-migration/last-classified-payments.csv';
+    public bool $migrationRunning = false;
+
+    public ?string $migrationLastError = null;
+
+    private ?string $lastKnownMigrationStatus = null;
+
+    private const CLASSIFIED_PAYMENTS_PATH = LegacyPaymentClassifierService::CLASSIFIED_PAYMENTS_DISK_PATH;
 
     public static function canAccess(): bool
     {
@@ -81,6 +90,42 @@ class LegacyMigrationPage extends Page implements HasForms
             'cutoff_date' => BusinessDay::now()->subMonth()->endOfMonth()->toDateString(),
             'default_password' => '',
         ]);
+
+        $this->classifiedPaymentsReady = Storage::disk('local')->exists(self::CLASSIFIED_PAYMENTS_PATH);
+        $this->refreshMigrationStateFromSettings();
+    }
+
+    public function pollMigrationStatus(): void
+    {
+        $previousStatus = $this->lastKnownMigrationStatus;
+        $this->refreshMigrationStateFromSettings();
+
+        $currentStatus = (string) Setting::get('legacy_migration', 'run_status', 'idle');
+
+        if ($previousStatus === 'running' && $currentStatus === 'completed' && $this->lastRun !== null) {
+            $members = $this->lastRun['members'] ?? [];
+
+            Notification::make()
+                ->title(__('Migration complete'))
+                ->body(__('Created: :created · Skipped: :skipped · Failed: :failed', [
+                    'created' => $members['created'] ?? 0,
+                    'skipped' => $members['skipped'] ?? 0,
+                    'failed' => $members['failed'] ?? 0,
+                ]))
+                ->success()
+                ->send();
+        }
+
+        if ($previousStatus === 'running' && $currentStatus === 'failed' && filled($this->migrationLastError)) {
+            Notification::make()
+                ->title(__('Migration failed'))
+                ->body($this->migrationLastError)
+                ->danger()
+                ->persistent()
+                ->send();
+        }
+
+        $this->lastKnownMigrationStatus = $currentStatus;
     }
 
     public function getTitle(): string
@@ -228,6 +273,16 @@ class LegacyMigrationPage extends Page implements HasForms
             return;
         }
 
+        if ($paths['loans'] === null && ! Loan::query()->whereNotNull('disbursed_at')->exists()) {
+            Notification::make()
+                ->title(__('Loans CSV required'))
+                ->body(__('Upload a loans CSV or import loans first. Repayment windows cannot be detected without loan disbursement dates.'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
         try {
             $cutoff = filled($state['cutoff_date'] ?? null)
                 ? Carbon::parse((string) $state['cutoff_date'])
@@ -330,43 +385,137 @@ class LegacyMigrationPage extends Page implements HasForms
             return;
         }
 
-        try {
-            $this->lastRun = app(LegacyMigrationOrchestrator::class)->run([
-                'cutoff_date' => $state['cutoff_date'] ?? null,
-                'default_password' => $password,
-                'members_path' => $paths['members'],
-                'loans_path' => $paths['loans'],
-                'payments_path' => $paths['payments'],
-                'strategy' => $state['strategy'] ?? 'snapshot',
-            ], $dryRun);
-
-            $members = $this->lastRun['members'];
-
+        if (! $dryRun && Setting::get('legacy_migration', 'run_status') === 'running') {
             Notification::make()
-                ->title($dryRun ? __('Dry run complete') : __('Migration complete'))
-                ->body($dryRun
-                    ? __('Would import :count member row(s). Review the summary below.', ['count' => $members['created']])
-                    : __('Created: :created · Skipped: :skipped · Failed: :failed', [
-                        'created' => $members['created'],
-                        'skipped' => $members['skipped'],
-                        'failed' => $members['failed'],
-                    ]))
-                ->success()
+                ->title(__('Migration already running'))
+                ->body(__('A migration is already in progress. This page will update when it finishes.'))
+                ->warning()
                 ->send();
+
+            return;
+        }
+
+        $options = [
+            'cutoff_date' => $state['cutoff_date'] ?? null,
+            'default_password' => $password,
+            'members_path' => $paths['members'],
+            'loans_path' => $paths['loans'],
+            'payments_path' => $paths['payments'],
+            'classified_payments_path' => Storage::disk('local')->exists(self::CLASSIFIED_PAYMENTS_PATH)
+                ? Storage::disk('local')->path(self::CLASSIFIED_PAYMENTS_PATH)
+                : null,
+            'strategy' => $state['strategy'] ?? 'snapshot',
+        ];
+
+        if ($dryRun) {
+            try {
+                $this->lastRun = app(LegacyMigrationOrchestrator::class)->run($options, true);
+
+                $members = $this->lastRun['members'];
+
+                Notification::make()
+                    ->title(__('Dry run complete'))
+                    ->body(__('Would import :count member row(s). Review the summary below.', ['count' => $members['created']]))
+                    ->success()
+                    ->send();
+
+                $this->currentStep = 5;
+            } catch (\Throwable $e) {
+                report($e);
+
+                Notification::make()
+                    ->title(__('Dry run failed'))
+                    ->body($e->getMessage())
+                    ->danger()
+                    ->persistent()
+                    ->send();
+            }
+
+            return;
+        }
+
+        try {
+            @set_time_limit(0);
+
+            Setting::set('legacy_migration', 'run_status', 'running');
+            Setting::set('legacy_migration', 'last_error', '');
+            $this->migrationRunning = true;
+            $this->lastKnownMigrationStatus = 'running';
+
+            $orchestrator = app(LegacyMigrationOrchestrator::class);
+            $memberLoanResult = LegacyMigrationOrchestrator::summarizeForDisplay(
+                $orchestrator->importMembersAndLoans($options),
+            );
+
+            $this->lastRun = $memberLoanResult;
+            Setting::set('legacy_migration', 'last_run', json_encode($memberLoanResult, JSON_UNESCAPED_UNICODE));
+
+            $members = $memberLoanResult['members'];
+
+            if ($orchestrator->shouldQueuePaymentImport($options)) {
+                RunLegacyMigrationPaymentsJob::dispatch(
+                    $options,
+                    $paths['relatives'],
+                    auth('tenant')->id(),
+                );
+
+                Notification::make()
+                    ->title(__('Members and loans imported'))
+                    ->body(__('Created: :created · Skipped: :skipped · Failed: :failed. Payment import is running in the background.', [
+                        'created' => $members['created'] ?? 0,
+                        'skipped' => $members['skipped'] ?? 0,
+                        'failed' => $members['failed'] ?? 0,
+                    ]))
+                    ->success()
+                    ->send();
+            } else {
+                Setting::set('legacy_migration', 'run_status', 'completed');
+                $this->migrationRunning = false;
+                $this->cleanupUploadedPaths($paths);
+
+                Notification::make()
+                    ->title(__('Migration complete'))
+                    ->body(__('Created: :created · Skipped: :skipped · Failed: :failed', [
+                        'created' => $members['created'] ?? 0,
+                        'skipped' => $members['skipped'] ?? 0,
+                        'failed' => $members['failed'] ?? 0,
+                    ]))
+                    ->success()
+                    ->send();
+            }
 
             $this->currentStep = 5;
         } catch (\Throwable $e) {
             report($e);
 
+            Setting::set('legacy_migration', 'run_status', 'failed');
+            Setting::set('legacy_migration', 'last_error', $e->getMessage());
+            $this->migrationRunning = false;
+            $this->migrationLastError = $e->getMessage();
+
             Notification::make()
-                ->title($dryRun ? __('Dry run failed') : __('Migration failed'))
+                ->title(__('Migration failed'))
                 ->body($e->getMessage())
                 ->danger()
                 ->persistent()
                 ->send();
-        } finally {
-            if (! $dryRun) {
-                $this->cleanupUploadedPaths($paths);
+        }
+    }
+
+    private function refreshMigrationStateFromSettings(): void
+    {
+        $status = (string) Setting::get('legacy_migration', 'run_status', 'idle');
+        $this->migrationRunning = $status === 'running';
+        $this->migrationLastError = (string) Setting::get('legacy_migration', 'last_error', '');
+        $this->lastKnownMigrationStatus ??= $status;
+
+        $lastRunJson = Setting::get('legacy_migration', 'last_run');
+
+        if (is_string($lastRunJson) && $lastRunJson !== '') {
+            $decoded = json_decode($lastRunJson, true);
+
+            if (is_array($decoded)) {
+                $this->lastRun = $decoded;
             }
         }
     }
@@ -388,6 +537,19 @@ class LegacyMigrationPage extends Page implements HasForms
             'payments' => $payments,
             'relatives' => $relatives,
         ];
+    }
+
+    /**
+     * @param  array{members: ?string, loans: ?string, payments: ?string, relatives: list<string>}  $paths
+     */
+    private function cleanupUploadedPaths(array $paths): void
+    {
+        foreach ($paths['relatives'] as $relative) {
+            try {
+                Storage::disk('local')->delete($relative);
+            } catch (\Throwable) {
+            }
+        }
     }
 
     private function notifyFormValidationFailed(ValidationException $exception): void
@@ -415,18 +577,5 @@ class LegacyMigrationPage extends Page implements HasForms
         }
 
         return $resolved['absolutePath'];
-    }
-
-    /**
-     * @param  array{members: ?string, loans: ?string, payments: ?string, relatives: list<string>}  $paths
-     */
-    private function cleanupUploadedPaths(array $paths): void
-    {
-        foreach ($paths['relatives'] as $relative) {
-            try {
-                Storage::disk('local')->delete($relative);
-            } catch (\Throwable) {
-            }
-        }
     }
 }

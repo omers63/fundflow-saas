@@ -21,6 +21,7 @@ test('ensure suspense account creates master suspense account', function (): voi
 
     expect($suspense->type)->toBe('suspense')
         ->and($suspense->is_master)->toBeTrue()
-        ->and($suspense->name)->toBe('Reconciliation suspense')
+        ->and($suspense->name)->toBe('Master Suspense')
+        ->and($suspense->displayLabel())->toBe(__('Master Suspense'))
         ->and((float) $suspense->balance)->toBe(0.0);
 });

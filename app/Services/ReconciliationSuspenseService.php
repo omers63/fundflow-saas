@@ -18,21 +18,7 @@ class ReconciliationSuspenseService
 
     public function ensureSuspenseAccount(): Account
     {
-        $existing = Account::query()
-            ->where('is_master', true)
-            ->where('type', 'suspense')
-            ->first();
-
-        if ($existing) {
-            return $existing;
-        }
-
-        return Account::create([
-            'type' => 'suspense',
-            'name' => __('Reconciliation suspense'),
-            'balance' => 0,
-            'is_master' => true,
-        ]);
+        return Account::ensureMasterSuspense();
     }
 
     /**

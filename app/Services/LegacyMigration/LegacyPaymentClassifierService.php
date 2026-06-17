@@ -4,16 +4,60 @@ declare(strict_types=1);
 
 namespace App\Services\LegacyMigration;
 
-use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Support\AssociativeCsv;
 use App\Support\LegacyMigrationDateParser;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 
 final class LegacyPaymentClassifierService
 {
+    public const CLASSIFIED_PAYMENTS_DISK_PATH = 'legacy-migration/last-classified-payments.csv';
+
+    public function __construct(
+        private readonly LegacyMigrationDatabaseLoanResolver $loanResolver,
+        private readonly LegacyLoanRepaymentWindowResolver $repaymentWindowResolver,
+    ) {}
+
+    public static function classifiedPaymentsAbsolutePath(): ?string
+    {
+        if (! Storage::disk('local')->exists(self::CLASSIFIED_PAYMENTS_DISK_PATH)) {
+            return null;
+        }
+
+        return Storage::disk('local')->path(self::CLASSIFIED_PAYMENTS_DISK_PATH);
+    }
+
+    /**
+     * @return array{contributions: int, loan_repayments: int, ignored: int, failed: int}
+     */
+    public function summarizeClassifiedFile(string $absolutePath): array
+    {
+        $rows = AssociativeCsv::read($absolutePath);
+
+        $stats = [
+            'contributions' => 0,
+            'loan_repayments' => 0,
+            'ignored' => 0,
+            'failed' => 0,
+        ];
+
+        foreach ($rows as $row) {
+            $type = strtolower(trim((string) ($row['payment_type'] ?? '')));
+
+            match (true) {
+                $type === 'contribution' => $stats['contributions']++,
+                in_array($type, ['loan_repayment', 'loan', 'repayment'], true) => $stats['loan_repayments']++,
+                in_array($type, ['ignore', 'skipped', 'skip'], true) => $stats['ignored']++,
+                default => $stats['failed']++,
+            };
+        }
+
+        return $stats;
+    }
+
     /**
      * @return array{
      *     rows: list<array<string, string>>,
@@ -96,19 +140,31 @@ final class LegacyPaymentClassifierService
                 if (in_array($explicitType, ['ignore', 'skipped', 'skip'], true)) {
                     $type = 'ignore';
                     $repaymentWindow = null;
-                } elseif (in_array($explicitType, ['contribution', 'loan_repayment', 'loan', 'repayment'], true)) {
-                    $type = $explicitType === 'contribution' ? 'contribution' : 'loan_repayment';
-                    $repaymentWindow = $type === 'loan_repayment'
-                        ? $this->resolveRepaymentWindow($member, $paymentDate, $loanIndex, $cumulativeRepaidByLoanKey)
-                        : null;
                 } else {
-                    $repaymentWindow = $this->resolveRepaymentWindow($member, $paymentDate, $loanIndex, $cumulativeRepaidByLoanKey);
-                    $type = $this->suggestType(
+                    $repaymentWindow = $this->repaymentWindowResolver->resolveWindow(
                         $member,
-                        $amount,
                         $paymentDate,
-                        $cutoffDate,
+                        $cumulativeRepaidByLoanKey,
+                        $loanIndex,
+                    );
+
+                    if (in_array($explicitType, ['loan_repayment', 'loan', 'repayment'], true)) {
+                        $type = $repaymentWindow !== null ? 'loan_repayment' : 'contribution';
+                    } else {
+                        $type = $this->suggestType(
+                            $member,
+                            $amount,
+                            $paymentDate,
+                            $cutoffDate,
+                            $repaymentWindow,
+                        );
+                    }
+                }
+
+                if ($type === 'loan_repayment' && $repaymentWindow !== null) {
+                    $repaymentWindow = $this->loanResolver->enrichWindow(
                         $repaymentWindow,
+                        $member->memberNumber,
                     );
                 }
 
@@ -127,7 +183,7 @@ final class LegacyPaymentClassifierService
                     'payment_date' => $paymentDate->toDateString(),
                     'amount' => (string) $amount,
                     'payment_type' => $type,
-                    'suggested_loan_number' => $type === 'loan_repayment'
+                    'loan_number' => $type === 'loan_repayment'
                         ? (string) ($repaymentWindow?->loanId ?? '')
                         : '',
                     'period' => $type === 'contribution' ? $paymentDate->copy()->startOfMonth()->format('Y-m') : '',
@@ -159,7 +215,7 @@ final class LegacyPaymentClassifierService
             'payment_date',
             'amount',
             'payment_type',
-            'suggested_loan_number',
+            'loan_number',
             'period',
             'notes',
         ], $rows);
@@ -172,105 +228,11 @@ final class LegacyPaymentClassifierService
         ?Carbon $cutoffDate,
         ?LegacyLoanRepaymentWindow $repaymentWindow,
     ): string {
-        if ($cutoffDate !== null && $paymentDate->gt($cutoffDate)) {
-            return 'unclassified';
-        }
-
-        if ($repaymentWindow !== null && $amount > 0) {
+        if ($repaymentWindow !== null && $amount > 0.00001) {
             return 'loan_repayment';
         }
 
-        $monthly = $member->monthlyContribution;
-
-        if ($monthly > 0 && $this->amountMatches($amount, $monthly)) {
-            return 'contribution';
-        }
-
-        if ($monthly > 0 && $amount > $monthly && $this->amountMatchesContributionArrears($amount, $monthly)) {
-            return 'contribution';
-        }
-
-        return 'unclassified';
-    }
-
-    /**
-     * @param  array<string, float>  $cumulativeRepaidByLoanKey
-     */
-    private function resolveRepaymentWindow(
-        LegacyPaymentClassifyMember $member,
-        Carbon $paymentDate,
-        ?LegacyMigrationCsvLoanIndex $loanIndex,
-        array $cumulativeRepaidByLoanKey,
-    ): ?LegacyLoanRepaymentWindow {
-        if ($member->databaseMember !== null) {
-            return $this->resolveDatabaseRepaymentWindow($member->databaseMember, $paymentDate, $cumulativeRepaidByLoanKey);
-        }
-
-        return $loanIndex?->repaymentWindowAt($member->memberNumber, $paymentDate, $cumulativeRepaidByLoanKey);
-    }
-
-    /**
-     * @param  array<string, float>  $cumulativeRepaidByLoanKey
-     */
-    private function resolveDatabaseRepaymentWindow(
-        Member $member,
-        Carbon $paymentDate,
-        array $cumulativeRepaidByLoanKey,
-    ): ?LegacyLoanRepaymentWindow {
-        foreach ($member->loans()
-            ->whereIn('status', ['active', 'transferred', 'completed', 'early_settled'])
-            ->whereNotNull('disbursed_at')
-            ->where('disbursed_at', '<=', $paymentDate)
-            ->orderBy('disbursed_at')
-            ->get() as $loan) {
-            $window = $this->buildDatabaseRepaymentWindow($member, $loan);
-
-            if (!$window->isDisbursedOnOrBefore($paymentDate)) {
-                continue;
-            }
-
-            $cumulative = $cumulativeRepaidByLoanKey[$window->loanKey] ?? 0.0;
-
-            if ($window->hasRemainingRepayment($cumulative)) {
-                return $window;
-            }
-        }
-
-        return null;
-    }
-
-    private function buildDatabaseRepaymentWindow(Member $member, Loan $loan): LegacyLoanRepaymentWindow
-    {
-        $approved = (float) ($loan->amount_approved ?? $loan->amount);
-        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? now()->startOfDay();
-
-        return new LegacyLoanRepaymentWindow(
-            loanKey: LegacyLoanRepaymentWindow::loanKey((string) $member->member_number, $disbursedAt),
-            disbursedAt: $disbursedAt,
-            amountApproved: $approved,
-            repaymentTargetAmount: LegacyLoanRepaymentTarget::totalRepaymentDue($approved),
-            loanId: $loan->id,
-        );
-    }
-
-    private function amountMatches(float $amount, float $target): bool
-    {
-        return abs($amount - $target) <= 0.02;
-    }
-
-    private function amountMatchesContributionArrears(float $amount, float $monthly): bool
-    {
-        if ($monthly <= 0) {
-            return false;
-        }
-
-        $months = round($amount / $monthly);
-
-        if ($months < 2 || $months > 6) {
-            return false;
-        }
-
-        return $this->amountMatches($amount, $months * $monthly);
+        return 'contribution';
     }
 
     /**
@@ -284,7 +246,7 @@ final class LegacyPaymentClassifierService
         $memberName = $this->cell($row, 'member_name') ?: $this->cell($row, 'name');
 
         if ($email === '' && $number === '' && $nationalId === '' && $memberName === '') {
-            throw new InvalidArgumentException("Row {$line}: " . __('Provide member_email, member_number, national_id, or member_name.'));
+            throw new InvalidArgumentException("Row {$line}: ".__('Provide member_email, member_number, national_id, or member_name.'));
         }
 
         $databaseMember = $this->tryResolveDatabaseMember($email, $number, $nationalId, $memberName);
@@ -300,24 +262,24 @@ final class LegacyPaymentClassifierService
         }
 
         if ($number !== '') {
-            throw new InvalidArgumentException("Row {$line}: " . __('No member found for member_number :number — import members first or upload the matching members CSV on this page.', [
+            throw new InvalidArgumentException("Row {$line}: ".__('No member found for member_number :number — import members first or upload the matching members CSV on this page.', [
                 'number' => $number,
             ]));
         }
 
         if ($email !== '') {
-            throw new InvalidArgumentException("Row {$line}: " . __('No member found for email :email — import members first or upload the matching members CSV on this page.', [
+            throw new InvalidArgumentException("Row {$line}: ".__('No member found for email :email — import members first or upload the matching members CSV on this page.', [
                 'email' => $email,
             ]));
         }
 
         if ($nationalId !== '') {
-            throw new InvalidArgumentException("Row {$line}: " . __('No member found for national_id :id — import members first or upload the matching members CSV on this page.', [
+            throw new InvalidArgumentException("Row {$line}: ".__('No member found for national_id :id — import members first or upload the matching members CSV on this page.', [
                 'id' => $nationalId,
             ]));
         }
 
-        throw new InvalidArgumentException("Row {$line}: " . __('member_name must match exactly one member in the database or members CSV.'));
+        throw new InvalidArgumentException("Row {$line}: ".__('member_name must match exactly one member in the database or members CSV.'));
     }
 
     private function tryResolveDatabaseMember(
@@ -326,12 +288,12 @@ final class LegacyPaymentClassifierService
         string $nationalId,
         string $memberName,
     ): ?Member {
-        if ($email !== '') {
-            return Member::query()->whereRaw('LOWER(email) = ?', [$email])->first();
-        }
-
         if ($number !== '') {
             return Member::query()->where('member_number', $number)->first();
+        }
+
+        if ($email !== '') {
+            return Member::query()->whereRaw('LOWER(email) = ?', [$email])->first();
         }
 
         if ($nationalId !== '') {
@@ -367,7 +329,7 @@ final class LegacyPaymentClassifierService
 
     private function parseMoney(string $value, string $column, int $line): float
     {
-        if ($value === '' || !is_numeric($value)) {
+        if ($value === '' || ! is_numeric($value)) {
             throw new InvalidArgumentException("Row {$line}: {$column} must be numeric.");
         }
 

@@ -112,3 +112,21 @@ test('collection cycle posting stores contribution posted notification in member
             ->count()
     )->toBe(1);
 });
+
+test('without posted notifications suppresses contribution posted emails during bulk import', function () {
+    Notification::fake();
+
+    [$memberUser, $member] = createMemberWithUserForPostedNotification($this->accounting);
+
+    Account::masterCash()->update(['balance' => 5000]);
+    $member->cashAccount->update(['balance' => 5000]);
+
+    $contribution = $this->service->recordContribution($member, '2026-05-01');
+    $contribution->update(['payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT]);
+
+    ContributionService::withoutPostedNotifications(function () use ($contribution): void {
+        $this->service->postContribution($contribution);
+    });
+
+    Notification::assertNothingSent();
+});

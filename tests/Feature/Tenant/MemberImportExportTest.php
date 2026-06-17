@@ -122,6 +122,165 @@ test('member import skips existing email', function () {
         ->and(Member::query()->where('email', 'existing.member@fund.test')->count())->toBe(1);
 });
 
+test('member import links dependent when parent row appears later in the file', function () {
+    $path = writeMemberImportCsv(
+        "member_number,name,email,parent_member_number\n".
+        "IMP-CHILD-1,Import Child,,IMP-PARENT-1\n".
+        "IMP-PARENT-1,Import Parent,import.parent@fund.test,\n"
+    );
+
+    $result = app(MemberImportService::class)->import($path, 'TempPass@123');
+
+    expect($result['created'])->toBe(2)
+        ->and($result['failed'])->toBe(0);
+
+    $parent = Member::query()->where('member_number', 'IMP-PARENT-1')->first();
+    $child = Member::query()->where('member_number', 'IMP-CHILD-1')->first();
+
+    expect($parent)->not->toBeNull()
+        ->and($child)->not->toBeNull()
+        ->and($child->parent_member_id)->toBe($parent->id);
+});
+
+test('member import links dependent when parent is referenced by email from a later row', function () {
+    $path = writeMemberImportCsv(
+        "member_number,name,email,parent_member_email\n".
+        "IMP-CHILD-2,Import Child By Email,,import.parent.email@fund.test\n".
+        "IMP-PARENT-2,Import Parent By Email,import.parent.email@fund.test,\n"
+    );
+
+    $result = app(MemberImportService::class)->import($path, 'TempPass@123');
+
+    expect($result['created'])->toBe(2)
+        ->and($result['failed'])->toBe(0);
+
+    $parent = Member::query()->where('member_number', 'IMP-PARENT-2')->first();
+    $child = Member::query()->where('member_number', 'IMP-CHILD-2')->first();
+
+    expect($child?->parent_member_id)->toBe($parent?->id);
+});
+
+test('member import fails when parent reference never resolves', function () {
+    $path = writeMemberImportCsv(
+        "member_number,name,email,parent_member_number\n".
+        "IMP-ORPHAN-1,Import Orphan,,IMP-MISSING-PARENT\n"
+    );
+
+    $result = app(MemberImportService::class)->import($path, 'TempPass@123');
+
+    expect($result['created'])->toBe(0)
+        ->and($result['failed'])->toBe(1)
+        ->and($result['errors'][0])->toContain('IMP-MISSING-PARENT')
+        ->and(Member::query()->where('member_number', 'IMP-ORPHAN-1')->exists())->toBeFalse();
+});
+
+test('member import links dependent when parent_member_number contains legacy household shorthand name', function () {
+    $path = writeMemberImportCsv(
+        "member_number,name,email,parent_member_number\n".
+        "1,باسم سليمان إبراهيم سمان,head.samman@fund.test,\n".
+        "2,خديجة عبدالحكيم أميرشاه عصمت,,باسم سليمان سمان\n"
+    );
+
+    $result = app(MemberImportService::class)->import($path, 'TempPass@123');
+
+    expect($result['created'])->toBe(2)
+        ->and($result['failed'])->toBe(0);
+
+    $parent = Member::query()->where('member_number', '1')->first();
+    $child = Member::query()->where('member_number', '2')->first();
+
+    expect($parent)->not->toBeNull()
+        ->and($child)->not->toBeNull()
+        ->and($child->parent_member_id)->toBe($parent->id);
+});
+
+test('member import links dependent when parent shorthand appears before household head row', function () {
+    $path = writeMemberImportCsv(
+        "member_number,name,email,parent_member_number\n".
+        "9,2 فايزة سليمان إبراهيم سمان,,نبيل سليمان سمان\n".
+        "29,نبيل سليمان إبراهيم سمان,head.nabil@fund.test,نبيل سليمان سمان\n"
+    );
+
+    $result = app(MemberImportService::class)->import($path, 'TempPass@123');
+
+    expect($result['created'])->toBe(2)
+        ->and($result['failed'])->toBe(0);
+
+    $parent = Member::query()->where('member_number', '29')->first();
+    $child = Member::query()->where('member_number', '9')->first();
+
+    expect($parent)->not->toBeNull()
+        ->and($child)->not->toBeNull()
+        ->and($child->parent_member_id)->toBe($parent->id);
+});
+
+test('member import creates dependents that share a household contact email when member_number is present', function () {
+    $path = writeMemberImportCsv(
+        "member_number,name,email,parent_member_number\n".
+        "1,Household Head,shared.household@fund.test,\n".
+        "2,Household Dependent One,shared.household@fund.test,1\n".
+        "3,Household Dependent Two,shared.household@fund.test,1\n"
+    );
+
+    $result = app(MemberImportService::class)->import($path, 'TempPass@123');
+
+    expect($result['created'])->toBe(3)
+        ->and($result['skipped'])->toBe(0)
+        ->and($result['failed'])->toBe(0)
+        ->and(Member::query()->count())->toBe(3);
+
+    $head = Member::query()->where('member_number', '1')->first();
+    $firstDependent = Member::query()->where('member_number', '2')->first();
+    $secondDependent = Member::query()->where('member_number', '3')->first();
+
+    expect($head?->email)->toBe('shared.household@fund.test')
+        ->and($firstDependent?->parent_member_id)->toBe($head?->id)
+        ->and($secondDependent?->parent_member_id)->toBe($head?->id)
+        ->and($firstDependent?->email)->toBe('shared.household@fund.test')
+        ->and($secondDependent?->email)->toBe('shared.household@fund.test');
+});
+
+test('member import resumes missing rows when household members share contact emails', function () {
+    Member::create([
+        'member_number' => '1',
+        'name' => 'Household Head',
+        'email' => 'shared.household@fund.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $path = writeMemberImportCsv(
+        "member_number,name,email,parent_member_number\n".
+        "1,Household Head,shared.household@fund.test,\n".
+        "2,Household Dependent One,shared.household@fund.test,1\n".
+        "3,Household Dependent Two,shared.household@fund.test,1\n"
+    );
+
+    $result = app(MemberImportService::class)->import($path, 'TempPass@123');
+
+    expect($result['created'])->toBe(2)
+        ->and($result['skipped'])->toBe(1)
+        ->and($result['failed'])->toBe(0)
+        ->and(Member::query()->count())->toBe(3);
+});
+
+test('member import accepts arabic legacy status labels', function () {
+    $path = writeMemberImportCsv(
+        "member_number,name,email,status\n".
+        "AR-ACTIVE,Arabic Active Member,arabic.active@fund.test,مستمر\n".
+        "AR-WITHDRAWN,Arabic Withdrawn Member,arabic.withdrawn@fund.test,منسحب\n"
+    );
+
+    $result = app(MemberImportService::class)->import($path, 'TempPass@123');
+
+    expect($result['created'])->toBe(2)
+        ->and($result['failed'])->toBe(0);
+
+    expect(Member::query()->where('member_number', 'AR-ACTIVE')->value('status'))->toBe('active')
+        ->and(Member::query()->where('member_number', 'AR-WITHDRAWN')->value('status'))->toBe('withdrawn');
+});
+
 test('member export includes roster and balance columns', function () {
     $member = Member::create([
         'member_number' => 'MEM-EXPORT-01',

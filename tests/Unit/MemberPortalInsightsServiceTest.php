@@ -3,10 +3,13 @@
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DirectMessage;
+use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\MemberPortalInsightsService;
+use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
@@ -88,23 +91,86 @@ test('member portal insights snapshot includes greeting and kpis', function () {
         'quick_links',
     ])
         ->and($snapshot['member']['number'])->toBe('MEM-INS01')
-        ->and($snapshot['kpis'])->toHaveCount(6)
+        ->and($snapshot['kpis'])->toHaveCount(8)
         ->and($snapshot['greeting'])->toHaveKeys([
-            'period_label',
-            'first_name',
-            'name',
-            'fund_name',
-            'date',
-            'subtitle',
-            'avatar_url',
-            'initials',
-            'profile_url',
-            'balances',
-            'pills',
-        ])
+                'period_label',
+                'first_name',
+                'name',
+                'fund_name',
+                'date',
+                'subtitle',
+                'avatar_url',
+                'initials',
+                'profile_url',
+                'balances',
+                'pills',
+            ])
         ->and($snapshot['greeting']['balances'])->toHaveCount(2)
         ->and($snapshot['steps'])->not->toBeEmpty()
         ->and($snapshot['trend'])->toHaveCount(6);
+});
+
+test('member portal insights show lifetime contribution and repayment totals in money format', function () {
+    $loan = Loan::query()->create([
+        'member_id' => $this->member->id,
+        'amount' => 10_000,
+        'amount_requested' => 10_000,
+        'amount_approved' => 10_000,
+        'amount_disbursed' => 10_000,
+        'interest_rate' => 0,
+        'term_months' => 10,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => now()->subMonth(),
+        'approved_at' => now()->subMonth(),
+        'disbursed_at' => now()->subMonth(),
+    ]);
+
+    LoanRepayment::query()->create([
+        'loan_id' => $loan->id,
+        'amount' => 1_250,
+        'paid_at' => now()->subDays(10),
+    ]);
+    LoanRepayment::query()->create([
+        'loan_id' => $loan->id,
+        'amount' => 2_750,
+        'paid_at' => now()->subDays(3),
+    ]);
+
+    auth('tenant')->login($this->memberUser);
+
+    $snapshot = app(MemberPortalInsightsService::class)->snapshot();
+    $contributionsKpi = collect($snapshot['kpis'])->firstWhere('label', __('Lifetime contributions'));
+    $repaidKpi = collect($snapshot['kpis'])->firstWhere('label', __('Lifetime repaid'));
+    $inflowKpi = collect($snapshot['kpis'])->firstWhere('label', __('Total fund inflow'));
+
+    expect($contributionsKpi)->not->toBeNull()
+        ->and($contributionsKpi['sub'])->toContain(InsightFormatter::money(500.0))
+        ->and($repaidKpi)->not->toBeNull()
+        ->and($repaidKpi['sub'])->toBe(InsightFormatter::money(4_000.0))
+        ->and($inflowKpi)->not->toBeNull()
+        ->and($inflowKpi['sub'])->toBe(InsightFormatter::money(4_500.0));
+});
+
+test('member portal insights render negative fund and inflow values in red', function () {
+    $this->member->cashAccount()->update(['balance' => -700]);
+    $this->member->fundAccount()->update(['balance' => -700]);
+
+    auth('tenant')->login($this->memberUser);
+
+    $snapshot = app(MemberPortalInsightsService::class)->snapshot();
+    $fundKpi = collect($snapshot['kpis'])->firstWhere('label', __('Fund'));
+    $inflowKpi = collect($snapshot['kpis'])->firstWhere('label', __('Total fund inflow'));
+
+    expect($fundKpi)->not->toBeNull()
+        ->and($fundKpi['value'])->toStartWith('-')
+        ->and($fundKpi['accent'])->toBe('rose')
+        ->and($fundKpi['value_class'])->toContain('text-rose-600')
+        ->and($inflowKpi)->not->toBeNull()
+        ->and($inflowKpi['value'])->toStartWith('-')
+        ->and($inflowKpi['accent'])->toBe('rose')
+        ->and($inflowKpi['value_class'])->toContain('text-rose-600');
 });
 
 test('member portal insights counts unread admin messages', function () {

@@ -8,6 +8,8 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\Tenant\HouseholdMemberService;
 use App\Support\BusinessDay;
+use App\Support\LegacyMemberIdentifierResolver;
+use App\Support\LegacyMemberStatusMapper;
 use App\Support\MemberUserEmail;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -23,6 +25,7 @@ final class MemberImportService
         private readonly HouseholdMemberService $householdMembers,
         private readonly MemberOpeningBalanceService $openingBalances,
         private readonly ContributionCollectionCycleService $contributions,
+        private readonly LegacyMemberIdentifierResolver $memberResolver,
     ) {}
 
     /**
@@ -32,6 +35,8 @@ final class MemberImportService
      * Optional: member_number when email is provided, phone, monthly_contribution_amount, joined_at, status, password,
      * parent_member_number, parent_member_email, portal_pin, contribution_arrears_cutoff_date,
      * cutoff_cash_balance, cutoff_fund_balance
+     *
+     * Parent rows may appear after dependent rows; the importer resolves household links in multiple passes.
      *
      * @return array{created: int, skipped: int, failed: int, errors: array<int, string>}
      */
@@ -67,21 +72,53 @@ final class MemberImportService
         $defaultArrearsCutoffDate = $this->normalizeOptionalDate($defaultArrearsCutoffDate);
         $lineBase = 2;
 
+        $pending = [];
+
         foreach ($rows as $index => $row) {
-            $lineNumber = $lineBase + $index;
+            $pending[] = [
+                'line' => $lineBase + $index,
+                'row' => $row,
+            ];
+        }
 
-            try {
-                $result = $this->importRow($row, $defaultPassword, $defaultArrearsCutoffDate);
+        while ($pending !== []) {
+            $deferred = [];
+            $progress = false;
 
-                if ($result === 'skipped') {
-                    $skipped++;
-                } else {
-                    $created++;
+            foreach ($pending as $item) {
+                if (! $this->canImportRow($item['row'])) {
+                    $deferred[] = $item;
+
+                    continue;
                 }
-            } catch (Throwable $e) {
-                $failed++;
-                $errors[] = "Row {$lineNumber}: {$e->getMessage()}";
+
+                try {
+                    $result = $this->importRow($item['row'], $defaultPassword, $defaultArrearsCutoffDate);
+
+                    if ($result === 'skipped') {
+                        $skipped++;
+                    } else {
+                        $created++;
+                    }
+
+                    $progress = true;
+                } catch (Throwable $e) {
+                    $failed++;
+                    $errors[] = "Row {$item['line']}: {$e->getMessage()}";
+                    $progress = true;
+                }
             }
+
+            if (! $progress) {
+                foreach ($deferred as $item) {
+                    $failed++;
+                    $errors[] = "Row {$item['line']}: {$this->missingParentReferenceMessage($item['row'])}";
+                }
+
+                break;
+            }
+
+            $pending = $deferred;
         }
 
         return [
@@ -106,15 +143,7 @@ final class MemberImportService
         $memberNumber = $this->cell($row, 'member_number');
         $explicitEmail = strtolower(trim($this->cell($row, 'email')));
 
-        if ($memberNumber !== '' && Member::query()->where('member_number', $memberNumber)->exists()) {
-            return 'skipped';
-        }
-
-        if ($explicitEmail !== '') {
-            if (Member::query()->where('email', $explicitEmail)->exists() || User::query()->where('email', $explicitEmail)->exists()) {
-                return 'skipped';
-            }
-        } elseif ($memberNumber === '' && Member::query()->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])->exists()) {
+        if ($this->rowAlreadyImported($name, $memberNumber, $explicitEmail)) {
             return 'skipped';
         }
 
@@ -122,6 +151,11 @@ final class MemberImportService
         $plainPassword = strlen($password) >= 8 ? $password : $defaultPassword;
 
         $parentMember = $this->resolveParentMember($row);
+
+        if ($this->rowHasParentReference($row) && $parentMember === null && ! $this->parentReferenceMatchesRowName($row)) {
+            throw new InvalidArgumentException($this->missingParentReferenceMessage($row));
+        }
+
         $email = $this->resolveImportEmail($row, $name, $memberNumber, $parentMember);
         $monthlyContribution = $this->parseMonthlyContribution($row);
         $joinedAt = $this->parseJoinedAt($row);
@@ -203,6 +237,87 @@ final class MemberImportService
     }
 
     /**
+     * When member_number is present it is the authoritative identity for legacy imports.
+     * Household dependents often reuse the head's contact email and must not be skipped.
+     */
+    private function rowAlreadyImported(string $name, string $memberNumber, string $explicitEmail): bool
+    {
+        if ($memberNumber !== '') {
+            return Member::query()->where('member_number', $memberNumber)->exists();
+        }
+
+        if ($explicitEmail !== '') {
+            if (Member::query()->where('email', $explicitEmail)->exists()) {
+                return true;
+            }
+
+            if (User::query()->where('email', $explicitEmail)->exists()) {
+                return true;
+            }
+        }
+
+        return Member::query()
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+            ->exists();
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     */
+    private function canImportRow(array $row): bool
+    {
+        if (! $this->rowHasParentReference($row)) {
+            return true;
+        }
+
+        if ($this->resolveParentMember($row) !== null) {
+            return true;
+        }
+
+        return $this->parentReferenceMatchesRowName($row);
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     */
+    private function rowHasParentReference(array $row): bool
+    {
+        if ($this->cell($row, 'parent_member_number') !== '') {
+            return true;
+        }
+
+        foreach (['parent_member_name', 'parent_name', 'parent_member_email', 'parent_email'] as $key) {
+            if ($this->cell($row, $key) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     */
+    private function missingParentReferenceMessage(array $row): string
+    {
+        $parentNumber = $this->cell($row, 'parent_member_number');
+
+        if ($parentNumber !== '') {
+            return (string) __('Parent member :identifier was not found.', ['identifier' => $parentNumber]);
+        }
+
+        foreach (['parent_member_email', 'parent_email'] as $key) {
+            $parentEmail = strtolower(trim($this->cell($row, $key)));
+
+            if ($parentEmail !== '') {
+                return (string) __('Parent member email :email was not found.', ['email' => $parentEmail]);
+            }
+        }
+
+        return (string) __('Parent member was not found.');
+    }
+
+    /**
      * @param  array<string, string>  $row
      */
     private function resolveParentMember(array $row): ?Member
@@ -210,13 +325,15 @@ final class MemberImportService
         $parentNumber = $this->cell($row, 'parent_member_number');
 
         if ($parentNumber !== '') {
-            $parent = Member::query()->where('member_number', $parentNumber)->first();
+            return $this->memberResolver->findByNumberOrLegacyLabel($parentNumber);
+        }
 
-            if ($parent === null) {
-                throw new InvalidArgumentException(__('Parent member number :number was not found.', ['number' => $parentNumber]));
+        foreach (['parent_member_name', 'parent_name'] as $key) {
+            $parentName = $this->cell($row, $key);
+
+            if ($parentName !== '') {
+                return $this->memberResolver->findByNumberOrLegacyLabel($parentName);
             }
-
-            return $parent;
         }
 
         foreach (['parent_member_email', 'parent_email'] as $key) {
@@ -226,16 +343,49 @@ final class MemberImportService
                 continue;
             }
 
-            $parent = Member::query()->where('email', $parentEmail)->first();
-
-            if ($parent === null) {
-                throw new InvalidArgumentException(__('Parent member email :email was not found.', ['email' => $parentEmail]));
-            }
-
-            return $parent;
+            return $this->memberResolver->findByEmail($parentEmail);
         }
 
         return null;
+    }
+
+    /**
+     * Legacy member exports sometimes put the household head's own shorthand label
+     * in parent_member_number on the head row itself.
+     *
+     * @param  array<string, string>  $row
+     */
+    private function parentReferenceMatchesRowName(array $row): bool
+    {
+        $parentLabel = $this->cell($row, 'parent_member_number');
+
+        if ($parentLabel === '') {
+            foreach (['parent_member_name', 'parent_name'] as $key) {
+                $parentLabel = $this->cell($row, $key);
+
+                if ($parentLabel !== '') {
+                    break;
+                }
+            }
+        }
+
+        $name = trim($this->cell($row, 'name'));
+
+        if ($parentLabel === '' || $name === '') {
+            return false;
+        }
+
+        $words = preg_split('/\s+/u', $parentLabel, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        if ($words === []) {
+            return false;
+        }
+
+        $first = mb_strtolower($words[0]);
+        $last = mb_strtolower($words[array_key_last($words)]);
+        $normalizedName = mb_strtolower($name);
+
+        return str_starts_with($normalizedName, $first) && str_ends_with($normalizedName, $last);
     }
 
     private function resolveImportEmail(array $row, string $name, string $memberNumber, ?Member $parentMember): string
@@ -328,19 +478,7 @@ final class MemberImportService
 
     private function parseStatus(string $value): string
     {
-        $normalized = strtolower(trim($value));
-
-        if ($normalized === '') {
-            return 'active';
-        }
-
-        if (array_key_exists($normalized, Member::statusOptions())) {
-            return $normalized;
-        }
-
-        throw new InvalidArgumentException(
-            __('status must be one of: :statuses.', ['statuses' => implode(', ', Member::STATUSES)])
-        );
+        return LegacyMemberStatusMapper::normalize($value);
     }
 
     /**
@@ -443,13 +581,13 @@ final class MemberImportService
         }
 
         $headerLine = array_shift($lines);
-        $headers = str_getcsv((string) $headerLine);
+        $headers = str_getcsv((string) $headerLine, ',', '"', '\\');
         $headers = array_map(fn ($header) => strtolower(trim(str_replace(' ', '_', (string) $header))), $headers);
 
         $rows = [];
 
         foreach ($lines as $line) {
-            $cells = str_getcsv((string) $line);
+            $cells = str_getcsv((string) $line, ',', '"', '\\');
             $assoc = [];
 
             foreach ($headers as $index => $key) {
