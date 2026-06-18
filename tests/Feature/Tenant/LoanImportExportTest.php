@@ -196,7 +196,48 @@ CSV;
         ->and((float) $loan->master_portion)->toBe(0.0)
         ->and((float) $member->fundAccount->balance)->toBe(-10000.0)
         ->and((float) $masterFund->fresh()->balance)->toBe(490_000.0)
-        ->and((float) $member->cashAccount->balance)->toBe(0.0);
+        ->and((float) $member->cashAccount->balance)->toBe(0.0)
+        ->and($loan->installments()->count())->toBe(7);
+});
+
+test('loan import derives installment count from split repayment formula when portions are omitted', function () {
+    $tierNumber = max(1, (int) LoanTier::withTrashed()->max('tier_number') + 1);
+
+    $tier = LoanTier::create([
+        'tier_number' => $tierNumber,
+        'label' => 'Legacy 72K tier',
+        'min_amount' => 61_000,
+        'max_amount' => 90_000,
+        'min_monthly_installment' => 2000,
+        'is_active' => true,
+    ]);
+
+    FundTier::create([
+        'tier_number' => min(254, $tierNumber + 1),
+        'label' => 'Pool legacy 72K',
+        'loan_tier_id' => $tier->id,
+        'percentage' => 25,
+        'is_active' => true,
+    ]);
+
+    $member = createLoanImportMember($this->accounting, 'legacy-72k-installments@example.test', 0);
+
+    $csv = <<<CSV
+loan_status,member_email,amount_approved,loan_tier_number,disbursed_at,paid_installments_count
+active,{$member->email},72000,{$tierNumber},2024-09-29,0
+CSV;
+
+    $path = writeLoanImportCsv($csv);
+    $result = app(LoanImportService::class)->import($path);
+
+    expect($result)->toMatchArray(['created' => 1, 'failed' => 0]);
+
+    $loan = Loan::query()->where('member_id', $member->id)->latest('id')->firstOrFail();
+
+    expect($loan->installments()->count())->toBe(24)
+        ->and($loan->installments_count)->toBe(24)
+        ->and((float) $loan->member_portion)->toBe(72000.0)
+        ->and((float) $loan->master_portion)->toBe(0.0);
 });
 
 test('loan import mirrors explicit master portion through member fund not master-only debit', function () {

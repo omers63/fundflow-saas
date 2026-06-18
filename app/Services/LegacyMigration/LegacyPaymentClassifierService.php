@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\LegacyMigration;
 
+use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Support\AssociativeCsv;
@@ -19,6 +21,7 @@ final class LegacyPaymentClassifierService
     public function __construct(
         private readonly LegacyMigrationDatabaseLoanResolver $loanResolver,
         private readonly LegacyLoanRepaymentWindowResolver $repaymentWindowResolver,
+        private readonly LegacyPaymentLoanAllocator $loanAllocator,
     ) {}
 
     public static function classifiedPaymentsAbsolutePath(): ?string
@@ -140,6 +143,7 @@ final class LegacyPaymentClassifierService
                 if (in_array($explicitType, ['ignore', 'skipped', 'skip'], true)) {
                     $type = 'ignore';
                     $repaymentWindow = null;
+                    $loanRepaymentAmount = 0.0;
                 } else {
                     $repaymentWindow = $this->repaymentWindowResolver->resolveWindow(
                         $member,
@@ -148,16 +152,23 @@ final class LegacyPaymentClassifierService
                         $loanIndex,
                     );
 
+                    $allocation = $this->resolveAllocation(
+                        $member,
+                        $amount,
+                        $paymentDate,
+                        $cumulativeRepaidByLoanKey,
+                        $repaymentWindow,
+                    );
+                    $loanRepaymentAmount = $allocation['repayment_amount'];
+
                     if (in_array($explicitType, ['loan_repayment', 'loan', 'repayment'], true)) {
-                        $type = $repaymentWindow !== null ? 'loan_repayment' : 'contribution';
+                        $type = $loanRepaymentAmount > 0.00001 ? 'loan_repayment' : 'contribution';
                     } else {
-                        $type = $this->suggestType(
-                            $member,
-                            $amount,
-                            $paymentDate,
-                            $cutoffDate,
-                            $repaymentWindow,
-                        );
+                        $type = $loanRepaymentAmount > 0.00001 ? 'loan_repayment' : 'contribution';
+                    }
+
+                    if ($type === 'loan_repayment' && $allocation['loan'] !== null) {
+                        $repaymentWindow = $this->buildWindowFromLoan($member, $allocation['loan']);
                     }
                 }
 
@@ -168,9 +179,9 @@ final class LegacyPaymentClassifierService
                     );
                 }
 
-                if ($type === 'loan_repayment' && $repaymentWindow !== null) {
+                if ($type === 'loan_repayment' && $repaymentWindow !== null && $loanRepaymentAmount > 0.00001) {
                     $cumulativeRepaidByLoanKey[$repaymentWindow->loanKey] = round(
-                        ($cumulativeRepaidByLoanKey[$repaymentWindow->loanKey] ?? 0.0) + $amount,
+                        ($cumulativeRepaidByLoanKey[$repaymentWindow->loanKey] ?? 0.0) + $loanRepaymentAmount,
                         2,
                     );
                 }
@@ -221,18 +232,78 @@ final class LegacyPaymentClassifierService
         ], $rows);
     }
 
-    private function suggestType(
+    /**
+     * @param  array<string, float>  $cumulativeRepaidByLoanKey
+     * @return array{loan: ?Loan, repayment_amount: float, contribution_amount: float}
+     */
+    private function resolveAllocation(
         LegacyPaymentClassifyMember $member,
         float $amount,
         Carbon $paymentDate,
-        ?Carbon $cutoffDate,
-        ?LegacyLoanRepaymentWindow $repaymentWindow,
-    ): string {
-        if ($repaymentWindow !== null && $amount > 0.00001) {
-            return 'loan_repayment';
+        array &$cumulativeRepaidByLoanKey,
+        ?LegacyLoanRepaymentWindow $repaymentWindow = null,
+    ): array {
+        if ($member->databaseMember !== null) {
+            return $this->loanAllocator->allocate(
+                $member->databaseMember,
+                $amount,
+                $paymentDate,
+                $cumulativeRepaidByLoanKey,
+            );
         }
 
-        return 'contribution';
+        if ($repaymentWindow === null || $amount <= 0.00001) {
+            return [
+                'loan' => null,
+                'repayment_amount' => 0.0,
+                'contribution_amount' => $amount,
+            ];
+        }
+
+        $cumulative = $cumulativeRepaidByLoanKey[$repaymentWindow->loanKey] ?? 0.0;
+        $minimumInstallment = (float) (LoanTier::forAmount($repaymentWindow->amountApproved)?->min_monthly_installment ?? 0);
+
+        if (
+            $minimumInstallment > 0.00001
+            && $cumulative <= 0.00001
+            && $amount + 0.00001 < $minimumInstallment
+        ) {
+            return [
+                'loan' => null,
+                'repayment_amount' => 0.0,
+                'contribution_amount' => $amount,
+            ];
+        }
+
+        if (! $repaymentWindow->hasRemainingRepayment($cumulative)) {
+            return [
+                'loan' => null,
+                'repayment_amount' => 0.0,
+                'contribution_amount' => $amount,
+            ];
+        }
+
+        $repaymentAmount = round(min($amount, $repaymentWindow->remainingRepayment($cumulative)), 2);
+
+        return [
+            'loan' => null,
+            'repayment_amount' => $repaymentAmount,
+            'contribution_amount' => round(max(0.0, $amount - $repaymentAmount), 2),
+        ];
+    }
+
+    private function buildWindowFromLoan(LegacyPaymentClassifyMember $member, Loan $loan): LegacyLoanRepaymentWindow
+    {
+        $approved = (float) ($loan->amount_approved ?? $loan->amount);
+        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? now()->startOfDay();
+
+        return new LegacyLoanRepaymentWindow(
+            loanKey: LegacyLoanRepaymentWindow::loanKey((string) $member->memberNumber, $disbursedAt),
+            disbursedAt: $disbursedAt,
+            amountApproved: $approved,
+            repaymentTargetAmount: LegacyLoanRepaymentTarget::totalRepaymentDue($approved),
+            loanId: $loan->id,
+        );
     }
 
     /**

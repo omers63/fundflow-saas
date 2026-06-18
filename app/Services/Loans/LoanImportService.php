@@ -12,6 +12,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Services\MemberCashOutService;
 use App\Support\LegacyMemberIdentifierResolver;
+use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -204,14 +205,21 @@ class LoanImportService
             throw new \InvalidArgumentException(__('amount_approved must be positive.'));
         }
 
-        [$memberPortion, $masterPortion] = $this->resolvePortions($row, $amount, $member);
+        [$memberPortion, $masterPortion, $portionsExplicit] = $this->resolvePortions($row, $amount, $member);
 
         $isEmergency = $this->parseBool($this->cell($row, 'is_emergency'));
         $loanTier = $this->resolveLoanTier($row, $amount, $isEmergency);
         $fundTier = $this->resolveFundTier($row, $loanTier, $isEmergency);
         $threshold = $this->parseThreshold($this->cell($row, 'settlement_threshold'));
         $minInstall = (float) ($loanTier?->min_monthly_installment ?? 1000);
-        $count = $this->resolveInstallmentsCountDisbursed($row, $amount, $memberPortion, $minInstall, $threshold);
+        $count = $this->resolveInstallmentsCountDisbursed(
+            $row,
+            $amount,
+            $memberPortion,
+            $minInstall,
+            $threshold,
+            $portionsExplicit,
+        );
         $paidCount = $allPaid ? $count : $this->parsePaidInstallmentsCount($row, $count);
         $disbursedAt = $this->parseDisbursedAt($this->cell($row, 'disbursed_at'));
         $exemption = Loan::computeExemptionAndFirstRepayment($disbursedAt);
@@ -327,7 +335,7 @@ class LoanImportService
 
     /**
      * @param  array<string, string>  $row
-     * @return array{0: float, 1: float}
+     * @return array{0: float, 1: float, 2: bool}
      */
     private function resolvePortions(array $row, float $amount, Member $member): array
     {
@@ -339,6 +347,8 @@ class LoanImportService
             // member fund takes the full disbursement and can go negative.
             $memberPortion = round($amount, 2);
             $masterPortion = 0.0;
+
+            return [$memberPortion, $masterPortion, false];
         } elseif ($memberCell === '') {
             $masterPortion = $this->parseMoney($masterCell, 'master_portion');
             $memberPortion = round($amount - $masterPortion, 2);
@@ -360,7 +370,7 @@ class LoanImportService
             );
         }
 
-        return [$memberPortion, $masterPortion];
+        return [$memberPortion, $masterPortion, true];
     }
 
     /**
@@ -720,6 +730,7 @@ class LoanImportService
         float $memberPortion,
         float $minInstall,
         float $threshold,
+        bool $portionsExplicit,
     ): int {
         $cell = $this->cell($row, 'installments_count');
         if ($cell !== '') {
@@ -729,6 +740,15 @@ class LoanImportService
             $count = (int) $cell;
 
             return $count >= 1 ? $count : throw new \InvalidArgumentException(__('installments_count must be at least 1.'));
+        }
+
+        if (! $portionsExplicit) {
+            $schedulePortions = LoanSettings::resolveFundingPortions(
+                $amount,
+                0,
+                LoanFundingStrategy::SPLIT_PERCENTAGE,
+            );
+            $memberPortion = $schedulePortions['member_portion'];
         }
 
         return Loan::computeInstallmentsCountFromPortions(

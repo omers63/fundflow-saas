@@ -8,6 +8,8 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
+use App\Support\BusinessDay;
+use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 
@@ -15,13 +17,17 @@ use Illuminate\Support\Collection;
  * Applies bulk-imported {@see LoanRepayment} rows to installment schedules without
  * posting additional ledger entries (ledger was posted at import time).
  *
- * Repayments may sit on the wrong loan when legacy import lacked loan_number;
- * each payment is applied chronologically to the member's earliest disbursed loan with
- * unpaid installments as of that payment date.
+ * Repayments are applied to the member's active repayment window at each payment
+ * date (same cumulative 50/50 + 16% logic as the classifier), not blindly by
+ * {@see LoanRepayment::$loan_id}. Overpayments spill to the next loan window.
  */
 final class LegacyImportedLoanScheduleSyncService
 {
     private const float AMOUNT_TOLERANCE = 0.02;
+
+    public function __construct(
+        private readonly LegacyLoanRepaymentWindowResolver $repaymentWindowResolver,
+    ) {}
 
     /**
      * @param  iterable<int|string>  $loanIds
@@ -94,8 +100,10 @@ final class LegacyImportedLoanScheduleSyncService
             return ['loans' => 0, 'installments' => 0];
         }
 
+        $loanIds = $loans->pluck('id');
+
         $repayments = LoanRepayment::query()
-            ->whereIn('loan_id', $loans->pluck('id'))
+            ->whereIn('loan_id', $loanIds)
             ->orderBy('paid_at')
             ->orderBy('id')
             ->get();
@@ -104,8 +112,10 @@ final class LegacyImportedLoanScheduleSyncService
             return ['loans' => 0, 'installments' => 0];
         }
 
+        $this->resetInstallmentPaymentState($loanIds);
+
         $installmentsByLoan = LoanInstallment::query()
-            ->whereIn('loan_id', $loans->pluck('id'))
+            ->whereIn('loan_id', $loanIds)
             ->orderBy('installment_number')
             ->get()
             ->groupBy('loan_id');
@@ -113,42 +123,21 @@ final class LegacyImportedLoanScheduleSyncService
         /** @var array<int, array{status: string, paid_at: CarbonInterface|string|null}> $updates */
         $updates = [];
         $touchedLoanIds = [];
+        /** @var array<string, float> $cumulativeRepaidByLoanKey */
+        $cumulativeRepaidByLoanKey = [];
 
         foreach ($repayments as $repayment) {
-            $pool = (float) $repayment->amount;
-            $paidAt = $repayment->paid_at;
-
-            foreach ($loans as $loan) {
-                if ($loan->disbursed_at !== null && $paidAt->lt($loan->disbursed_at)) {
-                    continue;
-                }
-
-                /** @var Collection<int, LoanInstallment> $installments */
-                $installments = $installmentsByLoan->get($loan->id, collect());
-
-                foreach ($installments as $installment) {
-                    if ($installment->isPaid() || isset($updates[$installment->id])) {
-                        continue;
-                    }
-
-                    $needed = (float) $installment->amount;
-
-                    if ($pool + self::AMOUNT_TOLERANCE < $needed) {
-                        break 2;
-                    }
-
-                    $pool -= $needed;
-                    $updates[$installment->id] = [
-                        'status' => 'paid',
-                        'paid_at' => $paidAt,
-                    ];
-                    $touchedLoanIds[$loan->id] = true;
-
-                    if ($pool <= self::AMOUNT_TOLERANCE) {
-                        break 2;
-                    }
-                }
-            }
+            $this->allocateRepaymentAcrossWindows(
+                $member,
+                $loans,
+                (float) $repayment->amount,
+                Carbon::parse($repayment->paid_at),
+                $cumulativeRepaidByLoanKey,
+                $installmentsByLoan,
+                $updates,
+                $touchedLoanIds,
+                (int) $repayment->loan_id,
+            );
         }
 
         if ($updates !== []) {
@@ -162,7 +151,7 @@ final class LegacyImportedLoanScheduleSyncService
         }
 
         foreach ($loans as $loan) {
-            $loan->fresh()->syncPaidOffStatusFromInstallments();
+            $this->syncLoanSettlement($loan->fresh());
         }
 
         return [
@@ -180,5 +169,241 @@ final class LegacyImportedLoanScheduleSyncService
         }
 
         return $this->syncMemberLoans($member)['installments'];
+    }
+
+    /**
+     * @param  Collection<int, Loan>  $loans
+     * @param  array<string, float>  $cumulativeRepaidByLoanKey
+     * @param  Collection<int, Collection<int, LoanInstallment>>  $installmentsByLoan
+     * @param  array<int, array{status: string, paid_at: CarbonInterface|string|null}>  $updates
+     * @param  array<int, bool>  $touchedLoanIds
+     */
+    private function allocateRepaymentAcrossWindows(
+        Member $member,
+        Collection $loans,
+        float $amount,
+        CarbonInterface $paidAt,
+        array &$cumulativeRepaidByLoanKey,
+        Collection $installmentsByLoan,
+        array &$updates,
+        array &$touchedLoanIds,
+        ?int $preferredLoanId = null,
+    ): void {
+        $remaining = round($amount, 2);
+
+        if ($preferredLoanId !== null) {
+            $preferredLoan = $loans->firstWhere('id', $preferredLoanId);
+
+            if ($preferredLoan !== null && $this->paymentAppliesToLoan($preferredLoan, $paidAt)) {
+                $remaining = $this->allocateChunkToLoanWindow(
+                    $member,
+                    $preferredLoan,
+                    $remaining,
+                    $paidAt,
+                    $cumulativeRepaidByLoanKey,
+                    $installmentsByLoan,
+                    $updates,
+                    $touchedLoanIds,
+                );
+            }
+        }
+
+        while ($remaining > self::AMOUNT_TOLERANCE) {
+            $window = $this->repaymentWindowResolver->resolveWindow(
+                LegacyPaymentClassifyMember::fromDatabase($member),
+                Carbon::parse($paidAt),
+                $cumulativeRepaidByLoanKey,
+            );
+
+            if ($window === null || $window->loanId === null) {
+                break;
+            }
+
+            $loan = $loans->firstWhere('id', $window->loanId);
+
+            if ($loan === null || ! $this->paymentAppliesToLoan($loan, $paidAt)) {
+                break;
+            }
+
+            $remaining = $this->allocateChunkToLoanWindow(
+                $member,
+                $loan,
+                $remaining,
+                $paidAt,
+                $cumulativeRepaidByLoanKey,
+                $installmentsByLoan,
+                $updates,
+                $touchedLoanIds,
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, float>  $cumulativeRepaidByLoanKey
+     * @param  Collection<int, Collection<int, LoanInstallment>>  $installmentsByLoan
+     * @param  array<int, array{status: string, paid_at: CarbonInterface|string|null}>  $updates
+     * @param  array<int, bool>  $touchedLoanIds
+     */
+    private function allocateChunkToLoanWindow(
+        Member $member,
+        Loan $loan,
+        float $remaining,
+        CarbonInterface $paidAt,
+        array &$cumulativeRepaidByLoanKey,
+        Collection $installmentsByLoan,
+        array &$updates,
+        array &$touchedLoanIds,
+    ): float {
+        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? now()->startOfDay();
+        $loanKey = LegacyLoanRepaymentWindow::loanKey((string) $member->member_number, $disbursedAt);
+        $cumulative = $cumulativeRepaidByLoanKey[$loanKey] ?? 0.0;
+        $target = LegacyLoanRepaymentTarget::totalRepaymentDue((float) ($loan->amount_approved ?? $loan->amount));
+        $windowCap = round(max(0.0, $target - $cumulative), 2);
+
+        if ($windowCap <= self::AMOUNT_TOLERANCE) {
+            return $remaining;
+        }
+
+        $chunk = round(min($remaining, $windowCap), 2);
+
+        $this->applyPoolToLoanInstallments(
+            (int) $loan->id,
+            $chunk,
+            $paidAt,
+            $installmentsByLoan,
+            $updates,
+            $touchedLoanIds,
+        );
+
+        $this->repaymentWindowResolver->recordRepayment(
+            $loan,
+            $member,
+            $chunk,
+            $cumulativeRepaidByLoanKey,
+        );
+
+        return round($remaining - $chunk, 2);
+    }
+
+    private function syncLoanSettlement(Loan $loan): void
+    {
+        if (! in_array($loan->status, ['active', 'transferred'], true)) {
+            return;
+        }
+
+        if (! $loan->installments()->exists()) {
+            return;
+        }
+
+        $target = LegacyLoanRepaymentTarget::totalRepaymentDue((float) ($loan->amount_approved ?? $loan->amount));
+        $paidInstallmentSum = (float) $loan->installments()->where('status', 'paid')->sum('amount');
+        $repaidOnLoan = (float) $loan->repayments()->sum('amount');
+        $hasUnpaid = $loan->installments()
+            ->whereIn('status', ['pending', 'overdue'])
+            ->exists();
+
+        $shouldComplete = ! $hasUnpaid
+            || $paidInstallmentSum + self::AMOUNT_TOLERANCE >= $target
+            || ($repaidOnLoan + self::AMOUNT_TOLERANCE >= $target && $paidInstallmentSum > self::AMOUNT_TOLERANCE);
+
+        if (! $shouldComplete) {
+            return;
+        }
+
+        $settledAt = $loan->repayments()->max('paid_at')
+            ?? $loan->installments()->whereNotNull('paid_at')->max('paid_at')
+            ?? BusinessDay::now();
+
+        if ($hasUnpaid) {
+            $this->settleRemainingInstallments($loan, $settledAt);
+        }
+
+        $loan->update([
+            'status' => 'completed',
+            'settled_at' => $settledAt,
+        ]);
+    }
+
+    private function settleRemainingInstallments(Loan $loan, CarbonInterface|string $settledAt): void
+    {
+        LoanInstallment::withoutEvents(function () use ($loan, $settledAt): void {
+            $loan->installments()
+                ->whereIn('status', ['pending', 'overdue'])
+                ->update([
+                    'status' => 'paid',
+                    'paid_at' => $settledAt,
+                ]);
+        });
+    }
+
+    /**
+     * @param  Collection<int, int|string>  $loanIds
+     */
+    private function resetInstallmentPaymentState(Collection $loanIds): void
+    {
+        LoanInstallment::query()
+            ->whereIn('loan_id', $loanIds)
+            ->where('status', 'paid')
+            ->update([
+                'status' => 'pending',
+                'paid_at' => null,
+                'is_late' => false,
+                'late_fee_amount' => 0,
+            ]);
+
+        Loan::query()
+            ->whereIn('id', $loanIds)
+            ->where('status', 'completed')
+            ->update([
+                'status' => 'active',
+                'settled_at' => null,
+            ]);
+    }
+
+    private function paymentAppliesToLoan(Loan $loan, CarbonInterface $paidAt): bool
+    {
+        return $loan->disbursed_at === null || ! $paidAt->lt($loan->disbursed_at);
+    }
+
+    /**
+     * @param  Collection<int, Collection<int, LoanInstallment>>  $installmentsByLoan
+     * @param  array<int, array{status: string, paid_at: CarbonInterface|string|null}>  $updates
+     * @param  array<int, bool>  $touchedLoanIds
+     */
+    private function applyPoolToLoanInstallments(
+        int $loanId,
+        float $pool,
+        CarbonInterface $paidAt,
+        Collection $installmentsByLoan,
+        array &$updates,
+        array &$touchedLoanIds,
+    ): float {
+        /** @var Collection<int, LoanInstallment> $installments */
+        $installments = $installmentsByLoan->get($loanId, collect());
+
+        foreach ($installments as $installment) {
+            if ($installment->isPaid() || isset($updates[$installment->id])) {
+                continue;
+            }
+
+            $needed = (float) $installment->amount;
+
+            if ($pool + self::AMOUNT_TOLERANCE < $needed) {
+                break;
+            }
+
+            $pool -= $needed;
+            $updates[$installment->id] = [
+                'status' => 'paid',
+                'paid_at' => $paidAt,
+            ];
+            $touchedLoanIds[$loanId] = true;
+
+            if ($pool <= self::AMOUNT_TOLERANCE) {
+                break;
+            }
+        }
+
+        return $pool;
     }
 }
