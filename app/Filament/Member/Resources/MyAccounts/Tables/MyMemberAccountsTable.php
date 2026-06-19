@@ -42,19 +42,22 @@ class MyMemberAccountsTable
             ->dateTime()
             ->sortable();
 
-        return TableGrouping::apply($table
-            ->columns($columns)
-            ->filters([
-                DateColumnRangeFilter::make('updated_at', 'Last activity'),
-            ])
-            ->recordUrl(fn (Model $record): string => MyAccountResource::getUrl('view', ['record' => $record]))
-            ->recordActions(TableRecordActionGroups::wrap([
-                ViewAction::make(),
-            ]))
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    TableToolbar::refreshBulkAction(),
-                ]),
-            ]), TableGrouping::memberAccounts(includeType: $showTypeColumn));
+        return TableGrouping::apply(
+            TableRecordActionGroups::apply(
+                $table
+                    ->columns($columns)
+                    ->filters([
+                        DateColumnRangeFilter::make('updated_at', __('Last activity')),
+                    ])
+                    ->toolbarActions([
+                        BulkActionGroup::make([
+                            TableToolbar::refreshBulkAction(),
+                        ]),
+                    ]),
+                [ViewAction::make()],
+                recordUrl: fn (Model $record): string => MyAccountResource::getUrl('view', ['record' => $record]),
+            ),
+            TableGrouping::memberAccounts(includeType: $showTypeColumn),
+        );
     }
 }

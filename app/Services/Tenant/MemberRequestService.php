@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Tenant;
 
+use App\Filament\Support\MemberDatabaseNotification;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\User;
@@ -278,18 +279,18 @@ class MemberRequestService
             return;
         }
 
-        $title = $outcome === 'approved' ? __('Request approved') : __('Request declined');
         $body = MemberRequest::typeLabel($request->type);
 
         if ($request->admin_note && $outcome === 'rejected') {
             $body .= ': '.$request->admin_note;
         }
 
-        Notification::make()
-            ->title($title)
-            ->body($body)
-            ->icon($outcome === 'approved' ? 'heroicon-o-check-circle' : 'heroicon-o-x-circle')
-            ->iconColor($outcome === 'approved' ? 'success' : 'danger')
-            ->sendToDatabase($user);
+        MemberDatabaseNotification::send($user, function (Notification $notification) use ($outcome, $body): void {
+            $notification
+                ->title($outcome === 'approved' ? __('Request approved') : __('Request declined'))
+                ->body($body)
+                ->icon($outcome === 'approved' ? 'heroicon-o-check-circle' : 'heroicon-o-x-circle')
+                ->iconColor($outcome === 'approved' ? 'success' : 'danger');
+        });
     }
 }

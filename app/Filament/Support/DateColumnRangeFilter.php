@@ -23,9 +23,9 @@ final class DateColumnRangeFilter
             ->label($label)
             ->schema([
                 DatePicker::make('from')
-                    ->label('From'),
+                    ->label(__('From')),
                 DatePicker::make('until')
-                    ->label('Until'),
+                    ->label(__('Until')),
             ])
             ->query(function (Builder $query, array $data) use ($column): Builder {
                 $qualified = $query->qualifyColumn($column);

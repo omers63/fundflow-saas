@@ -6,7 +6,8 @@ use App\Filament\Support\MoneyDisplay;
 use App\Filament\Tables\Columns\Summarizers\SignedLedgerSum;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
-use App\Support\Lang;
+use Filament\Facades\Filament;
+use Illuminate\Contracts\Support\Htmlable;
 
 class LedgerAmountColumn extends TextColumn
 {
@@ -16,21 +17,46 @@ class LedgerAmountColumn extends TextColumn
 
         $this
             ->sortable()
-            ->formatStateUsing(function ($state, Transaction $record) use ($currency): ?string {
+            ->formatStateUsing(function ($state, Transaction $record) use ($currency): Htmlable|string|null {
                 if (blank($state) && blank($record->amount)) {
                     return null;
                 }
 
-                return MoneyDisplay::format($record->getSignedAmount(), $currency());
+                $signed = $record->getSignedAmount();
+
+                if (Filament::getCurrentPanel()?->getId() === 'member') {
+                    return MoneyDisplay::html($signed, $currency(), signed: true);
+                }
+
+                return MoneyDisplay::format($signed, $currency());
             })
             ->badge()
             ->color(fn ($state, Transaction $record): string => MoneyDisplay::color($record->getSignedAmount()));
 
-        $label = Lang::formatUiLabel(str_replace('_', ' ', $this->getName()));
+        if (Filament::getCurrentPanel()?->getId() === 'member') {
+            $this->html();
+        }
+
+        $columnName = $this->getName();
 
         $signedNetSum = SignedLedgerSum::make()
-            ->label($label)
-            ->formatStateUsing(fn ($state): ?string => MoneyDisplay::format((float) $state, $currency()));
+            ->label(fn (): string => str($columnName)->replace('_', ' ')->headline()->toString())
+            ->translateLabel()
+            ->formatStateUsing(function ($state) use ($currency): ?string {
+                if ($state === null) {
+                    return null;
+                }
+
+                if (Filament::getCurrentPanel()?->getId() === 'member') {
+                    return MoneyDisplay::tableSummaryHtml((float) $state, $currency(), signed: true);
+                }
+
+                return MoneyDisplay::format((float) $state, $currency());
+            });
+
+        if (Filament::getCurrentPanel()?->getId() === 'member') {
+            $signedNetSum->html();
+        }
 
         $this->summarize([$signedNetSum]);
     }

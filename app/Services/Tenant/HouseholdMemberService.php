@@ -179,7 +179,7 @@ class HouseholdMemberService
 
         $flags = $this->householdAccessFlags(
             $this->resolveParentHouseholdEmail($parent),
-            strtolower(trim((string) ($member->email ?? ''))),
+            strtolower(trim((string) ($member->email ?? $member->user?->email ?? ''))),
         );
 
         $member->update([

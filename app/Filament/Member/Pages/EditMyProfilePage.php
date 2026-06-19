@@ -191,6 +191,7 @@ class EditMyProfilePage extends Page implements HasForms
         }
 
         $data = $this->form->getState();
+        $formInput = $this->form->getRawState();
         $oldAvatarPath = $user->avatar_path;
 
         $rawAvatar = $data['avatar'] ?? null;
@@ -251,10 +252,22 @@ class EditMyProfilePage extends Page implements HasForms
             auth('tenant')->setUser($user);
         }
 
-        $newPassword = (string) ($data['new_password'] ?? '');
+        $newPassword = (string) ($formInput['new_password'] ?? '');
         if ($newPassword !== '') {
-            $currentPassword = (string) ($data['current_password'] ?? '');
-            if (! Hash::check($currentPassword, (string) $user->password)) {
+            $currentPassword = (string) ($formInput['current_password'] ?? '');
+            $passwordHash = User::query()->whereKey($user->id)->value('password');
+
+            if ($currentPassword === '') {
+                Notification::make()
+                    ->title(__('Current password is required.'))
+                    ->body(__('Enter your current password to set a new one.'))
+                    ->danger()
+                    ->send();
+
+                return;
+            }
+
+            if (! is_string($passwordHash) || ! Hash::check($currentPassword, $passwordHash)) {
                 Notification::make()
                     ->title(__('Current password is incorrect.'))
                     ->danger()
@@ -263,7 +276,7 @@ class EditMyProfilePage extends Page implements HasForms
                 return;
             }
 
-            $user->update(['password' => Hash::make($newPassword)]);
+            $user->update(['password' => $newPassword]);
         }
 
         $shouldSetPin = (bool) ($data['set_parent_pin'] ?? false);
@@ -274,7 +287,7 @@ class EditMyProfilePage extends Page implements HasForms
 
         Notification::make()->title(__('Profile updated successfully.'))->success()->send();
 
-        $this->redirect(MyProfilePage::getUrl(panel: 'member'));
+        $this->redirect(MemberSettingsPage::getUrl(['tab' => 'profile'], panel: 'member'));
     }
 
     protected function currentMember(): ?Member

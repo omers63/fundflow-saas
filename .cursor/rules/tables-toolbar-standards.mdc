@@ -16,13 +16,16 @@ Every **data table** (list resources, relation managers, custom pages, table wid
 
 ## Row actions
 
-- Every row action lives inside an `ActionGroup` (`TableRecordActionGroups::wrap([...])`).
-- Do not leave bare `Action` / `EditAction` / `ViewAction` at the top level of `recordActions()`.
+- Use `TableRecordActionGroups::apply($table, $actions, recordUrl: …)` when configuring record actions.
+- When the list contains **only** a `ViewAction`, the row opens it on click and **no actions column** is rendered (pass `recordUrl` for page navigation, omit for modal view actions).
+- When multiple row actions exist, use `TableRecordActionGroups::wrap([...])` via `apply()` or chain `->recordActions(TableRecordActionGroups::wrap([...]))`.
+- Do not leave bare `Action` / `EditAction` / `ViewAction` at the top level of `recordActions()` unless wrapped by `apply()` / `wrap()`.
 
 ## Helpers
 
 - `App\Filament\Support\TableGrouping` — group-by definitions per domain
 - `App\Filament\Support\TableToolbar` — refresh bulk action, `bulkGroup()`
+- `App\Filament\Support\TableRecordActionGroups` — `apply()` for view-only row click; `wrap()` for action groups
 - `App\Filament\Support\TableStandards` — `defaultToolbarActions()` for read-only tables
 
 ## Account transaction ledgers

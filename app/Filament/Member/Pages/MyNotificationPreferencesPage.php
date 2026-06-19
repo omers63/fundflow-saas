@@ -24,9 +24,11 @@ class MyNotificationPreferencesPage extends Page
 
     protected static ?string $navigationLabel = 'Notification preferences';
 
-    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_SETTINGS;
+    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_SELF_SERVICE;
 
     protected static ?int $navigationSort = MemberNavigation::SORT_NOTIFICATION_PREFERENCES;
+
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?string $slug = 'notification-preferences';
 

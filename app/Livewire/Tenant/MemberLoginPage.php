@@ -4,10 +4,10 @@ namespace App\Livewire\Tenant;
 
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
-use App\Services\Tenant\HouseholdMemberService;
+use App\Services\Tenant\HouseholdProfileVerificationService;
+use App\Services\Tenant\MemberHouseholdLoginService;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -94,35 +94,31 @@ class MemberLoginPage extends Component
         $this->validate();
         $this->resetErrorBag();
 
+        $this->email = app(MemberHouseholdLoginService::class)->normalizeEmail($this->email);
+
         if (! $this->ensureIsNotRateLimited('login')) {
             return;
         }
 
-        $directUser = $this->resolveDirectUser();
+        $loginService = app(MemberHouseholdLoginService::class);
+
+        $directUser = $loginService->resolveDirectLoginUser($this->email, $this->password);
         if ($directUser !== null) {
             RateLimiter::clear($this->throttleKey('login'));
-            $this->completeLogin($directUser);
+            $this->completeLogin($directUser, $directUser->member);
 
             return;
         }
 
-        $householdParent = $this->resolveHouseholdParent();
+        $householdParent = $loginService->resolveHouseholdParent($this->email);
         if ($householdParent === null) {
-            if (
-                Auth::guard('tenant')->attempt(
-                    ['email' => $this->email, 'password' => $this->password],
-                    $this->remember,
-                )
-            ) {
-                $user = Auth::guard('tenant')->user();
-                if ($user instanceof User && $user->canAccessPanel(Filament::getPanel('member'))) {
-                    RateLimiter::clear($this->throttleKey('login'));
-                    $this->completeLogin($user);
+            $memberUser = $loginService->resolveMemberUserByCredentials($this->email, $this->password);
 
-                    return;
-                }
+            if ($memberUser !== null && $memberUser->canAccessPanel(Filament::getPanel('member'))) {
+                RateLimiter::clear($this->throttleKey('login'));
+                $this->completeLogin($memberUser, $memberUser->member);
 
-                Auth::guard('tenant')->logout();
+                return;
             }
 
             $adminUser = $this->resolveAdminUser();
@@ -140,7 +136,7 @@ class MemberLoginPage extends Component
             ]);
         }
 
-        if (! Hash::check($this->password, (string) $householdParent->user?->password)) {
+        if (! $loginService->verifyPassword($householdParent->user, $this->password)) {
             RateLimiter::hit($this->throttleKey('login'), 300);
 
             throw ValidationException::withMessages([
@@ -150,7 +146,7 @@ class MemberLoginPage extends Component
 
         if (! $householdParent->dependents()->exists()) {
             RateLimiter::clear($this->throttleKey('login'));
-            $this->completeLogin($householdParent->user);
+            $this->completeLogin($householdParent->user, $householdParent);
 
             return;
         }
@@ -208,7 +204,7 @@ class MemberLoginPage extends Component
             return;
         }
 
-        if (! app(HouseholdMemberService::class)->memberCanUsePortal($selected)) {
+        if (! app(HouseholdProfileVerificationService::class)->memberCanUsePortal($selected)) {
             $this->addError('selectedMemberId', __('This profile is not available for portal access.'));
 
             return;
@@ -220,21 +216,18 @@ class MemberLoginPage extends Component
             return;
         }
 
-        if ($selected->id === $this->householdParentId) {
-            $pinHash = (string) ($selected->portal_pin ?? '');
-            $isValidParentSecret = $pinHash !== ''
-                ? Hash::check($this->verificationSecret, $pinHash)
-                : Hash::check($this->verificationSecret, (string) $selected->user?->password);
+        $householdParent = Member::query()->find($this->householdParentId);
+        $verifier = app(HouseholdProfileVerificationService::class);
 
-            if (! $isValidParentSecret) {
-                RateLimiter::hit($this->throttleKey('profile_verification'), 300);
-                $this->addError('verificationSecret', __('The parent PIN is incorrect.'));
-
-                return;
-            }
-        } elseif (! Hash::check($this->verificationSecret, (string) $selected->user?->password)) {
+        if (! $verifier->verifyMemberSecret($selected, $this->verificationSecret, $householdParent)) {
             RateLimiter::hit($this->throttleKey('profile_verification'), 300);
-            $this->addError('verificationSecret', __('The dependent password is incorrect.'));
+
+            $this->addError(
+                'verificationSecret',
+                $selected->id === $this->householdParentId
+                ? __('The parent PIN is incorrect.')
+                : __('The dependent password is incorrect.'),
+            );
 
             return;
         }
@@ -336,45 +329,11 @@ class MemberLoginPage extends Component
             return null;
         }
 
-        if (! Hash::check($this->password, (string) $user->password)) {
+        if (! app(MemberHouseholdLoginService::class)->verifyPassword($user, $this->password)) {
             return null;
         }
 
         return $user;
-    }
-
-    protected function resolveDirectUser(): ?User
-    {
-        $user = User::query()
-            ->where('email', $this->email)
-            ->whereHas('member', fn ($q) => $q
-                ->whereNotNull('parent_member_id')
-                ->where('direct_login_enabled', true))
-            ->first();
-
-        if ($user === null) {
-            return null;
-        }
-
-        if (! Hash::check($this->password, (string) $user->password)) {
-            return null;
-        }
-
-        return $user;
-    }
-
-    protected function resolveHouseholdParent(): ?Member
-    {
-        return Member::query()
-            ->with('user')
-            ->whereNull('parent_member_id')
-            ->where(function ($query): void {
-                $query->where('household_email', $this->email)
-                    ->orWhere(function ($nested): void {
-                        $nested->whereNull('household_email')->where('email', $this->email);
-                    });
-            })
-            ->first();
     }
 
     protected function findHouseholdMember(int $memberId): ?Member

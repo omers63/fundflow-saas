@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Concerns;
 
+use App\Filament\Member\Pages\MemberSettingsPage;
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
@@ -19,6 +20,7 @@ use App\Models\Tenant\Transaction;
 use App\Services\ContributionCycleService;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
+use App\Support\MemberDateDisplay;
 use Illuminate\Support\Str;
 
 trait EnrichesMemberPortalDashboard
@@ -176,8 +178,8 @@ trait EnrichesMemberPortalDashboard
             ->limit(5)
             ->get()
             ->map(fn (Transaction $transaction): array => [
-                'description' => Str::limit($transaction->description ?? '—', 40),
-                'transacted_at' => $transaction->transacted_at?->format('d M, H:i'),
+                'description' => Str::limit($transaction->memberFacingDescription(), 40),
+                'transacted_at' => MemberDateDisplay::format($transaction->transacted_at, 'd M, H:i') ?? '—',
                 'amount' => InsightFormatter::money((float) $transaction->amount),
                 'signed_class' => $transaction->type === 'credit'
                     ? 'text-emerald-600 dark:text-emerald-400'
@@ -322,7 +324,9 @@ trait EnrichesMemberPortalDashboard
         }
 
         return [
-            'period' => $statement->period?->locale(app()->getLocale())->translatedFormat('F Y') ?? '—',
+            'period' => filled($statement->period)
+                ? MemberDateDisplay::westernizeDigits($statement->period_formatted)
+                : '—',
             'url' => MyStatementResource::getUrl('index'),
         ];
     }
@@ -335,6 +339,7 @@ trait EnrichesMemberPortalDashboard
         $member->loadMissing(['parent', 'dependents']);
 
         return [
+            'settings_url' => MemberSettingsPage::getUrl(['tab' => 'profile']),
             'dependents_url' => $member->isParent() && $member->dependents()->exists()
                 ? MyDependentResource::getUrl('index')
                 : null,
@@ -343,9 +348,13 @@ trait EnrichesMemberPortalDashboard
                 ->limit(6)
                 ->get()
                 ->map(fn (Member $dependent): array => [
+                    'id' => $dependent->id,
                     'name' => $dependent->name,
                     'number' => $dependent->member_number,
                     'status' => Member::statusOptions()[$dependent->status] ?? $dependent->status,
+                    'switch_url' => $dependent->is_separated
+                        ? MemberSettingsPage::getUrl(['tab' => 'profile'])
+                        : route('tenant.member.dependents.impersonate', ['dependent' => $dependent->id]),
                 ])
                 ->all(),
             'dependents_count' => $member->dependents()->count(),

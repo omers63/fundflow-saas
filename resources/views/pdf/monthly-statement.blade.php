@@ -1,59 +1,85 @@
 @php
+    use App\Filament\Support\MoneyDisplay;
+
     $d = $statement->details ?? [];
     $m = $d['member_snapshot'] ?? [];
     $currency = $d['currency'] ?? 'USD';
     $accent = $cfg['accent_color'] ?? '#0284c7';
+    $isArabic = app()->getLocale() === 'ar';
+    $moneyHtml = fn (float $amount): string => MoneyDisplay::pdfHtml($amount, $currency)?->toHtml() ?? '—';
+
+    $summaryRows = [
+        ['label' => __('Opening balance'), 'html' => $moneyHtml((float) $statement->opening_balance)],
+        ['label' => __('Contributions'), 'html' => $moneyHtml((float) $statement->total_contributions)],
+        ['label' => __('Loan repayments'), 'html' => $moneyHtml((float) $statement->total_repayments)],
+        ['label' => __('Closing balance'), 'html' => $moneyHtml((float) $statement->closing_balance)],
+        ['label' => __('Cash at period end'), 'html' => $moneyHtml((float) ($d['cash_closing'] ?? 0))],
+        ['label' => __('Fund at period end'), 'html' => $moneyHtml((float) ($d['fund_closing'] ?? 0))],
+    ];
+
+    $txnColumns = [
+        ['label' => __('Date'), 'key' => 'date'],
+        ['label' => __('Description'), 'key' => 'description'],
+        ['label' => __('Type'), 'key' => 'type'],
+        ['label' => __('Amount'), 'key' => 'amount'],
+    ];
+
+    if ($isArabic) {
+        $txnColumns = array_reverse($txnColumns);
+    }
 @endphp
 <!DOCTYPE html>
-<html lang="{{ app()->getLocale() }}" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
+<html lang="{{ app()->getLocale() }}" dir="{{ $isArabic ? 'rtl' : 'ltr' }}">
+
 <head>
     <meta charset="UTF-8">
-    <title>{{ $cfg['brand'] ?? config('app.name') }} — {{ $statement->period_formatted }}</title>
-    <style>
-        body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: #1e293b; margin: 24px; }
-        h1 { font-size: 18px; margin: 0 0 4px; color: {{ $accent }}; }
-        h2 { font-size: 13px; margin: 20px 0 8px; border-bottom: 2px solid {{ $accent }}; padding-bottom: 4px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-        th, td { border: 1px solid #e2e8f0; padding: 6px 8px; text-align: {{ app()->getLocale() === 'ar' ? 'right' : 'left' }}; }
-        th { background: #f8fafc; font-size: 10px; text-transform: uppercase; }
-        .summary td:last-child { text-align: {{ app()->getLocale() === 'ar' ? 'left' : 'right' }}; font-weight: 600; }
-        .muted { color: #64748b; font-size: 10px; margin-top: 24px; }
-    </style>
+    <title><span>{{ $cfg['brand'] ?? config('app.name') }}</span> — {{ $statement->period_formatted }}</title>
+    @include('pdf.partials.layout-styles', ['accent' => $accent, 'isArabic' => $isArabic, 'logoDataUri' => $logoDataUri ?? null])
 </head>
+
 <body>
-    <h1>{{ $cfg['brand'] ?? config('app.name') }}</h1>
-    <p class="muted">{{ $cfg['tagline'] ?? '' }}</p>
+    @include('pdf.partials.document-header', [
+        'brand' => $cfg['brand'] ?? config('app.name'),
+        'subtitle' => $cfg['tagline'] ?? __('Monthly statement'),
+        'meta' => $statement->period_formatted,
+        'logoDataUri' => $logoDataUri ?? null,
+        'isArabic' => $isArabic,
+    ])
 
-    <h2>{{ __('Monthly statement') }} — {{ $statement->period_formatted }}</h2>
-    <p><strong>{{ $m['name'] ?? '—' }}</strong> · {{ $m['member_number'] ?? '' }}</p>
+    <h2 class="section-title">{{ __('Monthly statement') }} — {{ $statement->period_formatted }}</h2>
+    <p class="member-line"><strong>{{ $m['name'] ?? '—' }}</strong> · {{ $m['member_number'] ?? '' }}</p>
 
-    <table class="summary">
-        <tr><td>{{ __('Opening balance') }}</td><td>{{ number_format((float) $statement->opening_balance, 2) }} {{ $currency }}</td></tr>
-        <tr><td>{{ __('Contributions') }}</td><td>{{ number_format((float) $statement->total_contributions, 2) }} {{ $currency }}</td></tr>
-        <tr><td>{{ __('Loan repayments') }}</td><td>{{ number_format((float) $statement->total_repayments, 2) }} {{ $currency }}</td></tr>
-        <tr><td>{{ __('Closing balance') }}</td><td>{{ number_format((float) $statement->closing_balance, 2) }} {{ $currency }}</td></tr>
-        <tr><td>{{ __('Cash at period end') }}</td><td>{{ number_format((float) ($d['cash_closing'] ?? 0), 2) }} {{ $currency }}</td></tr>
-        <tr><td>{{ __('Fund at period end') }}</td><td>{{ number_format((float) ($d['fund_closing'] ?? 0), 2) }} {{ $currency }}</td></tr>
-    </table>
+    <h2 class="section-title">{{ __('Summary') }}</h2>
+    @include('pdf.partials.summary-grid', ['rows' => $summaryRows, 'isArabic' => $isArabic])
 
     @if (($cfg['include_txns'] ?? true) && ! empty($d['period_transactions']))
-        <h2>{{ __('Transactions') }}</h2>
-        <table>
+        <h2 class="section-title">{{ __('Transactions') }}</h2>
+        <table class="data-table" dir="{{ $isArabic ? 'rtl' : 'ltr' }}">
             <thead>
                 <tr>
-                    <th>{{ __('Date') }}</th>
-                    <th>{{ __('Description') }}</th>
-                    <th>{{ __('Type') }}</th>
-                    <th>{{ __('Amount') }}</th>
+                    @foreach ($txnColumns as $column)
+                        <th>{{ $column['label'] }}</th>
+                    @endforeach
                 </tr>
             </thead>
             <tbody>
                 @foreach ($d['period_transactions'] as $tx)
+                    @php
+                        $cells = [
+                            ['class' => 'date', 'html' => e(\Illuminate\Support\Str::before($tx['date'] ?? '', ' '))],
+                            ['class' => '', 'html' => e($tx['description'] ?? '')],
+                            ['class' => '', 'html' => e($tx['type'] ?? '')],
+                            ['class' => 'amount-col', 'html' => $moneyHtml((float) ($tx['amount'] ?? 0))],
+                        ];
+
+                        if ($isArabic) {
+                            $cells = array_reverse($cells);
+                        }
+                    @endphp
                     <tr>
-                        <td>{{ \Illuminate\Support\Str::before($tx['date'] ?? '', ' ') }}</td>
-                        <td>{{ $tx['description'] ?? '' }}</td>
-                        <td>{{ $tx['type'] ?? '' }}</td>
-                        <td>{{ number_format((float) ($tx['amount'] ?? 0), 2) }} {{ $currency }}</td>
+                        @foreach ($cells as $cell)
+                            <td class="{{ $cell['class'] }}">{!! $cell['html'] !!}</td>
+                        @endforeach
                     </tr>
                 @endforeach
             </tbody>
@@ -62,11 +88,16 @@
 
     @if (($cfg['include_loan'] ?? true) && ! empty($d['active_loan']))
         @php $loan = $d['active_loan']; @endphp
-        <h2>{{ __('Active loan') }}</h2>
-        <p>{{ __('Loan #:id', ['id' => $loan['id'] ?? '—']) }} · {{ ucfirst($loan['status'] ?? '') }}</p>
+        <h2 class="section-title">{{ __('Active loan') }}</h2>
+        <p class="member-line">{{ __('Loan #') }}<span class="amount">#{{ $loan['id'] ?? '—' }}</span> · {{ __(ucfirst($loan['status'] ?? '')) }}</p>
     @endif
 
-    <p class="muted">{{ $cfg['footer_disclaimer'] ?? '' }}</p>
-    <p class="muted">{{ $cfg['signature_line'] ?? '' }}</p>
+    @if (! empty($cfg['footer_disclaimer']))
+        <p class="doc-footer muted">{{ $cfg['footer_disclaimer'] }}</p>
+    @endif
+    @if (! empty($cfg['signature_line']))
+        <p class="doc-footer muted">{{ $cfg['signature_line'] }}</p>
+    @endif
 </body>
+
 </html>

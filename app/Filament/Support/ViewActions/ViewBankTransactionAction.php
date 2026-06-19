@@ -116,14 +116,9 @@ final class ViewBankTransactionAction
 
     public static function configure(Table $table): Table
     {
-        return TableGrouping::apply(
-            $table
-                ->recordUrl(fn (): ?string => null)
-                ->recordAction(ViewAction::getDefaultName())
-                ->recordActions(TableRecordActionGroups::wrap([
-                    self::make(),
-                ])),
-            TableGrouping::bankTransactions()
+        return TableRecordActionGroups::apply(
+            TableGrouping::apply($table, TableGrouping::bankTransactions()),
+            [self::make()],
         );
     }
 }

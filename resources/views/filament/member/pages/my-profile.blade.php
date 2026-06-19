@@ -57,13 +57,13 @@
                 <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
                     <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">{{ __('Monthly contribution') }}</p>
                     <p class="text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                        {{ number_format((float) $member->monthly_contribution_amount, 2) }}
+                        {!! \App\Filament\Support\MoneyDisplay::html((float) $member->monthly_contribution_amount)?->toHtml() !!}
                     </p>
                 </div>
                 <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
                     <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">{{ __('Fund balance') }}</p>
                     <p class="text-xl font-bold text-indigo-600 dark:text-indigo-400">
-                        {{ number_format($member->getFundBalance(), 2) }}
+                        {!! \App\Filament\Support\MoneyDisplay::html($member->getFundBalance())?->toHtml() !!}
                     </p>
                 </div>
             </div>
@@ -97,10 +97,18 @@
                             @if ($isCurrent)
                                 <span class="mt-2 text-[10px] font-semibold text-emerald-600">{{ __('Current') }}</span>
                             @elseif (! $profile->isParent())
-                                <a href="{{ route('tenant.member.dependents.impersonate', ['dependent' => $profile->id]) }}"
-                                    class="mt-2 text-[10px] font-semibold text-sky-600 hover:underline">
-                                    {{ __('Switch') }}
-                                </a>
+                                @if ($profile->is_separated)
+                                    <button type="button"
+                                        wire:click="mountAction('switchHouseholdProfile', { memberId: {{ $profile->id }} })"
+                                        class="mt-2 text-[10px] font-semibold text-sky-600 hover:underline">
+                                        {{ __('Switch') }}
+                                    </button>
+                                @else
+                                    <a href="{{ route('tenant.member.dependents.impersonate', ['dependent' => $profile->id]) }}"
+                                        class="mt-2 text-[10px] font-semibold text-sky-600 hover:underline">
+                                        {{ __('Switch') }}
+                                    </a>
+                                @endif
                             @endif
                         </div>
                     @endforeach

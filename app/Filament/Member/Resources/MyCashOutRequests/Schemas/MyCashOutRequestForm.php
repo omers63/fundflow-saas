@@ -2,7 +2,9 @@
 
 namespace App\Filament\Member\Resources\MyCashOutRequests\Schemas;
 
+use App\Filament\Support\MoneyDisplay;
 use App\Services\MemberCashOutService;
+use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Textarea;
@@ -20,14 +22,17 @@ class MyCashOutRequestForm
                     ->label(__('Available to withdraw'))
                     ->content(function (MemberCashOutService $service): HtmlString {
                         $member = CurrentMember::get();
+                        $currency = InsightFormatter::currency();
                         $available = $member !== null ? $service->availableCashForWithdrawal($member) : 0.0;
                         $reserved = $member !== null ? $service->reservedForNextEmi($member) : 0.0;
+                        $availableHtml = MoneyDisplay::html($available, $currency)?->toHtml() ?? '—';
+                        $reservedHtml = MoneyDisplay::html($reserved, $currency)?->toHtml() ?? '—';
 
                         return new HtmlString(
                             '<div class="space-y-1 text-sm">'
-                            .e(__('Available: :amount', ['amount' => number_format($available, 2)]))
+                            .__('Available: :amount', ['amount' => $availableHtml])
                             .'<br><span class="text-gray-500">'
-                            .e(__('Reserved for next EMI: :amount', ['amount' => number_format($reserved, 2)]))
+                            .__('Reserved for next EMI: :amount', ['amount' => $reservedHtml])
                             .'</span></div>'
                         );
                     }),

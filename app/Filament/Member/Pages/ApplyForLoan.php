@@ -6,6 +6,8 @@ namespace App\Filament\Member\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
+use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
@@ -16,6 +18,7 @@ use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
@@ -42,9 +45,11 @@ class ApplyForLoan extends Page implements HasForms
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentPlus;
 
-    protected static ?string $navigationLabel = 'Apply for loan';
+    protected static ?string $navigationLabel = 'Request a loan';
 
-    protected static bool $shouldRegisterNavigation = false;
+    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_LOANS;
+
+    protected static ?int $navigationSort = MemberNavigation::SORT_REQUEST_LOAN;
 
     protected static ?string $slug = 'apply-for-loan';
 
@@ -117,7 +122,7 @@ class ApplyForLoan extends Page implements HasForms
                                 ->content(function () use ($member, $currency): string {
                                     $max = LoanSettings::maxLoanAmountForMember($member?->getFundBalance() ?? 0);
 
-                                    return number_format($max, 2).' '.$currency;
+                                    return MoneyDisplay::format($max, $currency) ?? '—';
                                 }),
                             TextInput::make('amount')
                                 ->label(__('Loan amount'))
@@ -176,9 +181,8 @@ class ApplyForLoan extends Page implements HasForms
                                     );
 
                                     return $excess > 0
-                                        ? __('Estimated transfer at disbursement: :amount :currency', [
-                                            'amount' => number_format($excess, 2),
-                                            'currency' => $currency,
+                                        ? __('Estimated transfer at disbursement: :amount', [
+                                            'amount' => MoneyDisplay::format($excess, $currency) ?? '—',
                                         ])
                                         : __('You have no fund balance above your configured share for this amount.');
                                 })
@@ -218,7 +222,7 @@ class ApplyForLoan extends Page implements HasForms
                         ->schema([
                             Placeholder::make('review_amount')
                                 ->label(__('Amount'))
-                                ->content(fn (Get $get): string => number_format((float) ($get('amount') ?? 0), 2).' '.$currency),
+                                ->content(fn (Get $get): string => MoneyDisplay::format((float) ($get('amount') ?? 0), $currency) ?? '—'),
                             Placeholder::make('review_installment')
                                 ->label(__('Estimated monthly installment'))
                                 ->content(function (Get $get) use ($currency, $member): HtmlString {
@@ -231,7 +235,7 @@ class ApplyForLoan extends Page implements HasForms
                                         ? Loan::computeInstallmentsCount($amount, $fundBal, $install, LoanSettings::settlementThreshold(), $strategy)
                                         : 0;
                                     $text = $install > 0
-                                        ? number_format($install, 2).' '.$currency.' / '.__('month')
+                                        ? (MoneyDisplay::format($install, $currency) ?? '—').' / '.__('month')
                                         : '—';
                                     if ($months > 0) {
                                         $text .= ' · '.trans_choice('~:count month|~:count months', $months, ['count' => $months]);
@@ -304,5 +308,19 @@ class ApplyForLoan extends Page implements HasForms
                 ->danger()
                 ->send();
         }
+    }
+
+    /**
+     * @return array<Action>
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('loanCalculator')
+                ->label(__('Loan calculator'))
+                ->icon('heroicon-o-calculator')
+                ->color('gray')
+                ->url(LoanCalculatorPage::getUrl()),
+        ];
     }
 }

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyGuaranteedLoans\Pages;
 
 use App\Filament\Member\Resources\MyGuaranteedLoans\MyGuaranteedLoanResource;
-use App\Filament\Member\Widgets\MemberGuaranteedLoanInsightsWidget;
 use Filament\Resources\Pages\ListRecords;
 
 class ListMyGuaranteedLoans extends ListRecords
@@ -17,9 +16,7 @@ class ListMyGuaranteedLoans extends ListRecords
      */
     protected function getHeaderWidgets(): array
     {
-        return [
-            MemberGuaranteedLoanInsightsWidget::class,
-        ];
+        return [];
     }
 
     public function getHeaderWidgetsColumns(): int|array

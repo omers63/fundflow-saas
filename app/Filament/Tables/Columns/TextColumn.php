@@ -7,6 +7,7 @@ use App\Filament\Tables\Concerns\CapitalizesTableColumnHeaderLabel;
 use App\Models\Tenant\Setting;
 use BackedEnum;
 use Closure;
+use Filament\Facades\Filament;
 use Filament\Tables\Columns\TextColumn as FilamentTextColumn;
 
 class TextColumn extends FilamentTextColumn
@@ -48,10 +49,20 @@ class TextColumn extends FilamentTextColumn
                 $localeCode = (string) $localeCode->value;
             }
 
+            if (Filament::getCurrentPanel()?->getId() === 'member') {
+                return MoneyDisplay::html($amount, (string) $currencyCode);
+            }
+
             return MoneyDisplay::format($amount, (string) $currencyCode, (string) $localeCode);
         });
 
-        return $this
+        $column = $this;
+
+        if (Filament::getCurrentPanel()?->getId() === 'member') {
+            $column = $column->html();
+        }
+
+        return $column
             ->badge()
             ->color(fn ($state): string => MoneyDisplay::color($state));
     }

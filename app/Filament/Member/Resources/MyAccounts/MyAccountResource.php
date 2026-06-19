@@ -32,9 +32,14 @@ class MyAccountResource extends Resource
 
     protected static ?string $pluralModelLabel = 'My Accounts';
 
-    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_MY_FINANCE;
+    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_MY_ACCOUNTS;
 
     protected static ?int $navigationSort = MemberNavigation::SORT_ACCOUNTS;
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 
     public static function getEloquentQuery(): Builder
     {

@@ -4,6 +4,7 @@
 <link rel="preconnect" href="https://fonts.bunny.net">
 <link href="https://fonts.bunny.net/css?family={{ ArabicDisplaySettings::bunnyFontsFamilyParam() }}&display=swap"
     rel="stylesheet" />
+<link href="https://fonts.bunny.net/css?family=noto-sans-symbols-2:400&display=swap" rel="stylesheet" />
 <style>
     :root {
         --ff-font-arabic:

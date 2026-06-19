@@ -3,8 +3,9 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Concerns\RegistersFundPublicShell;
+use App\Filament\Livewire\MemberDatabaseNotifications;
 use App\Filament\Member\Pages\MemberDashboard;
-use App\Filament\Member\Pages\MyProfilePage;
+use App\Filament\Member\Pages\MemberSettingsPage;
 use App\Filament\Member\Support\MemberNavigation;
 use App\Filament\Member\Support\ReturnToParentPortalAction;
 use App\Filament\Support\DatabaseNotificationsRefresh;
@@ -47,7 +48,7 @@ class MemberPanelProvider extends PanelProvider
             ->disabledErrorNotification(401)
             ->viteTheme('resources/css/filament/member/theme.css')
             ->colors([
-                'primary' => Color::Emerald,
+                'primary' => Color::hex('#534AB7'),
             ])
             ->brandName(fn (): string => PublicPageSettings::fundName(tenant('name')))
             ->favicon(fn (): string => PublicPageSettings::fundLogoUrl())
@@ -56,13 +57,17 @@ class MemberPanelProvider extends PanelProvider
             ->brandLogoHeight(PublicPageSettings::BRAND_LOGO_HEIGHT)
             ->sidebarCollapsibleOnDesktop()
             ->sidebarFullyCollapsibleOnDesktop()
+            ->sidebarWidth('14.5rem')
+            ->collapsedSidebarWidth('4rem')
             ->navigationGroups([
-                MemberNavigation::GROUP_MY_FINANCE => NavigationGroup::make()
-                    ->label(fn (): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_MY_FINANCE)),
+                MemberNavigation::GROUP_MY_ACCOUNTS => NavigationGroup::make()
+                    ->label(fn (): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_MY_ACCOUNTS)),
                 MemberNavigation::GROUP_LOANS => NavigationGroup::make()
                     ->label(fn (): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_LOANS)),
-                MemberNavigation::GROUP_SETTINGS => NavigationGroup::make()
-                    ->label(fn (): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_SETTINGS)),
+                MemberNavigation::GROUP_HISTORY => NavigationGroup::make()
+                    ->label(fn (): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_HISTORY)),
+                MemberNavigation::GROUP_SELF_SERVICE => NavigationGroup::make()
+                    ->label(fn (): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_SELF_SERVICE)),
             ])
             ->userMenuItems([
                 ReturnToParentPortalAction::make()
@@ -70,9 +75,12 @@ class MemberPanelProvider extends PanelProvider
                 Action::make('profile')
                     ->label(fn (): string => __('My profile'))
                     ->icon('heroicon-o-user-circle')
-                    ->url(fn (): string => MyProfilePage::getUrl())
+                    ->url(fn (): string => MemberSettingsPage::getUrl(['tab' => 'profile']))
                     ->sort(-1),
             ])
+            ->renderHook(PanelsRenderHook::SIDEBAR_NAV_START, fn (): HtmlString => new HtmlString(
+                view('filament.member.partials.sidebar-profile')->render()
+            ))
             ->renderHook(PanelsRenderHook::FOOTER, fn (): HtmlString => new HtmlString(
                 view('partials.status-footer-banners')->render()
             ))
@@ -83,7 +91,7 @@ class MemberPanelProvider extends PanelProvider
             ])
             ->discoverWidgets(in: app_path('Filament/Member/Widgets'), for: 'App\\Filament\\Member\\Widgets')
             ->widgets([])
-            ->databaseNotifications(isLazy: false)
+            ->databaseNotifications(isLazy: false, livewireComponent: MemberDatabaseNotifications::class)
             ->databaseNotificationsPolling(DatabaseNotificationsRefresh::pollingInterval())
             ->renderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(
                 view('partials.arabic-fonts')->render()

@@ -1,4 +1,4 @@
-@props(['cycle', 'fundSummary', 'loanCard', 'eligibility'])
+@props(['cycle', 'fundSummary', 'loanCard', 'eligibility', 'currency' => null])
 
 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
     <div
@@ -32,7 +32,7 @@
             @else
                 <div class="flex justify-between gap-2">
                     <span>{{ __('Required cash') }}</span>
-                    <span class="font-semibold tabular-nums">{{ $cycle['required_cash'] }}</span>
+                    <span class="font-semibold" dir="ltr">{{ $cycle['required_cash'] }}</span>
                 </div>
             @endif
             @if (($fundSummary['fund_minimum_pct'] ?? null) !== null)
@@ -69,7 +69,13 @@
                     class="text-[10px] font-medium text-violet-700 dark:text-violet-300">{{ $loanCard['status_label'] }}</span>
             </div>
             <div class="space-y-2 px-3 py-2.5">
-                <p class="text-xl font-bold tabular-nums text-gray-900 dark:text-white">{{ $loanCard['outstanding'] }}</p>
+                <div class="text-xl font-bold tabular-nums text-gray-900 dark:text-white">
+                    @if (is_numeric($loanCard['outstanding'] ?? null))
+                        <x-member::amount :value="$loanCard['outstanding']" :currency="$currency" />
+                    @else
+                        <span dir="ltr">{{ $loanCard['outstanding'] }}</span>
+                    @endif
+                </div>
                 <div>
                     <div class="mb-0.5 flex justify-between text-[10px] text-gray-500 dark:text-gray-400">
                         <span>{{ __('Repayment schedule') }}</span>
@@ -110,7 +116,7 @@
                 <p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">{{ $eligibility['reason'] }}</p>
             @endif
             @if ($eligibility['eligible'] ?? false)
-                <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
+                <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400" dir="ltr">
                     {{ __('Up to :amount', ['amount' => $eligibility['max_amount']]) }}
                 </p>
             @elseif ($eligibility['has_pending_override_request'] ?? false)
@@ -123,7 +129,7 @@
                     {{ __('Request eligibility review') }} →
                 </a>
             @endif
-            <p class="mt-2 text-[10px] text-gray-400 dark:text-gray-500">
+            <p class="mt-2 text-[10px] text-gray-400 dark:text-gray-500" dir="ltr">
                 {{ __('Total posted') }}: {{ $fundSummary['contributions_total'] }}
                 · {{ $fundSummary['contributions_count'] }} {{ __('payments') }}
             </p>

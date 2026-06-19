@@ -6,7 +6,6 @@ namespace App\Filament\Member\Resources\MyAccounts\Pages;
 
 use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
 use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
-use App\Filament\Member\Widgets\MemberMyAccountsInsightsWidget;
 use App\Models\Tenant\Loan;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
@@ -57,21 +56,6 @@ class ListMyAccounts extends ListRecords
     public function getSubheading(): ?string
     {
         return __('Cash, fund balances, ledger activity, and loans in one place.');
-    }
-
-    /**
-     * @return array<class-string>
-     */
-    protected function getHeaderWidgets(): array
-    {
-        return [
-            MemberMyAccountsInsightsWidget::class,
-        ];
-    }
-
-    public function getHeaderWidgetsColumns(): int|array
-    {
-        return 1;
     }
 
     protected function getHeaderActions(): array

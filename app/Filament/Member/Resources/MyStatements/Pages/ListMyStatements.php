@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyStatements\Pages;
 
 use App\Filament\Member\Resources\MyStatements\MyStatementResource;
-use App\Filament\Member\Widgets\MemberMonthlyStatementInsightsWidget;
+use App\Filament\Member\Widgets\MemberStatementsDownloadWidget;
 use Filament\Resources\Pages\ListRecords;
 
 class ListMyStatements extends ListRecords
@@ -15,7 +15,7 @@ class ListMyStatements extends ListRecords
     protected function getHeaderWidgets(): array
     {
         return [
-            MemberMonthlyStatementInsightsWidget::class,
+            MemberStatementsDownloadWidget::class,
         ];
     }
 

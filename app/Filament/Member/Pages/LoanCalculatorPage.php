@@ -6,6 +6,7 @@ namespace App\Filament\Member\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Setting;
 use App\Services\MemberLoanCalculatorService;
@@ -16,6 +17,7 @@ use BackedEnum;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
+use Livewire\Attributes\Computed;
 
 class LoanCalculatorPage extends Page
 {
@@ -33,7 +35,7 @@ class LoanCalculatorPage extends Page
 
     protected string $view = 'filament.member.pages.loan-calculator';
 
-    public float $loanAmount = 0;
+    public int|float|string|null $loanAmount = null;
 
     public string $fundingStrategy = LoanFundingStrategy::MEMBER_FUND_TOPUP;
 
@@ -63,16 +65,18 @@ class LoanCalculatorPage extends Page
      *     total_repay: float
      * }>
      */
-    public function getCalculationsProperty(): array
+    #[Computed]
+    public function calculations(): array
     {
         $member = CurrentMember::get();
+        $amount = (float) ($this->loanAmount ?? 0);
 
-        if ($member === null || $this->loanAmount <= 0) {
+        if ($member === null || $amount <= 0) {
             return [];
         }
 
         return app(MemberLoanCalculatorService::class)->calculationsForAmount(
-            $this->loanAmount,
+            $amount,
             $member,
             $this->fundingStrategy,
         );
@@ -81,22 +85,26 @@ class LoanCalculatorPage extends Page
     /**
      * @return Collection<int, LoanTier>
      */
-    public function getActiveTiersProperty(): Collection
+    #[Computed]
+    public function activeTiers(): Collection
     {
         return app(MemberLoanCalculatorService::class)->activeTiers();
     }
 
-    public function getSettlementPctProperty(): float
+    #[Computed]
+    public function settlementPct(): float
     {
         return app(MemberLoanCalculatorService::class)->settlementThresholdPercent();
     }
 
-    public function getMemberFundBalanceProperty(): float
+    #[Computed]
+    public function memberFundBalance(): float
     {
         return CurrentMember::get()?->getFundBalance() ?? 0.0;
     }
 
-    public function getCurrencyProperty(): string
+    #[Computed]
+    public function currency(): string
     {
         return Setting::get('general', 'currency', 'USD');
     }
@@ -104,17 +112,20 @@ class LoanCalculatorPage extends Page
     /**
      * @return array<string, string>
      */
-    public function getFundingStrategyOptionsProperty(): array
+    #[Computed]
+    public function fundingStrategyOptions(): array
     {
         return LoanFundingStrategy::options();
     }
 
-    public function getMemberFundingSplitPercentProperty(): float
+    #[Computed]
+    public function memberFundingSplitPercent(): float
     {
         return LoanSettings::memberFundingSplitPercent();
     }
 
-    public function getMasterFundingSplitPercentProperty(): float
+    #[Computed]
+    public function masterFundingSplitPercent(): float
     {
         return LoanSettings::masterFundingSplitPercent();
     }
@@ -123,6 +134,8 @@ class LoanCalculatorPage extends Page
     {
         $currency = $this->currency;
 
-        return number_format((float) $tier->min_amount, 0).' – '.number_format((float) $tier->max_amount, 0).' '.$currency;
+        return (MoneyDisplay::format((float) $tier->min_amount, $currency, precision: 0) ?? '—')
+            .' – '
+            .(MoneyDisplay::format((float) $tier->max_amount, $currency, precision: 0) ?? '—');
     }
 }

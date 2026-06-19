@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Tenant;
 
+use App\Filament\Support\MemberDatabaseNotification;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
@@ -174,12 +175,13 @@ final class DirectMessagingService
         $recipient = $member->user;
 
         if ($recipient !== null) {
-            Notification::make()
-                ->title(__('Message from Administration'))
-                ->body($admin->name.': '.mb_strimwidth(trim($body), 0, 100, '…'))
-                ->icon('heroicon-o-chat-bubble-left-right')
-                ->iconColor('info')
-                ->sendToDatabase($recipient);
+            MemberDatabaseNotification::send($recipient, function (Notification $notification) use ($admin, $body): void {
+                $notification
+                    ->title(__('Message from Administration'))
+                    ->body($admin->name.': '.mb_strimwidth(trim($body), 0, 100, '…'))
+                    ->icon('heroicon-o-chat-bubble-left-right')
+                    ->iconColor('info');
+            });
         }
 
         if (! $suppressAdminToast) {

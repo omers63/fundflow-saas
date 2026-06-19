@@ -23,6 +23,6 @@ class MyContributionsInsightsWidget extends Widget
      */
     public function getData(): array
     {
-        return app(MemberContributionInsightsService::class)->snapshot(CurrentMember::get());
+        return app(MemberContributionInsightsService::class)->statCards(CurrentMember::get());
     }
 }

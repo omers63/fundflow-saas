@@ -30,7 +30,7 @@ class MyFundPostingResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Deposits';
 
-    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_MY_FINANCE;
+    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_SELF_SERVICE;
 
     protected static ?int $navigationSort = MemberNavigation::SORT_DEPOSITS;
 

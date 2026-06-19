@@ -28,6 +28,69 @@ final class MemberContributionInsightsService
     ) {}
 
     /**
+     * @return list<array{label: string, value?: string, amount?: float, hint: ?string}>
+     */
+    public function statCards(?Member $member = null): array
+    {
+        $member = $member ?? CurrentMember::get();
+
+        if ($member === null) {
+            return [];
+        }
+
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $openPeriodLabel = $this->cycles->periodLabel($openMonth, $openYear);
+
+        $query = Contribution::query()->where('member_id', $member->id);
+        $totalPostedAmount = (float) (clone $query)->posted()->sum('amount');
+
+        $openPeriodRow = (clone $query)->forPeriod($openMonth, $openYear)->first();
+        $postedThisCycle = $openPeriodRow?->status === 'posted';
+
+        $cycleStatus = $this->resolveMemberCycleStatus(
+            $member,
+            $postedThisCycle,
+            $this->cycles,
+            $openMonth,
+            $openYear,
+        );
+
+        $thisCycleValue = $postedThisCycle
+            ? ($openPeriodRow !== null
+                ? null
+                : __('Posted'))
+            : $cycleStatus['label'];
+
+        $thisCycleAmount = $postedThisCycle && $openPeriodRow !== null
+            ? (float) $openPeriodRow->amount
+            : null;
+
+        return [
+            [
+                'label' => __('Total contributed'),
+                'amount' => $totalPostedAmount,
+                'hint' => null,
+            ],
+            [
+                'label' => __('This cycle'),
+                'value' => $postedThisCycle ? ($thisCycleAmount !== null ? null : __('Posted')) : $thisCycleValue,
+                'amount' => $thisCycleAmount,
+                'hint' => $openPeriodLabel,
+            ],
+            [
+                'label' => __('Cycles missed (12 mo)'),
+                'value' => (string) $this->countMissedCyclesLast12($member),
+                'hint' => __('Liable periods not posted'),
+            ],
+            [
+                'label' => __('Cycles exempt (12 mo)'),
+                'value' => (string) $this->countExemptCyclesLast12($member),
+                'hint' => __('Loan repayment or exemption'),
+            ],
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function snapshot(?Member $member = null): array
@@ -500,5 +563,48 @@ final class MemberContributionInsightsService
             ->filter(fn (array $row): bool => $row['count'] > 0)
             ->values()
             ->all();
+    }
+
+    private function countMissedCyclesLast12(Member $member): int
+    {
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $missed = 0;
+
+        for ($i = 0; $i < 12; $i++) {
+            $date = BusinessDay::now()->copy()->subMonths($i);
+            $month = (int) $date->month;
+            $year = (int) $date->year;
+
+            if (! $this->cycles->memberIsLiableForContributionPeriod($member, $month, $year)) {
+                continue;
+            }
+
+            if ($month === $openMonth && $year === $openYear && ! $this->cycles->isLate($openMonth, $openYear)) {
+                continue;
+            }
+
+            if (! Contribution::periodFullyPosted($member->id, $month, $year)) {
+                $missed++;
+            }
+        }
+
+        return $missed;
+    }
+
+    private function countExemptCyclesLast12(Member $member): int
+    {
+        $exempt = 0;
+
+        for ($i = 0; $i < 12; $i++) {
+            $date = BusinessDay::now()->copy()->subMonths($i);
+            $month = (int) $date->month;
+            $year = (int) $date->year;
+
+            if (! $this->cycles->memberIsLiableForContributionPeriod($member, $month, $year)) {
+                $exempt++;
+            }
+        }
+
+        return $exempt;
     }
 }

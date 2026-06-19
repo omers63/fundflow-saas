@@ -5,8 +5,13 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Filament\Member\Pages\ApplyForLoan;
+use App\Filament\Member\Pages\CashAccountPage;
+use App\Filament\Member\Pages\CommunicationsPage;
+use App\Filament\Member\Pages\FundAccountPage;
+use App\Filament\Member\Pages\MemberActivityPage;
 use App\Filament\Member\Pages\MyProfilePage;
 use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
+use App\Filament\Member\Resources\MyCashOutRequests\MyCashOutRequestResource;
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
 use App\Filament\Member\Resources\MyGuaranteedLoans\MyGuaranteedLoanResource;
@@ -17,18 +22,23 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MonthlyStatement;
+use App\Models\Tenant\Transaction;
 use App\Services\Concerns\EnrichesMemberPortalDashboard;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanEligibilityOverrideRequestService;
 use App\Support\BusinessDay;
 use App\Support\Insights\InsightFormatter;
 use App\Support\LoanSettings;
+use App\Support\MemberDateDisplay;
 use App\Support\PublicPageSettings;
 use App\Support\Tenant\CurrentMember;
 use Carbon\Carbon;
+use Illuminate\Support\HtmlString;
+use Illuminate\Support\Str;
 
 final class MemberPortalInsightsService
 {
@@ -57,7 +67,7 @@ final class MemberPortalInsightsService
         $eligibility = $loanService->checkEligibility($member);
         $arrears = $delinquency->memberArrearsSummary($member);
 
-        $activeLoan = $member->loans()->active()->with('installments')->latest('applied_at')->first();
+        $activeLoan = $member->loans()->active()->with(['installments', 'guarantor'])->latest('applied_at')->first();
         $pendingLoan = $member->loans()->where('status', 'pending')->exists();
         $loanOutstanding = $activeLoan ? $activeLoan->getOutstandingBalance() : 0.0;
 
@@ -76,7 +86,7 @@ final class MemberPortalInsightsService
         $unreadMessages = (int) DirectMessage::query()
             ->where('to_user_id', $member->user_id)
             ->whereNull('read_at')
-            ->whereHas('sender', fn($q) => $q->where('is_admin', true))
+            ->whereHas('sender', fn ($q) => $q->where('is_admin', true))
             ->count();
 
         $latestStatement = MonthlyStatement::query()
@@ -102,7 +112,7 @@ final class MemberPortalInsightsService
         $contributionsPosted = (int) ($contributionMetrics?->posted_count ?? 0);
         $contributionsPostedTotal = (float) ($contributionMetrics?->posted_total ?? 0.0);
         $lifetimeRepaidTotal = (float) LoanRepayment::query()
-            ->whereHas('loan', fn($query) => $query->where('member_id', $member->id))
+            ->whereHas('loan', fn ($query) => $query->where('member_id', $member->id))
             ->sum('amount');
         $totalFundInflow = $contributionsPostedTotal + $lifetimeRepaidTotal + $cashBalance;
         $dependentsCount = $member->dependents()->count();
@@ -142,7 +152,67 @@ final class MemberPortalInsightsService
             $hasPendingOverrideRequest,
         );
 
+        $nextInstallment = $this->nextPendingInstallment($activeLoan);
+
+        $notice = $this->buildPriorityNotice(
+            $member,
+            $arrears,
+            $activeLoan,
+            $nextInstallment,
+            $eligibility,
+            $pendingDeposits,
+            $unreadMessages,
+            $canRequestOverride,
+            $hasPendingOverrideRequest,
+            $postedThisCycle,
+            $cycles,
+            $curMonth,
+            $curYear,
+        );
+
+        $dashboardActivity = $this->dashboardRecentActivity($member);
+
         return [
+            'notice' => $notice,
+            'pending_actions' => $this->buildPendingActions(
+                $member,
+                $postedThisCycle,
+                $pendingDeposits,
+                $unreadMessages,
+                $arrears,
+                $cycles,
+                $curMonth,
+                $curYear,
+                $activeLoan,
+            ),
+            'cash_card' => $this->buildCashCard($member, $cashBalance, $nextInstallment),
+            'fund_card' => $this->buildFundCard($member, $fundBalance, $monthly),
+            'loan_panel' => $activeLoan !== null
+                ? $this->buildLoanPanel($activeLoan, $loanOutstanding, $installmentsPaid, $installmentsTotal, $repayPercent, $nextInstallment)
+                : null,
+            'eligibility_panel' => $activeLoan === null
+                ? $this->buildEligibilityPanel($member, $eligibility, $pendingLoan, $canRequestOverride, $hasPendingOverrideRequest, $fundBalance)
+                : null,
+            'expandable' => [
+                'insights' => [
+                    'sparkline' => $sparkline,
+                    'sparkline_max' => max(1, max($sparkline)),
+                    'stats' => $this->buildInsightStats(
+                        $contributionsPosted,
+                        $contributionsPostedTotal,
+                        $lifetimeRepaidTotal,
+                        $pendingDeposits,
+                        $unreadMessages,
+                    ),
+                ],
+                'household' => $this->memberHousehold($member),
+                'guarantor' => $guaranteedLoansCount > 0
+                    ? [
+                        'count' => $guaranteedLoansCount,
+                        'url' => MyGuaranteedLoanResource::getUrl('index'),
+                    ]
+                    : null,
+            ],
             'member' => [
                 'name' => $member->name,
                 'first_name' => $firstName,
@@ -182,7 +252,7 @@ final class MemberPortalInsightsService
                 'status_label' => Loan::statusOptions()[$activeLoan->status] ?? $activeLoan->status,
                 'outstanding' => InsightFormatter::money($loanOutstanding),
                 'repay_percent' => $repayPercent,
-                'installments' => $installmentsPaid . '/' . $installmentsTotal,
+                'installments' => $installmentsPaid.'/'.$installmentsTotal,
                 'installments_paid' => $installmentsPaid,
                 'installments_total' => $installmentsTotal,
                 'overdue_count' => $installmentsOverdue,
@@ -229,7 +299,8 @@ final class MemberPortalInsightsService
                 'monthly_contribution' => InsightFormatter::money($monthly),
             ],
             'trend' => $trend,
-            'recent_activity' => $this->recentMemberTransactions($member),
+            'recent_activity' => $dashboardActivity,
+            'activity_url' => MemberActivityPage::getUrl(),
             'recent_contributions' => $this->recentMemberContributions($member),
             'relation_summaries' => $this->memberRelationSummaries(
                 $member,
@@ -260,7 +331,7 @@ final class MemberPortalInsightsService
                 ->latest()
                 ->limit(4)
                 ->get()
-                ->map(fn(FundPosting $posting): array => [
+                ->map(fn (FundPosting $posting): array => [
                     'amount' => InsightFormatter::money((float) $posting->amount),
                     'status' => $posting->status,
                     'status_label' => match ($posting->status) {
@@ -330,7 +401,8 @@ final class MemberPortalInsightsService
 
         $attentionCount = ($unreadMessages > 0 ? 1 : 0)
             + ($pendingDeposits > 0 ? 1 : 0)
-            + (!$postedThisCycle ? 1 : 0)
+            + ($this->loanRepaymentCycleAttentionApplies($member, $postedThisCycle) ? 1 : 0)
+            + ($this->contributionNotPostedApplies($member, $postedThisCycle) ? 1 : 0)
             + (($arrears['has_arrears'] ?? false) || ($arrears['is_delinquent'] ?? false) ? 1 : 0);
 
         $defaultSubtitle = $attentionCount > 0
@@ -370,7 +442,7 @@ final class MemberPortalInsightsService
             $pills[] = [
                 'label' => trans_choice(':count unread message|:count unread messages', $unreadMessages, ['count' => $unreadMessages]),
                 'icon' => 'heroicon-o-chat-bubble-left-right',
-                'url' => MyMessageResource::getUrl('index'),
+                'url' => CommunicationsPage::getUrl(['tab' => 'messages']),
                 'tone' => 'info',
             ];
         }
@@ -384,7 +456,16 @@ final class MemberPortalInsightsService
             ];
         }
 
-        if (!$postedThisCycle) {
+        if ($this->loanRepaymentCycleAttentionApplies($member, $postedThisCycle)) {
+            $pills[] = [
+                'label' => __('Loan repayment · :period', [
+                    'period' => $cycles->periodLabel($curMonth, $curYear),
+                ]),
+                'icon' => 'heroicon-o-currency-dollar',
+                'url' => MyLoanResource::getUrl('index'),
+                'tone' => 'violet',
+            ];
+        } elseif ($this->contributionNotPostedApplies($member, $postedThisCycle)) {
             $pills[] = [
                 'label' => __('Contribution not posted :period', [
                     'period' => $cycles->periodLabel($curMonth, $curYear),
@@ -459,7 +540,7 @@ final class MemberPortalInsightsService
             ? mb_substr($parts[array_key_last($parts)], 0, 1)
             : '';
 
-        return mb_strtoupper($first . $last);
+        return mb_strtoupper($first.$last);
     }
 
     /**
@@ -664,7 +745,7 @@ final class MemberPortalInsightsService
                 'sub' => __('Unread'),
                 'icon' => 'heroicon-o-chat-bubble-left-right',
                 'accent' => $unreadMessages > 0 ? 'amber' : 'gray',
-                'url' => MyMessageResource::getUrl('index'),
+                'url' => CommunicationsPage::getUrl(['tab' => 'messages']),
             ],
         ];
     }
@@ -673,19 +754,11 @@ final class MemberPortalInsightsService
     {
         $display = InsightFormatter::compactAmount($amount);
 
-        return $amount < 0 ? '-' . $display : $display;
+        return $amount < 0 ? '-'.$display : $display;
     }
 
     /**
-     * @return list<array{
-     *     label: string,
-     *     description: string,
-     *     url: string,
-     *     icon: string,
-     *     tone: string,
-     *     badge: ?string,
-     *     visible: bool
-     * }>
+     * @return list<array{label: string, subtitle: string, description: string, url: string, icon: string, tone: string, badge: ?string, visible: bool}>
      */
     private function quickActions(
         Member $member,
@@ -700,6 +773,7 @@ final class MemberPortalInsightsService
         return [
             [
                 'label' => __('New deposit'),
+                'subtitle' => __('Submit a fund posting'),
                 'description' => __('Submit a fund posting'),
                 'url' => MyFundPostingResource::getUrl('create'),
                 'icon' => 'heroicon-o-plus-circle',
@@ -709,12 +783,13 @@ final class MemberPortalInsightsService
             ],
             [
                 'label' => __('Apply for loan'),
+                'subtitle' => __('Check eligibility and apply'),
                 'description' => __('Check eligibility and apply'),
                 'url' => ApplyForLoan::getUrl(),
                 'icon' => 'heroicon-o-document-plus',
                 'tone' => 'loan',
                 'badge' => null,
-                'visible' => $eligible && !$pendingLoan,
+                'visible' => $eligible && ! $pendingLoan,
             ],
             [
                 'label' => __('Request eligibility review'),
@@ -725,7 +800,7 @@ final class MemberPortalInsightsService
                 'icon' => 'heroicon-o-shield-exclamation',
                 'tone' => 'loan',
                 'badge' => $hasPendingOverrideRequest ? __('Pending') : null,
-                'visible' => !$eligible && ($canRequestOverride || $hasPendingOverrideRequest),
+                'visible' => ! $eligible && ($canRequestOverride || $hasPendingOverrideRequest),
             ],
             [
                 'label' => __('Statements'),
@@ -737,18 +812,29 @@ final class MemberPortalInsightsService
                 'visible' => $hasStatement,
             ],
             [
-                'label' => __('My accounts'),
-                'description' => __('Cash, fund, and loans'),
-                'url' => MyAccountResource::getUrl('index'),
-                'icon' => 'heroicon-o-rectangle-stack',
+                'label' => __('Cash account'),
+                'subtitle' => __('Deposits, cash out, and ledger'),
+                'description' => __('Deposits, cash out, and ledger'),
+                'url' => CashAccountPage::getUrl(),
+                'icon' => 'heroicon-o-wallet',
                 'tone' => 'accounts',
+                'badge' => null,
+                'visible' => true,
+            ],
+            [
+                'label' => __('Fund account'),
+                'subtitle' => __('Accumulated savings and loan cap'),
+                'description' => __('Accumulated savings and loan cap'),
+                'url' => FundAccountPage::getUrl(),
+                'icon' => 'heroicon-o-circle-stack',
+                'tone' => 'fund',
                 'badge' => null,
                 'visible' => true,
             ],
             [
                 'label' => __('Messages'),
                 'description' => __('Inbox from administrators'),
-                'url' => MyMessageResource::getUrl('index'),
+                'url' => CommunicationsPage::getUrl(['tab' => 'messages']),
                 'icon' => 'heroicon-o-chat-bubble-left-right',
                 'tone' => 'messages',
                 'badge' => $unreadMessages > 0 ? (string) $unreadMessages : null,
@@ -764,6 +850,486 @@ final class MemberPortalInsightsService
                 'visible' => $hasGuaranteedLoans,
             ],
         ];
+    }
+
+    private function nextPendingInstallment(?Loan $activeLoan): ?LoanInstallment
+    {
+        if ($activeLoan === null) {
+            return null;
+        }
+
+        return $activeLoan->installments
+            ->whereIn('status', ['pending', 'overdue'])
+            ->sortBy('due_date')
+            ->first();
+    }
+
+    private function contributionNotPostedApplies(Member $member, bool $postedThisCycle): bool
+    {
+        return ! $postedThisCycle
+            && $member->status === 'active'
+            && (float) $member->monthly_contribution_amount > 0
+            && ! $member->hasActiveLoanRepaymentObligation();
+    }
+
+    private function loanRepaymentCycleAttentionApplies(Member $member, bool $postedThisCycle): bool
+    {
+        return ! $postedThisCycle
+            && $member->hasActiveLoanRepaymentObligation();
+    }
+
+    /**
+     * @return array{tone: string, title: string, body: string|HtmlString, action: array{label: string, url: string}}
+     */
+    private function buildLoanRepaymentCycleNotice(
+        ?Loan $activeLoan,
+        ?LoanInstallment $nextInstallment,
+    ): array {
+        $body = __('Contributions are paused while you repay your loan. Cash in your account applies to loan installments for this cycle.');
+
+        if ($nextInstallment !== null && $nextInstallment->due_date !== null) {
+            $dueLabel = MemberDateDisplay::format($nextInstallment->due_date, 'j M Y') ?? '—';
+
+            $body = new HtmlString(__(
+                'Your next EMI of :amount is due on :date. Contributions are paused while you repay your loan.',
+                [
+                    'amount' => InsightFormatter::moneyHtml((float) $nextInstallment->amount),
+                    'date' => $dueLabel,
+                ],
+            ));
+        }
+
+        return [
+            'tone' => 'violet',
+            'title' => __('Under loan repayment'),
+            'body' => $body,
+            'action' => [
+                'label' => __('View loan'),
+                'url' => $activeLoan !== null
+                    ? MyLoanResource::getUrl('view', ['record' => $activeLoan])
+                    : MyLoanResource::getUrl('index'),
+            ],
+        ];
+    }
+
+    /**
+     * @param  array{has_arrears: bool, is_delinquent: bool}  $arrears
+     * @param  array{eligible: bool, reasons?: list<string>}  $eligibility
+     * @return ?array{tone: string, title: string, body: string, action?: array{label: string, url: string}}
+     */
+    private function buildPriorityNotice(
+        Member $member,
+        array $arrears,
+        ?Loan $activeLoan,
+        ?LoanInstallment $nextInstallment,
+        array $eligibility,
+        int $pendingDeposits,
+        int $unreadMessages,
+        bool $canRequestOverride,
+        bool $hasPendingOverrideRequest,
+        bool $postedThisCycle,
+        ContributionCycleService $cycles,
+        int $curMonth,
+        int $curYear,
+    ): ?array {
+        if ($arrears['is_delinquent'] || $arrears['has_arrears']) {
+            return [
+                'tone' => 'red',
+                'title' => __('Action required on your account'),
+                'body' => __('Please review arrears or contact the fund office.'),
+                'action' => [
+                    'label' => __('My loans'),
+                    'url' => MyLoanResource::getUrl('index'),
+                ],
+            ];
+        }
+
+        if ($nextInstallment !== null) {
+            $dueDate = $nextInstallment->due_date;
+            $daysUntil = $dueDate !== null
+                ? (int) BusinessDay::now()->startOfDay()->diffInDays($dueDate->copy()->startOfDay(), false)
+                : null;
+
+            if ($daysUntil !== null && $daysUntil <= 14) {
+                $dueLabel = MemberDateDisplay::format($dueDate, 'j M Y') ?? '—';
+
+                return [
+                    'tone' => 'amber',
+                    'title' => __('EMI payment due soon'),
+                    'body' => new HtmlString(__(
+                        'Your next EMI of :amount is due in :days days (:date). Ensure your cash account is funded.',
+                        [
+                            'amount' => InsightFormatter::moneyHtml((float) $nextInstallment->amount),
+                            'days' => max(0, $daysUntil),
+                            'date' => $dueLabel,
+                        ],
+                    )),
+                    'action' => [
+                        'label' => __('View loan'),
+                        'url' => $activeLoan !== null
+                            ? MyLoanResource::getUrl('view', ['record' => $activeLoan])
+                            : MyLoanResource::getUrl('index'),
+                    ],
+                ];
+            }
+        }
+
+        if ($unreadMessages > 0) {
+            return [
+                'tone' => 'blue',
+                'title' => trans_choice(':count new message|:count new messages', $unreadMessages, ['count' => $unreadMessages]),
+                'body' => __('Messages from your fund administrators'),
+                'action' => [
+                    'label' => __('Open inbox'),
+                    'url' => CommunicationsPage::getUrl(['tab' => 'messages']),
+                ],
+            ];
+        }
+
+        if ($pendingDeposits > 0) {
+            return [
+                'tone' => 'amber',
+                'title' => trans_choice(':count deposit pending review|:count deposits pending review', $pendingDeposits, ['count' => $pendingDeposits]),
+                'body' => __('We will notify you when it is processed'),
+                'action' => [
+                    'label' => __('View deposits'),
+                    'url' => MyFundPostingResource::getUrl('index'),
+                ],
+            ];
+        }
+
+        if ($this->loanRepaymentCycleAttentionApplies($member, $postedThisCycle)) {
+            return $this->buildLoanRepaymentCycleNotice($activeLoan, $nextInstallment);
+        }
+
+        if ($this->contributionNotPostedApplies($member, $postedThisCycle)) {
+            return [
+                'tone' => 'amber',
+                'title' => __('Contribution not posted'),
+                'body' => __(':period is not yet posted for your account.', [
+                    'period' => $cycles->periodLabel($curMonth, $curYear),
+                ]),
+                'action' => [
+                    'label' => __('View contributions'),
+                    'url' => MyContributionResource::getUrl('index'),
+                ],
+            ];
+        }
+
+        if ($activeLoan !== null) {
+            return [
+                'tone' => 'blue',
+                'title' => __('Active loan in progress'),
+                'body' => new HtmlString(__(
+                    'Outstanding :amount',
+                    ['amount' => InsightFormatter::moneyHtml($activeLoan->getOutstandingBalance())],
+                )),
+                'action' => [
+                    'label' => __('View loan'),
+                    'url' => MyLoanResource::getUrl('view', ['record' => $activeLoan]),
+                ],
+            ];
+        }
+
+        if ($eligibility['eligible']) {
+            return [
+                'tone' => 'green',
+                'title' => __('You are eligible to apply for a loan'),
+                'body' => new HtmlString(__(
+                    'Maximum amount :amount',
+                    ['amount' => InsightFormatter::moneyHtml(LoanSettings::maxLoanAmountForMember($member->getFundBalance()))],
+                )),
+                'action' => [
+                    'label' => __('Apply now'),
+                    'url' => ApplyForLoan::getUrl(),
+                ],
+            ];
+        }
+
+        if ($hasPendingOverrideRequest) {
+            return [
+                'tone' => 'amber',
+                'title' => __('Eligibility review pending'),
+                'body' => __('An administrator is reviewing your loan eligibility request.'),
+                'action' => [
+                    'label' => __('My loans'),
+                    'url' => MyLoanResource::getUrl('index'),
+                ],
+            ];
+        }
+
+        if ($canRequestOverride) {
+            return [
+                'tone' => 'amber',
+                'title' => __('Not eligible for a loan'),
+                'body' => $eligibility['reasons'][0] ?? __('Requirements not met'),
+                'action' => [
+                    'label' => __('Request review'),
+                    'url' => MyLoanResource::getUrl('index', ['requestOverride' => 1]),
+                ],
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array{has_arrears: bool, is_delinquent: bool}  $arrears
+     * @return list<array{label: string, url: string, tone: string}>
+     */
+    private function buildPendingActions(
+        Member $member,
+        bool $postedThisCycle,
+        int $pendingDeposits,
+        int $unreadMessages,
+        array $arrears,
+        ContributionCycleService $cycles,
+        int $curMonth,
+        int $curYear,
+        ?Loan $activeLoan = null,
+    ): array {
+        $actions = [];
+
+        if ($unreadMessages > 0) {
+            $actions[] = [
+                'label' => trans_choice(':count unread message|:count unread messages', $unreadMessages, ['count' => $unreadMessages]),
+                'url' => CommunicationsPage::getUrl(['tab' => 'messages']),
+                'tone' => 'blue',
+            ];
+        }
+
+        if ($pendingDeposits > 0) {
+            $actions[] = [
+                'label' => trans_choice(':count deposit pending|:count deposits pending', $pendingDeposits, ['count' => $pendingDeposits]),
+                'url' => MyFundPostingResource::getUrl('index'),
+                'tone' => 'amber',
+            ];
+        }
+
+        if ($this->loanRepaymentCycleAttentionApplies($member, $postedThisCycle)) {
+            $actions[] = [
+                'label' => __('Loan repayment · :period', [
+                    'period' => $cycles->periodLabel($curMonth, $curYear),
+                ]),
+                'url' => $activeLoan !== null
+                    ? MyLoanResource::getUrl('view', ['record' => $activeLoan])
+                    : MyLoanResource::getUrl('index'),
+                'tone' => 'violet',
+            ];
+        } elseif ($this->contributionNotPostedApplies($member, $postedThisCycle)) {
+            $actions[] = [
+                'label' => __('Contribution not posted :period', [
+                    'period' => $cycles->periodLabel($curMonth, $curYear),
+                ]),
+                'url' => MyContributionResource::getUrl('index'),
+                'tone' => 'amber',
+            ];
+        }
+
+        if ($arrears['is_delinquent'] ?? false) {
+            $actions[] = [
+                'label' => __('Account delinquent'),
+                'url' => MyLoanResource::getUrl('index'),
+                'tone' => 'red',
+            ];
+        } elseif ($arrears['has_arrears'] ?? false) {
+            $actions[] = [
+                'label' => __('Arrears on record'),
+                'url' => MyLoanResource::getUrl('index'),
+                'tone' => 'amber',
+            ];
+        }
+
+        return $actions;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildCashCard(Member $member, float $cashBalance, ?LoanInstallment $nextInstallment): array
+    {
+        $cashUrl = CashAccountPage::getUrl();
+
+        return [
+            'balance' => $cashBalance,
+            'balance_label' => __('Available balance'),
+            'reserved_emi' => $nextInstallment !== null ? (float) $nextInstallment->amount : null,
+            'details_url' => $cashUrl,
+            'actions' => [
+                [
+                    'label' => __('Deposit'),
+                    'url' => $cashUrl.'#deposit',
+                    'icon' => 'heroicon-o-arrow-down-tray',
+                ],
+                [
+                    'label' => __('Cash out'),
+                    'url' => MyCashOutRequestResource::getUrl('create'),
+                    'icon' => 'heroicon-o-arrow-up-tray',
+                ],
+                [
+                    'label' => __('History'),
+                    'url' => $cashUrl,
+                    'icon' => 'heroicon-o-clock',
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildFundCard(Member $member, float $fundBalance, float $monthly): array
+    {
+        $maxLoan = LoanSettings::maxLoanAmountForMember($fundBalance);
+        $fundUrl = FundAccountPage::getUrl();
+
+        return [
+            'balance' => $fundBalance,
+            'headroom' => $maxLoan,
+            'monthly' => $monthly,
+            'headroom_label' => __('Loan cap: :amount', ['amount' => InsightFormatter::money($maxLoan)]),
+            'monthly_label' => __('Monthly contribution: :amount', ['amount' => InsightFormatter::money($monthly)]),
+            'details_url' => $fundUrl,
+            'actions' => [
+                [
+                    'label' => __('History'),
+                    'url' => $fundUrl,
+                    'icon' => 'heroicon-o-chart-bar',
+                ],
+                [
+                    'label' => __('Statement'),
+                    'url' => MyStatementResource::getUrl('index'),
+                    'icon' => 'heroicon-o-document-text',
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildLoanPanel(
+        Loan $loan,
+        float $loanOutstanding,
+        int $installmentsPaid,
+        int $installmentsTotal,
+        int $repayPercent,
+        ?LoanInstallment $nextInstallment,
+    ): array {
+        $totalRepaid = max(0, (float) $loan->amount - $loanOutstanding);
+
+        return [
+            'id' => $loan->id,
+            'label' => __('Active loan — #:id', ['id' => $loan->id]),
+            'status_label' => Loan::statusOptions()[$loan->status] ?? $loan->status,
+            'status_variant' => in_array($loan->status, ['disbursed', 'repaying', 'active'], true) ? 'green' : 'amber',
+            'outstanding' => $loanOutstanding,
+            'repay_percent' => $repayPercent,
+            'installments_label' => __(':paid of :total EMIs', [
+                'paid' => $installmentsPaid,
+                'total' => $installmentsTotal,
+            ]),
+            'repaid_label' => __(':amount repaid (:percent%)', [
+                'amount' => InsightFormatter::money($totalRepaid),
+                'percent' => $repayPercent,
+            ]),
+            'repaid_amount' => $totalRepaid,
+            'guarantor_name' => $loan->guarantor?->name,
+            'next_emi' => $nextInstallment !== null ? [
+                'amount' => (float) $nextInstallment->amount,
+                'due_date' => MemberDateDisplay::format($nextInstallment->due_date, 'j M Y'),
+            ] : null,
+            'view_url' => MyLoanResource::getUrl('view', ['record' => $loan]),
+            'settle_url' => MyLoanResource::getUrl('index', ['hub' => 'settle']),
+        ];
+    }
+
+    /**
+     * @param  array{eligible: bool, reasons?: list<string>}  $eligibility
+     * @return array<string, mixed>
+     */
+    private function buildEligibilityPanel(
+        Member $member,
+        array $eligibility,
+        bool $pendingLoan,
+        bool $canRequestOverride,
+        bool $hasPendingOverrideRequest,
+        float $fundBalance,
+    ): array {
+        return [
+            'eligible' => $eligibility['eligible'] && ! $pendingLoan,
+            'reason' => $eligibility['reasons'][0] ?? null,
+            'max_amount' => LoanSettings::maxLoanAmountForMember($fundBalance),
+            'can_request_override' => $canRequestOverride,
+            'has_pending_override_request' => $hasPendingOverrideRequest,
+            'apply_url' => ApplyForLoan::getUrl(),
+            'request_url' => MyLoanResource::getUrl('index', ['requestOverride' => 1]),
+            'loans_url' => MyLoanResource::getUrl('index'),
+        ];
+    }
+
+    /**
+     * @return list<array{label: string, value?: string, amount?: float}>
+     */
+    private function buildInsightStats(
+        int $contributionsPosted,
+        float $contributionsPostedTotal,
+        float $lifetimeRepaidTotal,
+        int $pendingDeposits,
+        int $unreadMessages,
+    ): array {
+        return [
+            [
+                'label' => __('Contributions posted'),
+                'value' => (string) $contributionsPosted,
+            ],
+            [
+                'label' => __('Contribution total'),
+                'amount' => $contributionsPostedTotal,
+            ],
+            [
+                'label' => __('Lifetime repaid'),
+                'amount' => $lifetimeRepaidTotal,
+            ],
+            [
+                'label' => __('Pending deposits'),
+                'value' => (string) $pendingDeposits,
+            ],
+            [
+                'label' => __('Unread messages'),
+                'value' => (string) $unreadMessages,
+            ],
+        ];
+    }
+
+    /**
+     * @return list<array{description: string, date: string, credit: ?float, debit: ?float, type: string}>
+     */
+    private function dashboardRecentActivity(Member $member): array
+    {
+        $accountIds = $member->accounts()->pluck('id');
+
+        if ($accountIds->isEmpty()) {
+            return [];
+        }
+
+        return Transaction::query()
+            ->whereIn('account_id', $accountIds)
+            ->orderByDesc('transacted_at')
+            ->limit(6)
+            ->get()
+            ->map(function (Transaction $transaction): array {
+                $amount = (float) $transaction->amount;
+
+                return [
+                    'description' => Str::limit($transaction->memberFacingDescription(), 48),
+                    'date' => MemberDateDisplay::format($transaction->transacted_at, 'j M Y') ?? '—',
+                    'credit' => $transaction->type === 'credit' ? $amount : null,
+                    'debit' => $transaction->type === 'debit' ? $amount : null,
+                    'type' => $transaction->type === 'credit' ? 'CR' : 'DR',
+                ];
+            })
+            ->all();
     }
 
     /**

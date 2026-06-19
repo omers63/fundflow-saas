@@ -23,6 +23,21 @@ it('defaults to noto sans arabic without enhanced names', function () {
         ->and(ArabicDisplaySettings::fontFamilyCss())->toContain('Noto Sans Arabic');
 });
 
+it('returns defaults when tenancy is not initialized', function () {
+    tenancy()->end();
+
+    try {
+        expect(ArabicDisplaySettings::fontPreset())->toBe(ArabicDisplaySettings::FONT_NOTO_SANS)
+            ->and(ArabicDisplaySettings::enhancedNameStyle())->toBeFalse()
+            ->and(ArabicDisplaySettings::allForForm())->toBe([
+                'arabic_display_font' => ArabicDisplaySettings::FONT_NOTO_SANS,
+                'arabic_enhanced_name_style' => false,
+            ]);
+    } finally {
+        $this->initializeTenancy();
+    }
+});
+
 it('persists tajawal and enhanced name style', function () {
     ArabicDisplaySettings::save([
         'arabic_display_font' => ArabicDisplaySettings::FONT_TAJAWAL,

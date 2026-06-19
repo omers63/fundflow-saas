@@ -93,10 +93,10 @@ final class MemberPortalAccountDetailInsightsService
             ->limit(5)
             ->get()
             ->map(fn (Transaction $transaction): array => [
-                'description' => Str::limit($transaction->description ?? '—', 48),
+                'description' => Str::limit($transaction->memberFacingDescription(), 48),
                 'transacted_at' => $transaction->transacted_at?->format('M j, H:i'),
                 'type' => $transaction->type,
-                'amount' => InsightFormatter::money((float) $transaction->amount),
+                'amount_value' => (float) $transaction->amount,
                 'signed_class' => $transaction->type === 'credit'
                     ? 'text-emerald-600 dark:text-emerald-400'
                     : 'text-rose-600 dark:text-rose-400',

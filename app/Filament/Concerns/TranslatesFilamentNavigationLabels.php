@@ -9,6 +9,16 @@ use UnitEnum;
 
 trait TranslatesFilamentNavigationLabels
 {
+    public static function getModelLabel(): string
+    {
+        return Lang::formatUiLabel(__(parent::getModelLabel()));
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return Lang::formatUiLabel(__(parent::getPluralModelLabel()));
+    }
+
     public static function getNavigationLabel(): string
     {
         return Lang::formatUiLabel(__(parent::getNavigationLabel()));

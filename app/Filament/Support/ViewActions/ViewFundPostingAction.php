@@ -2,9 +2,12 @@
 
 namespace App\Filament\Support\ViewActions;
 
+use App\Filament\Member\Support\MemberPortalViewModal;
 use App\Filament\Support\MoneyDisplay;
+use App\Filament\Support\TableRecordActionGroups;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Setting;
+use App\Support\MemberDateDisplay;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -91,6 +94,91 @@ final class ViewFundPostingAction
                 return self::formatRecordData($record);
             })
             ->schema(self::schema());
+    }
+
+    public static function makeForMemberPortal(): ViewAction
+    {
+        return MemberPortalViewModal::apply(
+            ViewAction::make()
+                ->modalHeading(fn (FundPosting $record): string => __('Deposit request'))
+                ->modalContent(fn (FundPosting $record) => MemberPortalViewModal::content(
+                    self::memberPortalSections($record),
+                )),
+        );
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public static function memberPortalSections(FundPosting $record): array
+    {
+        $data = self::formatRecordData($record);
+
+        $statusChip = match ($record->status) {
+            'pending' => ['chip' => $data['status_display'], 'variant' => 'amber'],
+            'accepted' => ['chip' => $data['status_display'], 'variant' => 'green'],
+            'rejected' => ['chip' => $data['status_display'], 'variant' => 'red'],
+            default => ['chip' => $data['status_display'], 'variant' => 'gray'],
+        };
+
+        $sections = [
+            [
+                'hero' => [
+                    'label' => __('Deposit request'),
+                    'amount' => $data['amount_display'],
+                    'subtitle' => MemberDateDisplay::format($record->posting_date, 'M j, Y'),
+                    'chip' => $statusChip['chip'],
+                    'chipVariant' => $statusChip['variant'],
+                ],
+            ],
+            [
+                'title' => __('Posting details'),
+                'columns' => 3,
+                'items' => [
+                    ['label' => __('Posting date'), 'value' => MemberDateDisplay::format($record->posting_date, 'M j, Y') ?? $data['posting_date_display']],
+                    ['label' => __('Reference'), 'value' => $data['reference_display']],
+                    ['label' => __('Submitted'), 'value' => MemberDateDisplay::format($record->created_at, 'M j, Y g:i A') ?? $data['submitted_at_display']],
+                ],
+            ],
+        ];
+
+        if ($data['comments_display'] !== __('—')) {
+            $sections[] = [
+                'title' => __('Comments'),
+                'prose' => $data['comments_display'],
+            ];
+        }
+
+        if (in_array($record->status, ['accepted', 'rejected'], true)) {
+            $sections[] = [
+                'title' => __('Review'),
+                'columns' => 3,
+                'items' => [
+                    ['label' => __('Reviewed by'), 'value' => $data['reviewer_name']],
+                    ['label' => __('Reviewed at'), 'value' => MemberDateDisplay::format($record->reviewed_at, 'M j, Y g:i A') ?? $data['reviewed_at_display']],
+                ],
+            ];
+
+            if ($data['admin_remarks_display'] !== __('—')) {
+                $sections[] = [
+                    'title' => __('Admin remarks'),
+                    'prose' => $data['admin_remarks_display'],
+                ];
+            }
+        }
+
+        if (filled($data['attachment_url'])) {
+            $sections[] = [
+                'title' => __('Receipt'),
+                'view' => 'filament.member.partials.fund-posting-receipt',
+                'viewData' => [
+                    'url' => $data['attachment_url'],
+                    'isImage' => $data['attachment_is_image'],
+                ],
+            ];
+        }
+
+        return $sections;
     }
 
     /**
@@ -199,8 +287,6 @@ final class ViewFundPostingAction
 
     public static function configure(Table $table): Table
     {
-        return $table
-            ->recordUrl(fn (): ?string => null)
-            ->recordAction(ViewAction::getDefaultName());
+        return TableRecordActionGroups::apply($table, [self::make()]);
     }
 }

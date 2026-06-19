@@ -17,6 +17,7 @@ use App\Models\Tenant\Transaction;
 use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
+use App\Support\MemberDateDisplay;
 use App\Support\Tenant\CurrentMember;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -113,8 +114,8 @@ final class MemberPortalAccountsInsightsService
             ->limit(5)
             ->get()
             ->map(fn (Transaction $transaction): array => [
-                'description' => Str::limit($transaction->description ?? '—', 40),
-                'transacted_at' => $transaction->transacted_at?->format('d M, H:i'),
+                'description' => Str::limit($transaction->memberFacingDescription(), 40),
+                'transacted_at' => MemberDateDisplay::format($transaction->transacted_at, 'd M, H:i') ?? '—',
                 'amount' => InsightFormatter::money((float) $transaction->amount),
                 'signed_class' => $transaction->type === 'credit'
                     ? 'text-emerald-600 dark:text-emerald-400'

@@ -34,19 +34,14 @@ class MyMessageResource extends Resource
 
     protected static ?int $navigationSort = MemberNavigation::SORT_MESSAGES;
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
     public static function getNavigationBadge(): ?string
     {
-        $userId = auth('tenant')->id();
-
-        if ($userId === null) {
-            return null;
-        }
-
-        $count = DirectMessage::query()
-            ->where('to_user_id', $userId)
-            ->whereNull('read_at')
-            ->whereHas('sender', fn (Builder $q) => $q->where('is_admin', true))
-            ->count();
+        $count = MemberNavigation::unreadAdminMessageCount();
 
         return $count > 0 ? (string) $count : null;
     }

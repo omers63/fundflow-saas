@@ -21,6 +21,8 @@
 /storage/pail
 /storage/tenant*/app/livewire-tmp/
 /vendor
+/lang/vendor/filament/
+/lang/vendor/filament-panels/
 Homestead.json
 Homestead.yaml
 Thumbs.db

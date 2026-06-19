@@ -23,7 +23,7 @@
                         <div class="min-w-0">
                             <x-ff-stat-line :text="ui_label($d['account']['type_label'])"
                                 class="truncate text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400" />
-                            <x-ff-stat-line :text="(string) $d['balance_display']" @class([
+                            <x-ff-stat-line :amount="$d['balance']" :currency="$d['currency']" @class([
                                 'truncate text-2xl font-bold tabular-nums leading-tight',
                                 $d['balance_negative']
                                     ? 'text-rose-600 dark:text-rose-400'
@@ -77,7 +77,8 @@
                                 </p>
                             </div>
                             <span @class(['shrink-0 font-semibold tabular-nums', $tx['signed_class']])>
-                                {{ $tx['type'] === 'credit' ? '+' : '−' }}{{ $tx['amount'] }}
+                                {{ $tx['type'] === 'credit' ? '+' : '−' }}<x-member::amount :value="$tx['amount_value']"
+                                    :currency="$d['currency']" class="inline" />
                             </span>
                         </li>
                     @empty
@@ -98,7 +99,7 @@
                             @foreach ($panel['rows'] as $row)
                                 <div class="flex items-center justify-between gap-2 text-xs">
                                     <span class="text-gray-500 dark:text-gray-400">{{ $row['label'] }}</span>
-                                    <span class="font-semibold tabular-nums text-gray-900 dark:text-white">{{ $row['value'] }}</span>
+                                    <span class="font-semibold tabular-nums text-gray-900 dark:text-white">{!! \App\Filament\Support\MoneyDisplay::markupForDisplay($row['value'], $d['currency']) !!}</span>
                                 </div>
                             @endforeach
                             @if (!empty($panel['progress']))

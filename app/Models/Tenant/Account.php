@@ -156,4 +156,21 @@ class Account extends Model
 
         return $this->name;
     }
+
+    /**
+     * Member-portal label for cash / fund / loan accounts (not the internal ledger name).
+     */
+    public function memberFacingLabel(): string
+    {
+        if ($this->is_master) {
+            return $this->displayLabel();
+        }
+
+        return match ($this->type) {
+            'cash' => __('Cash account'),
+            'fund' => __('Fund account'),
+            'loan' => __('Loan account'),
+            default => $this->displayLabel(),
+        };
+    }
 }

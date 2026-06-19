@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Filament\Member\Pages\MemberSettingsPage;
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\Member;
@@ -31,6 +32,10 @@ class StartDependentImpersonationController extends Controller
             || (int) $dependent->parent_member_id !== (int) $parentMember->id
         ) {
             abort(403);
+        }
+
+        if ($dependent->is_separated) {
+            return redirect(MemberSettingsPage::getUrl(['tab' => 'profile'], panel: 'member'));
         }
 
         $dependentUser = $dependent->user;

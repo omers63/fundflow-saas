@@ -33,8 +33,8 @@ final class ArabicDisplaySettings
         $preset = (string) self::get('arabic_display_font', self::FONT_NOTO_SANS);
 
         return array_key_exists($preset, self::fontOptions())
-          ? $preset
-          : self::FONT_NOTO_SANS;
+            ? $preset
+            : self::FONT_NOTO_SANS;
     }
 
     public static function enhancedNameStyle(): bool
@@ -84,6 +84,13 @@ final class ArabicDisplaySettings
      */
     public static function allForForm(): array
     {
+        if (! tenancy()->initialized) {
+            return [
+                'arabic_display_font' => self::FONT_NOTO_SANS,
+                'arabic_enhanced_name_style' => false,
+            ];
+        }
+
         $stored = Setting::getGroup(self::GROUP);
 
         return [
@@ -97,6 +104,10 @@ final class ArabicDisplaySettings
 
     public static function get(string $key, mixed $default = null): mixed
     {
+        if (! tenancy()->initialized) {
+            return self::defaults()[$key] ?? $default;
+        }
+
         $value = Setting::get(self::GROUP, $key);
 
         if ($value === null || $value === '') {

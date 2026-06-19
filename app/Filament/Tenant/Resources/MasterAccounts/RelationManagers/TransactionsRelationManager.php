@@ -7,6 +7,8 @@ use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\AccountDetailInsightsRefresh;
 use App\Filament\Support\AccountTransactionAmountColumn;
 use App\Filament\Support\AccountTransactionManualAdjustmentHeaderActions;
+use App\Filament\Support\AccountTransactionTypeColumn;
+use App\Filament\Support\AccountTransactionTypeFilter;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MasterExpenseHeaderActions;
 use App\Filament\Support\MasterFeesHeaderActions;
@@ -38,12 +40,7 @@ class TransactionsRelationManager extends RelationManager
                     ->label('Date')
                     ->dateTime()
                     ->sortable(),
-                TextColumn::make('type')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'credit' => 'success',
-                        'debit' => 'danger',
-                    }),
+                AccountTransactionTypeColumn::make(),
                 AccountTransactionAmountColumn::make(),
                 TextColumn::make('balance_after')
                     ->label('Balance')
@@ -68,10 +65,7 @@ class TransactionsRelationManager extends RelationManager
             ])
             ->filters([
                 SelectFilter::make('type')
-                    ->options([
-                        'credit' => 'Credit',
-                        'debit' => 'Debit',
-                    ]),
+                    ->options(AccountTransactionTypeFilter::options()),
                 DateColumnRangeFilter::make('transacted_at', 'Date'),
                 SelectFilter::make('member_id')
                     ->label(__('Member tag'))

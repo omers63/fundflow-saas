@@ -6,6 +6,8 @@ namespace App\Filament\Tenant\Resources\BankAccounts\Tables;
 
 use App\Filament\Support\AccountTransactionAmountColumn;
 use App\Filament\Support\AccountTransactionManualAdjustmentHeaderActions;
+use App\Filament\Support\AccountTransactionTypeColumn;
+use App\Filament\Support\AccountTransactionTypeFilter;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\ViewActions\ViewAccountTransactionAction;
@@ -61,13 +63,7 @@ class MasterBankLedgerTable
                             ->label(__('Date'))
                             ->dateTime()
                             ->sortable(),
-                        TextColumn::make('type')
-                            ->badge()
-                            ->color(fn (string $state): string => match ($state) {
-                                'credit' => 'success',
-                                'debit' => 'danger',
-                                default => 'gray',
-                            }),
+                        AccountTransactionTypeColumn::make(),
                         AccountTransactionAmountColumn::make(),
                         TextColumn::make('balance_after')
                             ->label(__('Balance'))
@@ -84,10 +80,7 @@ class MasterBankLedgerTable
                     ])
                     ->filters([
                         SelectFilter::make('type')
-                            ->options([
-                                'credit' => __('Credit'),
-                                'debit' => __('Debit'),
-                            ]),
+                            ->options(AccountTransactionTypeFilter::options()),
                         DateColumnRangeFilter::make('transacted_at', __('Date')),
                         SelectFilter::make('member_id')
                             ->label(__('Member tag'))

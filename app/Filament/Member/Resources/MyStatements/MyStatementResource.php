@@ -23,9 +23,13 @@ class MyStatementResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentChartBar;
 
-    protected static ?string $navigationLabel = 'My statements';
+    protected static ?string $navigationLabel = 'Statements';
 
-    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_MY_FINANCE;
+    protected static ?string $modelLabel = 'Statement';
+
+    protected static ?string $pluralModelLabel = 'Statements';
+
+    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_SELF_SERVICE;
 
     protected static ?int $navigationSort = MemberNavigation::SORT_STATEMENTS;
 

@@ -4,15 +4,30 @@ declare(strict_types=1);
 
 namespace App\Filament\Member\Pages;
 
+use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Support\ReturnToParentPortalAction;
+use App\Filament\Member\Widgets\MemberLoanEligibilityWidget;
 use App\Filament\Member\Widgets\MemberPortalDashboardWidget;
+use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Support\Enums\Width;
+use Filament\Support\Icons\Heroicon;
 
 class MemberDashboard extends BaseDashboard
 {
+    use TranslatesPageNavigationLabel;
+
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedHome;
+
+    protected static ?string $navigationLabel = 'Overview';
+
     protected Width|string|null $maxContentWidth = Width::Full;
+
+    public function getTitle(): string
+    {
+        return __('Overview');
+    }
 
     /**
      * @return array<string>
@@ -28,6 +43,7 @@ class MemberDashboard extends BaseDashboard
     public function getWidgets(): array
     {
         return [
+            MemberLoanEligibilityWidget::class,
             MemberPortalDashboardWidget::class,
         ];
     }

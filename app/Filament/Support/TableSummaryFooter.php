@@ -3,10 +3,13 @@
 namespace App\Filament\Support;
 
 use App\Filament\Tables\Columns\LedgerAmountColumn;
+use App\Models\Tenant\Setting;
+use Filament\Facades\Filament;
 use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\Number;
 
 final class TableSummaryFooter
 {
@@ -52,11 +55,21 @@ final class TableSummaryFooter
             return $column;
         }
 
-        $label = self::summarizeLabelForColumn($column);
+        $sum = Sum::make()->label(fn (): string => self::summarizeLabelForColumn($column));
 
-        $sum = Sum::make()->label($label);
+        if (Filament::getCurrentPanel()?->getId() === 'member') {
+            $currency = fn (): string => Setting::get('general', 'currency', 'USD');
 
-        if ($column->isMoney()) {
+            if (self::columnShouldFormatSummaryAsMoney($column)) {
+                $sum
+                    ->formatStateUsing(fn ($state): ?string => MoneyDisplay::tableSummaryHtml($state, $currency()))
+                    ->html();
+            } else {
+                $sum->formatStateUsing(fn ($state): ?string => $state === null
+                    ? null
+                    : Number::format((float) $state, 2, locale: 'en'));
+            }
+        } elseif ($column->isMoney()) {
             $sum->money(decimalPlaces: 2);
         } else {
             $sum->numeric(decimalPlaces: 2);
@@ -88,6 +101,27 @@ final class TableSummaryFooter
         }
 
         return self::columnNameLooksAggregatable($column->getName());
+    }
+
+    private static function columnShouldFormatSummaryAsMoney(TextColumn $column): bool
+    {
+        if ($column->isMoney()) {
+            return true;
+        }
+
+        $name = $column->getName();
+
+        if (in_array($name, [
+            'total_rows',
+            'imported_rows',
+            'duplicate_rows',
+            'quantity',
+            'active_loans_count',
+        ], true)) {
+            return false;
+        }
+
+        return self::columnNameLooksAggregatable($name);
     }
 
     private static function summarizeLabelForColumn(TextColumn $column): string

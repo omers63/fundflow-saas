@@ -1,0 +1,221 @@
+/**
+ * Member portal prototype chrome — Phase 1.
+ * Every rule is scoped under .fi-body.fi-panel-member so tenant/admin panels are unaffected.
+ * Light-mode shell only for v1 (matches HTML prototype).
+ */
+
+.fi-body.fi-panel-member {
+    --ff-primary: #534ab7;
+    --ff-primary-dark: #3c3489;
+    --ff-primary-light: #eeedfe;
+    --ff-primary-border: #afa9ec;
+    --ff-success: #1d9e75;
+    --ff-warning: #ef9f27;
+    --ff-danger: #e24b4a;
+    --ff-info: #378add;
+    --ff-panel-radius: 14px;
+    --ff-surface: #ffffff;
+    --ff-page-bg: #f9fafb;
+    --ff-border: #e5e7eb;
+    --ff-muted: #6b7280;
+    --ff-muted-light: #9ca3af;
+
+    color-scheme: light;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    background: var(--ff-page-bg) !important;
+}
+
+.dark .fi-body.fi-panel-member {
+    color-scheme: light;
+    background: var(--ff-page-bg) !important;
+}
+
+/* Page shell */
+.fi-body.fi-panel-member .fi-main,
+.fi-body.fi-panel-member .fi-page,
+.fi-body.fi-panel-member .fi-simple-main {
+    background: var(--ff-page-bg);
+}
+
+.fi-body.fi-panel-member .fi-main-ctn {
+    background: transparent;
+}
+
+/* Sidebar */
+.fi-body.fi-panel-member .fi-sidebar {
+    background: var(--ff-surface);
+    border-inline-end: 1px solid var(--ff-border);
+}
+
+.fi-body.fi-panel-member .fi-sidebar-header {
+    background: var(--ff-surface);
+    box-shadow: none;
+    padding-inline: 0.625rem;
+}
+
+.fi-body.fi-panel-member .fi-sidebar-nav {
+    padding-block: 0.75rem;
+    padding-inline: 0.5rem;
+}
+
+.fi-body.fi-panel-member .fi-sidebar-group-label {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ff-muted-light);
+    padding-inline: 0.5rem;
+}
+
+.fi-body.fi-panel-member .fi-sidebar-item-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.fi-body.fi-panel-member .fi-sidebar-item.fi-active > .fi-sidebar-item-btn,
+.fi-body.fi-panel-member .fi-sidebar-item.fi-sidebar-item-has-url > .fi-sidebar-item-btn:hover,
+.fi-body.fi-panel-member .fi-sidebar-item.fi-sidebar-item-has-url > .fi-sidebar-item-btn:focus-visible {
+    background: #f3f4f6;
+}
+
+.fi-body.fi-panel-member .fi-sidebar-item.fi-active > .fi-sidebar-item-btn > .fi-sidebar-item-label,
+.fi-body.fi-panel-member .fi-sidebar-item.fi-active > .fi-sidebar-item-btn > .fi-icon {
+    color: #111827;
+}
+
+/* Topbar */
+.fi-body.fi-panel-member .fi-topbar {
+    min-height: 3.125rem;
+    background: var(--ff-surface);
+    border-block-end: 1px solid var(--ff-border);
+    box-shadow: none;
+}
+
+.fi-body.fi-panel-member .fi-topbar nav {
+    background: var(--ff-surface);
+}
+
+/* Sections / panels */
+.fi-body.fi-panel-member .fi-section:not(.fi-aside) {
+    border-radius: var(--ff-panel-radius);
+    border-color: var(--ff-border);
+    background: var(--ff-surface);
+}
+
+.fi-body.fi-panel-member .fi-section-header-heading {
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+/* Form fields */
+.fi-body.fi-panel-member .fi-fo-field-wrp-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--ff-muted);
+}
+
+.fi-body.fi-panel-member .fi-input-wrp {
+    border-radius: 0.5rem;
+    border-color: var(--ff-border);
+}
+
+.fi-body.fi-panel-member .fi-input-wrp:focus-within {
+    border-color: var(--ff-primary);
+    --tw-ring-color: rgb(83 74 183 / 0.25);
+}
+
+.fi-body.fi-panel-member .fi-input-wrp input,
+.fi-body.fi-panel-member .fi-input-wrp select,
+.fi-body.fi-panel-member .fi-input-wrp textarea,
+.fi-body.fi-panel-member .fi-select-input,
+.fi-body.fi-panel-member .fi-fo-text-input input {
+    font-size: 0.75rem;
+}
+
+/* Buttons */
+.fi-body.fi-panel-member .fi-btn.fi-color-primary:not(.fi-outlined) {
+    border-radius: 0.5625rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.fi-body.fi-panel-member .fi-btn.fi-outlined.fi-color-primary {
+    border-radius: 0.5625rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-color: var(--ff-primary-border);
+    color: var(--ff-primary);
+    background: var(--ff-surface);
+}
+
+.fi-body.fi-panel-member .fi-btn.fi-outlined.fi-color-primary:hover {
+    background: var(--ff-primary-light);
+}
+
+.fi-body.fi-panel-member .fi-btn.fi-color-gray,
+.fi-body.fi-panel-member .fi-btn.fi-color-secondary {
+    border-radius: 0.5625rem;
+    font-size: 0.75rem;
+    background: var(--ff-surface);
+    border-color: var(--ff-border);
+    color: var(--ff-muted);
+}
+
+/* Tables */
+.fi-body.fi-panel-member .fi-ta-table > thead > tr > th {
+    background: var(--ff-page-bg);
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ff-muted-light);
+    border-block-end-color: var(--ff-border);
+}
+
+.fi-body.fi-panel-member .fi-ta-table > tbody > tr > td {
+    font-size: 0.75rem;
+    border-block-end-color: #f3f4f6;
+}
+
+.fi-body.fi-panel-member .fi-ta-table > tbody > tr:hover > td {
+    background: #fafafa;
+}
+
+.fi-body.fi-panel-member .fi-ta-header-cell .fi-ta-header-cell-label {
+    font-size: 0.625rem;
+    font-weight: 600;
+}
+
+/* Footer summaries: column label and total on one line (e.g. المبلغ: 1,234.00) */
+.fi-body.fi-panel-member .fi-ta-text-summary {
+    display: inline-flex;
+    flex-flow: row wrap;
+    align-items: baseline;
+    column-gap: 0.35rem;
+    row-gap: 0;
+    padding-block: 0.75rem;
+}
+
+.fi-body.fi-panel-member .fi-ta-text-summary > .fi-ta-text-summary-label::after {
+    content: ':';
+}
+
+.fi-body.fi-panel-member .fi-ta-text-summary > .fi-ta-text-summary-label {
+    font-weight: 600;
+    color: #111827;
+}
+
+/* Tabs */
+.fi-body.fi-panel-member .fi-tabs-item.fi-active .fi-tabs-item-label {
+    color: #111827;
+    font-weight: 600;
+    border-block-end-color: var(--ff-primary);
+}
+
+/* Widget stat cards — soften green hover glow toward purple */
+.fi-body.fi-panel-member a.fi-wi-stats-overview-stat:hover {
+    box-shadow:
+        0 12px 28px -12px rgb(83 74 183 / 0.28),
+        0 0 0 1px rgb(83 74 183 / 0.12);
+}

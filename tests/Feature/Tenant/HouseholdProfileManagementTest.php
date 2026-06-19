@@ -1,11 +1,16 @@
 <?php
 
-use App\Filament\Member\Pages\MyProfilePage;
+use App\Filament\Member\Pages\MemberSettingsPage;
 use App\Livewire\Tenant\MemberLoginPage;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\MembershipApplicationApprovalService;
+use App\Services\Tenant\HouseholdAccessService;
 use App\Services\Tenant\ImpersonationService;
+use App\Support\MemberUserEmail;
+use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
@@ -110,6 +115,98 @@ test('dependent can verify with password and sign in', function () {
     expect(auth('tenant')->id())->toBe($this->dependentUser->id);
 });
 
+test('separated dependent can verify with own password on household profile picker', function () {
+    $this->dependent->update([
+        'email' => 'dependent.unique@fund.test',
+        'is_separated' => true,
+        'direct_login_enabled' => true,
+    ]);
+
+    $this->dependentUser->update([
+        'email' => 'dependent.unique@fund.test',
+        'password' => 'SeparatedPass123',
+    ]);
+
+    Livewire::test(MemberLoginPage::class)
+        ->set('email', 'family@fund.test')
+        ->set('password', 'ParentPass123')
+        ->call('login')
+        ->assertSet('showProfilePicker', true)
+        ->call('selectProfile', $this->dependent->id)
+        ->set('verificationSecret', 'SeparatedPass123')
+        ->call('verifySelectedProfile')
+        ->assertRedirect('/member');
+
+    expect(auth('tenant')->id())->toBe($this->dependentUser->id);
+});
+
+test('household dependent with internal login email can verify with password on profile picker', function () {
+    $internalEmail = app(MemberUserEmail::class)->generateInternalLoginEmail();
+
+    $this->dependentUser->update(['email' => $internalEmail]);
+    $this->dependent->update([
+        'email' => 'family@fund.test',
+        'is_separated' => false,
+        'direct_login_enabled' => false,
+    ]);
+
+    Livewire::test(MemberLoginPage::class)
+        ->set('email', 'family@fund.test')
+        ->set('password', 'ParentPass123')
+        ->call('login')
+        ->call('selectProfile', $this->dependent->id)
+        ->set('verificationSecret', 'DependentPass123')
+        ->call('verifySelectedProfile')
+        ->assertRedirect('/member');
+
+    expect(auth('tenant')->id())->toBe($this->dependentUser->id);
+});
+
+test('separated dependent approved from application can verify on household profile picker', function () {
+    $parentApplication = MembershipApplication::create([
+        'name' => 'Parent Applicant',
+        'email' => 'household@example.test',
+        'password' => 'HouseholdPass1',
+        'application_type' => 'new',
+        'mobile_phone' => '0501000101',
+        'iban' => 'SA030000000000101000000101',
+        'status' => 'pending',
+        'household_email' => 'household@example.test',
+    ]);
+
+    $childApplication = MembershipApplication::create([
+        'name' => 'Adult Child',
+        'email' => 'adult.child@example.test',
+        'password' => 'ChildPass123',
+        'application_type' => 'new',
+        'mobile_phone' => '0501000102',
+        'iban' => 'SA030000000000101000000102',
+        'status' => 'pending',
+        'household_email' => 'household@example.test',
+        'parent_application_id' => $parentApplication->id,
+    ]);
+
+    app(MembershipApplicationApprovalService::class)->approveMany(collect([$parentApplication, $childApplication]));
+
+    $child = Member::query()->where('name', 'Adult Child')->firstOrFail();
+    $childUser = $child->user;
+
+    expect($child->is_separated)->toBeTrue()
+        ->and(Hash::check('ChildPass123', (string) $childUser?->password))->toBeTrue();
+
+    Livewire::test(MemberLoginPage::class)
+        ->set('email', 'household@example.test')
+        ->set('password', 'HouseholdPass1')
+        ->call('login')
+        ->assertSet('showProfilePicker', true)
+        ->call('selectProfile', $child->id)
+        ->set('verificationSecret', 'ChildPass123')
+        ->call('verifySelectedProfile')
+        ->assertRedirect('/member');
+
+    expect(auth('tenant')->id())->toBe($childUser->id);
+});
+
 test('member without dependents logs in directly', function () {
     $this->dependent->delete();
     $this->dependentUser->delete();
@@ -121,14 +218,91 @@ test('member without dependents logs in directly', function () {
         ->assertRedirect('/member');
 });
 
-test('parent can access my profile page', function () {
+test('parent can access household profiles on settings page', function () {
+    Filament\Facades\Filament::setCurrentPanel('member');
     $this->actingAs($this->parentUser, 'tenant');
 
-    Livewire::test(MyProfilePage::class)
+    Livewire::test(MemberSettingsPage::class)
         ->assertSuccessful()
-        ->assertSee('Household profiles')
+        ->assertSee(__('Household profiles'))
         ->assertSee('Parent User')
         ->assertSee('Dependent User');
+});
+
+test('separated dependent can login directly after profile email and password change', function () {
+    $this->actingAs($this->dependentUser, 'tenant');
+
+    app(HouseholdAccessService::class)->updateMemberLoginEmail(
+        $this->dependent,
+        $this->dependentUser,
+        'separated.dependent@fund.test',
+    );
+
+    $this->dependentUser->refresh()->update(['password' => 'NewSeparatedPass123']);
+    $this->dependent->refresh();
+
+    expect($this->dependent->is_separated)->toBeTrue()
+        ->and($this->dependent->direct_login_enabled)->toBeTrue()
+        ->and($this->dependentUser->fresh()->email)->toBe('separated.dependent@fund.test');
+
+    auth('tenant')->logout();
+
+    Livewire::test(MemberLoginPage::class)
+        ->set('email', 'separated.dependent@fund.test')
+        ->set('password', 'NewSeparatedPass123')
+        ->call('login')
+        ->assertSet('showProfilePicker', false)
+        ->assertRedirect('/member');
+
+    expect(auth('tenant')->id())->toBe($this->dependentUser->id);
+});
+
+test('separated dependent can login via household profile picker after profile email and password change', function () {
+    $this->actingAs($this->dependentUser, 'tenant');
+
+    app(HouseholdAccessService::class)->updateMemberLoginEmail(
+        $this->dependent,
+        $this->dependentUser,
+        'separated.dependent@fund.test',
+    );
+
+    $this->dependentUser->refresh()->update(['password' => 'NewSeparatedPass123']);
+    $this->dependent->refresh();
+
+    auth('tenant')->logout();
+
+    Livewire::test(MemberLoginPage::class)
+        ->set('email', 'family@fund.test')
+        ->set('password', 'ParentPass123')
+        ->call('login')
+        ->assertSet('showProfilePicker', true)
+        ->call('selectProfile', $this->dependent->id)
+        ->set('verificationSecret', 'NewSeparatedPass123')
+        ->call('verifySelectedProfile')
+        ->assertRedirect('/member');
+
+    expect(auth('tenant')->id())->toBe($this->dependentUser->id);
+});
+
+test('separated dependent direct login accepts mixed case email', function () {
+    $this->dependent->update([
+        'email' => 'separated.dependent@fund.test',
+        'is_separated' => true,
+        'direct_login_enabled' => true,
+    ]);
+
+    $this->dependentUser->update([
+        'email' => 'separated.dependent@fund.test',
+        'password' => 'NewSeparatedPass123',
+    ]);
+
+    Livewire::test(MemberLoginPage::class)
+        ->set('email', 'Separated.Dependent@Fund.test')
+        ->set('password', 'NewSeparatedPass123')
+        ->call('login')
+        ->assertRedirect('/member');
+
+    expect(auth('tenant')->id())->toBe($this->dependentUser->id);
 });
 
 test('impersonation switches to dependent and back on logout', function () {

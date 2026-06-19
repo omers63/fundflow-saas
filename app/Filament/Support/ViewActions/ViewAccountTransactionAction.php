@@ -2,12 +2,14 @@
 
 namespace App\Filament\Support\ViewActions;
 
+use App\Filament\Member\Support\MemberPortalViewModal;
 use App\Filament\Support\MoneyDisplay;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
+use App\Support\MemberDateDisplay;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
@@ -39,6 +41,7 @@ final class ViewAccountTransactionAction
                         : (string) $record->transacted_at,
                     'signed_amount_display' => MoneyDisplay::format($record->getSignedAmount(), $currency),
                     'balance_after_display' => MoneyDisplay::format((float) $record->balance_after, $currency),
+                    'type_display' => Transaction::typeLabel($record->type),
                     'account_name' => $record->account?->name,
                     'member_tag' => $record->member?->name,
                     'reference_summary' => $record->bankImportSummary() ?? $record->referenceSummary(),
@@ -47,6 +50,81 @@ final class ViewAccountTransactionAction
                 ];
             })
             ->schema(self::schema());
+    }
+
+    public static function makeForMemberPortal(): ViewAction
+    {
+        return MemberPortalViewModal::apply(
+            ViewAction::make()
+                ->modalHeading(fn (Transaction $record): string => $record->memberFacingDescription())
+                ->modalContent(fn (Transaction $record) => MemberPortalViewModal::content(
+                    self::memberPortalSections($record),
+                )),
+        );
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public static function memberPortalSections(Transaction $record): array
+    {
+        $record->loadMissing(['account', 'member', 'reference']);
+
+        $currency = Setting::get('general', 'currency', 'USD');
+
+        $heading = $record->memberFacingDescription();
+        $transactedAt = MemberDateDisplay::format($record->transacted_at, 'M j, Y g:i A') ?? '—';
+        $signedAmount = MoneyDisplay::format($record->getSignedAmount(), $currency);
+        $balanceAfter = MoneyDisplay::format((float) $record->balance_after, $currency);
+        $reference = $record->bankImportSummary();
+
+        $sections = [
+            [
+                'hero' => [
+                    'label' => $heading,
+                    'amount' => $signedAmount,
+                    'type' => $record->type,
+                    'chip' => $record->memberFacingTypeLabel(),
+                    'chipVariant' => $record->type === 'credit' ? 'green' : 'gray',
+                ],
+            ],
+            [
+                'title' => __('Details'),
+                'columns' => 3,
+                'items' => array_values(array_filter([
+                    ['label' => __('Date'), 'value' => $transactedAt],
+                    ['label' => __('Account'), 'value' => self::memberPortalAccountLabel($record)],
+                    ['label' => __('Balance after'), 'value' => $balanceAfter],
+                    filled($record->member?->name)
+                    ? ['label' => __('Member tag'), 'value' => $record->member->name]
+                    : null,
+                ])),
+            ],
+        ];
+
+        if (filled($reference) && $reference !== $heading) {
+            $sections[] = [
+                'title' => __('Reference'),
+                'prose' => $reference,
+            ];
+        }
+
+        return $sections;
+    }
+
+    private static function memberPortalAccountLabel(Transaction $record): string
+    {
+        $account = $record->account;
+
+        if ($account === null) {
+            return __('—');
+        }
+
+        return match ($account->type) {
+            'cash' => __('Cash account'),
+            'fund' => __('Fund account'),
+            default => $account->name,
+        };
     }
 
     /**
@@ -62,7 +140,7 @@ final class ViewAccountTransactionAction
                         ->label(__('Transaction ID')),
                     TextInput::make('transacted_at_display')
                         ->label(__('Date')),
-                    TextInput::make('type')
+                    TextInput::make('type_display')
                         ->label(__('Type')),
                     TextInput::make('signed_amount_display')
                         ->label(__('Amount')),
@@ -93,25 +171,30 @@ final class ViewAccountTransactionAction
         ];
     }
 
-    public static function configure(Table $table, bool $editable = true): Table
+    public static function configure(Table $table, bool $editable = true, bool $memberPortal = false): Table
     {
+        $viewAction = $memberPortal ? self::makeForMemberPortal() : self::make();
+
         $actions = $editable
             ? [
                 EditAccountTransactionAction::make(),
                 SplitAccountTransactionAction::make(),
                 ReverseAccountTransactionAction::make(),
                 DeleteAccountTransactionAction::make(),
-                self::make()
+                $viewAction
                     ->hidden(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin),
             ]
-            : [self::make()];
+            : [$viewAction];
 
-        return TableGrouping::apply(
-            $table
-                ->recordUrl(fn (): ?string => null)
-                ->recordActions(TableRecordActionGroups::wrap($actions)),
-            TableGrouping::accountTransactions()
-        )
+        $table = TableGrouping::apply($table, TableGrouping::accountTransactions());
+
+        if (! $editable) {
+            return TableRecordActionGroups::apply($table, $actions);
+        }
+
+        return $table
+            ->recordUrl(fn (): ?string => null)
+            ->recordActions(TableRecordActionGroups::wrap($actions))
             ->recordAction(function () use ($editable): ?string {
                 if (! $editable) {
                     return ViewAction::getDefaultName();

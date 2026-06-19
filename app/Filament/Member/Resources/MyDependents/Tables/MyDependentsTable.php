@@ -30,17 +30,17 @@ class MyDependentsTable
         return TableGrouping::apply($table
             ->columns([
                 TextColumn::make('member_number')
-                    ->label('Member #')
+                    ->label(__('Member #'))
                     ->searchable(),
                 TextColumn::make('name')
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('monthly_contribution_amount')
-                    ->label('Monthly contribution')
+                    ->label(__('Monthly contribution'))
                     ->money($currency)
                     ->sortable(),
                 TextColumn::make('last_allocation_change')
-                    ->label('Last changed')
+                    ->label(__('Last changed'))
                     ->state(function (Member $record) use ($currency): ?string {
                         if (! Schema::hasTable('dependent_allocation_changes')) {
                             return null;
@@ -61,17 +61,17 @@ class MyDependentsTable
                     })
                     ->placeholder(__('Never changed')),
                 TextColumn::make('cash_balance')
-                    ->label('Cash')
+                    ->label(__('Cash'))
                     ->state(fn (Member $record): float => $record->getCashBalance())
                     ->money($currency)
                     ->sortable(false),
                 TextColumn::make('fund_balance')
-                    ->label('Fund')
+                    ->label(__('Fund'))
                     ->state(fn (Member $record): float => $record->getFundBalance())
                     ->money($currency)
                     ->sortable(false),
                 TextColumn::make('open_cycle_status')
-                    ->label('Open cycle')
+                    ->label(__('Open cycle'))
                     ->badge()
                     ->state(function (Member $record) use ($openMonth, $openYear): string {
                         $row = Contribution::query()

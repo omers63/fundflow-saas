@@ -35,6 +35,20 @@ class MyGuaranteedLoanResource extends Resource
 
     protected static ?int $navigationSort = MemberNavigation::SORT_GUARANTEED_LOANS;
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        $member = CurrentMember::get();
+
+        if ($member === null) {
+            return false;
+        }
+
+        return Loan::query()
+            ->where('guarantor_member_id', $member->id)
+            ->whereIn('status', ['pending', 'approved', 'disbursed', 'active', 'repaying', 'defaulted'])
+            ->exists();
+    }
+
     public static function getEloquentQuery(): Builder
     {
         $memberId = CurrentMember::get()?->id;

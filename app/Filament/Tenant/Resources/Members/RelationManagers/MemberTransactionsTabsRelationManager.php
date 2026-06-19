@@ -9,6 +9,7 @@ use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\AccountDetailInsightsRefresh;
 use App\Filament\Support\AccountTransactionAmountColumn;
 use App\Filament\Support\AccountTransactionManualAdjustmentHeaderActions;
+use App\Filament\Support\AccountTransactionTypeFilter;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\UiLabelIcons;
 use App\Filament\Support\ViewActions\ViewAccountTransactionAction;
@@ -71,10 +72,7 @@ class MemberTransactionsTabsRelationManager extends RelationManager
             ])
             ->filters([
                 SelectFilter::make('type')
-                    ->options([
-                        'credit' => __('Credit'),
-                        'debit' => __('Debit'),
-                    ]),
+                    ->options(AccountTransactionTypeFilter::options()),
                 DateColumnRangeFilter::make('transacted_at', __('Date')),
             ]);
 

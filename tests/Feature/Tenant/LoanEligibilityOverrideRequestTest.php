@@ -66,6 +66,18 @@ function createIneligibleMemberWithUser(AccountingService $accounting): array
     return [$memberUser, $member];
 }
 
+test('member can open eligibility review from request override url', function () {
+    Notification::fake();
+
+    [$memberUser, $member] = createIneligibleMemberWithUser($this->accounting);
+
+    Filament::setCurrentPanel('member');
+    $this->actingAs($memberUser, 'tenant');
+
+    Livewire::test(ListMyLoans::class, ['requestOverride' => true])
+        ->assertActionMounted('requestEligibilityOverride');
+});
+
 test('member can submit eligibility review from my loans page', function () {
     Notification::fake();
 

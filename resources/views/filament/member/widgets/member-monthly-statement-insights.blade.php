@@ -1,4 +1,6 @@
 @php
+    use App\Filament\Support\MoneyDisplay;
+
     $d = $this->getData();
     $latest = $d['latest'] ?? null;
     $maxTrend = max(1, collect($d['trend'])->max('closing'));
@@ -9,9 +11,9 @@
     $kpis = [
         ['label' => __('Statements'), 'value' => $d['total'], 'sub' => __('On file'), 'icon' => 'heroicon-o-document-chart-bar', 'accent' => 'sky', 'active' => true],
         ['label' => __('Latest'), 'value' => $latest ? $latest['period_label'] : '—', 'sub' => __('Period'), 'icon' => 'heroicon-o-calendar', 'accent' => 'violet', 'active' => $latest !== null],
-        ['label' => __('Closing'), 'value' => $latest ? number_format($latest['closing'], 0) : '—', 'sub' => $currency, 'icon' => 'heroicon-o-banknotes', 'accent' => 'emerald', 'active' => $latest !== null],
-        ['label' => __('Contributions'), 'value' => $latest ? number_format($latest['contributions'], 0) : '—', 'sub' => __('Period'), 'icon' => 'heroicon-o-arrow-trending-up', 'accent' => 'teal', 'active' => true],
-        ['label' => __('Repayments'), 'value' => $latest ? number_format($latest['repayments'], 0) : '—', 'sub' => __('Period'), 'icon' => 'heroicon-o-arrow-trending-down', 'accent' => 'amber', 'active' => true],
+        ['label' => __('Closing'), 'amount' => $latest['closing'] ?? null, 'precision' => 0, 'sub' => __('Balance'), 'icon' => 'heroicon-o-banknotes', 'accent' => 'emerald', 'active' => $latest !== null],
+        ['label' => __('Contributions'), 'amount' => $latest['contributions'] ?? null, 'precision' => 0, 'sub' => __('Period'), 'icon' => 'heroicon-o-arrow-trending-up', 'accent' => 'teal', 'active' => true],
+        ['label' => __('Repayments'), 'amount' => $latest['repayments'] ?? null, 'precision' => 0, 'sub' => __('Period'), 'icon' => 'heroicon-o-arrow-trending-down', 'accent' => 'amber', 'active' => true],
         ['label' => __('This year'), 'value' => $d['generated_this_year'], 'sub' => __('Generated'), 'icon' => 'heroicon-o-sparkles', 'accent' => 'rose', 'active' => $d['generated_this_year'] > 0],
     ];
 @endphp
@@ -34,7 +36,8 @@
                                     {{ __('Latest statement: :period', ['period' => $latest['period_label']]) }}
                                 </p>
                                 <p class="mt-0.5 text-[11px] text-gray-600 dark:text-gray-400">
-                                    {{ $latest['closing_display'] }}
+                                    <x-member::amount :value="$latest['closing']" :currency="$currency" :precision="0"
+                                        class="inline" />
                                     @if ($latest['notified'])
                                         · <span class="text-emerald-600">{{ __('Delivered') }}</span>
                                     @else
@@ -70,7 +73,9 @@
                         @php
                             $labelText = ui_label($card['label']);
                             $subText = ui_label($card['sub']);
-                            $valueText = (string) $card['value'];
+                            $valueText = isset($card['amount'])
+                                ? (MoneyDisplay::format($card['amount'], $currency, precision: $card['precision'] ?? 2) ?? '—')
+                                : (string) ($card['value'] ?? '—');
                         @endphp
                         <div class="ff-app-insights-kpi ff-member-stat-card relative min-w-0 px-2.5 py-2 transition"
                             data-accent="{{ $card['accent'] }}"
@@ -81,8 +86,13 @@
                             </div>
                             <x-ff-stat-line :text="$labelText"
                                 class="mt-0.5 truncate pl-1 text-[10px] font-medium uppercase tracking-wide text-gray-500" />
-                            <x-ff-stat-line :text="$valueText"
-                                class="truncate pl-1 text-lg font-bold tabular-nums leading-tight text-gray-900 dark:text-white" />
+                            @if (isset($card['amount']))
+                                <x-ff-stat-line :amount="$card['amount']" :currency="$currency" :precision="$card['precision'] ?? 2"
+                                    class="truncate pl-1 text-lg font-bold tabular-nums leading-tight text-gray-900 dark:text-white" />
+                            @else
+                                <x-ff-stat-line :text="$valueText"
+                                    class="truncate pl-1 text-lg font-bold tabular-nums leading-tight text-gray-900 dark:text-white" />
+                            @endif
                             <x-ff-stat-line :text="$subText" class="truncate pl-1 text-[10px] text-gray-400" />
                         </div>
                     @endforeach
@@ -126,8 +136,10 @@
                                 $barH = max(12, (int) round(($month['closing'] / $maxTrend) * 100));
                             @endphp
                             <div class="flex flex-1 flex-col items-center gap-0.5">
-                                <span
-                                    class="text-[10px] font-semibold tabular-nums text-gray-500">{{ number_format($month['closing'], 0) }}</span>
+                                <span class="text-[10px] font-semibold tabular-nums text-gray-500">
+                                    <x-member::amount :value="$month['closing']" :currency="$currency" :precision="0"
+                                        class="inline text-[10px]" />
+                                </span>
                                 <div class="flex w-full max-w-[2.25rem] flex-col justify-end overflow-hidden rounded-t-md ring-1 ring-gray-200/60 dark:ring-gray-600"
                                     style="height: {{ $barH }}%">
                                     @if ($month['contributions'] > 0)

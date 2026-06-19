@@ -5,7 +5,6 @@ namespace App\Filament\Member\Resources\MyLoans;
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Member\Resources\MyLoans\Pages\ListMyLoans;
 use App\Filament\Member\Resources\MyLoans\Pages\ViewMyLoan;
-use App\Filament\Member\Resources\MyLoans\RelationManagers\InstallmentsRelationManager;
 use App\Filament\Member\Resources\MyLoans\Tables\MyLoansTable;
 use App\Filament\Member\Support\MemberNavigation;
 use App\Models\Tenant\Loan;
@@ -23,15 +22,27 @@ class MyLoanResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentText;
 
-    protected static ?string $navigationLabel = 'My Loans';
+    protected static ?string $navigationLabel = 'My loans';
 
     protected static ?string $modelLabel = 'Loan';
 
-    protected static ?string $pluralModelLabel = 'My Loans';
+    protected static ?string $pluralModelLabel = 'My loans';
 
     protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_LOANS;
 
     protected static ?int $navigationSort = MemberNavigation::SORT_LOANS;
+
+    public static function getNavigationBadge(): ?string
+    {
+        $count = MemberNavigation::activeLoanCount();
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'warning';
+    }
 
     public static function getEloquentQuery(): Builder
     {
@@ -53,9 +64,7 @@ class MyLoanResource extends Resource
 
     public static function getRelations(): array
     {
-        return [
-            InstallmentsRelationManager::class,
-        ];
+        return [];
     }
 
     /**

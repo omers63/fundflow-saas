@@ -13,6 +13,8 @@ use App\Http\Controllers\Tenant\LegacyPaymentClassifiedDownloadController;
 use App\Http\Controllers\Tenant\LegacyPaymentImportSampleController;
 use App\Http\Controllers\Tenant\LoanImportSampleController;
 use App\Http\Controllers\Tenant\LoanRepaymentImportSampleController;
+use App\Http\Controllers\Tenant\LoanSchedulePdfController;
+use App\Http\Controllers\Tenant\MemberActivityExportController;
 use App\Http\Controllers\Tenant\MemberImportSampleController;
 use App\Http\Controllers\Tenant\MembershipApplicationImportSampleController;
 use App\Http\Controllers\Tenant\StartDependentImpersonationController;
@@ -99,6 +101,13 @@ Route::middleware([
     })->where('path', '.*')->name('tenant.storage-legacy');
 
     Route::middleware(['auth:tenant'])->group(function () {
+        Route::redirect('/member/my-accounts', '/member/cash-account');
+        Route::redirect('/member/support', '/member/help?tab=requests');
+        Route::redirect('/member/contribution-settings', '/member/settings?tab=contributions');
+        Route::redirect('/member/notification-preferences', '/member/settings?tab=notifications');
+        Route::redirect('/member/my-profile', '/member/settings?tab=profile');
+        Route::redirect('/member/my-messages', '/member/help?tab=messages');
+
         Route::get('/member/dependents/{dependent}/impersonate', StartDependentImpersonationController::class)
             ->name('tenant.member.dependents.impersonate');
 
@@ -107,6 +116,12 @@ Route::middleware([
 
         Route::get('/member/statements/{statement}/pdf', [StatementPdfController::class, '__invoke'])
             ->name('tenant.member.statement.pdf');
+
+        Route::get('/member/loans/{loan}/schedule/pdf', LoanSchedulePdfController::class)
+            ->name('tenant.member.loan.schedule.pdf');
+
+        Route::get('/member/activity/export', MemberActivityExportController::class)
+            ->name('tenant.member.activity.export');
 
         Route::get('/admin/statements/{statement}/pdf', [StatementPdfController::class, 'admin'])
             ->name('tenant.admin.statement.pdf');

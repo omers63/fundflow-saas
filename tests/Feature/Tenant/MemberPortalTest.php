@@ -11,9 +11,11 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Support\LoanFundingStrategy;
 use App\Support\PublicPageSettings;
 use Filament\Facades\Filament;
 use Filament\Support\Facades\FilamentView;
@@ -227,7 +229,37 @@ test('loan calculator page renders for member', function () {
         ->assertSee(__('Loan calculator'))
         ->assertSee(__('Estimate your loan repayment'))
         ->set('loanAmount', 10000)
-        ->assertSet('loanAmount', 10000.0);
+        ->assertSet('loanAmount', 10000);
+});
+
+test('loan calculator shows repayment estimate when tier matches', function () {
+    LoanTier::query()->delete();
+    LoanTier::create([
+        'tier_number' => 1,
+        'label' => 'Standard',
+        'min_amount' => 1000,
+        'max_amount' => 50000,
+        'min_monthly_installment' => 500,
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($this->memberUserA, 'tenant');
+
+    Livewire::test(LoanCalculatorPage::class)
+        ->set('loanAmount', 10000)
+        ->assertSee(__('months'), false)
+        ->assertSee('Standard', false);
+});
+
+test('loan calculator funding strategy options are translated in Arabic locale', function () {
+    app()->setLocale('ar');
+
+    $options = LoanFundingStrategy::options();
+
+    expect($options[LoanFundingStrategy::MEMBER_FUND_TOPUP])
+        ->toBe('استخدام رصيد صندوقي (تُكمل الإدارة الباقي)')
+        ->and($options[LoanFundingStrategy::SPLIT_PERCENTAGE])
+        ->toContain('استخدام تقسيم الصندوق المُعرَّف');
 });
 
 test('member panel has database notifications enabled', function () {

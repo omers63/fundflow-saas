@@ -6,6 +6,7 @@ namespace App\Support\Insights;
 
 use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Setting;
+use Illuminate\Support\HtmlString;
 
 final class InsightFormatter
 {
@@ -17,6 +18,11 @@ final class InsightFormatter
     public static function money(float $amount): string
     {
         return MoneyDisplay::format($amount, self::currency()) ?? '—';
+    }
+
+    public static function moneyHtml(float $amount): HtmlString
+    {
+        return MoneyDisplay::html($amount, self::currency()) ?? new HtmlString('—');
     }
 
     public static function compactAmount(float $amount): string

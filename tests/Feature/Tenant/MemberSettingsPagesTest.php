@@ -78,6 +78,15 @@ test('member can save notification preferences', function () {
     expect($channels)->toContain(NotificationPreferenceService::CH_SMS);
 });
 
+test('notification preference categories render in arabic', function () {
+    app()->setLocale('ar');
+
+    Livewire::test(MyNotificationPreferencesPage::class)
+        ->assertSuccessful()
+        ->assertSee(__('Contributions'), false)
+        ->assertSee(__('Loan repayments'), false);
+});
+
 test('member can submit support request', function () {
     Livewire::test(SupportPage::class)
         ->assertSuccessful()

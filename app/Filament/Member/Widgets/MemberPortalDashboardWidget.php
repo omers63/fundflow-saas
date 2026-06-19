@@ -18,18 +18,18 @@ class MemberPortalDashboardWidget extends Widget
 
     protected int|string|array $columnSpan = 'full';
 
-    protected ?string $pollingInterval = '60s';
-
-    public function getPollingInterval(): ?string
-    {
-        return $this->pollingInterval;
-    }
+    protected ?string $pollingInterval = null;
 
     /**
      * @return array<string, mixed>
      */
-    public function getData(): array
+    protected function getViewData(): array
     {
-        return app(MemberPortalInsightsService::class)->snapshot(CurrentMember::get());
+        $snapshot = app(MemberPortalInsightsService::class)->snapshot(CurrentMember::get());
+
+        return [
+            'd' => $snapshot,
+            'currency' => $snapshot['currency'] ?? null,
+        ];
     }
 }

@@ -26,9 +26,11 @@ class MyContributionSettingsPage extends Page
 
     protected static ?string $navigationLabel = 'Contribution settings';
 
-    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_SETTINGS;
+    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_SELF_SERVICE;
 
     protected static ?int $navigationSort = MemberNavigation::SORT_CONTRIBUTION_SETTINGS;
+
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?string $slug = 'contribution-settings';
 

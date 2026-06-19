@@ -4,8 +4,11 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\MonthlyStatement;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\MemberPortalInsightsService;
@@ -73,6 +76,13 @@ test('member portal insights snapshot includes greeting and kpis', function () {
     $snapshot = app(MemberPortalInsightsService::class)->snapshot(CurrentMember::get());
 
     expect($snapshot)->toHaveKeys([
+        'notice',
+        'pending_actions',
+        'cash_card',
+        'fund_card',
+        'loan_panel',
+        'eligibility_panel',
+        'expandable',
         'greeting',
         'hero',
         'kpis',
@@ -91,20 +101,24 @@ test('member portal insights snapshot includes greeting and kpis', function () {
         'quick_links',
     ])
         ->and($snapshot['member']['number'])->toBe('MEM-INS01')
-        ->and($snapshot['kpis'])->toHaveCount(8)
+        ->and($snapshot['cash_card'])->toHaveKeys(['balance', 'details_url', 'actions'])
+        ->and($snapshot['fund_card'])->toHaveKeys(['balance', 'headroom_label', 'details_url'])
+        ->and($snapshot['eligibility_panel'])->not->toBeNull()
+        ->and($snapshot['loan_panel'])->toBeNull()
+        ->and($snapshot['expandable'])->toHaveKeys(['insights', 'household', 'guarantor'])
         ->and($snapshot['greeting'])->toHaveKeys([
-                'period_label',
-                'first_name',
-                'name',
-                'fund_name',
-                'date',
-                'subtitle',
-                'avatar_url',
-                'initials',
-                'profile_url',
-                'balances',
-                'pills',
-            ])
+            'period_label',
+            'first_name',
+            'name',
+            'fund_name',
+            'date',
+            'subtitle',
+            'avatar_url',
+            'initials',
+            'profile_url',
+            'balances',
+            'pills',
+        ])
         ->and($snapshot['greeting']['balances'])->toHaveCount(2)
         ->and($snapshot['steps'])->not->toBeEmpty()
         ->and($snapshot['trend'])->toHaveCount(6);
@@ -153,6 +167,44 @@ test('member portal insights show lifetime contribution and repayment totals in 
         ->and($inflowKpi['sub'])->toBe(InsightFormatter::money(4_500.0));
 });
 
+test('member portal emi due notice embeds amount with symbol before digits', function () {
+    $loan = Loan::query()->create([
+        'member_id' => $this->member->id,
+        'amount' => 20_000,
+        'amount_requested' => 20_000,
+        'amount_approved' => 20_000,
+        'amount_disbursed' => 20_000,
+        'interest_rate' => 0,
+        'term_months' => 10,
+        'monthly_repayment' => 2000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => now()->subMonth(),
+        'approved_at' => now()->subMonth(),
+        'disbursed_at' => now()->subMonth(),
+    ]);
+
+    LoanInstallment::query()->create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 2000,
+        'due_date' => now()->addDays(7),
+        'status' => 'pending',
+    ]);
+
+    Setting::set('general', 'currency', 'SAR');
+
+    auth('tenant')->login($this->memberUser);
+    app()->setLocale('ar');
+
+    $snapshot = app(MemberPortalInsightsService::class)->snapshot();
+    $body = (string) ($snapshot['notice']['body'] ?? '');
+
+    expect($snapshot['notice']['title'] ?? null)->toBe(__('EMI payment due soon'))
+        ->and($body)->toContain('ff-member-amount')
+        ->and($body)->toMatch('/ff-sar-symbol[^>]*>.*<\/span><span class="ff-member-amount__digits">2,000\.00<\/span>/s');
+});
+
 test('member portal insights render negative fund and inflow values in red', function () {
     $this->member->cashAccount()->update(['balance' => -700]);
     $this->member->fundAccount()->update(['balance' => -700]);
@@ -188,4 +240,23 @@ test('member portal insights counts unread admin messages', function () {
     $messagesKpi = collect($snapshot['kpis'])->firstWhere('label', __('Messages'));
 
     expect($messagesKpi['value'])->toBe('1');
+});
+
+test('member portal insights formats latest statement period from Y-m string', function () {
+    MonthlyStatement::create([
+        'member_id' => $this->member->id,
+        'period' => '2026-01',
+        'opening_balance' => 0,
+        'total_contributions' => 500,
+        'total_repayments' => 0,
+        'closing_balance' => 500,
+        'generated_at' => now(),
+    ]);
+
+    auth('tenant')->login($this->memberUser);
+    app()->setLocale('en');
+
+    $snapshot = app(MemberPortalInsightsService::class)->snapshot();
+
+    expect($snapshot['latest_statement']['period'] ?? null)->toBe('January 2026');
 });

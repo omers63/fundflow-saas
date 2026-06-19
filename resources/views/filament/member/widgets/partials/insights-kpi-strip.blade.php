@@ -59,7 +59,7 @@
                 <x-ff-stat-line :text="$valueText" @class([
                     'truncate pl-1 text-base font-bold tabular-nums leading-tight sm:text-lg',
                     $card['value_class'] ?? 'text-gray-900 dark:text-white',
-                ])>{{ $card['value'] }}</x-ff-stat-line>
+                ]) />
                 <x-ff-stat-line :text="$subText" class="truncate pl-1 text-[10px] text-gray-400" />
             </{{ $tag }}>
         @endforeach

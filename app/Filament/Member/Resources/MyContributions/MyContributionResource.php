@@ -29,7 +29,7 @@ class MyContributionResource extends Resource
 
     protected static ?string $pluralModelLabel = 'My Contributions';
 
-    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_MY_FINANCE;
+    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_HISTORY;
 
     protected static ?int $navigationSort = MemberNavigation::SORT_CONTRIBUTIONS;
 

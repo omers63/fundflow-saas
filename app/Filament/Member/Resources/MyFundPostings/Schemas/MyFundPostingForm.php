@@ -2,6 +2,7 @@
 
 namespace App\Filament\Member\Resources\MyFundPostings\Schemas;
 
+use App\Models\Tenant\Setting;
 use App\Support\BusinessDay;
 use App\Support\Tenant\CurrentMember;
 use Filament\Forms\Components\DatePicker;
@@ -14,32 +15,34 @@ class MyFundPostingForm
 {
     public static function configure(Schema $schema): Schema
     {
+        $currency = fn (): string => Setting::get('general', 'currency', 'USD');
+
         return $schema
             ->components([
                 DatePicker::make('posting_date')
-                    ->label('Date of Transfer')
+                    ->label(__('Date of transfer'))
                     ->required()
                     ->default(BusinessDay::now())
                     ->maxDate(BusinessDay::now()),
                 TextInput::make('amount')
-                    ->label('Amount')
+                    ->label(__('Amount'))
                     ->numeric()
                     ->required()
                     ->minValue(0.01)
-                    ->prefix('$'),
+                    ->prefix(fn (): string => $currency()),
                 TextInput::make('reference')
-                    ->label('Reference / Receipt Number')
+                    ->label(__('Reference / receipt number'))
                     ->default(fn (): ?string => CurrentMember::get()?->name)
                     ->maxLength(255)
                     ->placeholder(__('e.g. bank transfer reference')),
                 FileUpload::make('attachment')
-                    ->label('Attachment (e.g. transfer receipt)')
+                    ->label(__('Attachment (e.g. transfer receipt)'))
                     ->disk('public')
                     ->directory('fund-postings')
                     ->acceptedFileTypes(['image/*', 'application/pdf'])
                     ->maxSize(5120),
                 Textarea::make('comments')
-                    ->label('Comments / Instructions')
+                    ->label(__('Comments / instructions'))
                     ->rows(3)
                     ->maxLength(1000)
                     ->placeholder(__('Any additional notes for the admin...')),

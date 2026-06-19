@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Tenant;
 
+use App\Filament\Support\MemberDatabaseNotification;
 use App\Models\Tenant\Member;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Collection;
@@ -25,12 +26,13 @@ final class MemberPortalNotificationService
             return false;
         }
 
-        Notification::make()
-            ->title($title)
-            ->body($body)
-            ->icon('heroicon-o-bell')
-            ->iconColor('info')
-            ->sendToDatabase($recipient);
+        MemberDatabaseNotification::send($recipient, function (Notification $notification) use ($title, $body): void {
+            $notification
+                ->title($title)
+                ->body($body)
+                ->icon('heroicon-o-bell')
+                ->iconColor('info');
+        });
 
         return true;
     }

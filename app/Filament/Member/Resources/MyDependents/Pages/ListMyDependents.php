@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyDependents\Pages;
 
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
-use App\Filament\Member\Widgets\MemberDependentsInsightsWidget;
 use App\Filament\Member\Widgets\MyMemberRequestsTableWidget;
 use Filament\Resources\Pages\ListRecords;
 
@@ -23,9 +22,7 @@ class ListMyDependents extends ListRecords
      */
     protected function getHeaderWidgets(): array
     {
-        return [
-            MemberDependentsInsightsWidget::class,
-        ];
+        return [];
     }
 
     public function getHeaderWidgetsColumns(): int|array

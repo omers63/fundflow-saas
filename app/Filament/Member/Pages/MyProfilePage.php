@@ -3,6 +3,7 @@
 namespace App\Filament\Member\Pages;
 
 use App\Filament\Member\Support\ReturnToParentPortalAction;
+use App\Filament\Member\Support\SwitchHouseholdProfileAction;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use BackedEnum;
@@ -86,5 +87,10 @@ class MyProfilePage extends Page
         }
 
         return $actions;
+    }
+
+    public function switchHouseholdProfileAction(): Action
+    {
+        return SwitchHouseholdProfileAction::make();
     }
 }

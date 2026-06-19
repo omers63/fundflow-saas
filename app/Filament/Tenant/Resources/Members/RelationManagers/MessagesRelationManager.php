@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\Members\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
+use App\Filament\Support\MemberDatabaseNotification;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -213,12 +214,13 @@ class MessagesRelationManager extends RelationManager
                         $recipient = $member->user;
 
                         if ($recipient !== null) {
-                            Notification::make()
-                                ->title(__('Reply: :subject', ['subject' => $root->subject ?: __('Message')]))
-                                ->body($admin->name.': '.mb_strimwidth($data['body'], 0, 100, '…'))
-                                ->icon('heroicon-o-chat-bubble-left-right')
-                                ->iconColor('info')
-                                ->sendToDatabase($recipient);
+                            MemberDatabaseNotification::send($recipient, function (Notification $notification) use ($admin, $root, $data): void {
+                                $notification
+                                    ->title(__('Reply: :subject', ['subject' => $root->subject ?: __('Message')]))
+                                    ->body($admin->name.': '.mb_strimwidth($data['body'], 0, 100, '…'))
+                                    ->icon('heroicon-o-chat-bubble-left-right')
+                                    ->iconColor('info');
+                            });
                         }
 
                         Notification::make()

@@ -23,6 +23,7 @@ use App\Filament\Tables\Columns\ToggleColumn as AppToggleColumn;
 use App\Filament\Tables\Columns\ViewColumn as AppViewColumn;
 use App\Filament\Tables\Concerns\CapitalizesTableColumnHeaderLabel;
 use App\Http\Responses\FilamentLogoutResponse;
+use App\Listeners\ApplyMemberNotificationLocaleListener;
 use App\Listeners\LogNotificationDeliveryListener;
 use App\Listeners\RecordSystemJobRunListener;
 use App\Models\Tenant\LoanInstallment;
@@ -63,8 +64,10 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Events\NotificationFailed;
+use Illuminate\Notifications\Events\NotificationSending;
 use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Session\SessionManager;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
@@ -104,11 +107,18 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Blade::anonymousComponentPath(
+            resource_path('views/components/member-portal'),
+            'member',
+        );
+
         LoanInstallment::observe(LoanInstallmentObserver::class);
         Transaction::observe(TransactionObserver::class);
 
         Event::listen(CommandStarting::class, [RecordSystemJobRunListener::class, 'handleStarting']);
         Event::listen(CommandFinished::class, [RecordSystemJobRunListener::class, 'handleFinished']);
+
+        Event::listen(NotificationSending::class, [ApplyMemberNotificationLocaleListener::class, 'handleSending']);
 
         Event::listen(NotificationSent::class, function (NotificationSent $event): void {
             if ($event->channel !== 'database' || ! Filament::hasBroadcasting() || ! config('filament.broadcasting.echo')) {
@@ -123,7 +133,9 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Event::listen(NotificationSent::class, [LogNotificationDeliveryListener::class, 'handleSent']);
+        Event::listen(NotificationSent::class, [ApplyMemberNotificationLocaleListener::class, 'handleSent']);
         Event::listen(NotificationFailed::class, [LogNotificationDeliveryListener::class, 'handleFailed']);
+        Event::listen(NotificationFailed::class, [ApplyMemberNotificationLocaleListener::class, 'handleFailed']);
 
         Column::configureUsing(function (Column $column): Column {
             $column = $column

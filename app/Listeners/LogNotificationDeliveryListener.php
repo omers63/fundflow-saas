@@ -8,6 +8,7 @@ use App\Models\Tenant\NotificationLog;
 use App\Models\Tenant\User;
 use App\Notifications\Channels\SmsChannel;
 use App\Notifications\Channels\WhatsAppChannel;
+use App\Support\MemberLocale;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Events\NotificationFailed;
@@ -59,7 +60,9 @@ class LogNotificationDeliveryListener
         }
 
         $userId = $notifiable instanceof User ? $notifiable->id : null;
-        [$subject, $body] = $this->extractContent($notification, $notifiable, $channel);
+        [$subject, $body] = $notifiable instanceof User
+            ? MemberLocale::using($notifiable, fn (): array => $this->extractContent($notification, $notifiable, $channel))
+            : $this->extractContent($notification, $notifiable, $channel);
 
         NotificationLog::query()->create([
             'user_id' => $userId,

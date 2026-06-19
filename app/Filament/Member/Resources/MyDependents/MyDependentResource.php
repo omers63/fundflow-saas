@@ -31,7 +31,7 @@ class MyDependentResource extends Resource
 
     protected static ?string $pluralModelLabel = 'My dependents';
 
-    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_MY_FINANCE;
+    protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_SELF_SERVICE;
 
     protected static ?int $navigationSort = MemberNavigation::SORT_DEPENDENTS;
 
