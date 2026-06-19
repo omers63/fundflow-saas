@@ -72,7 +72,7 @@ class EditMyProfilePage extends Page implements HasForms
         $user = auth('tenant')->user();
         $member = $this->currentMember();
 
-        if (! $user instanceof User) {
+        if (!$user instanceof User) {
             return;
         }
 
@@ -165,17 +165,17 @@ class EditMyProfilePage extends Page implements HasForms
                             ->dehydrated(false),
                         Toggle::make('set_parent_pin')
                             ->label(__('Set parent PIN'))
-                            ->visible(fn (): bool => $this->currentMember()?->isParent() ?? false),
+                            ->visible(fn(): bool => $this->currentMember()?->isParent() ?? false),
                         TextInput::make('pin')
                             ->label(__('4-digit PIN'))
                             ->password()
                             ->rules(['nullable', 'digits:4'])
-                            ->visible(fn ($get): bool => (bool) $get('set_parent_pin')),
+                            ->visible(fn($get): bool => (bool) $get('set_parent_pin')),
                         TextInput::make('pin_confirmation')
                             ->label(__('Confirm PIN'))
                             ->password()
                             ->same('pin')
-                            ->visible(fn ($get): bool => (bool) $get('set_parent_pin')),
+                            ->visible(fn($get): bool => (bool) $get('set_parent_pin')),
                     ])
                     ->columns(2),
             ]);
@@ -186,7 +186,7 @@ class EditMyProfilePage extends Page implements HasForms
         $member = $this->currentMember();
         $user = auth('tenant')->user();
 
-        if ($member === null || ! $user instanceof User) {
+        if ($member === null || !$user instanceof User) {
             return;
         }
 
@@ -196,7 +196,7 @@ class EditMyProfilePage extends Page implements HasForms
 
         $rawAvatar = $data['avatar'] ?? null;
         if (is_array($rawAvatar)) {
-            $rawAvatar = Arr::first(array_filter(Arr::wrap($rawAvatar), fn ($v) => filled($v)));
+            $rawAvatar = Arr::first(array_filter(Arr::wrap($rawAvatar), fn($v) => filled($v)));
         }
         $newAvatarPath = filled($rawAvatar) ? (string) $rawAvatar : null;
         $newAvatarPath = User::normalizePublicDiskRelativePath($newAvatarPath) ?? $newAvatarPath;
@@ -206,7 +206,7 @@ class EditMyProfilePage extends Page implements HasForms
         }
 
         $preferredLocale = $data['preferred_locale'] ?? $user->preferred_locale;
-        if (! in_array((string) $preferredLocale, ['en', 'ar'], true)) {
+        if (!in_array((string) $preferredLocale, ['en', 'ar'], true)) {
             $preferredLocale = $user->preferred_locale;
         }
 
@@ -267,7 +267,7 @@ class EditMyProfilePage extends Page implements HasForms
                 return;
             }
 
-            if (! is_string($passwordHash) || ! Hash::check($currentPassword, $passwordHash)) {
+            if (!is_string($passwordHash) || !Hash::check($currentPassword, $passwordHash)) {
                 Notification::make()
                     ->title(__('Current password is incorrect.'))
                     ->danger()
