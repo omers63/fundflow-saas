@@ -21,6 +21,7 @@ use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationRe
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\FundAuditLog;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
@@ -127,6 +128,9 @@ final class TenantDashboardService
             'sparkline' => $masterSnapshot['sparkline'] ?? [],
             'sparkline_max' => $masterSnapshot['sparkline_max'] ?? 1,
             'open_period_label' => $openPeriodLabel,
+            'loan_queue_preview' => $this->loanQueuePreview(),
+            'recent_activity' => $this->recentActivity(),
+            'collection_breakdown' => $this->collectionBreakdown($openMonth, $openYear, $activeMembers, $delinquencyCounts),
         ];
     }
 
@@ -589,6 +593,135 @@ final class TenantDashboardService
                 'url' => ReconciliationOverviewPage::getUrl(),
             ],
         ]);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function loanQueuePreview(): array
+    {
+        return Loan::query()
+            ->inQueue()
+            ->with('member')
+            ->orderByDesc('is_emergency')
+            ->orderBy('queue_position')
+            ->limit(5)
+            ->get()
+            ->map(function (Loan $loan): array {
+                $member = $loan->member;
+
+                return [
+                    'id' => $loan->id,
+                    'member_name' => $member?->name ?? '—',
+                    'member_initials' => $member ? mb_strtoupper(
+                        collect(explode(' ', $member->name))
+                            ->filter()
+                            ->map(fn (string $w): string => mb_substr($w, 0, 1))
+                            ->take(2)
+                            ->implode('')
+                    ) : '??',
+                    'amount' => InsightFormatter::money((float) $loan->amount_requested),
+                    'is_emergency' => $loan->is_emergency,
+                    'queue_position' => $loan->queue_position ?? 0,
+                    'url' => LoanResource::getUrl('view', ['record' => $loan]),
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function recentActivity(): array
+    {
+        return FundAuditLog::query()
+            ->with('member')
+            ->latest('occurred_at')
+            ->limit(6)
+            ->get()
+            ->map(function (FundAuditLog $log): array {
+                $member = $log->member;
+                $eventType = $log->event_type ?? '';
+                $domain = $log->domain ?? '';
+
+                $chip = match (true) {
+                    str_contains($eventType, 'loan') || str_contains($domain, 'loan') => ['label' => Lang::ui('Loan'), 'class' => 'ff-chip-blue'],
+                    str_contains($eventType, 'contribution') || str_contains($domain, 'contribution') => ['label' => Lang::ui('Contribution'), 'class' => 'ff-chip-green'],
+                    str_contains($eventType, 'recon') || str_contains($domain, 'recon') => ['label' => Lang::ui('Recon'), 'class' => 'ff-chip-amber'],
+                    str_contains($eventType, 'migration') => ['label' => Lang::ui('Migration'), 'class' => 'ff-chip-purple'],
+                    str_contains($eventType, 'override') => ['label' => Lang::ui('Override'), 'class' => 'ff-chip-amber'],
+                    default => ['label' => Lang::ui('System'), 'class' => 'ff-chip-gray'],
+                };
+
+                $payload = $log->payload ?? [];
+                $description = $payload['description'] ?? $payload['message'] ?? str_replace('_', ' ', ucfirst($eventType));
+
+                return [
+                    'initials' => $member ? mb_strtoupper(
+                        collect(explode(' ', $member->name))
+                            ->filter()
+                            ->map(fn (string $w): string => mb_substr($w, 0, 1))
+                            ->take(2)
+                            ->implode('')
+                    ) : 'SY',
+                    'member_name' => $member?->name ?? Lang::ui('System'),
+                    'description' => $description,
+                    'chip' => $chip,
+                    'time' => $log->occurred_at?->diffForHumans() ?? '',
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * @param  array<string, int>  $delinquencyCounts
+     * @return array<string, mixed>
+     */
+    private function collectionBreakdown(int $month, int $year, int $activeMembers, array $delinquencyCounts): array
+    {
+        if ($activeMembers === 0) {
+            return [
+                'posted_pct' => 0, 'pending_pct' => 0, 'failed_pct' => 0, 'waived_pct' => 0,
+                'posted' => 0, 'pending' => 0, 'failed' => 0, 'waived' => 0,
+                'tier1' => 0, 'tier2' => 0, 'tier3' => 0,
+                'total' => 0,
+            ];
+        }
+
+        $periodDate = Contribution::periodDate($month, $year);
+
+        $statusCounts = Contribution::query()
+            ->where('period', $periodDate)
+            ->selectRaw('status, COUNT(DISTINCT member_id) as cnt')
+            ->groupBy('status')
+            ->pluck('cnt', 'status')
+            ->all();
+
+        $posted = (int) ($statusCounts['posted'] ?? 0);
+        $pending = (int) ($statusCounts['pending'] ?? 0);
+        $failed = (int) ($statusCounts['failed'] ?? 0);
+        $waived = (int) ($statusCounts['waived'] ?? 0);
+
+        $tier1 = (int) Contribution::query()->where('period', $periodDate)->where('late_fee_tier', 1)->count();
+        $tier2 = (int) Contribution::query()->where('period', $periodDate)->where('late_fee_tier', 2)->count();
+        $tier3 = (int) Contribution::query()->where('period', $periodDate)->where('late_fee_tier', '>=', 3)->count();
+
+        $total = max(1, $activeMembers);
+
+        return [
+            'posted_pct' => min(100, round(($posted / $total) * 100)),
+            'pending_pct' => min(100, round(($pending / $total) * 100)),
+            'failed_pct' => min(100, round(($failed / $total) * 100)),
+            'waived_pct' => min(100, round(($waived / $total) * 100)),
+            'posted' => $posted,
+            'pending' => $pending,
+            'failed' => $failed,
+            'waived' => $waived,
+            'tier1' => $tier1,
+            'tier2' => $tier2,
+            'tier3' => $tier3,
+            'total' => $activeMembers,
+        ];
     }
 
     /**
