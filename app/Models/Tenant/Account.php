@@ -127,22 +127,19 @@ class Account extends Model
 
     public static function ensureMasterSuspense(): self
     {
-        $existing = static::masterSuspense();
+        static::ensureDefaultMasterAccounts();
 
-        if ($existing !== null) {
-            if ($existing->name !== 'Master Suspense') {
-                $existing->update(['name' => 'Master Suspense']);
-            }
+        $suspense = static::masterSuspense();
 
-            return $existing->fresh();
+        if ($suspense === null) {
+            throw new \RuntimeException('Master suspense account is not configured.');
         }
 
-        return static::create([
-            'type' => 'suspense',
-            'name' => 'Master Suspense',
-            'balance' => 0,
-            'is_master' => true,
-        ]);
+        if ($suspense->name !== 'Master Suspense') {
+            $suspense->update(['name' => 'Master Suspense']);
+        }
+
+        return $suspense->fresh();
     }
 
     /**
@@ -150,11 +147,20 @@ class Account extends Model
      */
     public function displayLabel(): string
     {
-        if ($this->is_master && $this->type === 'suspense') {
-            return __('Master Suspense');
+        if (! $this->is_master) {
+            return $this->name;
         }
 
-        return $this->name;
+        return match ($this->type) {
+            'cash' => __('Master Cash'),
+            'fund' => __('Master Fund'),
+            'bank' => __('Master Bank'),
+            'expense' => __('Master Expense'),
+            'fees' => __('Master Fees'),
+            'invest' => __('Master Invest'),
+            'suspense' => __('Master Suspense'),
+            default => $this->name,
+        };
     }
 
     /**

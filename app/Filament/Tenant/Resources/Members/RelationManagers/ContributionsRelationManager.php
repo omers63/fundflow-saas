@@ -27,7 +27,7 @@ class ContributionsRelationManager extends RelationManager
 
     protected static string $relationship = 'contributions';
 
-    protected static ?string $title = 'Contributions';
+    protected static ?string $title = 'Cycle history';
 
     public function table(Table $table): Table
     {

@@ -8,16 +8,25 @@ use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Concerns\HidesFromTenantSidebar;
+use App\Filament\Tenant\Resources\SupportRequests\SupportRequestResource;
 use App\Filament\Tenant\Support\TenantNavigation;
+use App\Filament\Tenant\Support\TenantPortalViewModal;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\MemberAnnouncement;
 use App\Models\Tenant\User;
 use App\Services\Tenant\DirectMessagingService;
+use App\Services\Tenant\MemberAnnouncementService;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
+use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -32,6 +41,7 @@ use Illuminate\Support\Collection;
 
 class MessagesInboxPage extends Page implements HasTable
 {
+    use HidesFromTenantSidebar;
     use InteractsWithTable;
     use TranslatesPageNavigationLabel;
 
@@ -81,24 +91,83 @@ class MessagesInboxPage extends Page implements HasTable
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('message_all_members')
-                ->label(__('Message all members'))
-                ->icon('heroicon-o-megaphone')
-                ->color('primary')
-                ->modalHeading(__('Send message to all members'))
-                ->modalDescription(fn (): string => __('This sends the same message (and attachments) to every member who has a login account. Currently: ')
-                    .Member::query()->whereNotNull('user_id')->count()
-                    .' '.__('member(s).'))
-                ->modalWidth('lg')
-                ->schema($this->bulkMessageFormSchema())
-                ->action(function (array $data): void {
-                    $members = Member::query()
-                        ->whereNotNull('user_id')
-                        ->with('user')
-                        ->get();
+            Action::make('support_requests')
+                ->label(__('Support requests'))
+                ->icon('heroicon-o-lifebuoy')
+                ->color('gray')
+                ->url(SupportRequestResource::getUrl()),
+            TenantPortalViewModal::applyToForm(
+                Action::make('compose_announcement')
+                    ->label(__('Compose announcement'))
+                    ->icon('heroicon-o-megaphone')
+                    ->color('primary')
+                    ->modalHeading(__('Compose member announcement'))
+                    ->modalDescription(__('Broadcast a bilingual message to a member audience via in-app, SMS, and/or email.'))
+                    ->modalWidth('3xl')
+                    ->schema($this->announcementFormSchema())
+                    ->action(function (array $data): void {
+                        $admin = auth('tenant')->user();
 
-                    $this->sendMessageToMembersCollection($members, $data);
-                }),
+                        if (! $admin instanceof User) {
+                            return;
+                        }
+
+                        try {
+                            $announcement = app(MemberAnnouncementService::class)->createAndDispatch($admin, [
+                                'audience' => (string) ($data['audience'] ?? MemberAnnouncement::AUDIENCE_ALL_ACTIVE),
+                                'title_en' => (string) ($data['title_en'] ?? ''),
+                                'title_ar' => $data['title_ar'] ?? null,
+                                'body_en' => (string) ($data['body_en'] ?? ''),
+                                'body_ar' => $data['body_ar'] ?? null,
+                                'channels' => array_values($data['channels'] ?? []),
+                                'scheduled_for' => $data['scheduled_for'] ?? null,
+                            ]);
+                        } catch (\InvalidArgumentException $exception) {
+                            Notification::make()->title($exception->getMessage())->danger()->send();
+
+                            return;
+                        }
+
+                        if ($announcement->scheduled_for !== null && $announcement->sent_at === null) {
+                            Notification::make()
+                                ->title(__('Announcement scheduled'))
+                                ->body(__('Scheduled for :at', ['at' => $announcement->scheduled_for->toDayDateTimeString()]))
+                                ->success()
+                                ->send();
+
+                            return;
+                        }
+
+                        Notification::make()
+                            ->title(__('Announcement sent'))
+                            ->body(__('Delivered to :count of :total member(s).', [
+                                'count' => $announcement->delivered_count,
+                                'total' => $announcement->recipient_count,
+                            ]))
+                            ->success()
+                            ->send();
+                    }),
+            ),
+            TenantPortalViewModal::applyToForm(
+                Action::make('message_all_members')
+                    ->label(__('Message all members'))
+                    ->icon('heroicon-o-megaphone')
+                    ->color('primary')
+                    ->modalHeading(__('Send message to all members'))
+                    ->modalDescription(fn (): string => __('This sends the same message (and attachments) to every member who has a login account. Currently: ')
+                        .Member::query()->whereNotNull('user_id')->count()
+                        .' '.__('member(s).'))
+                    ->modalWidth('lg')
+                    ->schema($this->bulkMessageFormSchema())
+                    ->action(function (array $data): void {
+                        $members = Member::query()
+                            ->whereNotNull('user_id')
+                            ->with('user')
+                            ->get();
+
+                        $this->sendMessageToMembersCollection($members, $data);
+                    }),
+            ),
         ];
     }
 
@@ -190,56 +259,58 @@ class MessagesInboxPage extends Page implements HasTable
                     ->placeholder(__('No messages yet')),
             ])
             ->recordActions(TableRecordActionGroups::wrap([
-                Action::make('communicate')
-                    ->label(__('Communicate'))
-                    ->icon('heroicon-o-chat-bubble-left-right')
-                    ->color('primary')
-                    ->disabled(fn (Member $record): bool => blank($record->user_id))
-                    ->modalHeading(fn (Member $record): string => __('Conversation with :name', ['name' => $record->user?->name ?? __('Member')]))
-                    ->modalDescription(__('Single communication thread with full history.'))
-                    ->modalWidth('5xl')
-                    ->modalSubmitActionLabel(__('Send message'))
-                    ->modalContent(fn (Member $record) => view(
-                        'filament.tenant.pages.partials.member-conversation-modal',
-                        [
-                            'messages' => $this->conversationMessages($record),
-                            'userId' => auth('tenant')->id(),
-                        ]
-                    ))
-                    ->schema([
-                        Textarea::make('body')
-                            ->label(__('Message'))
-                            ->rows(4)
-                            ->required()
-                            ->maxLength(3000),
-                        FileUpload::make('attachments')
-                            ->label(__('Attachments'))
-                            ->multiple()
-                            ->disk('public')
-                            ->directory('direct-messages')
-                            ->openable()
-                            ->downloadable()
-                            ->maxFiles(5),
-                    ])
-                    ->action(function (Action $action, Member $record, array $data): void {
-                        $admin = auth('tenant')->user();
+                TenantPortalViewModal::applyToForm(
+                    Action::make('communicate')
+                        ->label(__('Communicate'))
+                        ->icon('heroicon-o-chat-bubble-left-right')
+                        ->color('primary')
+                        ->disabled(fn (Member $record): bool => blank($record->user_id))
+                        ->modalHeading(fn (Member $record): string => __('Conversation with :name', ['name' => $record->user?->name ?? __('Member')]))
+                        ->modalDescription(__('Single communication thread with full history.'))
+                        ->modalWidth('5xl')
+                        ->modalSubmitActionLabel(__('Send message'))
+                        ->modalContent(fn (Member $record) => view(
+                            'filament.tenant.pages.partials.member-conversation-modal',
+                            [
+                                'messages' => $this->conversationMessages($record),
+                                'userId' => auth('tenant')->id(),
+                            ]
+                        ))
+                        ->schema([
+                            Textarea::make('body')
+                                ->label(__('Message'))
+                                ->rows(4)
+                                ->required()
+                                ->maxLength(3000),
+                            FileUpload::make('attachments')
+                                ->label(__('Attachments'))
+                                ->multiple()
+                                ->disk('public')
+                                ->directory('direct-messages')
+                                ->openable()
+                                ->downloadable()
+                                ->maxFiles(5),
+                        ])
+                        ->action(function (Action $action, Member $record, array $data): void {
+                            $admin = auth('tenant')->user();
 
-                        if (! $admin instanceof User) {
-                            return;
-                        }
+                            if (! $admin instanceof User) {
+                                return;
+                            }
 
-                        $attachments = is_array($data['attachments'] ?? null) ? $data['attachments'] : [];
+                            $attachments = is_array($data['attachments'] ?? null) ? $data['attachments'] : [];
 
-                        $this->messaging()->sendAdminToMember(
-                            $record,
-                            $admin,
-                            (string) ($data['body'] ?? ''),
-                            $attachments,
-                        );
+                            $this->messaging()->sendAdminToMember(
+                                $record,
+                                $admin,
+                                (string) ($data['body'] ?? ''),
+                                $attachments,
+                            );
 
-                        $action->data(['body' => '', 'attachments' => []], shouldMutate: false);
-                        $action->halt();
-                    }),
+                            $action->data(['body' => '', 'attachments' => []], shouldMutate: false);
+                            $action->halt();
+                        }),
+                ),
                 Action::make('delete_conversation')
                     ->label(__('Delete conversation'))
                     ->icon('heroicon-o-trash')
@@ -310,6 +381,55 @@ class MessagesInboxPage extends Page implements HasTable
             ]))
             ->emptyStateHeading(__('No members found'))
             ->emptyStateDescription(__('Members will appear here once they have portal accounts.')), TableGrouping::members());
+    }
+
+    /**
+     * @return array<int, Select|TextInput|Textarea|CheckboxList|DateTimePicker>
+     */
+    protected function announcementFormSchema(): array
+    {
+        $announcements = app(MemberAnnouncementService::class);
+
+        return [
+            Select::make('audience')
+                ->label(__('Recipients'))
+                ->options(MemberAnnouncement::audienceOptions())
+                ->default(MemberAnnouncement::AUDIENCE_ALL_ACTIVE)
+                ->required()
+                ->live()
+                ->helperText(fn (?string $state): string => $state === null
+                    ? ''
+                    : __('Matches :count member(s) with portal accounts.', [
+                        'count' => $announcements->previewCount($state),
+                    ])),
+            TextInput::make('title_en')
+                ->label(__('Message title (English)'))
+                ->required()
+                ->maxLength(150),
+            TextInput::make('title_ar')
+                ->label(__('Message title (Arabic)'))
+                ->maxLength(150),
+            Textarea::make('body_en')
+                ->label(__('Message body (English)'))
+                ->rows(4)
+                ->required()
+                ->maxLength(5000),
+            Textarea::make('body_ar')
+                ->label(__('Message body (Arabic)'))
+                ->rows(4)
+                ->maxLength(5000),
+            CheckboxList::make('channels')
+                ->label(__('Delivery channels'))
+                ->options(MemberAnnouncement::channelOptions())
+                ->default([MemberAnnouncement::CHANNEL_IN_APP])
+                ->required()
+                ->columns(3),
+            DateTimePicker::make('scheduled_for')
+                ->label(__('Schedule for'))
+                ->native(false)
+                ->minDate(now())
+                ->helperText(__('Leave empty to send immediately.')),
+        ];
     }
 
     /**

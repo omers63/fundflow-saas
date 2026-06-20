@@ -4,10 +4,7 @@
     $delivery = $d['delivery'];
     $latest = $d['latest_period'];
     $maxPeriod = max(1, collect($d['period_breakdown'])->max('count'));
-    $sparkMax = max(1, max($d['sparkline']));
     $currency = $delivery['currency'];
-    $accentBar = ['amber' => 'bg-amber-500', 'emerald' => 'bg-emerald-500', 'rose' => 'bg-rose-500', 'sky' => 'bg-sky-500', 'violet' => 'bg-violet-500', 'teal' => 'bg-teal-500'];
-    $accentIcon = ['amber' => 'text-amber-500', 'emerald' => 'text-emerald-500', 'rose' => 'text-rose-500', 'sky' => 'text-sky-500', 'violet' => 'text-violet-500', 'teal' => 'text-teal-500'];
     $kpis = [
         ['key' => 'pending', 'label' => __('Unsent'), 'value' => $d['pending_notify'], 'sub' => __('Notify'), 'icon' => 'heroicon-o-envelope', 'accent' => 'amber', 'active' => $d['pending_notify'] > 0],
         ['key' => 'notified', 'label' => __('Sent'), 'value' => $d['notified'], 'sub' => __(':percent%', ['percent' => $d['notify_rate']]), 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => true],
@@ -18,97 +15,21 @@
     ];
 @endphp
 
-<div class="ff-app-insights w-full max-w-none space-y-3 mb-1">
-    <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <div @class([
-            'ff-app-insights-hero overflow-hidden rounded-xl border px-3 py-2.5 shadow-sm lg:col-span-1',
-            'border-amber-200/80 bg-gradient-to-r from-amber-50 to-emerald-50/80 dark:border-amber-500/30 dark:from-amber-950/40 dark:to-emerald-950/20' => $d['needs_attention'] > 0,
-            'border-emerald-200/70 bg-gradient-to-r from-emerald-50 to-teal-50/60 dark:border-emerald-500/25 dark:from-emerald-950/30 dark:to-teal-950/20' => $d['needs_attention'] === 0,
-        ])>
-            <div class="flex items-center justify-between gap-2">
-                @if ($d['needs_attention'] > 0)
-                    <div class="flex min-w-0 items-center gap-2">
-                        <x-heroicon-o-document-chart-bar class="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                        <div class="min-w-0">
-                            <p class="truncate text-xs font-semibold text-amber-900 dark:text-amber-100">
-                                {{ __('Statements need your attention') }}</p>
-                            <p class="truncate text-[11px] text-gray-600 dark:text-gray-400">
-                                {{ trans_choice(':count unsent|:count unsent', $d['pending_notify'], ['count' => $d['pending_notify']]) }}
-                                @if ($latest['missing'] > 0)
-                                    · {{ trans_choice(':count missing|:count missing', $latest['missing'], ['count' => $latest['missing']]) }}
-                                @endif
-                                · {{ number_format($latest['contrib_sum'], 0) }} {{ $currency }}
-                                @if ($d['pending_notify'] > 0)
-                                    · <span
-                                        class="text-red-600 dark:text-red-400">{{ trans_choice(':count unsent|:count unsent', $d['pending_notify'], ['count' => $d['pending_notify']]) }}</span>
-                                @endif
-                            </p>
-                        </div>
-                    </div>
-                    <a href="{{ $pipeline['statements_url'] }}"
-                        class="shrink-0 rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-500 dark:bg-amber-500">
-                        {{ __('Review') }}
-                    </a>
-                @else
-                    <div class="flex items-center gap-2">
-                        <x-heroicon-o-check-badge class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                        <p class="text-xs font-semibold text-gray-900 dark:text-white">{{ __('Delivery on track') }}</p>
-                    </div>
-                @endif
-            </div>
-        </div>
+@php
+    $stmtSub = trans_choice(':count unsent', $d['pending_notify'], ['count' => $d['pending_notify']]);
+    if ($latest['missing'] > 0) {
+        $stmtSub .= ' · ' . trans_choice(':count missing', $latest['missing'], ['count' => $latest['missing']]);
+    }
+    $hero = $d['needs_attention'] > 0
+        ? ['title' => __('Statements need your attention'), 'subtitle' => $stmtSub, 'tone' => 'amber', 'cta_url' => $pipeline['statements_url'], 'cta_label' => __('Review')]
+        : ['title' => __('Delivery on track'), 'subtitle' => __('All statements sent for this period'), 'tone' => 'success'];
+@endphp
 
-        <div
-            class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 lg:col-span-2">
-            <div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-6">
-                @foreach ($kpis as $i => $card)
-                    @php
-                        $barClass = $accentBar[$card['accent']] ?? 'bg-gray-400';
-                        $iconClass = $accentIcon[$card['accent']] ?? 'text-gray-400';
-                        $barOpacity = $card['active'] ? 'opacity-100' : 'opacity-25';
-                    @endphp
-                    @php
-                        $labelText = ui_label($card['label']);
-                        $subText = ui_label($card['sub']);
-                        $valueText = (string) $card['value'];
-                        if (! empty($card['suffix'] ?? null)) {
-                            $valueText .= ' '.$card['suffix'];
-                        }
-                    @endphp
-                    <div class="ff-app-insights-kpi relative min-w-0 px-2.5 py-2 transition hover:bg-gray-50/80 dark:hover:bg-gray-800/60"
-                        style="animation: ff-stat-in 0.35s ease-out {{ 0.02 + ($i * 0.03) }}s both">
-                        <div @class(['absolute inset-y-0 left-0 w-0.5', $barClass, $barOpacity])></div>
-                        <div class="flex items-center justify-between gap-1 pl-1">
-                            <x-dynamic-component :component="$card['icon']" @class(['h-3.5 w-3.5', $iconClass]) />
-                            @if ($card['key'] === 'new' && isset($card['mom']) && $card['mom'] !== null)
-                                <span @class([
-                                    'text-[9px] font-bold',
-                                    'text-emerald-600 dark:text-emerald-400' => $card['mom'] >= 0,
-                                    'text-rose-600 dark:text-rose-400' => $card['mom'] < 0,
-                                ])>{{ $card['mom'] >= 0 ? '↑' : '↓' }}{{ abs($card['mom']) }}%</span>
-                            @endif
-                        </div>
-                        <x-ff-stat-line :text="$labelText"
-                            class="mt-0.5 truncate pl-1 text-[10px] font-medium uppercase tracking-wide text-gray-500" />
-                        <x-ff-stat-line :text="$valueText"
-                            class="truncate pl-1 text-lg font-bold tabular-nums leading-tight text-gray-900 dark:text-white">
-                            {{ $card['value'] }}@if (! empty($card['suffix'] ?? null))<span
-                                    class="text-[10px] font-normal text-gray-400">{{ $card['suffix'] }}</span>@endif
-                        </x-ff-stat-line>
-                        <x-ff-stat-line :text="$subText" class="truncate pl-1 text-[10px] text-gray-400" />
-                    </div>
-                @endforeach
-            </div>
-            @if (collect($d['sparkline'])->sum() > 0)
-                <div class="flex h-5 items-end gap-px border-t border-gray-100 px-2 py-1 dark:border-gray-700">
-                    @foreach ($d['sparkline'] as $point)
-                        @php $h = max(20, (int) round(($point / $sparkMax) * 100)); @endphp
-                        <div class="flex-1 rounded-sm bg-indigo-400/70 dark:bg-indigo-500/60" style="height: {{ $h }}%"></div>
-                    @endforeach
-                </div>
-            @endif
-        </div>
-    </div>
+<div class="ff-app-insights w-full max-w-none space-y-3 mb-1">
+    @include('filament.tenant.widgets.partials.insights-head', [
+        'hero' => $hero,
+        'kpis' => $kpis,
+    ])
 
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div
@@ -122,7 +43,7 @@
                 </div>
                 @if ($latest['contrib_sum'] > 0)
                     <span class="text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
-                        {{ number_format($latest['contrib_sum'], 0) }} {{ $currency }} {{ __('this mo') }}
+                        <x-member::amount :value="$latest['contrib_sum']" :currency="$currency" :precision="0" class="inline" /> {{ __('this mo') }}
                     </span>
                 @endif
             </div>
@@ -178,8 +99,7 @@
                             {{ __('Latest period') }}</p>
                     </div>
                     <p class="mt-1.5 text-lg font-bold tabular-nums text-gray-900 dark:text-white">
-                        {{ number_format($latest['contrib_sum'], 0) }} <span
-                            class="text-[10px] font-normal text-gray-400">{{ $currency }}</span>
+                        <x-member::amount :value="$latest['contrib_sum']" :currency="$currency" :precision="0" />
                     </p>
                     <p class="text-[10px] text-gray-400">
                         {{ trans_choice(':count generated|:count generated', $latest['count'], ['count' => $latest['count']]) }}

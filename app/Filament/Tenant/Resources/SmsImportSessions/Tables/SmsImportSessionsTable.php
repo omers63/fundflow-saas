@@ -9,6 +9,7 @@ use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\SmsTransactions\SmsTransactionResource;
+use App\Filament\Tenant\Support\ViewSmsImportSessionAction;
 use App\Models\Tenant\SmsImportSession;
 use App\Models\Tenant\SmsImportTemplate;
 use App\Models\Tenant\SmsTransaction;
@@ -18,7 +19,6 @@ use App\Support\Lang;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
@@ -29,16 +29,13 @@ use Filament\Tables\Table;
 
 final class SmsImportSessionsTable
 {
-    public static function configure(Table $table, bool $embedInBankWorkspace = false, ?Closure $afterImport = null): Table
+    public static function configure(Table $table, bool $embedInBankWorkspace = false, ?Closure $afterImport = null, bool $includeImportHeaderAction = true): Table
     {
-        return TableGrouping::apply($table
+        $table = TableGrouping::apply($table
             ->heading($embedInBankWorkspace ? null : __('SMS import history'))
             ->description($embedInBankWorkspace
                 ? __('Monitor SMS import batches with counts, errors, and completion state.')
                 : null)
-            ->headerActions([
-                BankWorkspaceImportTableHeaderActions::smsImportAction($afterImport),
-            ])
             ->columns([
                 TextColumn::make('bank_name')
                     ->label(__('Bank'))
@@ -126,7 +123,7 @@ final class SmsImportSessionsTable
                 TrashedFilter::make(),
             ])
             ->recordActions(TableRecordActionGroups::wrap([
-                ViewAction::make(),
+                ViewSmsImportSessionAction::make(),
                 Action::make('viewTransactions')
                     ->label(__('Transactions'))
                     ->icon('heroicon-o-table-cells')
@@ -172,5 +169,13 @@ final class SmsImportSessionsTable
                     TableToolbar::refreshBulkAction(),
                 ]),
             ]), TableGrouping::smsImportSessions());
+
+        if ($includeImportHeaderAction) {
+            $table->headerActions([
+                BankWorkspaceImportTableHeaderActions::smsImportAction($afterImport),
+            ]);
+        }
+
+        return $table;
     }
 }

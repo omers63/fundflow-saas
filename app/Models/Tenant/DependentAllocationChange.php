@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models\Tenant;
 
+use App\Filament\Support\MoneyDisplay;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -61,6 +62,6 @@ class DependentAllocationChange extends Model
         $delta = $this->delta();
         $prefix = $delta > 0 ? '+' : '';
 
-        return $prefix.number_format(abs($delta), 0).' '.$currency;
+        return $prefix.(MoneyDisplay::format(abs($delta), $currency, precision: 0) ?? '');
     }
 }

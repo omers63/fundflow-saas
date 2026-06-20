@@ -7,12 +7,14 @@ use App\Filament\Support\MoneyDisplay;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Support\ViewAccountTransactionAction as TenantViewAccountTransactionAction;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Support\MemberDateDisplay;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
@@ -42,7 +44,7 @@ final class ViewAccountTransactionAction
                     'signed_amount_display' => MoneyDisplay::format($record->getSignedAmount(), $currency),
                     'balance_after_display' => MoneyDisplay::format((float) $record->balance_after, $currency),
                     'type_display' => Transaction::typeLabel($record->type),
-                    'account_name' => $record->account?->name,
+                    'account_name' => $record->account?->displayLabel(),
                     'member_tag' => $record->member?->name,
                     'reference_summary' => $record->bankImportSummary() ?? $record->referenceSummary(),
                     'created_at_display' => $record->created_at?->format('M j, Y g:i A'),
@@ -73,7 +75,7 @@ final class ViewAccountTransactionAction
         $currency = Setting::get('general', 'currency', 'USD');
 
         $heading = $record->memberFacingDescription();
-        $transactedAt = MemberDateDisplay::format($record->transacted_at, 'M j, Y g:i A') ?? '—';
+        $transactedAt = MemberDateDisplay::format($record->transacted_at, 'M j, Y g:i A') ?? __('—');
         $signedAmount = MoneyDisplay::format($record->getSignedAmount(), $currency);
         $balanceAfter = MoneyDisplay::format((float) $record->balance_after, $currency);
         $reference = $record->bankImportSummary();
@@ -173,7 +175,11 @@ final class ViewAccountTransactionAction
 
     public static function configure(Table $table, bool $editable = true, bool $memberPortal = false): Table
     {
-        $viewAction = $memberPortal ? self::makeForMemberPortal() : self::make();
+        $viewAction = match (true) {
+            $memberPortal => self::makeForMemberPortal(),
+            Filament::getCurrentPanel()?->getId() === 'tenant' => TenantViewAccountTransactionAction::make(),
+            default => self::make(),
+        };
 
         $actions = $editable
             ? [

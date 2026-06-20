@@ -9,6 +9,7 @@ use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Support\ViewMemberRequestAction;
 use App\Models\Tenant\MemberRequest;
 use App\Services\Tenant\MemberRequestService;
 use Filament\Actions\Action;
@@ -22,7 +23,6 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Grouping\Group;
 use Filament\Tables\Table;
-use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Validation\ValidationException;
@@ -90,17 +90,7 @@ final class MemberRequestsTable
                 ])
                 ->defaultSort('created_at', 'desc')
                 ->recordActions(TableRecordActionGroups::wrap([
-                    Action::make('viewPayload')
-                        ->label(__('Details'))
-                        ->icon('heroicon-o-eye')
-                        ->color('gray')
-                        ->modalHeading(__('Request payload'))
-                        ->modalSubmitAction(false)
-                        ->modalCancelActionLabel(__('Close'))
-                        ->modalContent(fn (MemberRequest $record): View => view(
-                            'filament.tenant.components.member-request-payload',
-                            ['record' => $record],
-                        )),
+                    ViewMemberRequestAction::make(),
                     Action::make('approve')
                         ->label(__('Approve'))
                         ->icon('heroicon-o-check-circle')

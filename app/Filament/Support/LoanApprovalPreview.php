@@ -25,7 +25,7 @@ final class LoanApprovalPreview
         if ($loanTier === null) {
             return new HtmlString(
                 '<div class="rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700 dark:border-danger-500/30 dark:bg-danger-500/10 dark:text-danger-400">'
-                .e(__('No loan tier covers :amount. Adjust loan tiers before approving.', ['amount' => number_format($previewApproved, 2).' '.$currency]))
+                .e(__('No loan tier covers :amount. Adjust loan tiers before approving.', ['amount' => MoneyDisplay::format($previewApproved, $currency) ?? '']))
                 .'</div>'
             );
         }
@@ -52,14 +52,14 @@ final class LoanApprovalPreview
         $rows = [
             [__('Loan tier'), $loanTier->label],
             [__('Fund tier'), $fundTierLabel],
-            [__('Fund tier pool'), number_format($declaredPool, 2).' '.$currency],
-            [__('Master fund balance'), number_format($masterFundBal, 2).' '.$currency],
+            [__('Fund tier pool'), MoneyDisplay::format($declaredPool, $currency) ?? ''],
+            [__('Master fund balance'), MoneyDisplay::format($masterFundBal, $currency) ?? ''],
             [__('Funding strategy'), LoanFundingStrategy::options()[$strategy] ?? $strategy],
-            [__('Member fund balance'), number_format($fundBal, 2).' '.$currency],
-            [__('Member portion'), number_format($memberPortion, 2).' '.$currency],
-            [__('Master portion'), number_format($masterPortion, 2).' '.$currency],
-            [__('Settlement top-up (:pct%)', ['pct' => $threshold * 100]), number_format($settleAmt, 2).' '.$currency],
-            [__('Monthly installment'), number_format($minInstall, 2).' '.$currency],
+            [__('Member fund balance'), MoneyDisplay::format($fundBal, $currency) ?? ''],
+            [__('Member portion'), MoneyDisplay::format($memberPortion, $currency) ?? ''],
+            [__('Master portion'), MoneyDisplay::format($masterPortion, $currency) ?? ''],
+            [__('Settlement top-up (:pct%)', ['pct' => $threshold * 100]), MoneyDisplay::format($settleAmt, $currency) ?? ''],
+            [__('Monthly installment'), MoneyDisplay::format($minInstall, $currency) ?? ''],
             [__('Repayment period'), __(':count months', ['count' => $count])],
         ];
 

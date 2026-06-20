@@ -1,0 +1,64 @@
+/**
+ * Shared SAR / money display — member + tenant panels.
+ * Symbol is always rendered before Western digits (dir="ltr" on amount spans).
+ */
+
+.ff-sar-symbol {
+    flex-shrink: 0;
+    line-height: 1;
+    font-weight: 700;
+}
+
+.ff-sar-symbol--code {
+    font-family: inherit;
+    font-size: 0.62em;
+    letter-spacing: 0.05em;
+    font-weight: 700;
+    transform: translateY(0.14em);
+}
+
+.ff-sar-symbol--glyph {
+    font-family: 'Noto Sans Symbols 2', var(--ff-font-arabic, inherit), sans-serif;
+    font-size: 0.82em;
+    font-weight: 600;
+    transform: translateY(0.06em);
+}
+
+.ff-member-amount-wrap {
+    display: inline-block;
+}
+
+.ff-member-amount {
+    display: inline-flex;
+    flex-direction: row;
+    direction: ltr;
+    unicode-bidi: isolate;
+    align-items: baseline;
+    gap: 0.25em;
+    white-space: nowrap;
+    text-align: left;
+}
+
+.ff-member-amount__digits {
+    font-variant-numeric: tabular-nums;
+}
+
+.ff-member-amount--danger {
+    color: var(--ff-danger, #e24b4a);
+}
+
+.ff-member-amount--success {
+    color: var(--ff-success, #1d9e75);
+}
+
+/* Stat / insight cards: clip long amounts instead of overflowing the grid cell */
+.ff-app-insights .ff-member-amount {
+    max-width: 100%;
+    min-width: 0;
+}
+
+.ff-app-insights .ff-member-amount__digits {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

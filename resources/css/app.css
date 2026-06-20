@@ -243,13 +243,14 @@
     }
 
     .member-login-card--admin .member-login-submit {
-        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-        box-shadow: 0 4px 14px rgb(2 132 199 / 0.35);
+        background: #0284c7;
+        box-shadow: none;
     }
 
     .member-login-card--admin .member-login-submit:hover:not(:disabled) {
-        background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
-        box-shadow: 0 6px 18px rgb(2 132 199 / 0.4);
+        background: #0369a1;
+        box-shadow: none;
+        transform: none;
     }
 
     .member-login-card--admin .member-login-links__accent {

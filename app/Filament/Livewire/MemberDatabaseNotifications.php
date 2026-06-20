@@ -6,7 +6,7 @@ namespace App\Filament\Livewire;
 
 use App\Support\StoredNotificationTranslator;
 use Carbon\CarbonInterface;
-use Filament\Notifications\Livewire\DatabaseNotifications;
+use Filament\Livewire\DatabaseNotifications;
 use Filament\Notifications\Notification;
 use Illuminate\Notifications\DatabaseNotification;
 

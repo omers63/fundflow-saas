@@ -36,6 +36,8 @@ class ReconciliationExceptionsTable
                     ->color(fn (string $state): string => match ($state) {
                         'critical' => 'danger',
                         'high' => 'warning',
+                        'medium' => 'info',
+                        'low' => 'gray',
                         default => 'gray',
                     }),
                 TextColumn::make('amount_delta')
@@ -47,6 +49,16 @@ class ReconciliationExceptionsTable
                 TextColumn::make('sla_deadline')
                     ->dateTime()
                     ->placeholder(__('—')),
+                TextColumn::make('resolved_at')
+                    ->label(__('Resolved at'))
+                    ->dateTime()
+                    ->placeholder(__('—'))
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('resolution_notes')
+                    ->label(__('Resolution notes'))
+                    ->placeholder(__('—'))
+                    ->wrap()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('raised_at')
                     ->dateTime()
                     ->sortable(),

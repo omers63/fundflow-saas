@@ -44,11 +44,12 @@ class TenantPanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Sky,
             ])
-            ->brandName(fn(): string => PublicPageSettings::fundName(tenant('name')))
-            ->favicon(fn(): string => PublicPageSettings::fundLogoUrl())
-            ->brandLogo(fn(): string => PublicPageSettings::fundPanelBrandLogoUrl())
-            ->darkModeBrandLogo(fn(): string => PublicPageSettings::fundPanelBrandLogoUrl())
+            ->brandName(fn (): string => PublicPageSettings::fundName(tenant('name')))
+            ->favicon(fn (): string => PublicPageSettings::fundLogoUrl())
+            ->brandLogo(fn (): string => PublicPageSettings::fundPanelBrandLogoUrl())
+            ->darkModeBrandLogo(fn (): string => PublicPageSettings::fundPanelBrandLogoUrl())
             ->brandLogoHeight(PublicPageSettings::BRAND_LOGO_HEIGHT)
+            ->sidebarWidth('13rem')
             ->sidebarCollapsibleOnDesktop()
             ->sidebarFullyCollapsibleOnDesktop()
             ->navigationGroups(TenantNavigation::navigationGroups())
@@ -62,15 +63,18 @@ class TenantPanelProvider extends PanelProvider
             ->widgets([])
             ->databaseNotifications(isLazy: false)
             ->databaseNotificationsPolling(DatabaseNotificationsRefresh::panelPollingInterval())
-            ->renderHook(PanelsRenderHook::FOOTER, fn(): HtmlString => new HtmlString(
+            ->renderHook(PanelsRenderHook::GLOBAL_SEARCH_AFTER, fn (): HtmlString => new HtmlString(
+                view('filament.tenant.partials.topbar-admin-shortcuts')->render()
+            ))
+            ->renderHook(PanelsRenderHook::FOOTER, fn (): HtmlString => new HtmlString(
                 view('partials.status-footer-banners')->render()
             ))
-            ->renderHook(PanelsRenderHook::HEAD_END, fn(): HtmlString => new HtmlString(
+            ->renderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(
                 view('partials.arabic-fonts')->render()
-                . view('partials.arabic-display-body-class')->render()
-                . view('partials.pwa-head')->render()
+                .view('partials.arabic-display-body-class')->render()
+                .view('partials.pwa-head')->render()
             ))
-            ->renderHook(PanelsRenderHook::BODY_END, fn(): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))
+            ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

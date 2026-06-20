@@ -9,7 +9,9 @@ use App\Filament\Tenant\Resources\Members\Pages\ListMembers;
 use App\Filament\Tenant\Resources\Members\RelationManagers\AccountsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\ContributionsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\DependentsRelationManager;
+use App\Filament\Tenant\Resources\Members\RelationManagers\GuarantorExposureRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\LoansRelationManager;
+use App\Filament\Tenant\Resources\Members\RelationManagers\MemberTransactionsTabsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\MessagesRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\RepaymentsRelationManager;
 use App\Filament\Tenant\Resources\Members\Schemas\MemberForm;
@@ -18,6 +20,7 @@ use App\Filament\Tenant\Support\TenantNavigation;
 use App\Filament\Tenant\Widgets\MemberDetailInsightsWidget;
 use App\Filament\Tenant\Widgets\MemberInsightsWidget;
 use App\Models\Tenant\Member;
+use App\Services\Tenant\MemberListTabService;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -36,6 +39,12 @@ class MemberResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
 
     protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
+
+    protected static ?string $navigationLabel = 'Members';
+
+    protected static ?string $modelLabel = 'Member';
+
+    protected static ?string $pluralModelLabel = 'Members';
 
     protected static ?int $navigationSort = TenantNavigation::SORT_MEMBERS;
 
@@ -56,18 +65,12 @@ class MemberResource extends Resource
      */
     public static function listTabKeys(): array
     {
-        return ['all', 'active', 'delinquent', 'suspended', 'withdrawn'];
+        return app(MemberListTabService::class)->tabKeys();
     }
 
     public static function listTabLabel(string $tab): string
     {
-        return match ($tab) {
-            'active' => __('Active'),
-            'delinquent' => __('Delinquent'),
-            'suspended' => __('Suspended'),
-            'withdrawn' => __('Withdrawn'),
-            default => __('All members'),
-        };
+        return app(MemberListTabService::class)->tabLabel($tab);
     }
 
     public static function listTabUrl(string $tab): string
@@ -106,6 +109,11 @@ class MemberResource extends Resource
         return in_array($tab, self::listTabKeys(), true) ? $tab : 'all';
     }
 
+    public static function migrationPendingCount(): int
+    {
+        return app(MemberListTabService::class)->tabCounts()['migration_pending'] ?? 0;
+    }
+
     public static function form(Schema $schema): Schema
     {
         return MemberForm::configure($schema);
@@ -120,9 +128,11 @@ class MemberResource extends Resource
     {
         return [
             AccountsRelationManager::class,
-            ContributionsRelationManager::class,
-            RepaymentsRelationManager::class,
             LoansRelationManager::class,
+            GuarantorExposureRelationManager::class,
+            ContributionsRelationManager::class,
+            MemberTransactionsTabsRelationManager::class,
+            RepaymentsRelationManager::class,
             DependentsRelationManager::class,
             MessagesRelationManager::class,
         ];

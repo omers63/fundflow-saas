@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Resources\BankAccounts\Pages;
 use App\Filament\Concerns\RefreshesResourceRecord;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Widgets\BankStatementDetailInsightsWidget;
+use App\Models\Tenant\BankStatement;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\TextEntry;
@@ -71,6 +72,7 @@ class ViewBankStatement extends ViewRecord
                         ->date(),
                     TextEntry::make('status')
                         ->badge()
+                        ->formatStateUsing(fn (string $state): string => BankStatement::statusOptions()[$state] ?? $state)
                         ->color(fn (string $state): string => match ($state) {
                             'pending' => 'warning',
                             'processing' => 'info',

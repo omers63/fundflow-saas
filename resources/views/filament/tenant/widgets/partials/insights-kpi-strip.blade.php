@@ -1,90 +1,69 @@
 @props(['kpis', 'sparkline' => null, 'sparklineMax' => 1])
 
 @php
-    $accentBar = [
-        'amber' => 'bg-amber-500',
-        'emerald' => 'bg-emerald-500',
-        'rose' => 'bg-rose-500',
-        'sky' => 'bg-sky-500',
-        'violet' => 'bg-violet-500',
-        'teal' => 'bg-teal-500',
-        'indigo' => 'bg-indigo-500',
-        'gray' => 'bg-gray-400',
-        'slate' => 'bg-slate-400',
+    $accentText = [
+        'amber' => 'text-amber-600 dark:text-amber-400',
+        'emerald' => 'text-emerald-600 dark:text-emerald-400',
+        'rose' => 'text-red-600 dark:text-red-400',
+        'sky' => 'text-sky-600 dark:text-sky-400',
+        'violet' => 'text-violet-600 dark:text-violet-400',
+        'teal' => 'text-teal-600 dark:text-teal-400',
+        'indigo' => 'text-indigo-600 dark:text-indigo-400',
+        'gray' => 'text-gray-500 dark:text-gray-400',
+        'slate' => 'text-gray-500 dark:text-gray-400',
     ];
-    $accentIcon = [
-        'amber' => 'text-amber-500',
-        'emerald' => 'text-emerald-500',
-        'rose' => 'text-rose-500',
-        'sky' => 'text-sky-500',
-        'violet' => 'text-violet-500',
-        'teal' => 'text-teal-500',
-        'indigo' => 'text-indigo-500',
-        'gray' => 'text-gray-400',
-        'slate' => 'text-slate-400',
-    ];
+    $count = count($kpis);
+    $gridCols = match (true) {
+        $count <= 4 => 'grid-cols-2 sm:grid-cols-4',
+        $count <= 6 => 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6',
+        default => 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-7',
+    };
 @endphp
 
-<div
-    class="ff-app-insights-kpi-strip overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 lg:col-span-2">
-    <div class="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-4 lg:grid-cols-7">
-        @foreach ($kpis as $i => $card)
-            @php
-                $accent = $card['accent'] ?? 'gray';
-                if ($accent === 'gray') {
-                    $accent = 'slate';
-                }
-                $barClass = $accentBar[$accent] ?? 'bg-gray-400';
-                $iconClass = $accentIcon[$accent] ?? 'text-gray-400';
-                $barOpacity = ($card['active'] ?? true) ? 'opacity-100' : 'opacity-25';
-                $tag = filled($card['url'] ?? null) ? 'a' : 'div';
-                $labelText = ui_label($card['label']);
-                $subText = ui_label($card['sub']);
-                $valueText = (string) $card['value'];
-                if (!empty($card['suffix'] ?? null)) {
-                    $valueText .= ' ' . $card['suffix'];
-                }
-            @endphp
-            <{{ $tag }}
-                @if ($tag === 'a')
-                    href="{{ $card['url'] }}"
+<div class="ff-app-insights-kpi-strip w-full min-w-0 grid {{ $gridCols }} gap-2.5">
+    @foreach ($kpis as $i => $card)
+        @php
+            $accent = $card['accent'] ?? 'gray';
+            $textClass = $accentText[$accent] ?? 'text-gray-500 dark:text-gray-400';
+            $active = $card['active'] ?? true;
+            $tag = filled($card['url'] ?? null) ? 'a' : 'div';
+            $rawValue = $card['value'];
+            $valueText = (string) $rawValue;
+            $currency = $card['currency'] ?? null;
+            $valuePrecision = (int) ($card['value_precision'] ?? 2);
+            $subPrecision = (int) ($card['sub_precision'] ?? 2);
+            $subText = (string) ($card['sub'] ?? '');
+            $valueIsAmount = is_int($rawValue) || is_float($rawValue);
+
+            if (!$valueIsAmount && is_string($rawValue) && is_numeric($rawValue)) {
+                $valueIsAmount = true;
+                $rawValue = str_contains($rawValue, '.') ? (float) $rawValue : (int) $rawValue;
+            }
+
+            $dimmed = !$active ? 'opacity-50' : '';
+        @endphp
+        <{{ $tag }}
+            @if ($tag === 'a') href="{{ $card['url'] }}" @endif
+            @class([
+                'ff-app-insights-kpi group flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-sky-700',
+                $dimmed,
+            ])
+            style="animation: ff-stat-in 0.3s ease-out {{ 0.02 + ($i * 0.03) }}s forwards">
+            <p class="truncate text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                {{ ui_label($card['label']) }}
+            </p>
+            <div class="flex min-w-0 items-baseline gap-0.5 overflow-hidden">
+                <x-ff-stat-line :amount="$valueIsAmount ? $rawValue : null" :text="$valueIsAmount ? null : $valueText"
+                    :currency="$currency" :precision="$valuePrecision" @class([
+                        'min-w-0 flex-1 truncate',
+                        $card['value_class'] ?? 'text-gray-900 dark:text-white',
+                        'text-base font-bold tabular-nums leading-none sm:text-lg xl:text-[22px]',
+                    ]) />
+                @if (!empty($card['suffix'] ?? null))
+                    <span class="shrink-0 text-[11px] font-normal text-gray-400">{{ $card['suffix'] }}</span>
                 @endif
-                @class([
-                    'ff-app-insights-kpi ff-tenant-stat-card relative min-w-0 px-2.5 py-2 transition sm:px-2.5 sm:py-2',
-                    'cursor-pointer hover:bg-gray-50/80 dark:hover:bg-gray-800/60' => $tag === 'a',
-                ])
-                data-accent="{{ $accent }}"
-                style="animation: ff-stat-in 0.35s ease-out {{ 0.02 + ($i * 0.03) }}s forwards">
-                <div @class(['absolute inset-y-0 left-0 w-0.5', $barClass, $barOpacity])></div>
-                <div class="flex items-center justify-between gap-1 pl-1">
-                    <x-dynamic-component :component="$card['icon']" @class(['h-3.5 w-3.5 shrink-0', $iconClass]) />
-                    @if (($card['key'] ?? null) === 'new' && isset($card['mom']) && $card['mom'] !== null)
-                        <span @class([
-                            'text-[9px] font-bold',
-                            'text-emerald-600 dark:text-emerald-400' => $card['mom'] >= 0,
-                            'text-rose-600 dark:text-rose-400' => $card['mom'] < 0,
-                        ])>{{ $card['mom'] >= 0 ? '↑' : '↓' }}{{ abs($card['mom']) }}%</span>
-                    @endif
-                </div>
-                <x-ff-stat-line :text="$labelText"
-                    class="mt-0.5 truncate pl-1 text-[10px] font-medium uppercase tracking-wide text-gray-500" />
-                <x-ff-stat-line :text="$valueText" @class([
-                    'truncate pl-1 text-lg font-bold tabular-nums leading-tight',
-                    $card['value_class'] ?? 'text-gray-900 dark:text-white',
-                ])>
-                    {{ $card['value'] }}@if (!empty($card['suffix'] ?? null))<span
-                    class="text-[10px] font-normal text-gray-400">{{ $card['suffix'] }}</span>@endif
-                </x-ff-stat-line>
-                <x-ff-stat-line :text="$subText" class="truncate pl-1 text-[10px] text-gray-400" />
-            </{{ $tag }}>
-        @endforeach
-    </div>
-    @if (filled($sparkline) && count($sparkline) > 0)
-        <div class="flex h-5 items-end gap-px border-t border-gray-100 px-2 py-1 dark:border-gray-700">
-            @foreach ($sparkline as $point)
-                @php $h = max(20, (int) round(($point / $sparklineMax) * 100)); @endphp
-                <div class="flex-1 rounded-sm bg-indigo-400/70 dark:bg-indigo-500/60" style="height: {{ $h }}%"></div>
-            @endforeach
-        </div>
-    @endif
+            </div>
+            <x-ff-stat-line :text="$subText" :currency="$currency" :precision="$subPrecision" @class(['min-w-0 truncate', $textClass, 'text-[11px] font-medium']) />
+        </{{ $tag }}>
+    @endforeach
 </div>

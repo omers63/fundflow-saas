@@ -7,6 +7,7 @@ namespace App\Filament\Tenant\Resources\SmsTransactions\Tables;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Support\ViewSmsTransactionAction;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\SmsImportSession;
@@ -18,7 +19,6 @@ use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -46,6 +46,7 @@ final class SmsTransactionsTable
             ->all();
 
         return TableGrouping::apply($table
+            ->modifyQueryUsing(fn ($query) => $query->with(['member', 'postedBy', 'importSession']))
             ->heading($embedInBankWorkspace ? null : __('SMS transactions'))
             ->description($embedInBankWorkspace
                 ? __('Review parsed SMS transactions and post verified rows to member cash.')
@@ -171,7 +172,7 @@ final class SmsTransactionsTable
                 TrashedFilter::make(),
             ])
             ->recordActions(TableRecordActionGroups::wrap([
-                ViewAction::make(),
+                ViewSmsTransactionAction::make(),
                 Action::make('postToCash')
                     ->label(__('Post to cash'))
                     ->icon('heroicon-o-arrow-right-circle')

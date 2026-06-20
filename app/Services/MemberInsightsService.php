@@ -12,7 +12,6 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
-use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
 
 final class MemberInsightsService
@@ -87,7 +86,7 @@ final class MemberInsightsService
                 'name' => $member->name,
                 'status' => Member::statusOptions()[$member->status] ?? $member->status,
                 'status_key' => $member->status,
-                'contribution' => InsightFormatter::money((float) $member->monthly_contribution_amount),
+                'contribution_amount' => (float) $member->monthly_contribution_amount,
                 'view_url' => MemberResource::getUrl('edit', ['record' => $member]),
             ])
             ->all();
@@ -131,8 +130,8 @@ final class MemberInsightsService
                 'members_active_url' => MemberResource::listUrl('all', ['status' => ['value' => 'active']]),
                 'members_delinquent_url' => MemberResource::listTabUrl('delinquent'),
                 'applications_url' => MembershipApplicationResource::getUrl('index'),
-                'applications_pending_url' => MembershipApplicationResource::listUrl(['status' => ['value' => 'pending']]),
-                'applications_approved_url' => MembershipApplicationResource::listUrl(['status' => ['value' => 'approved']]),
+                'applications_pending_url' => MembershipApplicationResource::listTabUrl('pending'),
+                'applications_approved_url' => MembershipApplicationResource::listTabUrl('approved'),
                 'contributions_url' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'pending']]),
                 'delinquency_url' => MemberResource::listTabUrl('delinquent'),
             ],

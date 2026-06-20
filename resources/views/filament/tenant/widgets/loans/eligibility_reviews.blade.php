@@ -3,10 +3,10 @@
     $maxGateCount = max(1, (int) ($d['max_gate_count'] ?? 1));
 @endphp
 
-<div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-    @include('filament.tenant.widgets.partials.insights-hero', ['hero' => $d['hero']])
-    @include('filament.tenant.widgets.partials.insights-kpi-strip', ['kpis' => $d['kpis']])
-</div>
+@include('filament.tenant.widgets.partials.insights-head', [
+    'hero' => $d['hero'],
+    'kpis' => $d['kpis'],
+])
 
 <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
     <div

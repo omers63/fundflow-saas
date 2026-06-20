@@ -13,7 +13,7 @@
         ['key' => 'total', 'label' => __('Roster'), 'value' => $d['total'], 'sub' => __(':count inactive', ['count' => $d['inactive']]), 'icon' => 'heroicon-o-users', 'accent' => 'sky', 'active' => true],
         ['key' => 'new', 'label' => __('Joined/mo'), 'value' => $d['new_this_month'], 'sub' => $d['mom_change'] !== null ? __(':percent%', ['percent' => $d['mom_change']]) : now()->format('M'), 'icon' => 'heroicon-o-sparkles', 'accent' => 'violet', 'active' => true, 'mom' => $d['mom_change']],
         ['key' => 'dependents', 'label' => __('Dependents'), 'value' => $d['dependents'], 'sub' => __(':count heads', ['count' => $d['independent']]), 'icon' => 'heroicon-o-user-group', 'accent' => 'teal', 'active' => $d['dependents'] > 0],
-        ['key' => 'avg', 'label' => __('Avg contrib'), 'value' => number_format($d['avg_contribution'], 0), 'sub' => $currency, 'icon' => 'heroicon-o-banknotes', 'accent' => 'amber', 'active' => $d['avg_contribution'] > 0],
+        ['key' => 'avg', 'label' => __('Avg contrib'), 'value' => $d['avg_contribution'] > 0 ? $d['avg_contribution'] : '—', 'currency' => $currency, 'value_precision' => 0, 'sub' => __('Monthly'), 'icon' => 'heroicon-o-banknotes', 'accent' => 'amber', 'active' => $d['avg_contribution'] > 0],
     ], [
         'active' => $pipeline['members_active_url'],
         'delinquent' => $pipeline['members_delinquent_url'],
@@ -24,51 +24,26 @@
     ]);
 @endphp
 
-<div class="ff-app-insights w-full max-w-none space-y-3 mb-1">
-    <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <div @class([
-            'ff-app-insights-hero overflow-hidden rounded-xl border px-3 py-2.5 shadow-sm lg:col-span-1',
-            'border-amber-200/80 bg-gradient-to-r from-amber-50 to-emerald-50/80 dark:border-amber-500/30 dark:from-amber-950/40 dark:to-emerald-950/20' => $d['needs_attention'] > 0,
-            'border-emerald-200/70 bg-gradient-to-r from-emerald-50 to-teal-50/60 dark:border-emerald-500/25 dark:from-emerald-950/30 dark:to-teal-950/20' => $d['needs_attention'] === 0,
-        ])>
-            <div class="flex items-center justify-between gap-2">
-                @if ($d['needs_attention'] > 0)
-                    <div class="flex min-w-0 items-center gap-2">
-                        <x-heroicon-o-users class="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                        <div class="min-w-0">
-                            <p class="truncate text-xs font-semibold text-amber-900 dark:text-amber-100">
-                                {{ __('Members need your attention') }}</p>
-                            <p class="truncate text-[11px] text-gray-600 dark:text-gray-400">
-                                {{ trans_choice(':count delinquent|:count delinquent', $d['delinquent'], ['count' => $d['delinquent']]) }}
-                                @if ($d['suspended'] > 0)
-                                    · {{ trans_choice(':count suspended|:count suspended', $d['suspended'], ['count' => $d['suspended']]) }}
-                                @endif
-                                @if ($d['zero_cash_members'] > 0)
-                                    · <span
-                                        class="text-red-600 dark:text-red-400">{{ trans_choice(':count zero cash|:count zero cash', $d['zero_cash_members'], ['count' => $d['zero_cash_members']]) }}</span>
-                                @endif
-                            </p>
-                        </div>
-                    </div>
-                    <a href="{{ $pipeline['members_delinquent_url'] }}"
-                        class="shrink-0 rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-500 dark:bg-amber-500">
-                        {{ __('Review') }}
-                    </a>
-                @else
-                    <div class="flex items-center gap-2">
-                        <x-heroicon-o-check-badge class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                        <p class="text-xs font-semibold text-gray-900 dark:text-white">{{ __('Roster healthy') }}</p>
-                    </div>
-                @endif
-            </div>
-        </div>
+@php
+    $delinqSub = trans_choice(':count delinquent', $d['delinquent'], ['count' => $d['delinquent']]);
+    if ($d['suspended'] > 0) {
+        $delinqSub .= ' · ' . trans_choice(':count suspended', $d['suspended'], ['count' => $d['suspended']]);
+    }
+    if ($d['zero_cash_members'] > 0) {
+        $delinqSub .= ' · ' . trans_choice(':count zero cash', $d['zero_cash_members'], ['count' => $d['zero_cash_members']]);
+    }
+    $hero = $d['needs_attention'] > 0
+        ? ['title' => __('Members need your attention'), 'subtitle' => $delinqSub, 'tone' => 'amber', 'cta_url' => $pipeline['members_delinquent_url'], 'cta_label' => __('Review')]
+        : ['title' => __('Roster healthy'), 'subtitle' => __('No delinquent or suspended members'), 'tone' => 'success'];
+@endphp
 
-        @include('filament.tenant.widgets.partials.insights-kpi-strip', [
-            'kpis' => $kpis,
-            'sparkline' => $d['needs_attention'] > 0 ? $d['sparkline'] : null,
-            'sparklineMax' => $sparkMax,
-        ])
-    </div>
+<div class="ff-app-insights w-full max-w-none space-y-3 mb-1">
+    @include('filament.tenant.widgets.partials.insights-head', [
+        'hero' => $hero,
+        'kpis' => $kpis,
+        'sparkline' => $d['needs_attention'] > 0 ? $d['sparkline'] : null,
+        'sparklineMax' => $sparkMax,
+    ])
 
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div
@@ -137,8 +112,7 @@
                             {{ __('Fund health') }}</p>
                     </div>
                     <p class="mt-1.5 text-lg font-bold tabular-nums text-gray-900 dark:text-white">
-                        {{ number_format($fund['avg_contribution'], 0) }} <span
-                            class="text-[10px] font-normal text-gray-400">{{ $currency }}</span>
+                        <x-member::amount :value="$fund['avg_contribution']" :currency="$currency" :precision="0" />
                     </p>
                     <p class="text-[10px] text-gray-400">
                         {{ trans_choice(':count active loans|:count active loans', $fund['active_loans'], ['count' => $fund['active_loans']]) }}
@@ -193,8 +167,10 @@
                             <p class="truncate text-xs font-medium text-gray-900 dark:text-white">
                                 <x-arabic-text :text="$member['name']" />
                             </p>
-                            <p class="truncate text-[10px] text-gray-400">{{ $member['contribution'] }} ·
-                                {{ $member['status'] }}</p>
+                            <p class="truncate text-[10px] text-gray-400">
+                                <x-member::amount :value="$member['contribution_amount']" :currency="$currency" :precision="0" />
+                                · {{ $member['status'] }}
+                            </p>
                         </div>
                         <span @class([
                             'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',

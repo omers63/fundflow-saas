@@ -10,7 +10,6 @@ use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanQueueOrderingService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\CreateAction;
 use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
@@ -37,17 +36,17 @@ class FundTiersTable
                     ->suffix('%'),
                 TextColumn::make('declared_pool')
                     ->label(__('Declared pool'))
-                    ->state(fn(FundTier $record): float => $record->allocated_amount)
+                    ->state(fn (FundTier $record): float => $record->allocated_amount)
                     ->money($currency)
                     ->sortable(false),
                 TextColumn::make('tier_available')
                     ->label(__('Available'))
-                    ->state(fn(FundTier $record): float => $record->available_amount)
+                    ->state(fn (FundTier $record): float => $record->available_amount)
                     ->money($currency)
                     ->sortable(false),
                 TextColumn::make('active_loans_count')
                     ->label(__('Active loans'))
-                    ->state(fn(FundTier $record): int => $record->active_loans_count)
+                    ->state(fn (FundTier $record): int => $record->active_loans_count)
                     ->sortable(false),
                 IconColumn::make('is_active')
                     ->boolean(),
@@ -57,9 +56,6 @@ class FundTiersTable
                     ->label(__('Active')),
             ])
             ->defaultSort('tier_number')
-            ->headerActions([
-                CreateAction::make(),
-            ])
             ->recordActions(TableRecordActionGroups::wrap([
                 EditAction::make(),
                 Action::make('resequence')

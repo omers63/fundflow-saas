@@ -59,10 +59,8 @@ class TenantProvisioningService
             Bus::chain([
                 new Jobs\CreateDatabase($tenant),      // Create new DB
                 new Jobs\MigrateDatabase($tenant),     // Run migrations in database/migrations/tenant folder
+                new Jobs\SeedDatabase($tenant),        // Initial settings, master ledger accounts, bank templates
                 new CreateFrameworkCacheDirForTenant($tenant), // Setup isolated cache folder
-
-                // Place additional jobs here (like seeding initial data, role setup, etc.)
-
                 new MarkTenantAsProvisioned($tenant->id), // Mark as finished
             ])->dispatch();
 

@@ -29,7 +29,7 @@
                                     ? 'text-rose-600 dark:text-rose-400'
                                     : 'text-emerald-600 dark:text-emerald-400',
                             ]) />
-                            <x-ff-stat-line :text="$d['currency'].' · '.__('Current balance')"
+                            <x-ff-stat-line :text="\App\Filament\Support\MoneyDisplay::symbol($d['currency']).' · '.__('Current balance')"
                                 class="truncate text-[10px] text-gray-400" />
                         </div>
                         <span

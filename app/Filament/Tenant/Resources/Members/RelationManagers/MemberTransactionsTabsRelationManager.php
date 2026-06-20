@@ -29,7 +29,7 @@ class MemberTransactionsTabsRelationManager extends RelationManager
 
     protected static string $relationship = 'transactions';
 
-    protected static ?string $title = 'Transaction history';
+    protected static ?string $title = 'Transactions';
 
     public string $ledgerTab = 'cash';
 

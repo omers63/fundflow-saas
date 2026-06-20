@@ -5,14 +5,12 @@
     $currency = $d['currency'];
 @endphp
 
-<div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-    @include('filament.tenant.widgets.partials.insights-hero', ['hero' => $d['hero']])
-    @include('filament.tenant.widgets.partials.insights-kpi-strip', [
-        'kpis' => $d['kpis'],
-        'sparkline' => ($pipeline['needs_decision'] + $pipeline['ready_to_disburse']) > 0 ? $d['sparkline'] : null,
-        'sparklineMax' => $sparkMax,
-    ])
-</div>
+@include('filament.tenant.widgets.partials.insights-head', [
+    'hero' => $d['hero'],
+    'kpis' => $d['kpis'],
+    'sparkline' => ($pipeline['needs_decision'] + $pipeline['ready_to_disburse']) > 0 ? $d['sparkline'] : null,
+    'sparklineMax' => $sparkMax,
+])
 
 <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
     <div class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
@@ -113,7 +111,7 @@
                     <div class="min-w-0 flex-1">
                         <p class="truncate text-xs font-medium text-gray-900 dark:text-white">{{ $loan['member'] }}</p>
                         <p class="truncate text-[10px] text-gray-400">
-                            {{ number_format($loan['amount'], 0) }} {{ $currency }}
+                            <x-member::amount :value="$loan['amount']" :currency="$currency" :precision="0" class="inline" />
                             @if ($loan['is_emergency']) · <span class="text-rose-500">{{ __('Emergency') }}</span> @endif
                         </p>
                     </div>

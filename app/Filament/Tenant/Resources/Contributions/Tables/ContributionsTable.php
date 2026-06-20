@@ -51,8 +51,12 @@ class ContributionsTable
                         ->color(fn (?int $state): string => match (true) {
                             $state === null || $state === 0 => 'gray',
                             $state === 1 => 'warning',
+                            $state === 2 => 'info',
                             default => 'danger',
                         })
+                        ->extraAttributes(fn (?int $state): array => $state === 2
+                            ? ['class' => 'ff-late-fee-tier-2']
+                            : [])
                         ->toggleable(isToggledHiddenByDefault: true)
                         ->sortable(),
                     TextColumn::make('posted_at')

@@ -357,7 +357,7 @@ test('jobs page registers in tenant panel navigation', function () {
     $this->actingAs($admin, 'tenant');
 
     expect(JobsPage::canAccess())->toBeTrue()
-        ->and(JobsPage::shouldRegisterNavigation())->toBeTrue()
+        ->and(JobsPage::shouldRegisterNavigation())->toBeFalse()
         ->and(JobsPage::getUrl())->toContain('/admin/jobs');
 });
 
@@ -776,7 +776,7 @@ test('late fees settled column sums member cash debits only not master cash mirr
         ->where('reference_type', Contribution::class)
         ->where('reference_id', $contribution->id)
         ->where('type', 'debit')
-        ->where('description', 'like', __('Contribution late fee —') . '%')
+        ->where('description', 'like', __('Contribution late fee —').'%')
         ->count();
 
     expect($mirrorLegCount)->toBe(2);

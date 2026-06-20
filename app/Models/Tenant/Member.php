@@ -2,6 +2,7 @@
 
 namespace App\Models\Tenant;
 
+use App\Filament\Support\MoneyDisplay;
 use App\Services\LoanService;
 use App\Services\MemberMonthlyAllocationService;
 use App\Support\MemberNumberSettings;
@@ -129,6 +130,11 @@ class Member extends Model
         return $this->hasMany(Loan::class);
     }
 
+    public function guaranteedLoans(): HasMany
+    {
+        return $this->hasMany(Loan::class, 'guarantor_member_id');
+    }
+
     public function fundPostings(): HasMany
     {
         return $this->hasMany(FundPosting::class);
@@ -207,6 +213,32 @@ class Member extends Model
         return $query->whereNull('parent_member_id');
     }
 
+    public function scopeOrderByCashBalance($query, string $direction = 'asc')
+    {
+        return $query->orderBy(
+            Account::query()
+                ->select('balance')
+                ->whereColumn('accounts.member_id', 'members.id')
+                ->where('type', 'cash')
+                ->where('is_master', false)
+                ->limit(1),
+            $direction,
+        );
+    }
+
+    public function scopeOrderByFundBalance($query, string $direction = 'asc')
+    {
+        return $query->orderBy(
+            Account::query()
+                ->select('balance')
+                ->whereColumn('accounts.member_id', 'members.id')
+                ->where('type', 'fund')
+                ->where('is_master', false)
+                ->limit(1),
+            $direction,
+        );
+    }
+
     public static function generateMemberNumber(): string
     {
         return MemberNumberSettings::generate();
@@ -226,7 +258,7 @@ class Member extends Model
         $options = [];
 
         foreach (self::CONTRIBUTION_STEPS as $amount) {
-            $options[$amount] = number_format($amount, 0).' '.$currency;
+            $options[$amount] = MoneyDisplay::format($amount, $currency, precision: 0) ?? '';
         }
 
         return $options;

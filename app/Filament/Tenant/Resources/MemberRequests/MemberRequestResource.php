@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\MemberRequests;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
+use App\Filament\Tenant\Concerns\HidesFromTenantSidebar;
 use App\Filament\Tenant\Resources\MemberRequests\Pages\ListMemberRequests;
 use App\Filament\Tenant\Resources\MemberRequests\Tables\MemberRequestsTable;
 use App\Filament\Tenant\Support\TenantNavigation;
@@ -17,6 +18,7 @@ use Filament\Tables\Table;
 
 class MemberRequestResource extends Resource
 {
+    use HidesFromTenantSidebar;
     use TranslatesFilamentNavigationLabels;
 
     protected static ?string $model = MemberRequest::class;

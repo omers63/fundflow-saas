@@ -6,6 +6,7 @@ use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\LateSettledArrearsTableStyling;
+use App\Filament\Support\MoneyDisplay;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -76,7 +77,7 @@ class RepaymentsRelationManager extends RelationManager
                                 ->orderBy('applied_at', 'desc')
                                 ->get()
                                 ->mapWithKeys(function (Loan $loan) use ($currency): array {
-                                    $amount = number_format((float) $loan->amount, 2).' '.$currency;
+                                    $amount = MoneyDisplay::format((float) $loan->amount, $currency) ?? '';
 
                                     return [$loan->id => $amount.' · '.$loan->applied_at->format('M j, Y')];
                                 })

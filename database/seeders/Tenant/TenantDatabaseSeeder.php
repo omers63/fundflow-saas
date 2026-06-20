@@ -39,6 +39,9 @@ class TenantDatabaseSeeder extends Seeder
             'late_fee_repayment_30d' => 150,
         ]);
 
+        // Permanent master ledger accounts (includes Master Suspense for reconciliation).
+        Account::ensureDefaultMasterAccounts();
+
         BankTemplate::firstOrCreate(
             ['name' => 'Generic CSV'],
             [
@@ -84,8 +87,6 @@ class TenantDatabaseSeeder extends Seeder
                 'is_default' => true,
             ],
         );
-
-        Account::ensureDefaultMasterAccounts();
 
         $user = User::firstOrCreate(
             ['email' => 'admin@fundflow.sa'],

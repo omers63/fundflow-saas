@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
+use App\Filament\Support\MoneyDisplay;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\LoanEligibilityOverrideRequestResource;
@@ -27,7 +28,6 @@ use App\Services\Loans\LoanEligibilityOverrideRequestService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
-use App\Support\Insights\InsightFormatter;
 use App\Support\Insights\InsightKpi;
 use App\Support\LoanEligibilityGate;
 use App\Support\Loans\LoanUserFacingStage;
@@ -501,7 +501,7 @@ final class LoanInsightsService
             ],
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'collected', 'label' => __('Collected'), 'value' => (string) $collectedCount, 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => $collectedCount > 0],
-                ['key' => 'amount', 'label' => __('Amount'), 'value' => InsightFormatter::compactAmount($collectedAmount), 'sub' => $currency, 'icon' => 'heroicon-o-currency-dollar', 'accent' => 'teal', 'active' => $collectedAmount > 0],
+                ['key' => 'amount', 'label' => __('Amount'), 'value' => $this->formatMoneyCompact($collectedAmount, $currency), 'sub' => $periodLabel, 'icon' => 'heroicon-o-currency-dollar', 'accent' => 'teal', 'active' => $collectedAmount > 0],
                 ['key' => 'remaining', 'label' => __('Remaining'), 'value' => (string) $pendingMembers, 'sub' => __('Members'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $pendingMembers > 0],
                 ['key' => 'pending_emis', 'label' => __('Pending EMIs'), 'value' => (string) $metrics['total_pending_emis'], 'sub' => __('Installments'), 'icon' => 'heroicon-o-clock', 'accent' => 'sky', 'active' => $metrics['total_pending_emis'] > 0],
                 ['key' => 'collect', 'label' => __('To collect'), 'value' => (string) $pendingMembers, 'sub' => __('Open period'), 'icon' => 'heroicon-o-arrow-down-tray', 'accent' => 'violet', 'active' => $pendingMembers > 0],
@@ -1289,14 +1289,6 @@ final class LoanInsightsService
 
     private function formatMoneyCompact(float $amount, string $currency): string
     {
-        if ($amount >= 1_000_000) {
-            return number_format($amount / 1_000_000, 1).'M '.$currency;
-        }
-
-        if ($amount >= 1_000) {
-            return number_format($amount / 1_000, 1).'K '.$currency;
-        }
-
-        return number_format($amount, 0).' '.$currency;
+        return MoneyDisplay::compactWithSymbol($amount, $currency);
     }
 }

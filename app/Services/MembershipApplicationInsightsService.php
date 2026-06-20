@@ -187,8 +187,8 @@ final class MembershipApplicationInsightsService
                 'active_members' => $activeMembers,
                 'members_joined_month' => $membersJoinedThisMonth,
                 'applications_url' => MembershipApplicationResource::getUrl('index'),
-                'applications_pending_url' => MembershipApplicationResource::listUrl(['status' => ['value' => 'pending']]),
-                'applications_approved_url' => MembershipApplicationResource::listUrl(['status' => ['value' => 'approved']]),
+                'applications_pending_url' => MembershipApplicationResource::listTabUrl('pending'),
+                'applications_approved_url' => MembershipApplicationResource::listTabUrl('approved'),
                 'members_url' => MemberResource::getUrl('index'),
             ],
         ];

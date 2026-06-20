@@ -231,16 +231,16 @@ final class DependentAllocationFilamentActions
                     Placeholder::make('balances')
                         ->label(__('Balances'))
                         ->content(__('Parent cash: :parent · :name cash: :dependent', [
-                            'parent' => number_format($parent?->getCashBalance() ?? 0, 2).' '.$currency,
+                            'parent' => MoneyDisplay::format($parent?->getCashBalance() ?? 0, $currency) ?? '',
                             'name' => $record->name,
-                            'dependent' => number_format($record->getCashBalance(), 2).' '.$currency,
+                            'dependent' => MoneyDisplay::format($record->getCashBalance(), $currency) ?? '',
                         ])),
                     TextInput::make('amount')
                         ->label(__('Amount to transfer'))
                         ->numeric()
                         ->minValue(0.01)
                         ->required()
-                        ->suffix($currency),
+                        ->suffix(MoneyDisplay::symbol($currency)),
                     TextInput::make('note')
                         ->label(__('Note (optional)'))
                         ->maxLength(200),
@@ -267,7 +267,7 @@ final class DependentAllocationFilamentActions
                     Notification::make()
                         ->title(__('Transfer successful'))
                         ->body(__(':amount transferred to :name cash account.', [
-                            'amount' => number_format((float) $data['amount'], 2).' '.$currency,
+                            'amount' => MoneyDisplay::format((float) $data['amount'], $currency) ?? '',
                             'name' => $record->name,
                         ]))
                         ->success()
@@ -328,8 +328,8 @@ final class DependentAllocationFilamentActions
                 ->default($dependent->monthly_contribution_amount)
                 ->required()
                 ->helperText(__('Current allocation: :alloc · Cash: :cash', [
-                    'alloc' => number_format((float) $dependent->monthly_contribution_amount, 0).' '.$currency,
-                    'cash' => number_format($dependent->getCashBalance(), 2).' '.$currency,
+                    'alloc' => MoneyDisplay::format((float) $dependent->monthly_contribution_amount, $currency, precision: 0) ?? '',
+                    'cash' => MoneyDisplay::format($dependent->getCashBalance(), $currency) ?? '',
                 ]));
         }
 

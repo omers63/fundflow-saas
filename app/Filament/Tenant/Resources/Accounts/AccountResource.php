@@ -4,6 +4,7 @@ namespace App\Filament\Tenant\Resources\Accounts;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Support\UiLabelIcons;
+use App\Filament\Tenant\Concerns\HidesFromTenantSidebar;
 use App\Filament\Tenant\Resources\Accounts\Pages\ListAccounts;
 use App\Filament\Tenant\Resources\Accounts\Pages\ViewAccount;
 use App\Filament\Tenant\Resources\Accounts\RelationManagers\TransactionsRelationManager;
@@ -23,6 +24,7 @@ use UnitEnum;
 
 class AccountResource extends Resource
 {
+    use HidesFromTenantSidebar;
     use TranslatesFilamentNavigationLabels;
 
     protected static ?string $model = Account::class;

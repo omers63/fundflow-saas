@@ -134,6 +134,28 @@ it('renders pdf amounts with embedded sar glyph image in arabic', function (): v
         ->toContain('1,500.00');
 });
 
+it('formats compact amounts with symbol before digits in arabic', function (): void {
+    app()->setLocale('ar');
+
+    expect(MoneyDisplay::compactWithSymbol(1_500_000, 'SAR'))
+        ->toBe("\u{20C1} 1.5M");
+});
+
+it('formats compact amounts with sar code in english', function (): void {
+    app()->setLocale('en');
+
+    expect(MoneyDisplay::compactWithSymbol(2500, 'SAR'))
+        ->toBe('SAR 2.5K');
+});
+
+it('renders symbol html with glyph class in arabic', function (): void {
+    app()->setLocale('ar');
+
+    expect((string) MoneyDisplay::symbolHtml('SAR'))
+        ->toContain('ff-sar-symbol--glyph')
+        ->toContain("\u{20C1}");
+});
+
 it('renders pdf amounts with sar code in english', function (): void {
     app()->setLocale('en');
 

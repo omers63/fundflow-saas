@@ -3,53 +3,7 @@
  * Scoped under .fi-body.fi-panel-member where shell context matters.
  */
 
-.ff-sar-symbol {
-    flex-shrink: 0;
-    line-height: 1;
-    font-weight: 700;
-}
-
-.ff-sar-symbol--code {
-    font-family: inherit;
-    font-size: 0.62em;
-    letter-spacing: 0.05em;
-    font-weight: 700;
-    transform: translateY(0.14em);
-}
-
-.ff-sar-symbol--glyph {
-    font-family: 'Noto Sans Symbols 2', var(--ff-font-arabic, inherit), sans-serif;
-    font-size: 0.82em;
-    font-weight: 600;
-    transform: translateY(0.06em);
-}
-
-.ff-member-amount-wrap {
-    display: inline-block;
-}
-
-.ff-member-amount {
-    display: inline-flex;
-    flex-direction: row;
-    direction: ltr;
-    unicode-bidi: isolate;
-    align-items: baseline;
-    gap: 0.25em;
-    white-space: nowrap;
-    text-align: left;
-}
-
-.ff-member-amount__digits {
-    font-variant-numeric: tabular-nums lining-nums;
-}
-
-.ff-member-amount--danger {
-    color: var(--ff-danger);
-}
-
-.ff-member-amount--success {
-    color: var(--ff-success);
-}
+@import '../currency-display.css';
 
 .ff-member-panel {
     background: var(--ff-surface, #fff);

@@ -2,8 +2,10 @@
 
 namespace App\Services\Loans;
 
+use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\Setting;
 use App\Notifications\Tenant\LoanEarlySettledNotification;
 use App\Services\ContributionCycleService;
 use App\Support\BusinessDay;
@@ -113,9 +115,13 @@ class LoanEarlySettlementService
         $cash = $member->getCashBalance();
 
         if ($cash < $required - 0.00001) {
+            $currency = Setting::get('general', 'currency', 'USD');
+
             throw new \RuntimeException(
-                'Insufficient cash. Required: SAR '.number_format($required, 2)
-                .' (installments plus any late fees). Current cash balance: SAR '.number_format($cash, 2).'.'
+                __('Insufficient cash. Required: :required (installments plus any late fees). Current cash balance: :balance.', [
+                    'required' => MoneyDisplay::format($required, $currency) ?? '',
+                    'balance' => MoneyDisplay::format($cash, $currency) ?? '',
+                ])
             );
         }
 

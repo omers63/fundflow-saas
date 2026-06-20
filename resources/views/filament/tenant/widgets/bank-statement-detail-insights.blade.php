@@ -10,14 +10,12 @@
             {{ __('Loading statement insights…') }}
         </div>
     @else
-        <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-            @include('filament.tenant.widgets.partials.insights-hero', ['hero' => $d['hero']])
-            @include('filament.tenant.widgets.partials.insights-kpi-strip', [
-                'kpis' => $d['kpis'],
-                'sparkline' => $d['sparkline'],
-                'sparklineMax' => $d['sparkline_max'],
-            ])
-        </div>
+        @include('filament.tenant.widgets.partials.insights-head', [
+            'hero' => $d['hero'],
+            'kpis' => $d['kpis'],
+            'sparkline' => $d['sparkline'],
+            'sparklineMax' => $d['sparkline_max'],
+        ])
 
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div
@@ -73,7 +71,7 @@
                             <div class="min-w-0">
                                 <p class="font-medium text-gray-800 dark:text-gray-200">{{ $line['description'] }}</p>
                                 <p class="text-[10px] text-gray-400">
-                                    {{ $line['date'] }} · {{ ucfirst($line['status']) }}
+                                    {{ $line['date'] }} · {{ $line['status_label'] }}
                                     @if ($line['member'])
                                         · {{ $line['member'] }}
                                     @endif

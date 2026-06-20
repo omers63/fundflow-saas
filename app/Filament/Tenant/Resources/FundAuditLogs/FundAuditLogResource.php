@@ -16,7 +16,6 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
-use Illuminate\Support\Facades\Schema as DatabaseSchema;
 use UnitEnum;
 
 class FundAuditLogResource extends Resource
@@ -37,7 +36,7 @@ class FundAuditLogResource extends Resource
 
     protected static ?int $navigationSort = TenantNavigation::SORT_AUDIT_LOGS;
 
-    protected static bool $shouldRegisterNavigation = true;
+    protected static bool $shouldRegisterNavigation = false;
 
     public static function canAccess(): bool
     {
@@ -79,6 +78,6 @@ class FundAuditLogResource extends Resource
 
     public static function shouldRegisterNavigation(): bool
     {
-        return DatabaseSchema::hasTable('fund_audit_logs');
+        return false;
     }
 }

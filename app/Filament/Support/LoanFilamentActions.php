@@ -476,6 +476,26 @@ final class LoanFilamentActions
     /**
      * @return array<int, Action>
      */
+    public static function queueTableActions(): array
+    {
+        return array_map(
+            fn (Action $action): Action => self::withInsightsRefresh($action),
+            [
+                self::approve()->button(),
+                self::reject()->button(),
+                self::disburse()->button(),
+                Action::make('review')
+                    ->label(__('Review'))
+                    ->icon('heroicon-o-eye')
+                    ->color('gray')
+                    ->url(fn (Loan $record): string => LoanResource::getUrl('view', ['record' => $record])),
+            ],
+        );
+    }
+
+    /**
+     * @return array<int, Action>
+     */
     public static function workflowActions(): array
     {
         return array_map(

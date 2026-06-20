@@ -5,18 +5,22 @@ declare(strict_types=1);
 use App\Filament\Support\TableRecordActionGroups;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
+use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Tables\Contracts\HasTable;
+use Filament\Tables\Table;
 use Tests\TestCase;
 
 uses(TestCase::class);
 
-test('is single view action when only view action is present', function () {
-    expect(TableRecordActionGroups::isSingleViewAction([ViewAction::make()]))->toBeTrue()
-        ->and(TableRecordActionGroups::isSingleViewAction([
+test('is single primary action when only view or edit action is present', function () {
+    expect(TableRecordActionGroups::isSinglePrimaryAction([ViewAction::make()]))->toBeTrue()
+        ->and(TableRecordActionGroups::isSinglePrimaryAction([EditAction::make()]))->toBeTrue()
+        ->and(TableRecordActionGroups::isSinglePrimaryAction([
             ViewAction::make(),
             Action::make('edit'),
         ]))->toBeFalse()
-        ->and(TableRecordActionGroups::isSingleViewAction([]))->toBeFalse();
+        ->and(TableRecordActionGroups::isSinglePrimaryAction([]))->toBeFalse();
 });
 
 test('flatten unwraps action groups', function () {
@@ -47,4 +51,55 @@ test('table record action groups leave all-action-group lists unchanged', functi
     ];
 
     expect(TableRecordActionGroups::wrap($groups))->toBe($groups);
+});
+
+test('normalize removes actions column for a single edit action', function () {
+    $livewire = Mockery::mock(HasTable::class);
+    $table = Table::make($livewire)
+        ->recordActions(TableRecordActionGroups::wrap([
+            EditAction::make(),
+        ]));
+
+    $normalized = TableRecordActionGroups::normalizeSinglePrimaryActionRowClick($table);
+
+    expect($normalized->getRecordActions())->toBe([])
+        ->and($normalized->getRecordAction([]))->toBe(EditAction::getDefaultName());
+});
+
+test('normalize keeps record url and clears actions for a single view action', function () {
+    $livewire = Mockery::mock(HasTable::class);
+    $table = Table::make($livewire)
+        ->recordUrl(fn (): string => '/example')
+        ->recordActions(TableRecordActionGroups::wrap([
+            ViewAction::make(),
+        ]));
+
+    $normalized = TableRecordActionGroups::normalizeSinglePrimaryActionRowClick($table);
+
+    expect($normalized->getRecordActions())->toBe([])
+        ->and($normalized->getRecordUrl([]))->toBe('/example');
+});
+
+test('normalize leaves multiple row actions unchanged', function () {
+    $livewire = Mockery::mock(HasTable::class);
+    $table = Table::make($livewire)
+        ->recordActions(TableRecordActionGroups::wrap([
+            ViewAction::make(),
+            EditAction::make(),
+        ]));
+
+    $normalized = TableRecordActionGroups::normalizeSinglePrimaryActionRowClick($table);
+
+    expect($normalized->getRecordActions())->toHaveCount(1)
+        ->and($normalized->getRecordActions()[0])->toBeInstanceOf(ActionGroup::class);
+});
+
+test('apply configures row click for a single view action without record url', function () {
+    $livewire = Mockery::mock(HasTable::class);
+    $table = Table::make($livewire);
+
+    $configured = TableRecordActionGroups::apply($table, [ViewAction::make()]);
+
+    expect($configured->getRecordActions())->toBe([])
+        ->and($configured->getRecordAction([]))->toBe(ViewAction::getDefaultName());
 });

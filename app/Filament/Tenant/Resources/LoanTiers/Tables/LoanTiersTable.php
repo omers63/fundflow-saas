@@ -7,7 +7,6 @@ use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\CreateAction;
 use Filament\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -41,9 +40,6 @@ class LoanTiersTable
                     ->label(__('Active')),
             ])
             ->defaultSort('tier_number')
-            ->headerActions([
-                CreateAction::make(),
-            ])
             ->recordActions(TableRecordActionGroups::wrap([
                 EditAction::make(),
             ]))

@@ -26,17 +26,12 @@
 @endphp
 
 <div class="ff-app-insights w-full max-w-none space-y-3 mb-1">
-    <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <div class="lg:col-span-1">
-            @include('filament.tenant.widgets.partials.insights-hero', ['hero' => $hero])
-        </div>
-
-        @include('filament.tenant.widgets.partials.insights-kpi-strip', [
-            'kpis' => $kpis,
-            'sparkline' => $d['pending'] > 0 ? $d['sparkline'] : null,
-            'sparklineMax' => $sparkMax,
-        ])
-    </div>
+    @include('filament.tenant.widgets.partials.insights-head', [
+        'hero' => $hero,
+        'kpis' => $kpis,
+        'sparkline' => $d['pending'] > 0 ? $d['sparkline'] : null,
+        'sparklineMax' => $sparkMax,
+    ])
 
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div
@@ -50,7 +45,7 @@
                 </div>
                 @if ($d['accepted_amount_this_month'] > 0)
                     <span class="text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
-                        {{ number_format($d['accepted_amount_this_month'], 0) }} {{ $currency }} {{ __('this mo') }}
+                        <x-member::amount :value="$d['accepted_amount_this_month']" :currency="$currency" :precision="0" class="inline" /> {{ __('this mo') }}
                     </span>
                 @endif
             </div>
@@ -106,8 +101,7 @@
                             {{ __('Notes & bank') }}</p>
                     </div>
                     <p class="mt-1.5 text-lg font-bold tabular-nums text-gray-900 dark:text-white">
-                        {{ number_format($notes['pending_total'], 0) }} <span
-                            class="text-[10px] font-normal text-gray-400">{{ $currency }}</span>
+                        <x-member::amount :value="$notes['pending_total']" :currency="$currency" :precision="0" />
                     </p>
                     <p class="text-[10px] text-gray-400">
                         {{ trans_choice(':count w/ notes|:count w/ notes', $notes['pending_with_notes'], ['count' => $notes['pending_with_notes']]) }}

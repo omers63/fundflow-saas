@@ -34,8 +34,8 @@ test('member detail insights snapshot includes balances and lifecycle', function
     $snapshot = app(MemberDetailInsightsService::class)->snapshot($member->fresh());
 
     expect($snapshot['member']['name'])->toBe('Insight Member')
-        ->and($snapshot['balances']['cash']['display'])->toBeString()->not->toBeEmpty()
-        ->and($snapshot['balances']['fund']['display'])->toBeString()->not->toBeEmpty()
+        ->and($snapshot['balances']['cash']['amount'])->toBe(1500.0)
+        ->and($snapshot['balances']['fund']['amount'])->toBe(2500.0)
         ->and($snapshot['kpis'])->toHaveCount(10)
         ->and($snapshot['steps'])->not->toBeEmpty()
         ->and($snapshot['cycle']['period_label'])->toBeString()

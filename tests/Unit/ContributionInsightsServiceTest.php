@@ -55,7 +55,30 @@ test('insights snapshot aggregates contribution pipeline metrics', function () {
         ->and($snapshot['method_breakdown'])->not->toBeEmpty()
         ->and($snapshot['trend'])->toHaveCount(6)
         ->and($snapshot['sparkline'])->toHaveCount(8)
-        ->and($snapshot['oldest_pending'])->not->toBeEmpty();
+        ->and($snapshot['oldest_pending'])->not->toBeEmpty()
+        ->and($snapshot['oldest_pending'][0])->toHaveKey('amount');
+});
+
+test('collected snapshot amount kpi exposes numeric value for stat rendering', function () {
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 1000,
+    ]);
+
+    [$month, $year] = app(ContributionCycleService::class)->currentOpenPeriod();
+    $period = Contribution::periodDate($month, $year);
+
+    Contribution::factory()->for($member)->posted()->create([
+        'period' => $period,
+        'amount' => 2500,
+    ]);
+
+    $snapshot = app(ContributionInsightsService::class)->forContext('collected');
+    $amountKpi = collect($snapshot['kpis'])->firstWhere('key', 'amount');
+
+    expect($amountKpi)->not->toBeNull()
+        ->and($amountKpi['value'])->toBe(2500.0)
+        ->and($amountKpi['currency'])->toBeString();
 });
 
 test('six month trend buckets contributions using normalized period keys', function () {

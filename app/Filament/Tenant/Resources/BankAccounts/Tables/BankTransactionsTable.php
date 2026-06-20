@@ -8,7 +8,7 @@ use App\Filament\Support\BankWorkspaceImportTableHeaderActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
-use App\Filament\Support\ViewActions\ViewBankTransactionAction;
+use App\Filament\Tenant\Support\ViewBankTransactionAction;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
 use App\Services\BankClearingMatchService;
@@ -34,26 +34,23 @@ use Illuminate\Database\Eloquent\Collection;
 
 class BankTransactionsTable
 {
-    public static function configure(Table $table, ?Closure $afterImport = null): Table
+    public static function configure(Table $table, ?Closure $afterImport = null, bool $includeImportHeaderAction = true): Table
     {
-        return TableGrouping::apply(
+        $table = TableGrouping::apply(
             $table
-                ->headerActions([
-                    BankWorkspaceImportTableHeaderActions::bankStatementImportAction($afterImport),
-                ])
                 ->columns([
                     TextColumn::make('transaction_date')
                         ->date()
                         ->sortable(),
                     TextColumn::make('bankStatement.filename')
-                        ->label('Source')
+                        ->label(__('Source'))
                         ->limit(20),
                     TextColumn::make('amount')
                         ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
                         ->sortable()
                         ->color(fn ($state): string => $state >= 0 ? 'success' : 'danger'),
                     TextColumn::make('member.name')
-                        ->label('Assigned to')
+                        ->label(__('Assigned to'))
                         ->placeholder(__('Unassigned'))
                         ->sortable(),
                     TextColumn::make('masterCashTransaction.id')
@@ -63,6 +60,7 @@ class BankTransactionsTable
                         ->wrap(),
                     TextColumn::make('status')
                         ->badge()
+                        ->formatStateUsing(fn (string $state): string => BankTransaction::statusOptions()[$state] ?? $state)
                         ->color(fn (string $state): string => match ($state) {
                             'imported' => 'warning',
                             'mirrored' => 'info',
@@ -71,48 +69,42 @@ class BankTransactionsTable
                             'duplicate' => 'danger',
                         }),
                     TextColumn::make('duplicateOf.description')
-                        ->label('Duplicate of')
+                        ->label(__('Duplicate of'))
                         ->placeholder(__('—'))
                         ->limit(30)
                         ->toggledHiddenByDefault(),
                     IconColumn::make('is_cleared')
-                        ->label('Cleared')
+                        ->label(__('Cleared'))
                         ->boolean(),
                 ])
                 ->filters([
                     SelectFilter::make('status')
-                        ->options([
-                            'imported' => 'Imported',
-                            'mirrored' => 'Mirrored',
-                            'posted' => 'Posted',
-                            'ignored' => 'Ignored',
-                            'duplicate' => 'Duplicate',
-                        ]),
+                        ->options(BankTransaction::statusOptions()),
                     TernaryFilter::make('is_cleared')
-                        ->label('Cleared status')
+                        ->label(__('Cleared status'))
                         ->trueLabel(__('Cleared'))
                         ->falseLabel(__('Uncleared')),
-                    DateColumnRangeFilter::make('transaction_date', 'Transaction date'),
+                    DateColumnRangeFilter::make('transaction_date', __('Transaction date')),
                     SelectFilter::make('member_id')
-                        ->label('Member')
+                        ->label(__('Member'))
                         ->relationship('member', 'name')
                         ->searchable()
                         ->preload(),
                     TernaryFilter::make('duplicate_of_id')
-                        ->label('Duplicate link')
+                        ->label(__('Duplicate link'))
                         ->nullable()
                         ->trueLabel(__('Linked'))
                         ->falseLabel(__('Not linked')),
                     SelectFilter::make('bank_statement_id')
-                        ->label('Statement')
+                        ->label(__('Statement'))
                         ->relationship('bankStatement', 'filename')
                         ->searchable()
                         ->preload(),
                     Filter::make('description_contains')
-                        ->label('Description')
+                        ->label(__('Description'))
                         ->schema([
                             TextInput::make('value')
-                                ->label('Contains'),
+                                ->label(__('Contains')),
                         ])
                         ->query(function (Builder $query, array $data): Builder {
                             $needle = $data['value'] ?? null;
@@ -151,7 +143,7 @@ class BankTransactionsTable
                         }),
                     BankTransactionTableActions::postToMember(),
                     Action::make('clearMatch')
-                        ->label('Clear / Match')
+                        ->label(__('Clear / Match'))
                         ->icon('heroicon-o-link')
                         ->color('primary')
                         ->requiresConfirmation()
@@ -188,7 +180,7 @@ class BankTransactionsTable
                             Notification::make()->title(__('Transactions matched and cleared'))->success()->send();
                         }),
                     Action::make('ignore')
-                        ->label('Ignore')
+                        ->label(__('Ignore'))
                         ->icon('heroicon-o-x-mark')
                         ->color('gray')
                         ->requiresConfirmation()
@@ -267,7 +259,7 @@ class BankTransactionsTable
                             }),
                         BankTransactionTableActions::postToMemberBulk(),
                         BulkAction::make('ignoreSelected')
-                            ->label('Ignore selected')
+                            ->label(__('Ignore selected'))
                             ->icon('heroicon-o-x-mark')
                             ->color('gray')
                             ->requiresConfirmation()
@@ -287,5 +279,13 @@ class BankTransactionsTable
                 ->defaultSort('transaction_date', 'desc'),
             TableGrouping::bankTransactions()
         );
+
+        if ($includeImportHeaderAction) {
+            $table->headerActions([
+                BankWorkspaceImportTableHeaderActions::bankStatementImportAction($afterImport),
+            ]);
+        }
+
+        return $table;
     }
 }

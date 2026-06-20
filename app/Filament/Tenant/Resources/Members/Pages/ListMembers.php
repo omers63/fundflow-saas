@@ -3,9 +3,16 @@
 namespace App\Filament\Tenant\Resources\Members\Pages;
 
 use App\Filament\Tenant\Resources\Members\MemberResource;
-use App\Models\Tenant\Member;
+use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
+use App\Filament\Tenant\Widgets\MemberInsightsWidget;
+use App\Services\Tenant\MemberListTabService;
+use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
-use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\RenderHook;
+use Filament\Schemas\Components\View;
+use Filament\Schemas\Schema;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -17,48 +24,67 @@ class ListMembers extends ListRecords
     {
         return match (MemberResource::resolveListTab()) {
             'delinquent' => __('Members blocked from portal access and new loans until arrears are cleared and status is restored.'),
+            'migration_pending' => __('Imported members awaiting contribution cycle clearance before full go-live.'),
+            'suspended' => __('Members temporarily blocked from portal access and new loans.'),
             default => __('Manage the member roster, household structure, status, and contribution commitments.'),
         };
     }
 
-    protected function getHeaderActions(): array
+    protected function getHeaderWidgets(): array
     {
-        return [];
+        return [
+            MemberInsightsWidget::class,
+        ];
     }
 
-    public function getTabs(): array
+    public function getHeaderWidgetsColumns(): int|array
     {
-        $delinquentCount = Member::query()->where('status', 'delinquent')->count();
-        $suspendedCount = Member::query()->where('status', 'suspended')->count();
-        $withdrawnCount = Member::query()->where('status', 'withdrawn')->count();
+        return 1;
+    }
 
+    protected function getHeaderActions(): array
+    {
         return [
-            'all' => Tab::make(MemberResource::listTabLabel('all')),
-            'active' => Tab::make(MemberResource::listTabLabel('active')),
-            'delinquent' => Tab::make(MemberResource::listTabLabel('delinquent'))
-                ->badge($delinquentCount > 0 ? (string) $delinquentCount : null)
-                ->badgeColor('danger'),
-            'suspended' => Tab::make(MemberResource::listTabLabel('suspended'))
-                ->badge($suspendedCount > 0 ? (string) $suspendedCount : null)
-                ->badgeColor('warning'),
-            'withdrawn' => Tab::make(MemberResource::listTabLabel('withdrawn'))
-                ->badge($withdrawnCount > 0 ? (string) $withdrawnCount : null)
-                ->badgeColor('gray'),
+            Action::make('pending_applications')
+                ->label(__('Applications'))
+                ->icon('heroicon-o-clipboard-document-list')
+                ->color('gray')
+                ->badge(MembershipApplicationResource::getNavigationBadge())
+                ->badgeColor(MembershipApplicationResource::getNavigationBadgeColor())
+                ->url(MembershipApplicationResource::listTabUrl('pending')),
+        ];
+    }
+
+    public function content(Schema $schema): Schema
+    {
+        return $schema
+            ->components([
+                View::make('filament.tenant.resources.members.partials.status-filter-pills-wrapper'),
+                RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
+                EmbeddedTable::make(),
+                RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
+            ]);
+    }
+
+    /**
+     * @return array<string>
+     */
+    public function getPageClasses(): array
+    {
+        return [
+            ...parent::getPageClasses(),
+            'fi-page-members-list',
         ];
     }
 
     protected function getTableQuery(): Builder
     {
         $query = parent::getTableQuery();
-        $tab = MemberResource::resolveListTab();
 
-        return match ($tab) {
-            'active' => $query->where('status', 'active'),
-            'delinquent' => $query->where('status', 'delinquent'),
-            'suspended' => $query->where('status', 'suspended'),
-            'withdrawn' => $query->where('status', 'withdrawn'),
-            default => $query,
-        };
+        return app(MemberListTabService::class)->applyTabFilter(
+            $query,
+            MemberResource::resolveListTab(),
+        );
     }
 
     protected function getTableQueryStringIdentifier(): ?string

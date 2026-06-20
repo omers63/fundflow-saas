@@ -7,6 +7,7 @@ namespace App\Filament\Support;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
+use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
@@ -14,8 +15,8 @@ use Illuminate\Database\Eloquent\Model;
 final class TableRecordActionGroups
 {
     /**
-     * Configure row actions. When the list contains only a {@see ViewAction}, the row opens that
-     * action on click and no actions column is rendered.
+     * Configure row actions. When the list contains only a {@see ViewAction} or {@see EditAction},
+     * the row opens that action on click and no actions column is rendered.
      *
      * @param  array<int, Action|ActionGroup>  $actions
      * @param  Closure(Model): (?string)|null  $recordUrl
@@ -24,21 +25,8 @@ final class TableRecordActionGroups
     {
         $flat = self::flatten($actions);
 
-        if (self::isSingleViewAction($flat)) {
-            /** @var ViewAction $view */
-            $view = $flat[0];
-
-            if ($recordUrl !== null) {
-                return $table
-                    ->recordUrl($recordUrl)
-                    ->recordActions([]);
-            }
-
-            return $table
-                ->recordActions([$view])
-                ->recordUrl(fn (): ?string => null)
-                ->recordAction($view->getName())
-                ->recordActions([]);
+        if (self::isSinglePrimaryAction($flat)) {
+            return self::configureSinglePrimaryActionRowClick($table, $flat[0], $recordUrl);
         }
 
         $table = $table->recordActions(self::wrap($actions));
@@ -48,6 +36,25 @@ final class TableRecordActionGroups
         }
 
         return $table;
+    }
+
+    /**
+     * When a table already has a single view or edit row action, remove the actions column and
+     * rely on row click (or an existing {@see Table::recordUrl()}).
+     */
+    public static function normalizeSinglePrimaryActionRowClick(Table $table): Table
+    {
+        if ($table->getRecordActions() === []) {
+            return $table;
+        }
+
+        $flat = self::flatten($table->getRecordActions());
+
+        if (! self::isSinglePrimaryAction($flat)) {
+            return $table;
+        }
+
+        return self::configureSinglePrimaryActionRowClick($table, $flat[0]);
     }
 
     /**
@@ -107,5 +114,42 @@ final class TableRecordActionGroups
     public static function isSingleViewAction(array $actions): bool
     {
         return count($actions) === 1 && $actions[0] instanceof ViewAction;
+    }
+
+    /**
+     * @param  array<int, Action>  $actions
+     */
+    public static function isSingleEditAction(array $actions): bool
+    {
+        return count($actions) === 1 && $actions[0] instanceof EditAction;
+    }
+
+    /**
+     * @param  array<int, Action>  $actions
+     */
+    public static function isSinglePrimaryAction(array $actions): bool
+    {
+        return self::isSingleViewAction($actions) || self::isSingleEditAction($actions);
+    }
+
+    private static function configureSinglePrimaryActionRowClick(
+        Table $table,
+        Action $action,
+        ?Closure $recordUrl = null,
+    ): Table {
+        if ($recordUrl !== null) {
+            return $table
+                ->recordUrl($recordUrl)
+                ->recordActions([]);
+        }
+
+        if ($table->hasCustomRecordUrl()) {
+            return $table->recordActions([]);
+        }
+
+        return $table
+            ->recordUrl(fn (): ?string => null)
+            ->recordAction($action->getName())
+            ->recordActions([]);
     }
 }

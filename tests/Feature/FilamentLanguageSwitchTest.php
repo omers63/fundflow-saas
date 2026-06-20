@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Livewire\LanguageSwitchComponent;
+use App\Http\Livewire\TenantTopbarLanguageSwitch;
 use BezhanSalleh\LanguageSwitch\LanguageSwitch;
 use Livewire\Livewire;
 
@@ -14,6 +15,15 @@ test('filament language switch component switches locale via switchLocale action
         ->assertRedirect();
 
     expect(session('locale'))->toBe('en');
+});
+
+test('tenant topbar language switch shows locale label and sized dropdown options', function () {
+    app()->setLocale('en');
+
+    Livewire::test(TenantTopbarLanguageSwitch::class)
+        ->assertSee('English')
+        ->assertSeeHtml('ff-tenant-topbar-language-switch__option')
+        ->assertSeeHtml('ff-tenant-topbar-chip');
 });
 
 test('language switch dropdown uses dedicated class and switchLocale wire action', function () {

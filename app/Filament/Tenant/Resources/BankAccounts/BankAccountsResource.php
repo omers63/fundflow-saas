@@ -40,7 +40,7 @@ class BankAccountsResource extends Resource
 
     protected static ?string $slug = 'bank-accounts';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = TenantNavigation::SORT_BANK_CLEARING;
 
     public static function getNavigationBadge(): ?string
     {
@@ -77,6 +77,7 @@ class BankAccountsResource extends Resource
             'imports', 'transactions' => BankTransactionsTable::configure(
                 $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Statement lines'))),
                 $afterLedgerMutation,
+                includeImportHeaderAction: false,
             ),
             'clearance' => PendingOperationalClearanceTable::configure(
                 $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Pending bank match'))),
@@ -101,13 +102,13 @@ class BankAccountsResource extends Resource
         if ($livewire instanceof ListBankAccounts && filled($livewire->activeTab)) {
             $tab = $livewire->activeTab;
         } else {
-            $tab = request()->string('tab')->toString() ?: 'imports';
+            $tab = request()->string('tab')->toString() ?: 'clearance';
         }
 
         return match ($tab) {
             'transactions' => 'imports',
             'ledger', 'statements', 'imports', 'clearance', 'sms' => $tab,
-            default => 'imports',
+            default => 'clearance',
         };
     }
 

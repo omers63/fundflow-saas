@@ -7,6 +7,7 @@ use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\ViewActions\ViewFundPostingAction;
 use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
+use App\Filament\Tenant\Support\ViewFundPostingAction as TenantViewFundPostingAction;
 use App\Models\Tenant\Setting;
 use App\Services\FundPostingService;
 use Filament\Actions\Action;
@@ -85,7 +86,7 @@ class FundPostingsTable
                         ->falseLabel(__('No receipt')),
                 ])
                 ->recordActions(TableRecordActionGroups::wrap([
-                    ViewFundPostingAction::make(),
+                    TenantViewFundPostingAction::make(),
                     Action::make('accept')
                         ->label('Accept')
                         ->icon('heroicon-o-check-circle')

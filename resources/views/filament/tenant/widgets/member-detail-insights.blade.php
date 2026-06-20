@@ -12,44 +12,46 @@
     @else
         <x-member-lifecycle-stepper :steps="$d['steps']" />
 
-        <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-            <div class="space-y-2 lg:col-span-1">
-                @include('filament.tenant.widgets.partials.insights-hero', ['hero' => $d['hero']])
-                <div class="grid grid-cols-2 gap-2">
-                    <a href="{{ $d['balances']['cash']['url'] ?? '#' }}"
+        <div class="ff-app-insights-head space-y-3">
+            @include('filament.tenant.widgets.partials.insights-hero', ['hero' => $d['hero']])
+
+            <div class="grid max-w-lg grid-cols-2 gap-2 sm:max-w-xl">
+                <a href="{{ $d['balances']['cash']['url'] ?? '#' }}"
                         @class([
-                            'block overflow-hidden rounded-xl border px-3 py-2.5 shadow-sm transition hover:ring-2 hover:ring-emerald-500/30',
-                            'border-emerald-200/80 bg-gradient-to-br from-emerald-50 to-teal-50/60 dark:border-emerald-500/25 dark:from-emerald-950/30 dark:to-teal-950/20' => ! $d['balances']['cash']['negative'],
-                            'border-rose-200/80 bg-gradient-to-br from-rose-50 to-orange-50/60 dark:border-rose-500/25 dark:from-rose-950/30 dark:to-orange-950/20' => $d['balances']['cash']['negative'],
+                            'relative block overflow-hidden rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm transition hover:bg-gray-50/80 dark:border-white/10 dark:bg-slate-800',
                             'pointer-events-none opacity-60' => empty($d['balances']['cash']['url']),
                         ])>
-                        <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{{ __('Cash') }}
-                        </p>
+                        <div @class([
+                            'absolute inset-y-0 left-0 w-0.5',
+                            $d['balances']['cash']['negative'] ? 'bg-rose-500' : 'bg-emerald-500',
+                        ])></div>
+                        <p class="pl-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">{{ __('Cash') }}</p>
                         <p @class([
-                            'text-lg font-bold tabular-nums leading-tight',
+                            'pl-1 text-lg font-bold tabular-nums leading-tight',
                             $d['balances']['cash']['negative']
                                 ? 'text-rose-600 dark:text-rose-400'
                                 : 'text-emerald-600 dark:text-emerald-400',
-                        ])>{{ $d['balances']['cash']['display'] }}</p>
+                        ])><x-member::amount :value="$d['balances']['cash']['amount']" :currency="$d['currency']" /></p>
                     </a>
                     <a href="{{ $d['balances']['fund']['url'] ?? '#' }}"
                         @class([
-                            'block overflow-hidden rounded-xl border px-3 py-2.5 shadow-sm transition hover:ring-2 hover:ring-indigo-500/30',
-                            'border-indigo-200/80 bg-gradient-to-br from-indigo-50 to-violet-50/60 dark:border-indigo-500/25 dark:from-indigo-950/30 dark:to-violet-950/20' => ! $d['balances']['fund']['negative'],
-                            'border-rose-200/80 bg-gradient-to-br from-rose-50 to-orange-50/60 dark:border-rose-500/25 dark:from-rose-950/30 dark:to-orange-950/20' => $d['balances']['fund']['negative'],
+                            'relative block overflow-hidden rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm transition hover:bg-gray-50/80 dark:border-white/10 dark:bg-slate-800',
                             'pointer-events-none opacity-60' => empty($d['balances']['fund']['url']),
                         ])>
-                        <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{{ __('Fund') }}
-                        </p>
+                        <div @class([
+                            'absolute inset-y-0 left-0 w-0.5',
+                            $d['balances']['fund']['negative'] ? 'bg-rose-500' : 'bg-indigo-500',
+                        ])></div>
+                        <p class="pl-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">{{ __('Fund') }}</p>
                         <p @class([
-                            'text-lg font-bold tabular-nums leading-tight',
+                            'pl-1 text-lg font-bold tabular-nums leading-tight',
                             $d['balances']['fund']['negative']
                                 ? 'text-rose-600 dark:text-rose-400'
                                 : 'text-indigo-600 dark:text-indigo-400',
-                        ])>{{ $d['balances']['fund']['display'] }}</p>
+                        ])><x-member::amount :value="$d['balances']['fund']['amount']" :currency="$d['currency']" /></p>
                     </a>
-                </div>
             </div>
+
             @include('filament.tenant.widgets.partials.insights-kpi-strip', [
                 'kpis' => $d['kpis'],
                 'sparkline' => $d['sparkline'],
@@ -88,7 +90,7 @@
                     @else
                         <div class="flex justify-between gap-2">
                             <span class="text-gray-500">{{ __('Required cash') }}</span>
-                            <span class="font-semibold tabular-nums">{{ $d['cycle']['required_cash'] }}</span>
+                            <span class="font-semibold tabular-nums"><x-member::amount :value="$d['cycle']['required_cash']" :currency="$d['currency']" /></span>
                         </div>
                     @endif
                     @if ($d['fund_summary']['fund_minimum_pct'] !== null)
@@ -111,20 +113,19 @@
             </div>
 
             @if ($d['loan'])
-                <div
-                    class="overflow-hidden rounded-xl border border-violet-200/80 bg-gradient-to-br from-violet-50 to-indigo-50/60 shadow-sm dark:border-violet-500/25 dark:from-violet-950/30 dark:to-indigo-950/20">
-                    <div class="flex items-center justify-between gap-2 border-b border-violet-100/80 px-3 py-2 dark:border-violet-500/20">
+                <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-800">
+                    <div class="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 dark:border-white/10">
                         <div class="flex items-center gap-1.5">
-                            <x-heroicon-o-currency-dollar class="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                            <h3 class="text-[11px] font-semibold uppercase tracking-wider text-violet-800 dark:text-violet-200">
+                            <x-heroicon-o-currency-dollar class="h-4 w-4 text-violet-500" />
+                            <h3 class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                                 {{ __('Active loan') }}</h3>
                         </div>
-                        <span class="text-[10px] font-medium text-violet-700 dark:text-violet-300">{{ $d['loan']['status_label'] }}</span>
+                        <span class="text-[10px] font-medium text-gray-400">{{ $d['loan']['status_label'] }}</span>
                     </div>
                     <div class="space-y-2 px-3 py-2.5">
                         <div class="flex justify-between text-xs">
                             <span class="text-gray-600 dark:text-gray-300">{{ __('Outstanding') }}</span>
-                            <span class="font-bold tabular-nums text-gray-900 dark:text-white">{{ $d['loan']['outstanding'] }}</span>
+                            <span class="font-bold tabular-nums text-gray-900 dark:text-white"><x-member::amount :value="$d['loan']['outstanding']" :currency="$d['currency']" /></span>
                         </div>
                         <div>
                             <div class="mb-0.5 flex justify-between text-[10px] text-gray-500">
@@ -163,7 +164,7 @@
                         <p class="mt-1 text-[11px] text-gray-500">{{ $d['eligibility']['reason'] }}</p>
                     @endif
                     <p class="mt-2 text-[10px] text-gray-400">
-                        {{ __('Total posted') }}: {{ $d['fund_summary']['contributions_total'] }}
+                        {{ __('Total posted') }}: <x-member::amount :value="$d['fund_summary']['contributions_total']" :currency="$d['currency']" />
                         · {{ $d['fund_summary']['contributions_count'] }} {{ __('payments') }}
                     </p>
                 </div>
@@ -171,8 +172,8 @@
         </div>
 
         @if ($d['arrears']['visible'])
-            <div
-                class="rounded-xl border border-rose-200/80 bg-gradient-to-r from-rose-50 to-amber-50/70 px-3 py-2.5 shadow-sm dark:border-rose-500/30 dark:from-rose-950/30 dark:to-amber-950/20">
+            <div class="relative overflow-hidden rounded-xl border border-rose-200 bg-white px-3 py-2.5 shadow-sm dark:border-rose-500/25 dark:bg-slate-800">
+                <div class="absolute inset-y-0 left-0 w-0.5 bg-rose-500"></div>
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <div class="flex items-center gap-2">
                         <x-heroicon-o-exclamation-triangle class="h-4 w-4 text-rose-600" />
@@ -190,7 +191,7 @@
                         </div>
                     </div>
                     <a href="{{ $d['arrears']['cta_url'] }}"
-                        class="shrink-0 rounded-lg bg-rose-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-rose-500">
+                        class="ff-tenant-btn ff-tenant-btn--danger shrink-0 px-2.5 py-1 text-[11px]">
                         {{ $d['arrears']['cta_label'] }}
                     </a>
                 </div>
@@ -220,9 +221,23 @@
                         <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
                             {{ ui_label($card['label']) }}</p>
                     </div>
-                    <p class="mt-1 pl-1 text-sm font-bold text-gray-900 dark:text-white">{{ $card['value'] }}</p>
+                    <p class="mt-1 pl-1 text-sm font-bold text-gray-900 dark:text-white">
+                        @if (($card['key'] ?? null) === 'accounts' && isset($card['value_amount']))
+                            <x-member::amount :value="$card['value_amount']" :currency="$d['currency']" /> · {{ __('Cash') }}
+                        @elseif (($card['key'] ?? null) === 'loans' && isset($card['value_amount']))
+                            {{ __('Active') }} · <x-member::amount :value="$card['value_amount']" :currency="$d['currency']" />
+                        @else
+                            {{ $card['value'] }}
+                        @endif
+                    </p>
                     @if (filled($card['hint'] ?? null))
-                        <p class="pl-1 text-[10px] text-gray-400">{{ $card['hint'] }}</p>
+                        <p class="pl-1 text-[10px] text-gray-400">
+                            @if (($card['key'] ?? null) === 'accounts' && isset($card['hint_amount']))
+                                <x-member::amount :value="$card['hint_amount']" :currency="$d['currency']" /> {{ __('fund') }}
+                            @else
+                                {{ $card['hint'] }}
+                            @endif
+                        </p>
                     @endif
                 </a>
             @endforeach
@@ -262,7 +277,7 @@
                                 <p class="text-[10px] text-gray-400">{{ $tx['transacted_at'] }}</p>
                             </div>
                             <span @class(['shrink-0 font-semibold tabular-nums', $tx['signed_class']])>
-                                {{ $tx['amount'] }}
+                                <x-member::amount :value="$tx['amount']" :currency="$d['currency']" />
                             </span>
                         </li>
                     @empty

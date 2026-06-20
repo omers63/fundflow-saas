@@ -19,7 +19,7 @@
         @elseif (filled($value))
             {!! MoneyDisplay::markupForDisplay($value, $currency, precision: (int) $precision) !!}
         @else
-            —
+            {{ __('—') }}
         @endif
     </p>
     @if (filled($hint))

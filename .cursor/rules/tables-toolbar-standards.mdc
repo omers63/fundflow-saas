@@ -17,7 +17,7 @@ Every **data table** (list resources, relation managers, custom pages, table wid
 ## Row actions
 
 - Use `TableRecordActionGroups::apply($table, $actions, recordUrl: …)` when configuring record actions.
-- When the list contains **only** a `ViewAction`, the row opens it on click and **no actions column** is rendered (pass `recordUrl` for page navigation, omit for modal view actions).
+- When the list contains **only** a `ViewAction` or `EditAction`, the row opens that action on click and **no actions column** is rendered (pass `recordUrl` for page navigation, omit for modal view actions). `TableGrouping::apply()` enforces this automatically for tables that use `->recordActions(TableRecordActionGroups::wrap([…]))`.
 - When multiple row actions exist, use `TableRecordActionGroups::wrap([...])` via `apply()` or chain `->recordActions(TableRecordActionGroups::wrap([...]))`.
 - Do not leave bare `Action` / `EditAction` / `ViewAction` at the top level of `recordActions()` unless wrapped by `apply()` / `wrap()`.
 

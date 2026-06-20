@@ -87,6 +87,19 @@ test('member portal pages render arabic navigation labels when locale is ar', fu
         ->assertSuccessful()
         ->assertSee('مساهماتي', false);
 
+    $this->get('http://'.$this->domain.'/member/fund-account')
+        ->assertSuccessful()
+        ->assertSee('حساب الصندوق', false)
+        ->assertSee('مدخرات صندوقك طويلة الأجل', false);
+
+    $this->get('http://'.$this->domain.'/member/activity')
+        ->assertSuccessful()
+        ->assertSee('المعاملات', false);
+
+    $this->get('http://'.$this->domain.'/member/loan-calculator')
+        ->assertSuccessful()
+        ->assertSee('حاسبة القرض', false);
+
     expect(MyContributionResource::getNavigationLabel())->toBe('مساهماتي')
         ->and(MyDependentResource::getNavigationLabel())->toBe('تابعيني')
         ->and(MyContributionResource::getPluralModelLabel())->toBe('مساهماتي')

@@ -21,6 +21,28 @@ use Filament\Tables\Table;
 
 class LoanEligibilityOverridesTable
 {
+    public static function createAction(): CreateAction
+    {
+        return CreateAction::make()
+            ->schema([
+                Select::make('member_id')
+                    ->relationship('member', 'name')
+                    ->searchable()
+                    ->required(),
+                Select::make('gate')
+                    ->options(LoanEligibilityGate::labels())
+                    ->required(),
+                Textarea::make('reason')->required()->rows(3),
+            ])
+            ->using(function (array $data, LoanEligibilityOverrideService $service): LoanEligibilityOverride {
+                return $service->record(
+                    (int) $data['member_id'],
+                    (string) $data['gate'],
+                    (string) $data['reason'],
+                );
+            });
+    }
+
     public static function configure(Table $table): Table
     {
         return TableGrouping::apply($table
@@ -37,26 +59,6 @@ class LoanEligibilityOverridesTable
                 SelectFilter::make('gate')
                     ->options(LoanEligibilityGate::labels()),
                 DateColumnRangeFilter::make('created_at', __('Created')),
-            ])
-            ->headerActions([
-                CreateAction::make()
-                    ->schema([
-                        Select::make('member_id')
-                            ->relationship('member', 'name')
-                            ->searchable()
-                            ->required(),
-                        Select::make('gate')
-                            ->options(LoanEligibilityGate::labels())
-                            ->required(),
-                        Textarea::make('reason')->required()->rows(3),
-                    ])
-                    ->using(function (array $data, LoanEligibilityOverrideService $service): LoanEligibilityOverride {
-                        return $service->record(
-                            (int) $data['member_id'],
-                            (string) $data['gate'],
-                            (string) $data['reason'],
-                        );
-                    }),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

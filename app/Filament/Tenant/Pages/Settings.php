@@ -6,8 +6,10 @@ use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Support\SmsImportTemplateFieldsets;
 use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
 use App\Filament\Tenant\Resources\LoanTiers\LoanTierResource;
+use App\Filament\Tenant\Support\SettingsTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\BankTemplate;
+use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\SmsImportTemplate;
 use App\Services\FiscalClose\FiscalClosePeriodResolver;
@@ -73,6 +75,40 @@ class Settings extends Page implements HasForms
     public static function canAccess(): bool
     {
         return auth()->guard('tenant')->check();
+    }
+
+    /**
+     * @return array<string>
+     */
+    public function getPageClasses(): array
+    {
+        return ['fi-page-settings'];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function getSettingsTabs(): array
+    {
+        return SettingsTabRegistry::tabs();
+    }
+
+    /**
+     * @return list<array{label: string, percentage: string, loan_tier: string, active: bool}>
+     */
+    public function getFundTierRows(): array
+    {
+        return FundTier::query()
+            ->with('loanTier')
+            ->orderBy('tier_number')
+            ->get()
+            ->map(fn (FundTier $tier): array => [
+                'label' => $tier->label,
+                'percentage' => number_format((float) $tier->percentage, 2).'%',
+                'loan_tier' => $tier->loanTier?->name ?? __('—'),
+                'active' => (bool) $tier->is_active,
+            ])
+            ->all();
     }
 
     public static function smsTemplatesUrl(): string
@@ -242,22 +278,6 @@ class Settings extends Page implements HasForms
 
                                                 return BusinessDay::calendarToday()->toFormattedDateString();
                                             }),
-                                    ]),
-                                Section::make(__('Reconciliation (bank vs book)'))
-                                    ->description(__('Optional declared bank closing balance merged into scheduled fund:reconcile runs and available as defaults on the reconciliation page.'))
-                                    ->columns(2)
-                                    ->schema([
-                                        TextInput::make('reconciliation_bank_statement_balance')
-                                            ->label(__('Statement / bank closing balance'))
-                                            ->numeric()
-                                            ->nullable(),
-                                        DatePicker::make('reconciliation_bank_statement_date')
-                                            ->label(__('Statement as-of date'))
-                                            ->native(false)
-                                            ->nullable(),
-                                        Toggle::make('reconciliation_bank_variance_critical')
-                                            ->label(__('Treat bank vs book variance as critical on scheduled runs'))
-                                            ->default(false),
                                     ]),
                                 Section::make(__('Member numbers'))
                                     ->description(__('Controls how IDs are generated for new members (manual create and approved applications). Existing numbers are not changed.'))
@@ -486,7 +506,7 @@ class Settings extends Page implements HasForms
                                             ->placeholder('https://…'),
                                     ]),
                             ]),
-                        Tab::make('Contributions')
+                        Tab::make(__('Collection'))
                             ->icon('heroicon-o-calendar')
                             ->schema([
                                 Section::make(__('Contribution Cycle'))
@@ -577,6 +597,45 @@ class Settings extends Page implements HasForms
                                             ->required()
                                             ->helperText(__('Charged on join-date anniversary; set to 0 to disable.')),
                                     ]),
+                                Section::make(__('Collection window tiers'))
+                                    ->description(__('Days after cycle deadline when late fee tiers apply.'))
+                                    ->columns(4)
+                                    ->schema([
+                                        TextInput::make('collection_late_fee_reminder_days')
+                                            ->label(__('Reminder (days)'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->required(),
+                                        TextInput::make('collection_late_fee_tier_1_day')
+                                            ->label(__('Tier 1 day'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->required(),
+                                        TextInput::make('collection_late_fee_tier_2_day')
+                                            ->label(__('Tier 2 day'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->required(),
+                                        TextInput::make('collection_late_fee_tier_3_day')
+                                            ->label(__('Tier 3 day'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->required(),
+                                        TextInput::make('collection_late_fee_tier_4_day')
+                                            ->label(__('Tier 4 day'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->required(),
+                                        Select::make('collection_late_fee_model')
+                                            ->label(__('Late fee model'))
+                                            ->options([
+                                                'replacement' => __('Replacement (highest tier only)'),
+                                                'cumulative' => __('Cumulative (stack tiers)'),
+                                            ])
+                                            ->required()
+                                            ->native(false)
+                                            ->columnSpanFull(),
+                                    ]),
                             ]),
                         Tab::make(__('Loans'))
                             ->icon('heroicon-o-banknotes')
@@ -610,30 +669,6 @@ class Settings extends Page implements HasForms
                                             ->minValue(0)
                                             ->helperText(__('Optional hard cap (0 = no cap, use multiplier only).')),
                                     ]),
-                                Section::make(__('Payment history gates'))
-                                    ->description(__('Members with pending collections, arrears, or too many late-settled cycles cannot apply for a loan.'))
-                                    ->columns(3)
-                                    ->schema([
-                                        TextInput::make('loan_late_payment_consecutive')
-                                            ->label(__('Consecutive late cycles'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->maxValue(36)
-                                            ->required()
-                                            ->helperText(__('Block when this many closed cycles in a row were settled after the deadline.')),
-                                        TextInput::make('loan_late_payment_rolling')
-                                            ->label(__('Late cycles (rolling window)'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->maxValue(240)
-                                            ->required(),
-                                        TextInput::make('loan_late_payment_lookback_months')
-                                            ->label(__('Rolling window (months)'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->maxValue(240)
-                                            ->required(),
-                                    ]),
                                 Section::make(__('Defaults'))
                                     ->columns(2)
                                     ->schema([
@@ -658,7 +693,123 @@ class Settings extends Page implements HasForms
                                             ->required()
                                             ->helperText(__('Percentage of approved amount member must hold in fund for full settlement.')),
                                     ]),
-                                Section::make(__('Repayment & guarantors'))
+                                Section::make(__('Loan tiers'))
+                                    ->description(__('Interest rates are managed in the loan tiers resource.'))
+                                    ->schema([
+                                        Placeholder::make('loan_tiers_link')
+                                            ->label(__('Loan tiers'))
+                                            ->content(fn (): HtmlString => new HtmlString(
+                                                '<a class="font-semibold text-sky-600 hover:underline dark:text-sky-400" href="'
+                                                .e(LoanTierResource::getUrl('index')).'">'.e(__('Open loan tiers')).'</a>'
+                                            )),
+                                    ]),
+                            ]),
+                        Tab::make(__('Fund tiers'))
+                            ->icon('heroicon-o-circle-stack')
+                            ->schema([
+                                Section::make(__('Fund tier allocations'))
+                                    ->description(__('Tier percentages control how much of the master fund each loan tier may commit. Edit tiers in the loans cluster or below.'))
+                                    ->schema([
+                                        Placeholder::make('fund_tiers_manage')
+                                            ->label(__('Manage tiers'))
+                                            ->content(fn (): HtmlString => new HtmlString(
+                                                '<a class="font-semibold text-sky-600 hover:underline dark:text-sky-400" href="'
+                                                .e(FundTierResource::getUrl('index')).'">'.e(__('Open fund tiers')).'</a>'
+                                            )),
+                                        Placeholder::make('fund_tiers_summary')
+                                            ->label(__('Current tiers'))
+                                            ->columnSpanFull()
+                                            ->content(function (): HtmlString {
+                                                $rows = $this->getFundTierRows();
+
+                                                if ($rows === []) {
+                                                    return new HtmlString('<p class="text-sm text-gray-500">'.e(__('No fund tiers configured.')).'</p>');
+                                                }
+
+                                                $html = '<div class="overflow-x-auto"><table class="w-full min-w-[24rem] text-left text-sm"><thead class="border-b text-xs uppercase text-gray-500"><tr><th class="py-2 pe-3">'.e(__('Tier')).'</th><th class="py-2 pe-3">'.e(__('Allocation')).'</th><th class="py-2 pe-3">'.e(__('Loan tier')).'</th><th class="py-2">'.e(__('Status')).'</th></tr></thead><tbody>';
+
+                                                foreach ($rows as $row) {
+                                                    $status = $row['active']
+                                                        ? '<span class="text-emerald-600">'.e(__('Active')).'</span>'
+                                                        : '<span class="text-gray-400">'.e(__('Inactive')).'</span>';
+                                                    $html .= '<tr class="border-b border-gray-100 dark:border-white/10"><td class="py-2 pe-3 font-medium">'.e($row['label']).'</td><td class="py-2 pe-3 tabular-nums">'.e($row['percentage']).'</td><td class="py-2 pe-3">'.e($row['loan_tier']).'</td><td class="py-2">'.$status.'</td></tr>';
+                                                }
+
+                                                return new HtmlString($html.'</tbody></table></div>');
+                                            }),
+                                    ]),
+                            ]),
+                        Tab::make(__('Reconciliation'))
+                            ->icon('heroicon-o-scale')
+                            ->schema([
+                                Section::make(__('Bank vs book'))
+                                    ->description(__('Optional declared bank closing balance merged into scheduled fund:reconcile runs and available as defaults on the reconciliation page.'))
+                                    ->columns(2)
+                                    ->schema([
+                                        TextInput::make('reconciliation_bank_statement_balance')
+                                            ->label(__('Statement / bank closing balance'))
+                                            ->numeric()
+                                            ->nullable(),
+                                        DatePicker::make('reconciliation_bank_statement_date')
+                                            ->label(__('Statement as-of date'))
+                                            ->native(false)
+                                            ->nullable(),
+                                        Toggle::make('reconciliation_bank_variance_critical')
+                                            ->label(__('Treat bank vs book variance as critical on scheduled runs'))
+                                            ->default(false),
+                                    ]),
+                                Section::make(__('Auto-resolve & matching'))
+                                    ->description(__('Operational tolerances used by nightly reconciliation and bank clearing.'))
+                                    ->columns(3)
+                                    ->schema([
+                                        TextInput::make('collection_recon_tolerance')
+                                            ->label(__('Auto-resolve tolerance'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->step(0.01)
+                                            ->required()
+                                            ->helperText(__('Maximum amount delta auto-resolved without admin review.')),
+                                        TextInput::make('collection_bank_match_date_range_days')
+                                            ->label(__('Bank match date range (days)'))
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->required(),
+                                        TextInput::make('collection_stale_pending_days')
+                                            ->label(__('Stale pending threshold (days)'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->required(),
+                                        TextInput::make('collection_timing_diff_defer_hours')
+                                            ->label(__('Timing defer (hours)'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->required(),
+                                        TextInput::make('collection_timing_diff_escalate_hours')
+                                            ->label(__('Timing escalate (hours)'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->required(),
+                                        TextInput::make('collection_cash_deposit_unbanked_days')
+                                            ->label(__('Unbanked deposit alert (days)'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->required(),
+                                    ]),
+                                Section::make(__('Reconciliation workspace'))
+                                    ->schema([
+                                        Placeholder::make('reconciliation_workspace_link')
+                                            ->label(__('Control center'))
+                                            ->content(fn (): HtmlString => new HtmlString(
+                                                '<a class="font-semibold text-sky-600 hover:underline dark:text-sky-400" href="'
+                                                .e(ReconciliationOverviewPage::getUrl()).'">'.e(__('Open reconciliation')).'</a>'
+                                            )),
+                                    ]),
+                            ]),
+                        Tab::make(__('Guarantor rules'))
+                            ->icon('heroicon-o-shield-check')
+                            ->schema([
+                                Section::make(__('Guarantor liability'))
+                                    ->description(__('When borrowers miss repayment cycles, guarantors may be debited after the grace period.'))
                                     ->columns(2)
                                     ->schema([
                                         TextInput::make('loan_default_grace_cycles')
@@ -686,15 +837,28 @@ class Settings extends Page implements HasForms
                                             ->label(__('Auto-allocate posted contributions to loan'))
                                             ->helperText(__('After a contribution is posted, apply open-period loan repayment from member cash when possible.')),
                                     ]),
-                                Section::make(__('Loan & fund tiers'))
-                                    ->description(__('Interest rates and fund multipliers are managed in dedicated resources.'))
+                                Section::make(__('Missed EMI thresholds'))
+                                    ->description(__('Members with too many late-settled cycles cannot apply for new loans.'))
+                                    ->columns(3)
                                     ->schema([
-                                        Placeholder::make('loan_tiers_link')
-                                            ->label(__('Loan tiers'))
-                                            ->content(fn (): string => LoanTierResource::getUrl('index')),
-                                        Placeholder::make('fund_tiers_link')
-                                            ->label(__('Fund tiers'))
-                                            ->content(fn (): string => FundTierResource::getUrl('index')),
+                                        TextInput::make('loan_late_payment_consecutive')
+                                            ->label(__('Consecutive late cycles'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(36)
+                                            ->required(),
+                                        TextInput::make('loan_late_payment_rolling')
+                                            ->label(__('Late cycles (rolling window)'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(240)
+                                            ->required(),
+                                        TextInput::make('loan_late_payment_lookback_months')
+                                            ->label(__('Rolling window (months)'))
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(240)
+                                            ->required(),
                                     ]),
                             ]),
                         Tab::make(__('Statements'))

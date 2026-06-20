@@ -35,9 +35,9 @@ final class SmsImportTemplatesTable
             ));
     }
 
-    public static function configure(Table $table, bool $embedInBankWorkspace = false, bool $fromSettings = false): Table
+    public static function configure(Table $table, bool $embedInBankWorkspace = false, bool $fromSettings = false, bool $includeCreateHeaderAction = true): Table
     {
-        return TableGrouping::apply($table
+        $table = TableGrouping::apply($table
             ->heading($embedInBankWorkspace ? null : __('SMS import templates'))
             ->description($embedInBankWorkspace
                 ? __('Maintain SMS parsing patterns and member matching rules for exports.')
@@ -83,9 +83,6 @@ final class SmsImportTemplatesTable
                     ])),
                 TrashedFilter::make(),
             ])
-            ->headerActions([
-                self::createAction($fromSettings),
-            ])
             ->recordActions(TableRecordActionGroups::wrap([
                 EditAction::make(),
                 DeleteAction::make(),
@@ -97,5 +94,13 @@ final class SmsImportTemplatesTable
                     TableToolbar::refreshBulkAction(),
                 ]),
             ]), TableGrouping::smsImportTemplates());
+
+        if ($includeCreateHeaderAction) {
+            $table->headerActions([
+                self::createAction($fromSettings),
+            ]);
+        }
+
+        return $table;
     }
 }

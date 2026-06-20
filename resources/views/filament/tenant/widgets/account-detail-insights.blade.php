@@ -10,11 +10,11 @@
             {{ __('Loading account insights…') }}
         </div>
     @else
-        <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-            <div class="space-y-2 lg:col-span-1">
-                @include('filament.tenant.widgets.partials.insights-hero', ['hero' => $d['hero']])
-                <div
-                    class="overflow-hidden rounded-xl border border-gray-200/80 bg-white px-3 py-2.5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div class="ff-app-insights-head space-y-3">
+            @include('filament.tenant.widgets.partials.insights-hero', ['hero' => $d['hero']])
+
+            <div
+                class="max-w-sm overflow-hidden rounded-xl border border-gray-200/80 bg-white px-3 py-2.5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
                     <div class="flex items-end justify-between gap-2">
                         <div>
                             <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
@@ -27,7 +27,7 @@
                             ])>
                                 {{ $d['balance_display'] }}
                             </p>
-                            <p class="text-[10px] text-gray-400">{{ $d['currency'] }} · {{ __('Current balance') }}</p>
+                            <p class="text-[10px] text-gray-400">{{ __('Current balance') }}</p>
                         </div>
                         <span
                             class="rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-bold uppercase text-gray-600 dark:bg-gray-700 dark:text-gray-300">
@@ -35,7 +35,7 @@
                         </span>
                     </div>
                 </div>
-            </div>
+
             @include('filament.tenant.widgets.partials.insights-kpi-strip', [
                 'kpis' => $d['kpis'],
                 'sparkline' => $d['sparkline'],

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\MonthlyStatements;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
+use App\Filament\Tenant\Concerns\HidesFromTenantSidebar;
 use App\Filament\Tenant\Resources\MonthlyStatements\Pages\CreateMonthlyStatement;
 use App\Filament\Tenant\Resources\MonthlyStatements\Pages\EditMonthlyStatement;
 use App\Filament\Tenant\Resources\MonthlyStatements\Pages\ListMonthlyStatements;
@@ -24,6 +25,7 @@ use UnitEnum;
 
 class MonthlyStatementResource extends Resource
 {
+    use HidesFromTenantSidebar;
     use TranslatesFilamentNavigationLabels;
 
     protected static ?string $model = MonthlyStatement::class;

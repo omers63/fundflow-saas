@@ -1,6 +1,6 @@
 <div class="space-y-3">
     <div
-        class="max-h-[22rem] overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/20 p-3">
+        class="max-h-[22rem] overflow-y-auto rounded-xl border border-gray-200 bg-gray-50/60 p-3 dark:border-gray-700 dark:bg-gray-900/20">
         @forelse($messages as $msg)
             @php $isMine = (int) $msg->from_user_id === (int) $userId; @endphp
             <div class="mb-3 flex {{ $isMine ? 'justify-end' : 'justify-start' }}">
@@ -11,8 +11,8 @@
                     </p>
                     <div @class([
                         'rounded-xl px-3 py-2 text-sm whitespace-pre-wrap',
-                        'bg-primary-600 text-white rounded-tr-none' => $isMine,
-                        'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded-tl-none border border-gray-200 dark:border-gray-700' => !$isMine,
+                        'border border-sky-200 bg-sky-50 text-gray-900 rounded-tr-none dark:border-sky-800/50 dark:bg-sky-950/40 dark:text-gray-100' => $isMine,
+                        'rounded-tl-none border border-gray-200 bg-white text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100' => !$isMine,
                     ])>
                         {{ $msg->body }}
                     </div>
@@ -22,8 +22,8 @@
                                 <a href="{{ route('tenant.direct-messages.attachment', ['message' => $msg->id, 'index' => $loop->index]) }}"
                                     target="_blank" rel="noopener" @class([
                                         'inline-flex items-center gap-1 text-xs underline',
-                                        'text-primary-100' => $isMine,
-                                        'text-primary-600 dark:text-primary-400' => !$isMine,
+                                        'text-sky-700 dark:text-sky-300' => $isMine,
+                                        'text-sky-600 dark:text-sky-400' => !$isMine,
                                     ])>
                                     <x-heroicon-o-paper-clip class="w-3 h-3" />
                                     {{ basename($attachment) }}

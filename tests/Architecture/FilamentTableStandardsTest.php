@@ -8,7 +8,7 @@ declare(strict_types=1);
  * @see .cursor/rules/tables-toolbar-standards.mdc
  *
  * Row actions: use {@see TableRecordActionGroups::apply()} when configuring record actions.
- * When the list contains only a View action, the row opens it on click and no actions column is shown.
+ * When the list contains only a View or Edit action, the row opens it on click and no actions column is shown.
  */
 test('filament tables define bulk actions, group-by, and filters', function (): void {
     $root = dirname(__DIR__, 2).'/app/Filament';

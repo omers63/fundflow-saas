@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Tenant\Concerns\EmbedsAsAuditWorkspacePanel;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Services\DatabaseMaintenanceService;
 use BackedEnum;
@@ -14,11 +15,11 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
-use Illuminate\Support\Facades\Schema;
 use UnitEnum;
 
 class SystemMaintenancePage extends Page
 {
+    use EmbedsAsAuditWorkspacePanel;
     use TranslatesPageNavigationLabel;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedWrenchScrewdriver;
@@ -34,6 +35,8 @@ class SystemMaintenancePage extends Page
     protected Width|string|null $maxContentWidth = Width::SevenExtraLarge;
 
     protected string $view = 'filament.tenant.pages.system-maintenance';
+
+    protected string $embeddedView = 'filament.tenant.pages.embedded.system-maintenance';
 
     /** @var list<string> */
     public array $purgeableTables = [];
@@ -51,11 +54,12 @@ class SystemMaintenancePage extends Page
 
     public static function shouldRegisterNavigation(): bool
     {
-        return Schema::hasTable('database_backups');
+        return false;
     }
 
-    public function mount(DatabaseMaintenanceService $service): void
+    public function mount(DatabaseMaintenanceService $service, bool $embedded = false): void
     {
+        $this->mountEmbedded($embedded);
         $this->refreshTableLists($service);
     }
 
@@ -107,7 +111,9 @@ class SystemMaintenancePage extends Page
                         ->success()
                         ->send();
 
-                    $this->redirect(static::getUrl());
+                    $this->redirect($this->embedded
+                        ? $this->embeddedWorkspaceUrl('maintenance')
+                        : static::getUrl());
                 }),
             Action::make('download')
                 ->label(__('Download backup'))
@@ -121,8 +127,8 @@ class SystemMaintenancePage extends Page
                 ->requiresConfirmation()
                 ->modalHeading(__('Purge tables without soft deletes?'))
                 ->modalDescription(
-                    __('All rows in each listed table will be permanently removed. ') .
-                    __('Tables with a deleted_at column are skipped. ') .
+                    __('All rows in each listed table will be permanently removed. ').
+                    __('Tables with a deleted_at column are skipped. ').
                     __('Users, permissions, sessions, queues, cache, and migrations are always preserved.')
                 )
                 ->schema([

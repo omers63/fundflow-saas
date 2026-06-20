@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\MembershipApplications;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
+use App\Filament\Tenant\Concerns\HidesFromTenantSidebar;
 use App\Filament\Tenant\Resources\MembershipApplications\Pages\CreateMembershipApplication;
 use App\Filament\Tenant\Resources\MembershipApplications\Pages\EditMembershipApplication;
 use App\Filament\Tenant\Resources\MembershipApplications\Pages\ListMembershipApplications;
@@ -21,6 +22,7 @@ use Livewire\Livewire;
 
 class MembershipApplicationResource extends Resource
 {
+    use HidesFromTenantSidebar;
     use TranslatesFilamentNavigationLabels;
 
     protected static ?string $model = MembershipApplication::class;
@@ -91,12 +93,21 @@ class MembershipApplicationResource extends Resource
         return 'warning';
     }
 
+    public static function listTabUrl(string $tab): string
+    {
+        return static::listUrl($tab);
+    }
+
     /**
      * @param  array<string, array<string, mixed>>  $filters
      */
-    public static function listUrl(array $filters = []): string
+    public static function listUrl(string $tab = 'all', array $filters = []): string
     {
         $parameters = [];
+
+        if ($tab !== 'all') {
+            $parameters['tab'] = $tab;
+        }
 
         if ($filters !== []) {
             $parameters['filters'] = $filters;

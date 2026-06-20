@@ -5,14 +5,12 @@
 @endphp
 
 <div class="ff-app-insights w-full max-w-none space-y-3 mb-1" @if (filled($pollingInterval)) wire:poll.{{ $pollingInterval }} @endif>
-    <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        @include('filament.tenant.widgets.partials.insights-hero', ['hero' => $d['hero']])
-        @include('filament.tenant.widgets.partials.insights-kpi-strip', [
-            'kpis' => $d['kpis'],
-            'sparkline' => $d['sparkline'],
-            'sparklineMax' => $d['sparkline_max'],
-        ])
-    </div>
+    @include('filament.tenant.widgets.partials.insights-head', [
+        'hero' => $d['hero'],
+        'kpis' => $d['kpis'],
+        'sparkline' => $d['sparkline'],
+        'sparklineMax' => $d['sparkline_max'],
+    ])
 
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div
@@ -91,8 +89,10 @@
                     <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{{ __('30-day flow') }}
                     </p>
                     <p class="mt-1 text-lg font-bold tabular-nums text-gray-900 dark:text-white">
-                        {{ ($d['activity_net'] >= 0 ? '+' : '−') . \App\Support\Insights\InsightFormatter::compactAmount($d['activity_net']) }}
-                        <span class="text-[10px] font-normal text-gray-400">{{ $d['currency'] }}</span>
+                        @php
+                            $netSign = $d['activity_net'] >= 0 ? '+' : '−';
+                        @endphp
+                        {!! $netSign . (\App\Filament\Support\MoneyDisplay::html(abs($d['activity_net']), $d['currency'], precision: 0)?->toHtml() ?? '') !!}
                     </p>
                     <p class="text-[10px] text-gray-400">
                         {{ \App\Support\Insights\InsightFormatter::money($d['activity_credits']) }}

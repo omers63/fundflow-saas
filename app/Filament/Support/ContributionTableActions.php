@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
-use App\Filament\Support\ViewActions\ViewContributionAction;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
+use App\Filament\Tenant\Support\ViewContributionAction;
 use App\Models\Tenant\Contribution;
 use App\Services\ContributionLatePostingClearanceService;
 use App\Services\ContributionService;

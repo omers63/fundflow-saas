@@ -36,18 +36,18 @@ final class AccountTransactionManualAdjustmentHeaderActions
             ->label(__('Credit'))
             ->icon('heroicon-o-arrow-trending-up')
             ->color('success')
-            ->visible(fn(): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
+            ->visible(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
             ->modalHeading(__('Manual credit'))
-            ->modalDescription(fn(): string => self::creditModalDescription($resolveAccount()))
+            ->modalDescription(fn (): string => self::creditModalDescription($resolveAccount()))
             ->modalWidth('md')
-            ->schema(fn(): array => self::formSchema($resolveAccount))
+            ->schema(fn (): array => self::formSchema($resolveAccount))
             ->action(function (array $data, Action $action, AccountingService $accounting) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
                 if (
-                    !ActionModalFailure::attemptThrowable(
+                    ! ActionModalFailure::attemptThrowable(
                         $action,
-                        fn() => $accounting->postManualCredit(
+                        fn () => $accounting->postManualCredit(
                             $account,
                             (float) $data['amount'],
                             (string) $data['description'],
@@ -70,18 +70,18 @@ final class AccountTransactionManualAdjustmentHeaderActions
             ->label(__('Debit'))
             ->icon('heroicon-o-arrow-trending-down')
             ->color('danger')
-            ->visible(fn(): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
+            ->visible(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
             ->modalHeading(__('Manual debit'))
-            ->modalDescription(fn(): string => self::debitModalDescription($resolveAccount()))
+            ->modalDescription(fn (): string => self::debitModalDescription($resolveAccount()))
             ->modalWidth('md')
-            ->schema(fn(): array => self::formSchema($resolveAccount))
+            ->schema(fn (): array => self::formSchema($resolveAccount))
             ->action(function (array $data, Action $action, AccountingService $accounting) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
                 if (
-                    !ActionModalFailure::attemptThrowable(
+                    ! ActionModalFailure::attemptThrowable(
                         $action,
-                        fn() => $accounting->postManualDebit(
+                        fn () => $accounting->postManualDebit(
                             $account,
                             (float) $data['amount'],
                             (string) $data['description'],
@@ -105,26 +105,26 @@ final class AccountTransactionManualAdjustmentHeaderActions
             ->icon('heroicon-o-arrow-uturn-left')
             ->color('warning')
             ->visible(function () use ($resolveAccount): bool {
-                if (!(bool) Auth::guard('tenant')->user()?->is_admin) {
+                if (! (bool) Auth::guard('tenant')->user()?->is_admin) {
                     return false;
                 }
 
                 $account = $resolveAccount();
 
-                return !$account->is_master && $account->type === 'cash';
+                return ! $account->is_master && $account->type === 'cash';
             })
             ->modalHeading(__('Post refund'))
             ->modalDescription(__('Debits this member cash account and master cash, recording money returned to the member. The matching debit should appear on a future imported bank statement.'))
             ->modalSubmitActionLabel(__('Post refund'))
             ->modalWidth('md')
-            ->schema(fn(): array => self::refundFormSchema($resolveAccount))
+            ->schema(fn (): array => self::refundFormSchema($resolveAccount))
             ->action(function (array $data, Action $action, AccountingService $accounting) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
                 if (
-                    !ActionModalFailure::attemptThrowable(
+                    ! ActionModalFailure::attemptThrowable(
                         $action,
-                        fn() => $accounting->refundMemberCash(
+                        fn () => $accounting->refundMemberCash(
                             $account,
                             (float) $data['amount'],
                             (string) $data['description'],
@@ -139,7 +139,7 @@ final class AccountTransactionManualAdjustmentHeaderActions
                 Notification::make()
                     ->title(__('Refund posted'))
                     ->body(__('Refund of :amount posted for :name', [
-                        'amount' => number_format((float) $data['amount'], 2) . ' ' . Setting::get('general', 'currency', 'USD'),
+                        'amount' => MoneyDisplay::format((float) $data['amount'], Setting::get('general', 'currency', 'USD')) ?? '',
                         'name' => $account->member?->name ?? __('Member'),
                     ]))
                     ->success()
@@ -162,7 +162,7 @@ final class AccountTransactionManualAdjustmentHeaderActions
 
     private static function debitModalDescription(Account $account): string
     {
-        if (!$account->is_master && $account->type === 'fund') {
+        if (! $account->is_master && $account->type === 'fund') {
             return __('Post a debit to this member fund account only. The balance may go negative for adjustments such as loan allocation. Use a clear description for the audit trail.');
         }
 
@@ -219,9 +219,9 @@ final class AccountTransactionManualAdjustmentHeaderActions
             Placeholder::make('balance_info')
                 ->label(__('Available balance'))
                 ->content(new HtmlString(
-                    '<span class="text-lg font-bold ' . $balanceClass . '">'
-                    . e(number_format($balance, 2) . ' ' . $currency)
-                    . '</span>'
+                    '<span class="text-lg font-bold '.$balanceClass.'">'
+                    .e(MoneyDisplay::format($balance, $currency) ?? '')
+                    .'</span>'
                 )),
             DateTimePicker::make('transacted_at')
                 ->label(__('Transaction date & time'))

@@ -7,6 +7,7 @@ namespace App\Filament\Tenant\Pages;
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Resources\ReconciliationExceptions\Tables\ReconciliationExceptionsTable;
 use App\Filament\Tenant\Support\TenantNavigation;
+use App\Models\Tenant\FundAuditLog;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Services\ReconciliationPdfService;
@@ -46,7 +47,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     protected string $view = 'filament.tenant.pages.reconciliation';
 
-    /** @var 'overview'|'exceptions'|'snapshots'|'methodology' */
+    /** @var 'overview'|'exceptions'|'history'|'snapshots'|'methodology' */
     #[Url]
     public string $sideTab = 'overview';
 
@@ -95,22 +96,30 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public function mount(): void
     {
-        if (! in_array($this->sideTab, ['overview', 'exceptions', 'snapshots', 'methodology'], true)) {
+        if (! in_array($this->sideTab, ['overview', 'exceptions', 'history', 'snapshots', 'methodology'], true)) {
             $this->sideTab = 'overview';
         }
     }
 
     public function updatedSideTab(?string $value): void
     {
-        if ($value === 'exceptions') {
+        if (in_array($value, ['exceptions', 'history'], true)) {
             $this->resetTable();
         }
     }
 
     public function table(Table $table): Table
     {
+        $query = match ($this->sideTab) {
+            'history' => ReconciliationException::query()
+                ->where('status', ReconciliationException::STATUS_RESOLVED)
+                ->orderByDesc('resolved_at'),
+            'exceptions' => ReconciliationException::query()->orderByDesc('raised_at'),
+            default => ReconciliationException::query(),
+        };
+
         return ReconciliationExceptionsTable::configure(
-            $table->query(ReconciliationException::query())
+            $table->query($query)
         );
     }
 
@@ -125,6 +134,60 @@ class ReconciliationOverviewPage extends Page implements HasTable
         } catch (\Throwable) {
             return 0;
         }
+    }
+
+    public function getResolvedExceptionCount(): int
+    {
+        if (! Schema::hasTable('reconciliation_exceptions')) {
+            return 0;
+        }
+
+        try {
+            return ReconciliationException::query()
+                ->where('status', ReconciliationException::STATUS_RESOLVED)
+                ->count();
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
+    public function getLastNightlyBatch(): ?FundAuditLog
+    {
+        if (! Schema::hasTable('fund_audit_logs')) {
+            return null;
+        }
+
+        try {
+            return FundAuditLog::query()
+                ->where('event_type', 'NIGHTLY_RECON_COMPLETE')
+                ->latest('occurred_at')
+                ->first();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    public function getLastBatchAutoResolvedCount(): int
+    {
+        $batch = $this->getLastNightlyBatch();
+
+        if ($batch === null) {
+            return 0;
+        }
+
+        return (int) ($batch->payload['resolved'] ?? 0);
+    }
+
+    public function getNextBatchRunAt(): Carbon
+    {
+        $tz = config('app.timezone');
+        $next = Carbon::now($tz)->setTime(6, 30);
+
+        if ($next->isPast()) {
+            $next->addDay();
+        }
+
+        return $next;
     }
 
     protected function getHeaderActions(): array

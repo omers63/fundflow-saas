@@ -62,6 +62,19 @@ class BankStatement extends Model
     }
 
     /**
+     * @return array<string, string>
+     */
+    public static function statusOptions(): array
+    {
+        return [
+            'pending' => __('Pending'),
+            'processing' => __('Processing'),
+            'completed' => __('Completed'),
+            'failed' => __('Failed'),
+        ];
+    }
+
+    /**
      * Recompute denormalized row counts from linked bank transactions.
      */
     public function refreshRowCounts(): void

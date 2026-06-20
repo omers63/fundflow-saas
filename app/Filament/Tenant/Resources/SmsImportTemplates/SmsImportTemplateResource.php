@@ -18,6 +18,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Livewire\Livewire;
 use UnitEnum;
 
 class SmsImportTemplateResource extends Resource
@@ -52,7 +53,10 @@ class SmsImportTemplateResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return SmsImportTemplatesTable::configure($table);
+        return SmsImportTemplatesTable::configure(
+            $table,
+            includeCreateHeaderAction: ! (Livewire::current() instanceof ListSmsImportTemplates),
+        );
     }
 
     public static function getPages(): array

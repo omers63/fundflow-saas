@@ -6,9 +6,18 @@ namespace App\Models\Tenant;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SupportRequest extends Model
 {
+    public const STATUS_OPEN = 'open';
+
+    public const STATUS_IN_PROGRESS = 'in_progress';
+
+    public const STATUS_RESOLVED = 'resolved';
+
+    public const STATUS_CLOSED = 'closed';
+
     public const CATEGORY_GENERAL_INQUIRY = 'general_inquiry';
 
     public const CATEGORY_CASH_DEPOSIT = 'cash_deposit';
@@ -29,7 +38,19 @@ class SupportRequest extends Model
         'category',
         'subject',
         'message',
+        'status',
+        'escalated_at',
+        'assigned_to_user_id',
+        'resolved_at',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'escalated_at' => 'datetime',
+            'resolved_at' => 'datetime',
+        ];
+    }
 
     public function user(): BelongsTo
     {
@@ -39,6 +60,68 @@ class SupportRequest extends Model
     public function member(): BelongsTo
     {
         return $this->belongsTo(Member::class);
+    }
+
+    public function assignedTo(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_to_user_id');
+    }
+
+    public function replies(): HasMany
+    {
+        return $this->hasMany(SupportRequestReply::class);
+    }
+
+    public function isOpen(): bool
+    {
+        return in_array($this->status, [self::STATUS_OPEN, self::STATUS_IN_PROGRESS], true);
+    }
+
+    public function isEscalated(): bool
+    {
+        return $this->escalated_at !== null;
+    }
+
+    public function daysOpen(): int
+    {
+        return (int) $this->created_at?->startOfDay()->diffInDays(now()->startOfDay());
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function statusOptions(): array
+    {
+        return [
+            self::STATUS_OPEN => __('Open'),
+            self::STATUS_IN_PROGRESS => __('In progress'),
+            self::STATUS_RESOLVED => __('Resolved'),
+            self::STATUS_CLOSED => __('Closed'),
+        ];
+    }
+
+    public static function statusColor(string $status): string
+    {
+        return match ($status) {
+            self::STATUS_OPEN => 'gray',
+            self::STATUS_IN_PROGRESS => 'info',
+            self::STATUS_RESOLVED => 'success',
+            self::STATUS_CLOSED => 'gray',
+            default => 'gray',
+        };
+    }
+
+    public static function slaColor(int $daysOpen): string
+    {
+        if ($daysOpen > 7) {
+            return 'danger';
+        }
+
+        if ($daysOpen >= 3) {
+            return 'warning';
+        }
+
+        return 'success';
     }
 
     /**

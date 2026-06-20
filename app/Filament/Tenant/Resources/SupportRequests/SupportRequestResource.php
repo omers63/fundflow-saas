@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\SupportRequests;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
+use App\Filament\Tenant\Concerns\HidesFromTenantSidebar;
 use App\Filament\Tenant\Resources\SupportRequests\Pages\ListSupportRequests;
 use App\Filament\Tenant\Resources\SupportRequests\Tables\SupportRequestsTable;
 use App\Filament\Tenant\Support\TenantNavigation;
@@ -17,6 +18,7 @@ use Filament\Tables\Table;
 
 class SupportRequestResource extends Resource
 {
+    use HidesFromTenantSidebar;
     use TranslatesFilamentNavigationLabels;
 
     protected static ?string $model = SupportRequest::class;

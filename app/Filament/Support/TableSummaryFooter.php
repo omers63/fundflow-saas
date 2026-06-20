@@ -70,7 +70,11 @@ final class TableSummaryFooter
                     : Number::format((float) $state, 2, locale: 'en'));
             }
         } elseif ($column->isMoney()) {
-            $sum->money(decimalPlaces: 2);
+            $currency = fn (): string => Setting::get('general', 'currency', 'USD');
+
+            $sum
+                ->formatStateUsing(fn ($state): ?string => MoneyDisplay::tableSummaryHtml($state, $currency()))
+                ->html();
         } else {
             $sum->numeric(decimalPlaces: 2);
         }
@@ -111,13 +115,15 @@ final class TableSummaryFooter
 
         $name = $column->getName();
 
-        if (in_array($name, [
-            'total_rows',
-            'imported_rows',
-            'duplicate_rows',
-            'quantity',
-            'active_loans_count',
-        ], true)) {
+        if (
+            in_array($name, [
+                'total_rows',
+                'imported_rows',
+                'duplicate_rows',
+                'quantity',
+                'active_loans_count',
+            ], true)
+        ) {
             return false;
         }
 

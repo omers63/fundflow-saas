@@ -26,7 +26,7 @@
                 @else
                     <span
                         class="mb-2 inline-flex w-fit rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
-                        {{ $currency }} {{ number_format($fee, 2) }}
+                        <x-member::amount :value="$fee" :currency="$currency" class="inline" />
                     </span>
                 @endif
                 <span class="font-semibold text-gray-900">{{ $option['label'] }}</span>

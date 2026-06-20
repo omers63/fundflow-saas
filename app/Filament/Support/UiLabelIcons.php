@@ -26,6 +26,8 @@ class UiLabelIcons
         'cash' => Heroicon::OutlinedBanknotes,
         'fund' => Heroicon::OutlinedCircleStack,
         'loans' => Heroicon::OutlinedDocumentCurrencyDollar,
+        'guaranteedloans' => Heroicon::OutlinedShieldCheck,
+        'guarantor' => Heroicon::OutlinedShieldCheck,
         'loan' => Heroicon::OutlinedDocumentCurrencyDollar,
         'imports' => Heroicon::OutlinedQueueList,
         'import' => Heroicon::OutlinedQueueList,

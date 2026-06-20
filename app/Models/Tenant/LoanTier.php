@@ -2,6 +2,7 @@
 
 namespace App\Models\Tenant;
 
+use App\Filament\Support\MoneyDisplay;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -55,7 +56,11 @@ class LoanTier extends Model
 
     public function getRangeAttribute(): string
     {
-        return 'SAR '.number_format($this->min_amount).' – '.number_format($this->max_amount);
+        $currency = Setting::get('general', 'currency', 'USD');
+
+        return (MoneyDisplay::format((float) $this->min_amount, $currency, precision: 0) ?? '')
+            .' – '
+            .(MoneyDisplay::format((float) $this->max_amount, $currency, precision: 0) ?? '');
     }
 
     /** Total outstanding active loan amount in this tier. */

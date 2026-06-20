@@ -5,17 +5,17 @@
             <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 {{ __('Workspace') }}</p>
             <button type="button" wire:click="$set('sideTab', 'overview')" @class([
-                'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition',
-                'bg-primary-600 text-white shadow-sm dark:bg-primary-500' => $this->sideTab === 'overview',
-                'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5' => $this->sideTab !== 'overview',
+                'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition',
+                'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-200' => $this->sideTab === 'overview',
+                'border-transparent text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5' => $this->sideTab !== 'overview',
             ])>
                 <x-heroicon-o-chart-pie class="h-5 w-5 shrink-0" />
                 {{ __('Overview') }}
             </button>
             <button type="button" wire:click="$set('sideTab', 'exceptions')" @class([
-                'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition',
-                'bg-primary-600 text-white shadow-sm dark:bg-primary-500' => $this->sideTab === 'exceptions',
-                'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5' => $this->sideTab !== 'exceptions',
+                'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition',
+                'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-200' => $this->sideTab === 'exceptions',
+                'border-transparent text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5' => $this->sideTab !== 'exceptions',
             ])>
                 <x-heroicon-o-shield-exclamation class="h-5 w-5 shrink-0" />
                 <span class="flex min-w-0 flex-1 items-center justify-between gap-2">
@@ -28,17 +28,17 @@
                 </span>
             </button>
             <button type="button" wire:click="$set('sideTab', 'snapshots')" @class([
-                'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition',
-                'bg-primary-600 text-white shadow-sm dark:bg-primary-500' => $this->sideTab === 'snapshots',
-                'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5' => $this->sideTab !== 'snapshots',
+                'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition',
+                'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-200' => $this->sideTab === 'snapshots',
+                'border-transparent text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5' => $this->sideTab !== 'snapshots',
             ])>
                 <x-heroicon-o-clipboard-document-list class="h-5 w-5 shrink-0" />
                 {{ __('Snapshots') }}
             </button>
             <button type="button" wire:click="$set('sideTab', 'methodology')" @class([
-                'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition',
-                'bg-primary-600 text-white shadow-sm dark:bg-primary-500' => $this->sideTab === 'methodology',
-                'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5' => $this->sideTab !== 'methodology',
+                'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition',
+                'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-200' => $this->sideTab === 'methodology',
+                'border-transparent text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5' => $this->sideTab !== 'methodology',
             ])>
                 <x-heroicon-o-document-text class="h-5 w-5 shrink-0" />
                 {{ __('Methodology') }}
@@ -59,7 +59,7 @@
                     </p>
                 </div>
                 <button type="button" wire:click="$set('sideTab', 'exceptions')"
-                    class="ms-auto shrink-0 rounded-lg bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-500 dark:bg-red-700 dark:hover:bg-red-600">
+                    class="ff-tenant-btn ff-tenant-btn--danger ms-auto shrink-0 px-3 py-1 text-xs">
                     {{ __('Review') }}
                 </button>
             </div>
@@ -67,15 +67,68 @@
 
             @if ($this->sideTab === 'overview')
             <section
-                class="overflow-hidden rounded-2xl bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-6 text-white shadow-md ring-1 ring-white/10 dark:from-slate-900 dark:to-black">
-                <p class="text-xs uppercase tracking-[0.16em] text-white/70">{{ __('Finance control') }}</p>
-                <h2 class="mt-1 text-2xl font-semibold">{{ __('Reconciliation control center') }}</h2>
-                <p class="mt-2 max-w-3xl text-sm text-white/85">
+                class="overflow-hidden rounded-xl border border-gray-200 bg-white px-6 py-6 shadow-sm dark:border-white/10 dark:bg-slate-800">
+                <p class="text-xs font-semibold uppercase tracking-[0.12em] text-sky-600 dark:text-sky-400">{{ __('Finance control') }}</p>
+                <h2 class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">{{ __('Reconciliation control center') }}</h2>
+                <p class="mt-2 max-w-3xl text-sm text-gray-600 dark:text-gray-300">
                     {{ __('Run checks on demand or rely on scheduled daily and monthly snapshots. Critical failures mean stored balances disagree with the ledger — investigate before period close.') }}
                 </p>
             </section>
 
             @php($latest = $this->getLatestSnapshots()->first())
+                @php($lastBatch = $this->getLastNightlyBatch())
+                <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <div
+                        class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
+                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Open exceptions') }}</p>
+                        <p
+                            class="mt-1 text-lg font-semibold tabular-nums {{ $this->getOpenExceptionCount() > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white' }}">
+                            {{ number_format($this->getOpenExceptionCount()) }}
+                        </p>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            @if ($this->getOpenExceptionCount() > 0)
+                                <button type="button" wire:click="$set('sideTab', 'exceptions')"
+                                    class="font-semibold text-sky-600 hover:underline dark:text-sky-400">{{ __('Review queue') }}</button>
+                            @else
+                                {{ __('Operational queue clear') }}
+                            @endif
+                        </p>
+                    </div>
+                    <div
+                        class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
+                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Auto-resolved (last batch)') }}</p>
+                        <p class="mt-1 text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                            {{ number_format($this->getLastBatchAutoResolvedCount()) }}
+                        </p>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ __('From nightly batch') }}</p>
+                    </div>
+                    <div
+                        class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
+                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Last batch run') }}</p>
+                        <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+                            {{ $lastBatch?->occurred_at?->diffForHumans() ?? '—' }}
+                        </p>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            @if ($lastBatch)
+                                {{ __('Raised') }} {{ $lastBatch->payload['raised'] ?? 0 }} · {{ __('Resolved') }}
+                                {{ $lastBatch->payload['resolved'] ?? 0 }}
+                            @else
+                                {{ __('No batch logged yet') }}
+                            @endif
+                        </p>
+                    </div>
+                    <div
+                        class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
+                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Next batch') }}</p>
+                        <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+                            {{ $this->getNextBatchRunAt()->format('H:i') }}
+                        </p>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {{ $this->getNextBatchRunAt()->format('d M Y') }} · {{ __('Daily at 06:30') }}
+                        </p>
+                    </div>
+                </div>
+
                 <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                     <div
                         class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
@@ -113,17 +166,16 @@
                     </div>
                     <div
                         class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Open exceptions') }}</p>
-                        <p
-                            class="mt-1 text-lg font-semibold tabular-nums {{ $this->getOpenExceptionCount() > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white' }}">
-                            {{ number_format($this->getOpenExceptionCount()) }}
+                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Resolved (session)') }}</p>
+                        <p class="mt-1 text-lg font-semibold tabular-nums text-gray-900 dark:text-white">
+                            {{ number_format($this->getResolvedExceptionCount()) }}
                         </p>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            @if ($this->getOpenExceptionCount() > 0)
-                                <button type="button" wire:click="$set('sideTab', 'exceptions')"
-                                    class="font-semibold text-primary-600 hover:underline dark:text-primary-400">{{ __('Review queue') }}</button>
+                            @if ($this->getResolvedExceptionCount() > 0)
+                                <button type="button" wire:click="$set('sideTab', 'history')"
+                                    class="font-semibold text-sky-600 hover:underline dark:text-sky-400">{{ __('View history') }}</button>
                             @else
-                                {{ __('Operational queue clear') }}
+                                {{ __('None since last batch reset') }}
                             @endif
                         </p>
                     </div>
@@ -157,6 +209,29 @@
                             <code class="text-xs">reconciliation.bank_statement_balance</code> {{ __('and') }} <code
                                 class="text-xs">reconciliation.bank_statement_date</code> {{ __('from settings.') }}</li>
                     </ul>
+                </div>
+            @elseif ($this->sideTab === 'history')
+                <div
+                    class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                            {{ __('Reconciliation history') }}</h3>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {{ __('Resolved exceptions with resolution notes. The nightly batch clears the queue and re-raises fresh issues.') }}
+                        </p>
+                        @php($lastBatch = $this->getLastNightlyBatch())
+                        @if ($lastBatch)
+                            <p class="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-200">
+                                {{ __('Last batch (:time): raised :raised, auto-resolved :resolved, critical :critical', [
+                                    'time' => $lastBatch->occurred_at?->format('d M Y H:i') ?? '—',
+                                    'raised' => $lastBatch->payload['raised'] ?? 0,
+                                    'resolved' => $lastBatch->payload['resolved'] ?? 0,
+                                    'critical' => $lastBatch->payload['critical'] ?? 0,
+                                ]) }}
+                            </p>
+                        @endif
+                    </div>
+                    {{ $this->table }}
                 </div>
             @elseif ($this->sideTab === 'exceptions')
                 <div
@@ -212,14 +287,14 @@
                                         {{ $snap->warnings }}</td>
                                     <td class="px-4 py-3 text-right whitespace-nowrap">
                                         <button type="button" wire:click="selectSnapshot({{ (int) $snap->id }})"
-                                            class="text-primary-600 text-xs font-semibold hover:underline dark:text-primary-400">{{ __('View') }}</button>
+                                            class="text-sky-600 text-xs font-semibold hover:underline dark:text-sky-400">{{ __('View') }}</button>
                                         @if ($this->canExportDownloads())
                                             <span class="text-gray-300 dark:text-gray-600">|</span>
                                             <button type="button" wire:click="downloadReport({{ (int) $snap->id }})"
-                                                class="text-primary-600 text-xs font-semibold hover:underline dark:text-primary-400">JSON</button>
+                                                class="text-sky-600 text-xs font-semibold hover:underline dark:text-sky-400">JSON</button>
                                             <span class="text-gray-300 dark:text-gray-600">|</span>
                                             <button type="button" wire:click="downloadPdf({{ (int) $snap->id }})"
-                                                class="text-primary-600 text-xs font-semibold hover:underline dark:text-primary-400">PDF</button>
+                                                class="text-sky-600 text-xs font-semibold hover:underline dark:text-sky-400">PDF</button>
                                         @endif
                                     </td>
                                 </tr>
@@ -276,7 +351,7 @@
                                 <ul class="mt-2 list-inside list-disc space-y-1">
                                     @foreach (array_slice($sel->report['checks']['ledger_balances']['mismatches'], 0, 8) as $row)
                                         <li>{{ $row['name'] ?? __('Account #:id', ['id' => ($row['account_id'] ?? '')]) }} — Δ
-                                            {{ number_format($row['delta'] ?? 0, 2) }} SAR</li>
+                                            {!! \App\Filament\Support\MoneyDisplay::html($row['delta'] ?? 0)?->toHtml() ?? '—' !!}</li>
                                     @endforeach
                                 </ul>
                             </div>

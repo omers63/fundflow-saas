@@ -8,7 +8,8 @@ use App\Filament\Support\BankTransactionTableActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
-use App\Filament\Support\ViewActions\ViewBankTransactionAction;
+use App\Filament\Support\ViewActions\ViewBankTransactionAction as SharedViewBankTransactionAction;
+use App\Filament\Tenant\Support\ViewBankTransactionAction;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
@@ -31,7 +32,7 @@ class BankTransactionsRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return ViewBankTransactionAction::configure(
+        return SharedViewBankTransactionAction::configure(
             $table
                 ->recordTitleAttribute('description')
                 ->columns([
@@ -56,6 +57,7 @@ class BankTransactionsRelationManager extends RelationManager
                         ->wrap(),
                     TextColumn::make('status')
                         ->badge()
+                        ->formatStateUsing(fn (string $state): string => BankTransaction::statusOptions()[$state] ?? $state)
                         ->color(fn (string $state): string => match ($state) {
                             'imported' => 'warning',
                             'mirrored' => 'info',
@@ -64,36 +66,30 @@ class BankTransactionsRelationManager extends RelationManager
                             'duplicate' => 'danger',
                         }),
                     TextColumn::make('duplicateOf.description')
-                        ->label('Duplicate of')
+                        ->label(__('Duplicate of'))
                         ->placeholder(__('—'))
                         ->limit(30)
                         ->toggledHiddenByDefault(),
                 ])
                 ->filters([
                     SelectFilter::make('status')
-                        ->options([
-                            'imported' => 'Imported',
-                            'mirrored' => 'Mirrored',
-                            'posted' => 'Posted',
-                            'ignored' => 'Ignored',
-                            'duplicate' => 'Duplicate',
-                        ]),
-                    DateColumnRangeFilter::make('transaction_date', 'Transaction date'),
+                        ->options(BankTransaction::statusOptions()),
+                    DateColumnRangeFilter::make('transaction_date', __('Transaction date')),
                     SelectFilter::make('member_id')
-                        ->label('Member')
+                        ->label(__('Member'))
                         ->relationship('member', 'name')
                         ->searchable()
                         ->preload(),
                     TernaryFilter::make('duplicate_of_id')
-                        ->label('Duplicate link')
+                        ->label(__('Duplicate link'))
                         ->nullable()
                         ->trueLabel(__('Linked'))
                         ->falseLabel(__('Not linked')),
                     Filter::make('description_contains')
-                        ->label('Description')
+                        ->label(__('Description'))
                         ->schema([
                             TextInput::make('value')
-                                ->label('Contains'),
+                                ->label(__('Contains')),
                         ])
                         ->query(function (Builder $query, array $data): Builder {
                             $needle = $data['value'] ?? null;

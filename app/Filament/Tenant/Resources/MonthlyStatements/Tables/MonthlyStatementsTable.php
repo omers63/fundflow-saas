@@ -18,7 +18,6 @@ use App\Support\BusinessDay;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteAction;
@@ -113,11 +112,6 @@ class MonthlyStatementsTable
                 TrashedFilter::make(),
             ])
             ->defaultSort('period', 'desc')
-            ->headerActions([
-                CreateAction::make()
-                    ->label(__('New statement'))
-                    ->icon('heroicon-o-plus-circle'),
-            ])
             ->recordActions(TableRecordActionGroups::wrap([
                 Action::make('pdf')
                     ->label(__('Download PDF'))

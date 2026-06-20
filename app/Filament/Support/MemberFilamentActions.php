@@ -411,7 +411,7 @@ final class MemberFilamentActions
                 }
 
                 return __('Debit :amount from :name\'s cash account and credit master fees.', [
-                    'amount' => number_format($amount, 2).' '.$currency,
+                    'amount' => MoneyDisplay::format($amount, $currency) ?? '',
                     'name' => $record->name,
                 ]);
             })
@@ -870,7 +870,7 @@ final class MemberFilamentActions
                 }
 
                 return __('Debit :amount from each eligible member\'s cash account and credit master fees.', [
-                    'amount' => number_format($amount, 2).' '.$currency,
+                    'amount' => MoneyDisplay::format($amount, $currency) ?? '',
                 ]);
             })
             ->action(function (Collection $records, MemberAnnualSubscriptionFeeService $fees, Component $livewire): void {

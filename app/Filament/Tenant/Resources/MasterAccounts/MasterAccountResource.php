@@ -4,6 +4,7 @@ namespace App\Filament\Tenant\Resources\MasterAccounts;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Support\UiLabelIcons;
+use App\Filament\Tenant\Concerns\HidesFromTenantSidebar;
 use App\Filament\Tenant\Resources\MasterAccounts\Pages\ListMasterAccounts;
 use App\Filament\Tenant\Resources\MasterAccounts\Pages\ViewMasterAccount;
 use App\Filament\Tenant\Resources\MasterAccounts\RelationManagers\BankLinesAwaitingPostingRelationManager;
@@ -24,6 +25,7 @@ use UnitEnum;
 
 class MasterAccountResource extends Resource
 {
+    use HidesFromTenantSidebar;
     use TranslatesFilamentNavigationLabels;
 
     protected static ?string $model = Account::class;

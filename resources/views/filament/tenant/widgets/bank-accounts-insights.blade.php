@@ -5,10 +5,30 @@
 @endphp
 
 <div class="ff-app-insights w-full max-w-none space-y-3 mb-1" @if (filled($pollingInterval)) wire:poll.{{ $pollingInterval }} @endif>
-    <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        @include('filament.tenant.widgets.partials.insights-hero', ['hero' => $d['hero']])
-        @include('filament.tenant.widgets.partials.insights-kpi-strip', ['kpis' => $d['kpis']])
-    </div>
+    @if ($d['active_tab'] === 'imports' || $d['active_tab'] === 'clearance' || $d['active_tab'] === 'transactions')
+        <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            @foreach ($d['clearing_kpis'] as $kpi)
+                <a href="{{ $kpi['url'] }}"
+                    class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition hover:border-sky-200 hover:bg-sky-50/40 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-sky-800/40 dark:hover:bg-sky-950/20">
+                    <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ $kpi['label'] }}</p>
+                    <p @class([
+                        'mt-1 text-xl font-bold tabular-nums leading-none',
+                        'text-amber-600 dark:text-amber-400' => ($kpi['accent'] ?? '') === 'amber',
+                        'text-emerald-600 dark:text-emerald-400' => ($kpi['accent'] ?? '') === 'emerald',
+                        'text-rose-600 dark:text-rose-400' => ($kpi['accent'] ?? '') === 'rose',
+                        'text-sky-600 dark:text-sky-400' => ($kpi['accent'] ?? '') === 'sky',
+                        'text-gray-900 dark:text-white' => ! in_array($kpi['accent'] ?? '', ['amber', 'emerald', 'rose', 'sky'], true),
+                    ])>{{ $kpi['value'] }}</p>
+                    <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">{{ $kpi['sub'] }}</p>
+                </a>
+            @endforeach
+        </div>
+    @endif
+
+    @include('filament.tenant.widgets.partials.insights-head', [
+        'hero' => $d['hero'],
+        'kpis' => $d['kpis'],
+    ])
 
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div
@@ -43,27 +63,21 @@
         </div>
 
         <div class="grid grid-cols-2 gap-3">
-            <div
-                class="overflow-hidden rounded-xl border border-sky-200/80 bg-gradient-to-br from-sky-50 to-indigo-50/80 p-3 shadow-sm dark:border-sky-500/30 dark:from-sky-950/40 dark:to-indigo-950/20">
-                <p class="text-[10px] font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">
-                    {{ __('Master cash') }}
-                </p>
-                <p class="mt-1 text-lg font-bold tabular-nums text-gray-900 dark:text-white">
+            <div class="flex flex-col gap-0.5 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Master cash') }}</p>
+                <p class="text-[20px] font-bold tabular-nums leading-none text-gray-900 dark:text-white">
                     {{ \App\Support\Insights\InsightFormatter::compactAmount($d['master_cash']) }}
                 </p>
-                <p class="text-[10px] text-gray-500">
+                <p class="text-[10px] text-sky-600 dark:text-sky-400">
                     {{ \App\Support\Insights\InsightFormatter::money($d['master_cash']) }}
                 </p>
             </div>
-            <div
-                class="overflow-hidden rounded-xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50 to-violet-50/80 p-3 shadow-sm dark:border-indigo-500/30 dark:from-indigo-950/40 dark:to-violet-950/20">
-                <p class="text-[10px] font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
-                    {{ __('Master bank') }}
-                </p>
-                <p class="mt-1 text-lg font-bold tabular-nums text-gray-900 dark:text-white">
+            <div class="flex flex-col gap-0.5 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Master bank') }}</p>
+                <p class="text-[20px] font-bold tabular-nums leading-none text-gray-900 dark:text-white">
                     {{ \App\Support\Insights\InsightFormatter::compactAmount($d['master_bank']) }}
                 </p>
-                <p class="text-[10px] text-gray-500">
+                <p class="text-[10px] text-indigo-600 dark:text-indigo-400">
                     {{ \App\Support\Insights\InsightFormatter::money($d['master_bank']) }}
                 </p>
             </div>
@@ -110,7 +124,7 @@
                             'bg-amber-100 text-amber-800 dark:bg-amber-900/40' => $statement['status'] === 'pending',
                             'bg-rose-100 text-rose-800 dark:bg-rose-900/40' => $statement['status'] === 'failed',
                             'bg-sky-100 text-sky-800 dark:bg-sky-900/40' => $statement['status'] === 'processing',
-                        ])>{{ $statement['status'] }}</span>
+                        ])>{{ $statement['status_label'] }}</span>
                     </a>
                 @empty
                     <div class="px-3 py-6 text-center text-xs text-gray-500">{{ __('No imports yet') }}</div>

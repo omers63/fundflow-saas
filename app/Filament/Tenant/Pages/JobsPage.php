@@ -45,7 +45,7 @@ class JobsPage extends Page implements HasTable
 
     protected static ?int $navigationSort = TenantNavigation::SORT_JOBS;
 
-    protected static bool $shouldRegisterNavigation = true;
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?string $title = 'Jobs & commands';
 
@@ -60,7 +60,7 @@ class JobsPage extends Page implements HasTable
 
     public function setJobsTab(string $tab): void
     {
-        if (!in_array($tab, ['catalog', 'history'], true)) {
+        if (! in_array($tab, ['catalog', 'history'], true)) {
             return;
         }
 
@@ -148,13 +148,13 @@ class JobsPage extends Page implements HasTable
     protected function catalogTable(Table $table): Table
     {
         return TableGrouping::apply($table
-            ->records(fn(): Collection => app(SystemJobRunnerService::class)->catalogRecords())
+            ->records(fn (): Collection => app(SystemJobRunnerService::class)->catalogRecords())
             ->columnManager(false)
             ->persistColumnsInSession(false)
             ->heading(__('Scheduled jobs'))
             ->filters([
                 SelectFilter::make('category')
-                    ->options(fn(): array => collect(app(SystemJobRunnerService::class)->catalogRecords())
+                    ->options(fn (): array => collect(app(SystemJobRunnerService::class)->catalogRecords())
                         ->pluck('category', 'category')
                         ->unique()
                         ->sort()
@@ -180,7 +180,7 @@ class JobsPage extends Page implements HasTable
                     ->sortable(false)
                     ->searchable(false)
                     ->badge()
-                    ->color(fn(?string $state): string => match ($state) {
+                    ->color(fn (?string $state): string => match ($state) {
                         SystemJobRun::STATUS_SUCCESS => 'success',
                         SystemJobRun::STATUS_FAILED => 'danger',
                         SystemJobRun::STATUS_RUNNING => 'warning',
@@ -197,7 +197,7 @@ class JobsPage extends Page implements HasTable
                     ->label(__('Duration'))
                     ->sortable(false)
                     ->searchable(false)
-                    ->formatStateUsing(fn(?int $state): string => $state ? $state . ' ms' : '—'),
+                    ->formatStateUsing(fn (?int $state): string => $state ? $state.' ms' : '—'),
             ])
             ->recordActions(TableRecordActionGroups::wrap([
                 Action::make('run')
@@ -225,15 +225,15 @@ class JobsPage extends Page implements HasTable
                 Action::make('view_output')
                     ->label(__('Last output'))
                     ->icon('heroicon-o-document-text')
-                    ->visible(fn(array $record): bool => app(SystemJobRunnerService::class)->latestRun($record['key']) !== null)
-                    ->modalHeading(fn(array $record): string => $record['job_label'])
-                    ->schema(fn(array $record): array => [
+                    ->visible(fn (array $record): bool => app(SystemJobRunnerService::class)->latestRun($record['key']) !== null)
+                    ->modalHeading(fn (array $record): string => $record['job_label'])
+                    ->schema(fn (array $record): array => [
                         Placeholder::make('output')
                             ->label(__('Output'))
-                            ->content(fn(): HtmlString => new HtmlString(
+                            ->content(fn (): HtmlString => new HtmlString(
                                 '<pre class="text-xs whitespace-pre-wrap max-h-96 overflow-auto">'
-                                . e(app(SystemJobRunnerService::class)->latestRun($record['key'])?->output ?? '—')
-                                . '</pre>'
+                                .e(app(SystemJobRunnerService::class)->latestRun($record['key'])?->output ?? '—')
+                                .'</pre>'
                             )),
                     ]),
             ]))
@@ -270,14 +270,14 @@ class JobsPage extends Page implements HasTable
             ->columns([
                 TextColumn::make('job_key')
                     ->label(__('Job'))
-                    ->formatStateUsing(fn(string $state): string => ScheduledJobRegistry::find($state)['label'] ?? $state)
+                    ->formatStateUsing(fn (string $state): string => ScheduledJobRegistry::find($state)['label'] ?? $state)
                     ->searchable()
                     ->wrap(),
                 TextColumn::make('trigger')
                     ->badge(),
                 TextColumn::make('status')
                     ->badge()
-                    ->color(fn(string $state): string => match ($state) {
+                    ->color(fn (string $state): string => match ($state) {
                         SystemJobRun::STATUS_SUCCESS => 'success',
                         SystemJobRun::STATUS_FAILED => 'danger',
                         default => 'warning',
@@ -299,12 +299,12 @@ class JobsPage extends Page implements HasTable
                 Action::make('view_run')
                     ->label(__('Output'))
                     ->icon('heroicon-o-document-text')
-                    ->modalHeading(fn(SystemJobRun $record): string => $record->job_key)
+                    ->modalHeading(fn (SystemJobRun $record): string => $record->job_key)
                     ->schema([
                         Placeholder::make('run_output')
                             ->label(__('Output'))
-                            ->content(fn(SystemJobRun $record): HtmlString => new HtmlString(
-                                '<pre class="text-xs whitespace-pre-wrap max-h-96 overflow-auto">' . e($record->output ?? '—') . '</pre>'
+                            ->content(fn (SystemJobRun $record): HtmlString => new HtmlString(
+                                '<pre class="text-xs whitespace-pre-wrap max-h-96 overflow-auto">'.e($record->output ?? '—').'</pre>'
                             )),
                     ]),
             ]))
@@ -317,6 +317,6 @@ class JobsPage extends Page implements HasTable
 
     protected function getTableQueryStringIdentifier(): ?string
     {
-        return 'jobs_' . $this->jobsTab;
+        return 'jobs_'.$this->jobsTab;
     }
 }

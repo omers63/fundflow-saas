@@ -130,7 +130,7 @@ class ApplyForLoan extends Page implements HasForms
                                 ->required()
                                 ->minValue(1)
                                 ->live(onBlur: true)
-                                ->suffix($currency),
+                                ->suffix(MoneyDisplay::symbol($currency)),
                             Select::make('guarantor_member_id')
                                 ->label(__('Guarantor'))
                                 ->helperText(__('Required when the amount exceeds your fund balance.'))

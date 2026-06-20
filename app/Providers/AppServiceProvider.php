@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Events\DatabaseNotificationsSentNow;
+use App\Filament\Infolists\Components\TextEntry as AppTextEntry;
 use App\Filament\Support\Action as AppAction;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TabLabelColors;
@@ -22,6 +23,7 @@ use App\Filament\Tables\Columns\TextInputColumn as AppTextInputColumn;
 use App\Filament\Tables\Columns\ToggleColumn as AppToggleColumn;
 use App\Filament\Tables\Columns\ViewColumn as AppViewColumn;
 use App\Filament\Tables\Concerns\CapitalizesTableColumnHeaderLabel;
+use App\Filament\Tenant\Support\TenantPortalViewModal;
 use App\Http\Responses\FilamentLogoutResponse;
 use App\Listeners\ApplyMemberNotificationLocaleListener;
 use App\Listeners\LogNotificationDeliveryListener;
@@ -34,6 +36,7 @@ use App\Session\WallClockDatabaseSessionHandler;
 use App\Support\ArabicDisplaySettings;
 use App\Support\ArabicTypography;
 use Filament\Actions\Action as FilamentAction;
+use Filament\Actions\ViewAction;
 use Filament\Auth\Http\Responses\Contracts\LogoutResponse;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Field;
@@ -212,7 +215,19 @@ class AppServiceProvider extends ServiceProvider
 
         Field::configureUsing(fn (Field $field): Field => $field->translateLabel());
 
-        FilamentAction::configureUsing(fn (FilamentAction $action): FilamentAction => $action->translateLabel());
+        FilamentAction::configureUsing(function (FilamentAction $action): FilamentAction {
+            $action = $action->translateLabel();
+
+            if (Filament::getCurrentPanel()?->getId() !== 'tenant') {
+                return $action;
+            }
+
+            if ($action instanceof ViewAction) {
+                return TenantPortalViewModal::apply($action);
+            }
+
+            return TenantPortalViewModal::applyToForm($action);
+        });
 
         BaseFilter::configureUsing(fn (BaseFilter $filter): BaseFilter => $filter->translateLabel());
 
@@ -252,6 +267,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $bindings = [
             TextColumn::class => AppTextColumn::class,
+            TextEntry::class => AppTextEntry::class,
             BadgeColumn::class => AppBadgeColumn::class,
             TagsColumn::class => AppTagsColumn::class,
             IconColumn::class => AppIconColumn::class,

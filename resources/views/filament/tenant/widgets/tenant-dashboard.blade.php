@@ -5,6 +5,7 @@
     $activity = $d['recent_activity'];
     $pipeline = $d['loan_pipeline'];
     $greeting = $d['greeting'];
+    $pool = $d['pool_health'];
 @endphp
 
 <div class="w-full max-w-none space-y-3 pb-6">
@@ -12,7 +13,7 @@
     {{-- ── Slim context banner ── --}}
     <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-white px-4 py-2.5 shadow-sm dark:border-sky-800/40 dark:bg-gray-900">
         <div class="flex items-center gap-2.5">
-            <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-600 text-white">
+            <div class="flex h-7 w-7 items-center justify-center rounded-lg border border-sky-200 bg-sky-50 text-sky-600 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-400">
                 <x-heroicon-o-building-library class="h-4 w-4" />
             </div>
             <div>
@@ -23,7 +24,7 @@
         <div class="flex flex-wrap items-center gap-2">
             <span class="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2.5 py-1 text-[10px] font-semibold text-sky-700 ring-1 ring-inset ring-sky-200 dark:bg-sky-950/40 dark:text-sky-300">
                 <x-heroicon-o-calendar-days class="h-3 w-3" />
-                {{ __('Cycle') }}: {{ $d['open_period_label'] }}
+                {{ __('Cycle: :label', ['label' => $d['open_period_label']]) }}
             </span>
             @foreach ($d['balances'] as $balance)
                 <a href="{{ $balance['url'] }}"
@@ -52,6 +53,54 @@
                 <p class="{{ $subColor }} text-[11px] font-medium">{{ $stat['sub'] }}</p>
             </a>
         @endforeach
+    </div>
+
+    {{-- ── Fund pool health ── --}}
+    <div @class([
+        'overflow-hidden rounded-xl border bg-white shadow-sm dark:bg-gray-900',
+        'border-red-300 dark:border-red-800/50' => $pool['has_drift'],
+        'border-gray-200 dark:border-gray-700' => ! $pool['has_drift'],
+    ])>
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
+            <div class="flex items-center gap-2">
+                <x-heroicon-o-beaker class="h-4 w-4 text-sky-500" />
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Fund pool health') }}</span>
+            </div>
+            @if ($pool['has_drift'])
+                <a href="{{ $pool['reconciliation_url'] }}"
+                    class="text-[11px] font-semibold text-red-600 hover:underline dark:text-red-400">{{ __('Review reconciliation →') }}</a>
+            @endif
+        </div>
+        <div class="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
+            <div>
+                <p class="text-[10px] uppercase text-gray-400">{{ __('Master cash') }}</p>
+                <p class="text-sm font-bold tabular-nums text-gray-900 dark:text-white">{{ \App\Support\Insights\InsightFormatter::money($pool['master_cash']) }}</p>
+                <p class="text-[10px] text-gray-500">{{ __('Members') }}: {{ \App\Support\Insights\InsightFormatter::money($pool['member_cash']) }}</p>
+            </div>
+            <div>
+                <p class="text-[10px] uppercase text-gray-400">{{ __('Master fund') }}</p>
+                <p class="text-sm font-bold tabular-nums text-gray-900 dark:text-white">{{ \App\Support\Insights\InsightFormatter::money($pool['master_fund']) }}</p>
+                <p class="text-[10px] text-gray-500">{{ __('Members') }}: {{ \App\Support\Insights\InsightFormatter::money($pool['member_fund']) }}</p>
+            </div>
+            <div>
+                <p class="text-[10px] uppercase text-gray-400">{{ __('Pool solvency') }}</p>
+                <p class="text-sm font-bold tabular-nums text-gray-900 dark:text-white">
+                    {{ $pool['solvency_ratio'] !== null ? $pool['solvency_ratio'].'×' : '—' }}
+                </p>
+                <p class="text-[10px] text-gray-500">{{ __('vs loan exposure') }}</p>
+            </div>
+            <div>
+                <p class="text-[10px] uppercase text-gray-400">{{ __('Pool drift') }}</p>
+                <p @class([
+                    'text-sm font-bold tabular-nums',
+                    'text-red-600 dark:text-red-400' => $pool['has_drift'],
+                    'text-emerald-600 dark:text-emerald-400' => ! $pool['has_drift'],
+                ])>
+                    {{ $pool['has_drift'] ? __('Variance detected') : __('Balanced') }}
+                </p>
+                <p class="text-[10px] text-gray-500">{{ __('Cash drift') }} {{ \App\Support\Insights\InsightFormatter::money($pool['cash_drift']) }} · {{ __('Fund drift') }} {{ \App\Support\Insights\InsightFormatter::money($pool['fund_drift']) }}</p>
+            </div>
+        </div>
     </div>
 
     {{-- ── Row 2: Loan queue preview (left, wide) + Recon alerts (right) ── --}}
@@ -101,7 +150,7 @@
                                     </td>
                                     <td class="px-4 py-2.5">
                                         <a href="{{ $loan['url'] }}"
-                                            class="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-sky-500">
+                                            class="ff-tenant-btn inline-flex items-center gap-1 px-3 py-1 text-[11px]">
                                             {{ __('Review') }}
                                         </a>
                                     </td>
@@ -169,6 +218,11 @@
                         ['label' => __('Failed'),    'pct' => $breakdown['failed_pct'],  'color' => '#E24B4A', 'count' => $breakdown['failed']],
                         ['label' => __('Waived'),    'pct' => $breakdown['waived_pct'],  'color' => '#9ca3af', 'count' => $breakdown['waived']],
                     ];
+                    $lateFeeTiers = [
+                        ['label' => __('Tier 1 (day 3+)'),  'count' => $breakdown['tier1'], 'class' => 'text-amber-600 dark:text-amber-400'],
+                        ['label' => __('Tier 2 (day 10+)'), 'count' => $breakdown['tier2'], 'class' => 'text-orange-600 dark:text-orange-400'],
+                        ['label' => __('Tier 3 (day 20+)'), 'count' => $breakdown['tier3'], 'class' => 'text-red-600 dark:text-red-400'],
+                    ];
                 @endphp
                 @foreach ($bars as $bar)
                     <div class="flex items-center gap-2">
@@ -182,11 +236,7 @@
 
                 <div class="mt-2 border-t border-gray-100 pt-3 dark:border-gray-700">
                     <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Late fee tiers') }}</p>
-                    @foreach ([
-                        ['label' => __('Tier 1 (day 3+)'),  'count' => $breakdown['tier1'], 'class' => 'text-amber-600 dark:text-amber-400'],
-                        ['label' => __('Tier 2 (day 10+)'), 'count' => $breakdown['tier2'], 'class' => 'text-orange-600 dark:text-orange-400'],
-                        ['label' => __('Tier 3 (day 20+)'), 'count' => $breakdown['tier3'], 'class' => 'text-red-600 dark:text-red-400'],
-                    ] as $tier)
+                    @foreach ($lateFeeTiers as $tier)
                         <div class="flex items-center justify-between text-[11px]">
                             <span class="text-gray-500">{{ $tier['label'] }}</span>
                             <span class="{{ $tier['class'] }} font-semibold">
@@ -369,7 +419,7 @@
                                     class="flex items-center gap-2 px-3 py-2 text-xs transition hover:bg-sky-50/70 dark:hover:bg-sky-950/20">
                                     <x-dynamic-component :component="$link['icon']" class="h-3.5 w-3.5 shrink-0 text-sky-500" />
                                     <span class="font-medium text-gray-800 dark:text-gray-200">{{ $link['label'] }}</span>
-                                    <x-heroicon-m-chevron-right class="ms-auto h-3 w-3 text-gray-300 dark:text-gray-600" />
+                                    <x-heroicon-m-chevron-right class="ff-rtl-flip ms-auto h-3 w-3 text-gray-300 dark:text-gray-600" />
                                 </a>
                             </li>
                         @endforeach

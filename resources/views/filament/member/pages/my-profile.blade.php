@@ -1,5 +1,7 @@
 <x-filament-panels::page>
     @php
+        use App\Models\Tenant\Member;
+
         $user = $user ?? auth('tenant')->user();
         $member = $member ?? $user?->member;
     @endphp
@@ -39,7 +41,7 @@
                     <div class="shrink-0">
                         <span
                             class="member-profile-status {{ $member->status === 'active' ? 'member-profile-status--active' : 'member-profile-status--inactive' }}">
-                            {{ __(ucfirst(str_replace('_', ' ', $member->status))) }}
+                            {{ Member::statusOptions()[$member->status] ?? $member->status }}
                         </span>
                     </div>
                 @endif

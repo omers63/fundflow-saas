@@ -59,7 +59,7 @@ class MemberActivityTableWidget extends TableWidget
                         ->sortable(),
                     TextColumn::make('account_label')
                         ->label(__('Account'))
-                        ->state(fn (Transaction $record): string => $record->account?->memberFacingLabel() ?? '—')
+                        ->state(fn (Transaction $record): string => $record->account?->memberFacingLabel() ?? __('—'))
                         ->badge()
                         ->color(fn (Transaction $record): string => match ($record->account?->type) {
                             'fund' => 'primary',
@@ -77,12 +77,12 @@ class MemberActivityTableWidget extends TableWidget
                         ->label(__('Credit'))
                         ->state(fn (Transaction $record): ?float => $record->type === 'credit' ? (float) $record->amount : null)
                         ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
-                        ->placeholder('—'),
+                        ->placeholder(__('—')),
                     TextColumn::make('debit')
                         ->label(__('Debit'))
                         ->state(fn (Transaction $record): ?float => $record->type === 'debit' ? (float) $record->amount : null)
                         ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
-                        ->placeholder('—'),
+                        ->placeholder(__('—')),
                     TextColumn::make('category')
                         ->label(__('Type'))
                         ->state(fn (Transaction $record): string => $record->memberActivityCategoryLabel())

@@ -1,16 +1,14 @@
 <!DOCTYPE html>
-<html lang="{{ app()->getLocale() }}" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
+@php
+    $isArabic = app()->getLocale() === 'ar';
+@endphp
+<html lang="{{ app()->getLocale() }}" dir="{{ $isArabic ? 'rtl' : 'ltr' }}">
 
 <head>
     <meta charset="utf-8">
     <title>{{ __('Reconciliation snapshot') }} #{{ $snapshot->id }}</title>
+    @include('pdf.partials.layout-styles', ['accent' => '#0284c7', 'isArabic' => $isArabic])
     <style>
-        body {
-            font-family: DejaVu Sans, sans-serif;
-            font-size: 10pt;
-            color: #111;
-        }
-
         h1 {
             font-size: 16pt;
             margin: 0 0 8px;
@@ -20,30 +18,6 @@
             font-size: 11pt;
             margin: 16px 0 6px;
             border-bottom: 1px solid #ccc;
-        }
-
-        .muted {
-            color: #555;
-            font-size: 9pt;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 6px;
-        }
-
-        th,
-        td {
-            border: 1px solid #ccc;
-            padding: 4px 6px;
-            text-align: left;
-            vertical-align: top;
-        }
-
-        th {
-            background: #f3f4f6;
-            font-size: 9pt;
         }
 
         .pass {
@@ -74,10 +48,12 @@
 <body>
     <h1>{{ __('Financial reconciliation report') }}</h1>
     <p class="muted">{{ __('Snapshot') }} #{{ $snapshot->id }} · {{ __('Mode') }} {{ $snapshot->mode }} ·
-        {{ __('As of') }} {{ $snapshot->as_of->format('Y-m-d H:i T') }}</p>
+        {{ __('As of') }} {{ $snapshot->as_of->format('Y-m-d H:i T') }}
+    </p>
     @if ($snapshot->period_start && $snapshot->period_end)
         <p class="muted">{{ __('Period') }} {{ $snapshot->period_start->format('Y-m-d') }} →
-            {{ $snapshot->period_end->format('Y-m-d') }}</p>
+            {{ $snapshot->period_end->format('Y-m-d') }}
+        </p>
     @endif
 
     <h2>{{ __('Verdict') }}</h2>
@@ -173,12 +149,14 @@
         <tr>
             <th>{{ __('Bank unposted') }}</th>
             <td>{{ $snapshot->report['pipeline']['bank_unposted_count'] ?? 0 }} {{ __('rows') }}
-                ({{ number_format($snapshot->report['pipeline']['bank_unposted_amount'] ?? 0, 2) }} SAR)</td>
+                ({!! \App\Filament\Support\MoneyDisplay::pdfHtml($snapshot->report['pipeline']['bank_unposted_amount'] ?? 0)?->toHtml() ?? '—' !!})
+            </td>
         </tr>
         <tr>
             <th>{{ __('SMS unposted') }}</th>
             <td>{{ $snapshot->report['pipeline']['sms_unposted_count'] ?? 0 }} {{ __('rows') }}
-                ({{ number_format($snapshot->report['pipeline']['sms_unposted_amount'] ?? 0, 2) }} SAR)</td>
+                ({!! \App\Filament\Support\MoneyDisplay::pdfHtml($snapshot->report['pipeline']['sms_unposted_amount'] ?? 0)?->toHtml() ?? '—' !!})
+            </td>
         </tr>
     </table>
 

@@ -7,9 +7,9 @@ namespace App\Filament\Tenant\Resources\NotificationLogs\Tables;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Support\ViewNotificationLogAction;
 use App\Models\Tenant\NotificationLog;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
@@ -102,7 +102,7 @@ class NotificationLogsTable
             ])
             ->defaultSort('sent_at', 'desc')
             ->recordActions(TableRecordActionGroups::wrap([
-                ViewAction::make(),
+                ViewNotificationLogAction::make(),
             ]))
             ->toolbarActions([
                 BulkActionGroup::make([

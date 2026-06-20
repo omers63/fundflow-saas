@@ -3,9 +3,11 @@
 namespace App\Filament\Tenant\Resources\Loans\Pages;
 
 use App\Filament\Support\LoanDelinquencyTables;
+use App\Filament\Tenant\Pages\LoanEmiCollectionCalendarPage;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
+use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Tables\Table;
@@ -77,6 +79,17 @@ class ListLoans extends ListRecords
             default => __('Track the full lifecycle of every loan — from application through disbursement to settlement.
                 Monitor the full loan portfolio, outstanding balances, and operational pipeline.'),
         };
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('collection_calendar')
+                ->label(__('Collection calendar'))
+                ->icon('heroicon-o-calendar-days')
+                ->color('gray')
+                ->url(LoanEmiCollectionCalendarPage::getUrl()),
+        ];
     }
 
     protected function getHeaderWidgets(): array

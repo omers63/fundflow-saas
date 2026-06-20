@@ -4,10 +4,10 @@
 @endphp
 
 <div class="ff-app-insights w-full max-w-none space-y-3 mb-1" @if (filled($pollingInterval)) wire:poll.{{ $pollingInterval }} @endif>
-    <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        @include('filament.tenant.widgets.partials.insights-hero', ['hero' => $d['hero']])
-        @include('filament.tenant.widgets.partials.insights-kpi-strip', ['kpis' => $d['kpis']])
-    </div>
+    @include('filament.tenant.widgets.partials.insights-head', [
+        'hero' => $d['hero'],
+        'kpis' => $d['kpis'],
+    ])
 
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div

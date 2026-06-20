@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Tenant\Concerns\EmbedsAsAuditWorkspacePanel;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Jobs\Tenant\RunLegacyMigrationPaymentsJob;
 use App\Models\Tenant\Loan;
@@ -16,6 +17,7 @@ use App\Support\BusinessDay;
 use App\Support\FilamentStoredUploadPath;
 use BackedEnum;
 use Carbon\Carbon;
+use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Radio;
@@ -34,6 +36,7 @@ use UnitEnum;
 
 class LegacyMigrationPage extends Page implements HasForms
 {
+    use EmbedsAsAuditWorkspacePanel;
     use InteractsWithForms;
     use TranslatesPageNavigationLabel;
 
@@ -50,6 +53,8 @@ class LegacyMigrationPage extends Page implements HasForms
     protected Width|string|null $maxContentWidth = Width::SevenExtraLarge;
 
     protected string $view = 'filament.tenant.pages.legacy-migration';
+
+    protected string $embeddedView = 'filament.tenant.pages.embedded.legacy-migration';
 
     public int $currentStep = 1;
 
@@ -83,8 +88,15 @@ class LegacyMigrationPage extends Page implements HasForms
         return auth('tenant')->user()?->is_admin === true;
     }
 
-    public function mount(): void
+    public static function shouldRegisterNavigation(): bool
     {
+        return false;
+    }
+
+    public function mount(bool $embedded = false): void
+    {
+        $this->mountEmbedded($embedded);
+
         $this->form->fill([
             'strategy' => 'snapshot',
             'cutoff_date' => BusinessDay::now()->subMonth()->endOfMonth()->toDateString(),
@@ -136,6 +148,35 @@ class LegacyMigrationPage extends Page implements HasForms
     public function getSubheading(): ?string
     {
         return __('Import members, loans, and optional payment history from your previous system using CSV templates.');
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('previewMigration')
+                ->label(__('Preview'))
+                ->icon('heroicon-o-eye')
+                ->color('gray')
+                ->action(fn (): mixed => $this->previewMigration()),
+            Action::make('classifyPayments')
+                ->label(__('Classify payments'))
+                ->icon('heroicon-o-tag')
+                ->color('gray')
+                ->action(fn (): mixed => $this->classifyPayments()),
+            Action::make('dryRun')
+                ->label(__('Dry run'))
+                ->icon('heroicon-o-beaker')
+                ->color('warning')
+                ->action(fn (): mixed => $this->runMigration(true)),
+            Action::make('runMigration')
+                ->label(__('Run migration'))
+                ->icon('heroicon-o-play')
+                ->color('primary')
+                ->requiresConfirmation()
+                ->modalHeading(__('Run migration now?'))
+                ->modalDescription(__('This writes members, loans, and optional payments to the database.'))
+                ->action(fn (): mixed => $this->runMigration(false)),
+        ];
     }
 
     /**

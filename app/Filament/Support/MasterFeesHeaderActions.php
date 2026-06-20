@@ -79,7 +79,7 @@ final class MasterFeesHeaderActions
 
                         $currency = (string) Setting::get('general', 'currency', 'USD');
 
-                        return number_format($arrears->totalFeeArrears($member), 2).' '.$currency;
+                        return MoneyDisplay::format($arrears->totalFeeArrears($member), $currency) ?? '';
                     }),
                 DateTimePicker::make('transacted_at')
                     ->label(__('Transaction date & time'))
@@ -102,16 +102,18 @@ final class MasterFeesHeaderActions
             ->action(function (array $data, Action $action, MasterFeeDeductionService $feeDeductions): void {
                 $member = Member::query()->findOrFail($data['member_id']);
 
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $feeDeductions->deduct(
-                        $member,
-                        (float) $data['amount'],
-                        (string) $data['description'],
-                        Carbon::parse($data['transacted_at']),
-                    ),
-                    __('Fee deduction failed'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $feeDeductions->deduct(
+                            $member,
+                            (float) $data['amount'],
+                            (string) $data['description'],
+                            Carbon::parse($data['transacted_at']),
+                        ),
+                        __('Fee deduction failed'),
+                    )
+                ) {
                     return;
                 }
 
@@ -133,16 +135,18 @@ final class MasterFeesHeaderActions
             ->action(function (array $data, Action $action, MasterFeeDisbursementService $feeDisbursements) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $feeDisbursements->disburse(
-                        $account,
-                        (float) $data['amount'],
-                        (string) $data['description'],
-                        Carbon::parse($data['transacted_at']),
-                    ),
-                    __('Disbursement failed'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $feeDisbursements->disburse(
+                            $account,
+                            (float) $data['amount'],
+                            (string) $data['description'],
+                            Carbon::parse($data['transacted_at']),
+                        ),
+                        __('Disbursement failed'),
+                    )
+                ) {
                     return;
                 }
 

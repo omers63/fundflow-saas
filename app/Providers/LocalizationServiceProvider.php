@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Http\Livewire\LanguageSwitchComponent;
+use App\Http\Livewire\TenantTopbarLanguageSwitch;
 use App\Models\Tenant\User;
 use App\Support\AppLocale;
 use App\Support\ShowsFundPublicShell;
@@ -21,6 +22,7 @@ class LocalizationServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Livewire::component('language-switch-component', LanguageSwitchComponent::class);
+        Livewire::component('tenant-topbar-language-switch', TenantTopbarLanguageSwitch::class);
 
         $this->configureLanguageSwitch();
         $this->listenForLocaleChanges();
@@ -40,6 +42,8 @@ class LocalizationServiceProvider extends ServiceProvider
                     'ar' => 'https://flagcdn.com/w40/sa.png',
                 ])
                 ->circular()
+                ->flagsOnly()
+                ->excludes(['tenant'])
                 ->visible(
                     insidePanels: true,
                     outsidePanels: fn (): bool => ! ShowsFundPublicShell::onTenantFilamentAuthPage()

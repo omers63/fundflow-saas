@@ -17,7 +17,6 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Schema as DatabaseSchema;
 use UnitEnum;
 
 class NotificationLogResource extends Resource
@@ -95,6 +94,6 @@ class NotificationLogResource extends Resource
 
     public static function shouldRegisterNavigation(): bool
     {
-        return DatabaseSchema::hasTable('notification_logs');
+        return false;
     }
 }

@@ -4,11 +4,19 @@ namespace App\Filament\Tenant\Resources\FundTiers\Pages;
 
 use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
+use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListFundTiers extends ListRecords
 {
     protected static string $resource = FundTierResource::class;
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            CreateAction::make(),
+        ];
+    }
 
     protected function getHeaderWidgets(): array
     {

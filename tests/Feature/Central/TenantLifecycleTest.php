@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Bus;
 use Stancl\Tenancy\Jobs\CreateDatabase;
 use Stancl\Tenancy\Jobs\DeleteDatabase;
 use Stancl\Tenancy\Jobs\MigrateDatabase;
+use Stancl\Tenancy\Jobs\SeedDatabase;
 
 beforeEach(function () {
     // Clear any existing bus fakes if any
@@ -45,6 +46,7 @@ test('tenant provisioning service dispatches correct jobs when invoice is paid',
     Bus::assertChained([
         CreateDatabase::class,
         MigrateDatabase::class,
+        SeedDatabase::class,
         CreateFrameworkCacheDirForTenant::class,
         MarkTenantAsProvisioned::class,
     ]);

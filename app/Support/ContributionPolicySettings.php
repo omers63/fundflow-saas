@@ -155,6 +155,7 @@ final class ContributionPolicySettings
     {
         $delinquency = array_merge(self::delinquencyDefaults(), Setting::getGroup(self::GROUP_DELINQUENCY));
         $lateFee = array_merge(self::lateFeeDefaults(), Setting::getGroup(self::GROUP_LATE_FEE));
+        $collection = array_merge(self::collectionDefaults(), Setting::getGroup(self::GROUP_COLLECTION));
 
         return [
             'delinquency_consecutive' => $delinquency['consecutive_miss_threshold'],
@@ -169,6 +170,18 @@ final class ContributionPolicySettings
             'late_fee_repayment_20d' => $lateFee['repayment_day_20'],
             'late_fee_repayment_30d' => $lateFee['repayment_day_30'],
             'annual_subscription_fee' => self::annualSubscriptionFee(),
+            'collection_late_fee_reminder_days' => $collection['late_fee_reminder_days'],
+            'collection_late_fee_tier_1_day' => $collection['late_fee_tier_1_day'],
+            'collection_late_fee_tier_2_day' => $collection['late_fee_tier_2_day'],
+            'collection_late_fee_tier_3_day' => $collection['late_fee_tier_3_day'],
+            'collection_late_fee_tier_4_day' => $collection['late_fee_tier_4_day'],
+            'collection_late_fee_model' => $collection['late_fee_model'],
+            'collection_recon_tolerance' => $collection['recon_tolerance'],
+            'collection_bank_match_date_range_days' => $collection['bank_match_date_range_days'],
+            'collection_stale_pending_days' => $collection['stale_pending_days'],
+            'collection_cash_deposit_unbanked_days' => $collection['cash_deposit_unbanked_days'],
+            'collection_timing_diff_defer_hours' => $collection['timing_diff_defer_hours'],
+            'collection_timing_diff_escalate_hours' => $collection['timing_diff_escalate_hours'],
         ];
     }
 
@@ -202,6 +215,23 @@ final class ContributionPolicySettings
         }
 
         Setting::set(self::GROUP_SUBSCRIPTION, 'annual_fee', max(0, (float) ($state['annual_subscription_fee'] ?? 0)));
+
+        Setting::set(self::GROUP_COLLECTION, 'late_fee_reminder_days', max(0, (int) ($state['collection_late_fee_reminder_days'] ?? 3)));
+        Setting::set(self::GROUP_COLLECTION, 'late_fee_tier_1_day', max(1, (int) ($state['collection_late_fee_tier_1_day'] ?? 3)));
+        Setting::set(self::GROUP_COLLECTION, 'late_fee_tier_2_day', max(1, (int) ($state['collection_late_fee_tier_2_day'] ?? 10)));
+        Setting::set(self::GROUP_COLLECTION, 'late_fee_tier_3_day', max(1, (int) ($state['collection_late_fee_tier_3_day'] ?? 20)));
+        Setting::set(self::GROUP_COLLECTION, 'late_fee_tier_4_day', max(1, (int) ($state['collection_late_fee_tier_4_day'] ?? 30)));
+        $lateFeeModel = $state['collection_late_fee_model'] ?? 'replacement';
+
+        Setting::set(self::GROUP_COLLECTION, 'late_fee_model', in_array($lateFeeModel, ['replacement', 'cumulative'], true)
+            ? $lateFeeModel
+            : 'replacement');
+        Setting::set(self::GROUP_COLLECTION, 'recon_tolerance', max(0.0, (float) ($state['collection_recon_tolerance'] ?? 0.01)));
+        Setting::set(self::GROUP_COLLECTION, 'bank_match_date_range_days', max(0, (int) ($state['collection_bank_match_date_range_days'] ?? 3)));
+        Setting::set(self::GROUP_COLLECTION, 'stale_pending_days', max(1, (int) ($state['collection_stale_pending_days'] ?? 30)));
+        Setting::set(self::GROUP_COLLECTION, 'cash_deposit_unbanked_days', max(1, (int) ($state['collection_cash_deposit_unbanked_days'] ?? 14)));
+        Setting::set(self::GROUP_COLLECTION, 'timing_diff_defer_hours', max(1, (int) ($state['collection_timing_diff_defer_hours'] ?? 24)));
+        Setting::set(self::GROUP_COLLECTION, 'timing_diff_escalate_hours', max(1, (int) ($state['collection_timing_diff_escalate_hours'] ?? 48)));
     }
 
     private static function delinquencyGet(string $key, mixed $default): mixed

@@ -7,7 +7,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Account::ensureMasterSuspense();
+        Account::ensureDefaultMasterAccounts();
     }
 
     public function down(): void

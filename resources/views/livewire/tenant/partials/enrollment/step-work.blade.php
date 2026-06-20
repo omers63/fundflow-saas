@@ -23,7 +23,8 @@
 
     <div>
         <label for="monthly_income" class="mb-1.5 block text-sm font-medium text-gray-700">
-            {{ __('Monthly income') }} ({{ $currency }})
+            {{ __('Monthly income') }} (<span
+                dir="ltr">{{ \App\Filament\Support\MoneyDisplay::symbol($currency) }}</span>)
         </label>
         <input wire:model="monthly_income" type="number" step="0.01" id="monthly_income"
             class="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">

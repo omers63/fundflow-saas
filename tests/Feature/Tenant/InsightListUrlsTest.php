@@ -96,10 +96,10 @@ test('bank accounts list url uses filters and includes tab when not default', fu
         ->toContain('filters');
 });
 
-test('membership application list url uses filters', function () {
-    $url = MembershipApplicationResource::listUrl(['status' => ['value' => 'pending']]);
+test('membership application list tab url uses tab query parameter', function () {
+    $url = MembershipApplicationResource::listTabUrl('pending');
 
     expect($url)
-        ->toContain('filters')
+        ->toContain('tab=pending')
         ->not->toContain('tableFilters');
 });

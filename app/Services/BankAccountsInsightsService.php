@@ -116,6 +116,7 @@ final class BankAccountsInsightsService
                 'filename' => $statement->filename,
                 'bank_name' => $statement->bank_name,
                 'status' => $statement->status,
+                'status_label' => BankStatement::statusOptions()[$statement->status] ?? $statement->status,
                 'imported_rows' => $statement->imported_rows,
                 'total_rows' => $statement->total_rows,
                 'url' => BankAccountsResource::getUrl('view', ['record' => $statement]),
@@ -123,9 +124,58 @@ final class BankAccountsInsightsService
             ])
             ->all();
 
+        $importedToday = (clone $statementLineQuery)
+            ->whereDate('created_at', $now->toDateString())
+            ->count();
+
+        $autoMatched = $posted + $mirrored;
+
+        $unmatched = $imported + $pendingBankMatch;
+
+        $stalePending = (clone $statementLineQuery)
+            ->whereIn('status', ['imported', 'mirrored'])
+            ->where('created_at', '<', $now->copy()->subDays(30))
+            ->count();
+
         $indexUrl = BankAccountsResource::getUrl('index');
 
         return [
+            'imported_today' => $importedToday,
+            'auto_matched' => $autoMatched,
+            'unmatched' => $unmatched,
+            'stale_pending' => $stalePending,
+            'clearing_kpis' => [
+                [
+                    'label' => __('Imported today'),
+                    'value' => (string) $importedToday,
+                    'sub' => __('Statement lines'),
+                    'accent' => 'sky',
+                    'url' => BankAccountsResource::listUrl('imports'),
+                ],
+                [
+                    'label' => __('Auto-matched'),
+                    'value' => (string) $autoMatched,
+                    'sub' => __('Posted + mirrored'),
+                    'accent' => 'emerald',
+                    'url' => BankAccountsResource::listUrl('imports'),
+                ],
+                [
+                    'label' => __('Unmatched'),
+                    'value' => (string) $unmatched,
+                    'sub' => __('Needs action'),
+                    'accent' => $unmatched > 0 ? 'amber' : 'emerald',
+                    'url' => $unmatched > 0
+                        ? BankAccountsResource::listUrl('clearance')
+                        : BankAccountsResource::listUrl('imports'),
+                ],
+                [
+                    'label' => __('Stale pending'),
+                    'value' => (string) $stalePending,
+                    'sub' => __('Older than 30 days'),
+                    'accent' => $stalePending > 0 ? 'rose' : 'gray',
+                    'url' => BankAccountsResource::listUrl('imports'),
+                ],
+            ],
             'currency' => $currency,
             'active_tab' => $activeTab,
             'active_tab_label' => match ($activeTab) {

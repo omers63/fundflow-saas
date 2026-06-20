@@ -37,13 +37,13 @@ class TransactionsRelationManager extends RelationManager
             ->modifyQueryUsing(fn ($query) => $query->with('member'))
             ->columns([
                 TextColumn::make('transacted_at')
-                    ->label('Date')
+                    ->label(__('Date'))
                     ->dateTime()
                     ->sortable(),
                 AccountTransactionTypeColumn::make(),
                 AccountTransactionAmountColumn::make(),
                 TextColumn::make('balance_after')
-                    ->label('Balance')
+                    ->label(__('Balance'))
                     ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
                     ->sortable(),
                 TextColumn::make('description')
@@ -66,7 +66,7 @@ class TransactionsRelationManager extends RelationManager
             ->filters([
                 SelectFilter::make('type')
                     ->options(AccountTransactionTypeFilter::options()),
-                DateColumnRangeFilter::make('transacted_at', 'Date'),
+                DateColumnRangeFilter::make('transacted_at', __('Date')),
                 SelectFilter::make('member_id')
                     ->label(__('Member tag'))
                     ->options(fn (): array => Member::query()

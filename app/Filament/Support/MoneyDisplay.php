@@ -40,8 +40,33 @@ final class MoneyDisplay
             : 'ff-sar-symbol ff-sar-symbol--code';
     }
 
+    public static function symbolHtml(?string $currency = null): HtmlString
+    {
+        return new HtmlString(
+            '<span class="'.self::symbolSpanClass($currency).'" dir="ltr">'.e(self::symbol($currency)).'</span>'
+        );
+    }
+
     /**
-     * Format like "SAR 50,000.00" or "⃁ 50,000.00" — symbol always left of digits.
+     * Compact amount with localized currency symbol before digits (e.g. ⃁ 1.2M).
+     */
+    public static function compactWithSymbol(float $amount, ?string $currency = null): string
+    {
+        $abs = abs($amount);
+        $symbol = self::symbol($currency);
+
+        if ($abs >= 1_000_000) {
+            return $symbol.' '.Number::format($abs / 1_000_000, 1, locale: 'en').'M';
+        }
+
+        if ($abs >= 1_000) {
+            return $symbol.' '.Number::format($abs / 1_000, 1, locale: 'en').'K';
+        }
+
+        return self::format($abs, $currency, precision: 0) ?? $symbol;
+    }
+
+    /**
      * Sign is not shown — use {@see color()} for danger (negative) vs success (zero/positive).
      *
      * @param  string|null  $locale  Deprecated; digits always use Western numerals.

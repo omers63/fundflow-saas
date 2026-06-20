@@ -42,9 +42,11 @@ final class TableGrouping
      */
     public static function apply(Table $table, array $groups): Table
     {
-        return $table
-            ->groups(self::collapsible($groups))
-            ->groupingSettingsInDropdownOnDesktop();
+        return TableRecordActionGroups::normalizeSinglePrimaryActionRowClick(
+            $table
+                ->groups(self::collapsible($groups))
+                ->groupingSettingsInDropdownOnDesktop()
+        );
     }
 
     /**
@@ -152,6 +154,11 @@ final class TableGrouping
                 ->getTitleFromRecordUsing(fn ($record): string => match ($record->type) {
                     'cash' => __('Cash'),
                     'fund' => __('Fund'),
+                    'bank' => __('Bank'),
+                    'expense' => __('Expense'),
+                    'fees' => __('Fees'),
+                    'invest' => __('Invest'),
+                    'suspense' => __('Suspense'),
                     default => ucfirst((string) $record->type),
                 });
         }

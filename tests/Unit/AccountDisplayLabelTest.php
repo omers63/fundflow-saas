@@ -32,12 +32,14 @@ test('tenant seeder provisions master suspense with other master accounts', func
         ->and(Account::masterSuspense()?->name)->toBe('Master Suspense');
 });
 
-test('other accounts use stored name for display label', function (): void {
+test('other master accounts use translated display labels', function (): void {
+    app()->setLocale('en');
+
     $account = new Account([
         'type' => 'fund',
         'name' => 'Master Fund',
         'is_master' => true,
     ]);
 
-    expect($account->displayLabel())->toBe('Master Fund');
+    expect($account->displayLabel())->toBe(__('Master Fund'));
 });

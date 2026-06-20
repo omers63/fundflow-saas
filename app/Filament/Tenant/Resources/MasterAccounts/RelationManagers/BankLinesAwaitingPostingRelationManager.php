@@ -10,7 +10,7 @@ use App\Filament\Support\BankTransactionTableActions;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
-use App\Filament\Support\ViewActions\ViewBankTransactionAction;
+use App\Filament\Tenant\Support\ViewBankTransactionAction;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
@@ -64,6 +64,7 @@ class BankLinesAwaitingPostingRelationManager extends RelationManager
                         ->wrap(),
                     TextColumn::make('status')
                         ->badge()
+                        ->formatStateUsing(fn (string $state): string => BankTransaction::statusOptions()[$state] ?? $state)
                         ->color(fn (string $state): string => match ($state) {
                             'imported' => 'warning',
                             'mirrored' => 'info',

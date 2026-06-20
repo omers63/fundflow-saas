@@ -1,6 +1,8 @@
 @import '../../../../vendor/filament/filament/resources/css/theme.css';
 @import '../mobile-panels.css';
 @import '../stat-widget-tooltips.css';
+@import '../currency-display.css';
+@import './tenant-portal-components.css';
 
 @source '../../../../vendor/bezhansalleh/filament-language-switch/resources/views/**/*.blade.php';
 @source '../../../../app/Filament/Tenant/**/*';
@@ -28,47 +30,429 @@
     --ff-panel-radius:   12px;
 }
 
-/* ── Calm sky-blue atmosphere (lighter, less busy than before) ── */
+/* ── PAGE SHELL: flat, clean — matches prototype ── */
+
+/* Body: flat page background, no gradient */
 .fi-body.fi-panel-tenant {
-    background:
-        radial-gradient(1000px 480px at 5% -8%, rgb(14 165 233 / 0.07), transparent 52%),
-        radial-gradient(700px 380px at 100% 0%, rgb(2 132 199 / 0.06), transparent 48%),
-        linear-gradient(180deg, rgb(248 250 252) 0%, rgb(255 255 255) 50%, rgb(248 250 252) 100%);
+    color-scheme: light dark;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    background: var(--ff-page-bg) !important;
 }
 
 .dark .fi-body.fi-panel-tenant {
-    background:
-        radial-gradient(1000px 500px at 15% -5%, rgb(14 165 233 / 0.12), transparent 55%),
-        radial-gradient(800px 400px at 100% 5%, rgb(2 132 199 / 0.08), transparent 50%),
-        linear-gradient(180deg, rgb(15 23 42) 0%, rgb(2 6 23) 100%);
+    background: #0f172a !important;
 }
 
-.fi-body.fi-panel-tenant .fi-main {
-    background: linear-gradient(160deg, rgb(255 255 255 / 0.6) 0%, transparent 38%);
+/* Main content area: flat, no gradient overlay */
+.fi-body.fi-panel-tenant .fi-main,
+.fi-body.fi-panel-tenant .fi-page,
+.fi-body.fi-panel-tenant .fi-simple-main {
+    background: var(--ff-page-bg);
 }
 
-.dark .fi-body.fi-panel-tenant .fi-main {
-    background: linear-gradient(160deg, rgb(30 41 59 / 0.3) 0%, transparent 42%);
+.dark .fi-body.fi-panel-tenant .fi-main,
+.dark .fi-body.fi-panel-tenant .fi-page {
+    background: #0f172a;
 }
 
-/* ── Sidebar: compact prototype-style chrome ── */
+.fi-body.fi-panel-tenant .fi-main-ctn {
+    background: transparent;
+}
+
+/* ── Sidebar: white, flat border ── */
 .fi-body.fi-panel-tenant .fi-sidebar {
-    border-right: 1px solid var(--ff-border);
+    background: var(--ff-surface) !important;
+    border-inline-end: 1px solid var(--ff-border) !important;
+    box-shadow: none !important;
 }
 
+.dark .fi-body.fi-panel-tenant .fi-sidebar {
+    background: #1e293b !important;
+    border-inline-end-color: rgb(255 255 255 / 0.08) !important;
+}
+
+/* Sidebar header: white, simple bottom border */
+.fi-body.fi-panel-tenant .fi-sidebar-header {
+    background: var(--ff-surface) !important;
+    box-shadow: none !important;
+    border-bottom: 1px solid var(--ff-border) !important;
+    padding-inline: 0.75rem !important;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-sidebar-header {
+    background: #1e293b !important;
+    border-bottom-color: rgb(255 255 255 / 0.08) !important;
+}
+
+/* Sidebar nav padding */
+.fi-body.fi-panel-tenant .fi-sidebar-nav {
+    padding-block: 0.75rem;
+    padding-inline: 0.5rem;
+}
+
+/* Sidebar nav item label */
+.fi-body.fi-panel-tenant .fi-sidebar-item-label,
+.fi-body.fi-panel-tenant .fi-sidebar-item-btn {
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+/* Active nav item — sky-blue left indicator + light tint */
+.fi-body.fi-panel-tenant .fi-sidebar-item.fi-active > .fi-sidebar-item-btn,
+.fi-body.fi-panel-tenant .fi-sidebar-item-button[aria-current='page'],
+.fi-body.fi-panel-tenant .fi-sidebar-item-button.fi-active {
+    background-color: #e0f2fe !important;
+    box-shadow: inset 3px 0 0 #0284c7 !important;
+    border-radius: 0 8px 8px 0 !important;
+}
+
+.fi-body.fi-panel-tenant .fi-sidebar-item.fi-active > .fi-sidebar-item-btn > .fi-sidebar-item-label,
+.fi-body.fi-panel-tenant .fi-sidebar-item.fi-active > .fi-sidebar-item-btn > .fi-icon,
+.fi-body.fi-panel-tenant .fi-sidebar-item-button[aria-current='page'] {
+    color: #0369a1 !important;
+    font-weight: 600;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-sidebar-item.fi-active > .fi-sidebar-item-btn,
+.dark .fi-body.fi-panel-tenant .fi-sidebar-item-button[aria-current='page'],
+.dark .fi-body.fi-panel-tenant .fi-sidebar-item-button.fi-active {
+    background-color: rgb(7 89 133 / 0.25) !important;
+    box-shadow: inset 3px 0 0 #38bdf8 !important;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-sidebar-item.fi-active > .fi-sidebar-item-btn > .fi-sidebar-item-label,
+.dark .fi-body.fi-panel-tenant .fi-sidebar-item.fi-active > .fi-sidebar-item-btn > .fi-icon {
+    color: #7dd3fc !important;
+}
+
+/* Sidebar item hover */
+.fi-body.fi-panel-tenant .fi-sidebar-item.fi-sidebar-item-has-url > .fi-sidebar-item-btn:hover,
+.fi-body.fi-panel-tenant .fi-sidebar-item-button:hover {
+    background-color: #f0f9ff !important;
+    color: #0284c7 !important;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-sidebar-item.fi-sidebar-item-has-url > .fi-sidebar-item-btn:hover,
+.dark .fi-body.fi-panel-tenant .fi-sidebar-item-button:hover {
+    background-color: rgb(7 89 133 / 0.15) !important;
+    color: #7dd3fc !important;
+}
+
+/* Group labels: sky-blue uppercase */
+.fi-body.fi-panel-tenant .fi-sidebar-group-label {
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: #0284c7;
+    padding-inline: 0.5rem;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-sidebar-group-label {
+    color: #38bdf8;
+}
+
+/* Nav badge chips */
 .fi-body.fi-panel-tenant .fi-sidebar-nav-item-badge-ctn {
     font-size: 10px;
     font-weight: 600;
     padding: 1px 5px;
     border-radius: 10px;
+    background-color: #e0f2fe;
+    color: #0369a1;
 }
 
-/* ── Panels: prototype card style ── */
+.dark .fi-body.fi-panel-tenant .fi-sidebar-nav-item-badge-ctn {
+    background-color: rgb(7 89 133 / 0.4);
+    color: #7dd3fc;
+}
+
+/* ── Topbar: white, flat border, no blur ── */
+.fi-body.fi-panel-tenant .fi-topbar {
+    background: var(--ff-surface) !important;
+    border-block-end: 1px solid var(--ff-border) !important;
+    box-shadow: none !important;
+    min-height: 3rem;
+}
+
+.fi-body.fi-panel-tenant .fi-topbar nav {
+    background: transparent !important;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-topbar {
+    background: #1e293b !important;
+    border-block-end-color: rgb(255 255 255 / 0.08) !important;
+}
+
+/* ── NProgress loading bar: sky-blue ── */
+html.fi.fi-panel-tenant #nprogress .bar {
+    background: #0284c7;
+    height: 2px;
+    opacity: 0.7;
+}
+
+html.fi.fi-panel-tenant #nprogress .peg {
+    box-shadow:
+        0 0 6px #0284c7,
+        0 0 2px #0284c7;
+}
+
+/* ── Buttons: flat, no shadow, no gradient ── */
+
+/* Strip shadows and soften radius on all buttons */
+.fi-body.fi-panel-tenant .fi-btn {
+    box-shadow: none !important;
+    border-radius: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease,
+        color 0.15s ease;
+}
+
+/* Primary: flat neutral — no fill (matches member portal) */
+.fi-body.fi-panel-tenant .fi-btn.fi-color-primary:not(.fi-outlined) {
+    background: var(--ff-surface) !important;
+    border-color: var(--ff-border) !important;
+    color: #374151 !important;
+    box-shadow: none !important;
+}
+
+.fi-body.fi-panel-tenant .fi-btn.fi-color-primary:not(.fi-outlined):hover {
+    background: #f0f9ff !important;
+    border-color: #7dd3fc !important;
+    color: #0284c7 !important;
+}
+
+/* Success / warning / info: same flat neutral treatment */
+.fi-body.fi-panel-tenant .fi-btn.fi-color-success:not(.fi-outlined),
+.fi-body.fi-panel-tenant .fi-btn.fi-color-warning:not(.fi-outlined),
+.fi-body.fi-panel-tenant .fi-btn.fi-color-info:not(.fi-outlined) {
+    background: var(--ff-surface) !important;
+    border-color: var(--ff-border) !important;
+    color: var(--ff-muted) !important;
+    box-shadow: none !important;
+}
+
+.fi-body.fi-panel-tenant .fi-btn.fi-color-success:not(.fi-outlined):hover,
+.fi-body.fi-panel-tenant .fi-btn.fi-color-warning:not(.fi-outlined):hover,
+.fi-body.fi-panel-tenant .fi-btn.fi-color-info:not(.fi-outlined):hover {
+    background: #f9fafb !important;
+    border-color: #d1d5db !important;
+    color: #374151 !important;
+}
+
+/* Primary outlined: sky border, sky text, white background */
+.fi-body.fi-panel-tenant .fi-btn.fi-outlined.fi-color-primary {
+    background: var(--ff-surface) !important;
+    border-color: #7dd3fc !important;
+    color: #0284c7 !important;
+    box-shadow: none !important;
+}
+
+.fi-body.fi-panel-tenant .fi-btn.fi-outlined.fi-color-primary:hover {
+    background: #f0f9ff !important;
+    border-color: #38bdf8 !important;
+}
+
+/* Gray / secondary: white, very light border, muted text — the "without color" default */
+.fi-body.fi-panel-tenant .fi-btn.fi-color-gray,
+.fi-body.fi-panel-tenant .fi-btn.fi-color-secondary {
+    background: var(--ff-surface) !important;
+    border-color: var(--ff-border) !important;
+    color: var(--ff-muted) !important;
+    box-shadow: none !important;
+}
+
+.fi-body.fi-panel-tenant .fi-btn.fi-color-gray:hover,
+.fi-body.fi-panel-tenant .fi-btn.fi-color-secondary:hover {
+    background: #f9fafb !important;
+    border-color: #d1d5db !important;
+    color: #374151 !important;
+}
+
+/* Danger: flat neutral by default */
+.fi-body.fi-panel-tenant .fi-btn.fi-color-danger:not(.fi-outlined) {
+    background: var(--ff-surface) !important;
+    border-color: var(--ff-border) !important;
+    color: #b91c1c !important;
+    box-shadow: none !important;
+}
+
+.fi-body.fi-panel-tenant .fi-btn.fi-color-danger:not(.fi-outlined):hover {
+    background: #fef2f2 !important;
+    border-color: #fca5a5 !important;
+    color: #dc2626 !important;
+    box-shadow: none !important;
+}
+
+/* Outlined danger: clean border, no fill */
+.fi-body.fi-panel-tenant .fi-btn.fi-outlined.fi-color-danger {
+    background: var(--ff-surface) !important;
+    border-color: #fca5a5 !important;
+    color: #dc2626 !important;
+    box-shadow: none !important;
+}
+
+/* Modal destructive confirm: keep solid red (exception) */
+.fi-body.fi-panel-tenant .fi-modal-window .fi-modal-footer .fi-btn.fi-color-danger:not(.fi-outlined) {
+    background-color: #dc2626 !important;
+    border-color: #dc2626 !important;
+    color: #fff !important;
+}
+
+.fi-body.fi-panel-tenant .fi-modal-window .fi-modal-footer .fi-btn.fi-color-danger:not(.fi-outlined):hover {
+    background-color: #b91c1c !important;
+    border-color: #b91c1c !important;
+    color: #fff !important;
+}
+
+/* Dark mode: gray buttons */
+.dark .fi-body.fi-panel-tenant .fi-btn.fi-color-gray,
+.dark .fi-body.fi-panel-tenant .fi-btn.fi-color-secondary {
+    background: rgb(31 41 55) !important;
+    border-color: rgb(55 65 81) !important;
+    color: #9ca3af !important;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-btn.fi-color-gray:hover,
+.dark .fi-body.fi-panel-tenant .fi-btn.fi-color-secondary:hover {
+    background: rgb(55 65 81) !important;
+    border-color: rgb(75 85 99) !important;
+    color: #e5e7eb !important;
+}
+
+/* ── Page header: compact, clean ── */
+.fi-body.fi-panel-tenant .fi-page-header {
+    border-bottom: 1px solid var(--ff-border);
+    padding-block: 0.875rem;
+    background: var(--ff-surface);
+}
+
+.fi-body.fi-panel-tenant .fi-header-heading {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.01em;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-header-heading {
+    color: #f1f5f9;
+}
+
+.fi-body.fi-panel-tenant .fi-header-subheading {
+    font-size: 0.75rem;
+    color: var(--ff-muted);
+    margin-top: 0.125rem;
+}
+
+/* ── Panels / sections / cards: prototype flat style ── */
 .fi-body.fi-panel-tenant .fi-section,
 .fi-body.fi-panel-tenant .ff-admin-panel {
     border-radius: var(--ff-panel-radius);
     border: 1px solid var(--ff-border);
     background: var(--ff-surface);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+}
+
+.dark .fi-body.fi-panel-tenant .fi-section,
+.dark .fi-body.fi-panel-tenant .ff-admin-panel {
+    background: #1e293b;
+    border-color: rgb(255 255 255 / 0.08);
+}
+
+/* Section header: simple bottom divider */
+.fi-body.fi-panel-tenant .fi-section-header {
+    border-block-end: 1px solid var(--ff-border);
+    padding: 0.75rem 1rem;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-section-header {
+    border-block-end-color: rgb(255 255 255 / 0.07);
+}
+
+.fi-body.fi-panel-tenant .fi-section-header-heading {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #111827;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-section-header-heading {
+    color: #f9fafb;
+}
+
+/* Widgets: same card look */
+.fi-body.fi-panel-tenant .fi-wi-widget > .fi-section {
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+}
+
+/* Stat-overview widget cards: clean, flat */
+.fi-body.fi-panel-tenant .fi-wi-stats-overview-stat {
+    border-color: var(--ff-border) !important;
+    background: var(--ff-surface) !important;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04) !important;
+    border-radius: var(--ff-panel-radius) !important;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-wi-stats-overview-stat {
+    background: #1e293b !important;
+    border-color: rgb(255 255 255 / 0.08) !important;
+}
+
+/* Infolist entries: match form field style */
+.fi-body.fi-panel-tenant .fi-in-entry-wrp-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--ff-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.fi-body.fi-panel-tenant .fi-in-text-entry-content {
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+/* Form field labels */
+.fi-body.fi-panel-tenant .fi-fo-field-wrp-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--ff-muted);
+}
+
+/* Input wrappers */
+.fi-body.fi-panel-tenant .fi-input-wrp {
+    border-radius: 0.5rem;
+    border-color: var(--ff-border);
+}
+
+.fi-body.fi-panel-tenant .fi-input-wrp:focus-within {
+    border-color: #38bdf8;
+    --tw-ring-color: rgb(14 165 233 / 0.2);
+}
+
+.fi-body.fi-panel-tenant .fi-input-wrp input,
+.fi-body.fi-panel-tenant .fi-input-wrp select,
+.fi-body.fi-panel-tenant .fi-input-wrp textarea,
+.fi-body.fi-panel-tenant .fi-select-input,
+.fi-body.fi-panel-tenant .fi-fo-text-input input {
+    font-size: 0.75rem;
+}
+
+/* ── Table toolbar icon-buttons (filter toggle, search, column picker) ── */
+.fi-body.fi-panel-tenant .fi-ta-actions .fi-icon-btn,
+.fi-body.fi-panel-tenant .fi-ta-header .fi-icon-btn,
+.fi-body.fi-panel-tenant .fi-icon-btn {
+    box-shadow: none !important;
+    background: transparent !important;
+    border-color: transparent !important;
+}
+
+.fi-body.fi-panel-tenant .fi-icon-btn:hover {
+    background: rgb(240 249 255 / 0.8) !important;
+    color: #0284c7 !important;
 }
 
 /* ── Stat cards: sky hover glow ── */
@@ -169,6 +553,10 @@
   max-width: none;
 }
 
+.fi-body.fi-panel-tenant .ff-app-insights-head {
+  width: 100%;
+}
+
 .fi-body.fi-panel-tenant .ff-app-insights-kpi {
   transition:
     background-color 0.15s ease,
@@ -223,62 +611,7 @@
   }
 }
 
-/* Quick action tiles — explicit gradients (Tailwind cannot see dynamic PHP class strings) */
-.fi-body.fi-panel-tenant .ff-dashboard-action__bg {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  transition:
-    transform 0.25s ease,
-    filter 0.25s ease;
-}
-
-.fi-body.fi-panel-tenant .ff-dashboard-action:hover .ff-dashboard-action__bg {
-  filter: brightness(1.08) saturate(1.1);
-  transform: scale(1.03);
-}
-
-.fi-body.fi-panel-tenant .ff-dashboard-action__bg--cycle {
-  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 45%, #db2777 100%);
-}
-
-.fi-body.fi-panel-tenant .ff-dashboard-action__bg--queue {
-  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 50%, #dc2626 100%);
-}
-
-.fi-body.fi-panel-tenant .ff-dashboard-action__bg--delinquency {
-  background: linear-gradient(135deg, #e11d48 0%, #dc2626 50%, #be185d 100%);
-}
-
-.fi-body.fi-panel-tenant .ff-dashboard-action__bg--deposits {
-  background: linear-gradient(135deg, #059669 0%, #16a34a 50%, #0d9488 100%);
-}
-
-.fi-body.fi-panel-tenant .ff-dashboard-action__bg--applications {
-  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 50%, #7c3aed 100%);
-}
-
-.fi-body.fi-panel-tenant .ff-dashboard-action__bg--bank {
-  background: linear-gradient(135deg, #06b6d4 0%, #0284c7 50%, #1d4ed8 100%);
-}
-
-.fi-body.fi-panel-tenant .ff-dashboard-action {
-  animation-fill-mode: forwards;
-  color: #fff;
-  background-color: transparent;
-}
-
-.fi-body.fi-panel-tenant .ff-dashboard-action,
-.fi-body.fi-panel-tenant .ff-dashboard-action:hover,
-.fi-body.fi-panel-tenant .ff-dashboard-action:focus-visible {
-  color: #fff;
-  text-decoration: none;
-}
-
-.fi-body.fi-panel-tenant .ff-dashboard-action span,
-.fi-body.fi-panel-tenant .ff-dashboard-action svg {
-  color: inherit;
-}
+/* Quick action tiles — removed (tenant dashboard no longer uses gradient tiles) */
 
 .fi-body.fi-panel-tenant .ff-dashboard-gauge .ff-gauge-ring {
   filter: drop-shadow(0 0 4px rgb(2 132 199 / 0.22));
@@ -294,6 +627,175 @@
 
 .fi-body.fi-panel-tenant .ff-dashboard-balance:nth-child(3) {
   animation-delay: 0.12s;
+}
+
+/* ── Tables: clean, compact, prototype style ── */
+
+/* Header cells */
+.fi-body.fi-panel-tenant .fi-ta-table > thead > tr > th {
+    background: var(--ff-page-bg);
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ff-muted-light);
+    border-block-end-color: var(--ff-border);
+}
+
+.dark .fi-body.fi-panel-tenant .fi-ta-table > thead > tr > th {
+    background: rgb(15 23 42 / 0.6);
+}
+
+/* Body cells */
+.fi-body.fi-panel-tenant .fi-ta-table > tbody > tr > td {
+    font-size: 0.75rem;
+    border-block-end-color: #f3f4f6;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-ta-table > tbody > tr > td {
+    border-block-end-color: rgb(255 255 255 / 0.06);
+}
+
+/* Row hover — very subtle sky tint */
+.fi-body.fi-panel-tenant .fi-ta-table > tbody > tr:hover > td {
+    background: rgb(240 249 255 / 0.5);
+}
+
+.dark .fi-body.fi-panel-tenant .fi-ta-table > tbody > tr:hover > td {
+    background: rgb(7 89 133 / 0.08);
+}
+
+/* Header cell label */
+.fi-body.fi-panel-tenant .fi-ta-header-cell .fi-ta-header-cell-label {
+    font-size: 0.625rem;
+    font-weight: 700;
+}
+
+/* Table container — remove default outer shadow */
+.fi-body.fi-panel-tenant .fi-ta-ctn {
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+    border-radius: 0.75rem;
+    border-color: var(--ff-border);
+}
+
+/* Summary / totals row */
+.fi-body.fi-panel-tenant .fi-ta-text-summary {
+    display: inline-flex;
+    flex-flow: row wrap;
+    align-items: baseline;
+    column-gap: 0.35rem;
+    row-gap: 0;
+    padding-block: 0.75rem;
+}
+
+.fi-body.fi-panel-tenant .fi-ta-text-summary > .fi-ta-text-summary-label::after {
+    content: ':';
+}
+
+.fi-body.fi-panel-tenant .fi-ta-text-summary > .fi-ta-text-summary-label {
+    font-weight: 600;
+    color: #111827;
+}
+
+/* ── Tabs: sky-blue active indicator ── */
+.fi-body.fi-panel-tenant .fi-tabs-item.fi-active .fi-tabs-item-label {
+    color: #0284c7;
+    font-weight: 600;
+}
+
+.fi-body.fi-panel-tenant .fi-tabs-item-label {
+    font-size: 0.75rem;
+}
+
+/* Pill tabs (used in filter drawers) */
+.fi-body.fi-panel-tenant .fi-tabs-pill .fi-tabs-item.fi-active {
+    background: #e0f2fe;
+    color: #0284c7;
+}
+
+/* (section/header overrides in structural block above) */
+
+/* ── Badge / status chips in tables ── */
+.fi-body.fi-panel-tenant .fi-badge {
+    font-size: 0.625rem;
+    font-weight: 600;
+    border-radius: 0.375rem;
+    padding: 0.125rem 0.5rem;
+}
+
+/* ── Modals / dialogs: clean flat chrome ── */
+.fi-body.fi-panel-tenant .fi-modal-content {
+    border-radius: 1rem;
+    box-shadow:
+        0 4px 6px -1px rgb(0 0 0 / 0.08),
+        0 2px 4px -2px rgb(0 0 0 / 0.05);
+    border: 1px solid var(--ff-border);
+}
+
+.fi-body.fi-panel-tenant .fi-modal-header {
+    border-block-end-color: var(--ff-border);
+    padding: 1rem 1.25rem;
+}
+
+.fi-body.fi-panel-tenant .fi-modal-header-heading {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-modal-header-heading {
+    color: #f1f5f9;
+}
+
+/* ── Dropdowns: flat, clean shadow ── */
+.fi-body.fi-panel-tenant .fi-dropdown-panel {
+    box-shadow:
+        0 4px 6px -1px rgb(0 0 0 / 0.08),
+        0 2px 4px -2px rgb(0 0 0 / 0.05);
+    border-radius: 0.625rem;
+    border-color: var(--ff-border);
+}
+
+.fi-body.fi-panel-tenant .fi-dropdown-list-item-label {
+    font-size: 0.75rem;
+}
+
+/* ── Notifications: flat with sky accent bar ── */
+.fi-body.fi-panel-tenant .fi-no {
+    border-radius: 0.75rem;
+    border-color: var(--ff-border);
+    box-shadow:
+        0 4px 6px -1px rgb(0 0 0 / 0.07),
+        0 2px 4px -2px rgb(0 0 0 / 0.05);
+}
+
+.fi-body.fi-panel-tenant .fi-no.fi-color-primary {
+    border-left: 3px solid #0284c7;
+}
+
+.fi-body.fi-panel-tenant .fi-no.fi-color-success {
+    border-left: 3px solid #059669;
+}
+
+.fi-body.fi-panel-tenant .fi-no.fi-color-warning {
+    border-left: 3px solid #f59e0b;
+}
+
+.fi-body.fi-panel-tenant .fi-no.fi-color-danger {
+    border-left: 3px solid #dc2626;
+}
+
+/* (input overrides in structural block above) */
+
+/* ── Breadcrumbs: muted, compact ── */
+.fi-body.fi-panel-tenant .fi-breadcrumbs-item-label {
+    font-size: 0.7rem;
+    color: var(--ff-muted);
+}
+
+.fi-body.fi-panel-tenant .fi-breadcrumbs-item:last-child .fi-breadcrumbs-item-label {
+    color: #0284c7;
+    font-weight: 500;
 }
 
 /* System maintenance — unified page layout */
@@ -333,27 +835,93 @@
 .fi-body.fi-panel-tenant .ff-maintenance-panel__header--muted {
   align-items: center;
   justify-content: space-between;
-  background-color: rgb(249 250 251);
+  background-color: var(--ff-page-bg, #f8fafc);
 }
 
 .dark .fi-body.fi-panel-tenant .ff-maintenance-panel__header--muted {
-  background-color: rgb(31 41 55 / 0.5);
+  background-color: rgb(15 23 42 / 0.5);
 }
 
-.fi-body.fi-panel-tenant .ff-maintenance-panel__header--emerald {
-  background: linear-gradient(to right, rgb(236 253 245), rgb(240 253 250));
-}
-
-.dark .fi-body.fi-panel-tenant .ff-maintenance-panel__header--emerald {
-  background: linear-gradient(to right, rgb(6 78 59 / 0.2), rgb(19 78 74 / 0.2));
-}
-
+.fi-body.fi-panel-tenant .ff-maintenance-panel__header--emerald,
 .fi-body.fi-panel-tenant .ff-maintenance-panel__header--blue {
-  background: linear-gradient(to right, rgb(248 250 252), rgb(239 246 255));
+  background: var(--ff-surface, #fff);
 }
 
+.dark .fi-body.fi-panel-tenant .ff-maintenance-panel__header--emerald,
 .dark .fi-body.fi-panel-tenant .ff-maintenance-panel__header--blue {
-  background: linear-gradient(to right, rgb(17 24 39), rgb(23 37 84 / 0.4));
+  background: #1e293b;
+}
+
+.fi-body.fi-panel-tenant .ff-maintenance-panel__header-icon {
+  display: flex;
+  height: 2.5rem;
+  width: 2.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  border: 1px solid var(--ff-border, #e5e7eb);
+  background: var(--ff-page-bg, #f8fafc);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-maintenance-panel__header-icon {
+  border-color: rgb(255 255 255 / 0.1);
+  background: rgb(15 23 42 / 0.5);
+}
+
+.fi-body.fi-panel-tenant .ff-maintenance-danger-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #fca5a5;
+  background: #fff;
+  padding: 1.25rem;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-maintenance-danger-banner {
+  border-color: rgb(220 38 38 / 0.35);
+  background: #1e293b;
+}
+
+.fi-body.fi-panel-tenant .ff-maintenance-danger-banner__icon {
+  display: flex;
+  height: 2.75rem;
+  width: 2.75rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.625rem;
+  border: 1px solid #fca5a5;
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-maintenance-danger-banner__icon {
+  border-color: rgb(220 38 38 / 0.35);
+  background: rgb(127 29 29 / 0.2);
+  color: #f87171;
+}
+
+.fi-body.fi-panel-tenant .ff-maintenance-danger-banner__title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #991b1b;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-maintenance-danger-banner__title {
+  color: #fecaca;
+}
+
+.fi-body.fi-panel-tenant .ff-maintenance-danger-banner__body {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: #b91c1c;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-maintenance-danger-banner__body {
+  color: #fca5a5;
 }
 
 .fi-body.fi-panel-tenant .ff-maintenance-panel__body {
@@ -390,17 +958,6 @@
   padding-right: 0.25rem;
 }
 
-.fi-body.fi-panel-tenant .ff-maintenance-danger-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-  border-radius: 0.75rem;
-  border: 1px solid rgb(153 27 27);
-  background: linear-gradient(to bottom right, rgb(220 38 38), rgb(225 29 72));
-  padding: 1.25rem;
-  box-shadow: 0 4px 6px -1px rgb(127 29 29 / 0.25);
-}
-
 .fi-body.fi-panel-tenant .ff-system-maintenance .fi-wi-widget {
   grid-column: 1 / -1;
   margin: 0;
@@ -428,3 +985,430 @@
   box-shadow: none;
   background: transparent;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   STRUCTURAL OVERRIDES — ALL PAGES
+   Applies to list, view, edit, create, and custom pages.
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Page content: tighter top padding ── */
+.fi-body.fi-panel-tenant .fi-page-content {
+    padding-block-start: 1rem;
+}
+
+/* ── Page header: enforce white background even on resource sub-pages ── */
+.fi-body.fi-panel-tenant .fi-simple-page .fi-page-header,
+.fi-body.fi-panel-tenant .fi-resource-page .fi-page-header {
+    background: var(--ff-surface);
+    border-bottom: 1px solid var(--ff-border);
+    padding-block: 0.875rem;
+}
+
+/* ── Relation managers: white card panel ── */
+.fi-body.fi-panel-tenant .fi-resource-relation-manager {
+    background: var(--ff-surface);
+    border: 1px solid var(--ff-border);
+    border-radius: var(--ff-panel-radius);
+    overflow: hidden;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+}
+
+.dark .fi-body.fi-panel-tenant .fi-resource-relation-manager {
+    background: #1e293b;
+    border-color: rgb(255 255 255 / 0.08);
+}
+
+/* Table inside relation manager: no outer border — the container provides it */
+.fi-body.fi-panel-tenant .fi-resource-relation-manager .fi-ta-ctn {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+/* Relation manager header bar */
+.fi-body.fi-panel-tenant .fi-resource-relation-manager > .fi-ta-header {
+    border-bottom: 1px solid var(--ff-border);
+    background: var(--ff-surface);
+    padding-inline: 0.875rem;
+    padding-block: 0.5rem;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-resource-relation-manager > .fi-ta-header {
+    border-bottom-color: rgb(255 255 255 / 0.08);
+    background: #1e293b;
+}
+
+/* ── Infolist sections: match form section card ── */
+.fi-body.fi-panel-tenant .fi-in-section {
+    background: var(--ff-surface);
+    border: 1px solid var(--ff-border);
+    border-radius: var(--ff-panel-radius);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+    overflow: hidden;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-in-section {
+    background: #1e293b;
+    border-color: rgb(255 255 255 / 0.08);
+}
+
+.fi-body.fi-panel-tenant .fi-in-section-header {
+    border-bottom: 1px solid var(--ff-border);
+    padding: 0.625rem 1rem;
+    background: transparent;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-in-section-header {
+    border-bottom-color: rgb(255 255 255 / 0.08);
+}
+
+.fi-body.fi-panel-tenant .fi-in-section-header-heading {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #111827;
+    letter-spacing: 0.01em;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-in-section-header-heading {
+    color: #f9fafb;
+}
+
+/* Infolist entry labels: compact muted uppercase */
+.fi-body.fi-panel-tenant .fi-in-entry-wrp-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--ff-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Infolist entry values: slightly bolder for contrast */
+.fi-body.fi-panel-tenant .fi-in-text-entry-content {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #111827;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-in-text-entry-content {
+    color: #f1f5f9;
+}
+
+/* ── Tabs content panel: transparent (sections inside provide white card) ── */
+.fi-body.fi-panel-tenant .fi-tabs-tab-panel {
+    background: transparent;
+    padding: 0;
+}
+
+/* Tabs container bar: clean separator */
+.fi-body.fi-panel-tenant .fi-tabs {
+    border-bottom: 1px solid var(--ff-border);
+    background: var(--ff-surface);
+    padding-inline: 0.25rem;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-tabs {
+    background: #1e293b;
+    border-bottom-color: rgb(255 255 255 / 0.08);
+}
+
+/* Compact tab item */
+.fi-body.fi-panel-tenant .fi-tabs-item {
+    padding-block: 0.5rem;
+    padding-inline: 0.75rem;
+}
+
+/* Active tab: sky underline */
+.fi-body.fi-panel-tenant .fi-tabs-item.fi-active {
+    border-bottom: 2px solid #0284c7;
+}
+
+/* ── Key-value action buttons: remove outer ring on record pages ── */
+.fi-body.fi-panel-tenant .fi-page-header .fi-btn {
+    box-shadow: none !important;
+}
+
+/* ── Actions column cells: no wasted space ── */
+.fi-body.fi-panel-tenant .fi-ta-col-action {
+    width: 1%;
+    white-space: nowrap;
+}
+
+/* ── Compact form component gap ── */
+.fi-body.fi-panel-tenant .fi-form-component-ctn {
+    gap: 0.75rem;
+}
+
+/* ── Sidebar nav: add slight vertical rhythm between items ── */
+.fi-body.fi-panel-tenant .fi-sidebar-item + .fi-sidebar-item {
+    margin-block-start: 1px;
+}
+
+/* ── Compact nav group label ── */
+.fi-body.fi-panel-tenant .fi-sidebar-group-label {
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #0284c7;
+    padding-inline: 0.625rem;
+    padding-block: 0.75rem 0.25rem;
+}
+
+/* ── Active nav item: sky-blue left indicator ── */
+.fi-body.fi-panel-tenant .fi-sidebar-item.fi-active > .fi-sidebar-item-btn {
+    background: #f0f9ff !important;
+    border-inline-start: 2px solid #0284c7;
+    border-radius: 0 0.375rem 0.375rem 0;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-sidebar-item.fi-active > .fi-sidebar-item-btn {
+    background: rgb(2 132 199 / 0.1) !important;
+    border-inline-start-color: #38bdf8;
+}
+
+.fi-body.fi-panel-tenant .fi-sidebar-item.fi-active > .fi-sidebar-item-btn .fi-sidebar-item-label,
+.fi-body.fi-panel-tenant .fi-sidebar-item.fi-active > .fi-sidebar-item-btn .fi-icon {
+    color: #0284c7 !important;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-sidebar-item.fi-active > .fi-sidebar-item-btn .fi-sidebar-item-label,
+.dark .fi-body.fi-panel-tenant .fi-sidebar-item.fi-active > .fi-sidebar-item-btn .fi-icon {
+    color: #38bdf8 !important;
+}
+
+/* Inactive nav item hover */
+.fi-body.fi-panel-tenant .fi-sidebar-item-has-url > .fi-sidebar-item-btn:hover {
+    background: #f0f9ff !important;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-sidebar-item-has-url > .fi-sidebar-item-btn:hover {
+    background: rgb(2 132 199 / 0.07) !important;
+}
+
+/* ── Page-level container: enforce sensible max-width on create/edit forms ── */
+.fi-body.fi-panel-tenant .fi-simple-page .fi-page-content {
+    max-width: 64rem;
+}
+
+/* ── Global stat overview cards: flat, consistent, no color stripe gradients ── */
+.fi-body.fi-panel-tenant .fi-wi-stats-overview-stat {
+    border: 1px solid var(--ff-border) !important;
+    background: var(--ff-surface) !important;
+    border-radius: var(--ff-panel-radius) !important;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04) !important;
+    overflow: hidden;
+    padding: 1rem 1.25rem !important;
+}
+
+.fi-body.fi-panel-tenant .fi-wi-stats-overview-stat-value {
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.02em;
+    color: #0f172a !important;
+    line-height: 1.2;
+}
+
+.dark .fi-body.fi-panel-tenant .fi-wi-stats-overview-stat-value {
+    color: #f1f5f9 !important;
+}
+
+.fi-body.fi-panel-tenant .fi-wi-stats-overview-stat-label {
+    font-size: 0.6875rem !important;
+    font-weight: 600 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ff-muted) !important;
+}
+
+/* Strip the colored left border stripe and icon area gradient from stats cards */
+.fi-body.fi-panel-tenant .fi-wi-stats-overview-stat::before,
+.fi-body.fi-panel-tenant .fi-wi-stats-overview-stat::after {
+    display: none !important;
+}
+
+/* ── Widget header strip (insight widget above table) ── */
+.fi-body.fi-panel-tenant .fi-wi-widget {
+    margin-block-end: 0;
+}
+
+/* ── Badge: compact sharp pill ── */
+.fi-body.fi-panel-tenant .fi-badge {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border-radius: 0.375rem;
+    padding: 0.15rem 0.5rem;
+    line-height: 1.4;
+}
+
+/* ── Empty state: cleaner, less padded ── */
+.fi-body.fi-panel-tenant .fi-ta-empty-state {
+    padding-block: 2.5rem;
+}
+
+.fi-body.fi-panel-tenant .fi-ta-empty-state-icon {
+    color: var(--ff-muted-light);
+}
+
+.fi-body.fi-panel-tenant .fi-ta-empty-state-heading {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #374151;
+}
+
+.fi-body.fi-panel-tenant .fi-ta-empty-state-description {
+    font-size: 0.75rem;
+    color: var(--ff-muted);
+}
+
+/* ── Table pagination: compact ── */
+.fi-body.fi-panel-tenant .fi-ta-pagination {
+    border-top: 1px solid var(--ff-border);
+    padding: 0.5rem 0.875rem;
+    font-size: 0.75rem;
+}
+
+.fi-body.fi-panel-tenant .fi-pagination-item {
+    font-size: 0.75rem;
+}
+
+/* ── Filter drawer: clean card chrome ── */
+.fi-body.fi-panel-tenant .fi-ta-filters-dw {
+    background: var(--ff-surface);
+    border-inline-start: 1px solid var(--ff-border);
+}
+
+.dark .fi-body.fi-panel-tenant .fi-ta-filters-dw {
+    background: #1e293b;
+    border-inline-start-color: rgb(255 255 255 / 0.08);
+}
+
+.fi-body.fi-panel-tenant .fi-ta-filters-dw-header {
+    border-bottom: 1px solid var(--ff-border);
+    padding: 0.75rem 1rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+/* ── Search input in table toolbar ── */
+.fi-body.fi-panel-tenant .fi-ta-search-field input {
+    font-size: 0.75rem;
+    border-radius: 0.5rem;
+}
+
+/* ── Member detail: unified profile + relation tabs as pill bar ── */
+.fi-body.fi-panel-tenant.fi-page-member-detail .fi-tabs[data-tabs-key="relationManagerTabs"] {
+    border: 1px solid var(--ff-border);
+    border-radius: 0.75rem;
+    background: var(--ff-page-bg);
+    padding: 0.35rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--ff-border);
+}
+
+.fi-body.fi-panel-tenant.fi-page-member-detail .fi-tabs[data-tabs-key="relationManagerTabs"] .fi-tabs-item {
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    border-bottom: none;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.35rem 0.75rem;
+}
+
+.fi-body.fi-panel-tenant.fi-page-member-detail .fi-tabs[data-tabs-key="relationManagerTabs"] .fi-tabs-item.fi-active {
+    background: #fff;
+    border-color: var(--ff-border);
+    border-bottom: 1px solid var(--ff-border);
+    color: #0284c7;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+}
+
+/* ── Collections: late fee tier 2 orange badge ── */
+.fi-body.fi-panel-tenant .ff-late-fee-tier-2 .fi-badge {
+    background: #ffedd5 !important;
+    color: #c2410c !important;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-late-fee-tier-2 .fi-badge {
+    background: rgb(234 88 12 / 0.2) !important;
+    color: #fdba74 !important;
+}
+
+/* ── Settings: external pill nav hides Filament tab bar ── */
+.fi-body.fi-panel-tenant.fi-page-settings .fi-sc-tabs > .fi-tabs:not(.fi-contained) > .fi-tabs-tab-ctn,
+.fi-body.fi-panel-tenant.fi-page-settings .fi-fo-tabs > .fi-tabs > .fi-tabs-tab-ctn {
+    display: none;
+}
+
+/* ── Loan queue: compact inline action buttons ── */
+.fi-body.fi-panel-tenant.fi-page-loan-queue .fi-ta-actions .fi-btn {
+    font-size: 0.6875rem;
+    padding-inline: 0.5rem;
+    padding-block: 0.25rem;
+}
+
+/* ── Topbar: cycle chip + messages + language switch ── */
+.fi-body.fi-panel-tenant .ff-tenant-topbar-locale {
+    display: flex;
+    align-items: center;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-topbar-language-switch .fi-dropdown-panel {
+    min-width: 9.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-topbar-language-switch__list {
+    min-width: 9.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-topbar-language-switch__option {
+    min-height: 2rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-topbar-chip {
+    background: rgb(224 242 254 / 0.9);
+    border: 1px solid rgb(186 230 253 / 0.9);
+    transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-topbar-chip:hover {
+    background: rgb(186 230 253 / 0.95);
+    border-color: rgb(125 211 252);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-tenant-topbar-chip {
+    background: rgb(12 74 110 / 0.35);
+    border-color: rgb(3 105 161 / 0.45);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-tenant-topbar-chip:hover {
+    background: rgb(12 74 110 / 0.55);
+}
+
+/* ── RTL layout (Arabic locale) ── */
+html[dir='rtl'] .fi-body.fi-panel-tenant .ff-rtl-flip {
+    transform: scaleX(-1);
+}
+
+html[dir='rtl'] .fi-body.fi-panel-tenant .fi-sidebar-nav-item-label,
+html[dir='rtl'] .fi-body.fi-panel-tenant .fi-page-header-heading,
+html[dir='rtl'] .fi-body.fi-panel-tenant .ff-tenant-tab-pills__item {
+    letter-spacing: 0;
+}
+
+html[dir='rtl'] .fi-body.fi-panel-tenant .fi-ta-header-cell,
+html[dir='rtl'] .fi-body.fi-panel-tenant .fi-ta-cell {
+    text-align: start;
+}
+
+html[dir='rtl'] .fi-body.fi-panel-tenant .fi-ta-cell .ff-member-amount,
+html[dir='rtl'] .fi-body.fi-panel-tenant .tabular-nums {
+    direction: ltr;
+    unicode-bidi: isolate;
+    text-align: end;
+}
+
+html[dir='rtl'] .fi-body.fi-panel-tenant .ff-tenant-topbar-chip {
+    flex-direction: row-reverse;
+}
+

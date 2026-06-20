@@ -93,6 +93,7 @@ final class BankStatementDetailInsightsService
                 'description' => Str::limit($line->description ?? '—', 40),
                 'amount' => InsightFormatter::money((float) $line->amount),
                 'status' => $line->status,
+                'status_label' => BankTransaction::statusOptions()[$line->status] ?? $line->status,
                 'member' => $line->member?->name,
                 'signed_class' => (float) $line->amount >= 0
                     ? 'text-emerald-600 dark:text-emerald-400'

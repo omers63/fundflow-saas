@@ -9,6 +9,7 @@ use App\Filament\Support\TableRecordActionGroups;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
 use Filament\Actions\ViewAction;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -116,9 +117,13 @@ final class ViewBankTransactionAction
 
     public static function configure(Table $table): Table
     {
+        $viewAction = Filament::getCurrentPanel()?->getId() === 'tenant'
+            ? \App\Filament\Tenant\Support\ViewBankTransactionAction::make()
+            : self::make();
+
         return TableRecordActionGroups::apply(
             TableGrouping::apply($table, TableGrouping::bankTransactions()),
-            [self::make()],
+            [$viewAction],
         );
     }
 }

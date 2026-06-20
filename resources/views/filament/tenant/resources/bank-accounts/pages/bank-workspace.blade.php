@@ -9,28 +9,36 @@
         </div>
     </div>
 
-    <x-filament::tabs class="mb-2 justify-center">
-        <x-filament::tabs.item :active="$channel === 'bank'" icon="heroicon-o-building-library" tag="button" type="button"
-            wire:click="setChannel('bank')">
+    <div class="ff-tenant-tab-pills mb-4 flex flex-wrap justify-center gap-2">
+        <button type="button" wire:click="setChannel('bank')" @class([
+            'ff-tenant-tab-pills__item',
+            'ff-tenant-tab-pills__item--active' => $channel === 'bank',
+        ])>
             {{ __('Bank') }}
-        </x-filament::tabs.item>
-        <x-filament::tabs.item :active="$channel === 'sms'" icon="heroicon-o-device-phone-mobile" tag="button"
-            type="button" wire:click="setChannel('sms')">
+        </button>
+        <button type="button" wire:click="setChannel('sms')" @class([
+            'ff-tenant-tab-pills__item',
+            'ff-tenant-tab-pills__item--active' => $channel === 'sms',
+        ])>
             {{ __('SMS') }}
-        </x-filament::tabs.item>
-    </x-filament::tabs>
+        </button>
+    </div>
 
     @if ($channel === 'sms')
-        <x-filament::tabs class="mb-4 mt-0 justify-center">
-            <x-filament::tabs.item :active="$smsSubTab === 'transactions'" icon="heroicon-o-arrows-right-left" tag="button"
-                type="button" wire:click="setSmsSubTab('transactions')">
+        <div class="ff-tenant-tab-pills mb-4 flex flex-wrap justify-center gap-2">
+            <button type="button" wire:click="setSmsSubTab('transactions')" @class([
+                'ff-tenant-tab-pills__item',
+                'ff-tenant-tab-pills__item--active' => $smsSubTab === 'transactions',
+            ])>
                 {{ __('Transactions') }}
-            </x-filament::tabs.item>
-            <x-filament::tabs.item :active="$smsSubTab === 'history'" icon="heroicon-o-clock" tag="button" type="button"
-                wire:click="setSmsSubTab('history')">
+            </button>
+            <button type="button" wire:click="setSmsSubTab('history')" @class([
+                'ff-tenant-tab-pills__item',
+                'ff-tenant-tab-pills__item--active' => $smsSubTab === 'history',
+            ])>
                 {{ __('History') }}
-            </x-filament::tabs.item>
-        </x-filament::tabs>
+            </button>
+        </div>
 
         @if ($smsSubTab === 'transactions')
             <p class="mb-3 text-sm text-gray-500 dark:text-gray-400">

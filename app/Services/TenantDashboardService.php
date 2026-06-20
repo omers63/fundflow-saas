@@ -26,6 +26,7 @@ use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\ReconciliationException;
@@ -133,6 +134,42 @@ final class TenantDashboardService
             'recent_activity' => $this->recentActivity(),
             'collection_breakdown' => $this->collectionBreakdown($openMonth, $openYear, $activeMembers, $delinquencyCounts),
             'fund_tier_utilisation' => $this->fundTierUtilisation(),
+            'pool_health' => $this->poolHealth($masterBalance),
+        ];
+    }
+
+    /**
+     * @param  callable(string): float  $masterBalance
+     * @return array<string, mixed>
+     */
+    private function poolHealth(callable $masterBalance): array
+    {
+        $masterCash = $masterBalance('cash');
+        $masterFund = $masterBalance('fund');
+        $memberCash = (float) Account::query()->where('is_master', false)->where('type', 'cash')->sum('balance');
+        $memberFund = (float) Account::query()->where('is_master', false)->where('type', 'fund')->sum('balance');
+        $cashDrift = round(abs($masterCash - $memberCash), 2);
+        $fundDrift = round(abs($masterFund - $memberFund), 2);
+        $hasDrift = $cashDrift > 0.01 || $fundDrift > 0.01;
+        $loanExposure = (float) LoanInstallment::query()
+            ->whereIn('status', ['pending', 'overdue'])
+            ->whereHas('loan', fn ($query) => $query->where('status', 'active'))
+            ->sum('amount');
+        $poolTotal = $masterCash + $masterFund;
+        $solvency = $loanExposure > 0.01 ? round($poolTotal / $loanExposure, 2) : null;
+
+        return [
+            'master_cash' => $masterCash,
+            'master_fund' => $masterFund,
+            'member_cash' => $memberCash,
+            'member_fund' => $memberFund,
+            'cash_drift' => $cashDrift,
+            'fund_drift' => $fundDrift,
+            'has_drift' => $hasDrift,
+            'loan_exposure' => $loanExposure,
+            'solvency_ratio' => $solvency,
+            'reconciliation_url' => ReconciliationOverviewPage::getUrl(),
+            'sparkline' => $this->masterAccounts->snapshot()['sparkline'] ?? [],
         ];
     }
 

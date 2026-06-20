@@ -151,7 +151,7 @@ class BankTransaction extends Model
 
     public function masterCashMirrorSummary(): ?string
     {
-        if (!in_array($this->status, ['mirrored', 'posted'], true)) {
+        if (! in_array($this->status, ['mirrored', 'posted'], true)) {
             return null;
         }
 
@@ -204,6 +204,20 @@ class BankTransaction extends Model
         return $query->where('amount', '<', 0);
     }
 
+    /**
+     * @return array<string, string>
+     */
+    public static function statusOptions(): array
+    {
+        return [
+            'imported' => __('Imported'),
+            'mirrored' => __('Mirrored'),
+            'posted' => __('Posted'),
+            'ignored' => __('Ignored'),
+            'duplicate' => __('Duplicate'),
+        ];
+    }
+
     public function scopeUncleared($query)
     {
         return $query->where('is_cleared', false);
@@ -233,7 +247,7 @@ class BankTransaction extends Model
             BankStatement::query()
                 ->whereKey($transaction->bank_statement_id)
                 ->first()
-                    ?->refreshRowCounts();
+                ?->refreshRowCounts();
         });
     }
 }

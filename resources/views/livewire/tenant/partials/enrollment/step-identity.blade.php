@@ -16,7 +16,7 @@
     {{ $typeLabel }}
     @if ($requiresFeePayment)
         <span class="text-gray-600">
-            — {{ __('application fee') }} {{ $currency }} {{ number_format($currentFee, 2) }}
+            — {{ __('application fee') }} <x-member::amount :value="$currentFee" :currency="$currency" class="inline" />
             ({{ __('you will confirm the bank transfer on the last step before submitting') }}).
         </span>
     @else
@@ -100,7 +100,8 @@
         <input wire:model="mobile_phone" type="tel" id="mobile_phone"
             class="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
         <p class="mt-1 text-xs text-gray-500">
-            {{ __('Used for contact and saved on your member profile after approval.') }}</p>
+            {{ __('Used for contact and saved on your member profile after approval.') }}
+        </p>
         @error('mobile_phone') <p class="mt-1 text-sm text-red-500">{{ $message }}</p> @enderror
     </div>
 

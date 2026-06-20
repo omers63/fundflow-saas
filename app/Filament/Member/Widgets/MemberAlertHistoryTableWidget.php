@@ -62,7 +62,7 @@ class MemberAlertHistoryTableWidget extends TableWidget
                             'database' => __('In-app'),
                             'twilio' => __('SMS'),
                             'whatsapp' => __('WhatsApp'),
-                            default => $state ?? '—',
+                            default => $state ?? __('—'),
                         }),
                     TextColumn::make('subject')
                         ->label(__('Subject'))
@@ -76,7 +76,7 @@ class MemberAlertHistoryTableWidget extends TableWidget
                             'sent' => __('Sent'),
                             'failed' => __('Failed'),
                             'skipped' => __('Skipped'),
-                            default => $state ?? '—',
+                            default => $state ?? __('—'),
                         })
                         ->color(fn (?string $state): string => match ($state) {
                             'sent' => 'success',
@@ -122,7 +122,7 @@ class MemberAlertHistoryTableWidget extends TableWidget
                         'database' => __('In-app'),
                         'twilio' => __('SMS'),
                         'whatsapp' => __('WhatsApp'),
-                        default => $record->channel ?? '—',
+                        default => $record->channel ?? __('—'),
                     }),
             ],
         );

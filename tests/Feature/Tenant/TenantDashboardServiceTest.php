@@ -25,6 +25,37 @@ beforeEach(function () {
     Member::query()->delete();
 });
 
+test('tenant dashboard kpi labels follow the active locale', function () {
+    $user = User::create([
+        'name' => 'Fund Admin',
+        'email' => 'kpi-admin@fund.test',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    Member::create([
+        'member_number' => 'MEM-KPI',
+        'name' => 'KPI Member',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 1000, 'is_master' => true]);
+    Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 5000, 'is_master' => true]);
+    Account::create(['type' => 'bank', 'name' => 'Master Bank', 'balance' => 2000, 'is_master' => true]);
+
+    $this->actingAs($user, 'tenant');
+
+    app()->setLocale('ar');
+
+    $labels = collect($this->service->snapshot()['kpi_stats'])->pluck('label')->all();
+
+    expect($labels)->toContain('تحصيل الدورة')
+        ->and($labels)->toContain('أعضاء نشطون')
+        ->and($labels)->toContain('استثناءات المطابقة');
+});
+
 test('tenant dashboard snapshot includes greeting and workspace links', function () {
     $user = User::create([
         'name' => 'Fund Admin',
@@ -89,6 +120,6 @@ test('jobs page registers in tenant panel navigation', function () {
     $this->actingAs($admin, 'tenant');
 
     expect(JobsPage::canAccess())->toBeTrue()
-        ->and(JobsPage::shouldRegisterNavigation())->toBeTrue()
+        ->and(JobsPage::shouldRegisterNavigation())->toBeFalse()
         ->and(JobsPage::getUrl())->toContain('/admin/jobs');
 });

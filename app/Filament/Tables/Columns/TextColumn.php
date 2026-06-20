@@ -53,16 +53,11 @@ class TextColumn extends FilamentTextColumn
                 return MoneyDisplay::html($amount, (string) $currencyCode);
             }
 
-            return MoneyDisplay::format($amount, (string) $currencyCode, (string) $localeCode);
+            return MoneyDisplay::html($amount, (string) $currencyCode);
         });
 
-        $column = $this;
-
-        if (Filament::getCurrentPanel()?->getId() === 'member') {
-            $column = $column->html();
-        }
-
-        return $column
+        return $this
+            ->html()
             ->badge()
             ->color(fn ($state): string => MoneyDisplay::color($state));
     }

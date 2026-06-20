@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tenant\Resources\MembershipApplications\Schemas;
 
+use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\MembershipApplication;
 use App\Support\BusinessDay;
 use App\Support\PublicPageSettings;
@@ -143,9 +144,9 @@ class MembershipApplicationForm
                     TextInput::make('employer')
                         ->maxLength(150),
                     TextInput::make('monthly_income')
-                        ->label(__('Monthly income (SAR)'))
+                        ->label(__('Monthly income (:currency)', ['currency' => MoneyDisplay::symbol()]))
                         ->numeric()
-                        ->prefix(__('SAR'))
+                        ->prefix(MoneyDisplay::symbol())
                         ->minValue(0),
                 ])->columns(3),
 
@@ -199,13 +200,13 @@ class MembershipApplicationForm
                     TextInput::make('membership_fee_required_amount')
                         ->label(__('Required subscription fee'))
                         ->numeric()
-                        ->prefix(__('SAR'))
+                        ->prefix(MoneyDisplay::symbol())
                         ->disabled()
                         ->dehydrated(false),
                     TextInput::make('membership_fee_amount')
                         ->label(__('Declared transfer amount'))
                         ->numeric()
-                        ->prefix(__('SAR'))
+                        ->prefix(MoneyDisplay::symbol())
                         ->minValue(0),
                     DatePicker::make('membership_fee_transfer_date')
                         ->label(__('Transfer date'))

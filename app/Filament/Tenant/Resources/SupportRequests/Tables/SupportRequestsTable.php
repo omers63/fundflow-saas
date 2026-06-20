@@ -9,8 +9,9 @@ use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Support\ManageSupportRequestAction;
+use App\Filament\Tenant\Support\ViewSupportRequestAction;
 use App\Models\Tenant\SupportRequest;
-use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -18,7 +19,6 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Grouping\Group;
 use Filament\Tables\Table;
-use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 
 final class SupportRequestsTable
@@ -54,6 +54,19 @@ final class SupportRequestsTable
                     TextColumn::make('subject')
                         ->searchable()
                         ->wrap(),
+                    TextColumn::make('status')
+                        ->badge()
+                        ->formatStateUsing(fn (string $state): string => SupportRequest::statusOptions()[$state] ?? $state)
+                        ->color(fn (string $state): string => SupportRequest::statusColor($state)),
+                    TextColumn::make('sla')
+                        ->label(__('SLA'))
+                        ->badge()
+                        ->state(fn (SupportRequest $record): string => trans_choice(':count day|:count days', $record->daysOpen(), ['count' => $record->daysOpen()]))
+                        ->color(fn (SupportRequest $record): string => SupportRequest::slaColor($record->daysOpen())),
+                    TextColumn::make('escalated_at')
+                        ->label(__('Escalated'))
+                        ->dateTime()
+                        ->placeholder(__('—')),
                     TextColumn::make('message')
                         ->limit(60)
                         ->tooltip(fn (SupportRequest $record): string => $record->message)
@@ -64,23 +77,16 @@ final class SupportRequestsTable
                         ->sortable(),
                 ])
                 ->filters([
+                    SelectFilter::make('status')
+                        ->options(SupportRequest::statusOptions()),
                     SelectFilter::make('category')
                         ->options(SupportRequest::categoryOptions()),
                     DateColumnRangeFilter::make('created_at', 'Submitted'),
                 ])
                 ->defaultSort('created_at', 'desc')
                 ->recordActions(TableRecordActionGroups::wrap([
-                    Action::make('viewMessage')
-                        ->label(__('View'))
-                        ->icon('heroicon-o-eye')
-                        ->color('gray')
-                        ->modalHeading(fn (SupportRequest $record): string => __('Support request #:id', ['id' => $record->id]))
-                        ->modalSubmitAction(false)
-                        ->modalCancelActionLabel(__('Close'))
-                        ->modalContent(fn (SupportRequest $record): View => view(
-                            'filament.tenant.components.support-request-detail',
-                            ['record' => $record],
-                        )),
+                    ManageSupportRequestAction::make(),
+                    ViewSupportRequestAction::make(),
                     DeleteAction::make(),
                 ]))
                 ->toolbarActions([

@@ -2,6 +2,7 @@
 
 use App\Models\Tenant\Member;
 use App\Services\MemberInsightsService;
+use App\Support\BusinessDay;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
 use Tests\TestCase;
@@ -19,7 +20,7 @@ test('insights snapshot aggregates member roster metrics', function () {
         'name' => 'Active One',
         'status' => 'active',
         'monthly_contribution_amount' => 1000,
-        'joined_at' => now(),
+        'joined_at' => BusinessDay::now(),
     ]);
 
     Member::factory()->create([
@@ -46,5 +47,6 @@ test('insights snapshot aggregates member roster metrics', function () {
         ->and($snapshot['status_breakdown'])->toHaveCount(5)
         ->and($snapshot['trend'])->toHaveCount(6)
         ->and($snapshot['sparkline'])->toHaveCount(8)
-        ->and($snapshot['attention_queue'])->not->toBeEmpty();
+        ->and($snapshot['attention_queue'])->not->toBeEmpty()
+        ->and($snapshot['attention_queue'][0])->toHaveKey('contribution_amount');
 });

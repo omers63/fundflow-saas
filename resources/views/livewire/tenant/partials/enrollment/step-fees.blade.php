@@ -1,11 +1,13 @@
 @php
+    use App\Filament\Support\MoneyDisplay;
+
     $typeLabel = match ($applicationType) {
         'new' => __('New membership'),
         'resume' => __('Resume membership'),
         'renew' => __('Renew membership'),
         default => ucfirst($applicationType),
     };
-    $feeFormatted = $currency . ' ' . number_format($currentFee, 2);
+    $feeFormatted = MoneyDisplay::format($currentFee, $currency) ?? '';
 @endphp
 
 <h2 class="mb-6 text-xl font-bold text-gray-900">
@@ -106,7 +108,7 @@
             <li>{{ __('Transfer Date') }}: {{ $membership_fee_transfer_date }}</li>
         @endif
         @if (filled($membership_fee_transfer_amount))
-            <li>{{ __('Transfer Amount') }}: {{ $currency }} {{ number_format((float) $membership_fee_transfer_amount, 2) }}
+            <li>{{ __('Transfer Amount') }}: {{ MoneyDisplay::format((float) $membership_fee_transfer_amount, $currency) }}
             </li>
         @endif
     </ul>
@@ -129,7 +131,8 @@
             </label>
             <div class="relative">
                 <span
-                    class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-4 text-sm text-gray-500">{{ $currency }}</span>
+                    class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-4 text-sm text-gray-500"
+                    dir="ltr">@include('filament.partials.currency-symbol', ['currency' => $currency])</span>
                 <input wire:model="membership_fee_transfer_amount" type="number" id="membership_fee_transfer_amount"
                     min="0.01" step="0.01" inputmode="decimal"
                     class="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 ps-14 pe-4 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">

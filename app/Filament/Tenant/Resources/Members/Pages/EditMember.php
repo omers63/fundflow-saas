@@ -11,6 +11,7 @@ use App\Services\Tenant\HouseholdMemberService;
 use App\Support\ArabicDisplaySettings;
 use App\Support\ArabicTypography;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
 use Livewire\Attributes\On;
@@ -48,6 +49,32 @@ class EditMember extends EditRecord
             'number' => $this->record->member_number,
             'status' => $status,
         ]);
+    }
+
+    public function hasCombinedRelationManagerTabsWithContent(): bool
+    {
+        return true;
+    }
+
+    public function getContentTabLabel(): ?string
+    {
+        return __('Profile');
+    }
+
+    public function getContentTabIcon(): string|\BackedEnum|Htmlable|null
+    {
+        return Heroicon::OutlinedUser;
+    }
+
+    /**
+     * @return array<string>
+     */
+    public function getPageClasses(): array
+    {
+        return [
+            ...parent::getPageClasses(),
+            'fi-page-member-detail',
+        ];
     }
 
     /**

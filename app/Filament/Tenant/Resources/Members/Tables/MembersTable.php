@@ -19,48 +19,76 @@ use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class MembersTable
 {
     public static function configure(Table $table): Table
     {
+        $currency = fn (): string => Setting::get('general', 'currency', 'USD');
+
         return TableGrouping::apply(
             $table
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query->withCount([
+                    'loans as active_loans_count' => fn (Builder $loanQuery): Builder => $loanQuery->where('status', 'active'),
+                ]))
                 ->headerActions(MemberListTableHeaderActions::all())
                 ->columns([
-                    MemberTableColumns::number()
+                    MemberTableColumns::number(label: __('Member #'))
                         ->searchable()
                         ->sortable(),
                     MemberTableColumns::name()
                         ->searchable()
                         ->sortable(),
-                    TextColumn::make('email')
-                        ->searchable(),
-                    TextColumn::make('phone')
-                        ->toggleable(isToggledHiddenByDefault: true),
-                    TextColumn::make('monthly_contribution_amount')
-                        ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
-                        ->sortable(),
-                    TextColumn::make('parent.name')
-                        ->label('Parent')
-                        ->placeholder(__('Independent')),
                     TextColumn::make('status')
                         ->badge()
                         ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
                         ->color(fn (string $state): string => Member::statusBadgeColor($state)),
+                    TextColumn::make('cash_balance')
+                        ->label(__('Cash'))
+                        ->state(fn (Member $record): float => $record->getCashBalance())
+                        ->money($currency)
+                        ->color(fn (Member $record): string => $record->getCashBalance() < 0 ? 'danger' : 'success')
+                        ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByCashBalance($direction)),
+                    TextColumn::make('fund_balance')
+                        ->label(__('Fund'))
+                        ->state(fn (Member $record): float => $record->getFundBalance())
+                        ->money($currency)
+                        ->color(fn (Member $record): string => $record->getFundBalance() < 0 ? 'danger' : 'gray')
+                        ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByFundBalance($direction)),
+                    TextColumn::make('active_loans_count')
+                        ->label(__('Active loans'))
+                        ->alignCenter()
+                        ->badge()
+                        ->color(fn (int $state): string => $state > 0 ? 'info' : 'gray')
+                        ->sortable(),
+                    TextColumn::make('email')
+                        ->searchable()
+                        ->toggleable(isToggledHiddenByDefault: true),
+                    TextColumn::make('phone')
+                        ->toggleable(isToggledHiddenByDefault: true),
+                    TextColumn::make('monthly_contribution_amount')
+                        ->money($currency)
+                        ->sortable()
+                        ->toggleable(isToggledHiddenByDefault: true),
+                    TextColumn::make('parent.name')
+                        ->label(__('Parent'))
+                        ->placeholder(__('Independent'))
+                        ->toggleable(isToggledHiddenByDefault: true),
                     TextColumn::make('joined_at')
                         ->date()
-                        ->sortable(),
+                        ->sortable()
+                        ->toggleable(isToggledHiddenByDefault: true),
                 ])
                 ->filters([
                     SelectFilter::make('status')
                         ->options(Member::statusOptions()),
                     SelectFilter::make('parent_member_id')
-                        ->label('Parent')
+                        ->label(__('Parent'))
                         ->relationship('parent', 'name')
                         ->searchable()
                         ->preload(),
-                    DateColumnRangeFilter::make('joined_at', 'Joined'),
+                    DateColumnRangeFilter::make('joined_at', __('Joined')),
                 ])
                 ->recordUrl(fn (Member $record): string => MemberResource::getUrl('edit', ['record' => $record]))
                 ->recordActions(TableRecordActionGroups::wrap([

@@ -30,3 +30,36 @@
 .fi-body .ff-dashboard-gauge {
     min-width: 0;
 }
+
+.fi-body .ff-app-insights-kpi-strip {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.fi-body .ff-app-insights-kpi-strip > * {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.fi-body .ff-app-insights-kpi > p,
+.fi-body .ff-app-insights-kpi .ff-stat-line {
+    display: block;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fi-body .ff-app-insights-kpi .ff-member-amount {
+    display: inline-flex;
+    max-width: 100%;
+    min-width: 0;
+    vertical-align: bottom;
+}
+
+.fi-body .ff-app-insights-kpi .ff-member-amount__digits {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

@@ -156,12 +156,12 @@ final class MemberDetailInsightsService
             'steps' => $this->lifecycleSteps($member, $postedThisPeriod, $activeLoan, $arrears),
             'balances' => [
                 'cash' => [
-                    'display' => InsightFormatter::money($cashBalance),
+                    'amount' => $cashBalance,
                     'negative' => $cashBalance < 0,
                     'url' => $cashAccount ? AccountResource::getUrl('view', ['record' => $cashAccount]) : null,
                 ],
                 'fund' => [
-                    'display' => InsightFormatter::money($fundBalance),
+                    'amount' => $fundBalance,
                     'negative' => $fundBalance < 0,
                     'url' => $fundAccount ? AccountResource::getUrl('view', ['record' => $fundAccount]) : null,
                 ],
@@ -175,7 +175,7 @@ final class MemberDetailInsightsService
                 'loan_repayment_message' => $underLoanRepayment
                     ? __('Under loan repayment')
                     : null,
-                'required_cash' => InsightFormatter::money($requiredCash),
+                'required_cash' => $requiredCash,
                 'cash_ready' => $cashReady,
                 'posted' => $postedThisPeriod,
                 'exempt' => $exempt,
@@ -192,7 +192,7 @@ final class MemberDetailInsightsService
                 'id' => $activeLoan->id,
                 'status' => $activeLoan->status,
                 'status_label' => Loan::statusOptions()[$activeLoan->status] ?? $activeLoan->status,
-                'outstanding' => InsightFormatter::money($loanOutstanding),
+                'outstanding' => $loanOutstanding,
                 'repay_percent' => $repayPercent,
                 'installments_paid' => $installmentsPaid,
                 'installments_total' => $installmentsTotal,
@@ -209,7 +209,7 @@ final class MemberDetailInsightsService
                     ->orderBy('name')
                     ->limit(5)
                     ->get()
-                    ->map(fn(Member $dependent): array => [
+                    ->map(fn (Member $dependent): array => [
                         'name' => $dependent->name,
                         'number' => $dependent->member_number,
                         'status' => Member::statusOptions()[$dependent->status] ?? $dependent->status,
@@ -220,7 +220,7 @@ final class MemberDetailInsightsService
             ],
             'fund_summary' => [
                 'contributions_count' => $contributionsPostedCount,
-                'contributions_total' => InsightFormatter::money($contributionsPostedTotal),
+                'contributions_total' => $contributionsPostedTotal,
                 'pending_postings' => $pendingPostings,
                 'fund_minimum_pct' => $monthly > 0
                     ? min(100, (int) round(($fundBalance / $monthly) * 100))
@@ -357,7 +357,7 @@ final class MemberDetailInsightsService
             ];
         }
 
-        if (!in_array($member->status, ['active'], true)) {
+        if (! in_array($member->status, ['active'], true)) {
             return [
                 'tone' => 'amber',
                 'title' => Member::statusOptions()[$member->status] ?? ucfirst($member->status),
@@ -398,6 +398,7 @@ final class MemberDetailInsightsService
         int $contributionsPostedCount,
         int $pendingPostings,
     ): array {
+        $currency = InsightFormatter::currency();
         $loanKpi = InsightFormatter::moneyKpi($loanOutstanding);
         $lifetimeDisbursedKpi = InsightFormatter::moneyKpi($lifetimeDisbursed);
         $lifetimeContributionsKpi = InsightFormatter::moneyKpi($lifetimeContributions);
@@ -409,6 +410,7 @@ final class MemberDetailInsightsService
                 'label' => __('Cash'),
                 'value' => $this->signedDisplayFromKpi($cashKpi),
                 'sub' => $cashKpi['full'],
+                'currency' => $currency,
                 'icon' => 'heroicon-o-wallet',
                 'accent' => $cashKpi['is_negative'] ? 'rose' : 'emerald',
                 'value_class' => $cashKpi['is_negative']
@@ -419,6 +421,7 @@ final class MemberDetailInsightsService
                 'label' => __('Fund'),
                 'value' => $this->signedDisplayFromKpi($fundKpi),
                 'sub' => $fundKpi['full'],
+                'currency' => $currency,
                 'icon' => 'heroicon-o-building-library',
                 'accent' => $fundKpi['is_negative'] ? 'rose' : 'indigo',
                 'value_class' => $fundKpi['is_negative']
@@ -429,6 +432,7 @@ final class MemberDetailInsightsService
                 'label' => __('Monthly'),
                 'value' => InsightFormatter::compactAmount($monthly),
                 'sub' => InsightFormatter::money($monthly),
+                'currency' => $currency,
                 'icon' => 'heroicon-o-calendar',
                 'accent' => 'sky',
             ],
@@ -443,6 +447,7 @@ final class MemberDetailInsightsService
                 'label' => __('Loan due'),
                 'value' => $loanOutstanding > 0 ? $loanKpi['display'] : '—',
                 'sub' => $loanOutstanding > 0 ? $loanKpi['full'] : __('No active loan'),
+                'currency' => $currency,
                 'icon' => 'heroicon-o-scale',
                 'accent' => $loanOutstanding > 0 ? 'violet' : 'teal',
             ],
@@ -453,6 +458,7 @@ final class MemberDetailInsightsService
                 'sub' => $lifetimeDisbursed > 0
                     ? trans_choice(':count loan disbursed|:count loans disbursed', $disbursedLoanCount, ['count' => $disbursedLoanCount])
                     : __('No loans disbursed'),
+                'currency' => $currency,
                 'icon' => 'heroicon-o-banknotes',
                 'accent' => $lifetimeDisbursed > 0 ? 'violet' : 'teal',
                 'url' => LoanResource::portfolioUrlForMember($member),
@@ -462,6 +468,7 @@ final class MemberDetailInsightsService
                 'label' => __('Lifetime contributions'),
                 'value' => abs($lifetimeContributions) > 0.00001 ? $this->signedCompactAmount($lifetimeContributions) : '—',
                 'sub' => abs($lifetimeContributions) > 0.00001 ? $lifetimeContributionsKpi['full'] : __('No contributions'),
+                'currency' => $currency,
                 'icon' => 'heroicon-o-banknotes',
                 'accent' => $lifetimeContributions < 0 ? 'rose' : (abs($lifetimeContributions) > 0.00001 ? 'emerald' : 'teal'),
                 'value_class' => $lifetimeContributions < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-white',
@@ -472,6 +479,7 @@ final class MemberDetailInsightsService
                 'label' => __('Lifetime repaid'),
                 'value' => abs($lifetimeRepaid) > 0.00001 ? $this->signedCompactAmount($lifetimeRepaid) : '—',
                 'sub' => abs($lifetimeRepaid) > 0.00001 ? $lifetimeRepaidKpi['full'] : __('No repayments'),
+                'currency' => $currency,
                 'icon' => 'heroicon-o-arrow-uturn-left',
                 'accent' => $lifetimeRepaid < 0 ? 'rose' : (abs($lifetimeRepaid) > 0.00001 ? 'sky' : 'teal'),
                 'value_class' => $lifetimeRepaid < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-white',
@@ -482,6 +490,7 @@ final class MemberDetailInsightsService
                 'label' => __('Total fund inflow'),
                 'value' => abs($totalFundInflow) > 0.00001 ? $this->signedCompactAmount($totalFundInflow) : '—',
                 'sub' => abs($totalFundInflow) > 0.00001 ? $totalFundInflowKpi['full'] : __('No inflow yet'),
+                'currency' => $currency,
                 'icon' => 'heroicon-o-arrow-trending-up',
                 'accent' => $totalFundInflow < 0 ? 'rose' : (abs($totalFundInflow) > 0.00001 ? 'indigo' : 'teal'),
                 'value_class' => $totalFundInflow < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-white',
@@ -520,7 +529,7 @@ final class MemberDetailInsightsService
     private function lifetimeRepaidTotal(Member $member): float
     {
         return (float) LoanRepayment::query()
-            ->whereHas('loan', fn($query) => $query->where('member_id', $member->id))
+            ->whereHas('loan', fn ($query) => $query->where('member_id', $member->id))
             ->sum('amount');
     }
 
@@ -528,7 +537,7 @@ final class MemberDetailInsightsService
     {
         $display = InsightFormatter::compactAmount($amount);
 
-        return $amount < 0 ? '-' . $display : $display;
+        return $amount < 0 ? '-'.$display : $display;
     }
 
     /**
@@ -536,7 +545,7 @@ final class MemberDetailInsightsService
      */
     private function signedDisplayFromKpi(array $kpi): string
     {
-        return $kpi['is_negative'] ? '-' . $kpi['display'] : $kpi['display'];
+        return $kpi['is_negative'] ? '-'.$kpi['display'] : $kpi['display'];
     }
 
     /**
@@ -712,11 +721,11 @@ final class MemberDetailInsightsService
             ->orderByDesc('posted_at')
             ->limit(5)
             ->get()
-            ->map(fn(Contribution $contribution): array => [
+            ->map(fn (Contribution $contribution): array => [
                 'period' => $contribution->period !== null
                     ? Carbon::parse((string) $contribution->period)->format('M Y')
                     : '—',
-                'amount' => InsightFormatter::money((float) $contribution->amount),
+                'amount' => (float) $contribution->amount,
                 'posted_at' => $contribution->posted_at?->format('d M'),
                 'late' => (bool) $contribution->is_late,
             ])
@@ -739,10 +748,10 @@ final class MemberDetailInsightsService
             ->orderByDesc('transacted_at')
             ->limit(5)
             ->get()
-            ->map(fn(Transaction $transaction): array => [
+            ->map(fn (Transaction $transaction): array => [
                 'description' => Str::limit($transaction->description ?? '—', 40),
                 'transacted_at' => $transaction->transacted_at?->format('d M, H:i'),
-                'amount' => InsightFormatter::money((float) $transaction->amount),
+                'amount' => (float) $transaction->amount,
                 'signed_class' => $transaction->type === 'credit'
                     ? 'text-emerald-600 dark:text-emerald-400'
                     : 'text-rose-600 dark:text-rose-400',
@@ -766,8 +775,10 @@ final class MemberDetailInsightsService
             [
                 'key' => 'accounts',
                 'label' => __('Accounts'),
-                'value' => InsightFormatter::money($member->getCashBalance()) . ' · ' . __('Cash'),
-                'hint' => InsightFormatter::money($member->getFundBalance()) . ' ' . __('fund'),
+                'value' => InsightFormatter::money($member->getCashBalance()).' · '.__('Cash'),
+                'value_amount' => $member->getCashBalance(),
+                'hint' => InsightFormatter::money($member->getFundBalance()).' '.__('fund'),
+                'hint_amount' => $member->getFundBalance(),
                 'accent' => 'indigo',
                 'icon' => 'heroicon-o-rectangle-stack',
                 'url' => $member->cashAccount
@@ -777,7 +788,7 @@ final class MemberDetailInsightsService
             [
                 'key' => 'contributions',
                 'label' => __('Contributions'),
-                'value' => (string) $contributionsPostedCount . ' ' . __('posted'),
+                'value' => (string) $contributionsPostedCount.' '.__('posted'),
                 'hint' => $pendingPostings > 0
                     ? trans_choice(':count posting pending|:count postings pending', $pendingPostings, ['count' => $pendingPostings])
                     : null,
@@ -791,6 +802,7 @@ final class MemberDetailInsightsService
                 'value' => $activeLoan
                     ? __('Active · :amount', ['amount' => InsightFormatter::money($loanOutstanding)])
                     : __('No active loan'),
+                'value_amount' => $activeLoan ? $loanOutstanding : null,
                 'hint' => $activeLoan
                     ? (Loan::statusOptions()[$activeLoan->status] ?? $activeLoan->status)
                     : null,

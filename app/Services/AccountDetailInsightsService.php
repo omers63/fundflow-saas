@@ -640,7 +640,7 @@ final class AccountDetailInsightsService
 
         return [
             'tone' => $balance >= 0 ? 'success' : 'warning',
-            'title' => $account->name,
+            'title' => $account->displayLabel(),
             'subtitle' => $account->is_master
                 ? __('Master :type ledger', ['type' => MasterAccountResource::tabLabel($account->type)])
                 : __('Member :type account', [

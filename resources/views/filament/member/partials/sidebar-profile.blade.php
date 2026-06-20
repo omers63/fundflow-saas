@@ -1,5 +1,6 @@
 @php
     use App\Filament\Member\Pages\MemberSettingsPage;
+    use App\Models\Tenant\Member;
     use App\Models\Tenant\User;
     use App\Support\MemberDateDisplay;
     use App\Support\Tenant\CurrentMember;
@@ -60,7 +61,7 @@
                 <span class="ff-member-sidebar-profile__subtitle">
                     {{ __('Member #:number · since :date', [
                         'number' => $member->member_number,
-                        'date' => $sinceDate ?? '—',
+                        'date' => $sinceDate ?? __('—'),
                     ]) }}
                 </span>
             @endif
@@ -70,7 +71,7 @@
                 class="ff-member-sidebar-profile__status"
             >
                 <span class="ff-member-sidebar-profile__status-dot" aria-hidden="true"></span>
-                {{ __(ucfirst(str_replace('_', ' ', (string) $member->status))) }}
+                {{ Member::statusOptions()[$member->status] ?? $member->status }}
             </x-member::chip>
         </span>
     </a>

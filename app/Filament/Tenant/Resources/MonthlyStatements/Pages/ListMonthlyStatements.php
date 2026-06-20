@@ -10,6 +10,7 @@ use App\Models\Tenant\Member;
 use App\Services\MonthlyStatementService;
 use App\Support\StatementSettings;
 use Filament\Actions\Action;
+use Filament\Actions\CreateAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -24,6 +25,9 @@ class ListMonthlyStatements extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            CreateAction::make()
+                ->label(__('New statement'))
+                ->icon('heroicon-o-plus-circle'),
             Action::make('generate_and_send')
                 ->label(__('Generate & send previous month'))
                 ->icon('heroicon-o-arrow-path')

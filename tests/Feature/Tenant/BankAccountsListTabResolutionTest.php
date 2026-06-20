@@ -2,10 +2,10 @@
 
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 
-it('defaults to the statement lines tab when no tab query is present', function () {
+it('defaults to the pending bank match tab when no tab query is present', function () {
     request()->replace([]);
 
-    expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('imports');
+    expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('clearance');
 });
 
 it('resolves the statement lines tab from the legacy transactions tab query', function () {
@@ -26,8 +26,8 @@ it('resolves the pending bank match tab from the tab query string', function () 
     expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('clearance');
 });
 
-it('falls back to statement lines for an invalid tab query', function () {
+it('falls back to pending bank match for an invalid tab query', function () {
     request()->replace(['tab' => 'invalid']);
 
-    expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('imports');
+    expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('clearance');
 });

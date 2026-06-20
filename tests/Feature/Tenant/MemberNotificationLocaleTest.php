@@ -131,3 +131,30 @@ test('member panel uses localized database notifications component', function ()
     expect(filament()->getPanel('member')->getDatabaseNotificationsLivewireComponent())
         ->toBe(MemberDatabaseNotifications::class);
 });
+
+test('member database notifications resolve user through filament tenant guard', function () {
+    $this->initializeTenancy();
+    Filament::setCurrentPanel('member');
+
+    $memberUser = User::create([
+        'name' => 'Notify Member',
+        'email' => 'notify-member@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => false,
+    ]);
+
+    Member::create([
+        'user_id' => $memberUser->id,
+        'member_number' => 'MEM-NOTIFY-'.uniqid(),
+        'name' => 'Notify Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($memberUser, 'tenant');
+
+    $component = new MemberDatabaseNotifications;
+
+    expect($component->getUser()?->is($memberUser))->toBeTrue();
+});
