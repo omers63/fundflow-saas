@@ -13,6 +13,7 @@ use App\Filament\Tenant\Resources\BankAccounts\Tables\MasterBankLedgerTable;
 use App\Filament\Tenant\Resources\BankAccounts\Tables\PendingOperationalClearanceTable;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\BankStatement;
+use App\Models\Tenant\BankTransaction;
 use BackedEnum;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Resources\Resource;
@@ -40,6 +41,22 @@ class BankAccountsResource extends Resource
     protected static ?string $slug = 'bank-accounts';
 
     protected static ?int $navigationSort = 1;
+
+    public static function getNavigationBadge(): ?string
+    {
+        try {
+            $count = BankTransaction::query()->uncleared()->count();
+
+            return $count > 0 ? (string) $count : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'warning';
+    }
 
     public static function canCreate(): bool
     {

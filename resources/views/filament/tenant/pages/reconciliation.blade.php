@@ -46,6 +46,25 @@
         </aside>
 
         <div class="min-w-0 space-y-6" wire:key="reconciliation-workspace-{{ $this->sideTab }}">
+            @php($criticalCount = \App\Models\Tenant\ReconciliationException::query()->open()->where('severity', 'critical')->count())
+            @if ($criticalCount > 0)
+            <div role="alert" class="flex items-start gap-3 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-red-900 shadow-sm dark:border-red-700/60 dark:bg-red-950/40 dark:text-red-200">
+                <x-heroicon-o-exclamation-circle class="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+                <div class="min-w-0">
+                    <p class="text-sm font-semibold">
+                        {{ trans_choice(':count critical exception open|:count critical exceptions open', $criticalCount, ['count' => $criticalCount]) }}
+                    </p>
+                    <p class="mt-0.5 text-xs text-red-700 dark:text-red-300">
+                        {{ __('Ledger balances may be inconsistent. Review the Exceptions tab and resolve before period close.') }}
+                    </p>
+                </div>
+                <button type="button" wire:click="$set('sideTab', 'exceptions')"
+                    class="ms-auto shrink-0 rounded-lg bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-500 dark:bg-red-700 dark:hover:bg-red-600">
+                    {{ __('Review') }}
+                </button>
+            </div>
+            @endif
+
             @if ($this->sideTab === 'overview')
             <section
                 class="overflow-hidden rounded-2xl bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-6 text-white shadow-md ring-1 ring-white/10 dark:from-slate-900 dark:to-black">

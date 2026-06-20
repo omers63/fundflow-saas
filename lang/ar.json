@@ -531,6 +531,8 @@
     "Created: :created · Failed: :failed": "تم الإنشاء: :created · فشل: :failed",
     "Creates standing loan eligibility overrides for this member. Overrides are logged in the audit trail.": "ينشئ تجاوزات أهلية قرض قائمة لهذا العضو. تُسجَّل التجاوزات في سجل التدقيق.",
     "Creates the same standing loan eligibility overrides for each selected member. Overrides are logged in the audit trail.": "ينشئ نفس تجاوزات أهلية القرض لكل عضو محدد. تُسجَّل التجاوزات في مسار التدقيق.",
+    ":count critical exception open|:count critical exceptions open": "استثناء حرج مفتوح واحد|:count استثناء حرج مفتوح",
+    "Ledger balances may be inconsistent. Review the Exceptions tab and resolve before period close.": "قد تكون أرصدة الدفتر غير متسقة. راجع تبويب الاستثناءات وحلّها قبل إغلاق الفترة.",
     "Credit": "دائن",
     "Credit lines": "سطور دائنة",
     "Credit posted": "تم ترحيل الدائن",
