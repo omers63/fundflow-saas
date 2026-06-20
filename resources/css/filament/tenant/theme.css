@@ -6,28 +6,115 @@
 @source '../../../../app/Filament/Tenant/**/*';
 @source '../../../../resources/views/filament/**/*';
 
-/* Blue atmosphere — tenant fund admin */
+/* ── Admin portal design tokens (sky-blue primary) ── */
+.fi-body.fi-panel-tenant {
+    --ff-primary:        #0284c7;
+    --ff-primary-dark:   #0369a1;
+    --ff-primary-light:  #e0f2fe;
+    --ff-primary-border: #7dd3fc;
+    --ff-success:        #1d9e75;
+    --ff-success-light:  #e1f5ee;
+    --ff-warning:        #ef9f27;
+    --ff-warning-light:  #faeeda;
+    --ff-danger:         #e24b4a;
+    --ff-danger-light:   #fcebeb;
+    --ff-info:           #378add;
+    --ff-info-light:     #e6f1fb;
+    --ff-surface:        #ffffff;
+    --ff-page-bg:        #f8fafc;
+    --ff-border:         #e5e7eb;
+    --ff-muted:          #6b7280;
+    --ff-muted-light:    #9ca3af;
+    --ff-panel-radius:   12px;
+}
+
+/* ── Calm sky-blue atmosphere (lighter, less busy than before) ── */
 .fi-body.fi-panel-tenant {
     background:
-        radial-gradient(1200px 600px at 10% -10%, rgb(59 130 246 / 0.14), transparent 55%),
-        radial-gradient(900px 500px at 100% 0%, rgb(14 165 233 / 0.12), transparent 50%),
-        linear-gradient(180deg, rgb(248 250 252) 0%, rgb(255 255 255) 45%, rgb(241 245 249) 100%);
+        radial-gradient(1000px 480px at 5% -8%, rgb(14 165 233 / 0.07), transparent 52%),
+        radial-gradient(700px 380px at 100% 0%, rgb(2 132 199 / 0.06), transparent 48%),
+        linear-gradient(180deg, rgb(248 250 252) 0%, rgb(255 255 255) 50%, rgb(248 250 252) 100%);
 }
 
 .dark .fi-body.fi-panel-tenant {
     background:
-        radial-gradient(1000px 500px at 15% -5%, rgb(59 130 246 / 0.18), transparent 55%),
-        radial-gradient(800px 400px at 100% 5%, rgb(14 165 233 / 0.12), transparent 50%),
+        radial-gradient(1000px 500px at 15% -5%, rgb(14 165 233 / 0.12), transparent 55%),
+        radial-gradient(800px 400px at 100% 5%, rgb(2 132 199 / 0.08), transparent 50%),
         linear-gradient(180deg, rgb(15 23 42) 0%, rgb(2 6 23) 100%);
 }
 
 .fi-body.fi-panel-tenant .fi-main {
-    background: linear-gradient(160deg, rgb(255 255 255 / 0.55) 0%, transparent 42%);
+    background: linear-gradient(160deg, rgb(255 255 255 / 0.6) 0%, transparent 38%);
 }
 
 .dark .fi-body.fi-panel-tenant .fi-main {
-    background: linear-gradient(160deg, rgb(30 41 59 / 0.35) 0%, transparent 45%);
+    background: linear-gradient(160deg, rgb(30 41 59 / 0.3) 0%, transparent 42%);
 }
+
+/* ── Sidebar: compact prototype-style chrome ── */
+.fi-body.fi-panel-tenant .fi-sidebar {
+    border-right: 1px solid var(--ff-border);
+}
+
+.fi-body.fi-panel-tenant .fi-sidebar-nav-item-badge-ctn {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 10px;
+}
+
+/* ── Panels: prototype card style ── */
+.fi-body.fi-panel-tenant .fi-section,
+.fi-body.fi-panel-tenant .ff-admin-panel {
+    border-radius: var(--ff-panel-radius);
+    border: 1px solid var(--ff-border);
+    background: var(--ff-surface);
+}
+
+/* ── Stat cards: sky hover glow ── */
+.fi-body.fi-panel-tenant a.fi-wi-stats-overview-stat:hover {
+    transform: translateY(-3px);
+    box-shadow:
+        0 12px 28px -12px rgb(2 132 199 / 0.3),
+        0 0 0 1px rgb(14 165 233 / 0.1);
+}
+
+/* ── Semantic status chips ── */
+.fi-body.fi-panel-tenant .ff-chip-green   { background: var(--ff-success-light); color: #0f6e56; }
+.fi-body.fi-panel-tenant .ff-chip-amber   { background: var(--ff-warning-light); color: #854f0b; }
+.fi-body.fi-panel-tenant .ff-chip-red     { background: var(--ff-danger-light);  color: #a32d2d; }
+.fi-body.fi-panel-tenant .ff-chip-blue    { background: var(--ff-info-light);    color: #185fa5; }
+.fi-body.fi-panel-tenant .ff-chip-sky     { background: var(--ff-primary-light); color: var(--ff-primary-dark); }
+.fi-body.fi-panel-tenant .ff-chip-gray    { background: #f3f4f6;                 color: var(--ff-muted); }
+
+/* ── Notices / alert callouts ── */
+.fi-body.fi-panel-tenant .ff-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    margin-bottom: 12px;
+}
+.fi-body.fi-panel-tenant .ff-notice-red    { background: var(--ff-danger-light);  border: 1px solid var(--ff-danger);  color: #a32d2d; }
+.fi-body.fi-panel-tenant .ff-notice-amber  { background: var(--ff-warning-light); border: 1px solid var(--ff-warning); color: #854f0b; }
+.fi-body.fi-panel-tenant .ff-notice-blue   { background: var(--ff-info-light);    border: 1px solid var(--ff-info);   color: #185fa5; }
+.fi-body.fi-panel-tenant .ff-notice-green  { background: var(--ff-success-light); border: 1px solid var(--ff-success);color: #0f6e56; }
+
+/* ── Progress bars ── */
+.fi-body.fi-panel-tenant .ff-prog-bar {
+    height: 6px;
+    background: var(--ff-border);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.fi-body.fi-panel-tenant .ff-prog-fill { height: 100%; border-radius: 3px; }
+.fi-body.fi-panel-tenant .ff-prog-fill--green  { background: var(--ff-success); }
+.fi-body.fi-panel-tenant .ff-prog-fill--amber  { background: var(--ff-warning); }
+.fi-body.fi-panel-tenant .ff-prog-fill--red    { background: var(--ff-danger);  }
+.fi-body.fi-panel-tenant .ff-prog-fill--sky    { background: var(--ff-primary); }
+.fi-body.fi-panel-tenant .ff-prog-fill--gray   { background: #d1d5db; }
 
 @keyframes ff-stat-in {
     from {
@@ -48,12 +135,7 @@
         border-color 0.2s ease;
 }
 
-.fi-body.fi-panel-tenant a.fi-wi-stats-overview-stat:hover {
-    transform: translateY(-3px);
-    box-shadow:
-        0 12px 28px -12px rgb(37 99 235 / 0.35),
-        0 0 0 1px rgb(59 130 246 / 0.12);
-}
+/* Stat hover now uses sky-blue token glow (overridden below in token block) */
 
 .fi-body.fi-panel-tenant .fi-wi-stats-overview > * {
     animation: ff-stat-in 0.42s ease-out both;
@@ -97,7 +179,7 @@
 .fi-body.fi-panel-tenant a.ff-app-insights-kpi:hover,
 .fi-body.fi-panel-tenant a.ff-tenant-stat-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px -10px rgb(37 99 235 / 0.35);
+  box-shadow: 0 8px 20px -10px rgb(2 132 199 / 0.3);
 }
 
 .fi-body.fi-panel-tenant .ff-app-insights-hero {
@@ -130,13 +212,13 @@
 @keyframes ff-dashboard-glow {
   from {
     box-shadow:
-      0 10px 40px -12px rgb(14 165 233 / 0.45),
+      0 10px 40px -12px rgb(14 165 233 / 0.35),
       inset 0 1px 0 rgb(255 255 255 / 0.15);
   }
 
   to {
     box-shadow:
-      0 16px 48px -10px rgb(99 102 241 / 0.5),
+      0 16px 48px -10px rgb(2 132 199 / 0.38),
       inset 0 1px 0 rgb(255 255 255 / 0.2);
   }
 }
@@ -199,7 +281,7 @@
 }
 
 .fi-body.fi-panel-tenant .ff-dashboard-gauge .ff-gauge-ring {
-  filter: drop-shadow(0 0 4px rgb(14 165 233 / 0.25));
+  filter: drop-shadow(0 0 4px rgb(2 132 199 / 0.22));
 }
 
 .fi-body.fi-panel-tenant .ff-dashboard-balance {
