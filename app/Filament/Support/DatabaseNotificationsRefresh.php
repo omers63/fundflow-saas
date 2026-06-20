@@ -18,6 +18,18 @@ final class DatabaseNotificationsRefresh
         return (string) config('fundflow.database_notifications_polling', '5s');
     }
 
+    /**
+     * Prefer Reverb/Echo push refresh; HTTP polling only when broadcasting is off.
+     */
+    public static function panelPollingInterval(): ?string
+    {
+        if (filled(config('filament.broadcasting.echo.broadcaster'))) {
+            return null;
+        }
+
+        return self::pollingInterval();
+    }
+
     public static function dispatch(?Component $livewire, Model|Authenticatable|null $notifiable = null): void
     {
         if ($notifiable !== null && Filament::hasBroadcasting() && config('filament.broadcasting.echo')) {
@@ -36,7 +48,7 @@ final class DatabaseNotificationsRefresh
         );
 
         $livewire->js(
-            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)',
+            'setTimeout(() => window.Livewire.getByName(' . $targetName . ').forEach(w => w.$refresh()), 0)',
         );
     }
 }

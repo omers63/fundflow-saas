@@ -81,6 +81,21 @@ test('settings notifications tab can save preferences', function () {
         ->assertHasNoErrors();
 });
 
+test('settings tab switch keeps all tab panels mounted', function () {
+    Filament::setCurrentPanel('member');
+    $this->actingAs($this->memberUser, 'tenant');
+
+    Livewire::test(MemberSettingsPage::class)
+        ->assertSet('activeTab', 'profile')
+        ->call('setTab', 'contributions')
+        ->assertSet('activeTab', 'contributions')
+        ->call('setTab', 'notifications')
+        ->assertSet('activeTab', 'notifications')
+        ->call('setTab', 'profile')
+        ->assertSet('activeTab', 'profile')
+        ->assertHasNoErrors();
+});
+
 test('settings page renders in arabic with faq-free profile labels', function () {
     Filament::setCurrentPanel('member');
     $this->memberUser->update(['preferred_locale' => 'ar']);

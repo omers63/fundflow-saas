@@ -421,10 +421,10 @@
 /* Sidebar profile block (prototype) */
 .ff-member-sidebar-profile {
     display: flex;
-    align-items: flex-start;
-    gap: 0;
-    flex-direction: column;
-    padding: 0.875rem 0.625rem 0.75rem;
+    align-items: center;
+    gap: 0.625rem;
+    min-width: 0;
+    padding: 0.625rem 0.5rem;
     margin-block-end: 0.25rem;
     border-block-end: 1px solid var(--ff-border, #e5e7eb);
     text-decoration: none;
@@ -436,20 +436,36 @@
     background: var(--ff-page-bg, #f9fafb);
 }
 
+.fi-body.fi-panel-member .fi-sidebar:not(.fi-sidebar-open) .ff-member-sidebar-profile {
+    justify-content: center;
+    gap: 0;
+    padding: 0.5rem;
+}
+
+.fi-body.fi-panel-member .fi-sidebar:not(.fi-sidebar-open) .ff-member-sidebar-profile__meta {
+    display: none;
+}
+
 .ff-member-sidebar-profile__avatar {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 2.625rem;
-    height: 2.625rem;
+    width: 2.25rem;
+    height: 2.25rem;
     border-radius: 9999px;
     background: #e1f5ee;
     color: #085041;
-    font-size: 0.9375rem;
+    font-size: 0.875rem;
     font-weight: 700;
-    margin-block-end: 0.625rem;
     overflow: hidden;
     flex-shrink: 0;
+}
+
+/* Match fi-icon.fi-size-lg (1.5rem) used by sidebar nav items */
+.fi-body.fi-panel-member .fi-sidebar:not(.fi-sidebar-open) .ff-member-sidebar-profile__avatar {
+    width: 1.5rem;
+    height: 1.5rem;
+    font-size: 0.5625rem;
 }
 
 .ff-member-sidebar-profile__avatar-image {

@@ -11,6 +11,6 @@ return [
     | Examples: 5s, 10s, 30s. Set to null to disable polling (not recommended).
     |
     */
-    'database_notifications_polling' => env('FILAMENT_DATABASE_NOTIFICATIONS_POLLING', '10s'),
+    'database_notifications_polling' => env('FILAMENT_DATABASE_NOTIFICATIONS_POLLING', '30s'),
 
 ];

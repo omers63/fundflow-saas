@@ -113,7 +113,7 @@ test('communications help page renders tab shell', function () {
     $this->get('http://'.$this->domain.'/member/help')
         ->assertSuccessful()
         ->assertSee('ff-member-communications', false)
-        ->assertSee(__('Open inbox'), false);
+        ->assertSee(__('Inbox'), false);
 
     $this->get('http://'.$this->domain.'/member/help?tab=requests')
         ->assertSuccessful()

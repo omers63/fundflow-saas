@@ -114,6 +114,8 @@ test('member sidebar profile block renders on dashboard', function () {
     $this->get('http://'.$this->domain.'/member')
         ->assertSuccessful()
         ->assertSee('ff-member-sidebar-profile', false)
+        ->assertSee('ff-member-sidebar-profile__meta', false)
+        ->assertSee('x-show="$store.sidebar.isOpen"', false)
         ->assertSee('Design System Member', false)
         ->assertSee('MEM-1047', false)
         ->assertSee(__('Active'), false);
@@ -180,7 +182,9 @@ test('member portal component css defines record modal layout hooks', function (
         ->toContain('ff-member-record-modal__hero')
         ->toContain('ff-member-detail-grid--3col')
         ->toContain('ff-member-dashboard-account-grid')
-        ->toContain('ff-member-cash-hero');
+        ->toContain('ff-member-cash-hero')
+        ->toContain('.fi-sidebar:not(.fi-sidebar-open) .ff-member-sidebar-profile__meta')
+        ->toContain('width: 1.5rem');
 });
 
 test('x-member.amount uses western digits and places riyal symbol before amount in arabic', function () {

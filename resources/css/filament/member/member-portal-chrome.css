@@ -219,3 +219,24 @@
         0 12px 28px -12px rgb(83 74 183 / 0.28),
         0 0 0 1px rgb(83 74 183 / 0.12);
 }
+
+/* Keep page shell stable during Livewire SPA swaps and background polls */
+.fi-body.fi-panel-member .fi-main {
+    min-height: 60vh;
+    background: var(--ff-page-bg);
+}
+
+.fi-body.fi-panel-member .ff-member-settings-tab[hidden] {
+    display: none !important;
+}
+
+html.fi.fi-panel-member #nprogress .bar {
+    height: 2px;
+    opacity: 0.45;
+}
+
+html.fi.fi-panel-member #nprogress .peg {
+    box-shadow:
+        0 0 6px rgb(83 74 183 / 0.35),
+        0 0 2px rgb(83 74 183 / 0.35);
+}

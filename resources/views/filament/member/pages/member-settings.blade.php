@@ -17,17 +17,23 @@
             @endforeach
         </div>
 
-        @if ($activeTab === 'profile')
+        <div wire:show="activeTab === 'profile'" class="ff-member-settings-tab">
             @include('filament.member.settings.profile-tab', [
                 'user' => $profileUser,
                 'member' => $profileMember,
                 'householdProfiles' => $householdProfiles,
             ])
-        @elseif ($activeTab === 'contributions')
+        </div>
+
+        <div wire:show="activeTab === 'contributions'" class="ff-member-settings-tab">
             @include('filament.member.settings.contributions-body')
-        @elseif ($activeTab === 'notifications')
+        </div>
+
+        <div wire:show="activeTab === 'notifications'" class="ff-member-settings-tab">
             @include('filament.member.settings.notifications-tab')
-        @else
+        </div>
+
+        <div wire:show="activeTab === 'payout'" class="ff-member-settings-tab">
             <x-member::panel :title="__('Payout bank details')">
                 @if (filled($payoutIban))
                     <x-member::detail-grid :items="[
@@ -44,6 +50,6 @@
                     </x-member::notice>
                 @endif
             </x-member::panel>
-        @endif
+        </div>
     </div>
 </x-filament-panels::page>
