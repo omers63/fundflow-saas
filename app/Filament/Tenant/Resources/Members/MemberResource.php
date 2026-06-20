@@ -39,18 +39,33 @@ class MemberResource extends Resource
 
     protected static ?int $navigationSort = TenantNavigation::SORT_MEMBERS;
 
+    public static function getNavigationBadge(): ?string
+    {
+        $count = Member::query()->where('status', 'delinquent')->count();
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'danger';
+    }
+
     /**
      * @return list<string>
      */
     public static function listTabKeys(): array
     {
-        return ['all', 'delinquent'];
+        return ['all', 'active', 'delinquent', 'suspended', 'withdrawn'];
     }
 
     public static function listTabLabel(string $tab): string
     {
         return match ($tab) {
+            'active' => __('Active'),
             'delinquent' => __('Delinquent'),
+            'suspended' => __('Suspended'),
+            'withdrawn' => __('Withdrawn'),
             default => __('All members'),
         };
     }
@@ -151,7 +166,7 @@ class MemberResource extends Resource
         );
 
         $livewire->js(
-            'setTimeout(() => window.Livewire.getByName(' . $targetName . ').forEach(w => w.$refresh()), 0)'
+            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
         );
     }
 
@@ -167,7 +182,7 @@ class MemberResource extends Resource
         );
 
         $livewire->js(
-            'setTimeout(() => window.Livewire.getByName(' . $targetName . ').forEach(w => w.$refresh()), 0)'
+            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
         );
     }
 }

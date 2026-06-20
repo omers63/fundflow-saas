@@ -3,7 +3,6 @@
 namespace App\Filament\Tenant\Resources\Members\Pages;
 
 use App\Filament\Tenant\Resources\Members\MemberResource;
-use App\Filament\Tenant\Widgets\MemberInsightsWidget;
 use App\Models\Tenant\Member;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -27,37 +26,39 @@ class ListMembers extends ListRecords
         return [];
     }
 
-    protected function getHeaderWidgets(): array
-    {
-        return [
-            MemberInsightsWidget::class,
-        ];
-    }
-
-    public function getHeaderWidgetsColumns(): int|array
-    {
-        return 1;
-    }
-
     public function getTabs(): array
     {
+        $delinquentCount = Member::query()->where('status', 'delinquent')->count();
+        $suspendedCount = Member::query()->where('status', 'suspended')->count();
+        $withdrawnCount = Member::query()->where('status', 'withdrawn')->count();
+
         return [
             'all' => Tab::make(MemberResource::listTabLabel('all')),
+            'active' => Tab::make(MemberResource::listTabLabel('active')),
             'delinquent' => Tab::make(MemberResource::listTabLabel('delinquent'))
-                ->badge((string) Member::query()->where('status', 'delinquent')->count())
+                ->badge($delinquentCount > 0 ? (string) $delinquentCount : null)
                 ->badgeColor('danger'),
+            'suspended' => Tab::make(MemberResource::listTabLabel('suspended'))
+                ->badge($suspendedCount > 0 ? (string) $suspendedCount : null)
+                ->badgeColor('warning'),
+            'withdrawn' => Tab::make(MemberResource::listTabLabel('withdrawn'))
+                ->badge($withdrawnCount > 0 ? (string) $withdrawnCount : null)
+                ->badgeColor('gray'),
         ];
     }
 
     protected function getTableQuery(): Builder
     {
         $query = parent::getTableQuery();
+        $tab = MemberResource::resolveListTab();
 
-        if (MemberResource::resolveListTab() === 'delinquent') {
-            return $query->where('status', 'delinquent');
-        }
-
-        return $query;
+        return match ($tab) {
+            'active' => $query->where('status', 'active'),
+            'delinquent' => $query->where('status', 'delinquent'),
+            'suspended' => $query->where('status', 'suspended'),
+            'withdrawn' => $query->where('status', 'withdrawn'),
+            default => $query,
+        };
     }
 
     protected function getTableQueryStringIdentifier(): ?string
