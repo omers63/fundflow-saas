@@ -23,6 +23,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundAuditLog;
 use App\Models\Tenant\FundPosting;
+use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
 use App\Models\Tenant\Member;
@@ -131,6 +132,7 @@ final class TenantDashboardService
             'loan_queue_preview' => $this->loanQueuePreview(),
             'recent_activity' => $this->recentActivity(),
             'collection_breakdown' => $this->collectionBreakdown($openMonth, $openYear, $activeMembers, $delinquencyCounts),
+            'fund_tier_utilisation' => $this->fundTierUtilisation(),
         ];
     }
 
@@ -681,9 +683,17 @@ final class TenantDashboardService
     {
         if ($activeMembers === 0) {
             return [
-                'posted_pct' => 0, 'pending_pct' => 0, 'failed_pct' => 0, 'waived_pct' => 0,
-                'posted' => 0, 'pending' => 0, 'failed' => 0, 'waived' => 0,
-                'tier1' => 0, 'tier2' => 0, 'tier3' => 0,
+                'posted_pct' => 0,
+                'pending_pct' => 0,
+                'failed_pct' => 0,
+                'waived_pct' => 0,
+                'posted' => 0,
+                'pending' => 0,
+                'failed' => 0,
+                'waived' => 0,
+                'tier1' => 0,
+                'tier2' => 0,
+                'tier3' => 0,
                 'total' => 0,
             ];
         }
@@ -722,6 +732,44 @@ final class TenantDashboardService
             'tier3' => $tier3,
             'total' => $activeMembers,
         ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function fundTierUtilisation(): array
+    {
+        $tiers = FundTier::query()
+            ->where('is_active', true)
+            ->orderBy('tier_number')
+            ->get();
+
+        return $tiers->map(function (FundTier $tier): array {
+            $allocated = $tier->allocated_amount;
+            $exposure = $tier->active_exposure;
+            $pct = $allocated > 0 ? min(100, round(($exposure / $allocated) * 100)) : 0;
+
+            $tone = match (true) {
+                $pct >= 90 => 'danger',
+                $pct >= 70 => 'warning',
+                default => 'success',
+            };
+
+            $bar = match ($tone) {
+                'danger' => '#E24B4A',
+                'warning' => '#EF9F27',
+                default => '#1D9E75',
+            };
+
+            return [
+                'label' => $tier->tier_label ?? ($tier->is_emergency ? __('Emergency') : __('Tier :n', ['n' => $tier->tier_number])),
+                'pct' => $pct,
+                'bar_color' => $bar,
+                'tone' => $tone,
+                'available' => InsightFormatter::money($tier->available_amount),
+                'url' => FundTierResource::getUrl('index'),
+            ];
+        })->all();
     }
 
     /**

@@ -242,155 +242,113 @@
             </div>
         </div>
 
-        {{-- Fund health gauges (2×2 compact) + loan pipeline strip ── --}}
-        <div class="flex flex-col gap-3">
-            <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                <div class="flex items-center gap-2 border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
-                    <x-heroicon-o-chart-pie class="h-4 w-4 text-emerald-500" />
-                    <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Fund health') }}</span>
+        {{-- Fund tier utilisation ── --}}
+        <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+            <div class="flex items-center justify-between border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
+                <div class="flex items-center gap-2">
+                    <x-heroicon-o-chart-pie class="h-4 w-4 text-indigo-500" />
+                    <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Fund tier utilisation') }}</span>
                 </div>
-                <div class="grid grid-cols-2 gap-px bg-gray-100 dark:bg-gray-700">
-                    @foreach ($d['gauges'] as $gauge)
-                        @php
-                            $gt = match ($gauge['tone']) {
-                                'emerald' => ['ring' => '#1d9e75', 'text' => 'text-emerald-600 dark:text-emerald-400', 'bg' => 'bg-white dark:bg-gray-900'],
-                                'amber'   => ['ring' => '#ef9f27', 'text' => 'text-amber-600 dark:text-amber-400',   'bg' => 'bg-white dark:bg-gray-900'],
-                                'rose'    => ['ring' => '#e24b4a', 'text' => 'text-red-600 dark:text-red-400',       'bg' => 'bg-white dark:bg-gray-900'],
-                                'sky'     => ['ring' => '#0284c7', 'text' => 'text-sky-600 dark:text-sky-400',       'bg' => 'bg-white dark:bg-gray-900'],
-                                default   => ['ring' => '#6b7280', 'text' => 'text-gray-500 dark:text-gray-400',     'bg' => 'bg-white dark:bg-gray-900'],
-                            };
-                            $circumference = 2 * M_PI * 28;
-                            $dashOffset = $circumference - ($gauge['percent'] / 100) * $circumference;
-                        @endphp
-                        <a href="{{ $gauge['url'] }}"
-                            class="flex flex-col items-center gap-1 px-3 py-3 transition hover:bg-gray-50 dark:hover:bg-gray-800 {{ $gt['bg'] }}">
-                            <div class="relative h-14 w-14">
-                                <svg viewBox="0 0 64 64" class="h-full w-full -rotate-90">
-                                    <circle cx="32" cy="32" r="28" fill="none" stroke="#e5e7eb" stroke-width="5" class="dark:stroke-gray-700" />
-                                    <circle cx="32" cy="32" r="28" fill="none"
-                                        stroke="{{ $gt['ring'] }}"
-                                        stroke-width="5"
-                                        stroke-linecap="round"
-                                        stroke-dasharray="{{ $circumference }}"
-                                        stroke-dashoffset="{{ $dashOffset }}"
-                                        class="transition-all duration-700" />
-                                </svg>
-                                <span class="absolute inset-0 flex items-center justify-center text-[11px] font-bold tabular-nums {{ $gt['text'] }}">{{ $gauge['value'] }}</span>
-                            </div>
-                            <p class="text-center text-[10px] font-semibold text-gray-600 dark:text-gray-300">{{ $gauge['label'] }}</p>
-                        </a>
-                    @endforeach
-                </div>
+                <a href="{{ \App\Filament\Tenant\Resources\FundTiers\FundTierResource::getUrl('index') }}"
+                    class="text-[11px] font-medium text-sky-600 hover:underline dark:text-sky-400">{{ __('Manage →') }}</a>
             </div>
-
-            {{-- Loan pipeline strip --}}
-            <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                <div class="flex items-center gap-2 border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
-                    <x-heroicon-o-funnel class="h-4 w-4 text-sky-500" />
-                    <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Loan pipeline') }}</span>
-                </div>
-                <div class="grid grid-cols-4 divide-x divide-gray-100 dark:divide-gray-700">
-                    <a href="{{ $pipeline['queue_needs_decision_url'] ?? '#' }}"
-                        class="flex flex-col items-center py-3 transition hover:bg-amber-50/60 dark:hover:bg-amber-950/20">
-                        <span class="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ $pipeline['needs_decision'] ?? 0 }}</span>
-                        <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Decision') }}</span>
-                    </a>
-                    <a href="{{ $pipeline['queue_ready_to_disburse_url'] ?? '#' }}"
-                        class="flex flex-col items-center py-3 transition hover:bg-sky-50/60 dark:hover:bg-sky-950/20">
-                        <span class="text-xl font-bold tabular-nums text-sky-600 dark:text-sky-400">{{ $pipeline['ready_to_disburse'] ?? 0 }}</span>
-                        <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Disburse') }}</span>
-                    </a>
-                    <a href="{{ $pipeline['loans_active_url'] ?? '#' }}"
-                        class="flex flex-col items-center py-3 transition hover:bg-emerald-50/60 dark:hover:bg-emerald-950/20">
-                        <span class="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{{ $pipeline['active'] ?? 0 }}</span>
-                        <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Active') }}</span>
-                    </a>
-                    <a href="{{ $pipeline['loans_completed_url'] ?? '#' }}"
-                        class="flex flex-col items-center py-3 transition hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <span class="text-xl font-bold tabular-nums text-gray-500 dark:text-gray-300">{{ $pipeline['completed'] ?? 0 }}</span>
-                        <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Closed') }}</span>
-                    </a>
-                </div>
+            <div class="space-y-3 p-4">
+                @forelse ($d['fund_tier_utilisation'] as $tier)
+                    @php
+                        $tierColor = match ($tier['tone']) {
+                            'danger'  => 'text-red-600 dark:text-red-400',
+                            'warning' => 'text-amber-600 dark:text-amber-400',
+                            default   => 'text-emerald-600 dark:text-emerald-400',
+                        };
+                    @endphp
+                    <div>
+                        <div class="mb-1 flex items-center justify-between">
+                            <span class="text-[11px] font-medium text-gray-600 dark:text-gray-400">{{ $tier['label'] }}</span>
+                            <span class="{{ $tierColor }} text-[11px] font-bold tabular-nums">{{ $tier['pct'] }}%</span>
+                        </div>
+                        <div class="h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
+                            <div class="h-full rounded-full transition-all duration-700"
+                                style="width: {{ $tier['pct'] }}%; background: {{ $tier['bar_color'] }}"></div>
+                        </div>
+                        @if ($tier['tone'] === 'danger')
+                            <p class="mt-0.5 text-[10px] text-red-500">⚠ {{ __('Near capacity') }} · {{ $tier['available'] }} {{ __('available') }}</p>
+                        @else
+                            <p class="mt-0.5 text-[10px] text-gray-400">{{ $tier['available'] }} {{ __('available') }}</p>
+                        @endif
+                    </div>
+                @empty
+                    <p class="py-4 text-center text-[11px] text-gray-400">{{ __('No active fund tiers configured') }}</p>
+                @endforelse
             </div>
         </div>
     </div>
 
-    {{-- ── Row 4: Trend charts ── --}}
-    <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-        @php
-            $maxContrib = max(1, collect($d['contribution_trend'])->max('amount'));
-            $maxLoanTrend = max(1, collect($d['loan_trend'])->max('total') ?? 0);
-        @endphp
-        {{-- Contribution trend --}}
-        <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-            <div class="flex items-center justify-between border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
-                <div class="flex items-center gap-1.5">
-                    <x-heroicon-o-chart-bar class="h-4 w-4 text-emerald-500" />
-                    <h4 class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">{{ __('Contributions posted') }}</h4>
-                </div>
-                <span class="text-[10px] text-gray-400">{{ __('6 months') }}</span>
-            </div>
-            <div class="px-4 py-3">
-                <div class="flex h-20 items-end gap-1.5">
-                    @foreach ($d['contribution_trend'] as $month)
-                        @php $barH = max(8, (int) round(($month['amount'] / $maxContrib) * 100)); @endphp
-                        <div class="group flex flex-1 flex-col items-center gap-0.5">
-                            <span class="text-[10px] font-semibold tabular-nums text-gray-500 opacity-0 transition group-hover:opacity-100">{{ $month['count'] ?: '·' }}</span>
-                            <div class="flex w-full max-w-[2rem] items-end justify-center overflow-hidden rounded-t-sm bg-gray-100 dark:bg-gray-700" style="height: 4rem">
-                                <div class="w-full rounded-t-sm bg-gradient-to-t from-emerald-500 to-teal-400 transition-all duration-500 group-hover:from-emerald-400"
-                                    style="height: {{ $barH }}%"></div>
-                            </div>
-                            <span class="text-[10px] text-gray-400">{{ $month['label'] }}</span>
+    {{-- ── Row 4: Fund health gauges + loan pipeline (compact strip) ── --}}
+    <div class="grid grid-cols-1 gap-3 lg:grid-cols-5">
+        {{-- 4 health gauges --}}
+        <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900 lg:col-span-3">
+            <div class="grid grid-cols-4 divide-x divide-gray-100 dark:divide-gray-700">
+                @foreach ($d['gauges'] as $gauge)
+                    @php
+                        $gt = match ($gauge['tone']) {
+                            'emerald' => ['ring' => '#1d9e75', 'text' => 'text-emerald-600 dark:text-emerald-400'],
+                            'amber'   => ['ring' => '#ef9f27', 'text' => 'text-amber-600 dark:text-amber-400'],
+                            'rose'    => ['ring' => '#e24b4a', 'text' => 'text-red-600 dark:text-red-400'],
+                            'sky'     => ['ring' => '#0284c7', 'text' => 'text-sky-600 dark:text-sky-400'],
+                            default   => ['ring' => '#6b7280', 'text' => 'text-gray-500 dark:text-gray-400'],
+                        };
+                        $circumference = 2 * M_PI * 24;
+                        $dashOffset = $circumference - ($gauge['percent'] / 100) * $circumference;
+                    @endphp
+                    <a href="{{ $gauge['url'] }}"
+                        class="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <div class="relative h-12 w-12">
+                            <svg viewBox="0 0 56 56" class="h-full w-full -rotate-90">
+                                <circle cx="28" cy="28" r="24" fill="none" stroke="#e5e7eb" stroke-width="5" class="dark:stroke-gray-700" />
+                                <circle cx="28" cy="28" r="24" fill="none"
+                                    stroke="{{ $gt['ring'] }}"
+                                    stroke-width="5"
+                                    stroke-linecap="round"
+                                    stroke-dasharray="{{ $circumference }}"
+                                    stroke-dashoffset="{{ $dashOffset }}"
+                                    class="transition-all duration-700" />
+                            </svg>
+                            <span class="absolute inset-0 flex items-center justify-center text-[10px] font-bold tabular-nums {{ $gt['text'] }}">{{ $gauge['value'] }}</span>
                         </div>
-                    @endforeach
-                </div>
+                        <p class="text-center text-[10px] font-semibold text-gray-500 dark:text-gray-400">{{ $gauge['label'] }}</p>
+                        <p class="text-center text-[9px] text-gray-400 dark:text-gray-500">{{ $gauge['sub'] }}</p>
+                    </a>
+                @endforeach
             </div>
         </div>
 
-        {{-- Loan volume chart --}}
-        <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-            <div class="flex flex-wrap items-center justify-between border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
-                <div class="flex items-center gap-1.5">
-                    <x-heroicon-o-chart-bar class="h-4 w-4 text-sky-500" />
-                    <h4 class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">{{ __('Loan volume') }}</h4>
-                </div>
-                <div class="flex flex-wrap gap-2 text-[10px] text-gray-400">
-                    <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-sm bg-emerald-500"></span>{{ __('Active') }}</span>
-                    <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-sm bg-amber-400"></span>{{ __('Pending') }}</span>
-                    <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-sm bg-sky-500"></span>{{ __('Closed') }}</span>
-                </div>
+        {{-- Loan pipeline --}}
+        <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900 lg:col-span-2">
+            <div class="flex items-center gap-2 border-b border-gray-100 px-4 py-2 dark:border-gray-700">
+                <x-heroicon-o-funnel class="h-4 w-4 text-sky-500" />
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Loan pipeline') }}</span>
             </div>
-            <div class="px-4 py-3">
-                <div class="flex h-20 items-end gap-1.5">
-                    @foreach ($d['loan_trend'] as $month)
-                        @php
-                            $stackTotal = max(1, $month['total']);
-                            $activeH = round(($month['active'] / $stackTotal) * 100);
-                            $pendingH = round(($month['pending'] / $stackTotal) * 100);
-                            $completedH = max(0, 100 - $activeH - $pendingH);
-                            $barH = max(12, (int) round(($month['total'] / $maxLoanTrend) * 100));
-                        @endphp
-                        <div class="flex flex-1 flex-col items-center gap-0.5">
-                            <span class="text-[10px] font-semibold tabular-nums text-gray-500">{{ $month['total'] ?: '·' }}</span>
-                            <div class="flex w-full max-w-[2rem] flex-col justify-end overflow-hidden rounded-t-sm ring-1 ring-gray-200/60 dark:ring-gray-600"
-                                style="height: {{ $barH }}%">
-                                @if ($month['active'] > 0)
-                                    <div class="w-full bg-emerald-500" style="height: {{ max(3, $activeH) }}%"></div>
-                                @endif
-                                @if ($month['pending'] > 0)
-                                    <div class="w-full bg-amber-400" style="height: {{ max(3, $pendingH) }}%"></div>
-                                @endif
-                                @if ($month['completed'] > 0)
-                                    <div class="w-full bg-sky-500" style="height: {{ max(3, $completedH) }}%"></div>
-                                @endif
-                                @if ($month['total'] === 0)
-                                    <div class="h-0.5 w-full bg-gray-200 dark:bg-gray-600"></div>
-                                @endif
-                            </div>
-                            <span class="text-[10px] text-gray-400">{{ $month['label'] }}</span>
-                        </div>
-                    @endforeach
-                </div>
+            <div class="grid grid-cols-4 divide-x divide-gray-100 dark:divide-gray-700">
+                <a href="{{ $pipeline['queue_needs_decision_url'] ?? '#' }}"
+                    class="flex flex-col items-center py-3 transition hover:bg-amber-50/60 dark:hover:bg-amber-950/20">
+                    <span class="text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ $pipeline['needs_decision'] ?? 0 }}</span>
+                    <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Decision') }}</span>
+                </a>
+                <a href="{{ $pipeline['queue_ready_to_disburse_url'] ?? '#' }}"
+                    class="flex flex-col items-center py-3 transition hover:bg-sky-50/60 dark:hover:bg-sky-950/20">
+                    <span class="text-lg font-bold tabular-nums text-sky-600 dark:text-sky-400">{{ $pipeline['ready_to_disburse'] ?? 0 }}</span>
+                    <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Disburse') }}</span>
+                </a>
+                <a href="{{ $pipeline['loans_active_url'] ?? '#' }}"
+                    class="flex flex-col items-center py-3 transition hover:bg-emerald-50/60 dark:hover:bg-emerald-950/20">
+                    <span class="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{{ $pipeline['active'] ?? 0 }}</span>
+                    <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Active') }}</span>
+                </a>
+                <a href="{{ $pipeline['loans_completed_url'] ?? '#' }}"
+                    class="flex flex-col items-center py-3 transition hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <span class="text-lg font-bold tabular-nums text-gray-500 dark:text-gray-300">{{ $pipeline['completed'] ?? 0 }}</span>
+                    <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Closed') }}</span>
+                </a>
             </div>
         </div>
     </div>
