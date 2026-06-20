@@ -46,8 +46,7 @@ final class TenantDashboardService
         protected MasterAccountsInsightsService $masterAccounts,
         protected BankAccountsInsightsService $bankAccounts,
         protected LoanDelinquencyService $delinquency,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -60,7 +59,7 @@ final class TenantDashboardService
         assert($user instanceof User);
 
         $masters = Account::master()->get()->keyBy('type');
-        $masterBalance = fn(string $type): float => (float) ($masters->get($type)?->balance ?? 0);
+        $masterBalance = fn (string $type): float => (float) ($masters->get($type)?->balance ?? 0);
 
         $loanPortfolio = $this->loanInsights->portfolioSnapshot();
         $masterSnapshot = $this->masterAccounts->snapshot();
@@ -89,6 +88,14 @@ final class TenantDashboardService
         return [
             'currency' => $currency,
             'greeting' => $this->greeting($user, $now, $attentionTotal),
+            'kpi_stats' => $this->kpiStats(
+                $activeMembers,
+                $pendingApplications,
+                $collectionGauge,
+                $loanPortfolio,
+                $loanQueueCount,
+                $openReconciliationCount,
+            ),
             'quick_actions' => $this->quickActions(
                 $pendingContributions,
                 $pendingDeposits,
@@ -364,7 +371,7 @@ final class TenantDashboardService
 
     private function openReconciliationCount(): int
     {
-        if (!Schema::hasTable('reconciliation_exceptions')) {
+        if (! Schema::hasTable('reconciliation_exceptions')) {
             return 0;
         }
 
@@ -526,6 +533,65 @@ final class TenantDashboardService
     }
 
     /**
+     * Four headline KPI cards for the dashboard strip.
+     *
+     * @param  array<string, mixed>  $collectionGauge
+     * @param  array<string, mixed>  $loanPortfolio
+     * @return list<array<string, mixed>>
+     */
+    private function kpiStats(
+        int $activeMembers,
+        int $pendingApplications,
+        array $collectionGauge,
+        array $loanPortfolio,
+        int $loanQueueCount,
+        int $openReconciliationCount,
+    ): array {
+        $activeLoans = (int) ($loanPortfolio['pipeline']['active'] ?? 0);
+
+        return Lang::formatLabeledRows([
+            [
+                'label' => Lang::ui('Active members'),
+                'value' => (string) $activeMembers,
+                'sub' => $pendingApplications > 0
+                    ? Lang::uiText(trans_choice('+:n pending application|+:n pending applications', $pendingApplications, ['n' => $pendingApplications]))
+                    : Lang::ui('No pending applications'),
+                'sub_tone' => $pendingApplications > 0 ? 'amber' : 'success',
+                'icon' => 'heroicon-o-users',
+                'url' => MemberResource::getUrl('index'),
+            ],
+            [
+                'label' => Lang::ui('Collected this cycle'),
+                'value' => $collectionGauge['value'],
+                'sub' => $collectionGauge['sub'],
+                'sub_tone' => $collectionGauge['tone'],
+                'icon' => 'heroicon-o-arrow-path-rounded-square',
+                'url' => ContributionResource::listTabUrl('collect'),
+            ],
+            [
+                'label' => Lang::ui('Active loans'),
+                'value' => (string) $activeLoans,
+                'sub' => $loanQueueCount > 0
+                    ? Lang::uiText(trans_choice(':n in queue|:n in queue', $loanQueueCount, ['n' => $loanQueueCount]))
+                    : Lang::ui('Queue clear'),
+                'sub_tone' => $loanQueueCount > 0 ? 'amber' : 'success',
+                'icon' => 'heroicon-o-banknotes',
+                'url' => LoanResource::getUrl('index'),
+            ],
+            [
+                'label' => Lang::ui('Recon exceptions'),
+                'value' => (string) $openReconciliationCount,
+                'sub' => $openReconciliationCount > 0
+                    ? Lang::ui('Require action')
+                    : Lang::ui('All clear'),
+                'sub_tone' => $openReconciliationCount > 0 ? 'danger' : 'success',
+                'icon' => 'heroicon-o-shield-exclamation',
+                'url' => ReconciliationOverviewPage::getUrl(),
+            ],
+        ]);
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     private function workspaceSections(): array
@@ -573,7 +639,7 @@ final class TenantDashboardService
         ];
 
         return array_map(
-            fn(array $section): array => [
+            fn (array $section): array => [
                 ...$section,
                 'links' => Lang::formatLabeledRows($section['links']),
             ],
