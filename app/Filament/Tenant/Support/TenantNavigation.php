@@ -11,9 +11,11 @@ use Filament\Navigation\NavigationGroup;
  */
 final class TenantNavigation
 {
-    public const GROUP_ACCOUNTS = 'Accounts';
+    /** Finance group (bank, master accounts, reconciliation, reports). */
+    public const GROUP_ACCOUNTS = 'Finance';
 
-    public const GROUP_FUND_MANAGEMENT = 'Fund Management';
+    /** Operations group (members, loans, collections, deposits, applications). */
+    public const GROUP_FUND_MANAGEMENT = 'Operations';
 
     public const GROUP_SYSTEM = 'System';
 
@@ -38,8 +40,8 @@ final class TenantNavigation
 
     public const SORT_STATEMENTS = 7;
 
-    /** Last item in Fund Management (after statements, loans cluster, etc.). */
-    public const SORT_RECONCILIATION = 8;
+    /** Sort within Finance group (after bank, master, member accounts). */
+    public const SORT_RECONCILIATION = 4;
 
     public const SORT_JOBS = 1;
 
@@ -75,8 +77,8 @@ final class TenantNavigation
     public static function groupLabel(string $key): string
     {
         return match ($key) {
-            self::GROUP_ACCOUNTS => __('Accounts'),
-            self::GROUP_FUND_MANAGEMENT => __('Fund Management'),
+            self::GROUP_ACCOUNTS => __('Finance'),
+            self::GROUP_FUND_MANAGEMENT => __('Operations'),
             self::GROUP_SYSTEM => __('System'),
             default => $key,
         };
@@ -92,11 +94,11 @@ final class TenantNavigation
     {
         return [
             self::GROUP_ACCOUNTS => NavigationGroup::make()
-                ->label(fn(): string => self::groupLabel(self::GROUP_ACCOUNTS)),
+                ->label(fn (): string => self::groupLabel(self::GROUP_ACCOUNTS)),
             self::GROUP_FUND_MANAGEMENT => NavigationGroup::make()
-                ->label(fn(): string => self::groupLabel(self::GROUP_FUND_MANAGEMENT)),
+                ->label(fn (): string => self::groupLabel(self::GROUP_FUND_MANAGEMENT)),
             self::GROUP_SYSTEM => NavigationGroup::make()
-                ->label(fn(): string => self::groupLabel(self::GROUP_SYSTEM)),
+                ->label(fn (): string => self::groupLabel(self::GROUP_SYSTEM)),
         ];
     }
 }

@@ -36,7 +36,21 @@ class ContributionResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
 
+    protected static ?string $navigationLabel = 'Collections';
+
     protected static ?int $navigationSort = TenantNavigation::SORT_CONTRIBUTIONS;
+
+    public static function getNavigationBadge(): ?string
+    {
+        $count = Contribution::pending()->count();
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'warning';
+    }
 
     /**
      * @return list<string>

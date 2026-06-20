@@ -455,7 +455,7 @@
     "Collection": "التحصيل",
     "Collection rate": "معدل التحصيل",
     "Collection status": "حالة التحصيل",
-    "Collections": "عدد التحصيلات",
+    "Collections": "التحصيل",
     "Collections are current": "التحصيلات محدّثة",
     "Collections vs expected": "التحصيلات مقابل المتوقع",
     "Comments / instructions": "تعليقات / تعليمات",
@@ -2098,5 +2098,9 @@
     "••••••••": "••••••••",
     "…and :count more.": "…و :count أخرى.",
     "≥90%": "≥90%",
-    "✓ Saved at :time": "✓ حُفظ في :time"
+    "✓ Saved at :time": "✓ حُفظ في :time",
+    "Finance": "المالية",
+    "Operations": "العمليات",
+    "Bank clearing": "المقاصة البنكية",
+    "Bank Clearing": "المقاصة البنكية"
 }

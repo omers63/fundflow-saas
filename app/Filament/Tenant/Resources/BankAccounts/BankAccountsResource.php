@@ -31,7 +31,7 @@ class BankAccountsResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_ACCOUNTS;
 
-    protected static ?string $navigationLabel = 'Bank Accounts';
+    protected static ?string $navigationLabel = 'Bank clearing';
 
     protected static ?string $modelLabel = 'Bank statement';
 

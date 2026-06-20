@@ -40,7 +40,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     protected static ?string $slug = 'reconciliation';
 
-    protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
+    protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_ACCOUNTS;
 
     protected static ?int $navigationSort = TenantNavigation::SORT_RECONCILIATION;
 
@@ -65,7 +65,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public static function getNavigationBadge(): ?string
     {
-        if (!Schema::hasTable('reconciliation_exceptions')) {
+        if (! Schema::hasTable('reconciliation_exceptions')) {
             return null;
         }
 
@@ -95,7 +95,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public function mount(): void
     {
-        if (!in_array($this->sideTab, ['overview', 'exceptions', 'snapshots', 'methodology'], true)) {
+        if (! in_array($this->sideTab, ['overview', 'exceptions', 'snapshots', 'methodology'], true)) {
             $this->sideTab = 'overview';
         }
     }
@@ -116,7 +116,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public function getOpenExceptionCount(): int
     {
-        if (!Schema::hasTable('reconciliation_exceptions')) {
+        if (! Schema::hasTable('reconciliation_exceptions')) {
             return 0;
         }
 
@@ -129,7 +129,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     protected function getHeaderActions(): array
     {
-        $canRun = fn(): bool => auth('tenant')->user()?->is_admin === true;
+        $canRun = fn (): bool => auth('tenant')->user()?->is_admin === true;
 
         $bankSchema = [
             TextInput::make('declared_bank_balance')
@@ -179,7 +179,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
                 ->schema($bankSchema)
                 ->modalHeading(__('Run real-time reconciliation'))
                 ->modalDescription(__('Recomputes all checks as of this moment and stores a snapshot tagged realtime.'))
-                ->action(fn(array $data) => $this->executeRun(ReconciliationSnapshot::MODE_REALTIME, $this->optionsFromActionData($data))),
+                ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_REALTIME, $this->optionsFromActionData($data))),
 
             Action::make('run_daily')
                 ->label(__('Daily snapshot'))
@@ -189,7 +189,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
                 ->schema($bankSchema)
                 ->modalHeading(__('Record daily snapshot'))
                 ->modalDescription(__('Uses yesterday’s calendar window (app timezone) for period metrics, plus full ledger checks as of now.'))
-                ->action(fn(array $data) => $this->executeRun(ReconciliationSnapshot::MODE_DAILY, $this->optionsFromActionData($data))),
+                ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_DAILY, $this->optionsFromActionData($data))),
 
             Action::make('run_monthly')
                 ->label(__('Monthly snapshot'))
@@ -199,7 +199,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
                 ->schema($bankSchema)
                 ->modalHeading(__('Record monthly snapshot'))
                 ->modalDescription(__('Uses the previous calendar month for period metrics, plus full ledger checks as of now.'))
-                ->action(fn(array $data) => $this->executeRun(ReconciliationSnapshot::MODE_MONTHLY, $this->optionsFromActionData($data))),
+                ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_MONTHLY, $this->optionsFromActionData($data))),
         ];
     }
 
@@ -244,7 +244,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
         }
 
         $snapshot = ReconciliationSnapshot::query()->findOrFail($id);
-        $filename = 'reconciliation-snapshot-' . $snapshot->id . '-' . $snapshot->as_of->format('Y-m-d-His') . '.json';
+        $filename = 'reconciliation-snapshot-'.$snapshot->id.'-'.$snapshot->as_of->format('Y-m-d-His').'.json';
 
         return response()->streamDownload(
             function () use ($snapshot): void {
@@ -331,7 +331,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     protected function authorizeExport(): void
     {
-        if (!$this->canExportDownloads()) {
+        if (! $this->canExportDownloads()) {
             abort(403);
         }
     }
