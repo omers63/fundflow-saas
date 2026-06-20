@@ -1,0 +1,2 @@
+member_number,name,email,monthly_contribution_amount,cutoff_cash_balance,cutoff_fund_balance
+RUN-1,Run Member,run-member@fund.test,1000,0,0

@@ -1,0 +1,3 @@
+name,email,mobile_phone,iban,transfer_amount,transfer_date
+Fee Applicant,fee.csv@example.test,0501000777,SA030000000000101000000077,150,2026-03-01
+Default Fee,default.fee@example.test,0501000778,SA030000000000101000000078,,
