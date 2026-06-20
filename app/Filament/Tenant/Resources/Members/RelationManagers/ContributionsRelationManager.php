@@ -62,7 +62,7 @@ class ContributionsRelationManager extends RelationManager
                             ? LateSettledArrearsTableStyling::eligibilityHint()
                             : null),
                     TextColumn::make('posted_at')
-                        ->label('Posted')
+                        ->label(__('Posted'))
                         ->dateTime()
                         ->placeholder(__('—'))
                         ->sortable(),
@@ -70,9 +70,9 @@ class ContributionsRelationManager extends RelationManager
                 ->filters([
                     SelectFilter::make('status')
                         ->options([
-                            'pending' => 'Pending',
-                            'posted' => 'Posted',
-                            'failed' => 'Failed',
+                            'pending' => __('Pending'),
+                            'posted' => __('Posted'),
+                            'failed' => __('Failed'),
                         ]),
                     DateColumnRangeFilter::make('period', 'Contribution period'),
                     DateColumnRangeFilter::make('posted_at', 'Posted'),

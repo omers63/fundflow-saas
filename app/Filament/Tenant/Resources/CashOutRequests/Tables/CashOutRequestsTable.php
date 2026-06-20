@@ -52,9 +52,9 @@ class CashOutRequestsTable
                 ->filters([
                     SelectFilter::make('status')
                         ->options([
-                            'pending' => 'Pending',
-                            'accepted' => 'Accepted',
-                            'rejected' => 'Rejected',
+                            'pending' => __('Pending'),
+                            'accepted' => __('Accepted'),
+                            'rejected' => __('Rejected'),
                         ])
                         ->default('pending'),
                     SelectFilter::make('member_id')

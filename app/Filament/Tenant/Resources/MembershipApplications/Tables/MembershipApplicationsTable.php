@@ -62,9 +62,9 @@ class MembershipApplicationsTable
                 ->filters([
                     SelectFilter::make('status')
                         ->options([
-                            'pending' => 'Pending',
-                            'approved' => 'Approved',
-                            'rejected' => 'Rejected',
+                            'pending' => __('Pending'),
+                            'approved' => __('Approved'),
+                            'rejected' => __('Rejected'),
                         ]),
                     DateColumnRangeFilter::make('created_at', 'Submitted'),
                 ])

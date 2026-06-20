@@ -62,10 +62,10 @@ class ContributionsTable
                 ->filters([
                     SelectFilter::make('status')
                         ->options([
-                            'pending' => 'Pending',
-                            'posted' => 'Posted',
-                            'failed' => 'Failed',
-                            'waived' => 'Waived',
+                            'pending' => __('Pending'),
+                            'posted' => __('Posted'),
+                            'failed' => __('Failed'),
+                            'waived' => __('Waived'),
                         ]),
                     SelectFilter::make('member_id')
                         ->label('Member')
