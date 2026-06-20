@@ -44,6 +44,17 @@ class ContributionsTable
                         ->description(fn (Contribution $record): ?string => $record->status === 'failed'
                             ? __('Insufficient member cash when posting was attempted.')
                             : null),
+                    TextColumn::make('late_fee_tier')
+                        ->label(__('Late tier'))
+                        ->badge()
+                        ->formatStateUsing(fn (?int $state): string => $state ? __('Tier :n', ['n' => $state]) : '—')
+                        ->color(fn (?int $state): string => match (true) {
+                            $state === null || $state === 0 => 'gray',
+                            $state === 1 => 'warning',
+                            default => 'danger',
+                        })
+                        ->toggleable(isToggledHiddenByDefault: true)
+                        ->sortable(),
                     TextColumn::make('posted_at')
                         ->dateTime()
                         ->placeholder(__('Not posted')),

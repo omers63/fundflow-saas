@@ -124,6 +124,20 @@ class ListLoanQueue extends ListRecords
                     ->label(__('Applied'))
                     ->dateTime()
                     ->sortable(),
+                TextColumn::make('waiting_days')
+                    ->label(__('Waiting'))
+                    ->state(fn (Loan $record): string => $record->applied_at
+                        ? $record->applied_at->diffInDays(now()).'d'
+                        : '—')
+                    ->badge()
+                    ->color(fn (Loan $record): string => match (true) {
+                        $record->is_emergency => 'danger',
+                        ! $record->applied_at => 'gray',
+                        $record->applied_at->diffInDays(now()) >= 7 => 'danger',
+                        $record->applied_at->diffInDays(now()) >= 3 => 'warning',
+                        default => 'success',
+                    })
+                    ->sortable(query: fn ($query, string $direction) => $query->orderBy('applied_at', $direction === 'asc' ? 'desc' : 'asc')),
                 TextColumn::make('member.name')
                     ->label(__('Member'))
                     ->searchable()
