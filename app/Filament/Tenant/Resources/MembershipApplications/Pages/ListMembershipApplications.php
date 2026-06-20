@@ -4,6 +4,7 @@ namespace App\Filament\Tenant\Resources\MembershipApplications\Pages;
 
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Filament\Tenant\Widgets\MembershipApplicationInsightsWidget;
+use App\Models\Tenant\MembershipApplication;
 use App\Services\MembershipApplicationImportService;
 use App\Support\BusinessDay;
 use App\Support\FilamentStoredUploadPath;
@@ -14,6 +15,8 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Schemas\Components\Tabs\Tab;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
 use Livewire\Component;
@@ -148,6 +151,39 @@ class ListMembershipApplications extends ListRecords
                 ->url(MembershipApplicationResource::getUrl('create'))
                 ->visible(fn (): bool => MembershipApplicationResource::canCreate()),
         ];
+    }
+
+    public function getTabs(): array
+    {
+        $pendingCount = MembershipApplication::pending()->count();
+        $approvedCount = MembershipApplication::query()->where('status', 'approved')->count();
+        $rejectedCount = MembershipApplication::query()->where('status', 'rejected')->count();
+
+        return [
+            'all' => Tab::make(MembershipApplicationResource::listTabLabel('all')),
+            'pending' => Tab::make(MembershipApplicationResource::listTabLabel('pending'))
+                ->badge($pendingCount > 0 ? (string) $pendingCount : null)
+                ->badgeColor('warning'),
+            'approved' => Tab::make(MembershipApplicationResource::listTabLabel('approved'))
+                ->badge($approvedCount > 0 ? (string) $approvedCount : null)
+                ->badgeColor('success'),
+            'rejected' => Tab::make(MembershipApplicationResource::listTabLabel('rejected'))
+                ->badge($rejectedCount > 0 ? (string) $rejectedCount : null)
+                ->badgeColor('danger'),
+        ];
+    }
+
+    protected function getTableQuery(): Builder
+    {
+        $query = parent::getTableQuery();
+        $tab = MembershipApplicationResource::resolveListTab();
+
+        return match ($tab) {
+            'pending' => $query->where('status', 'pending'),
+            'approved' => $query->where('status', 'approved'),
+            'rejected' => $query->where('status', 'rejected'),
+            default => $query,
+        };
     }
 
     protected function getHeaderWidgets(): array

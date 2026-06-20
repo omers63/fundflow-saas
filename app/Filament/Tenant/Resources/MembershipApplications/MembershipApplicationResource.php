@@ -17,6 +17,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Livewire\Component;
+use Livewire\Livewire;
 
 class MembershipApplicationResource extends Resource
 {
@@ -31,6 +32,37 @@ class MembershipApplicationResource extends Resource
     protected static ?int $navigationSort = TenantNavigation::SORT_APPLICATIONS;
 
     protected static ?string $navigationLabel = 'Applications';
+
+    /**
+     * @return list<string>
+     */
+    public static function listTabKeys(): array
+    {
+        return ['all', 'pending', 'approved', 'rejected'];
+    }
+
+    public static function listTabLabel(string $tab): string
+    {
+        return match ($tab) {
+            'pending' => __('Pending'),
+            'approved' => __('Approved'),
+            'rejected' => __('Rejected'),
+            default => __('All applications'),
+        };
+    }
+
+    public static function resolveListTab(): string
+    {
+        $livewire = Livewire::current();
+
+        if ($livewire instanceof ListMembershipApplications && filled($livewire->activeTab)) {
+            $tab = $livewire->activeTab;
+        } else {
+            $tab = request()->string('tab')->toString() ?: 'all';
+        }
+
+        return in_array($tab, self::listTabKeys(), true) ? $tab : 'all';
+    }
 
     public static function canCreate(): bool
     {
@@ -94,7 +126,7 @@ class MembershipApplicationResource extends Resource
         );
 
         $livewire->js(
-            'setTimeout(() => window.Livewire.getByName(' . $targetName . ').forEach(w => w.$refresh()), 0)'
+            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
         );
     }
 }
