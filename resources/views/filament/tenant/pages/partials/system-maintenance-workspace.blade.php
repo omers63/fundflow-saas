@@ -27,6 +27,11 @@
             </header>
 
             <div class="ff-maintenance-panel__body space-y-4 text-sm text-gray-600 dark:text-gray-300">
+                @include('filament.tenant.partials.audit-system.workspace-actions', [
+                    'names' => ['saveToServer', 'download'],
+                    'class' => 'pb-1',
+                ])
+
                 <div class="grid gap-4 sm:grid-cols-2">
                     <div class="ff-maintenance-callout">
                         <p class="font-medium text-gray-800 dark:text-gray-200">{{ __('SQLite') }}</p>
@@ -68,13 +73,7 @@
                         {{ __('Purge database (destructive)') }}
                     </h2>
                     <p class="ff-maintenance-danger-banner__body">
-                        {{ __('Purge removes') }}
-                        <strong>{{ __('all rows') }}</strong>
-                        {{ __('from every table that does') }}
-                        <strong>{{ __('not') }}</strong>
-                        {{ __('have a') }}
-                        <code class="rounded bg-red-50 px-1 text-xs dark:bg-red-950/30">deleted_at</code>
-                        {{ __('column, except protected system tables (users, permissions, migrations, queues, cache, sessions).') }}
+                        {{ __('Purge removes all rows from every table that does not have a deleted_at column, except protected system tables (users, permissions, migrations, queues, cache, sessions).') }}
                     </p>
                 </div>
             </div>
@@ -170,5 +169,10 @@
                 <code class="rounded bg-gray-200 px-1 dark:bg-gray-700">php artisan db:seed</code>
                 {{ __('to restore defaults.') }}
             </p>
+
+            @include('filament.tenant.partials.audit-system.workspace-actions', [
+                'names' => ['purge'],
+                'class' => 'flex justify-center pt-2',
+            ])
         </section>
     </div>

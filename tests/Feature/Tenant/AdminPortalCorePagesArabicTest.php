@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Filament\Tenant\Pages\AuditSystemPage;
 use App\Filament\Tenant\Pages\Dashboard;
+use App\Filament\Tenant\Pages\LegacyMigrationPage;
 use App\Filament\Tenant\Pages\ReportsPage;
 use App\Filament\Tenant\Pages\Settings;
 use App\Models\Tenant\User;
@@ -28,6 +29,11 @@ test('admin portal core page translation keys have arabic entries', function ():
         'Custom report builder',
         'Audit trail, notification delivery, scheduled jobs, maintenance, migration, and year-end close.',
         'Standard exports and shortcuts to portfolio, collection, and reconciliation views.',
+        'Choose strategy, cut-off date, default password, and CSV files. Wait until each upload finishes before preview or run.',
+        'Use the actions above to preview, classify, dry run, or run the migration.',
+        'Purge removes all rows from every table that does not have a deleted_at column, except protected system tables (users, permissions, migrations, queues, cache, sessions).',
+        'Migration steps',
+        'Readiness report',
     ];
 
     /** @var array<string, string> $arabic */
@@ -63,6 +69,14 @@ test('settings reports audit and dashboard render primary arabic headings', func
         ->assertSuccessful()
         ->assertSee(__('Audit log', locale: 'ar'), false)
         ->assertSee(__('Fund audit log', locale: 'ar'), false);
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(LegacyMigrationPage::class, ['embedded' => true])
+        ->call('goToStep', 5)
+        ->assertSuccessful()
+        ->assertSee(__('Migration steps', locale: 'ar'), false)
+        ->assertSee(__('Upload files & settings', locale: 'ar'), false)
+        ->assertSee(__('Preview', locale: 'ar'), false);
 
     Livewire::actingAs($admin, 'tenant')
         ->test(Dashboard::class)

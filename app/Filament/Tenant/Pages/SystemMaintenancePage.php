@@ -83,6 +83,14 @@ class SystemMaintenancePage extends Page
 
     protected function getHeaderActions(): array
     {
+        return [];
+    }
+
+    /**
+     * @return array<Action>
+     */
+    protected function workspacePanelActions(): array
+    {
         return [
             Action::make('saveToServer')
                 ->label(__('Save backup to server'))
@@ -127,8 +135,8 @@ class SystemMaintenancePage extends Page
                 ->requiresConfirmation()
                 ->modalHeading(__('Purge tables without soft deletes?'))
                 ->modalDescription(
-                    __('All rows in each listed table will be permanently removed. ').
-                    __('Tables with a deleted_at column are skipped. ').
+                    __('All rows in each listed table will be permanently removed. ') .
+                    __('Tables with a deleted_at column are skipped. ') .
                     __('Users, permissions, sessions, queues, cache, and migrations are always preserved.')
                 )
                 ->schema([

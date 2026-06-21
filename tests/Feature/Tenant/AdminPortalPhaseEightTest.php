@@ -338,7 +338,11 @@ test('embedded migration panel renders wizard steps', function () {
     Livewire::actingAs($admin, 'tenant')
         ->test(LegacyMigrationPage::class, ['embedded' => true])
         ->assertSuccessful()
+        ->assertSee(__('Recommended approach'))
+        ->assertDontSee(__('Upload files & settings'))
+        ->call('goToStep', 5)
         ->assertSee(__('Upload files & settings'))
+        ->assertSeeHtml('wire:click="mountAction(\'previewMigration\'')
         ->assertSet('embedded', true);
 });
 
