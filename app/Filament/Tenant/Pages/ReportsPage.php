@@ -10,6 +10,7 @@ use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
 use App\Filament\Tenant\Support\TenantNavigation;
+use App\Services\Tenant\TenantAdminReportExportService;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -57,16 +58,24 @@ class ReportsPage extends Page
         return __('Standard exports and shortcuts to portfolio, collection, and reconciliation views.');
     }
 
-    public function generateCustomReport(): void
+    public function generateCustomReport(): mixed
     {
-        Notification::make()
-            ->title(__('Report queued'))
-            ->body(__('Custom :format export for :type is not fully wired yet. Use the report cards above for live exports.', [
-                'format' => strtoupper($this->reportFormat),
-                'type' => $this->reportType,
-            ]))
-            ->info()
-            ->send();
+        try {
+            return app(TenantAdminReportExportService::class)->download(
+                type: $this->reportType,
+                format: $this->reportFormat,
+                from: $this->reportFrom,
+                until: $this->reportUntil,
+            );
+        } catch (\InvalidArgumentException $exception) {
+            Notification::make()
+                ->title(__('Report export failed'))
+                ->body($exception->getMessage())
+                ->danger()
+                ->send();
+
+            return null;
+        }
     }
 
     /**
@@ -112,7 +121,7 @@ class ReportsPage extends Page
             ],
             [
                 'title' => __('Guarantor exposure report'),
-                'description' => __('Members guaranteeing active loans and outstanding exposure.'),
+                'description' => __('Export guarantor exposure or open the delinquency guarantor tab.'),
                 'icon' => 'heroicon-o-shield-check',
                 'url' => LoanResource::listUrl('guarantor_exposure'),
                 'badge' => null,

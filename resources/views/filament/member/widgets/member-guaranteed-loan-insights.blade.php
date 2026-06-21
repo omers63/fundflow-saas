@@ -72,7 +72,7 @@
                                     <span class="font-medium text-gray-900 dark:text-white">{{ $row['borrower'] }}</span>
                                     · {{ $row['status_label'] }} · {{ $row['liability_label'] }}
                                 </span>
-                                <span class="shrink-0 font-semibold tabular-nums">{{ $row['amount'] }}</span>
+                                <x-ff-money-text :text="$row['amount']" class="shrink-0 font-semibold tabular-nums" />
                             </a>
                         </li>
                     @endforeach

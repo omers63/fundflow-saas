@@ -30,6 +30,7 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\ReconciliationException;
+use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Support\BusinessDay;
@@ -157,6 +158,7 @@ final class TenantDashboardService
             ->sum('amount');
         $poolTotal = $masterCash + $masterFund;
         $solvency = $loanExposure > 0.01 ? round($poolTotal / $loanExposure, 2) : null;
+        $sparkline = $this->poolHealthSparkline($poolTotal);
 
         return [
             'master_cash' => $masterCash,
@@ -167,9 +169,79 @@ final class TenantDashboardService
             'fund_drift' => $fundDrift,
             'has_drift' => $hasDrift,
             'loan_exposure' => $loanExposure,
+            'pool_total' => $poolTotal,
             'solvency_ratio' => $solvency,
             'reconciliation_url' => ReconciliationOverviewPage::getUrl(),
-            'sparkline' => $this->masterAccounts->snapshot()['sparkline'] ?? [],
+            'sparkline' => $sparkline['values'],
+            'sparkline_max' => $sparkline['max'],
+            'sparkline_start' => $sparkline['start'],
+            'sparkline_end' => $sparkline['end'],
+        ];
+    }
+
+    /**
+     * End-of-day master cash + fund totals for the last 30 calendar days (oldest → newest).
+     *
+     * @return array{values: list<float>, max: float, start: float, end: float}
+     */
+    private function poolHealthSparkline(float $currentPoolTotal): array
+    {
+        $now = BusinessDay::now();
+        $windowStart = $now->copy()->subDays(29)->startOfDay();
+
+        $accountIds = Account::query()
+            ->where('is_master', true)
+            ->whereIn('type', ['cash', 'fund'])
+            ->pluck('id');
+
+        if ($accountIds->isEmpty()) {
+            $flat = array_fill(0, 30, round($currentPoolTotal, 2));
+
+            return [
+                'values' => $flat,
+                'max' => max(1.0, $currentPoolTotal),
+                'start' => $flat[0],
+                'end' => $flat[29],
+            ];
+        }
+
+        /** @var array<string, float> $dailyNet */
+        $dailyNet = [];
+
+        Transaction::query()
+            ->whereIn('account_id', $accountIds)
+            ->where('transacted_at', '>=', $windowStart)
+            ->get(['type', 'amount', 'transacted_at'])
+            ->each(function (Transaction $transaction) use (&$dailyNet): void {
+                if ($transaction->transacted_at === null) {
+                    return;
+                }
+
+                $day = Carbon::parse((string) $transaction->transacted_at)->toDateString();
+                $signed = $transaction->type === 'credit'
+                    ? (float) $transaction->amount
+                    : -(float) $transaction->amount;
+                $dailyNet[$day] = ($dailyNet[$day] ?? 0.0) + $signed;
+            });
+
+        $values = [];
+        $pool = $currentPoolTotal;
+
+        for ($offset = 0; $offset < 30; $offset++) {
+            $day = $now->copy()->subDays($offset)->toDateString();
+            $values[29 - $offset] = round($pool, 2);
+            $pool -= $dailyNet[$day] ?? 0.0;
+        }
+
+        ksort($values);
+
+        $values = array_values($values);
+
+        return [
+            'values' => $values,
+            'max' => max(1.0, max($values)),
+            'start' => $values[0],
+            'end' => $values[array_key_last($values)],
         ];
     }
 
@@ -230,7 +302,7 @@ final class TenantDashboardService
 
             return [
                 ...$item,
-                'amount' => InsightFormatter::money($masterBalance($item['type'])),
+                'amount' => $masterBalance($item['type']),
                 'url' => $account
                     ? MasterAccountResource::getUrl('view', ['record' => $account])
                     : MasterAccountResource::getUrl('index'),
@@ -659,7 +731,7 @@ final class TenantDashboardService
                             ->take(2)
                             ->implode('')
                     ) : '??',
-                    'amount' => InsightFormatter::money((float) $loan->amount_requested),
+                    'amount' => (float) $loan->amount_requested,
                     'is_emergency' => $loan->is_emergency,
                     'queue_position' => $loan->queue_position ?? 0,
                     'url' => LoanResource::getUrl('view', ['record' => $loan]),
@@ -803,7 +875,7 @@ final class TenantDashboardService
                 'pct' => $pct,
                 'bar_color' => $bar,
                 'tone' => $tone,
-                'available' => InsightFormatter::money($tier->available_amount),
+                'available_amount' => (float) $tier->available_amount,
                 'url' => FundTierResource::getUrl('index'),
             ];
         })->all();

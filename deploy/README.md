@@ -39,3 +39,31 @@ ss -tlnp | grep 8080
 ```
 
 Also see **`docs/production-runbook.md`** (Reverb section) for nginx WebSockets and deploy checklist.
+
+## Cron — Laravel scheduler
+
+| File | Purpose |
+|------|---------|
+| `cron/fundflow-scheduler` | Runs `php artisan schedule:run` every minute as `www-data` |
+
+**Full guide:** [`docs/production-runbook.md`](../docs/production-runbook.md#scheduled-fund-jobs)
+
+### Quick install
+
+```bash
+cd /var/www/fundflow-saas
+touch storage/logs/scheduler.log
+sudo chown www-data:www-data storage/logs/scheduler.log
+sudo cp deploy/cron/fundflow-scheduler /etc/cron.d/fundflow-scheduler
+sudo chmod 644 /etc/cron.d/fundflow-scheduler
+sudo chown root:root /etc/cron.d/fundflow-scheduler
+```
+
+Verify:
+
+```bash
+cat /etc/cron.d/fundflow-scheduler
+cd /var/www/fundflow-saas && php artisan schedule:list
+# After ~1 minute:
+tail -n 20 storage/logs/scheduler.log
+```

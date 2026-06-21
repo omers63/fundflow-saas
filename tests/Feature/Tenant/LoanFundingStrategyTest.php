@@ -2,6 +2,7 @@
 
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
@@ -26,6 +27,8 @@ beforeEach(function () {
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 200_000, 'is_master' => true]);
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 200_000, 'is_master' => true]);
     Account::create(['type' => 'bank', 'name' => 'Master Bank', 'balance' => 0, 'is_master' => true]);
+
+    FundTier::query()->update(['percentage' => 100]);
 
     $this->accounting = app(AccountingService::class);
     $this->lifecycle = app(LoanLifecycleService::class);
@@ -180,4 +183,57 @@ test('member fund top-up uses available fund balance for member portion', functi
         ->and((float) $loan->master_portion)->toBe(0.0)
         ->and($member->getFundBalance())->toBe(2000.0)
         ->and($member->getCashBalance())->toBe(10_000.0);
+});
+
+test('apply rejects disabled funding strategy', function () {
+    LoanSettings::save(['allow_funding_strategy_split_percentage' => false]);
+
+    $member = createEligibleMemberForFundingTest($this->accounting);
+
+    expect(fn () => $this->lifecycle->applyForLoan(
+        $member,
+        10_000,
+        'Education',
+        fundingStrategy: LoanFundingStrategy::SPLIT_PERCENTAGE,
+    ))->toThrow(InvalidArgumentException::class);
+});
+
+test('apply clears cash-out when tenant disables excess fund cash-out', function () {
+    LoanSettings::save([
+        'member_funding_split_pct' => 50,
+        'allow_excess_fund_cash_out' => false,
+    ]);
+
+    $member = createEligibleMemberForFundingTest($this->accounting);
+
+    $loan = $this->lifecycle->applyForLoan(
+        $member,
+        10_000,
+        'Split loan',
+        fundingStrategy: LoanFundingStrategy::SPLIT_PERCENTAGE,
+        cashOutExcessFund: true,
+    );
+
+    expect($loan->cash_out_excess_fund)->toBeFalse();
+});
+
+test('split strategy without cash-out keeps excess in fund at disbursement', function () {
+    LoanSettings::save(['member_funding_split_pct' => 50]);
+
+    $member = createEligibleMemberForFundingTest($this->accounting, 15_000);
+
+    $loan = $this->lifecycle->applyForLoan(
+        $member,
+        10_000,
+        'Keep excess',
+        fundingStrategy: LoanFundingStrategy::SPLIT_PERCENTAGE,
+        cashOutExcessFund: false,
+    );
+    $this->loanService->approveLoan($loan, 10_000);
+    $this->loanService->disburseLoan($loan);
+
+    $member->refresh();
+
+    expect((float) $member->cashAccount->balance)->toBe(10_000.0)
+        ->and((float) $member->fundAccount->balance)->toBe(5000.0);
 });

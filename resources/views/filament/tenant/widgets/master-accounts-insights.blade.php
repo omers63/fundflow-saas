@@ -76,12 +76,12 @@
                         <div class="flex items-center justify-between text-xs">
                             <span class="text-gray-600 dark:text-gray-300">{{ __('Cash') }}</span>
                             <span
-                                class="font-semibold tabular-nums">{{ \App\Support\Insights\InsightFormatter::money($d['member_cash_total']) }}</span>
+                                class="font-semibold tabular-nums">{!! \App\Support\Insights\InsightFormatter::moneyMarkup($d['member_cash_total']) !!}</span>
                         </div>
                         <div class="flex items-center justify-between text-xs">
                             <span class="text-gray-600 dark:text-gray-300">{{ __('Fund') }}</span>
                             <span
-                                class="font-semibold tabular-nums">{{ \App\Support\Insights\InsightFormatter::money($d['member_fund_total']) }}</span>
+                                class="font-semibold tabular-nums">{!! \App\Support\Insights\InsightFormatter::moneyMarkup($d['member_fund_total']) !!}</span>
                         </div>
                     </div>
                 </div>
@@ -95,9 +95,9 @@
                         {!! $netSign . (\App\Filament\Support\MoneyDisplay::html(abs($d['activity_net']), $d['currency'], precision: 0)?->toHtml() ?? '') !!}
                     </p>
                     <p class="text-[10px] text-gray-400">
-                        {{ \App\Support\Insights\InsightFormatter::money($d['activity_credits']) }}
+                        {!! \App\Support\Insights\InsightFormatter::moneyMarkup($d['activity_credits']) !!}
                         {{ __('in') }} ·
-                        {{ \App\Support\Insights\InsightFormatter::money($d['activity_debits']) }}
+                        {!! \App\Support\Insights\InsightFormatter::moneyMarkup($d['activity_debits']) !!}
                         {{ __('out') }}
                     </p>
                 </div>

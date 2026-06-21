@@ -43,7 +43,7 @@ class LocalizationServiceProvider extends ServiceProvider
                 ])
                 ->circular()
                 ->flagsOnly()
-                ->excludes(['tenant'])
+                ->excludes(['tenant', 'member'])
                 ->visible(
                     insidePanels: true,
                     outsidePanels: fn (): bool => ! ShowsFundPublicShell::onTenantFilamentAuthPage()

@@ -34,15 +34,15 @@ final class DependentAllocationHistory
                 ? '<span class="text-emerald-600 font-bold">↑</span>'
                 : '<span class="text-amber-600 font-bold">↓</span>';
             $delta = $change->isIncrease()
-                ? '<span class="text-emerald-600">+'.e(MoneyDisplay::format(abs($change->delta()), $currency) ?? '').'</span>'
-                : '<span class="text-amber-600">−'.e(MoneyDisplay::format(abs($change->delta()), $currency) ?? '').'</span>';
+                ? '<span class="text-emerald-600">+'.(MoneyDisplay::html(abs($change->delta()), $currency)?->toHtml() ?? '').'</span>'
+                : '<span class="text-amber-600">−'.(MoneyDisplay::html(abs($change->delta()), $currency)?->toHtml() ?? '').'</span>';
             $by = e($change->changedBy?->name ?? __('System'));
             $note = $change->note ? '<br><span class="text-gray-400 text-xs">'.e($change->note).'</span>' : '';
             $date = $change->created_at->locale(app()->getLocale())->translatedFormat('d M Y H:i');
 
-            $changeCell = $dir.' '.e(MoneyDisplay::format((float) $change->old_amount, $currency) ?? '')
+            $changeCell = $dir.' '.(MoneyDisplay::html((float) $change->old_amount, $currency)?->toHtml() ?? '')
                 .' → '
-                .e(MoneyDisplay::format((float) $change->new_amount, $currency) ?? '');
+                .(MoneyDisplay::html((float) $change->new_amount, $currency)?->toHtml() ?? '');
 
             $rows .= "
                 <tr class=\"border-b border-gray-100 dark:border-gray-700\">
@@ -58,10 +58,10 @@ final class DependentAllocationHistory
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="bg-gray-50 dark:bg-gray-800 text-xs uppercase text-gray-500">
-                            <th class="py-2 px-3 text-left">'.e(__('Date')).'</th>
-                            <th class="py-2 px-3 text-left">'.e(__('Change')).'</th>
-                            <th class="py-2 px-3 text-left">'.e(__('Delta')).'</th>
-                            <th class="py-2 px-3 text-left">'.e(__('Changed by'))."</th>
+                            <th class="py-2 px-3 text-start">'.e(__('Date')).'</th>
+                            <th class="py-2 px-3 text-start">'.e(__('Change')).'</th>
+                            <th class="py-2 px-3 text-start">'.e(__('Delta')).'</th>
+                            <th class="py-2 px-3 text-start">'.e(__('Changed by'))."</th>
                         </tr>
                     </thead>
                     <tbody>{$rows}</tbody>

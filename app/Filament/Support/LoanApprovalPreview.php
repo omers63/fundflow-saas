@@ -8,6 +8,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanTier;
+use App\Support\LoanFundExcessDisposition;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use Illuminate\Support\HtmlString;
@@ -55,19 +56,30 @@ final class LoanApprovalPreview
             [__('Fund tier pool'), MoneyDisplay::format($declaredPool, $currency) ?? ''],
             [__('Master fund balance'), MoneyDisplay::format($masterFundBal, $currency) ?? ''],
             [__('Funding strategy'), LoanFundingStrategy::options()[$strategy] ?? $strategy],
+        ];
+
+        if ($strategy === LoanFundingStrategy::SPLIT_PERCENTAGE) {
+            $rows[] = [__('Remaining fund balance'), LoanFundExcessDisposition::labelFromCashOutFlag((bool) $loan->cash_out_excess_fund)];
+        }
+
+        $rows = array_merge($rows, [
             [__('Member fund balance'), MoneyDisplay::format($fundBal, $currency) ?? ''],
             [__('Member portion'), MoneyDisplay::format($memberPortion, $currency) ?? ''],
             [__('Master portion'), MoneyDisplay::format($masterPortion, $currency) ?? ''],
             [__('Settlement top-up (:pct%)', ['pct' => $threshold * 100]), MoneyDisplay::format($settleAmt, $currency) ?? ''],
             [__('Monthly installment'), MoneyDisplay::format($minInstall, $currency) ?? ''],
             [__('Repayment period'), __(':count months', ['count' => $count])],
-        ];
+        ]);
 
         $body = '';
         foreach ($rows as [$label, $value]) {
+            $valueCell = is_numeric($value)
+                ? (MoneyDisplay::html((float) $value, $currency)?->toHtml() ?? e('—'))
+                : (MoneyDisplay::markupForDisplay(is_string($value) ? $value : (string) $value, $currency));
+
             $body .= '<tr class="border-b border-gray-100 dark:border-white/10">'
                 .'<td class="py-2 pl-3 pr-3 text-gray-500 dark:text-gray-400">'.e($label).'</td>'
-                .'<td class="py-2 pr-3 text-right tabular-nums text-gray-900 dark:text-white">'.e($value).'</td>'
+                .'<td class="py-2 pe-3 text-end tabular-nums text-gray-900 dark:text-white">'.$valueCell.'</td>'
                 .'</tr>';
         }
 

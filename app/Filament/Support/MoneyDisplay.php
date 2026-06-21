@@ -11,6 +11,10 @@ use Illuminate\Support\Number;
 
 final class MoneyDisplay
 {
+    private const LTR_ISOLATE_START = "\u{2066}";
+
+    private const POP_DIRECTIONAL_ISOLATE = "\u{2069}";
+
     /**
      * Western-digit numeric portion only (no currency symbol).
      */
@@ -35,16 +39,52 @@ final class MoneyDisplay
 
     public static function symbolSpanClass(?string $currency = null): string
     {
+        if (self::usesSvgSymbol($currency)) {
+            return 'ff-sar-symbol ff-sar-symbol--svg';
+        }
+
         return str_contains(self::symbol($currency), "\u{20C1}")
             ? 'ff-sar-symbol ff-sar-symbol--glyph'
             : 'ff-sar-symbol ff-sar-symbol--code';
     }
 
+    /**
+     * Arabic SAR amounts use an inline SVG — mobile OS fonts do not yet include U+20C1.
+     */
+    public static function usesSvgSymbol(?string $currency = null): bool
+    {
+        if (app()->getLocale() !== 'ar') {
+            return false;
+        }
+
+        $currencyCode = $currency ?? Setting::get('general', 'currency', 'USD');
+
+        return $currencyCode === 'SAR' || str_contains(self::symbol($currency), "\u{20C1}");
+    }
+
+    /**
+     * @deprecated Use {@see usesSvgSymbol()} — kept for PDF-specific call sites.
+     */
+    public static function usesPdfSvgSymbol(?string $currency = null): bool
+    {
+        return self::usesSvgSymbol($currency);
+    }
+
     public static function symbolHtml(?string $currency = null): HtmlString
     {
-        return new HtmlString(
-            '<span class="'.self::symbolSpanClass($currency).'" dir="ltr">'.e(self::symbol($currency)).'</span>'
-        );
+        return new HtmlString(self::symbolSpanHtml($currency));
+    }
+
+    /**
+     * Marked-up currency symbol for HTML contexts (SVG img in Arabic, text otherwise).
+     */
+    public static function symbolMarkup(?string $currency = null): string
+    {
+        if (self::usesSvgSymbol($currency)) {
+            return self::sarSymbolImageMarkup();
+        }
+
+        return e(self::symbol($currency));
     }
 
     /**
@@ -52,18 +92,60 @@ final class MoneyDisplay
      */
     public static function compactWithSymbol(float $amount, ?string $currency = null): string
     {
+        $parts = self::compactParts($amount);
+
+        return self::isolateLtrRun(self::symbol($currency).' '.$parts['digits']);
+    }
+
+    /**
+     * Marked-up compact amount for UI (symbol before digits, LTR isolated).
+     */
+    public static function compactHtml(float $amount, ?string $currency = null): HtmlString
+    {
+        $parts = self::compactParts($amount);
+        $precision = $parts['precision'];
+
+        if ($precision !== null) {
+            return self::html($parts['amount'], $currency, precision: $precision)
+                ?? new HtmlString('—');
+        }
+
+        return new HtmlString(
+            '<span class="ff-member-amount tabular-nums" dir="ltr">'
+            .self::symbolSpanHtml($currency)
+            .'<span class="ff-member-amount__digits">'.$parts['digits'].'</span>'
+            .'</span>'
+        );
+    }
+
+    /**
+     * @return array{amount: float, digits: string, precision: ?int}
+     */
+    private static function compactParts(float $amount): array
+    {
         $abs = abs($amount);
-        $symbol = self::symbol($currency);
 
         if ($abs >= 1_000_000) {
-            return $symbol.' '.Number::format($abs / 1_000_000, 1, locale: 'en').'M';
+            return [
+                'amount' => $abs,
+                'digits' => Number::format($abs / 1_000_000, 1, locale: 'en').'M',
+                'precision' => null,
+            ];
         }
 
         if ($abs >= 1_000) {
-            return $symbol.' '.Number::format($abs / 1_000, 1, locale: 'en').'K';
+            return [
+                'amount' => $abs,
+                'digits' => Number::format($abs / 1_000, 1, locale: 'en').'K',
+                'precision' => null,
+            ];
         }
 
-        return self::format($abs, $currency, precision: 0) ?? $symbol;
+        return [
+            'amount' => $abs,
+            'digits' => self::amount($abs, 0) ?? '0',
+            'precision' => 0,
+        ];
     }
 
     /**
@@ -87,7 +169,19 @@ final class MoneyDisplay
             return null;
         }
 
-        return self::symbol($currency).' '.$digits;
+        return self::isolateLtrRun(self::symbol($currency).' '.$digits);
+    }
+
+    /**
+     * Wrap plain-text money for embedding in RTL copy (symbol stays before digits).
+     */
+    public static function isolateLtrRun(?string $text): ?string
+    {
+        if ($text === null || $text === '' || app()->getLocale() !== 'ar') {
+            return $text;
+        }
+
+        return self::LTR_ISOLATE_START.$text.self::POP_DIRECTIONAL_ISOLATE;
     }
 
     /**
@@ -111,7 +205,7 @@ final class MoneyDisplay
 
         return new HtmlString(
             '<span class="ff-member-amount tabular-nums'.$colorClass.'" dir="ltr">'
-            .'<span class="'.self::symbolSpanClass($currency).'" dir="ltr">'.e(self::symbol($currency)).'</span>'
+            .self::symbolSpanHtml($currency)
             .'<span class="ff-member-amount__digits">'.$digits.'</span>'
             .'</span>'
         );
@@ -140,8 +234,8 @@ final class MoneyDisplay
         $symbol = self::symbol($currencyCode);
 
         if ($currencyCode === 'SAR' || str_contains($symbol, "\u{20C1}")) {
-            $symbolMarkup = app()->getLocale() === 'ar'
-                ? '<img src="'.PdfAssets::sarSymbolDataUri().'" alt="" class="currency-symbol" width="11" height="11" />'
+            $symbolMarkup = self::usesSvgSymbol($currencyCode)
+                ? self::sarSymbolImageMarkup('currency-symbol', width: 11, height: 11)
                 : '<span class="currency-code">SAR</span>';
         } else {
             $symbolMarkup = '<span class="currency-code">'.e($symbol).'</span>';
@@ -194,9 +288,32 @@ final class MoneyDisplay
             return e($text === '' ? '—' : $text);
         }
 
+        foreach (self::compoundSeparators($text) as $separator) {
+            if (! str_contains($text, $separator)) {
+                continue;
+            }
+
+            $parts = array_map(trim(...), explode($separator, $text));
+
+            if (count($parts) < 2) {
+                continue;
+            }
+
+            $rendered = array_map(
+                fn (string $part): string => self::markupForDisplay($part, $currency, precision: $precision, signed: $signed),
+                $parts,
+            );
+
+            return implode(e($separator), $rendered);
+        }
+
         $parsed = self::parseFormatString($text, $currency);
 
         if ($parsed !== null) {
+            if ($parsed['compact'] ?? false) {
+                return self::compactHtml($parsed['amount'], $parsed['currency'] ?? $currency)->toHtml();
+            }
+
             return self::html(
                 $parsed['amount'],
                 $parsed['currency'] ?? $currency,
@@ -209,10 +326,24 @@ final class MoneyDisplay
     }
 
     /**
-     * @return array{amount: float, precision: int, currency: ?string}|null
+     * @return list<string>
+     */
+    private static function compoundSeparators(string $text): array
+    {
+        $separators = [' / ', ' – ', ' · '];
+
+        return array_values(array_filter(
+            $separators,
+            fn (string $separator): bool => str_contains($text, $separator),
+        ));
+    }
+
+    /**
+     * @return array{amount: float, precision: int, currency: ?string, compact?: bool}|null
      */
     public static function parseFormatString(string $text, ?string $currency = null): ?array
     {
+        $text = trim(self::stripBidiIsolates($text));
         $symbols = array_unique(array_filter([
             preg_quote(self::symbol($currency), '/'),
             'SAR',
@@ -221,18 +352,60 @@ final class MoneyDisplay
 
         $symbolPattern = implode('|', $symbols);
 
-        if (! preg_match('/^('.$symbolPattern.')\s+([\d,]+(?:\.\d+)?)$/u', trim($text), $matches)) {
+        if (preg_match('/^('.$symbolPattern.')\s+([\d,]+(?:\.\d+)?)([KkMm])$/u', $text, $matches)) {
+            $base = (float) str_replace(',', '', $matches[2]);
+            $multiplier = strtolower($matches[3]) === 'm' ? 1_000_000 : 1_000;
+
+            return [
+                'amount' => $base * $multiplier,
+                'precision' => 0,
+                'currency' => self::matchedCurrency($matches[1]),
+                'compact' => true,
+            ];
+        }
+
+        if (! preg_match('/^('.$symbolPattern.')\s+([\d,]+(?:\.\d+)?)$/u', $text, $matches)) {
             return null;
         }
 
         $digits = str_replace(',', '', $matches[2]);
         $fraction = str_contains($matches[2], '.') ? explode('.', $matches[2])[1] : '';
-        $matchedSymbol = $matches[1];
 
         return [
             'amount' => (float) $digits,
             'precision' => strlen($fraction),
-            'currency' => ($matchedSymbol === 'SAR' || $matchedSymbol === "\u{20C1}") ? 'SAR' : null,
+            'currency' => self::matchedCurrency($matches[1]),
         ];
+    }
+
+    private static function matchedCurrency(string $matchedSymbol): ?string
+    {
+        return ($matchedSymbol === 'SAR' || $matchedSymbol === "\u{20C1}") ? 'SAR' : null;
+    }
+
+    private static function stripBidiIsolates(string $text): string
+    {
+        return str_replace([self::LTR_ISOLATE_START, self::POP_DIRECTIONAL_ISOLATE], '', $text);
+    }
+
+    private static function symbolSpanHtml(?string $currency = null): string
+    {
+        return '<span class="'.self::symbolSpanClass($currency).'" dir="ltr">'
+            .self::symbolMarkup($currency)
+            .'</span>';
+    }
+
+    private static function sarSymbolImageMarkup(
+        string $class = 'ff-sar-symbol__img',
+        ?int $width = null,
+        ?int $height = null,
+    ): string {
+        $sizeAttributes = '';
+
+        if ($width !== null && $height !== null) {
+            $sizeAttributes = ' width="'.$width.'" height="'.$height.'"';
+        }
+
+        return '<img src="'.PdfAssets::sarSymbolDataUri().'" alt="" class="'.e($class).'"'.$sizeAttributes.' decoding="async" />';
     }
 }

@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Resources\ReconciliationExceptions\Tables\ReconciliationExceptionsTable;
+use App\Filament\Tenant\Support\ReconciliationTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\FundAuditLog;
 use App\Models\Tenant\ReconciliationException;
@@ -48,7 +49,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
     protected string $view = 'filament.tenant.pages.reconciliation';
 
     /** @var 'overview'|'exceptions'|'history'|'snapshots'|'methodology' */
-    #[Url]
+    #[Url(as: 'sideTab')]
     public string $sideTab = 'overview';
 
     public ?int $selectedSnapshotId = null;
@@ -94,10 +95,43 @@ class ReconciliationOverviewPage extends Page implements HasTable
         return __('Audit snapshots, exception queue, and ledger integrity checks.');
     }
 
+    /**
+     * @return array<string>
+     */
+    public function getPageClasses(): array
+    {
+        return ['fi-page-reconciliation'];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function getReconciliationTabs(): array
+    {
+        return ReconciliationTabRegistry::tabs();
+    }
+
     public function mount(): void
     {
-        if (! in_array($this->sideTab, ['overview', 'exceptions', 'history', 'snapshots', 'methodology'], true)) {
+        if (! array_key_exists($this->sideTab, $this->getReconciliationTabs())) {
             $this->sideTab = 'overview';
+        }
+    }
+
+    public function setSideTab(string $tab): void
+    {
+        if (! array_key_exists($tab, $this->getReconciliationTabs())) {
+            return;
+        }
+
+        if ($this->sideTab === $tab) {
+            return;
+        }
+
+        $this->sideTab = $tab;
+
+        if (in_array($tab, ['exceptions', 'history'], true)) {
+            $this->resetTable();
         }
     }
 

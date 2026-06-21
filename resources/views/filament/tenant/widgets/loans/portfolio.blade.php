@@ -26,7 +26,7 @@
         <div class="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-4">
             @if (($pipeline['pending_eligibility_reviews'] ?? 0) > 0)
                 <a href="{{ $pipeline['eligibility_reviews_url'] }}"
-                    class="col-span-2 flex items-center justify-between gap-2 border-b border-gray-100 bg-amber-50/70 px-3 py-2 text-left transition hover:bg-amber-100/80 dark:border-gray-700 dark:bg-amber-950/20 dark:hover:bg-amber-950/30 sm:col-span-4">
+                    class="col-span-2 flex items-center justify-between gap-2 border-b border-gray-100 bg-amber-50/70 px-3 py-2 text-start transition hover:bg-amber-100/80 dark:border-gray-700 dark:bg-amber-950/20 dark:hover:bg-amber-950/30 sm:col-span-4">
                     <span class="text-[11px] font-semibold text-amber-800 dark:text-amber-200">
                         {{ trans_choice(':count eligibility review pending|:count eligibility reviews pending', $pipeline['pending_eligibility_reviews'], ['count' => $pipeline['pending_eligibility_reviews']]) }}
                     </span>
@@ -81,7 +81,9 @@
                         <div>
                             <div class="mb-0.5 flex justify-between text-[10px]">
                                 <span class="truncate text-gray-600 dark:text-gray-300">{{ $tier['label'] }}</span>
-                                <span class="shrink-0 tabular-nums text-emerald-600">{{ $tier['available_formatted'] }}</span>
+                                <span class="shrink-0 tabular-nums text-emerald-600">
+                                    <x-member::amount :value="$tier['available']" :currency="$currency" :compact="true" class="inline" />
+                                </span>
                             </div>
                             <div class="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
                                 <div @class(['h-full rounded-full', 'bg-rose-500' => $tier['used_percent'] >= 85, 'bg-amber-500' => $tier['used_percent'] >= 60 && $tier['used_percent'] < 85, 'bg-emerald-500' => $tier['used_percent'] < 60]) style="width: {{ max(4, $tier['used_percent']) }}%"></div>

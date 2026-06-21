@@ -19,6 +19,6 @@ class TenantTopbarLanguageSwitch extends Component
 
     public function render(): View
     {
-        return view('filament.tenant.partials.topbar-language-switch');
+        return view('filament.partials.portal-topbar-language-switch');
     }
 }

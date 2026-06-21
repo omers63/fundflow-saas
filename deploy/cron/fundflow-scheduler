@@ -1,0 +1,12 @@
+# Laravel scheduler for FundFlow SaaS (runs every minute as www-data).
+# Install:
+#   sudo cp deploy/cron/fundflow-scheduler /etc/cron.d/fundflow-scheduler
+#   sudo chmod 644 /etc/cron.d/fundflow-scheduler
+#   sudo chown root:root /etc/cron.d/fundflow-scheduler
+#   touch /var/www/fundflow-saas/storage/logs/scheduler.log
+#   sudo chown www-data:www-data /var/www/fundflow-saas/storage/logs/scheduler.log
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+* * * * * www-data cd /var/www/fundflow-saas && /usr/bin/php artisan schedule:run >> /var/www/fundflow-saas/storage/logs/scheduler.log 2>&1

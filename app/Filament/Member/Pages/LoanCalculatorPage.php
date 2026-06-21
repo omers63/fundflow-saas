@@ -37,7 +37,12 @@ class LoanCalculatorPage extends Page
 
     public int|float|string|null $loanAmount = null;
 
-    public string $fundingStrategy = LoanFundingStrategy::MEMBER_FUND_TOPUP;
+    public string $fundingStrategy = '';
+
+    public function mount(): void
+    {
+        $this->fundingStrategy = LoanFundingStrategy::defaultForApplication();
+    }
 
     public static function canAccess(): bool
     {
@@ -115,7 +120,7 @@ class LoanCalculatorPage extends Page
     #[Computed]
     public function fundingStrategyOptions(): array
     {
-        return LoanFundingStrategy::options();
+        return LoanFundingStrategy::availableOptions();
     }
 
     #[Computed]

@@ -28,7 +28,7 @@
                             'ff-tenant-record-modal__hero-amount--credit' => $heroType === 'credit',
                             'ff-tenant-record-modal__hero-amount--debit' => $heroType === 'debit',
                         ])>
-                            {{ $hero['amount'] }}
+                            {!! \App\Filament\Support\MoneyDisplay::markupForDisplay($hero['amount']) !!}
                         </p>
                     @endif
                     @if (filled($hero['subtitle'] ?? null))
@@ -58,7 +58,7 @@
                     @foreach ($section['items'] as $item)
                         <div class="ff-tenant-detail-grid__item">
                             <dt class="ff-tenant-detail-grid__label">{{ $item['label'] }}</dt>
-                            <dd class="ff-tenant-detail-grid__value">{{ $item['value'] }}</dd>
+                            <dd class="ff-tenant-detail-grid__value">{!! \App\Filament\Support\MoneyDisplay::markupForDisplay($item['value']) !!}</dd>
                         </div>
                     @endforeach
                 </div>

@@ -76,7 +76,7 @@ final class TableSummaryFooter
                 ->formatStateUsing(fn ($state): ?string => MoneyDisplay::tableSummaryHtml($state, $currency()))
                 ->html();
         } else {
-            $sum->numeric(decimalPlaces: 2);
+            $sum->numeric(decimalPlaces: 2, locale: 'en');
         }
 
         return $column->summarize([$sum]);

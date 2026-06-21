@@ -22,7 +22,7 @@ beforeEach(function () {
 
     $tenant = Tenant::find('testing');
 
-    if ($tenant !== null && ! $tenant->domains()->where('domain', 'testing.localhost')->exists()) {
+    if ($tenant !== null && !$tenant->domains()->where('domain', 'testing.localhost')->exists()) {
         $tenant->domains()->create(['domain' => 'testing.localhost']);
     }
 
@@ -83,4 +83,17 @@ test('list members page exposes status filter pill wrapper content', function ()
         ->assertOk()
         ->assertSee(__('All'))
         ->assertSee(__('Migration pending'));
+});
+
+test('member list search does not query virtual balance columns', function () {
+    Member::factory()->create([
+        'name' => 'Omer Hassan',
+        'member_number' => 'MEM-OMER',
+        'status' => 'active',
+    ]);
+
+    Livewire::test(ListMembers::class)
+        ->searchTable('omer')
+        ->assertOk()
+        ->assertCanSeeTableRecords(Member::query()->where('name', 'like', '%omer%')->get());
 });

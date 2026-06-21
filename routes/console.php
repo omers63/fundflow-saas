@@ -24,3 +24,7 @@ Schedule::command('loans:send-due-notifications')->monthlyOn(1, '08:00');
 Schedule::command('loans:apply-repayments')->monthlyOn(6, '06:00');
 Schedule::command('loans:check-defaults')->dailyAt('07:00');
 Schedule::command('delinquency:send-digest')->dailyAt('07:30');
+Schedule::command('announcements:dispatch-scheduled')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground();

@@ -1,5 +1,6 @@
 @php
     $pipeline = $d['pipeline'];
+    $currency = $d['currency'];
 @endphp
 
 @include('filament.tenant.widgets.partials.insights-head', [
@@ -54,7 +55,10 @@
             </h4>
         </div>
         @if (($pipeline['missing_open_period'] ?? 0) > 0)
-            <span class="text-[10px] text-gray-400">{{ $pipeline['required_cash'] }} {{ __('required cash') }}</span>
+            <span class="text-[10px] text-gray-400">
+                <x-member::amount :value="$pipeline['required_cash']" :currency="$currency" :compact="true" class="inline" />
+                {{ __('required cash') }}
+            </span>
         @endif
     </div>
     <div class="divide-y divide-gray-100 dark:divide-gray-700">
@@ -72,7 +76,7 @@
                 <div class="min-w-0 flex-1">
                     <p class="truncate text-xs font-medium text-gray-900 dark:text-white">{{ $row['member'] }}</p>
                     <p class="truncate text-[10px] text-gray-400">
-                        {{ $row['required_cash'] }}
+                        <x-member::amount :value="$row['required_cash']" :currency="$currency" :compact="true" class="inline" />
                         · {{ $row['has_cash'] ? __('Cash ready') : __('Insufficient cash') }}
                     </p>
                 </div>

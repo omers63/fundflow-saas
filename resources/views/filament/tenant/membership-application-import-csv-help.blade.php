@@ -27,8 +27,8 @@
         <table class="w-full text-xs">
             <thead class="bg-gray-50/60 dark:bg-white/5">
                 <tr>
-                    <th class="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-200 w-56">{{ __('Column') }}</th>
-                    <th class="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-200">{{ __('Description') }}</th>
+                    <th class="px-3 py-2 text-start font-semibold text-gray-700 dark:text-gray-200 w-56">{{ __('Column') }}</th>
+                    <th class="px-3 py-2 text-start font-semibold text-gray-700 dark:text-gray-200">{{ __('Description') }}</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-white/10">
@@ -56,8 +56,8 @@
         <table class="w-full text-xs">
             <thead class="bg-gray-50/60 dark:bg-white/5">
                 <tr>
-                    <th class="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-200 w-56">{{ __('Column') }}</th>
-                    <th class="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-200">{{ __('Description') }}</th>
+                    <th class="px-3 py-2 text-start font-semibold text-gray-700 dark:text-gray-200 w-56">{{ __('Column') }}</th>
+                    <th class="px-3 py-2 text-start font-semibold text-gray-700 dark:text-gray-200">{{ __('Description') }}</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-white/10">

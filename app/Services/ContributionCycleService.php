@@ -593,9 +593,9 @@ class ContributionCycleService
 
             $rowsHtml .= '<tr class="border-b border-gray-100 last:border-0 dark:border-white/10">'
                 .'<td class="py-2.5 pr-3 text-gray-950 dark:text-white">'.$name.'</td>'
-                .'<td class="py-2.5 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">'.e(MoneyDisplay::format($cash, $currency)).'</td>'
-                .'<td class="py-2.5 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">'.e(MoneyDisplay::format($required, $currency)).'</td>'
-                .'<td class="py-2.5 text-right tabular-nums font-medium text-gray-950 dark:text-white">'.e(MoneyDisplay::format($shortfall, $currency)).'</td>'
+                .'<td class="py-2.5 pe-3 text-end tabular-nums text-gray-700 dark:text-gray-300">'.(MoneyDisplay::html($cash, $currency)?->toHtml() ?? '').'</td>'
+                .'<td class="py-2.5 pe-3 text-end tabular-nums text-gray-700 dark:text-gray-300">'.(MoneyDisplay::html($required, $currency)?->toHtml() ?? '').'</td>'
+                .'<td class="py-2.5 text-end tabular-nums font-medium text-gray-950 dark:text-white">'.(MoneyDisplay::html($shortfall, $currency)?->toHtml() ?? '').'</td>'
                 .'</tr>';
         }
 
@@ -613,10 +613,10 @@ class ContributionCycleService
         $table = '<div class="overflow-x-auto rounded-lg border border-gray-200 bg-white dark:border-white/10 dark:bg-gray-900/40">'
             .'<table class="w-full min-w-[22rem] text-sm">'
             .'<thead><tr class="border-b border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/5">'
-            .'<th scope="col" class="py-2.5 pl-3 pr-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Dependent')).'</th>'
-            .'<th scope="col" class="py-2.5 pr-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Cash')).'</th>'
-            .'<th scope="col" class="py-2.5 pr-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Needed')).'</th>'
-            .'<th scope="col" class="py-2.5 pr-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Transfer')).'</th>'
+            .'<th scope="col" class="py-2.5 ps-3 pe-3 text-start text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Dependent')).'</th>'
+            .'<th scope="col" class="py-2.5 pe-3 text-end text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Cash')).'</th>'
+            .'<th scope="col" class="py-2.5 pe-3 text-end text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Needed')).'</th>'
+            .'<th scope="col" class="py-2.5 pe-3 text-end text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Transfer')).'</th>'
             .'</tr></thead>'
             .'<tbody>'.$rowsHtml.'</tbody>'
             .'</table></div>';
@@ -665,11 +665,11 @@ class ContributionCycleService
         }
 
         return new HtmlString(
-            '<div class="overflow-x-auto rounded-lg border border-gray-200 bg-white text-left dark:border-white/10 dark:bg-gray-900/40">'
+            '<div class="overflow-x-auto rounded-lg border border-gray-200 bg-white text-start dark:border-white/10 dark:bg-gray-900/40">'
             .'<table class="w-full min-w-[16rem] text-sm">'
             .'<thead><tr class="border-b border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/5">'
-            .'<th scope="col" class="py-2 pl-3 pr-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Dependent')).'</th>'
-            .'<th scope="col" class="py-2 pr-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Result')).'</th>'
+            .'<th scope="col" class="py-2 ps-3 pe-3 text-start text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Dependent')).'</th>'
+            .'<th scope="col" class="py-2 pe-3 text-start text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e(__('Result')).'</th>'
             .'</tr></thead>'
             .'<tbody>'.$rows.'</tbody>'
             .'</table></div>'

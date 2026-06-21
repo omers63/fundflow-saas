@@ -52,7 +52,7 @@
                     @foreach ($d['recent'] as $row)
                         <li class="flex justify-between px-3 py-2 text-xs">
                             <span>{{ $row['date'] }} · {{ $row['status_label'] }}</span>
-                            <span class="font-semibold tabular-nums">{{ $row['amount'] }}</span>
+                            <x-ff-money-text :text="$row['amount']" class="font-semibold tabular-nums" />
                         </li>
                     @endforeach
                 </ul>

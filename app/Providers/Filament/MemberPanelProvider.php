@@ -50,10 +50,10 @@ class MemberPanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::hex('#534AB7'),
             ])
-            ->brandName(fn(): string => PublicPageSettings::fundName(tenant('name')))
-            ->favicon(fn(): string => PublicPageSettings::fundLogoUrl())
-            ->brandLogo(fn(): string => PublicPageSettings::fundPanelBrandLogoUrl())
-            ->darkModeBrandLogo(fn(): string => PublicPageSettings::fundPanelBrandLogoUrl())
+            ->brandName(fn (): string => PublicPageSettings::fundName(tenant('name')))
+            ->favicon(fn (): string => PublicPageSettings::fundLogoUrl())
+            ->brandLogo(fn (): string => PublicPageSettings::fundPanelBrandLogoUrl())
+            ->darkModeBrandLogo(fn (): string => PublicPageSettings::fundPanelBrandLogoUrl())
             ->brandLogoHeight(PublicPageSettings::BRAND_LOGO_HEIGHT)
             ->sidebarCollapsibleOnDesktop()
             ->sidebarFullyCollapsibleOnDesktop()
@@ -61,27 +61,30 @@ class MemberPanelProvider extends PanelProvider
             ->collapsedSidebarWidth('4rem')
             ->navigationGroups([
                 MemberNavigation::GROUP_MY_ACCOUNTS => NavigationGroup::make()
-                    ->label(fn(): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_MY_ACCOUNTS)),
+                    ->label(fn (): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_MY_ACCOUNTS)),
                 MemberNavigation::GROUP_LOANS => NavigationGroup::make()
-                    ->label(fn(): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_LOANS)),
+                    ->label(fn (): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_LOANS)),
                 MemberNavigation::GROUP_HISTORY => NavigationGroup::make()
-                    ->label(fn(): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_HISTORY)),
+                    ->label(fn (): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_HISTORY)),
                 MemberNavigation::GROUP_SELF_SERVICE => NavigationGroup::make()
-                    ->label(fn(): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_SELF_SERVICE)),
+                    ->label(fn (): string => MemberNavigation::groupLabel(MemberNavigation::GROUP_SELF_SERVICE)),
             ])
             ->userMenuItems([
                 ReturnToParentPortalAction::make()
                     ->sort(-20),
                 Action::make('profile')
-                    ->label(fn(): string => __('My profile'))
+                    ->label(fn (): string => __('My profile'))
                     ->icon('heroicon-o-user-circle')
-                    ->url(fn(): string => MemberSettingsPage::getUrl(['tab' => 'profile']))
+                    ->url(fn (): string => MemberSettingsPage::getUrl(['tab' => 'profile']))
                     ->sort(-1),
             ])
-            ->renderHook(PanelsRenderHook::SIDEBAR_NAV_START, fn(): HtmlString => new HtmlString(
+            ->renderHook(PanelsRenderHook::GLOBAL_SEARCH_AFTER, fn (): HtmlString => new HtmlString(
+                view('filament.member.partials.topbar-member-shortcuts')->render()
+            ))
+            ->renderHook(PanelsRenderHook::SIDEBAR_NAV_START, fn (): HtmlString => new HtmlString(
                 view('filament.member.partials.sidebar-profile')->render()
             ))
-            ->renderHook(PanelsRenderHook::FOOTER, fn(): HtmlString => new HtmlString(
+            ->renderHook(PanelsRenderHook::FOOTER, fn (): HtmlString => new HtmlString(
                 view('partials.status-footer-banners')->render()
             ))
             ->discoverResources(in: app_path('Filament/Member/Resources'), for: 'App\\Filament\\Member\\Resources')
@@ -93,12 +96,12 @@ class MemberPanelProvider extends PanelProvider
             ->widgets([])
             ->databaseNotifications(isLazy: false, livewireComponent: MemberDatabaseNotifications::class)
             ->databaseNotificationsPolling(DatabaseNotificationsRefresh::panelPollingInterval())
-            ->renderHook(PanelsRenderHook::HEAD_END, fn(): HtmlString => new HtmlString(
+            ->renderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(
                 view('partials.arabic-fonts')->render()
-                . view('partials.arabic-display-body-class')->render()
-                . view('partials.pwa-head')->render()
+                .view('partials.arabic-display-body-class')->render()
+                .view('partials.pwa-head')->render()
             ))
-            ->renderHook(PanelsRenderHook::BODY_END, fn(): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))
+            ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

@@ -20,6 +20,16 @@ final class InsightFormatter
         return MoneyDisplay::format($amount, self::currency()) ?? '—';
     }
 
+    public static function moneyMarkup(float $amount, int $precision = 2): string
+    {
+        return MoneyDisplay::html($amount, self::currency(), precision: $precision)?->toHtml() ?? e('—');
+    }
+
+    public static function moneyCompactMarkup(float $amount): string
+    {
+        return MoneyDisplay::compactHtml($amount, self::currency())->toHtml();
+    }
+
     public static function moneyHtml(float $amount): HtmlString
     {
         return MoneyDisplay::html($amount, self::currency()) ?? new HtmlString('—');

@@ -8,6 +8,7 @@ use App\Models\Tenant\Setting;
 use BackedEnum;
 use Closure;
 use Filament\Facades\Filament;
+use Filament\Support\Enums\ArgumentValue;
 use Filament\Tables\Columns\TextColumn as FilamentTextColumn;
 
 class TextColumn extends FilamentTextColumn
@@ -16,7 +17,7 @@ class TextColumn extends FilamentTextColumn
 
     public function money(string|BackedEnum|Closure|null $currency = null, int|Closure $divideBy = 0, string|BackedEnum|Closure|null $locale = null, int|Closure|null $decimalPlaces = null): static
     {
-        parent::money($currency, $divideBy, $locale, $decimalPlaces);
+        parent::money($currency, $divideBy, $locale ?? 'en', $decimalPlaces);
 
         $this->formatStateUsing(function (FilamentTextColumn $column, $state) use ($currency, $divideBy, $locale): ?string {
             if (blank($state)) {
@@ -50,15 +51,31 @@ class TextColumn extends FilamentTextColumn
             }
 
             if (Filament::getCurrentPanel()?->getId() === 'member') {
-                return MoneyDisplay::html($amount, (string) $currencyCode);
+                return MoneyDisplay::html($amount, (string) $currencyCode)?->toHtml();
             }
 
-            return MoneyDisplay::html($amount, (string) $currencyCode);
+            return MoneyDisplay::html($amount, (string) $currencyCode)?->toHtml();
         });
 
         return $this
             ->html()
             ->badge()
             ->color(fn ($state): string => MoneyDisplay::color($state));
+    }
+
+    public function numeric(
+        int|Closure|null $decimalPlaces = null,
+        string|Closure|null|ArgumentValue $decimalSeparator = ArgumentValue::Default,
+        string|Closure|null|ArgumentValue $thousandsSeparator = ArgumentValue::Default,
+        int|Closure|null $maxDecimalPlaces = null,
+        string|BackedEnum|Closure|null $locale = null,
+    ): static {
+        return parent::numeric(
+            $decimalPlaces,
+            $decimalSeparator,
+            $thousandsSeparator,
+            $maxDecimalPlaces,
+            $locale ?? 'en',
+        );
     }
 }

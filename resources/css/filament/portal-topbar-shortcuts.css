@@ -1,0 +1,109 @@
+/* Shared Filament portal topbar: cycle, messages, language switch */
+.fi-body.fi-panel-tenant .ff-portal-topbar-locale,
+.fi-body.fi-panel-member .ff-portal-topbar-locale {
+    display: flex;
+    align-items: center;
+}
+
+.fi-body.fi-panel-tenant .ff-portal-topbar-shortcuts .ff-portal-topbar-language-switch .fi-dropdown-trigger,
+.fi-body.fi-panel-member .ff-portal-topbar-shortcuts .ff-portal-topbar-language-switch .fi-dropdown-trigger {
+    display: flex;
+    align-items: center;
+}
+
+.fi-body.fi-panel-tenant .ff-portal-topbar-shortcuts .ff-portal-topbar-language-switch .ff-portal-topbar-chip,
+.fi-body.fi-panel-member .ff-portal-topbar-shortcuts .ff-portal-topbar-language-switch .ff-portal-topbar-chip {
+    width: auto !important;
+    height: auto !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: none;
+    padding: 0.25rem 0.5rem !important;
+    line-height: 1rem;
+}
+
+.fi-body.fi-panel-tenant .ff-portal-topbar-shortcuts .ff-portal-topbar-language-switch .ff-portal-topbar-chip img,
+.fi-body.fi-panel-member .ff-portal-topbar-shortcuts .ff-portal-topbar-language-switch .ff-portal-topbar-chip img {
+    width: 1rem !important;
+    height: 1rem !important;
+    max-width: 1rem !important;
+    max-height: 1rem !important;
+}
+
+@media (max-width: 639px) {
+    .fi-body.fi-panel-tenant .ff-portal-topbar-shortcuts .ff-portal-topbar-language-switch .ff-portal-topbar-chip,
+    .fi-body.fi-panel-member .ff-portal-topbar-shortcuts .ff-portal-topbar-language-switch .ff-portal-topbar-chip {
+        min-width: 2.75rem;
+        min-height: 2.75rem;
+        justify-content: center;
+        padding: 0.375rem !important;
+    }
+
+    .fi-body.fi-panel-tenant .ff-portal-topbar-shortcuts .ff-portal-topbar-language-switch .ff-portal-topbar-chip img,
+    .fi-body.fi-panel-member .ff-portal-topbar-shortcuts .ff-portal-topbar-language-switch .ff-portal-topbar-chip img {
+        width: 1.75rem !important;
+        height: 1.75rem !important;
+        max-width: 1.75rem !important;
+        max-height: 1.75rem !important;
+    }
+}
+
+.fi-body.fi-panel-tenant .ff-portal-topbar-language-switch .fi-dropdown-panel,
+.fi-body.fi-panel-member .ff-portal-topbar-language-switch .fi-dropdown-panel {
+    min-width: 9.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-portal-topbar-language-switch__list,
+.fi-body.fi-panel-member .ff-portal-topbar-language-switch__list {
+    min-width: 9.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-portal-topbar-language-switch__option,
+.fi-body.fi-panel-member .ff-portal-topbar-language-switch__option {
+    min-height: 2rem;
+}
+
+.fi-body.fi-panel-tenant .ff-portal-topbar-chip {
+    background: rgb(224 242 254 / 0.9);
+    border: 1px solid rgb(186 230 253 / 0.9);
+    transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.fi-body.fi-panel-tenant .ff-portal-topbar-chip:hover {
+    background: rgb(186 230 253 / 0.95);
+    border-color: rgb(125 211 252);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-portal-topbar-chip {
+    background: rgb(12 74 110 / 0.35);
+    border-color: rgb(3 105 161 / 0.45);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-portal-topbar-chip:hover {
+    background: rgb(12 74 110 / 0.55);
+}
+
+.fi-body.fi-panel-member .ff-portal-topbar-chip {
+    background: rgb(237 233 254 / 0.9);
+    border: 1px solid rgb(221 214 254 / 0.9);
+    transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.fi-body.fi-panel-member .ff-portal-topbar-chip:hover {
+    background: rgb(221 214 254 / 0.95);
+    border-color: rgb(196 181 253);
+}
+
+.dark .fi-body.fi-panel-member .ff-portal-topbar-chip {
+    background: rgb(76 29 149 / 0.35);
+    border-color: rgb(109 40 217 / 0.45);
+}
+
+.dark .fi-body.fi-panel-member .ff-portal-topbar-chip:hover {
+    background: rgb(76 29 149 / 0.55);
+}
+
+html[dir='rtl'] .fi-body.fi-panel-tenant .ff-portal-topbar-chip,
+html[dir='rtl'] .fi-body.fi-panel-member .ff-portal-topbar-chip {
+    flex-direction: row-reverse;
+}

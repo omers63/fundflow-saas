@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\Loans\Schemas;
 
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Setting;
+use App\Support\LoanFundExcessDisposition;
 use App\Support\LoanFundingStrategy;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
@@ -105,8 +106,11 @@ final class LoanViewInfolist
                                         ->label(__('Funding strategy'))
                                         ->formatStateUsing(fn (?string $state): string => LoanFundingStrategy::options()[LoanFundingStrategy::normalize($state)] ?? __('—')),
                                     TextEntry::make('cash_out_excess_fund')
-                                        ->label(__('Cash out excess fund at disbursement'))
-                                        ->formatStateUsing(fn (bool $state): string => $state ? __('Yes') : __('No')),
+                                        ->label(__('Remaining fund balance'))
+                                        ->formatStateUsing(fn (bool $state, Loan $record): string => $record->funding_strategy === LoanFundingStrategy::SPLIT_PERCENTAGE
+                                            ? LoanFundExcessDisposition::labelFromCashOutFlag($state)
+                                            : __('—'))
+                                        ->visible(fn (Loan $record): bool => LoanFundingStrategy::normalize($record->funding_strategy) === LoanFundingStrategy::SPLIT_PERCENTAGE),
                                     TextEntry::make('loanTier.label')
                                         ->label(__('Loan tier (EMI)'))
                                         ->placeholder(__('—')),

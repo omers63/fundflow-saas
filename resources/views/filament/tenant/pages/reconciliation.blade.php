@@ -1,49 +1,14 @@
 <x-filament-panels::page>
-    <div class="lg:grid lg:grid-cols-[minmax(0,14rem)_1fr] lg:gap-8">
-        {{-- Sidebar --}}
-        <aside class="mb-6 space-y-1 lg:mb-0">
-            <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                {{ __('Workspace') }}</p>
-            <button type="button" wire:click="$set('sideTab', 'overview')" @class([
-                'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition',
-                'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-200' => $this->sideTab === 'overview',
-                'border-transparent text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5' => $this->sideTab !== 'overview',
-            ])>
-                <x-heroicon-o-chart-pie class="h-5 w-5 shrink-0" />
-                {{ __('Overview') }}
-            </button>
-            <button type="button" wire:click="$set('sideTab', 'exceptions')" @class([
-                'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition',
-                'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-200' => $this->sideTab === 'exceptions',
-                'border-transparent text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5' => $this->sideTab !== 'exceptions',
-            ])>
-                <x-heroicon-o-shield-exclamation class="h-5 w-5 shrink-0" />
-                <span class="flex min-w-0 flex-1 items-center justify-between gap-2">
-                    <span>{{ __('Exceptions') }}</span>
-                    @php($openCount = $this->getOpenExceptionCount())
-                    @if ($openCount > 0)
-                        <span
-                            class="inline-flex min-w-[1.25rem] justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">{{ $openCount }}</span>
-                    @endif
-                </span>
-            </button>
-            <button type="button" wire:click="$set('sideTab', 'snapshots')" @class([
-                'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition',
-                'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-200' => $this->sideTab === 'snapshots',
-                'border-transparent text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5' => $this->sideTab !== 'snapshots',
-            ])>
-                <x-heroicon-o-clipboard-document-list class="h-5 w-5 shrink-0" />
-                {{ __('Snapshots') }}
-            </button>
-            <button type="button" wire:click="$set('sideTab', 'methodology')" @class([
-                'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition',
-                'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-200' => $this->sideTab === 'methodology',
-                'border-transparent text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5' => $this->sideTab !== 'methodology',
-            ])>
-                <x-heroicon-o-document-text class="h-5 w-5 shrink-0" />
-                {{ __('Methodology') }}
-            </button>
-        </aside>
+    <section
+        class="rounded-2xl border border-gray-200 bg-white px-5 py-5 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
+        <header class="mb-4 border-b border-gray-100 pb-4 dark:border-white/10">
+            <h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('Reconciliation control center') }}</h2>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ $this->getSubheading() }}
+            </p>
+        </header>
+
+        @include('filament.tenant.partials.reconciliation-tab-pills')
 
         <div class="min-w-0 space-y-6" wire:key="reconciliation-workspace-{{ $this->sideTab }}">
             @php($criticalCount = \App\Models\Tenant\ReconciliationException::query()->open()->where('severity', 'critical')->count())
@@ -58,7 +23,7 @@
                         {{ __('Ledger balances may be inconsistent. Review the Exceptions tab and resolve before period close.') }}
                     </p>
                 </div>
-                <button type="button" wire:click="$set('sideTab', 'exceptions')"
+                <button type="button" wire:click="setSideTab('exceptions')"
                     class="ff-tenant-btn ff-tenant-btn--danger ms-auto shrink-0 px-3 py-1 text-xs">
                     {{ __('Review') }}
                 </button>
@@ -87,7 +52,7 @@
                         </p>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                             @if ($this->getOpenExceptionCount() > 0)
-                                <button type="button" wire:click="$set('sideTab', 'exceptions')"
+                                <button type="button" wire:click="setSideTab('exceptions')"
                                     class="font-semibold text-sky-600 hover:underline dark:text-sky-400">{{ __('Review queue') }}</button>
                             @else
                                 {{ __('Operational queue clear') }}
@@ -172,7 +137,7 @@
                         </p>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                             @if ($this->getResolvedExceptionCount() > 0)
-                                <button type="button" wire:click="$set('sideTab', 'history')"
+                                <button type="button" wire:click="setSideTab('history')"
                                     class="font-semibold text-sky-600 hover:underline dark:text-sky-400">{{ __('View history') }}</button>
                             @else
                                 {{ __('None since last batch reset') }}
@@ -202,7 +167,7 @@
                             {{ __('for the nightly control queue — resolve, defer, or run the batch from header actions.') }}
                         </li>
                         <li>{{ __('Open') }} <strong>{{ __('Snapshots') }}</strong> {{ __('to inspect history; download') }}
-                            <strong>JSON</strong> {{ __('(full machine-readable) or') }} <strong>PDF</strong>
+                            <strong>{{ __('JSON') }}</strong> {{ __('(full machine-readable) or') }} <strong>{{ __('PDF') }}</strong>
                             {{ __('(human-readable summary, truncated payload).') }}</li>
                         <li>{{ __('Optional') }} <strong>{{ __('statement balance') }}</strong>
                             {{ __('on each run compares master cash (book) to your declared closing balance; scheduled runs read') }}
@@ -254,7 +219,7 @@
                     </p>
                 </div>
                 <div class="overflow-x-auto">
-                    <table class="w-full min-w-[40rem] text-left text-sm">
+                    <table class="w-full min-w-[40rem] text-start text-sm">
                         <thead
                             class="border-b border-gray-100 bg-gray-50/80 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-gray-400">
                             <tr>
@@ -264,7 +229,7 @@
                                 <th class="px-4 py-3">{{ __('Verdict') }}</th>
                                 <th class="px-4 py-3">{{ __('Critical') }}</th>
                                 <th class="px-4 py-3">{{ __('Warnings') }}</th>
-                                <th class="px-4 py-3 text-right">{{ __('Actions') }}</th>
+                                <th class="px-4 py-3 text-end">{{ __('Actions') }}</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-white/10">
@@ -285,16 +250,16 @@
                                         {{ $snap->critical_issues }}</td>
                                     <td class="px-4 py-3 tabular-nums text-gray-700 dark:text-gray-300">
                                         {{ $snap->warnings }}</td>
-                                    <td class="px-4 py-3 text-right whitespace-nowrap">
+                                    <td class="px-4 py-3 text-end whitespace-nowrap">
                                         <button type="button" wire:click="selectSnapshot({{ (int) $snap->id }})"
                                             class="text-sky-600 text-xs font-semibold hover:underline dark:text-sky-400">{{ __('View') }}</button>
                                         @if ($this->canExportDownloads())
                                             <span class="text-gray-300 dark:text-gray-600">|</span>
                                             <button type="button" wire:click="downloadReport({{ (int) $snap->id }})"
-                                                class="text-sky-600 text-xs font-semibold hover:underline dark:text-sky-400">JSON</button>
+                                                class="text-sky-600 text-xs font-semibold hover:underline dark:text-sky-400">{{ __('JSON') }}</button>
                                             <span class="text-gray-300 dark:text-gray-600">|</span>
                                             <button type="button" wire:click="downloadPdf({{ (int) $snap->id }})"
-                                                class="text-sky-600 text-xs font-semibold hover:underline dark:text-sky-400">PDF</button>
+                                                class="text-sky-600 text-xs font-semibold hover:underline dark:text-sky-400">{{ __('PDF') }}</button>
                                         @endif
                                     </td>
                                 </tr>
@@ -325,12 +290,12 @@
                                     <button type="button" wire:click="downloadReport({{ (int) $sel->id }})"
                                         class="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:hover:bg-white/5">
                                         <x-heroicon-o-arrow-down-tray class="h-4 w-4" />
-                                        JSON
+                                        {{ __('JSON') }}
                                     </button>
                                     <button type="button" wire:click="downloadPdf({{ (int) $sel->id }})"
                                         class="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:hover:bg-white/5">
                                         <x-heroicon-o-document-text class="h-4 w-4" />
-                                        PDF
+                                        {{ __('PDF') }}
                                     </button>
                                 @endif
                             </div>
@@ -338,9 +303,16 @@
                         <dl class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                             @foreach (($sel->summary['headline_checks'] ?? []) as $key => $severity)
                                 <div class="rounded-lg border border-gray-100 px-3 py-2 dark:border-white/10">
-                                    <dt class="text-xs text-gray-500 dark:text-gray-400">{{ str_replace('_', ' ', $key) }}</dt>
-                                    <dd class="mt-0.5 text-sm font-semibold capitalize text-gray-900 dark:text-white">
-                                        {{ $severity }}</dd>
+                                    <dt class="text-xs text-gray-500 dark:text-gray-400">{{ \App\Support\Lang::ui(str_replace('_', ' ', $key)) }}</dt>
+                                    <dd class="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">
+                                        {{ match (strtolower((string) $severity)) {
+                                            'critical' => __('Critical'),
+                                            'warning' => __('Warnings'),
+                                            'pass', 'ok', 'success' => __('Pass'),
+                                            'fail' => __('Fail'),
+                                            default => ucfirst((string) $severity),
+                                        } }}
+                                    </dd>
                                 </div>
                             @endforeach
                         </dl>
@@ -426,5 +398,5 @@
             </div>
             @endif
         </div>
-    </div>
+    </section>
 </x-filament-panels::page>

@@ -5,7 +5,7 @@
             @php $isMine = (int) $msg->from_user_id === (int) $userId; @endphp
             <div class="mb-3 flex {{ $isMine ? 'justify-end' : 'justify-start' }}">
                 <div class="max-w-[85%]">
-                    <p class="mb-1 text-[11px] text-gray-500 {{ $isMine ? 'text-right' : '' }}">
+                    <p class="mb-1 text-[11px] text-gray-500 {{ $isMine ? 'text-end' : '' }}">
                         {{ $msg->sender?->name ?? __('Unknown') }} ·
                         {{ $msg->created_at?->locale(app()->getLocale())->translatedFormat('d M Y H:i') }}
                     </p>

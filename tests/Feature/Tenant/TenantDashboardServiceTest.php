@@ -9,8 +9,10 @@ use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\TenantDashboardService;
+use App\Support\BusinessDay;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
 
@@ -122,4 +124,34 @@ test('jobs page registers in tenant panel navigation', function () {
     expect(JobsPage::canAccess())->toBeTrue()
         ->and(JobsPage::shouldRegisterNavigation())->toBeFalse()
         ->and(JobsPage::getUrl())->toContain('/admin/jobs');
+});
+
+test('tenant dashboard pool health includes thirty day sparkline', function () {
+    $user = User::create([
+        'name' => 'Pool Admin',
+        'email' => 'pool-admin@fund.test',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    $this->actingAs($user, 'tenant');
+
+    $cash = Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 1000, 'is_master' => true]);
+    Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 5000, 'is_master' => true]);
+
+    Transaction::create([
+        'account_id' => $cash->id,
+        'type' => 'credit',
+        'amount' => 200,
+        'balance_after' => 1200,
+        'description' => 'Pool inflow',
+        'transacted_at' => BusinessDay::now()->subDay(),
+    ]);
+
+    $pool = $this->service->snapshot()['pool_health'];
+
+    expect($pool['sparkline'])->toHaveCount(30)
+        ->and($pool['sparkline_max'])->toBeGreaterThan(0)
+        ->and($pool['sparkline_end'])->toBe(6000.0)
+        ->and($pool['sparkline_start'])->toBe(5800.0);
 });

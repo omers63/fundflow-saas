@@ -43,5 +43,6 @@ test('loan view page shows legacy detail tabs', function () {
     Livewire::test(ViewLoan::class, ['record' => $loan->getKey()])
         ->assertSuccessful()
         ->assertSee('Home renovation', false)
-        ->assertSee('Witness One', false);
+        ->assertSee('Witness One', false)
+        ->assertSeeHtml('ff-loan-pipeline');
 });

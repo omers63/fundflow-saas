@@ -29,6 +29,9 @@ final class LoanSettings
             'max_active_loans' => 1,
             'require_guarantor_above_fund_balance' => true,
             'member_funding_split_pct' => 50,
+            'allow_funding_strategy_member_topup' => true,
+            'allow_funding_strategy_split_percentage' => true,
+            'allow_excess_fund_cash_out' => true,
             'auto_allocate_loan_repayment' => false,
             'late_payment_consecutive_threshold' => 3,
             'late_payment_rolling_threshold' => 15,
@@ -115,6 +118,26 @@ final class LoanSettings
     public static function masterFundingSplitPercent(): float
     {
         return round(100.0 - self::memberFundingSplitPercent(), 2);
+    }
+
+    public static function allowMemberFundTopupStrategy(): bool
+    {
+        return (bool) self::get('allow_funding_strategy_member_topup', true);
+    }
+
+    public static function allowSplitPercentageStrategy(): bool
+    {
+        return (bool) self::get('allow_funding_strategy_split_percentage', true);
+    }
+
+    public static function allowExcessFundCashOut(): bool
+    {
+        return (bool) self::get('allow_excess_fund_cash_out', true);
+    }
+
+    public static function hasAvailableFundingStrategy(): bool
+    {
+        return self::allowMemberFundTopupStrategy() || self::allowSplitPercentageStrategy();
     }
 
     /**

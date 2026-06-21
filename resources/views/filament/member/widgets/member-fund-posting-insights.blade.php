@@ -19,7 +19,7 @@
                         <p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
                             {{ trans_choice(':count pending|:count pending', $d['pending'], ['count' => $d['pending']]) }}
                             @if ($d['pending'] > 0)
-                                · {{ $d['pending_amount'] }}
+                                · <x-ff-money-text :text="$d['pending_amount']" />
                             @endif
                         </p>
                     </div>
@@ -70,7 +70,7 @@
                     @foreach ($d['recent'] as $row)
                         <li class="flex justify-between px-3 py-2 text-xs">
                             <span>{{ $row['date'] }} · {{ $row['status_label'] }}</span>
-                            <span class="font-semibold tabular-nums">{{ $row['amount'] }}</span>
+                            <x-ff-money-text :text="$row['amount']" class="font-semibold tabular-nums" />
                         </li>
                     @endforeach
                 </ul>

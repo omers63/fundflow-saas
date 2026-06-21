@@ -2,6 +2,7 @@
 @import '../mobile-panels.css';
 @import '../stat-widget-tooltips.css';
 @import '../currency-display.css';
+@import '../portal-topbar-shortcuts.css';
 @import './tenant-portal-components.css';
 
 @source '../../../../vendor/bezhansalleh/filament-language-switch/resources/views/**/*.blade.php';
@@ -593,6 +594,22 @@ html.fi.fi-panel-tenant #nprogress .peg {
 }
 
 /* Main dashboard */
+.fi-body.fi-panel-tenant .ff-tenant-dashboard-hero {
+    animation: ff-dashboard-glow 8s ease-in-out infinite alternate;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-dashboard-hero__balance {
+    animation: ff-stat-in 0.5s ease-out both;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-dashboard-hero__balance:nth-child(2) {
+    animation-delay: 0.06s;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-dashboard-hero__balance:nth-child(3) {
+    animation-delay: 0.12s;
+}
+
 .fi-body.fi-panel-tenant .ff-dashboard-hero {
   animation: ff-dashboard-glow 8s ease-in-out infinite alternate;
 }
@@ -1031,6 +1048,23 @@ html.fi.fi-panel-tenant #nprogress .peg {
     background: var(--ff-surface);
     padding-inline: 0.875rem;
     padding-block: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.fi-body.fi-panel-tenant .fi-resource-relation-manager .fi-ta-header .fi-ta-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-inline-start: auto;
+}
+
+.fi-body.fi-panel-tenant .ff-ledger-header-actions + .fi-ta-ctn > .fi-ta-header .fi-ta-actions {
+    display: none !important;
 }
 
 .dark .fi-body.fi-panel-tenant .fi-resource-relation-manager > .fi-ta-header {
@@ -1334,12 +1368,6 @@ html.fi.fi-panel-tenant #nprogress .peg {
     color: #fdba74 !important;
 }
 
-/* ── Settings: external pill nav hides Filament tab bar ── */
-.fi-body.fi-panel-tenant.fi-page-settings .fi-sc-tabs > .fi-tabs:not(.fi-contained) > .fi-tabs-tab-ctn,
-.fi-body.fi-panel-tenant.fi-page-settings .fi-fo-tabs > .fi-tabs > .fi-tabs-tab-ctn {
-    display: none;
-}
-
 /* ── Loan queue: compact inline action buttons ── */
 .fi-body.fi-panel-tenant.fi-page-loan-queue .fi-ta-actions .fi-btn {
     font-size: 0.6875rem;
@@ -1347,42 +1375,84 @@ html.fi.fi-panel-tenant #nprogress .peg {
     padding-block: 0.25rem;
 }
 
-/* ── Topbar: cycle chip + messages + language switch ── */
-.fi-body.fi-panel-tenant .ff-tenant-topbar-locale {
-    display: flex;
-    align-items: center;
+/* ── Loan lifecycle pipeline stepper (loan view insights) ── */
+@keyframes ff-loan-pipeline-step-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
-.fi-body.fi-panel-tenant .ff-tenant-topbar-language-switch .fi-dropdown-panel {
-    min-width: 9.5rem;
+@keyframes ff-loan-pipeline-pulse {
+    0%,
+    100% {
+        box-shadow:
+            0 0 0 0 rgb(14 165 233 / 0.4),
+            0 4px 6px -4px rgb(2 132 199 / 0.35);
+    }
+
+    50% {
+        box-shadow:
+            0 0 0 8px rgb(14 165 233 / 0),
+            0 4px 6px -4px rgb(2 132 199 / 0.35);
+    }
 }
 
-.fi-body.fi-panel-tenant .ff-tenant-topbar-language-switch__list {
-    min-width: 9.5rem;
+@keyframes ff-loan-pipeline-pulse-warning {
+    0%,
+    100% {
+        box-shadow:
+            0 0 0 0 rgb(244 63 94 / 0.45),
+            0 4px 6px -4px rgb(225 29 72 / 0.35);
+    }
+
+    50% {
+        box-shadow:
+            0 0 0 8px rgb(244 63 94 / 0),
+            0 4px 6px -4px rgb(225 29 72 / 0.35);
+    }
 }
 
-.fi-body.fi-panel-tenant .ff-tenant-topbar-language-switch__option {
-    min-height: 2rem;
+.fi-body.fi-panel-tenant .ff-loan-pipeline__step {
+    animation: ff-loan-pipeline-step-in 0.5s ease-out both;
 }
 
-.fi-body.fi-panel-tenant .ff-tenant-topbar-chip {
-    background: rgb(224 242 254 / 0.9);
-    border: 1px solid rgb(186 230 253 / 0.9);
-    transition: background-color 150ms ease, border-color 150ms ease;
+.fi-body.fi-panel-tenant .ff-loan-pipeline__track {
+    align-items: flex-start;
+    gap: 0;
 }
 
-.fi-body.fi-panel-tenant .ff-tenant-topbar-chip:hover {
-    background: rgb(186 230 253 / 0.95);
-    border-color: rgb(125 211 252);
+.fi-body.fi-panel-tenant .ff-loan-pipeline__rail {
+    flex-shrink: 0;
 }
 
-.dark .fi-body.fi-panel-tenant .ff-tenant-topbar-chip {
-    background: rgb(12 74 110 / 0.35);
-    border-color: rgb(3 105 161 / 0.45);
+.fi-body.fi-panel-tenant .ff-loan-pipeline__body {
+    flex: 1 1 auto;
 }
 
-.dark .fi-body.fi-panel-tenant .ff-tenant-topbar-chip:hover {
-    background: rgb(12 74 110 / 0.55);
+.fi-body.fi-panel-tenant .ff-loan-pipeline__nav {
+    overflow-y: visible;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-pipeline__node--pulse {
+    animation: ff-loan-pipeline-pulse 2.2s ease-in-out infinite;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-pipeline__node--pulse-warning {
+    animation-name: ff-loan-pipeline-pulse-warning;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-pipeline__connector,
+.fi-body.fi-panel-tenant .ff-loan-pipeline__arrow {
+    transition:
+        background-color 0.35s ease,
+        border-color 0.35s ease,
+        color 0.35s ease;
 }
 
 /* ── RTL layout (Arabic locale) ── */
@@ -1394,21 +1464,5 @@ html[dir='rtl'] .fi-body.fi-panel-tenant .fi-sidebar-nav-item-label,
 html[dir='rtl'] .fi-body.fi-panel-tenant .fi-page-header-heading,
 html[dir='rtl'] .fi-body.fi-panel-tenant .ff-tenant-tab-pills__item {
     letter-spacing: 0;
-}
-
-html[dir='rtl'] .fi-body.fi-panel-tenant .fi-ta-header-cell,
-html[dir='rtl'] .fi-body.fi-panel-tenant .fi-ta-cell {
-    text-align: start;
-}
-
-html[dir='rtl'] .fi-body.fi-panel-tenant .fi-ta-cell .ff-member-amount,
-html[dir='rtl'] .fi-body.fi-panel-tenant .tabular-nums {
-    direction: ltr;
-    unicode-bidi: isolate;
-    text-align: end;
-}
-
-html[dir='rtl'] .fi-body.fi-panel-tenant .ff-tenant-topbar-chip {
-    flex-direction: row-reverse;
 }
 

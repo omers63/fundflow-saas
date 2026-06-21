@@ -7,6 +7,7 @@ namespace App\Filament\Member\Pages;
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Support\LoanApplicationFundingFields;
 use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanTier;
@@ -14,17 +15,16 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanLifecycleService;
 use App\Services\LoanService;
+use App\Support\LoanFundExcessDisposition;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
@@ -80,7 +80,7 @@ class ApplyForLoan extends Page implements HasForms
         if (! ($eligibility['eligible'] ?? false)) {
             Notification::make()
                 ->title(__('Not eligible to apply'))
-                ->body($eligibility['reason'] ?? __('You cannot apply for a loan at this time.'))
+                ->body($eligibility['reasons'][0] ?? __('You cannot apply for a loan at this time.'))
                 ->warning()
                 ->send();
 
@@ -91,8 +91,8 @@ class ApplyForLoan extends Page implements HasForms
 
         $this->form->fill([
             'has_grace_cycle' => true,
-            'funding_strategy' => LoanFundingStrategy::MEMBER_FUND_TOPUP,
-            'cash_out_excess_fund' => false,
+            'funding_strategy' => LoanFundingStrategy::defaultForApplication(),
+            'excess_fund_disposition' => LoanFundExcessDisposition::defaultForApplication(),
         ]);
     }
 
@@ -110,6 +110,11 @@ class ApplyForLoan extends Page implements HasForms
     {
         $member = CurrentMember::get();
         $currency = Setting::get('general', 'currency', 'USD');
+
+        [$strategyRadio, $strategyFixed, $excessDisposition] = LoanApplicationFundingFields::components(
+            fn (Get $get): ?Member => $member,
+            amountField: 'amount',
+        );
 
         return $schema
             ->components([
@@ -161,32 +166,9 @@ class ApplyForLoan extends Page implements HasForms
                                 ->default(1)
                                 ->required()
                                 ->native(false),
-                            Radio::make('funding_strategy')
-                                ->label(__('How should this loan be funded?'))
-                                ->options(LoanFundingStrategy::options())
-                                ->default(LoanFundingStrategy::MEMBER_FUND_TOPUP)
-                                ->required()
-                                ->live(),
-                            Toggle::make('cash_out_excess_fund')
-                                ->label(__('Move remaining fund balance to cash at disbursement'))
-                                ->helperText(function (Get $get) use ($member, $currency): ?string {
-                                    $amount = (float) ($get('amount') ?? 0);
-                                    if ($amount <= 0 || $member === null) {
-                                        return __('Available when you choose the configured fund split. Any fund balance above your loan share can be credited to your cash account when the loan is disbursed.');
-                                    }
-                                    $excess = LoanSettings::excessFundCashOutAmount(
-                                        $amount,
-                                        $member->getFundBalance(),
-                                        LoanFundingStrategy::SPLIT_PERCENTAGE,
-                                    );
-
-                                    return $excess > 0
-                                        ? __('Estimated transfer at disbursement: :amount', [
-                                            'amount' => MoneyDisplay::format($excess, $currency) ?? '—',
-                                        ])
-                                        : __('You have no fund balance above your configured share for this amount.');
-                                })
-                                ->visible(fn (Get $get): bool => ($get('funding_strategy') ?? LoanFundingStrategy::MEMBER_FUND_TOPUP) === LoanFundingStrategy::SPLIT_PERCENTAGE),
+                            $strategyRadio,
+                            $strategyFixed,
+                            $excessDisposition,
                         ]),
                     Step::make(__('Purpose'))
                         ->icon(Heroicon::OutlinedChatBubbleLeftEllipsis)
@@ -248,13 +230,20 @@ class ApplyForLoan extends Page implements HasForms
                                 ->content(fn (Get $get): HtmlString => new HtmlString(nl2br(e((string) ($get('purpose') ?? ''))))),
                             Placeholder::make('review_funding')
                                 ->label(__('Funding'))
-                                ->content(fn (Get $get): string => LoanFundingStrategy::options()[(string) ($get('funding_strategy') ?? LoanFundingStrategy::MEMBER_FUND_TOPUP)] ?? '—'),
-                            Placeholder::make('review_cash_out')
-                                ->label(__('Excess fund to cash'))
-                                ->visible(fn (Get $get): bool => ($get('funding_strategy') ?? '') === LoanFundingStrategy::SPLIT_PERCENTAGE)
-                                ->content(fn (Get $get): string => ($get('cash_out_excess_fund') ?? false)
-                                    ? __('Yes, at disbursement')
-                                    : __('No')),
+                                ->content(function (Get $get): string {
+                                    $strategy = (string) ($get('funding_strategy') ?? LoanFundingStrategy::defaultForApplication());
+
+                                    return LoanFundingStrategy::options()[$strategy]
+                                        ?? LoanFundingStrategy::availableOptions()[$strategy]
+                                        ?? '—';
+                                }),
+                            Placeholder::make('review_excess_fund')
+                                ->label(__('Remaining fund balance'))
+                                ->visible(fn (Get $get): bool => ($get('funding_strategy') ?? '') === LoanFundingStrategy::SPLIT_PERCENTAGE
+                                    && count(LoanFundExcessDisposition::availableOptions()) > 0)
+                                ->content(fn (Get $get): string => LoanFundExcessDisposition::label(
+                                    (string) ($get('excess_fund_disposition') ?? LoanFundExcessDisposition::defaultForApplication()),
+                                )),
                         ]),
                 ])
                     ->submitAction(new HtmlString(Blade::render(<<<'BLADE'
@@ -276,6 +265,9 @@ class ApplyForLoan extends Page implements HasForms
         }
 
         $data = $this->form->getState();
+        $fundingStrategy = count(LoanFundingStrategy::availableOptions()) === 1
+            ? LoanFundingStrategy::defaultForApplication()
+            : (string) ($data['funding_strategy'] ?? LoanFundingStrategy::defaultForApplication());
 
         try {
             $loan = $lifecycle->applyForLoan(
@@ -290,8 +282,10 @@ class ApplyForLoan extends Page implements HasForms
                 filled($data['witness1_phone'] ?? null) ? (string) $data['witness1_phone'] : null,
                 filled($data['witness2_name'] ?? null) ? (string) $data['witness2_name'] : null,
                 filled($data['witness2_phone'] ?? null) ? (string) $data['witness2_phone'] : null,
-                fundingStrategy: (string) ($data['funding_strategy'] ?? LoanFundingStrategy::MEMBER_FUND_TOPUP),
-                cashOutExcessFund: (bool) ($data['cash_out_excess_fund'] ?? false),
+                fundingStrategy: $fundingStrategy,
+                cashOutExcessFund: LoanFundExcessDisposition::toCashOutFlag(
+                    (string) ($data['excess_fund_disposition'] ?? LoanFundExcessDisposition::defaultForApplication()),
+                ),
             );
 
             Notification::make()

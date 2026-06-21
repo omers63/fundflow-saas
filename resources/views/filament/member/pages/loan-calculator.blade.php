@@ -20,12 +20,12 @@
 ]) }}
                         {{ __('and the active loan tier settings.') }}
                         {{ __('If you choose the configured split at application, :member% comes from your fund and :master% from the master fund.', [
-                            'member' => number_format($this->memberFundingSplitPercent, 1),
-                            'master' => number_format($this->masterFundingSplitPercent, 1),
-                        ]) }}
+    'member' => number_format($this->memberFundingSplitPercent, 1),
+    'master' => number_format($this->masterFundingSplitPercent, 1),
+]) }}
                         {{ __('The :percent% settlement threshold is included.', [
-                            'percent' => round($this->settlementPct * 100),
-                        ]) }}
+    'percent' => round($this->settlementPct * 100),
+]) }}
                     </p>
                 </div>
             </div>
@@ -34,18 +34,25 @@
         <div
             class="rounded-xl bg-gradient-to-br from-sky-100 via-white to-indigo-50 p-4 shadow-md ring-1 ring-sky-200/80 dark:from-slate-800 dark:via-sky-950/35 dark:to-indigo-950/30 dark:ring-sky-600/40 sm:p-5">
             <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {{ __('Loan amount') }} (<span dir="ltr">{{ \App\Filament\Support\MoneyDisplay::symbol($currency) }}</span>)
+                {{ __('Loan amount') }} (<span
+                    dir="ltr">{!! \App\Filament\Support\MoneyDisplay::symbolHtml($currency)->toHtml() !!}</span>)
             </label>
             <div class="mb-4">
                 <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
                     {{ __('Funding approach') }}
                 </label>
-                <select wire:model.live="fundingStrategy"
-                    class="block w-full rounded-lg border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:max-w-md">
-                    @foreach ($this->fundingStrategyOptions as $value => $label)
-                        <option value="{{ $value }}">{{ $label }}</option>
-                    @endforeach
-                </select>
+                @if (count($this->fundingStrategyOptions) > 1)
+                    <select wire:model.live="fundingStrategy"
+                        class="block w-full rounded-lg border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:max-w-md">
+                        @foreach ($this->fundingStrategyOptions as $value => $label)
+                            <option value="{{ $value }}">{{ $label }}</option>
+                        @endforeach
+                    </select>
+                @else
+                    <p class="text-sm text-gray-700 dark:text-gray-300">
+                        {{ $this->fundingStrategyOptions[$this->fundingStrategy] ?? '—' }}
+                    </p>
+                @endif
             </div>
             <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                 <input type="number" wire:model.live.debounce.400ms="loanAmount" min="0" step="500"
@@ -63,7 +70,8 @@
                     @foreach ($this->activeTiers as $tier)
                         <button type="button" wire:click="$set('loanAmount', {{ (float) $tier->min_amount }})"
                             class="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-primary-100 hover:text-primary-700 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-primary-900 dark:hover:text-primary-300">
-                            {{ $tier->label }} ({!! \App\Filament\Support\MoneyDisplay::html((float) $tier->min_amount, $currency, precision: 0)?->toHtml() !!})
+                            {{ $tier->label }}
+                            ({!! \App\Filament\Support\MoneyDisplay::html((float) $tier->min_amount, $currency, precision: 0)?->toHtml() !!})
                         </button>
                     @endforeach
                 </div>
@@ -83,17 +91,18 @@
                                 <span
                                     class="ml-2 text-xs text-gray-500 dark:text-gray-400">{{ $this->formatTierRange($calc['tier']) }}</span>
                             </div>
-                            <div class="text-right">
+                            <div class="text-end tabular-nums">
                                 <span
                                     class="text-2xl font-bold text-primary-600 dark:text-primary-400">{{ $calc['installments'] }}</span>
-                                <span class="ml-1 text-sm text-gray-500 dark:text-gray-400">{{ __('months') }}</span>
+                                <span class="ms-1 text-sm text-gray-500 dark:text-gray-400">{{ __('months') }}</span>
                             </div>
                         </div>
 
                         <div class="grid grid-cols-2 gap-4 px-4 py-4 sm:grid-cols-3 sm:px-5">
                             <div>
                                 <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                    {{ __('Monthly installment') }}</p>
+                                    {{ __('Monthly installment') }}
+                                </p>
                                 <p class="mt-1 text-base font-semibold text-gray-900 dark:text-white">
                                     {!! \App\Filament\Support\MoneyDisplay::html($calc['min_installment'], $currency)?->toHtml() !!}
                                 </p>
@@ -101,7 +110,8 @@
                             </div>
                             <div>
                                 <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                    {{ __('Your fund portion') }}</p>
+                                    {{ __('Your fund portion') }}
+                                </p>
                                 <p class="mt-1 text-base font-semibold text-emerald-600 dark:text-emerald-400">
                                     {!! \App\Filament\Support\MoneyDisplay::html($calc['member_portion'], $currency)?->toHtml() !!}
                                 </p>
@@ -109,7 +119,8 @@
                             </div>
                             <div>
                                 <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                    {{ __('Fund contribution') }}</p>
+                                    {{ __('Fund contribution') }}
+                                </p>
                                 <p class="mt-1 text-base font-semibold text-amber-600 dark:text-amber-400">
                                     {!! \App\Filament\Support\MoneyDisplay::html($calc['master_portion'], $currency)?->toHtml() !!}
                                 </p>
@@ -117,7 +128,8 @@
                             </div>
                             <div>
                                 <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                    {{ __('Settlement amount') }}</p>
+                                    {{ __('Settlement amount') }}
+                                </p>
                                 <p class="mt-1 text-base font-semibold text-gray-700 dark:text-gray-300">
                                     {!! \App\Filament\Support\MoneyDisplay::html($calc['settlement_amt'], $currency)?->toHtml() !!}
                                 </p>
@@ -127,7 +139,8 @@
                             </div>
                             <div>
                                 <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                    {{ __('Total to repay') }}</p>
+                                    {{ __('Total to repay') }}
+                                </p>
                                 <p class="mt-1 text-base font-semibold text-gray-900 dark:text-white">
                                     {!! \App\Filament\Support\MoneyDisplay::html($calc['total_repay'], $currency)?->toHtml() !!}
                                 </p>

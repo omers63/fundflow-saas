@@ -161,10 +161,10 @@ final class LoanInsightsService
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'pending', 'label' => __('Pending'), 'value' => (string) $pending, 'sub' => __('Applications'), 'icon' => 'heroicon-o-clock', 'accent' => 'amber', 'active' => $pending > 0],
                 ['key' => 'active', 'label' => __('Active'), 'value' => (string) $active, 'sub' => __('Repaying'), 'icon' => 'heroicon-o-banknotes', 'accent' => 'emerald', 'active' => true],
-                ['key' => 'outstanding', 'label' => __('Outstanding'), 'value' => $this->formatMoneyCompact($outstanding, $currency), 'sub' => __('Portfolio'), 'icon' => 'heroicon-o-scale', 'accent' => 'violet', 'active' => $outstanding > 0],
+                ['key' => 'outstanding', 'label' => __('Outstanding'), ...InsightKpi::moneyValue($outstanding, $currency), 'sub' => __('Portfolio'), 'icon' => 'heroicon-o-scale', 'accent' => 'violet', 'active' => $outstanding > 0],
                 ['key' => 'overdue', 'label' => __('Overdue'), 'value' => (string) $overdueCount, 'sub' => __('Installments'), 'icon' => 'heroicon-o-exclamation-triangle', 'accent' => 'rose', 'active' => $overdueCount > 0, 'value_class' => $overdueCount > 0 ? 'text-rose-600 dark:text-rose-400' : null],
                 ['key' => 'new', 'label' => __('New/mo'), 'value' => (string) $newThisMonth, 'sub' => $this->monthOverMonthChange($newThisMonth, $newLastMonth) !== null ? __(':percent%', ['percent' => $this->monthOverMonthChange($newThisMonth, $newLastMonth)]) : BusinessDay::now()->format('M'), 'icon' => 'heroicon-o-sparkles', 'accent' => 'sky', 'active' => true, 'mom' => $this->monthOverMonthChange($newThisMonth, $newLastMonth)],
-                ['key' => 'disbursed', 'label' => __('Disbursed'), 'value' => $this->formatMoneyCompact($disbursedThisMonth, $currency), 'sub' => __('This month'), 'icon' => 'heroicon-o-arrow-trending-up', 'accent' => 'teal', 'active' => true],
+                ['key' => 'disbursed', 'label' => __('Disbursed'), ...InsightKpi::moneyValue($disbursedThisMonth, $currency), 'sub' => __('This month'), 'icon' => 'heroicon-o-arrow-trending-up', 'accent' => 'teal', 'active' => true],
             ], [
                 'pending' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'pending']]),
                 'active' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'active']]),
@@ -456,7 +456,7 @@ final class LoanInsightsService
                 'missing_open_period' => $pendingMembers,
                 'collected_open_period' => $collectedCount,
                 'ready_with_cash' => $readyWithCash,
-                'required_cash' => $this->formatMoneyCompact($requiredCashTotal, $currency),
+                'required_cash' => $requiredCashTotal,
                 'overdue_installments' => $overdueInstallments,
                 'collect_url' => $collectUrl,
                 'collected_url' => LoanResource::listTabUrl('emi_collected'),
@@ -501,7 +501,7 @@ final class LoanInsightsService
             ],
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'collected', 'label' => __('Collected'), 'value' => (string) $collectedCount, 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => $collectedCount > 0],
-                ['key' => 'amount', 'label' => __('Amount'), 'value' => $this->formatMoneyCompact($collectedAmount, $currency), 'sub' => $periodLabel, 'icon' => 'heroicon-o-currency-dollar', 'accent' => 'teal', 'active' => $collectedAmount > 0],
+                ['key' => 'amount', 'label' => __('Amount'), ...InsightKpi::moneyValue($collectedAmount, $currency), 'sub' => $periodLabel, 'icon' => 'heroicon-o-currency-dollar', 'accent' => 'teal', 'active' => $collectedAmount > 0],
                 ['key' => 'remaining', 'label' => __('Remaining'), 'value' => (string) $pendingMembers, 'sub' => __('Members'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $pendingMembers > 0],
                 ['key' => 'pending_emis', 'label' => __('Pending EMIs'), 'value' => (string) $metrics['total_pending_emis'], 'sub' => __('Installments'), 'icon' => 'heroicon-o-clock', 'accent' => 'sky', 'active' => $metrics['total_pending_emis'] > 0],
                 ['key' => 'collect', 'label' => __('To collect'), 'value' => (string) $pendingMembers, 'sub' => __('Open period'), 'icon' => 'heroicon-o-arrow-down-tray', 'accent' => 'violet', 'active' => $pendingMembers > 0],
@@ -583,7 +583,7 @@ final class LoanInsightsService
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'decision', 'label' => __('Decision'), 'value' => (string) $needsDecision, 'sub' => __('Pending'), 'icon' => 'heroicon-o-clipboard-document-check', 'accent' => 'amber', 'active' => $needsDecision > 0],
                 ['key' => 'disburse', 'label' => __('Disburse'), 'value' => (string) $readyToDisburse, 'sub' => __('Approved'), 'icon' => 'heroicon-o-currency-dollar', 'accent' => 'sky', 'active' => $readyToDisburse > 0],
-                ['key' => 'tab_total', 'label' => __('Tab total'), 'value' => $this->formatMoneyCompact($tabExposure, $currency), 'sub' => __('Exposure'), 'icon' => 'heroicon-o-scale', 'accent' => 'violet', 'active' => true],
+                ['key' => 'tab_total', 'label' => __('Tab total'), ...InsightKpi::moneyValue($tabExposure, $currency), 'sub' => __('Exposure'), 'icon' => 'heroicon-o-scale', 'accent' => 'violet', 'active' => true],
                 ['key' => 'emergency', 'label' => __('Emergency'), 'value' => (string) $emergency, 'sub' => __('In queue'), 'icon' => 'heroicon-o-bolt', 'accent' => 'rose', 'active' => $emergency > 0],
                 ['key' => 'queue', 'label' => __('Queue'), 'value' => (string) $total, 'sub' => __('All stages'), 'icon' => 'heroicon-o-queue-list', 'accent' => 'teal', 'active' => true],
             ], [
@@ -649,8 +649,8 @@ final class LoanInsightsService
                 ['key' => 'active', 'label' => __('Active'), 'value' => (string) $activeTiers->count(), 'sub' => __('Tiers'), 'icon' => 'heroicon-o-squares-2x2', 'accent' => 'emerald', 'active' => true],
                 ['key' => 'inactive', 'label' => __('Inactive'), 'value' => (string) $inactiveCount, 'sub' => __('Tiers'), 'icon' => 'heroicon-o-pause-circle', 'accent' => 'violet', 'active' => $inactiveCount > 0],
                 ['key' => 'in_flight', 'label' => __('In flight'), 'value' => (string) array_sum($loansByTier->all()), 'sub' => __('Loans'), 'icon' => 'heroicon-o-document-text', 'accent' => 'sky', 'active' => true],
-                ['key' => 'min_band', 'label' => __('Min band'), 'value' => $activeTiers->isNotEmpty() ? $this->formatMoneyCompact((float) $activeTiers->min('min_amount'), $currency) : '—', 'sub' => __('Lowest'), 'icon' => 'heroicon-o-arrow-down', 'accent' => 'teal', 'active' => true],
-                ['key' => 'max_band', 'label' => __('Max band'), 'value' => $activeTiers->isNotEmpty() ? $this->formatMoneyCompact((float) $activeTiers->max('max_amount'), $currency) : '—', 'sub' => __('Highest'), 'icon' => 'heroicon-o-arrow-up', 'accent' => 'violet', 'active' => true],
+                ['key' => 'min_band', 'label' => __('Min band'), ...($activeTiers->isNotEmpty() ? InsightKpi::moneyValue((float) $activeTiers->min('min_amount'), $currency) : ['value' => '—']), 'sub' => __('Lowest'), 'icon' => 'heroicon-o-arrow-down', 'accent' => 'teal', 'active' => true],
+                ['key' => 'max_band', 'label' => __('Max band'), ...($activeTiers->isNotEmpty() ? InsightKpi::moneyValue((float) $activeTiers->max('max_amount'), $currency) : ['value' => '—']), 'sub' => __('Highest'), 'icon' => 'heroicon-o-arrow-up', 'accent' => 'violet', 'active' => true],
                 ['key' => 'fund_pools', 'label' => __('Fund pools'), 'value' => (string) FundTier::query()->where('is_active', true)->count(), 'sub' => __('Linked'), 'icon' => 'heroicon-o-circle-stack', 'accent' => 'indigo', 'active' => true],
             ], [
                 'active' => LoanTierResource::getUrl('index'),
@@ -720,10 +720,10 @@ final class LoanInsightsService
                 'cta_url' => LoanTierResource::getUrl('index'),
             ],
             'kpis' => InsightKpi::linkMany([
-                ['key' => 'master_fund', 'label' => __('Master fund'), 'value' => $this->formatMoneyCompact($masterBalance, $currency), 'sub' => __('Balance'), 'icon' => 'heroicon-o-building-library', 'accent' => 'indigo', 'active' => true],
-                ['key' => 'allocated', 'label' => __('Allocated'), 'value' => $this->formatMoneyCompact($totalAllocated, $currency), 'sub' => __('Pools'), 'icon' => 'heroicon-o-circle-stack', 'accent' => 'sky', 'active' => true],
-                ['key' => 'deployed', 'label' => __('Deployed'), 'value' => $this->formatMoneyCompact($totalExposure, $currency), 'sub' => __('Exposure'), 'icon' => 'heroicon-o-arrow-trending-up', 'accent' => 'amber', 'active' => $totalExposure > 0],
-                ['key' => 'available', 'label' => __('Available'), 'value' => $this->formatMoneyCompact($totalAvailable, $currency), 'sub' => __('Headroom'), 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => true],
+                ['key' => 'master_fund', 'label' => __('Master fund'), ...InsightKpi::moneyValue($masterBalance, $currency), 'sub' => __('Balance'), 'icon' => 'heroicon-o-building-library', 'accent' => 'indigo', 'active' => true],
+                ['key' => 'allocated', 'label' => __('Allocated'), ...InsightKpi::moneyValue($totalAllocated, $currency), 'sub' => __('Pools'), 'icon' => 'heroicon-o-circle-stack', 'accent' => 'sky', 'active' => true],
+                ['key' => 'deployed', 'label' => __('Deployed'), ...InsightKpi::moneyValue($totalExposure, $currency), 'sub' => __('Exposure'), 'icon' => 'heroicon-o-arrow-trending-up', 'accent' => 'amber', 'active' => $totalExposure > 0],
+                ['key' => 'available', 'label' => __('Available'), ...InsightKpi::moneyValue($totalAvailable, $currency), 'sub' => __('Headroom'), 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => true],
                 ['key' => 'utilization', 'label' => __('Utilization'), 'value' => $utilization.'%', 'sub' => __('Portfolio'), 'icon' => 'heroicon-o-chart-pie', 'accent' => 'violet', 'active' => true],
                 ['key' => 'active_tiers', 'label' => __('Active tiers'), 'value' => (string) $tiers->count(), 'sub' => __('Pools'), 'icon' => 'heroicon-o-squares-2x2', 'accent' => 'teal', 'active' => true],
             ], [
@@ -809,10 +809,10 @@ final class LoanInsightsService
                     : null,
             ],
             'kpis' => InsightKpi::linkMany([
-                ['key' => 'requested', 'label' => __('Requested'), 'value' => $this->formatMoneyCompact((float) $loan->amount_requested, $currency), 'sub' => __('Application'), 'icon' => 'heroicon-o-document-text', 'accent' => 'sky', 'active' => true],
-                ['key' => 'approved', 'label' => __('Approved'), 'value' => $loan->amount_approved ? $this->formatMoneyCompact($approved, $currency) : '—', 'sub' => __('Terms'), 'icon' => 'heroicon-o-check-badge', 'accent' => 'emerald', 'active' => (bool) $loan->amount_approved],
-                ['key' => 'disbursed', 'label' => __('Disbursed'), 'value' => $this->formatMoneyCompact($disbursed, $currency), 'sub' => $disbursePercent.'%', 'icon' => 'heroicon-o-banknotes', 'accent' => 'indigo', 'active' => $disbursed > 0],
-                ['key' => 'outstanding', 'label' => __('Outstanding'), 'value' => $this->formatMoneyCompact($outstanding, $currency), 'sub' => __('Balance'), 'icon' => 'heroicon-o-scale', 'accent' => 'violet', 'active' => $outstanding > 0],
+                ['key' => 'requested', 'label' => __('Requested'), ...InsightKpi::moneyValue((float) $loan->amount_requested, $currency), 'sub' => __('Application'), 'icon' => 'heroicon-o-document-text', 'accent' => 'sky', 'active' => true],
+                ['key' => 'approved', 'label' => __('Approved'), ...($loan->amount_approved ? InsightKpi::moneyValue($approved, $currency) : ['value' => '—']), 'sub' => __('Terms'), 'icon' => 'heroicon-o-check-badge', 'accent' => 'emerald', 'active' => (bool) $loan->amount_approved],
+                ['key' => 'disbursed', 'label' => __('Disbursed'), ...InsightKpi::moneyValue($disbursed, $currency), 'sub' => $disbursePercent.'%', 'icon' => 'heroicon-o-banknotes', 'accent' => 'indigo', 'active' => $disbursed > 0],
+                ['key' => 'outstanding', 'label' => __('Outstanding'), ...InsightKpi::moneyValue($outstanding, $currency), 'sub' => __('Balance'), 'icon' => 'heroicon-o-scale', 'accent' => 'violet', 'active' => $outstanding > 0],
                 ['key' => 'queue', 'label' => __('Queue'), 'value' => $loan->queue_position ? '#'.$loan->queue_position : '—', 'sub' => $loan->fundTier?->label ?? '—', 'icon' => 'heroicon-o-queue-list', 'accent' => 'amber', 'active' => (bool) $loan->queue_position],
                 ['key' => 'schedule', 'label' => __('Schedule'), 'value' => $installmentsTotal > 0 ? $installmentsPaid.'/'.$installmentsTotal : '—', 'sub' => $repayPercent.'% '.__('paid'), 'icon' => 'heroicon-o-calendar-days', 'accent' => 'teal', 'active' => $installmentsTotal > 0],
             ], $kpiUrls),
@@ -821,7 +821,7 @@ final class LoanInsightsService
                 'repay' => ['percent' => $repayPercent, 'label' => __('Repayment schedule')],
             ],
             'next_due' => $nextInstallment ? [
-                'amount' => $this->formatMoneyCompact((float) $nextInstallment->amount, $currency),
+                'amount' => (float) $nextInstallment->amount,
                 'date' => $nextInstallment->due_date?->format('d M Y'),
                 'status' => $nextInstallment->status,
                 'is_overdue' => $nextInstallment->status === 'overdue',
@@ -846,6 +846,8 @@ final class LoanInsightsService
                 $loan->repayments->isNotEmpty() ? [
                     'key' => 'repayments',
                     'label' => __('Imported/legacy repayments'),
+                    'money_amount' => (float) $loan->repayments->sum('amount'),
+                    'money_compact' => true,
                     'value' => $this->formatMoneyCompact((float) $loan->repayments->sum('amount'), $currency),
                     'hint' => __('Imported rows · schedule drives balance'),
                     'accent' => 'violet',
@@ -940,7 +942,7 @@ final class LoanInsightsService
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'pending', 'label' => __('Pending'), 'value' => (string) $pending, 'sub' => __('Requests'), 'icon' => 'heroicon-o-clock', 'accent' => 'amber', 'active' => $pending > 0],
                 ['key' => 'active', 'label' => __('Active'), 'value' => (string) $active, 'sub' => __('Loans'), 'icon' => 'heroicon-o-banknotes', 'accent' => 'emerald', 'active' => $active > 0],
-                ['key' => 'outstanding', 'label' => __('Outstanding'), 'value' => $this->formatMoneyCompact($outstanding, $currency), 'sub' => __('Due'), 'icon' => 'heroicon-o-scale', 'accent' => 'violet', 'active' => $outstanding > 0],
+                ['key' => 'outstanding', 'label' => __('Outstanding'), ...InsightKpi::moneyValue($outstanding, $currency), 'sub' => __('Due'), 'icon' => 'heroicon-o-scale', 'accent' => 'violet', 'active' => $outstanding > 0],
                 ['key' => 'completed', 'label' => __('Completed'), 'value' => (string) $completed, 'sub' => __('History'), 'icon' => 'heroicon-o-check-circle', 'accent' => 'teal', 'active' => $completed > 0],
             ], [
                 'pending' => $this->memberLoansIndexUrl('pending'),
@@ -1045,12 +1047,11 @@ final class LoanInsightsService
     ): array {
         $pending = $catalog->pendingInstallmentCountForMember($member, $month, $year);
         $required = $catalog->requiredCashForMember($member, $month, $year);
-        $currency = Setting::get('general', 'currency', 'USD');
 
         return [
             'member' => $member->name,
             'pending_emis' => $pending,
-            'required_cash' => $this->formatMoneyCompact($required, $currency),
+            'required_cash' => $required,
             'has_cash' => $catalog->memberHasSufficientCash($member, $month, $year),
             'filter_url' => LoanResource::listUrl('emi_collect', [
                 'tableSearch' => $member->name,

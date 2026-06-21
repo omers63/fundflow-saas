@@ -70,7 +70,7 @@
                                 </p>
                             </div>
                             <span @class(['shrink-0 font-semibold tabular-nums', $tx['signed_class']])>
-                                {{ $tx['prefix'] }}{{ $tx['amount'] }}
+                                {{ $tx['prefix'] }}<x-ff-money-text :text="$tx['amount']" />
                             </span>
                         </li>
                     @empty

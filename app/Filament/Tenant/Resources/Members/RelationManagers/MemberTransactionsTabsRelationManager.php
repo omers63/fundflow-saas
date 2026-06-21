@@ -16,6 +16,7 @@ use App\Filament\Support\ViewActions\ViewAccountTransactionAction;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Services\AccountingService;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -76,16 +77,20 @@ class MemberTransactionsTabsRelationManager extends RelationManager
                 DateColumnRangeFilter::make('transacted_at', __('Date')),
             ]);
 
-        if ($this->ledgerTab === 'cash') {
-            $table = $table->headerActions(
-                AccountTransactionManualAdjustmentHeaderActions::make(
-                    fn (): Account => $member->cashAccount,
-                    function () use ($member): void {
-                        $this->resetTable();
-                        AccountDetailInsightsRefresh::dispatchLedgerChange((int) $member->cashAccount->id);
-                    },
-                ),
-            );
+        if (in_array($this->ledgerTab, ['cash', 'fund'], true)) {
+            $account = $this->resolveMemberLedgerAccount($member);
+
+            if ($account !== null) {
+                $table = $table->headerActions(
+                    AccountTransactionManualAdjustmentHeaderActions::make(
+                        fn (): Account => $account,
+                        function () use ($account): void {
+                            $this->resetTable();
+                            AccountDetailInsightsRefresh::dispatchLedgerChange((int) $account->id);
+                        },
+                    ),
+                );
+            }
         }
 
         return ViewAccountTransactionAction::configure($table)
@@ -95,5 +100,21 @@ class MemberTransactionsTabsRelationManager extends RelationManager
     protected function getTableQueryStringIdentifier(): ?string
     {
         return 'member_ledger_'.$this->ledgerTab;
+    }
+
+    private function resolveMemberLedgerAccount(Member $member): ?Account
+    {
+        $relation = $this->ledgerTab === 'fund' ? 'fundAccount' : 'cashAccount';
+        $member->loadMissing($relation);
+        $account = $member->{$relation};
+
+        if ($account !== null) {
+            return $account;
+        }
+
+        app(AccountingService::class)->createMemberAccounts($member);
+        $member->load($relation);
+
+        return $member->{$relation};
     }
 }

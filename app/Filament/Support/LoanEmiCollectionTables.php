@@ -43,18 +43,21 @@ final class LoanEmiCollectionTables
                         ->label(__('Pending EMIs'))
                         ->state(fn(Member $record): int => $catalog->pendingInstallmentCountForMember($record, $month, $year))
                         ->alignEnd()
+                        ->searchable(false)
                         ->sortable(false),
                     TextColumn::make('total_due')
                         ->label(__('Total due'))
                         ->state(fn(Member $record): float => $catalog->requiredCashForMember($record, $month, $year))
                         ->money($currency)
                         ->alignEnd()
+                        ->searchable(false)
                         ->sortable(false),
                     TextColumn::make('available_cash')
                         ->label(__('Cash balance'))
                         ->state(fn(Member $record): float => $record->getCashBalance())
                         ->money($currency)
                         ->alignEnd()
+                        ->searchable(false)
                         ->sortable(false),
                     TextColumn::make('coverage')
                         ->label(__('Ready'))
@@ -65,6 +68,7 @@ final class LoanEmiCollectionTables
                         })
                         ->badge()
                         ->color(fn(string $state): string => $state === __('Yes') ? 'success' : 'warning')
+                        ->searchable(false)
                         ->sortable(false),
                     TextColumn::make('parent.name')
                         ->label(__('Parent'))

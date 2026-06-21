@@ -46,17 +46,19 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Tabs;
-use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\HtmlString;
+use Livewire\Attributes\Url;
 
 class Settings extends Page implements HasForms
 {
     use InteractsWithForms;
     use TranslatesPageNavigationLabel;
+
+    #[Url(as: 'settingsTab')]
+    public string $settingsTab = 'general::tab';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
 
@@ -118,6 +120,20 @@ class Settings extends Page implements HasForms
 
     public function mount(): void
     {
+        $this->form->fill($this->defaultSettingsFormState());
+
+        if (! array_key_exists($this->settingsTab, SettingsTabRegistry::tabs())) {
+            $this->settingsTab = 'general::tab';
+        }
+    }
+
+    /**
+     * Full settings form state loaded from storage (all tabs).
+     *
+     * @return array<string, mixed>
+     */
+    protected function defaultSettingsFormState(): array
+    {
         $general = Setting::getGroup('general');
         $contribution = Setting::getGroup('contribution');
         $loan = LoanSettings::all();
@@ -125,6 +141,7 @@ class Settings extends Page implements HasForms
         $memberNumber = MemberNumberSettings::all();
         $public = PublicPageSettings::all();
         $fiscal = FiscalSettings::forForm();
+        $reconciliation = Setting::getGroup('reconciliation');
 
         $templates = BankTemplate::orderBy('name')->get()->map(fn (BankTemplate $t) => [
             'id' => $t->id,
@@ -170,9 +187,7 @@ class Settings extends Page implements HasForms
             'member_match_field' => $t->member_match_field ?? 'member_number',
         ])->toArray();
 
-        $reconciliation = Setting::getGroup('reconciliation');
-
-        $this->form->fill([
+        return [
             'currency' => $general['currency'] ?? 'USD',
             'business_day' => BusinessDaySettings::forForm(),
             'reconciliation_bank_statement_balance' => $reconciliation['bank_statement_balance'] ?? null,
@@ -199,6 +214,9 @@ class Settings extends Page implements HasForms
             'loan_settlement_threshold_pct' => ($loan['settlement_threshold_pct'] ?? 0.16) * 100,
             'loan_require_guarantor_above_fund' => (bool) ($loan['require_guarantor_above_fund_balance'] ?? true),
             'loan_member_funding_split_pct' => (float) ($loan['member_funding_split_pct'] ?? 50),
+            'loan_allow_funding_strategy_member_topup' => (bool) ($loan['allow_funding_strategy_member_topup'] ?? true),
+            'loan_allow_funding_strategy_split' => (bool) ($loan['allow_funding_strategy_split_percentage'] ?? true),
+            'loan_allow_excess_fund_cash_out' => (bool) ($loan['allow_excess_fund_cash_out'] ?? true),
             'loan_auto_allocate_repayment' => (bool) ($loan['auto_allocate_loan_repayment'] ?? false),
             'loan_default_grace_cycles' => $loan['default_grace_cycles'] ?? 2,
             'loan_late_payment_consecutive' => $loan['late_payment_consecutive_threshold'] ?? 3,
@@ -232,761 +250,765 @@ class Settings extends Page implements HasForms
             'contact_phone' => $public['contact_phone'] ?? '',
             'fund_logo' => filled($public['fund_logo'] ?? '') ? [$public['fund_logo']] : [],
             ...ArabicDisplaySettings::allForForm(),
-        ]);
+        ];
+    }
+
+    public function setSettingsTab(string $tab): void
+    {
+        if (! array_key_exists($tab, SettingsTabRegistry::tabs())) {
+            return;
+        }
+
+        $this->settingsTab = $tab;
     }
 
     public function form(Schema $schema): Schema
     {
+        $schemas = $this->settingsTabFormSchemas();
+
         return $schema
-            ->schema([
-                Tabs::make('Settings')
-                    ->persistTabInQueryString('settingsTab')
-                    ->tabs([
-                        Tab::make('General')
-                            ->icon('heroicon-o-cog-6-tooth')
-                            ->schema([
-                                Section::make(__('Regional'))
-                                    ->columns(2)
-                                    ->schema([
-                                        Select::make('currency')
-                                            ->label('Currency')
-                                            ->required()
-                                            ->searchable()
-                                            ->options(static::currencyOptions())
-                                            ->helperText(__('The primary currency used for all transactions.')),
-                                    ]),
-                                Section::make(__('Business calendar'))
-                                    ->description(__('Set a custom date that the application treats as today. Useful for testing contribution cycles, loan eligibility, and delinquency in the future or past.'))
-                                    ->columns(2)
-                                    ->schema([
-                                        DatePicker::make('business_day')
-                                            ->label(__('Current business day'))
-                                            ->native(false)
-                                            ->placeholder(__('Use real calendar date'))
-                                            ->helperText(__('Leave empty to use the real calendar date. Time of day still follows the server clock.')),
-                                        Placeholder::make('business_day_effective')
-                                            ->label(__('Effective today'))
-                                            ->content(function (Get $get): string {
-                                                $configured = $get('business_day');
-
-                                                if (filled($configured)) {
-                                                    return __('App date: :business · Calendar: :calendar', [
-                                                        'business' => Carbon::parse((string) $configured)->toFormattedDateString(),
-                                                        'calendar' => BusinessDay::calendarToday()->toFormattedDateString(),
-                                                    ]);
-                                                }
-
-                                                return BusinessDay::calendarToday()->toFormattedDateString();
-                                            }),
-                                    ]),
-                                Section::make(__('Member numbers'))
-                                    ->description(__('Controls how IDs are generated for new members (manual create and approved applications). Existing numbers are not changed.'))
-                                    ->columns(2)
-                                    ->schema([
-                                        Select::make('member_number_format')
-                                            ->label(__('Number format'))
-                                            ->options(MemberNumberSettings::formatOptions())
-                                            ->required()
-                                            ->native(false)
-                                            ->live()
-                                            ->partiallyRenderComponentsAfterStateUpdated(self::memberNumberPreviewPartialTargets()),
-                                        TextInput::make('member_number_prefix')
-                                            ->label(__('Prefix'))
-                                            ->required(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED)
-                                            ->maxLength(20)
-                                            ->regex('/^[A-Za-z0-9]+$/')
-                                            ->validationMessages([
-                                                'regex' => __('Use letters and numbers only.'),
-                                            ])
-                                            ->live(onBlur: true)
-                                            ->partiallyRenderComponentsAfterStateUpdated(['member_number_preview'])
-                                            ->helperText(__('Stored in uppercase (e.g. MEM, FUND).'))
-                                            ->visible(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED),
-                                        Select::make('member_number_separator')
-                                            ->label(__('Separator'))
-                                            ->options(MemberNumberSettings::separatorOptions())
-                                            ->required(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED)
-                                            ->live()
-                                            ->partiallyRenderComponentsAfterStateUpdated(['member_number_preview'])
-                                            ->visible(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED),
-                                        TextInput::make('member_number_padding')
-                                            ->label(__('Sequence digits'))
-                                            ->numeric()
-                                            ->minValue(3)
-                                            ->maxValue(8)
-                                            ->required(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED)
-                                            ->live(onBlur: true)
-                                            ->partiallyRenderComponentsAfterStateUpdated(['member_number_preview'])
-                                            ->helperText(__('How many digits to use for the running number (e.g. 4 → 0001).'))
-                                            ->visible(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED),
-                                        Toggle::make('member_number_include_year')
-                                            ->label(__('Include calendar year'))
-                                            ->live()
-                                            ->partiallyRenderComponentsAfterStateUpdated(['member_number_preview'])
-                                            ->helperText(__('When enabled, the year is inserted before the sequence (e.g. MEM-2026-0001). The sequence restarts each year.'))
-                                            ->visible(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED),
-                                        Placeholder::make('member_number_preview')
-                                            ->label(__('Next number preview'))
-                                            ->columnSpanFull()
-                                            ->content(function (Get $get): string {
-                                                return MemberNumberSettings::preview([
-                                                    'format' => $get('member_number_format'),
-                                                    'prefix' => $get('member_number_prefix'),
-                                                    'separator' => $get('member_number_separator'),
-                                                    'padding' => $get('member_number_padding'),
-                                                    'include_year' => (bool) $get('member_number_include_year'),
-                                                ]);
-                                            })
-                                            ->helperText(fn (Get $get): string => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_SEQUENTIAL
-                                                ? __('Based on highest numeric member number.')
-                                                : __('Based on existing members matching this pattern.')),
-                                    ]),
-                            ]),
-                        Tab::make(__('Fiscal calendar'))
-                            ->icon('heroicon-o-calendar-days')
-                            ->schema([
-                                Section::make(__('Fiscal year'))
-                                    ->description(__('Defines fiscal year boundaries for year-end close readiness. Business calendar (General tab) controls operational “today” for collection.'))
-                                    ->columns(2)
-                                    ->schema([
-                                        Select::make('fiscal_year_start_month')
-                                            ->label(__('Fiscal year starts in'))
-                                            ->options(collect(range(1, 12))->mapWithKeys(fn (int $m): array => [
-                                                $m => Carbon::create(2000, $m, 1)->translatedFormat('F'),
-                                            ])->all())
-                                            ->required()
-                                            ->native(false),
-                                        TextInput::make('fiscal_year_start_day')
-                                            ->label(__('Start day of month'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->maxValue(28)
-                                            ->required(),
-                                        TextInput::make('fiscal_current_year_label')
-                                            ->label(__('Current fiscal year label'))
-                                            ->maxLength(16)
-                                            ->helperText(__('Display label, e.g. FY2025. Defaults from calendar when empty on save.')),
-                                        Select::make('fiscal_purge_policy')
-                                            ->label(__('Default purge policy'))
-                                            ->options(FiscalSettings::purgePolicyOptions())
-                                            ->required()
-                                            ->native(false)
-                                            ->helperText(__('Used when Phase 2+ purge is implemented.')),
-                                        Placeholder::make('fiscal_books_closed_through_display')
-                                            ->label(__('Books closed through'))
-                                            ->content(fn (Get $get): string => filled($get('fiscal_books_closed_through'))
-                                                ? Carbon::parse((string) $get('fiscal_books_closed_through'))->toFormattedDateString()
-                                                : __('Not set'))
-                                            ->helperText(__('Set automatically when a close is executed (Phase 2+).')),
-                                        Placeholder::make('fiscal_close_link')
-                                            ->label(__('Year-end close'))
-                                            ->columnSpanFull()
-                                            ->content(fn (): string => __('Run readiness checks on the Year-end close page.'))
-                                            ->helperText(new HtmlString(
-                                                '<a class="text-primary-600 underline" href="'.e(FiscalYearClosePage::getUrl()).'">'
-                                                .e(__('Open year-end close')).'</a>'
-                                            )),
-                                    ]),
-                            ]),
-                        Tab::make(__('Public page'))
-                            ->icon('heroicon-o-globe-alt')
-                            ->schema([
-                                Section::make(__('Fund identity'))
-                                    ->columns(2)
-                                    ->schema([
-                                        TextInput::make('fund_name_en')
-                                            ->label(__('Fund name (English)'))
-                                            ->required()
-                                            ->maxLength(255)
-                                            ->helperText(__('Shown on public pages and panels when the interface is in English.')),
-                                        TextInput::make('fund_name_ar')
-                                            ->label(__('Fund name (Arabic)'))
-                                            ->required()
-                                            ->maxLength(255)
-                                            ->helperText(__('Shown on public pages and panels when the interface is in Arabic.')),
-                                        Select::make('arabic_display_font')
-                                            ->label(__('Arabic typeface'))
-                                            ->options(ArabicDisplaySettings::fontOptions())
-                                            ->required()
-                                            ->native(false)
-                                            ->helperText(__('Font used for Arabic interface text. Member names in tables use the same typeface.')),
-                                        Toggle::make('arabic_enhanced_name_style')
-                                            ->label(__('Enhanced Arabic member names'))
-                                            ->helperText(__('Larger display and explicit right-to-left layout for Arabic names in tables and headings. When off, names use normal size with RTL text only.')),
-                                        FileUpload::make('fund_logo')
-                                            ->label(__('Fund logo'))
-                                            ->image()
-                                            ->disk('public')
-                                            ->directory('fund-branding')
-                                            ->maxSize(2048)
-                                            ->acceptedFileTypes([
-                                                'image/png',
-                                                'image/jpeg',
-                                                'image/webp',
-                                                'image/svg+xml',
-                                            ])
-                                            ->columnSpanFull()
-                                            ->helperText(__('Optional. Replaces the default FundFlow logo in the navbar, footer, Filament panels, browser tab, and PWA icon. Square images work best.')),
-                                    ]),
-                                Section::make(__('Public contact'))
-                                    ->description(__('Shown in the site footer on public pages.'))
-                                    ->columns(2)
-                                    ->schema([
-                                        TextInput::make('contact_email')
-                                            ->label(__('Contact email'))
-                                            ->email()
-                                            ->maxLength(255),
-                                        TextInput::make('contact_phone')
-                                            ->label(__('Contact phone'))
-                                            ->tel()
-                                            ->maxLength(50),
-                                    ]),
-                                Section::make(__('Membership control'))
-                                    ->description(__('Limit how many active members may enroll in the fund.'))
-                                    ->columns(2)
-                                    ->schema([
-                                        Toggle::make('membership_no_limit')
-                                            ->label(__('No member limit'))
-                                            ->live()
-                                            ->helperText(__('When enabled, enrollment is always open regardless of member count.')),
-                                        TextInput::make('membership_max_members')
-                                            ->label(__('Maximum active members'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->required(fn (Get $get): bool => ! ($get('membership_no_limit') ?? true))
-                                            ->hidden(fn (Get $get): bool => (bool) ($get('membership_no_limit') ?? true))
-                                            ->helperText(__('Enrollment closes when active members reach this number.')),
-                                    ]),
-                                Section::make(__('Membership fees'))
-                                    ->description(__('Fees displayed during public enrollment (New, Resume, Renew).'))
-                                    ->columns(3)
-                                    ->schema([
-                                        TextInput::make('fee_new')
-                                            ->label(__('New membership fee'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->required(),
-                                        TextInput::make('fee_resume')
-                                            ->label(__('Resume membership fee'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->required(),
-                                        TextInput::make('fee_renew')
-                                            ->label(__('Renew membership fee'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->required(),
-                                    ]),
-                                Section::make(__('Fee transfer bank account'))
-                                    ->description(__('Bank details shown on the membership application when a fee applies. Applicants transfer the fee to this account before submitting.'))
-                                    ->columns(2)
-                                    ->schema([
-                                        TextInput::make('fee_transfer_bank_name')
-                                            ->label(__('Bank name'))
-                                            ->maxLength(255)
-                                            ->placeholder(__('e.g. Al Rajhi Bank')),
-                                        TextInput::make('fee_transfer_iban')
-                                            ->label(__('IBAN'))
-                                            ->maxLength(34)
-                                            ->placeholder('SA0000000000000000000000')
-                                            ->helperText(__('International Bank Account Number for fee payments.')),
-                                    ]),
-                                Section::make(__('Public documents'))
-                                    ->columns(2)
-                                    ->schema([
-                                        TextInput::make('rules_and_conditions_url')
-                                            ->label(__('Rules and conditions URL'))
-                                            ->url()
-                                            ->maxLength(2048)
-                                            ->placeholder('https://…'),
-                                        TextInput::make('membership_application_document_url')
-                                            ->label(__('Membership application document URL'))
-                                            ->url()
-                                            ->maxLength(2048)
-                                            ->placeholder('https://…'),
-                                    ]),
-                            ]),
-                        Tab::make(__('Collection'))
-                            ->icon('heroicon-o-calendar')
-                            ->schema([
-                                Section::make(__('Contribution Cycle'))
-                                    ->columns(2)
-                                    ->schema([
-                                        TextInput::make('cycle_start_day')
-                                            ->label('Cycle start day')
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->maxValue(28)
-                                            ->required()
-                                            ->helperText(__('Day of month when the contribution cycle starts (1-28). Default: 6th.')),
-                                    ]),
-                                Section::make(__('Delinquency policy'))
-                                    ->description(__('Daily delinquency sync marks members delinquent when consecutive or rolling miss thresholds are breached.'))
-                                    ->columns(3)
-                                    ->schema([
-                                        TextInput::make('delinquency_consecutive')
-                                            ->label(__('Consecutive missed cycles'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->maxValue(36)
-                                            ->required(),
-                                        TextInput::make('delinquency_total')
-                                            ->label(__('Total misses (rolling window)'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->maxValue(240)
-                                            ->required(),
-                                        TextInput::make('delinquency_lookback_months')
-                                            ->label(__('Rolling window (months)'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->maxValue(240)
-                                            ->required(),
-                                    ]),
-                                Section::make(__('Late fees (days after cycle deadline)'))
-                                    ->description(__('Highest non-zero tier reached applies (30+ → 20+ → 10+ → 1+).'))
-                                    ->columns(4)
-                                    ->schema([
-                                        TextInput::make('late_fee_contribution_1d')
-                                            ->label(__('Contribution — 1+ days late'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->required(),
-                                        TextInput::make('late_fee_contribution_10d')
-                                            ->label(__('Contribution — 10+ days late'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->required(),
-                                        TextInput::make('late_fee_contribution_20d')
-                                            ->label(__('Contribution — 20+ days late'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->required(),
-                                        TextInput::make('late_fee_contribution_30d')
-                                            ->label(__('Contribution — 30+ days late'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->required(),
-                                        TextInput::make('late_fee_repayment_1d')
-                                            ->label(__('Repayment — 1+ days late'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->required(),
-                                        TextInput::make('late_fee_repayment_10d')
-                                            ->label(__('Repayment — 10+ days late'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->required(),
-                                        TextInput::make('late_fee_repayment_20d')
-                                            ->label(__('Repayment — 20+ days late'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->required(),
-                                        TextInput::make('late_fee_repayment_30d')
-                                            ->label(__('Repayment — 30+ days late'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->required(),
-                                    ]),
-                                Section::make(__('Annual subscription fee'))
-                                    ->schema([
-                                        TextInput::make('annual_subscription_fee')
-                                            ->label(__('Annual subscription fee'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->required()
-                                            ->helperText(__('Charged on join-date anniversary; set to 0 to disable.')),
-                                    ]),
-                                Section::make(__('Collection window tiers'))
-                                    ->description(__('Days after cycle deadline when late fee tiers apply.'))
-                                    ->columns(4)
-                                    ->schema([
-                                        TextInput::make('collection_late_fee_reminder_days')
-                                            ->label(__('Reminder (days)'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->required(),
-                                        TextInput::make('collection_late_fee_tier_1_day')
-                                            ->label(__('Tier 1 day'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->required(),
-                                        TextInput::make('collection_late_fee_tier_2_day')
-                                            ->label(__('Tier 2 day'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->required(),
-                                        TextInput::make('collection_late_fee_tier_3_day')
-                                            ->label(__('Tier 3 day'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->required(),
-                                        TextInput::make('collection_late_fee_tier_4_day')
-                                            ->label(__('Tier 4 day'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->required(),
-                                        Select::make('collection_late_fee_model')
-                                            ->label(__('Late fee model'))
-                                            ->options([
-                                                'replacement' => __('Replacement (highest tier only)'),
-                                                'cumulative' => __('Cumulative (stack tiers)'),
-                                            ])
-                                            ->required()
-                                            ->native(false)
-                                            ->columnSpanFull(),
-                                    ]),
-                            ]),
-                        Tab::make(__('Loans'))
-                            ->icon('heroicon-o-banknotes')
-                            ->schema([
-                                Section::make(__('Eligibility'))
-                                    ->description(__('Rules applied when members apply for a loan or admins create an application.'))
-                                    ->columns(2)
-                                    ->schema([
-                                        TextInput::make('loan_eligibility_months')
-                                            ->label(__('Minimum membership (months)'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->maxValue(120)
-                                            ->required(),
-                                        TextInput::make('loan_min_fund_balance')
-                                            ->label(__('Minimum fund balance'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->required()
-                                            ->helperText(__('Member fund account must meet this balance to apply.')),
-                                        TextInput::make('loan_max_borrow_multiplier')
-                                            ->label(__('Max borrow multiplier'))
-                                            ->numeric()
-                                            ->minValue(0.1)
-                                            ->step(0.1)
-                                            ->required()
-                                            ->helperText(__('Maximum loan = fund balance × this multiplier (unless capped below).')),
-                                        TextInput::make('loan_max_loan_amount')
-                                            ->label(__('Absolute max loan amount'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->helperText(__('Optional hard cap (0 = no cap, use multiplier only).')),
-                                    ]),
-                                Section::make(__('Defaults'))
-                                    ->columns(2)
-                                    ->schema([
-                                        TextInput::make('loan_default_interest_rate')
-                                            ->label(__('Default interest rate (%)'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->maxValue(100)
-                                            ->required(),
-                                        TextInput::make('loan_default_term_months')
-                                            ->label(__('Default term (months)'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->maxValue(120)
-                                            ->required(),
-                                        TextInput::make('loan_settlement_threshold_pct')
-                                            ->label(__('Settlement threshold (%)'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->maxValue(100)
-                                            ->step(0.1)
-                                            ->required()
-                                            ->helperText(__('Percentage of approved amount member must hold in fund for full settlement.')),
-                                    ]),
-                                Section::make(__('Loan tiers'))
-                                    ->description(__('Interest rates are managed in the loan tiers resource.'))
-                                    ->schema([
-                                        Placeholder::make('loan_tiers_link')
-                                            ->label(__('Loan tiers'))
-                                            ->content(fn (): HtmlString => new HtmlString(
-                                                '<a class="font-semibold text-sky-600 hover:underline dark:text-sky-400" href="'
-                                                .e(LoanTierResource::getUrl('index')).'">'.e(__('Open loan tiers')).'</a>'
-                                            )),
-                                    ]),
-                            ]),
-                        Tab::make(__('Fund tiers'))
-                            ->icon('heroicon-o-circle-stack')
-                            ->schema([
-                                Section::make(__('Fund tier allocations'))
-                                    ->description(__('Tier percentages control how much of the master fund each loan tier may commit. Edit tiers in the loans cluster or below.'))
-                                    ->schema([
-                                        Placeholder::make('fund_tiers_manage')
-                                            ->label(__('Manage tiers'))
-                                            ->content(fn (): HtmlString => new HtmlString(
-                                                '<a class="font-semibold text-sky-600 hover:underline dark:text-sky-400" href="'
-                                                .e(FundTierResource::getUrl('index')).'">'.e(__('Open fund tiers')).'</a>'
-                                            )),
-                                        Placeholder::make('fund_tiers_summary')
-                                            ->label(__('Current tiers'))
-                                            ->columnSpanFull()
-                                            ->content(function (): HtmlString {
-                                                $rows = $this->getFundTierRows();
-
-                                                if ($rows === []) {
-                                                    return new HtmlString('<p class="text-sm text-gray-500">'.e(__('No fund tiers configured.')).'</p>');
-                                                }
-
-                                                $html = '<div class="overflow-x-auto"><table class="w-full min-w-[24rem] text-left text-sm"><thead class="border-b text-xs uppercase text-gray-500"><tr><th class="py-2 pe-3">'.e(__('Tier')).'</th><th class="py-2 pe-3">'.e(__('Allocation')).'</th><th class="py-2 pe-3">'.e(__('Loan tier')).'</th><th class="py-2">'.e(__('Status')).'</th></tr></thead><tbody>';
-
-                                                foreach ($rows as $row) {
-                                                    $status = $row['active']
-                                                        ? '<span class="text-emerald-600">'.e(__('Active')).'</span>'
-                                                        : '<span class="text-gray-400">'.e(__('Inactive')).'</span>';
-                                                    $html .= '<tr class="border-b border-gray-100 dark:border-white/10"><td class="py-2 pe-3 font-medium">'.e($row['label']).'</td><td class="py-2 pe-3 tabular-nums">'.e($row['percentage']).'</td><td class="py-2 pe-3">'.e($row['loan_tier']).'</td><td class="py-2">'.$status.'</td></tr>';
-                                                }
-
-                                                return new HtmlString($html.'</tbody></table></div>');
-                                            }),
-                                    ]),
-                            ]),
-                        Tab::make(__('Reconciliation'))
-                            ->icon('heroicon-o-scale')
-                            ->schema([
-                                Section::make(__('Bank vs book'))
-                                    ->description(__('Optional declared bank closing balance merged into scheduled fund:reconcile runs and available as defaults on the reconciliation page.'))
-                                    ->columns(2)
-                                    ->schema([
-                                        TextInput::make('reconciliation_bank_statement_balance')
-                                            ->label(__('Statement / bank closing balance'))
-                                            ->numeric()
-                                            ->nullable(),
-                                        DatePicker::make('reconciliation_bank_statement_date')
-                                            ->label(__('Statement as-of date'))
-                                            ->native(false)
-                                            ->nullable(),
-                                        Toggle::make('reconciliation_bank_variance_critical')
-                                            ->label(__('Treat bank vs book variance as critical on scheduled runs'))
-                                            ->default(false),
-                                    ]),
-                                Section::make(__('Auto-resolve & matching'))
-                                    ->description(__('Operational tolerances used by nightly reconciliation and bank clearing.'))
-                                    ->columns(3)
-                                    ->schema([
-                                        TextInput::make('collection_recon_tolerance')
-                                            ->label(__('Auto-resolve tolerance'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->step(0.01)
-                                            ->required()
-                                            ->helperText(__('Maximum amount delta auto-resolved without admin review.')),
-                                        TextInput::make('collection_bank_match_date_range_days')
-                                            ->label(__('Bank match date range (days)'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->required(),
-                                        TextInput::make('collection_stale_pending_days')
-                                            ->label(__('Stale pending threshold (days)'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->required(),
-                                        TextInput::make('collection_timing_diff_defer_hours')
-                                            ->label(__('Timing defer (hours)'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->required(),
-                                        TextInput::make('collection_timing_diff_escalate_hours')
-                                            ->label(__('Timing escalate (hours)'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->required(),
-                                        TextInput::make('collection_cash_deposit_unbanked_days')
-                                            ->label(__('Unbanked deposit alert (days)'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->required(),
-                                    ]),
-                                Section::make(__('Reconciliation workspace'))
-                                    ->schema([
-                                        Placeholder::make('reconciliation_workspace_link')
-                                            ->label(__('Control center'))
-                                            ->content(fn (): HtmlString => new HtmlString(
-                                                '<a class="font-semibold text-sky-600 hover:underline dark:text-sky-400" href="'
-                                                .e(ReconciliationOverviewPage::getUrl()).'">'.e(__('Open reconciliation')).'</a>'
-                                            )),
-                                    ]),
-                            ]),
-                        Tab::make(__('Guarantor rules'))
-                            ->icon('heroicon-o-shield-check')
-                            ->schema([
-                                Section::make(__('Guarantor liability'))
-                                    ->description(__('When borrowers miss repayment cycles, guarantors may be debited after the grace period.'))
-                                    ->columns(2)
-                                    ->schema([
-                                        TextInput::make('loan_default_grace_cycles')
-                                            ->label(__('Grace cycles before guarantor debit'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->maxValue(24)
-                                            ->required()
-                                            ->helperText(__('Missed repayment cycles before guarantor liability steps apply.')),
-                                        Toggle::make('loan_require_guarantor_above_fund')
-                                            ->label(__('Require guarantor above fund balance'))
-                                            ->helperText(__('When the member share of the loan exceeds their fund balance, a guarantor is mandatory on apply.')),
-                                        TextInput::make('loan_member_funding_split_pct')
-                                            ->label(__('Member fund share (%)'))
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->maxValue(100)
-                                            ->step(0.1)
-                                            ->suffix('%')
-                                            ->required()
-                                            ->helperText(fn (Get $get): string => __('Used when a member chooses the configured split at loan application. Master fund share: :pct%.', [
-                                                'pct' => number_format(100 - (float) ($get('loan_member_funding_split_pct') ?? 50), 1),
-                                            ])),
-                                        Toggle::make('loan_auto_allocate_repayment')
-                                            ->label(__('Auto-allocate posted contributions to loan'))
-                                            ->helperText(__('After a contribution is posted, apply open-period loan repayment from member cash when possible.')),
-                                    ]),
-                                Section::make(__('Missed EMI thresholds'))
-                                    ->description(__('Members with too many late-settled cycles cannot apply for new loans.'))
-                                    ->columns(3)
-                                    ->schema([
-                                        TextInput::make('loan_late_payment_consecutive')
-                                            ->label(__('Consecutive late cycles'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->maxValue(36)
-                                            ->required(),
-                                        TextInput::make('loan_late_payment_rolling')
-                                            ->label(__('Late cycles (rolling window)'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->maxValue(240)
-                                            ->required(),
-                                        TextInput::make('loan_late_payment_lookback_months')
-                                            ->label(__('Rolling window (months)'))
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->maxValue(240)
-                                            ->required(),
-                                    ]),
-                            ]),
-                        Tab::make(__('Statements'))
-                            ->icon('heroicon-o-document-text')
-                            ->schema([
-                                Section::make(__('Branding'))
-                                    ->columns(3)
-                                    ->schema([
-                                        TextInput::make('statement_brand_name')
-                                            ->label(__('Organization name'))
-                                            ->required()
-                                            ->maxLength(80),
-                                        TextInput::make('statement_tagline')
-                                            ->label(__('Tagline'))
-                                            ->maxLength(120),
-                                        TextInput::make('statement_accent_color')
-                                            ->label(__('Header accent color (hex)'))
-                                            ->required()
-                                            ->maxLength(7)
-                                            ->placeholder('#059669'),
-                                    ]),
-                                Section::make(__('Footer & signature'))
-                                    ->schema([
-                                        Textarea::make('statement_footer_disclaimer')
-                                            ->label(__('Footer disclaimer'))
-                                            ->rows(2)
-                                            ->columnSpanFull(),
-                                        TextInput::make('statement_signature_line')
-                                            ->label(__('Authorized signature line'))
-                                            ->maxLength(100),
-                                    ]),
-                                Section::make(__('Delivery & content'))
-                                    ->columns(2)
-                                    ->schema([
-                                        Toggle::make('statement_auto_email')
-                                            ->label(__('Auto-email members on generation'))
-                                            ->helperText(__('When enabled, statement notifications may include email when the email channel is on.')),
-                                        Toggle::make('statement_include_transactions')
-                                            ->label(__('Include transaction detail table')),
-                                        Toggle::make('statement_include_loan_section')
-                                            ->label(__('Include loan standing section')),
-                                        Toggle::make('statement_include_compliance')
-                                            ->label(__('Include compliance snapshot')),
-                                    ]),
-                            ]),
-                        Tab::make(__('Communication'))
-                            ->icon('heroicon-o-chat-bubble-left-right')
-                            ->schema([
-                                Section::make(__('Communication channels'))
-                                    ->description(__('When disabled, no notifications are sent through that channel. SMS and WhatsApp credentials are configured under Notifications.'))
-                                    ->columns(2)
-                                    ->schema([
-                                        Toggle::make('communication_in_app_enabled')
-                                            ->label(__('In-app inbox')),
-                                        Toggle::make('communication_email_enabled')
-                                            ->label(__('Email')),
-                                    ]),
-                            ]),
-                        Tab::make(__('Notifications'))
-                            ->icon('heroicon-o-bell-alert')
-                            ->schema([
-                                Section::make(__('Member SMS & WhatsApp'))
-                                    ->description(__('Uses Twilio when enabled. Members must have a phone number on their profile.'))
-                                    ->columns(2)
-                                    ->schema([
-                                        Toggle::make('notifications_sms_enabled')
-                                            ->label(__('Enable SMS'))
-                                            ->live(),
-                                        Toggle::make('notifications_whatsapp_enabled')
-                                            ->label(__('Enable WhatsApp'))
-                                            ->live(),
-                                        TextInput::make('notifications_twilio_sid')
-                                            ->label(__('Twilio account SID'))
-                                            ->maxLength(64)
-                                            ->columnSpanFull(),
-                                        TextInput::make('notifications_twilio_token')
-                                            ->label(__('Twilio auth token'))
-                                            ->password()
-                                            ->revealable()
-                                            ->maxLength(128)
-                                            ->columnSpanFull(),
-                                        TextInput::make('notifications_twilio_sms_from')
-                                            ->label(__('SMS sender number'))
-                                            ->tel()
-                                            ->helperText(__('E.164 format, e.g. +14155552671')),
-                                        TextInput::make('notifications_twilio_whatsapp_from')
-                                            ->label(__('WhatsApp sender'))
-                                            ->helperText(__('Twilio WhatsApp-enabled number, e.g. +14155238886')),
-                                    ]),
-                            ]),
-                        Tab::make('Bank Templates')
-                            ->icon('heroicon-o-document-arrow-up')
-                            ->schema([
-                                Section::make(__('CSV Import Templates'))
-                                    ->description(__('Define templates for parsing bank statement CSV files. Select one as default.'))
-                                    ->schema([
-                                        Repeater::make('bank_templates')
-                                            ->label('')
-                                            ->schema(static::templateSchema())
-                                            ->columns(1)
-                                            ->itemLabel(fn (array $state): ?string => $state['name'] ?? __('New template'))
-                                            ->collapsible()
-                                            ->defaultItems(0)
-                                            ->addActionLabel(__('Add template')),
-                                    ]),
-                            ]),
-                        Tab::make('SMS Templates')
-                            ->icon('heroicon-o-chat-bubble-bottom-center-text')
-                            ->schema([
-                                Section::make(__('SMS import templates'))
-                                    ->description(__('Define templates for parsing bank alert SMS exports. Select one as default per bank label (or globally when bank is blank).'))
-                                    ->schema([
-                                        Repeater::make('sms_templates')
-                                            ->label('')
-                                            ->schema(SmsImportTemplateFieldsets::forSettingsRepeater())
-                                            ->columns(1)
-                                            ->itemLabel(fn (array $state): ?string => trim(
-                                                (filled($state['bank_name'] ?? null) ? $state['bank_name'].' — ' : '')
-                                                .($state['name'] ?? __('New template'))
-                                            ))
-                                            ->collapsible()
-                                            ->defaultItems(0)
-                                            ->addActionLabel(__('Add template')),
-                                    ]),
-                            ]),
-                    ]),
-            ])
+            ->schema($schemas[$this->settingsTab] ?? $schemas['general::tab'])
             ->statePath('data');
+    }
+
+    /**
+     * @return array<string, array<int, mixed>>
+     */
+    protected function settingsTabFormSchemas(): array
+    {
+        return [
+            'general::tab' => [
+                Section::make(__('Regional'))
+                    ->columns(2)
+                    ->schema([
+                        Select::make('currency')
+                            ->label(__('Currency'))
+                            ->required()
+                            ->searchable()
+                            ->options(static::currencyOptions())
+                            ->helperText(__('The primary currency used for all transactions.')),
+                    ]),
+                Section::make(__('Business calendar'))
+                    ->description(__('Set a custom date that the application treats as today. Useful for testing contribution cycles, loan eligibility, and delinquency in the future or past.'))
+                    ->columns(2)
+                    ->schema([
+                        DatePicker::make('business_day')
+                            ->label(__('Current business day'))
+                            ->native(false)
+                            ->placeholder(__('Use real calendar date'))
+                            ->helperText(__('Leave empty to use the real calendar date. Time of day still follows the server clock.')),
+                        Placeholder::make('business_day_effective')
+                            ->label(__('Effective today'))
+                            ->content(function (Get $get): string {
+                                $configured = $get('business_day');
+
+                                if (filled($configured)) {
+                                    return __('App date: :business · Calendar: :calendar', [
+                                        'business' => Carbon::parse((string) $configured)->toFormattedDateString(),
+                                        'calendar' => BusinessDay::calendarToday()->toFormattedDateString(),
+                                    ]);
+                                }
+
+                                return BusinessDay::calendarToday()->toFormattedDateString();
+                            }),
+                    ]),
+                Section::make(__('Member numbers'))
+                    ->description(__('Controls how IDs are generated for new members (manual create and approved applications). Existing numbers are not changed.'))
+                    ->columns(2)
+                    ->schema([
+                        Select::make('member_number_format')
+                            ->label(__('Number format'))
+                            ->options(MemberNumberSettings::formatOptions())
+                            ->required()
+                            ->native(false)
+                            ->live()
+                            ->partiallyRenderComponentsAfterStateUpdated(self::memberNumberPreviewPartialTargets()),
+                        TextInput::make('member_number_prefix')
+                            ->label(__('Prefix'))
+                            ->required(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED)
+                            ->maxLength(20)
+                            ->regex('/^[A-Za-z0-9]+$/')
+                            ->validationMessages([
+                                'regex' => __('Use letters and numbers only.'),
+                            ])
+                            ->live(onBlur: true)
+                            ->partiallyRenderComponentsAfterStateUpdated(['member_number_preview'])
+                            ->helperText(__('Stored in uppercase (e.g. MEM, FUND).'))
+                            ->visible(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED),
+                        Select::make('member_number_separator')
+                            ->label(__('Separator'))
+                            ->options(MemberNumberSettings::separatorOptions())
+                            ->required(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED)
+                            ->live()
+                            ->partiallyRenderComponentsAfterStateUpdated(['member_number_preview'])
+                            ->visible(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED),
+                        TextInput::make('member_number_padding')
+                            ->label(__('Sequence digits'))
+                            ->numeric()
+                            ->minValue(3)
+                            ->maxValue(8)
+                            ->required(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED)
+                            ->live(onBlur: true)
+                            ->partiallyRenderComponentsAfterStateUpdated(['member_number_preview'])
+                            ->helperText(__('How many digits to use for the running number (e.g. 4 → 0001).'))
+                            ->visible(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED),
+                        Toggle::make('member_number_include_year')
+                            ->label(__('Include calendar year'))
+                            ->live()
+                            ->partiallyRenderComponentsAfterStateUpdated(['member_number_preview'])
+                            ->helperText(__('When enabled, the year is inserted before the sequence (e.g. MEM-2026-0001). The sequence restarts each year.'))
+                            ->visible(fn (Get $get): bool => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_FORMATTED),
+                        Placeholder::make('member_number_preview')
+                            ->label(__('Next number preview'))
+                            ->columnSpanFull()
+                            ->content(function (Get $get): string {
+                                return MemberNumberSettings::preview([
+                                    'format' => $get('member_number_format'),
+                                    'prefix' => $get('member_number_prefix'),
+                                    'separator' => $get('member_number_separator'),
+                                    'padding' => $get('member_number_padding'),
+                                    'include_year' => (bool) $get('member_number_include_year'),
+                                ]);
+                            })
+                            ->helperText(fn (Get $get): string => ($get('member_number_format') ?? MemberNumberSettings::FORMAT_FORMATTED) === MemberNumberSettings::FORMAT_SEQUENTIAL
+                                ? __('Based on highest numeric member number.')
+                                : __('Based on existing members matching this pattern.')),
+                    ]),
+            ],
+            'fiscal-calendar::tab' => [
+                Section::make(__('Fiscal year'))
+                    ->description(__('Defines fiscal year boundaries for year-end close readiness. Business calendar (General tab) controls operational “today” for collection.'))
+                    ->columns(2)
+                    ->schema([
+                        Select::make('fiscal_year_start_month')
+                            ->label(__('Fiscal year starts in'))
+                            ->options(collect(range(1, 12))->mapWithKeys(fn (int $m): array => [
+                                $m => Carbon::create(2000, $m, 1)->translatedFormat('F'),
+                            ])->all())
+                            ->required()
+                            ->native(false),
+                        TextInput::make('fiscal_year_start_day')
+                            ->label(__('Start day of month'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(28)
+                            ->required(),
+                        TextInput::make('fiscal_current_year_label')
+                            ->label(__('Current fiscal year label'))
+                            ->maxLength(16)
+                            ->helperText(__('Display label, e.g. FY2025. Defaults from calendar when empty on save.')),
+                        Select::make('fiscal_purge_policy')
+                            ->label(__('Default purge policy'))
+                            ->options(FiscalSettings::purgePolicyOptions())
+                            ->required()
+                            ->native(false)
+                            ->helperText(__('Used when Phase 2+ purge is implemented.')),
+                        Placeholder::make('fiscal_books_closed_through_display')
+                            ->label(__('Books closed through'))
+                            ->content(fn (Get $get): string => filled($get('fiscal_books_closed_through'))
+                                ? Carbon::parse((string) $get('fiscal_books_closed_through'))->toFormattedDateString()
+                                : __('Not set'))
+                            ->helperText(__('Set automatically when a close is executed (Phase 2+).')),
+                        Placeholder::make('fiscal_close_link')
+                            ->label(__('Year-end close'))
+                            ->columnSpanFull()
+                            ->content(fn (): string => __('Run readiness checks on the Year-end close page.'))
+                            ->helperText(new HtmlString(
+                                '<a class="text-primary-600 underline" href="'.e(FiscalYearClosePage::getUrl()).'">'
+                                .e(__('Open year-end close')).'</a>'
+                            )),
+                    ]),
+            ],
+            'public-page::tab' => [
+                Section::make(__('Fund identity'))
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('fund_name_en')
+                            ->label(__('Fund name (English)'))
+                            ->required()
+                            ->maxLength(255)
+                            ->helperText(__('Shown on public pages and panels when the interface is in English.')),
+                        TextInput::make('fund_name_ar')
+                            ->label(__('Fund name (Arabic)'))
+                            ->required()
+                            ->maxLength(255)
+                            ->helperText(__('Shown on public pages and panels when the interface is in Arabic.')),
+                        Select::make('arabic_display_font')
+                            ->label(__('Arabic typeface'))
+                            ->options(ArabicDisplaySettings::fontOptions())
+                            ->required()
+                            ->native(false)
+                            ->helperText(__('Font used for Arabic interface text. Member names in tables use the same typeface.')),
+                        Toggle::make('arabic_enhanced_name_style')
+                            ->label(__('Enhanced Arabic member names'))
+                            ->helperText(__('Larger display and explicit right-to-left layout for Arabic names in tables and headings. When off, names use normal size with RTL text only.')),
+                        FileUpload::make('fund_logo')
+                            ->label(__('Fund logo'))
+                            ->image()
+                            ->disk('public')
+                            ->directory('fund-branding')
+                            ->maxSize(2048)
+                            ->acceptedFileTypes([
+                                'image/png',
+                                'image/jpeg',
+                                'image/webp',
+                                'image/svg+xml',
+                            ])
+                            ->columnSpanFull()
+                            ->helperText(__('Optional. Replaces the default FundFlow logo in the navbar, footer, Filament panels, browser tab, and PWA icon. Square images work best.')),
+                    ]),
+                Section::make(__('Public contact'))
+                    ->description(__('Shown in the site footer on public pages.'))
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('contact_email')
+                            ->label(__('Contact email'))
+                            ->email()
+                            ->maxLength(255),
+                        TextInput::make('contact_phone')
+                            ->label(__('Contact phone'))
+                            ->tel()
+                            ->maxLength(50),
+                    ]),
+                Section::make(__('Membership control'))
+                    ->description(__('Limit how many active members may enroll in the fund.'))
+                    ->columns(2)
+                    ->schema([
+                        Toggle::make('membership_no_limit')
+                            ->label(__('No member limit'))
+                            ->live()
+                            ->helperText(__('When enabled, enrollment is always open regardless of member count.')),
+                        TextInput::make('membership_max_members')
+                            ->label(__('Maximum active members'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->required(fn (Get $get): bool => ! ($get('membership_no_limit') ?? true))
+                            ->hidden(fn (Get $get): bool => (bool) ($get('membership_no_limit') ?? true))
+                            ->helperText(__('Enrollment closes when active members reach this number.')),
+                    ]),
+                Section::make(__('Membership fees'))
+                    ->description(__('Fees displayed during public enrollment (New, Resume, Renew).'))
+                    ->columns(3)
+                    ->schema([
+                        TextInput::make('fee_new')
+                            ->label(__('New membership fee'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required(),
+                        TextInput::make('fee_resume')
+                            ->label(__('Resume membership fee'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required(),
+                        TextInput::make('fee_renew')
+                            ->label(__('Renew membership fee'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required(),
+                    ]),
+                Section::make(__('Fee transfer bank account'))
+                    ->description(__('Bank details shown on the membership application when a fee applies. Applicants transfer the fee to this account before submitting.'))
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('fee_transfer_bank_name')
+                            ->label(__('Bank name'))
+                            ->maxLength(255)
+                            ->placeholder(__('e.g. Al Rajhi Bank')),
+                        TextInput::make('fee_transfer_iban')
+                            ->label(__('IBAN'))
+                            ->maxLength(34)
+                            ->placeholder('SA0000000000000000000000')
+                            ->helperText(__('International Bank Account Number for fee payments.')),
+                    ]),
+                Section::make(__('Public documents'))
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('rules_and_conditions_url')
+                            ->label(__('Rules and conditions URL'))
+                            ->url()
+                            ->maxLength(2048)
+                            ->placeholder('https://…'),
+                        TextInput::make('membership_application_document_url')
+                            ->label(__('Membership application document URL'))
+                            ->url()
+                            ->maxLength(2048)
+                            ->placeholder('https://…'),
+                    ]),
+            ],
+            'collection::tab' => [
+                Section::make(__('Contribution Cycle'))
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('cycle_start_day')
+                            ->label(__('Cycle start day'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(28)
+                            ->required()
+                            ->helperText(__('Day of month when the contribution cycle starts (1-28). Default: 6th.')),
+                    ]),
+                Section::make(__('Delinquency policy'))
+                    ->description(__('Daily delinquency sync marks members delinquent when consecutive or rolling miss thresholds are breached.'))
+                    ->columns(3)
+                    ->schema([
+                        TextInput::make('delinquency_consecutive')
+                            ->label(__('Consecutive missed cycles'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(36)
+                            ->required(),
+                        TextInput::make('delinquency_total')
+                            ->label(__('Total misses (rolling window)'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(240)
+                            ->required(),
+                        TextInput::make('delinquency_lookback_months')
+                            ->label(__('Rolling window (months)'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(240)
+                            ->required(),
+                    ]),
+                Section::make(__('Late fees (days after cycle deadline)'))
+                    ->description(__('Highest non-zero tier reached applies (30+ → 20+ → 10+ → 1+).'))
+                    ->columns(4)
+                    ->schema([
+                        TextInput::make('late_fee_contribution_1d')
+                            ->label(__('Contribution — 1+ days late'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required(),
+                        TextInput::make('late_fee_contribution_10d')
+                            ->label(__('Contribution — 10+ days late'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required(),
+                        TextInput::make('late_fee_contribution_20d')
+                            ->label(__('Contribution — 20+ days late'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required(),
+                        TextInput::make('late_fee_contribution_30d')
+                            ->label(__('Contribution — 30+ days late'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required(),
+                        TextInput::make('late_fee_repayment_1d')
+                            ->label(__('Repayment — 1+ days late'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required(),
+                        TextInput::make('late_fee_repayment_10d')
+                            ->label(__('Repayment — 10+ days late'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required(),
+                        TextInput::make('late_fee_repayment_20d')
+                            ->label(__('Repayment — 20+ days late'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required(),
+                        TextInput::make('late_fee_repayment_30d')
+                            ->label(__('Repayment — 30+ days late'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required(),
+                    ]),
+                Section::make(__('Annual subscription fee'))
+                    ->schema([
+                        TextInput::make('annual_subscription_fee')
+                            ->label(__('Annual subscription fee'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required()
+                            ->helperText(__('Charged on join-date anniversary; set to 0 to disable.')),
+                    ]),
+                Section::make(__('Collection window tiers'))
+                    ->description(__('Days after cycle deadline when late fee tiers apply.'))
+                    ->columns(4)
+                    ->schema([
+                        TextInput::make('collection_late_fee_reminder_days')
+                            ->label(__('Reminder (days)'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required(),
+                        TextInput::make('collection_late_fee_tier_1_day')
+                            ->label(__('Tier 1 day'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->required(),
+                        TextInput::make('collection_late_fee_tier_2_day')
+                            ->label(__('Tier 2 day'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->required(),
+                        TextInput::make('collection_late_fee_tier_3_day')
+                            ->label(__('Tier 3 day'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->required(),
+                        TextInput::make('collection_late_fee_tier_4_day')
+                            ->label(__('Tier 4 day'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->required(),
+                        Select::make('collection_late_fee_model')
+                            ->label(__('Late fee model'))
+                            ->options([
+                                'replacement' => __('Replacement (highest tier only)'),
+                                'cumulative' => __('Cumulative (stack tiers)'),
+                            ])
+                            ->required()
+                            ->native(false)
+                            ->columnSpanFull(),
+                    ]),
+            ],
+            'loans::tab' => [
+                Section::make(__('Eligibility'))
+                    ->description(__('Rules applied when members apply for a loan or admins create an application.'))
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('loan_eligibility_months')
+                            ->label(__('Minimum membership (months)'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(120)
+                            ->required(),
+                        TextInput::make('loan_min_fund_balance')
+                            ->label(__('Minimum fund balance'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required()
+                            ->helperText(__('Member fund account must meet this balance to apply.')),
+                        TextInput::make('loan_max_borrow_multiplier')
+                            ->label(__('Max borrow multiplier'))
+                            ->numeric()
+                            ->minValue(0.1)
+                            ->step(0.1)
+                            ->required()
+                            ->helperText(__('Maximum loan = fund balance × this multiplier (unless capped below).')),
+                        TextInput::make('loan_max_loan_amount')
+                            ->label(__('Absolute max loan amount'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->helperText(__('Optional hard cap (0 = no cap, use multiplier only).')),
+                    ]),
+                Section::make(__('Defaults'))
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('loan_default_interest_rate')
+                            ->label(__('Default interest rate (%)'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(100)
+                            ->required(),
+                        TextInput::make('loan_default_term_months')
+                            ->label(__('Default term (months)'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(120)
+                            ->required(),
+                        TextInput::make('loan_settlement_threshold_pct')
+                            ->label(__('Settlement threshold (%)'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(100)
+                            ->step(0.1)
+                            ->required()
+                            ->helperText(__('Percentage of approved amount member must hold in fund for full settlement.')),
+                    ]),
+                Section::make(__('Loan tiers'))
+                    ->description(__('Interest rates are managed in the loan tiers resource.'))
+                    ->schema([
+                        Placeholder::make('loan_tiers_link')
+                            ->label(__('Loan tiers'))
+                            ->content(fn (): HtmlString => new HtmlString(
+                                '<a class="font-semibold text-sky-600 hover:underline dark:text-sky-400" href="'
+                                .e(LoanTierResource::getUrl('index')).'">'.e(__('Open loan tiers')).'</a>'
+                            )),
+                    ]),
+            ],
+            'fund-tiers::tab' => [
+                Section::make(__('Fund tier allocations'))
+                    ->description(__('Tier percentages control how much of the master fund each loan tier may commit. Edit tiers in the loans cluster or below.'))
+                    ->schema([
+                        Placeholder::make('fund_tiers_manage')
+                            ->label(__('Manage tiers'))
+                            ->content(fn (): HtmlString => new HtmlString(
+                                '<a class="font-semibold text-sky-600 hover:underline dark:text-sky-400" href="'
+                                .e(FundTierResource::getUrl('index')).'">'.e(__('Open fund tiers')).'</a>'
+                            )),
+                        Placeholder::make('fund_tiers_summary')
+                            ->label(__('Current tiers'))
+                            ->columnSpanFull()
+                            ->content(function (): HtmlString {
+                                $rows = $this->getFundTierRows();
+
+                                if ($rows === []) {
+                                    return new HtmlString('<p class="text-sm text-gray-500">'.e(__('No fund tiers configured.')).'</p>');
+                                }
+
+                                $html = '<div class="overflow-x-auto"><table class="w-full min-w-[24rem] text-start text-sm"><thead class="border-b text-xs uppercase text-gray-500"><tr><th class="py-2 pe-3">'.e(__('Tier')).'</th><th class="py-2 pe-3">'.e(__('Allocation')).'</th><th class="py-2 pe-3">'.e(__('Loan tier')).'</th><th class="py-2">'.e(__('Status')).'</th></tr></thead><tbody>';
+
+                                foreach ($rows as $row) {
+                                    $status = $row['active']
+                                        ? '<span class="text-emerald-600">'.e(__('Active')).'</span>'
+                                        : '<span class="text-gray-400">'.e(__('Inactive')).'</span>';
+                                    $html .= '<tr class="border-b border-gray-100 dark:border-white/10"><td class="py-2 pe-3 font-medium">'.e($row['label']).'</td><td class="py-2 pe-3 tabular-nums">'.e($row['percentage']).'</td><td class="py-2 pe-3">'.e($row['loan_tier']).'</td><td class="py-2">'.$status.'</td></tr>';
+                                }
+
+                                return new HtmlString($html.'</tbody></table></div>');
+                            }),
+                    ]),
+            ],
+            'reconciliation::tab' => [
+                Section::make(__('Bank vs book'))
+                    ->description(__('Optional declared bank closing balance merged into scheduled fund:reconcile runs and available as defaults on the reconciliation page.'))
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('reconciliation_bank_statement_balance')
+                            ->label(__('Statement / bank closing balance'))
+                            ->numeric()
+                            ->nullable(),
+                        DatePicker::make('reconciliation_bank_statement_date')
+                            ->label(__('Statement as-of date'))
+                            ->native(false)
+                            ->nullable(),
+                        Toggle::make('reconciliation_bank_variance_critical')
+                            ->label(__('Treat bank vs book variance as critical on scheduled runs'))
+                            ->default(false),
+                    ]),
+                Section::make(__('Auto-resolve & matching'))
+                    ->description(__('Operational tolerances used by nightly reconciliation and bank clearing.'))
+                    ->columns(3)
+                    ->schema([
+                        TextInput::make('collection_recon_tolerance')
+                            ->label(__('Auto-resolve tolerance'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->step(0.01)
+                            ->required()
+                            ->helperText(__('Maximum amount delta auto-resolved without admin review.')),
+                        TextInput::make('collection_bank_match_date_range_days')
+                            ->label(__('Bank match date range (days)'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required(),
+                        TextInput::make('collection_stale_pending_days')
+                            ->label(__('Stale pending threshold (days)'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->required(),
+                        TextInput::make('collection_timing_diff_defer_hours')
+                            ->label(__('Timing defer (hours)'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->required(),
+                        TextInput::make('collection_timing_diff_escalate_hours')
+                            ->label(__('Timing escalate (hours)'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->required(),
+                        TextInput::make('collection_cash_deposit_unbanked_days')
+                            ->label(__('Unbanked deposit alert (days)'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->required(),
+                    ]),
+                Section::make(__('Reconciliation workspace'))
+                    ->schema([
+                        Placeholder::make('reconciliation_workspace_link')
+                            ->label(__('Control center'))
+                            ->content(fn (): HtmlString => new HtmlString(
+                                '<a class="font-semibold text-sky-600 hover:underline dark:text-sky-400" href="'
+                                .e(ReconciliationOverviewPage::getUrl()).'">'.e(__('Open reconciliation')).'</a>'
+                            )),
+                    ]),
+            ],
+            'guarantor-rules::tab' => [
+                Section::make(__('Loan funding strategies'))
+                    ->description(__('Control which funding options members can choose when applying for a loan.'))
+                    ->columns(2)
+                    ->schema([
+                        Toggle::make('loan_allow_funding_strategy_member_topup')
+                            ->label(__('Allow member fund top-up'))
+                            ->helperText(__('Member uses their fund balance first; master fund covers the remainder.')),
+                        Toggle::make('loan_allow_funding_strategy_split')
+                            ->label(__('Allow configured fund split'))
+                            ->helperText(__('Member share follows the percentage below; master fund covers the rest.')),
+                        Toggle::make('loan_allow_excess_fund_cash_out')
+                            ->label(__('Allow excess fund cash-out'))
+                            ->helperText(__('When split funding is used, members may transfer fund balance above their loan share to cash at disbursement (member and master cash mirrors).'))
+                            ->visible(fn (Get $get): bool => (bool) ($get('loan_allow_funding_strategy_split') ?? true)),
+                    ]),
+                Section::make(__('Guarantor liability'))
+                    ->description(__('When borrowers miss repayment cycles, guarantors may be debited after the grace period.'))
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('loan_default_grace_cycles')
+                            ->label(__('Grace cycles before guarantor debit'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(24)
+                            ->required()
+                            ->helperText(__('Missed repayment cycles before guarantor liability steps apply.')),
+                        Toggle::make('loan_require_guarantor_above_fund')
+                            ->label(__('Require guarantor above fund balance'))
+                            ->helperText(__('When the member share of the loan exceeds their fund balance, a guarantor is mandatory on apply.')),
+                        TextInput::make('loan_member_funding_split_pct')
+                            ->label(__('Member fund share (%)'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(100)
+                            ->step(0.1)
+                            ->suffix('%')
+                            ->required()
+                            ->helperText(fn (Get $get): string => __('Used when a member chooses the configured split at loan application. Master fund share: :pct%.', [
+                                'pct' => number_format(100 - (float) ($get('loan_member_funding_split_pct') ?? 50), 1),
+                            ])),
+                        Toggle::make('loan_auto_allocate_repayment')
+                            ->label(__('Auto-allocate posted contributions to loan'))
+                            ->helperText(__('After a contribution is posted, apply open-period loan repayment from member cash when possible.')),
+                    ]),
+                Section::make(__('Missed EMI thresholds'))
+                    ->description(__('Members with too many late-settled cycles cannot apply for new loans.'))
+                    ->columns(3)
+                    ->schema([
+                        TextInput::make('loan_late_payment_consecutive')
+                            ->label(__('Consecutive late cycles'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(36)
+                            ->required(),
+                        TextInput::make('loan_late_payment_rolling')
+                            ->label(__('Late cycles (rolling window)'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(240)
+                            ->required(),
+                        TextInput::make('loan_late_payment_lookback_months')
+                            ->label(__('Rolling window (months)'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(240)
+                            ->required(),
+                    ]),
+            ],
+            'statements::tab' => [
+                Section::make(__('Branding'))
+                    ->columns(3)
+                    ->schema([
+                        TextInput::make('statement_brand_name')
+                            ->label(__('Organization name'))
+                            ->required()
+                            ->maxLength(80),
+                        TextInput::make('statement_tagline')
+                            ->label(__('Tagline'))
+                            ->maxLength(120),
+                        TextInput::make('statement_accent_color')
+                            ->label(__('Header accent color (hex)'))
+                            ->required()
+                            ->maxLength(7)
+                            ->placeholder('#059669'),
+                    ]),
+                Section::make(__('Footer & signature'))
+                    ->schema([
+                        Textarea::make('statement_footer_disclaimer')
+                            ->label(__('Footer disclaimer'))
+                            ->rows(2)
+                            ->columnSpanFull(),
+                        TextInput::make('statement_signature_line')
+                            ->label(__('Authorized signature line'))
+                            ->maxLength(100),
+                    ]),
+                Section::make(__('Delivery & content'))
+                    ->columns(2)
+                    ->schema([
+                        Toggle::make('statement_auto_email')
+                            ->label(__('Auto-email members on generation'))
+                            ->helperText(__('When enabled, statement notifications may include email when the email channel is on.')),
+                        Toggle::make('statement_include_transactions')
+                            ->label(__('Include transaction detail table')),
+                        Toggle::make('statement_include_loan_section')
+                            ->label(__('Include loan standing section')),
+                        Toggle::make('statement_include_compliance')
+                            ->label(__('Include compliance snapshot')),
+                    ]),
+            ],
+            'communication::tab' => [
+                Section::make(__('Communication channels'))
+                    ->description(__('When disabled, no notifications are sent through that channel. SMS and WhatsApp credentials are configured under Notifications.'))
+                    ->columns(2)
+                    ->schema([
+                        Toggle::make('communication_in_app_enabled')
+                            ->label(__('In-app inbox')),
+                        Toggle::make('communication_email_enabled')
+                            ->label(__('Email')),
+                    ]),
+            ],
+            'notifications::tab' => [
+                Section::make(__('Member SMS & WhatsApp'))
+                    ->description(__('Uses Twilio when enabled. Members must have a phone number on their profile.'))
+                    ->columns(2)
+                    ->schema([
+                        Toggle::make('notifications_sms_enabled')
+                            ->label(__('Enable SMS'))
+                            ->live(),
+                        Toggle::make('notifications_whatsapp_enabled')
+                            ->label(__('Enable WhatsApp'))
+                            ->live(),
+                        TextInput::make('notifications_twilio_sid')
+                            ->label(__('Twilio account SID'))
+                            ->maxLength(64)
+                            ->columnSpanFull(),
+                        TextInput::make('notifications_twilio_token')
+                            ->label(__('Twilio auth token'))
+                            ->password()
+                            ->revealable()
+                            ->maxLength(128)
+                            ->columnSpanFull(),
+                        TextInput::make('notifications_twilio_sms_from')
+                            ->label(__('SMS sender number'))
+                            ->tel()
+                            ->helperText(__('E.164 format, e.g. +14155552671')),
+                        TextInput::make('notifications_twilio_whatsapp_from')
+                            ->label(__('WhatsApp sender'))
+                            ->helperText(__('Twilio WhatsApp-enabled number, e.g. +14155238886')),
+                    ]),
+            ],
+            'bank-templates::tab' => [
+                Section::make(__('CSV Import Templates'))
+                    ->description(__('Define templates for parsing bank statement CSV files. Select one as default.'))
+                    ->schema([
+                        Repeater::make('bank_templates')
+                            ->label('')
+                            ->schema(static::templateSchema())
+                            ->columns(1)
+                            ->itemLabel(fn (array $state): ?string => $state['name'] ?? __('New template'))
+                            ->collapsible()
+                            ->defaultItems(0)
+                            ->addActionLabel(__('Add template')),
+                    ]),
+            ],
+            'sms-templates::tab' => [
+                Section::make(__('SMS import templates'))
+                    ->description(__('Define templates for parsing bank alert SMS exports. Select one as default per bank label (or globally when bank is blank).'))
+                    ->schema([
+                        Repeater::make('sms_templates')
+                            ->label('')
+                            ->schema(SmsImportTemplateFieldsets::forSettingsRepeater())
+                            ->columns(1)
+                            ->itemLabel(fn (array $state): ?string => trim(
+                                (filled($state['bank_name'] ?? null) ? $state['bank_name'].' — ' : '')
+                                .($state['name'] ?? __('New template'))
+                            ))
+                            ->collapsible()
+                            ->defaultItems(0)
+                            ->addActionLabel(__('Add template')),
+                    ]),
+            ],
+        ];
     }
 
     /**
@@ -996,15 +1018,15 @@ class Settings extends Page implements HasForms
     {
         return [
             // --- Section 1: General ---
-            Fieldset::make('General')
+            Fieldset::make(__('General'))
                 ->columns(3)
                 ->schema([
                     TextInput::make('name')
-                        ->label('Template name')
+                        ->label(__('Template name'))
                         ->required()
                         ->maxLength(255),
                     Select::make('encoding')
-                        ->label('File encoding')
+                        ->label(__('File encoding'))
                         ->options(Lang::transOptions([
                             'UTF-8' => 'UTF-8',
                             'ISO-8859-1' => 'ISO-8859-1 (Latin-1)',
@@ -1014,9 +1036,9 @@ class Settings extends Page implements HasForms
                         ->default('UTF-8')
                         ->required(),
                     Checkbox::make('is_default')
-                        ->label('Default template'),
+                        ->label(__('Default template')),
                     Select::make('delimiter')
-                        ->label('Delimiter')
+                        ->label(__('Delimiter'))
                         ->options(Lang::transOptions([
                             ',' => 'Comma (,)',
                             ';' => 'Semicolon (;)',
@@ -1025,7 +1047,7 @@ class Settings extends Page implements HasForms
                         ]))
                         ->required(),
                     CheckboxList::make('date_format')
-                        ->label('Date formats')
+                        ->label(__('Date formats'))
                         ->options(Lang::transOptions(ImportDateFormats::options()))
                         ->columns(1)
                         ->required()
@@ -1043,7 +1065,7 @@ class Settings extends Page implements HasForms
                             };
                         }),
                     TextInput::make('skip_rows')
-                        ->label('Skip rows')
+                        ->label(__('Skip rows'))
                         ->numeric()
                         ->minValue(0)
                         ->default(0)
@@ -1051,17 +1073,17 @@ class Settings extends Page implements HasForms
                 ]),
 
             // --- Section 2: Header and columns ---
-            Fieldset::make('Header and Columns')
+            Fieldset::make(__('Header and Columns'))
                 ->columns(2)
                 ->schema([
                     Toggle::make('has_header')
-                        ->label('First data row is a header')
+                        ->label(__('First data row is a header'))
                         ->helperText(__('On: use exact column header text in mappings. Off: use 0-based column index (0, 1, 2...).'))
                         ->default(true)
                         ->live()
                         ->columnSpanFull(),
                     TextInput::make('date_column')
-                        ->label('Date column')
+                        ->label(__('Date column'))
                         ->required()
                         ->helperText(fn (Get $get): string => ($get('has_header') ?? true)
                             ? __('Header name, e.g. "Transaction Date"')
@@ -1069,11 +1091,11 @@ class Settings extends Page implements HasForms
                 ]),
 
             // --- Section 3: Amount structure ---
-            Fieldset::make('Amount Structure')
+            Fieldset::make(__('Amount Structure'))
                 ->columns(2)
                 ->schema([
                     Radio::make('amount_mode')
-                        ->label('Amount type')
+                        ->label(__('Amount type'))
                         ->options(Lang::transOptions([
                             'single' => 'One amount column (negative often means debit)',
                             'split' => 'Separate credit and debit columns',
@@ -1083,24 +1105,24 @@ class Settings extends Page implements HasForms
                         ->live()
                         ->columnSpanFull(),
                     TextInput::make('amount_column')
-                        ->label('Amount column')
+                        ->label(__('Amount column'))
                         ->required(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'single')
                         ->visible(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'single')
                         ->helperText(fn (Get $get): string => ($get('has_header') ?? true)
                             ? __('Header name, e.g. "Amount"')
                             : __('0-based index')),
                     TextInput::make('credit_column')
-                        ->label('Credit column')
+                        ->label(__('Credit column'))
                         ->required(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'split')
                         ->visible(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'split'),
                     TextInput::make('debit_column')
-                        ->label('Debit column')
+                        ->label(__('Debit column'))
                         ->required(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'split')
                         ->visible(fn (Get $get): bool => ($get('amount_mode') ?? 'single') === 'split'),
                 ]),
 
             // --- Section 4: Optional column mappings ---
-            Fieldset::make('Optional Column Mappings')
+            Fieldset::make(__('Optional Column Mappings'))
                 ->columns(1)
                 ->schema([
                     Repeater::make('extra_columns')
@@ -1108,12 +1130,12 @@ class Settings extends Page implements HasForms
                         ->live()
                         ->schema([
                             TextInput::make('key')
-                                ->label('Key')
+                                ->label(__('Key'))
                                 ->required()
                                 ->placeholder(__('e.g. reference, description, balance, branch_code'))
                                 ->helperText(__('Use "reference", "description", or "balance" to fill main fields. Other keys are stored on the import row.')),
                             TextInput::make('column')
-                                ->label('CSV column')
+                                ->label(__('CSV column'))
                                 ->required()
                                 ->placeholder(__('Header name or 0-based index')),
                         ])
@@ -1125,11 +1147,11 @@ class Settings extends Page implements HasForms
                 ]),
 
             // --- Section 5: Duplicate detection ---
-            Fieldset::make('Duplicate Detection')
+            Fieldset::make(__('Duplicate Detection'))
                 ->columns(2)
                 ->schema([
                     CheckboxList::make('duplicate_fields')
-                        ->label('Match fields')
+                        ->label(__('Match fields'))
                         ->options(function (Get $get): array {
                             $options = [
                                 'date' => 'Date',
@@ -1156,7 +1178,7 @@ class Settings extends Page implements HasForms
                         ->helperText(__('Transactions are considered duplicates when all selected fields match. Options come from your column mappings above.'))
                         ->columnSpanFull(),
                     TextInput::make('duplicate_date_tolerance')
-                        ->label('Date tolerance (days)')
+                        ->label(__('Date tolerance (days)'))
                         ->numeric()
                         ->minValue(0)
                         ->default(0)
@@ -1167,7 +1189,20 @@ class Settings extends Page implements HasForms
 
     public function save(): void
     {
-        $state = $this->form->getState();
+        $state = array_merge($this->defaultSettingsFormState(), $this->form->getState());
+
+        $allowMemberTopup = (bool) ($state['loan_allow_funding_strategy_member_topup'] ?? true);
+        $allowSplit = (bool) ($state['loan_allow_funding_strategy_split'] ?? true);
+
+        if (! $allowMemberTopup && ! $allowSplit) {
+            Notification::make()
+                ->title(__('Settings not saved'))
+                ->body(__('Enable at least one loan funding strategy (member fund top-up or configured split).'))
+                ->danger()
+                ->send();
+
+            return;
+        }
 
         Setting::set('general', 'currency', $state['currency']);
         Setting::set('reconciliation', 'bank_statement_balance', $state['reconciliation_bank_statement_balance'] ?? '');
@@ -1203,6 +1238,9 @@ class Settings extends Page implements HasForms
             'default_grace_cycles' => (int) ($state['loan_default_grace_cycles'] ?? 2),
             'require_guarantor_above_fund_balance' => (bool) ($state['loan_require_guarantor_above_fund'] ?? true),
             'member_funding_split_pct' => max(0, min(100, (float) ($state['loan_member_funding_split_pct'] ?? 50))),
+            'allow_funding_strategy_member_topup' => $allowMemberTopup,
+            'allow_funding_strategy_split_percentage' => $allowSplit,
+            'allow_excess_fund_cash_out' => (bool) ($state['loan_allow_excess_fund_cash_out'] ?? true),
             'auto_allocate_loan_repayment' => (bool) ($state['loan_auto_allocate_repayment'] ?? false),
             'late_payment_consecutive_threshold' => max(1, min(36, (int) ($state['loan_late_payment_consecutive'] ?? 3))),
             'late_payment_rolling_threshold' => max(1, min(240, (int) ($state['loan_late_payment_rolling'] ?? 15))),

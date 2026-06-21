@@ -3,6 +3,7 @@
     'currency' => null,
     'signed' => false,
     'precision' => 2,
+    'compact' => false,
 ])
 @php
     use App\Filament\Support\MoneyDisplay;
@@ -14,11 +15,15 @@
 @endphp
 
 @if (filled($digits))
-    <span
-        {{ $attributes->class(array_filter(['ff-member-amount', 'tabular-nums', $colorClass])) }}
-        dir="ltr"
-    >
-        <span class="{{ MoneyDisplay::symbolSpanClass($currency) }}" dir="ltr">{{ MoneyDisplay::symbol($currency) }}</span>
-        <span class="ff-member-amount__digits">{{ $digits }}</span>
-    </span>
+    @if ($compact)
+        {!! MoneyDisplay::compactHtml((float) $value, $currency)->toHtml() !!}
+    @else
+        <span
+            {{ $attributes->class(array_filter(['ff-member-amount', 'tabular-nums', $colorClass])) }}
+            dir="ltr"
+        >
+            {!! MoneyDisplay::symbolHtml($currency)->toHtml() !!}
+            <span class="ff-member-amount__digits">{{ $digits }}</span>
+        </span>
+    @endif
 @endif

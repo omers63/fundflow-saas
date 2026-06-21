@@ -91,7 +91,7 @@ class MonthlyStatementsTable
                         ->all()),
                 Filter::make('period')
                     ->schema([
-                        TextInput::make('period')->placeholder('YYYY-MM'),
+                        TextInput::make('period')->placeholder(__('YYYY-MM')),
                     ])
                     ->query(fn (Builder $query, array $data): Builder => filled($data['period'] ?? null)
                         ? $query->where('period', $data['period'])

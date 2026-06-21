@@ -66,7 +66,7 @@ class ListLoanQueue extends ListRecords
 
     public function setQueueKind(string $kind): void
     {
-        if (!in_array($kind, ['all', 'emergency', 'standard', 'partial'], true)) {
+        if (! in_array($kind, ['all', 'emergency', 'standard', 'partial'], true)) {
             return;
         }
 
@@ -108,8 +108,8 @@ class ListLoanQueue extends ListRecords
             ->components([
                 $this->getTabsContentComponent(),
                 View::make('filament.tenant.resources.loans.partials.queue-kind-tabs')
-                    ->viewData(fn(): array => [
-                        'queueKind' => $this->queueKind,
+                    ->viewData(fn ($livewire): array => [
+                        'queueKind' => $livewire->queueKind,
                     ]),
                 RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
                 EmbeddedTable::make(),
@@ -131,7 +131,7 @@ class ListLoanQueue extends ListRecords
     protected function makeTable(): Table
     {
         $table = $this->makeBaseTable()
-            ->query(fn(): Builder => $this->getTableQuery())
+            ->query(fn (): Builder => $this->getTableQuery())
             ->modifyQueryUsing($this->modifyQueryWithActiveTab(...));
 
         return $this->table($table);
@@ -177,14 +177,14 @@ class ListLoanQueue extends ListRecords
             ->columns([
                 TextColumn::make('priority_score')
                     ->label(__('Priority'))
-                    ->state(fn(Loan $record): int => $priorityService->calculate($record))
+                    ->state(fn (Loan $record): int => $priorityService->calculate($record))
                     ->badge()
-                    ->color(fn(int $state): string => match (true) {
+                    ->color(fn (int $state): string => match (true) {
                         $state >= 120 => 'danger',
                         $state >= 80 => 'warning',
                         default => 'gray',
                     })
-                    ->sortable(query: fn(Builder $query, string $direction): Builder => $priorityService->applySort($query, $direction))
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $priorityService->applySort($query, $direction))
                     ->alignCenter(),
                 TextColumn::make('queue_position')
                     ->label(__('Queue #'))
@@ -196,18 +196,18 @@ class ListLoanQueue extends ListRecords
                     ->sortable(),
                 TextColumn::make('waiting_days')
                     ->label(__('Waiting'))
-                    ->state(fn(Loan $record): string => $record->applied_at
-                        ? $record->applied_at->diffInDays(now()) . 'd'
+                    ->state(fn (Loan $record): string => $record->applied_at
+                        ? $record->applied_at->diffInDays(now()).'d'
                         : '—')
                     ->badge()
-                    ->color(fn(Loan $record): string => match (true) {
+                    ->color(fn (Loan $record): string => match (true) {
                         $record->is_emergency => 'danger',
-                        !$record->applied_at => 'gray',
+                        ! $record->applied_at => 'gray',
                         $record->applied_at->diffInDays(now()) >= 7 => 'danger',
                         $record->applied_at->diffInDays(now()) >= 3 => 'warning',
                         default => 'success',
                     })
-                    ->sortable(query: fn($query, string $direction) => $query->orderBy('applied_at', $direction === 'asc' ? 'desc' : 'asc')),
+                    ->sortable(query: fn ($query, string $direction) => $query->orderBy('applied_at', $direction === 'asc' ? 'desc' : 'asc')),
                 TextColumn::make('member.name')
                     ->label(__('Member'))
                     ->searchable()
@@ -229,12 +229,12 @@ class ListLoanQueue extends ListRecords
                 TextColumn::make('is_emergency')
                     ->label(__('Emergency'))
                     ->badge()
-                    ->formatStateUsing(fn(bool $state): string => $state ? __('Yes') : __('No'))
-                    ->color(fn(bool $state): string => $state ? 'danger' : 'gray'),
+                    ->formatStateUsing(fn (bool $state): string => $state ? __('Yes') : __('No'))
+                    ->color(fn (bool $state): string => $state ? 'danger' : 'gray'),
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn(string $state): string => Loan::statusOptions()[$state] ?? $state)
-                    ->color(fn(string $state): string => Loan::statusColor($state)),
+                    ->formatStateUsing(fn (string $state): string => Loan::statusOptions()[$state] ?? $state)
+                    ->color(fn (string $state): string => Loan::statusColor($state)),
             ])
             ->filters([
                 SelectFilter::make('status')

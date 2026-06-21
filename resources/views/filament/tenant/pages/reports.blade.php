@@ -40,6 +40,7 @@
                     <option value="loans">{{ __('Loan portfolio') }}</option>
                     <option value="reconciliation">{{ __('Reconciliation summary') }}</option>
                     <option value="audit">{{ __('Audit trail') }}</option>
+                    <option value="guarantor_exposure">{{ __('Guarantor exposure') }}</option>
                 </select>
             </div>
             <div>
@@ -57,9 +58,9 @@
                     class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ __('Format') }}</label>
                 <select wire:model="reportFormat"
                     class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-gray-900">
-                    <option value="pdf">PDF</option>
-                    <option value="csv">CSV</option>
-                    <option value="xlsx">Excel</option>
+                    <option value="pdf">{{ __('PDF') }}</option>
+                    <option value="csv">{{ __('CSV') }}</option>
+                    <option value="xlsx">{{ __('Excel') }}</option>
                 </select>
             </div>
             <div class="sm:col-span-2 lg:col-span-4 flex justify-end">

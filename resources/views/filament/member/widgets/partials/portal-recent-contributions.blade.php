@@ -20,13 +20,11 @@
                             @endif
                         </p>
                     </div>
-                    <span @class([
+                    <x-ff-money-text :text="$row['amount']" @class([
                         'shrink-0 font-semibold tabular-nums',
                         'text-rose-600 dark:text-rose-400' => $row['late'] ?? false,
-                        'text-emerald-600 dark:text-emerald-400' => !($row['late'] ?? false),
-                    ])>
-                        {{ $row['amount'] }}
-                    </span>
+                        'text-emerald-600 dark:text-emerald-400' => ! ($row['late'] ?? false),
+                    ]) />
                 </li>
             @empty
                 <li class="px-3 py-4 text-center text-[11px] text-gray-400">{{ __('No contributions yet') }}</li>
@@ -48,9 +46,7 @@
                         <p class="font-medium text-gray-800 dark:text-gray-200">{{ $deposit['date'] }}</p>
                         <p class="text-[10px] text-gray-400">{{ $deposit['status_label'] }}</p>
                     </div>
-                    <span class="shrink-0 font-semibold tabular-nums text-gray-900 dark:text-white">
-                        {{ $deposit['amount'] }}
-                    </span>
+                    <x-ff-money-text :text="$deposit['amount']" class="shrink-0 font-semibold tabular-nums text-gray-900 dark:text-white" />
                 </li>
             @empty
                 <li class="px-3 py-4 text-center text-[11px] text-gray-400">{{ __('No deposits yet') }}</li>

@@ -98,10 +98,36 @@ More detail: `docs/filament-notification-bell-and-reverb.md`.
 
 ## Scheduled fund jobs
 
-Ensure the host cron runs Laravel’s scheduler every minute:
+Ensure the host cron runs Laravel’s scheduler every minute.
+
+**Recommended (system cron file):**
+
+```bash
+cd /var/www/fundflow-saas
+touch storage/logs/scheduler.log
+sudo chown www-data:www-data storage/logs/scheduler.log
+sudo cp deploy/cron/fundflow-scheduler /etc/cron.d/fundflow-scheduler
+sudo chmod 644 /etc/cron.d/fundflow-scheduler
+sudo chown root:root /etc/cron.d/fundflow-scheduler
+```
+
+The template at `deploy/cron/fundflow-scheduler` runs:
+
+```bash
+* * * * * www-data cd /var/www/fundflow-saas && php artisan schedule:run >> storage/logs/scheduler.log 2>&1
+```
+
+**Manual crontab alternative** (`sudo crontab -u www-data -e`):
 
 ```bash
 * * * * * cd /var/www/fundflow-saas && php artisan schedule:run >> /dev/null 2>&1
+```
+
+Verify:
+
+```bash
+php artisan schedule:list
+tail -f /var/www/fundflow-saas/storage/logs/scheduler.log
 ```
 
 Review **System → Jobs & commands** in the tenant admin panel for the catalog, last run times, and manual runs (respects `BatchPostingGate`).

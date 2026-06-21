@@ -25,7 +25,7 @@
                                     ? 'text-rose-600 dark:text-rose-400'
                                     : 'text-emerald-600 dark:text-emerald-400',
                             ])>
-                                {{ $d['balance_display'] }}
+                                {!! \App\Filament\Support\MoneyDisplay::markupForDisplay($d['balance_display']) !!}
                             </p>
                             <p class="text-[10px] text-gray-400">{{ __('Current balance') }}</p>
                         </div>
@@ -71,7 +71,7 @@
                                 </p>
                             </div>
                             <span @class(['shrink-0 font-semibold tabular-nums', $tx['signed_class']])>
-                                {{ $tx['type'] === 'credit' ? '+' : '−' }}{{ $tx['amount'] }}
+                                {{ $tx['type'] === 'credit' ? '+' : '−' }}<x-ff-money-text :text="$tx['amount']" />
                             </span>
                         </li>
                     @empty

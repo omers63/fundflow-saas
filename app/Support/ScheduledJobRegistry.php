@@ -41,6 +41,7 @@ final class ScheduledJobRegistry
             self::job('loans:apply-repayments', __('Apply loan repayments'), __('Batch EMI collection for period'), __('Monthly on 6th at 06:00'), 'loans', true),
             self::job('loans:check-defaults', __('Loan delinquency check'), __('Overdue, delinquency, guarantor defaults, auto-transfer'), __('Daily at 07:00'), 'loans', false),
             self::job('delinquency:send-digest', __('Delinquency digest'), __('Email/database digest to admins'), __('Daily at 07:30'), 'loans', false),
+            self::job('announcements:dispatch-scheduled', __('Dispatch scheduled announcements'), __('Send bulk member announcements when their scheduled time arrives'), __('Every minute'), 'messaging', false),
         ];
     }
 
@@ -64,7 +65,7 @@ final class ScheduledJobRegistry
     public static function commandNames(): array
     {
         return array_map(
-            fn(array $job): string => explode(' ', $job['command'])[0],
+            fn (array $job): string => explode(' ', $job['command'])[0],
             self::all(),
         );
     }

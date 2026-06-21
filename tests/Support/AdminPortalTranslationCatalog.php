@@ -91,27 +91,17 @@ final class AdminPortalTranslationCatalog
     {
         $content = (string) file_get_contents($path);
 
-        if (preg_match_all("/__\\(['\"]([^'\"\\n]{2,160})['\"]/", $content, $matches)) {
-            foreach ($matches[1] as $key) {
-                if (self::isValidKey($key)) {
-                    $keys[$key] = true;
-                }
-            }
+        $pattern = '/(?:__|@lang|Lang::ui|trans|trans_choice)\(\s*(\'(?:\\\\.|[^\'])*\'|"(?:\\\\.|[^"])*")/';
+
+        if (! preg_match_all($pattern, $content, $quotedMatches)) {
+            return;
         }
 
-        if (preg_match_all("/Lang::ui\\(['\"]([^'\"\\n]{2,160})['\"]/", $content, $uiMatches)) {
-            foreach ($uiMatches[1] as $key) {
-                if (self::isValidKey($key)) {
-                    $keys[$key] = true;
-                }
-            }
-        }
+        foreach ($quotedMatches[1] as $quoted) {
+            $key = stripcslashes(substr($quoted, 1, -1));
 
-        if (preg_match_all("/@lang\\(['\"]([^'\"\\n]{2,160})['\"]/", $content, $langMatches)) {
-            foreach ($langMatches[1] as $key) {
-                if (self::isValidKey($key)) {
-                    $keys[$key] = true;
-                }
+            if (self::isValidKey($key)) {
+                $keys[$key] = true;
             }
         }
     }
@@ -133,6 +123,10 @@ final class AdminPortalTranslationCatalog
         }
 
         if (preg_match('/^[\\(\\)\\[\\]\\.,;:!?#@&*\\/\\\\]+$/', $key)) {
+            return false;
+        }
+
+        if (str_ends_with($key, '\\')) {
             return false;
         }
 

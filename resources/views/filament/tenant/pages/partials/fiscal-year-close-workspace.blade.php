@@ -32,7 +32,7 @@
             class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
             <table class="w-full text-sm">
                 <thead
-                    class="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
+                    class="border-b border-gray-200 bg-gray-50 text-start text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
                     <tr>
                         <th class="px-4 py-3">{{ __('Check') }}</th>
                         <th class="px-4 py-3">{{ __('Status') }}</th>

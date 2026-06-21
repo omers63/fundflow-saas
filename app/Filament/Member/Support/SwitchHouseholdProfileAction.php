@@ -21,7 +21,7 @@ final class SwitchHouseholdProfileAction
         return Action::make('switchHouseholdProfile')
             ->label(__('Switch'))
             ->modalHeading(__('Verify profile access'))
-            ->modalDescription(__('Enter this member\'s portal password to continue.'))
+            ->modalDescription(__("Enter this member's portal password to continue."))
             ->modalSubmitActionLabel(__('Continue'))
             ->schema([
                 TextInput::make('verification_secret')

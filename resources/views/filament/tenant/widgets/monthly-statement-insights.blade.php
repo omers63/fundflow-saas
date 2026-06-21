@@ -157,7 +157,7 @@
                         <div class="min-w-0 flex-1">
                             <p class="truncate text-xs font-medium text-gray-900 dark:text-white">{{ $item['name'] }}</p>
                             <p class="truncate text-[10px] text-gray-400">{{ $item['period_label'] }} ·
-                                {{ $item['closing_display'] }}</p>
+                                <x-ff-money-text :text="$item['closing_display']" /></p>
                         </div>
                         <span @class([
                             'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',

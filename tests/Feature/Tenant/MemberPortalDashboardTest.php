@@ -212,11 +212,9 @@ test('member dashboard my insights stat cards place riyal symbol before amount i
 
     $html = $this->get('http://'.$this->domain.'/member')->getContent();
 
-    $riyal = "\u{20C1}";
-
     expect($html)->toContain('ff-member-amount')
-        ->and(mb_strpos($html, $riyal))->not->toBeFalse()
-        ->and(mb_strpos($html, $riyal))->toBeLessThan(mb_strpos($html, 'ff-member-amount__digits'));
+        ->and(mb_strpos($html, 'ff-sar-symbol__img'))->not->toBeFalse()
+        ->and(mb_strpos($html, 'ff-sar-symbol__img'))->toBeLessThan(mb_strpos($html, 'ff-member-amount__digits'));
 });
 
 test('member dashboard renders arabic labels with western digits for amounts', function () {
@@ -235,6 +233,6 @@ test('member dashboard renders arabic labels with western digits for amounts', f
         ->assertSee('ff-member-dashboard-overview', false)
         ->assertSee('حساب الصند', false)
         ->assertSee('1,500.00', false)
-        ->assertSee("\u{20C1}", false)
+        ->assertSee('ff-sar-symbol__img', false)
         ->assertDontSee('١٬٥٠٠', false);
 });

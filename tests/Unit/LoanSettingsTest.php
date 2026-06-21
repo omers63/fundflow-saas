@@ -22,6 +22,9 @@ it('uses defaults when loan settings are not stored', function () {
         ->and(LoanSettings::latePaymentRollingThreshold())->toBe(15)
         ->and(LoanSettings::latePaymentLookbackMonths())->toBe(60)
         ->and(LoanSettings::memberFundingSplitPercent())->toBe(50.0)
+        ->and(LoanSettings::allowMemberFundTopupStrategy())->toBeTrue()
+        ->and(LoanSettings::allowSplitPercentageStrategy())->toBeTrue()
+        ->and(LoanSettings::allowExcessFundCashOut())->toBeTrue()
         ->and(Setting::loanGuarantorTransferMissedThreshold())->toBe(3);
 });
 

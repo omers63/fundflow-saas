@@ -120,7 +120,7 @@ final class CashOutRequestInsightsService
             ->map(fn (CashOutRequest $request): array => [
                 'id' => $request->id,
                 'name' => $request->member?->name ?? __('Unknown member'),
-                'amount_display' => InsightFormatter::money((float) $request->amount),
+                'amount_display' => InsightFormatter::moneyMarkup((float) $request->amount),
                 'days_waiting' => (int) Carbon::parse($request->created_at)->diffInDays($now),
                 'has_notes' => filled($request->notes),
                 'queue_url' => CashOutRequestResource::indexUrlForMember((int) $request->member_id, 'pending'),

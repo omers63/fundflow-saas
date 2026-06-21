@@ -32,11 +32,40 @@
 .fi-body.fi-panel-tenant .fi-modal-window.ff-tenant-record-modal-window,
 .fi-body.fi-panel-tenant .fi-modal-window.ff-tenant-form-modal-window {
     border-radius: 1rem;
-    overflow: hidden;
     border: 1px solid var(--ff-border, #e5e7eb);
     box-shadow:
         0 10px 25px -5px rgb(0 0 0 / 0.08),
         0 4px 10px -6px rgb(0 0 0 / 0.06);
+}
+
+/* Tall modals: cap height, scroll the body, keep header + footer visible */
+.fi-body.fi-panel-tenant .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window {
+    max-height: min(90dvh, calc(100dvh - 2rem));
+    overflow: hidden;
+}
+
+.fi-body.fi-panel-tenant .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window
+    > .fi-modal-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.fi-body.fi-panel-tenant .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window
+    > .fi-modal-header,
+.fi-body.fi-panel-tenant .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window
+    > .fi-modal-footer {
+    flex-shrink: 0;
 }
 
 .dark .fi-body.fi-panel-tenant .fi-modal-window.ff-tenant-record-modal-window,
@@ -395,4 +424,107 @@
 .dark .fi-body.fi-panel-tenant .ff-tenant-tab-pills__item--warning:not(.ff-tenant-tab-pills__item--active) {
     border-color: rgb(245 158 11 / 0.35);
     color: #fcd34d;
+}
+
+/* Admin create loan wizard */
+.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard {
+    gap: 0.75rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    overflow: visible;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header-step {
+    display: flex !important;
+    min-width: 0;
+    border-radius: 0.75rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header-step-btn {
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.25rem;
+    width: 100%;
+    padding: 0.5rem 0.25rem;
+    text-align: center;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header-step-text {
+    width: 100%;
+    max-width: none;
+    justify-items: center;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header-step-label {
+    font-size: 0.625rem;
+    line-height: 1.2;
+    text-align: center;
+    white-space: normal;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header-step-description {
+    display: none;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header-step-separator {
+    display: none;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header-step-icon-ctn {
+    width: 2rem;
+    height: 2rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header-step-icon-ctn .fi-icon {
+    width: 1rem;
+    height: 1rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header-step.fi-active {
+    background: rgb(224 242 254 / 0.65);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header-step.fi-active {
+    background: rgb(12 74 110 / 0.35);
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-step.fi-active {
+    margin-top: 0.75rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-step {
+    border-radius: 0.875rem;
+    border: 1px solid var(--ff-border, #e5e7eb);
+    background: var(--ff-surface, #fff);
+    padding: 0.875rem 1rem;
+    box-shadow:
+        0 1px 2px rgb(0 0 0 / 0.04),
+        0 4px 12px -6px rgb(2 132 199 / 0.12);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-step {
+    border-color: rgb(255 255 255 / 0.1);
+    background: rgb(17 24 39 / 0.55);
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-footer {
+    margin-top: 0.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-create-loan .ff-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    padding: 0.2rem 0.65rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+html[dir='rtl'] .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header-step-label {
+    letter-spacing: 0;
 }

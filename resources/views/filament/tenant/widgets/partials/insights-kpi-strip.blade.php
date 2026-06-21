@@ -31,6 +31,7 @@
             $valueText = (string) $rawValue;
             $currency = $card['currency'] ?? null;
             $valuePrecision = (int) ($card['value_precision'] ?? 2);
+            $valueCompact = (bool) ($card['value_compact'] ?? false);
             $subPrecision = (int) ($card['sub_precision'] ?? 2);
             $subText = (string) ($card['sub'] ?? '');
             $valueIsAmount = is_int($rawValue) || is_float($rawValue);
@@ -54,7 +55,7 @@
             </p>
             <div class="flex min-w-0 items-baseline gap-0.5 overflow-hidden">
                 <x-ff-stat-line :amount="$valueIsAmount ? $rawValue : null" :text="$valueIsAmount ? null : $valueText"
-                    :currency="$currency" :precision="$valuePrecision" @class([
+                    :currency="$currency" :precision="$valuePrecision" :compact="$valueCompact" @class([
                         'min-w-0 flex-1 truncate',
                         $card['value_class'] ?? 'text-gray-900 dark:text-white',
                         'text-base font-bold tabular-nums leading-none sm:text-lg xl:text-[22px]',

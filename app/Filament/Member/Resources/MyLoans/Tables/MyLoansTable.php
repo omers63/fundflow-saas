@@ -44,13 +44,14 @@ class MyLoansTable
                         ->formatStateUsing(fn (string $state, Loan $record): string => LoanUserFacingStage::memberListStatusLabel($record))
                         ->color(fn (string $state): string => Loan::statusColor($state)),
                     TextColumn::make('applied_at')
+                        ->label(__('Applied'))
                         ->dateTime()
                         ->sortable(),
                 ])
                 ->filters([
                     SelectFilter::make('status')
                         ->options(Loan::statusOptions()),
-                    DateColumnRangeFilter::make('applied_at', 'Applied'),
+                    DateColumnRangeFilter::make('applied_at', __('Applied')),
                 ])
                 ->recordUrl(fn (Model $record): string => MyLoanResource::getUrl('view', ['record' => $record]))
                 ->recordActions(TableRecordActionGroups::wrap([

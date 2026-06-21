@@ -42,7 +42,7 @@ class MyDependentsTable
                 TextColumn::make('last_allocation_change')
                     ->label(__('Last changed'))
                     ->state(function (Member $record) use ($currency): ?string {
-                        if (! Schema::hasTable('dependent_allocation_changes')) {
+                        if (!Schema::hasTable('dependent_allocation_changes')) {
                             return null;
                         }
 
@@ -62,13 +62,15 @@ class MyDependentsTable
                     ->placeholder(__('Never changed')),
                 TextColumn::make('cash_balance')
                     ->label(__('Cash'))
-                    ->state(fn (Member $record): float => $record->getCashBalance())
+                    ->state(fn(Member $record): float => $record->getCashBalance())
                     ->money($currency)
+                    ->searchable(false)
                     ->sortable(false),
                 TextColumn::make('fund_balance')
                     ->label(__('Fund'))
-                    ->state(fn (Member $record): float => $record->getFundBalance())
+                    ->state(fn(Member $record): float => $record->getFundBalance())
                     ->money($currency)
+                    ->searchable(false)
                     ->sortable(false),
                 TextColumn::make('open_cycle_status')
                     ->label(__('Open cycle'))
@@ -105,8 +107,8 @@ class MyDependentsTable
                     }),
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
-                    ->color(fn (string $state): string => Member::statusBadgeColor($state)),
+                    ->formatStateUsing(fn(string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
+                    ->color(fn(string $state): string => Member::statusBadgeColor($state)),
             ])
             ->filters([
                 SelectFilter::make('status')
@@ -119,7 +121,7 @@ class MyDependentsTable
             ->headerActions(MyDependentTableActions::headerActions())
             ->recordActions(MyDependentTableActions::recordActions())
             ->recordUrl(function (Model $record): ?string {
-                if (! $record instanceof Member) {
+                if (!$record instanceof Member) {
                     return null;
                 }
 

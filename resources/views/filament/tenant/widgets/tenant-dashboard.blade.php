@@ -10,28 +10,56 @@
 
 <div class="w-full max-w-none space-y-3 pb-6">
 
-    {{-- ── Slim context banner ── --}}
-    <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-white px-4 py-2.5 shadow-sm dark:border-sky-800/40 dark:bg-gray-900">
-        <div class="flex items-center gap-2.5">
-            <div class="flex h-7 w-7 items-center justify-center rounded-lg border border-sky-200 bg-sky-50 text-sky-600 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-400">
-                <x-heroicon-o-building-library class="h-4 w-4" />
+    {{-- ── Fund overview hero ── --}}
+    <div class="ff-tenant-dashboard-hero overflow-hidden rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-emerald-50/50 shadow-md dark:border-sky-800/40 dark:from-sky-950/50 dark:via-gray-900 dark:to-emerald-950/25">
+        <div class="px-5 py-5 sm:px-6 sm:py-6">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div class="flex min-w-0 items-start gap-4">
+                    <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-sky-200/80 bg-white shadow-sm dark:border-sky-700/50 dark:bg-sky-950/60">
+                        <x-heroicon-o-building-library class="h-7 w-7 text-sky-600 dark:text-sky-400" />
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-xs font-semibold uppercase tracking-wider text-sky-600 dark:text-sky-400">
+                            {{ $greeting['period_label'] }}, {{ $greeting['name'] }}
+                        </p>
+                        <h2 class="mt-1 truncate text-xl font-bold text-gray-900 dark:text-white sm:text-2xl">
+                            {{ $greeting['fund_name'] }}
+                        </h2>
+                        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ $greeting['date'] }}</p>
+                        <p class="mt-2 max-w-2xl text-xs leading-relaxed text-gray-600 dark:text-gray-300">
+                            {{ $greeting['subtitle'] }}
+                        </p>
+                    </div>
+                </div>
+                <div class="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
+                    <span class="inline-flex items-center gap-1.5 rounded-lg bg-sky-100/90 px-3 py-1.5 text-xs font-semibold text-sky-800 ring-1 ring-inset ring-sky-200/80 dark:bg-sky-900/50 dark:text-sky-200 dark:ring-sky-700/50">
+                        <x-heroicon-o-calendar-days class="h-4 w-4 shrink-0" />
+                        {{ __('Cycle: :label', ['label' => $d['open_period_label']]) }}
+                    </span>
+                </div>
             </div>
-            <div>
-                <p class="text-[11px] font-semibold text-gray-800 dark:text-gray-100">{{ $greeting['fund_name'] }}</p>
-                <p class="text-[10px] text-gray-400">{{ $greeting['date'] }}</p>
+
+            <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                @foreach ($d['balances'] as $balance)
+                    <a href="{{ $balance['url'] }}"
+                        class="ff-tenant-dashboard-hero__balance group relative overflow-hidden rounded-xl border border-white/90 bg-white/95 p-4 shadow-sm ring-1 ring-gray-200/70 transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/5 dark:bg-gray-900/70 dark:ring-white/10">
+                        <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r {{ $balance['gradient'] }}"></div>
+                        <div class="flex items-center gap-3">
+                            <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-50 text-gray-600 ring-1 ring-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:ring-white/5">
+                                <x-dynamic-component :component="$balance['icon']" class="h-5 w-5" />
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                    {{ $balance['label'] }}
+                                </p>
+                                <p class="mt-0.5 truncate text-lg font-bold leading-tight text-gray-900 dark:text-white sm:text-xl">
+                                    <x-member::amount :value="$balance['amount']" />
+                                </p>
+                            </div>
+                        </div>
+                    </a>
+                @endforeach
             </div>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-            <span class="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2.5 py-1 text-[10px] font-semibold text-sky-700 ring-1 ring-inset ring-sky-200 dark:bg-sky-950/40 dark:text-sky-300">
-                <x-heroicon-o-calendar-days class="h-3 w-3" />
-                {{ __('Cycle: :label', ['label' => $d['open_period_label']]) }}
-            </span>
-            @foreach ($d['balances'] as $balance)
-                <a href="{{ $balance['url'] }}"
-                    class="inline-flex items-center gap-1 rounded-md bg-gray-50 px-2.5 py-1 text-[10px] font-semibold text-gray-600 ring-1 ring-inset ring-gray-200 transition hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700">
-                    {{ $balance['label'] }}: <span class="font-bold text-gray-900 dark:text-white">{{ $balance['amount'] }}</span>
-                </a>
-            @endforeach
         </div>
     </div>
 
@@ -74,13 +102,13 @@
         <div class="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
             <div>
                 <p class="text-[10px] uppercase text-gray-400">{{ __('Master cash') }}</p>
-                <p class="text-sm font-bold tabular-nums text-gray-900 dark:text-white">{{ \App\Support\Insights\InsightFormatter::money($pool['master_cash']) }}</p>
-                <p class="text-[10px] text-gray-500">{{ __('Members') }}: {{ \App\Support\Insights\InsightFormatter::money($pool['member_cash']) }}</p>
+                <p class="text-sm font-bold tabular-nums text-gray-900 dark:text-white">{!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['master_cash']) !!}</p>
+                <p class="text-[10px] text-gray-500">{{ __('Members') }}: {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['member_cash']) !!}</p>
             </div>
             <div>
                 <p class="text-[10px] uppercase text-gray-400">{{ __('Master fund') }}</p>
-                <p class="text-sm font-bold tabular-nums text-gray-900 dark:text-white">{{ \App\Support\Insights\InsightFormatter::money($pool['master_fund']) }}</p>
-                <p class="text-[10px] text-gray-500">{{ __('Members') }}: {{ \App\Support\Insights\InsightFormatter::money($pool['member_fund']) }}</p>
+                <p class="text-sm font-bold tabular-nums text-gray-900 dark:text-white">{!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['master_fund']) !!}</p>
+                <p class="text-[10px] text-gray-500">{{ __('Members') }}: {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['member_fund']) !!}</p>
             </div>
             <div>
                 <p class="text-[10px] uppercase text-gray-400">{{ __('Pool solvency') }}</p>
@@ -98,9 +126,40 @@
                 ])>
                     {{ $pool['has_drift'] ? __('Variance detected') : __('Balanced') }}
                 </p>
-                <p class="text-[10px] text-gray-500">{{ __('Cash drift') }} {{ \App\Support\Insights\InsightFormatter::money($pool['cash_drift']) }} · {{ __('Fund drift') }} {{ \App\Support\Insights\InsightFormatter::money($pool['fund_drift']) }}</p>
+                <p class="text-[10px] text-gray-500">{{ __('Cash drift') }} {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['cash_drift']) !!} · {{ __('Fund drift') }} {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['fund_drift']) !!}</p>
             </div>
         </div>
+        @if (! empty($pool['sparkline']))
+            <div class="border-t border-gray-100 px-4 py-3 dark:border-gray-700">
+                <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        {{ __('30-day pool trend') }}
+                    </p>
+                    <p class="text-[10px] tabular-nums text-gray-500 dark:text-gray-400">
+                        {{ \App\Support\Insights\InsightFormatter::compactAmount($pool['sparkline_start'] ?? 0) }}
+                        →
+                        {{ \App\Support\Insights\InsightFormatter::compactAmount($pool['sparkline_end'] ?? ($pool['pool_total'] ?? 0)) }}
+                    </p>
+                </div>
+                <div class="flex h-8 items-end gap-px sm:h-10">
+                    @php
+                        $sparklineMax = max(1, (float) ($pool['sparkline_max'] ?? 1));
+                    @endphp
+                    @foreach ($pool['sparkline'] as $point)
+                        @php $h = max(12, (int) round(((float) $point / $sparklineMax) * 100)); @endphp
+                        <div
+                            @class([
+                                'flex-1 rounded-sm',
+                                'bg-red-400/70 dark:bg-red-500/60' => ($pool['has_drift'] ?? false),
+                                'bg-sky-400/70 dark:bg-sky-500/60' => ! ($pool['has_drift'] ?? false),
+                            ])
+                            style="height: {{ $h }}%"
+                            title="{{ \App\Support\Insights\InsightFormatter::money($point) }}"
+                        ></div>
+                    @endforeach
+                </div>
+            </div>
+        @endif
     </div>
 
     {{-- ── Row 2: Loan queue preview (left, wide) + Recon alerts (right) ── --}}
@@ -121,11 +180,11 @@
                     <table class="w-full text-[12px]">
                         <thead>
                             <tr class="border-b border-gray-100 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/60">
-                                <th class="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">#</th>
-                                <th class="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Member') }}</th>
-                                <th class="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Amount') }}</th>
-                                <th class="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Type') }}</th>
-                                <th class="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400"></th>
+                                <th class="px-4 py-2 text-start text-[10px] font-semibold uppercase tracking-wide text-gray-400">#</th>
+                                <th class="px-4 py-2 text-start text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Member') }}</th>
+                                <th class="px-4 py-2 text-start text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Amount') }}</th>
+                                <th class="px-4 py-2 text-start text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Type') }}</th>
+                                <th class="px-4 py-2 text-start text-[10px] font-semibold uppercase tracking-wide text-gray-400"></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -140,7 +199,9 @@
                                             <span class="font-medium text-gray-800 dark:text-gray-200">{{ $loan['member_name'] }}</span>
                                         </div>
                                     </td>
-                                    <td class="px-4 py-2.5 font-semibold tabular-nums text-gray-800 dark:text-gray-200">{{ $loan['amount'] }}</td>
+                                    <td class="px-4 py-2.5 font-semibold text-gray-800 dark:text-gray-200">
+                                        <x-member::amount :value="$loan['amount']" />
+                                    </td>
                                     <td class="px-4 py-2.5">
                                         @if ($loan['is_emergency'])
                                             <span class="inline-block rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-950/40 dark:text-red-400">{{ __('Emergency') }}</span>
@@ -321,9 +382,9 @@
                                 style="width: {{ $tier['pct'] }}%; background: {{ $tier['bar_color'] }}"></div>
                         </div>
                         @if ($tier['tone'] === 'danger')
-                            <p class="mt-0.5 text-[10px] text-red-500">⚠ {{ __('Near capacity') }} · {{ $tier['available'] }} {{ __('available') }}</p>
+                            <p class="mt-0.5 text-[10px] text-red-500">⚠ {{ __('Near capacity') }} · {!! \App\Support\Insights\InsightFormatter::moneyMarkup($tier['available_amount']) !!} {{ __('available') }}</p>
                         @else
-                            <p class="mt-0.5 text-[10px] text-gray-400">{{ $tier['available'] }} {{ __('available') }}</p>
+                            <p class="mt-0.5 text-[10px] text-gray-400">{!! \App\Support\Insights\InsightFormatter::moneyMarkup($tier['available_amount']) !!} {{ __('available') }}</p>
                         @endif
                     </div>
                 @empty

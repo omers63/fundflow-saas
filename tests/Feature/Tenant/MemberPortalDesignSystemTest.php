@@ -195,9 +195,9 @@ test('x-member.amount uses western digits and places riyal symbol before amount 
     );
 
     expect($html)
-        ->toContain("\u{20C1}")
+        ->toContain('ff-sar-symbol__img')
         ->toContain('3,240.00')
         ->not->toMatch('/[٠-٩]/u');
 
-    expect(mb_strpos($html, "\u{20C1}"))->toBeLessThan(mb_strpos($html, '3,240.00'));
+    expect(mb_strpos($html, 'ff-sar-symbol__img'))->toBeLessThan(mb_strpos($html, '3,240.00'));
 });

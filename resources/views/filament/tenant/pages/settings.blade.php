@@ -10,7 +10,7 @@
 
         @include('filament.tenant.partials.settings-tab-pills')
 
-        <form wire:submit="save">
+        <form wire:submit="save" wire:key="settings-form-{{ $settingsTab }}">
             {{ $this->form }}
 
             <div class="mt-6 flex justify-end border-t border-gray-100 pt-4 dark:border-white/10">

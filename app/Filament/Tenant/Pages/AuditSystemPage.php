@@ -8,6 +8,7 @@ use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Concerns\InteractsWithJobsTable;
 use App\Filament\Tenant\Resources\FundAuditLogs\Tables\FundAuditLogsTable;
 use App\Filament\Tenant\Resources\NotificationLogs\Tables\NotificationLogsTable;
+use App\Filament\Tenant\Support\AuditSystemTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\FundAuditLog;
 use App\Models\Tenant\NotificationLog;
@@ -45,7 +46,7 @@ class AuditSystemPage extends Page implements HasTable
     protected string $view = 'filament.tenant.pages.audit-system';
 
     /** @var 'audit'|'notifications'|'jobs'|'maintenance'|'migration'|'fiscal' */
-    #[Url]
+    #[Url(as: 'sideTab')]
     public string $sideTab = 'audit';
 
     /** @var 'all'|'admin'|'overrides'|'recon'|'loans' */
@@ -87,45 +88,59 @@ class AuditSystemPage extends Page implements HasTable
         return __('Audit trail, notification delivery, scheduled jobs, maintenance, migration, and year-end close.');
     }
 
+    /**
+     * @return array<string>
+     */
+    public function getPageClasses(): array
+    {
+        return ['fi-page-audit-system'];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function getAuditSystemTabs(): array
+    {
+        return AuditSystemTabRegistry::tabsForUser($this->tenantUserIsAdmin());
+    }
+
     public function mount(): void
     {
-        if (! in_array($this->sideTab, ['audit', 'notifications', 'jobs', 'maintenance', 'migration', 'fiscal'], true)) {
-            $this->sideTab = 'audit';
-        }
+        $allowedTabs = array_keys($this->getAuditSystemTabs());
 
-        if (in_array($this->sideTab, ['maintenance', 'migration'], true) && ! $this->tenantUserIsAdmin()) {
+        if (! in_array($this->sideTab, $allowedTabs, true)) {
             $this->sideTab = 'audit';
         }
 
         if (! in_array($this->auditFilter, ['all', 'admin', 'overrides', 'recon', 'loans'], true)) {
             $this->auditFilter = 'all';
         }
+
+        if (! in_array($this->jobsTab, ['catalog', 'history'], true)) {
+            $this->jobsTab = 'catalog';
+        }
+    }
+
+    public function setSideTab(string $tab): void
+    {
+        if (! array_key_exists($tab, $this->getAuditSystemTabs())) {
+            return;
+        }
+
+        if ($this->sideTab === $tab) {
+            return;
+        }
+
+        $this->sideTab = $tab;
+
+        if (in_array($tab, ['audit', 'notifications', 'jobs'], true)) {
+            $this->resetTable();
+        }
     }
 
     public function tenantUserIsAdmin(): bool
     {
         return auth('tenant')->user()?->is_admin === true;
-    }
-
-    /**
-     * @return array<string, array{icon: string, label: string}>
-     */
-    public function getSideTabOptions(): array
-    {
-        $tabs = [
-            'audit' => ['icon' => 'heroicon-o-clipboard-document-list', 'label' => __('Audit log')],
-            'notifications' => ['icon' => 'heroicon-o-bell', 'label' => __('Notification log')],
-            'jobs' => ['icon' => 'heroicon-o-cpu-chip', 'label' => __('Jobs')],
-            'maintenance' => ['icon' => 'heroicon-o-wrench-screwdriver', 'label' => __('Maintenance')],
-            'migration' => ['icon' => 'heroicon-o-arrow-path', 'label' => __('Migration')],
-            'fiscal' => ['icon' => 'heroicon-o-calendar-days', 'label' => __('Year-end close')],
-        ];
-
-        if (! $this->tenantUserIsAdmin()) {
-            unset($tabs['maintenance'], $tabs['migration']);
-        }
-
-        return $tabs;
     }
 
     public function setAuditFilter(string $filter): void
@@ -136,13 +151,6 @@ class AuditSystemPage extends Page implements HasTable
 
         $this->auditFilter = $filter;
         $this->resetTable();
-    }
-
-    public function updatedSideTab(?string $value): void
-    {
-        if (in_array($value, ['audit', 'notifications', 'jobs'], true)) {
-            $this->resetTable();
-        }
     }
 
     public function table(Table $table): Table

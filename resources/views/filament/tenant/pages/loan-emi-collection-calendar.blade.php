@@ -40,7 +40,7 @@
 
         @foreach ($grid as $day => $cell)
             <button type="button" wire:click="selectDate('{{ $cell['date'] }}')" @class([
-                'min-h-20 rounded-xl border p-2 text-left transition',
+                'min-h-20 rounded-xl border p-2 text-start transition',
                 'border-sky-300 bg-sky-50 ring-2 ring-sky-200 dark:border-sky-700 dark:bg-sky-950/40 dark:ring-sky-800/50' => $selectedDate === $cell['date'],
                 'border-gray-200 bg-white hover:border-sky-200 dark:border-white/10 dark:bg-gray-900/60' => $selectedDate !== $cell['date'],
             ])>
@@ -57,7 +57,8 @@
                             <span class="block h-1.5 rounded-full bg-rose-500"></span>
                         @endif
                         <p class="text-[10px] text-gray-500 dark:text-gray-400">
-                            {{ trans_choice(':count EMI|:count EMIs', $cell['total'], ['count' => $cell['total']]) }}</p>
+                            {{ trans_choice(':count EMI|:count EMIs', $cell['total'], ['count' => $cell['total']]) }}
+                        </p>
                     </div>
                 @endif
             </button>
@@ -87,7 +88,7 @@
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead
-                            class="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-white/10 dark:text-gray-400">
+                            class="border-b border-gray-200 text-start text-xs uppercase tracking-wide text-gray-500 dark:border-white/10 dark:text-gray-400">
                             <tr>
                                 <th class="px-3 py-2">{{ __('Member') }}</th>
                                 <th class="px-3 py-2">{{ __('Loan') }}</th>
@@ -103,7 +104,7 @@
                                     <td class="px-3 py-2">#{{ $installment->loan_id }}</td>
                                     <td class="px-3 py-2">{{ $installment->installment_number }}</td>
                                     <td class="px-3 py-2">
-                                        {{ \App\Filament\Support\MoneyDisplay::format((float) $installment->amount, $this->currency()) }}
+                                        {!! \App\Filament\Support\MoneyDisplay::html((float) $installment->amount, $this->currency())?->toHtml() !!}
                                     </td>
                                     <td class="px-3 py-2">
                                         <span @class([

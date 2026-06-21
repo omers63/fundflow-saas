@@ -108,7 +108,8 @@
             <li>{{ __('Transfer Date') }}: {{ $membership_fee_transfer_date }}</li>
         @endif
         @if (filled($membership_fee_transfer_amount))
-            <li>{{ __('Transfer Amount') }}: {{ MoneyDisplay::format((float) $membership_fee_transfer_amount, $currency) }}
+            <li>{{ __('Transfer Amount') }}:
+                {!! MoneyDisplay::html((float) $membership_fee_transfer_amount, $currency)?->toHtml() !!}
             </li>
         @endif
     </ul>

@@ -6,6 +6,7 @@ use App\Filament\Tenant\Clusters\LoanQueuePage;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Contributions\Pages\ListContributions;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
+use App\Filament\Tenant\Resources\Loans\Pages\ListLoanQueue;
 use App\Filament\Tenant\Resources\Loans\Pages\ListLoans;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\Members\Pages\ListMembers;
@@ -54,6 +55,15 @@ test('loan queue sub-navigation active route targets queue page only', function 
             "{$base}.view",
             "{$base}.edit",
         ]);
+});
+
+test('loan queue kind tabs render and switch without view errors', function () {
+    Livewire::test(ListLoanQueue::class)
+        ->assertSuccessful()
+        ->assertSeeHtml('ff-tenant-tab-pills')
+        ->call('setQueueKind', 'emergency')
+        ->assertSet('queueKind', 'emergency')
+        ->assertSuccessful();
 });
 
 test('loans list defaults to portfolio tab', function () {

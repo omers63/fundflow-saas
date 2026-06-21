@@ -25,12 +25,12 @@ class MembersTable
 {
     public static function configure(Table $table): Table
     {
-        $currency = fn (): string => Setting::get('general', 'currency', 'USD');
+        $currency = fn(): string => Setting::get('general', 'currency', 'USD');
 
         return TableGrouping::apply(
             $table
-                ->modifyQueryUsing(fn (Builder $query): Builder => $query->withCount([
-                    'loans as active_loans_count' => fn (Builder $loanQuery): Builder => $loanQuery->where('status', 'active'),
+                ->modifyQueryUsing(fn(Builder $query): Builder => $query->withCount([
+                    'loans as active_loans_count' => fn(Builder $loanQuery): Builder => $loanQuery->where('status', 'active'),
                 ]))
                 ->headerActions(MemberListTableHeaderActions::all())
                 ->columns([
@@ -42,25 +42,28 @@ class MembersTable
                         ->sortable(),
                     TextColumn::make('status')
                         ->badge()
-                        ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
-                        ->color(fn (string $state): string => Member::statusBadgeColor($state)),
+                        ->formatStateUsing(fn(string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
+                        ->color(fn(string $state): string => Member::statusBadgeColor($state)),
                     TextColumn::make('cash_balance')
                         ->label(__('Cash'))
-                        ->state(fn (Member $record): float => $record->getCashBalance())
+                        ->state(fn(Member $record): float => $record->getCashBalance())
                         ->money($currency)
-                        ->color(fn (Member $record): string => $record->getCashBalance() < 0 ? 'danger' : 'success')
-                        ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByCashBalance($direction)),
+                        ->color(fn(Member $record): string => $record->getCashBalance() < 0 ? 'danger' : 'success')
+                        ->searchable(false)
+                        ->sortable(query: fn(Builder $query, string $direction): Builder => $query->orderByCashBalance($direction)),
                     TextColumn::make('fund_balance')
                         ->label(__('Fund'))
-                        ->state(fn (Member $record): float => $record->getFundBalance())
+                        ->state(fn(Member $record): float => $record->getFundBalance())
                         ->money($currency)
-                        ->color(fn (Member $record): string => $record->getFundBalance() < 0 ? 'danger' : 'gray')
-                        ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByFundBalance($direction)),
+                        ->color(fn(Member $record): string => $record->getFundBalance() < 0 ? 'danger' : 'gray')
+                        ->searchable(false)
+                        ->sortable(query: fn(Builder $query, string $direction): Builder => $query->orderByFundBalance($direction)),
                     TextColumn::make('active_loans_count')
                         ->label(__('Active loans'))
                         ->alignCenter()
                         ->badge()
-                        ->color(fn (int $state): string => $state > 0 ? 'info' : 'gray')
+                        ->color(fn(int $state): string => $state > 0 ? 'info' : 'gray')
+                        ->searchable(false)
                         ->sortable(),
                     TextColumn::make('email')
                         ->searchable()
@@ -90,10 +93,10 @@ class MembersTable
                         ->preload(),
                     DateColumnRangeFilter::make('joined_at', __('Joined')),
                 ])
-                ->recordUrl(fn (Member $record): string => MemberResource::getUrl('edit', ['record' => $record]))
+                ->recordUrl(fn(Member $record): string => MemberResource::getUrl('edit', ['record' => $record]))
                 ->recordActions(TableRecordActionGroups::wrap([
                     ViewAction::make()
-                        ->url(fn (Member $record): string => MemberResource::getUrl('edit', ['record' => $record])),
+                        ->url(fn(Member $record): string => MemberResource::getUrl('edit', ['record' => $record])),
                     EditAction::make(),
                     ...MemberFilamentActions::forMemberListRow(),
                     ...MemberDelinquencyActions::forMemberListRow(),

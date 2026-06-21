@@ -20,7 +20,7 @@
                             'ff-member-record-modal__hero-amount--credit' => $heroType === 'credit',
                             'ff-member-record-modal__hero-amount--debit' => $heroType === 'debit',
                         ])>
-                            {{ $hero['amount'] }}
+                            {!! \App\Filament\Support\MoneyDisplay::markupForDisplay($hero['amount']) !!}
                         </p>
                     @endif
                     @if (filled($hero['subtitle'] ?? null))

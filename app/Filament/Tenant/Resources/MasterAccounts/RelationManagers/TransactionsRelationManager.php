@@ -34,6 +34,7 @@ class TransactionsRelationManager extends RelationManager
     {
         return ViewAccountTransactionAction::configure($table
             ->recordTitleAttribute('description')
+            ->heading(__('Transaction history'))
             ->modifyQueryUsing(fn ($query) => $query->with('member'))
             ->columns([
                 TextColumn::make('transacted_at')

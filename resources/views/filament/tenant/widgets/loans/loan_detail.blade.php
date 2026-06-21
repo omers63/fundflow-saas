@@ -36,8 +36,10 @@
                 <div>
                     <p class="text-[10px] font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-200">
                         {{ __('Next installment') }}</p>
-                    <p class="text-sm font-bold text-gray-900 dark:text-white">{{ $d['next_due']['amount'] }} ·
-                        {{ $d['next_due']['date'] }}</p>
+                    <p class="text-sm font-bold text-gray-900 dark:text-white">
+                        <x-member::amount :value="$d['next_due']['amount']" :currency="$currency" class="inline" />
+                        · {{ $d['next_due']['date'] }}
+                    </p>
                 </div>
             </div>
             @if ($d['next_due']['is_overdue'])
@@ -58,7 +60,13 @@
                 <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{{ ui_label($card['label']) }}
                 </p>
             </div>
-            <p class="mt-1 pl-1 text-sm font-bold text-gray-900 dark:text-white">{{ $card['value'] }}</p>
+            <p class="mt-1 pl-1 text-sm font-bold text-gray-900 dark:text-white">
+                @if (($card['money_amount'] ?? null) !== null)
+                    <x-member::amount :value="$card['money_amount']" :currency="$currency" :compact="($card['money_compact'] ?? false)" class="inline" />
+                @else
+                    <x-ff-money-text :text="$card['value']" :currency="$currency" class="inline" />
+                @endif
+            </p>
             @if (filled($card['hint'] ?? null))
                 <p class="pl-1 text-[10px] text-gray-400">{{ $card['hint'] }}</p>
             @endif

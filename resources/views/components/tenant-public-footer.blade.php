@@ -69,7 +69,8 @@
 
         <div class="tenant-public-footer__bar">
             <p>{{ __(':year © :fund. All rights reserved.', ['year' => date('Y'), 'fund' => $fundName]) }}</p>
-            <p>{{ __('Managed in :currency (Saudi Riyal)', ['currency' => __('SAR')]) }}</p>
+            <p>{!! __('Managed in :currency (Saudi Riyal)', ['currency' => \App\Filament\Support\MoneyDisplay::symbolHtml()->toHtml()]) !!}
+            </p>
         </div>
     </div>
 </footer>

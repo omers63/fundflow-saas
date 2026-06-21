@@ -69,7 +69,7 @@
                     {{ \App\Support\Insights\InsightFormatter::compactAmount($d['master_cash']) }}
                 </p>
                 <p class="text-[10px] text-sky-600 dark:text-sky-400">
-                    {{ \App\Support\Insights\InsightFormatter::money($d['master_cash']) }}
+                    {!! \App\Support\Insights\InsightFormatter::moneyMarkup($d['master_cash']) !!}
                 </p>
             </div>
             <div class="flex flex-col gap-0.5 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
@@ -78,7 +78,7 @@
                     {{ \App\Support\Insights\InsightFormatter::compactAmount($d['master_bank']) }}
                 </p>
                 <p class="text-[10px] text-indigo-600 dark:text-indigo-400">
-                    {{ \App\Support\Insights\InsightFormatter::money($d['master_bank']) }}
+                    {!! \App\Support\Insights\InsightFormatter::moneyMarkup($d['master_bank']) !!}
                 </p>
             </div>
         </div>

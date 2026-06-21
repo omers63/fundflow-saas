@@ -218,6 +218,89 @@ test('messages inbox exposes compose announcement action', function () {
         ->assertActionMounted('compose_announcement');
 });
 
+test('scheduled member announcement dispatches when due', function () {
+    $admin = User::create([
+        'name' => 'Schedule Admin',
+        'email' => 'schedule-admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Member::factory()->create([
+        'status' => 'active',
+        'user_id' => User::create([
+            'name' => 'Schedule Member',
+            'email' => 'schedule-member@fund.test',
+            'password' => bcrypt('password'),
+            'email_verified_at' => now(),
+        ])->id,
+    ]);
+
+    $announcement = MemberAnnouncement::query()->create([
+        'created_by_user_id' => $admin->id,
+        'audience' => MemberAnnouncement::AUDIENCE_ALL_ACTIVE,
+        'title_en' => 'Scheduled title',
+        'body_en' => 'Scheduled body',
+        'channels' => [MemberAnnouncement::CHANNEL_IN_APP],
+        'scheduled_for' => now()->subMinute(),
+    ]);
+
+    expect(app(MemberAnnouncementService::class)->dispatchDueScheduled())->toBe(1);
+
+    $announcement->refresh();
+
+    expect($announcement->sent_at)->not->toBeNull()
+        ->and($announcement->recipient_count)->toBeGreaterThan(0);
+});
+
+test('future scheduled member announcement is not dispatched', function () {
+    $admin = User::create([
+        'name' => 'Future Schedule Admin',
+        'email' => 'future-schedule-admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $announcement = MemberAnnouncement::query()->create([
+        'created_by_user_id' => $admin->id,
+        'audience' => MemberAnnouncement::AUDIENCE_ALL_ACTIVE,
+        'title_en' => 'Future title',
+        'body_en' => 'Future body',
+        'channels' => [MemberAnnouncement::CHANNEL_IN_APP],
+        'scheduled_for' => now()->addHour(),
+    ]);
+
+    expect(app(MemberAnnouncementService::class)->dispatchDueScheduled())->toBe(0);
+
+    $announcement->refresh();
+
+    expect($announcement->sent_at)->toBeNull();
+});
+
+test('announcements dispatch scheduled command runs for tenant', function () {
+    $admin = User::create([
+        'name' => 'Command Schedule Admin',
+        'email' => 'command-schedule-admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    MemberAnnouncement::query()->create([
+        'created_by_user_id' => $admin->id,
+        'audience' => MemberAnnouncement::AUDIENCE_ALL_ACTIVE,
+        'title_en' => 'Command title',
+        'body_en' => 'Command body',
+        'channels' => [MemberAnnouncement::CHANNEL_IN_APP],
+        'scheduled_for' => now()->subMinute(),
+    ]);
+
+    $this->artisan('announcements:dispatch-scheduled', ['--tenants' => ['testing']])
+        ->assertSuccessful();
+});
+
 test('member edit page includes guarantor relation manager in registry', function () {
     expect(MemberResource::getRelations())->toContain(GuarantorExposureRelationManager::class);
 });

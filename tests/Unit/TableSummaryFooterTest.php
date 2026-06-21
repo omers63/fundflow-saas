@@ -65,8 +65,31 @@ it('renders riyal symbol markup in member money column footer summaries', functi
     expect($html)->toBeInstanceOf(HtmlString::class)
         ->and((string) $html)
         ->toContain('ff-sar-symbol')
-        ->toContain("\u{20C1}")
-        ->toContain('2,500.00');
+        ->toContain('2,500.00')
+        ->not->toMatch('/[٠-٩]/u');
+});
+
+it('formats non-money column footer summaries with western digits in arabic locale', function (): void {
+    app()->setLocale('ar');
+    Filament::setCurrentPanel('tenant');
+
+    $column = TableSummaryFooter::applySummarizersToTextColumn(
+        TextColumn::make('quantity'),
+    );
+
+    $formatted = $column->getSummarizers()[0]->formatState(1234.5);
+
+    expect($formatted)->toBe('1,234.50')
+        ->not->toMatch('/[٠-٩]/u');
+});
+
+it('formats numeric table cells with western digits in arabic locale', function (): void {
+    app()->setLocale('ar');
+
+    $column = TextColumn::make('amount_delta')->numeric(decimalPlaces: 2);
+
+    expect($column->formatState(1500.25))->toBe('1,500.25')
+        ->not->toMatch('/[٠-٩]/u');
 });
 
 it('detects aggregatable column names', function (string $column, bool $expected) {

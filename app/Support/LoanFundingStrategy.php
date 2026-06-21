@@ -23,6 +23,42 @@ final class LoanFundingStrategy
         ];
     }
 
+    /**
+     * Funding strategies enabled for new loan applications.
+     *
+     * @return array<string, string>
+     */
+    public static function availableOptions(): array
+    {
+        $options = [];
+
+        if (LoanSettings::allowMemberFundTopupStrategy()) {
+            $options[self::MEMBER_FUND_TOPUP] = self::options()[self::MEMBER_FUND_TOPUP];
+        }
+
+        if (LoanSettings::allowSplitPercentageStrategy()) {
+            $options[self::SPLIT_PERCENTAGE] = self::options()[self::SPLIT_PERCENTAGE];
+        }
+
+        return $options;
+    }
+
+    public static function defaultForApplication(): string
+    {
+        $available = self::availableOptions();
+
+        if ($available === []) {
+            return self::MEMBER_FUND_TOPUP;
+        }
+
+        return array_key_first($available);
+    }
+
+    public static function isAvailableForApplication(?string $strategy): bool
+    {
+        return self::isValid($strategy) && array_key_exists($strategy, self::availableOptions());
+    }
+
     public static function isValid(?string $strategy): bool
     {
         return in_array($strategy, [self::MEMBER_FUND_TOPUP, self::SPLIT_PERCENTAGE], true);

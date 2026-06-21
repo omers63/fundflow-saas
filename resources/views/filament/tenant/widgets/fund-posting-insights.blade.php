@@ -171,7 +171,7 @@
                         </span>
                         <div class="min-w-0 flex-1">
                             <p class="truncate text-xs font-medium text-gray-900 dark:text-white">{{ $posting['name'] }}</p>
-                            <p class="truncate text-[10px] text-gray-400">{{ $posting['amount_display'] }} ·
+                            <p class="truncate text-[10px] text-gray-400">{!! $posting['amount_display'] !!} ·
                                 {{ $posting['has_receipt'] ? __('Receipt') : __('No receipt') }}</p>
                         </div>
                         <span @class([

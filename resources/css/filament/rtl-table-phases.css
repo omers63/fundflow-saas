@@ -1,0 +1,110 @@
+/**
+ * RTL table UI fixes — applied in sequence (one phase at a time).
+ *
+ * Phase 1: Header toolbar (bulk, group-by, filters, search)
+ * Phase 2: Row action menus (per-row Actions dropdown)
+ * Phase 3: Selection bar (selected count / deselect)
+ * Phase 4: Relation manager table headers
+ */
+
+/* ── Phase 1: Table header toolbar ── */
+html[dir='rtl'] .fi-body .fi-ta-ctn .fi-ta-header-toolbar {
+    direction: rtl;
+}
+
+html[dir='rtl'] .fi-body .fi-ta-ctn .fi-ta-header-toolbar > .fi-ta-actions {
+    justify-content: flex-start;
+}
+
+html[dir='rtl'] .fi-body .fi-ta-ctn .fi-ta-header-toolbar .fi-ta-search-field .fi-input-wrp {
+    flex-direction: row-reverse;
+}
+
+html[dir='rtl'] .fi-body .fi-ta-ctn .fi-ta-header-toolbar .fi-ta-search-field .fi-input-wrp-prefix {
+    padding-inline: 0;
+}
+
+html[dir='rtl'] .fi-body .fi-ta-ctn .fi-ta-header-toolbar .fi-ta-filters-heading,
+html[dir='rtl'] .fi-body .fi-ta-ctn .fi-ta-header-toolbar .fi-ta-filters-header,
+html[dir='rtl'] .fi-body .fi-ta-ctn .fi-ta-header-toolbar .fi-ta-grouping-settings-fields label {
+    text-align: start;
+}
+
+html[dir='rtl'] .fi-body .fi-ta-ctn .fi-ta-header-toolbar .fi-ta-filter-indicators {
+    direction: rtl;
+}
+
+html[dir='rtl'] .fi-body .fi-ta-ctn .fi-ta-header-toolbar .fi-btn:not(.fi-icon-btn):has(.fi-icon) {
+    flex-direction: row-reverse;
+}
+
+/* ── Phase 2: Row action menus ── */
+html[dir='rtl'] .fi-body .fi-ta-cell .fi-ta-actions {
+    justify-content: flex-start;
+}
+
+html[dir='rtl'] .fi-body .fi-ta-cell .fi-ta-actions .fi-btn:not(.fi-icon-btn):has(.fi-icon) {
+    flex-direction: row-reverse;
+}
+
+html[dir='rtl'] .fi-body .fi-ta-cell .fi-ta-actions .fi-dropdown-list-item.fi-ac-grouped-action,
+html[dir='rtl'] .fi-body .fi-ta-cell .fi-ta-actions .fi-dropdown-list-item:has(.fi-icon) {
+    flex-direction: row-reverse;
+    text-align: start;
+}
+
+/* ── Phase 3: Bulk selection bar ── */
+html[dir='rtl'] .fi-body .fi-ta-selection-indicator {
+    direction: rtl;
+    flex-direction: row;
+}
+
+html[dir='rtl'] .fi-body .fi-ta-selection-indicator-actions-ctn {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+html[dir='rtl'] .fi-body .fi-ta-selection-indicator .fi-dropdown-list-item.fi-ac-grouped-action,
+html[dir='rtl'] .fi-body .fi-ta-selection-indicator .fi-dropdown-list-item:has(.fi-icon) {
+    flex-direction: row-reverse;
+    text-align: start;
+}
+
+/* ── Phase 4: Relation manager table headers ── */
+html[dir='rtl'] .fi-body .fi-resource-relation-manager .fi-ta-header .fi-ta-actions {
+    justify-content: flex-start;
+}
+
+/* ── Shared: table cell text + numeric columns ── */
+html[dir='rtl'] .fi-body .fi-ta-header-cell,
+html[dir='rtl'] .fi-body .fi-ta-cell {
+    text-align: start;
+}
+
+html[dir='rtl'] .fi-body .fi-ta-cell .tabular-nums,
+html[dir='rtl'] .fi-body .fi-ta-cell .ff-member-amount,
+html[dir='rtl'] .fi-body .fi-ta-text-summary .fi-ta-text-item {
+    direction: ltr;
+    unicode-bidi: isolate;
+    text-align: end;
+}
+
+html[dir='rtl'] .fi-body .ff-member-amount {
+    flex-direction: row !important;
+    direction: ltr !important;
+}
+
+html[dir='rtl'] .fi-body .ff-money-text {
+    direction: ltr;
+    unicode-bidi: isolate;
+    display: inline-block;
+}
+
+/* Dropdown items outside row context (toolbar bulk menu) */
+html[dir='rtl'] .fi-body .fi-ta-header-toolbar .fi-dropdown-list-item.fi-ac-grouped-action,
+html[dir='rtl'] .fi-body .fi-ta-header-toolbar .fi-dropdown-list-item:has(.fi-icon) {
+    flex-direction: row-reverse;
+    text-align: start;
+}

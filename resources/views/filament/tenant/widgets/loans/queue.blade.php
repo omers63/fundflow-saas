@@ -60,7 +60,7 @@
                             @if (!empty($loan['fund_tier']))· {{ $loan['fund_tier'] }}@endif
                         </p>
                     </div>
-                    <div class="shrink-0 text-right">
+                    <div class="shrink-0 text-end tabular-nums">
                         <span
                             class="block text-[11px] font-semibold text-gray-500 dark:text-gray-400">{{ $loan['days_waiting'] }}d</span>
                     </div>

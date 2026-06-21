@@ -83,7 +83,7 @@ final class FundPostingInsightsService
                 'id' => $posting->id,
                 'name' => $posting->member?->name ?? __('Unknown member'),
                 'amount' => (float) $posting->amount,
-                'amount_display' => InsightFormatter::money((float) $posting->amount),
+                'amount_display' => InsightFormatter::moneyMarkup((float) $posting->amount),
                 'days_waiting' => (int) Carbon::parse($posting->created_at)->diffInDays($now),
                 'has_receipt' => filled($posting->attachment),
                 'queue_url' => FundPostingResource::indexUrlForMember((int) $posting->member_id, 'pending'),

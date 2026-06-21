@@ -12,6 +12,7 @@ use App\Services\Loans\LoanImportService;
 use App\Services\Loans\LoanQueueOrderingService;
 use App\Services\Loans\LoanRepaymentExportService;
 use App\Services\Loans\LoanRepaymentImportService;
+use App\Services\Members\GuarantorExposureExportService;
 use App\Support\FilamentStoredUploadPath;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -45,6 +46,7 @@ final class LoanListTableHeaderActions
     public static function delinquency(): array
     {
         return [
+            self::exportGuarantorExposureAction(),
             self::delinquencyToolsGroup(),
         ];
     }
@@ -199,6 +201,16 @@ final class LoanListTableHeaderActions
             ->color('warning')
             ->visible(fn (): bool => LoanResource::canCreate())
             ->action(fn (): mixed => app(LoanExportService::class)->downloadCsv());
+    }
+
+    public static function exportGuarantorExposureAction(): Action
+    {
+        return Action::make('exportGuarantorExposure')
+            ->label(__('Export guarantor exposure'))
+            ->icon('heroicon-o-arrow-down-tray')
+            ->color('gray')
+            ->visible(fn (): bool => (bool) auth('tenant')->user()?->is_admin)
+            ->action(fn (): mixed => app(GuarantorExposureExportService::class)->downloadCsv());
     }
 
     public static function importRepaymentsAction(): Action

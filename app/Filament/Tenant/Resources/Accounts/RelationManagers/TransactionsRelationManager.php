@@ -27,8 +27,9 @@ class TransactionsRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return ViewAccountTransactionAction::configure($table
+        $table = ViewAccountTransactionAction::configure($table
             ->recordTitleAttribute('description')
+            ->heading(__('Transaction history'))
             ->columns([
                 TextColumn::make('transacted_at')
                     ->label('Date')
@@ -55,6 +56,8 @@ class TransactionsRelationManager extends RelationManager
                 fn (): Account => $this->getOwnerRecord(),
                 $this->ledgerMutationAfter(),
             ));
+
+        return $table;
     }
 
     protected function ledgerMutationAfter(): \Closure

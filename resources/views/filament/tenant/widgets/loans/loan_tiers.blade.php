@@ -21,7 +21,9 @@
                 <div class="flex items-start justify-between gap-2">
                     <div>
                         <p class="text-xs font-semibold text-gray-900 dark:text-white">{{ $tier['label'] }}</p>
-                        <p class="text-[10px] text-gray-400">{{ $tier['range'] }}</p>
+                        <p class="text-[10px] text-gray-400">
+                            <x-ff-money-text :text="$tier['range']" :currency="$currency" />
+                        </p>
                     </div>
                     <span
                         class="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold text-sky-800 dark:bg-sky-900/40">{{ $tier['count'] }}</span>
@@ -30,7 +32,9 @@
                     <div class="h-full rounded-full bg-gradient-to-r from-sky-500 to-indigo-500"
                         style="width: {{ max($tier['count'] > 0 ? 8 : 0, $width) }}%"></div>
                 </div>
-                <p class="mt-1 text-[10px] text-gray-500">{{ __('Min installment') }}: {{ $tier['min_installment'] }}</p>
+                <p class="mt-1 text-[10px] text-gray-500">{{ __('Min installment') }}:
+                    <x-ff-money-text :text="$tier['min_installment']" :currency="$currency" class="inline" />
+                </p>
             </div>
         @endforeach
     </div>

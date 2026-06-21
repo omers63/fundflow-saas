@@ -24,6 +24,38 @@
     transform: translateY(0.06em);
 }
 
+.ff-sar-symbol--svg {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+    vertical-align: -0.125em;
+    color: inherit;
+}
+
+.ff-sar-symbol__svg,
+.ff-sar-symbol__img {
+    display: block;
+    width: 1em;
+    height: 1em;
+    min-width: 12px;
+    min-height: 12px;
+    flex-shrink: 0;
+}
+
+/* Filament badges / compact table cells (common on mobile) */
+.fi-body .fi-badge .ff-sar-symbol--svg,
+.fi-body .fi-ta-text .ff-sar-symbol--svg,
+.fi-body .fi-wi-stats-overview-stat-value .ff-sar-symbol--svg {
+    vertical-align: middle;
+}
+
+.fi-body .fi-badge .ff-member-amount,
+.fi-body .fi-ta-text .ff-member-amount,
+.fi-body .fi-wi-stats-overview-stat-value .ff-member-amount {
+    align-items: center;
+}
+
 .ff-member-amount-wrap {
     display: inline-block;
 }
@@ -61,4 +93,23 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.ff-tenant-dashboard-hero .ff-member-amount {
+    max-width: 100%;
+    min-width: 0;
+}
+
+.ff-tenant-dashboard-hero .ff-member-amount__digits {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+
+.ff-stat-line .ff-member-amount {
+    display: inline-flex;
+}
+
+.ff-money-text {
+    display: inline;
 }

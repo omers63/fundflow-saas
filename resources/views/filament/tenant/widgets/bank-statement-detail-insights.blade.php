@@ -78,7 +78,7 @@
                                 </p>
                             </div>
                             <span @class(['shrink-0 font-semibold tabular-nums', $line['signed_class']])>
-                                {{ $line['amount'] }}
+                                <x-ff-money-text :text="$line['amount']" />
                             </span>
                         </li>
                     @empty

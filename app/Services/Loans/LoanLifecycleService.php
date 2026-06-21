@@ -112,7 +112,13 @@ final class LoanLifecycleService
 
         $fundingStrategy = LoanFundingStrategy::normalize($fundingStrategy);
 
+        if (! LoanFundingStrategy::isAvailableForApplication($fundingStrategy)) {
+            throw new InvalidArgumentException(__('The selected loan funding option is not available.'));
+        }
+
         if ($fundingStrategy === LoanFundingStrategy::MEMBER_FUND_TOPUP) {
+            $cashOutExcessFund = false;
+        } elseif (! LoanSettings::allowExcessFundCashOut()) {
             $cashOutExcessFund = false;
         }
 

@@ -19,9 +19,11 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Support\Collection;
 use Illuminate\Support\HtmlString;
+use Livewire\Attributes\Url;
 
 trait InteractsWithJobsTable
 {
+    #[Url(as: 'jobsTab')]
     public string $jobsTab = 'catalog';
 
     public function setJobsTab(string $tab): void

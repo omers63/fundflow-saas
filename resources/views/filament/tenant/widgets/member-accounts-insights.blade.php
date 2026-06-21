@@ -70,8 +70,8 @@
                             <x-arabic-text :text="$member['name']" />
                         </p>
                         <p class="text-[10px] text-gray-400">
-                            {{ __('Cash') }} {{ \App\Support\Insights\InsightFormatter::money($member['cash']) }} ·
-                            {{ __('Fund') }} {{ \App\Support\Insights\InsightFormatter::money($member['fund']) }}
+                            {{ __('Cash') }} {!! \App\Support\Insights\InsightFormatter::moneyMarkup($member['cash']) !!} ·
+                            {{ __('Fund') }} {!! \App\Support\Insights\InsightFormatter::moneyMarkup($member['fund']) !!}
                         </p>
                     </div>
                 </a>

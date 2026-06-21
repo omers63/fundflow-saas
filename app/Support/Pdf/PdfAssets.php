@@ -24,6 +24,23 @@ final class PdfAssets
         return self::$sarSymbolDataUri = self::fileDataUri($path, 'image/svg+xml');
     }
 
+    /**
+     * Inline SVG for web UI (currentColor — works on mobile without U+20C1 font support).
+     */
+    public static function sarSymbolInlineMarkup(string $class = 'ff-sar-symbol__svg'): string
+    {
+        $path = resource_path('pdf/assets/sar-symbol.svg');
+        $svg = (string) file_get_contents($path);
+        $svg = preg_replace('/fill="#[^"]+"/', 'fill="currentColor"', $svg) ?? $svg;
+
+        return preg_replace(
+            '/<svg\b/',
+            '<svg class="'.e($class).'" focusable="false" aria-hidden="true"',
+            $svg,
+            1,
+        ) ?? $svg;
+    }
+
     public static function fundLogoDataUri(): ?string
     {
         $path = PublicPageSettings::fundLogoPath();

@@ -33,9 +33,7 @@
                         <p class="font-medium text-gray-800 dark:text-gray-200">{{ $tx['description'] }}</p>
                         <p class="text-[10px] text-gray-400">{{ $tx['transacted_at'] }}</p>
                     </div>
-                    <span @class(['shrink-0 font-semibold tabular-nums', $tx['signed_class']])>
-                        {{ $tx['amount'] }}
-                    </span>
+                    <x-ff-money-text :text="$tx['amount']" @class(['shrink-0 font-semibold tabular-nums', $tx['signed_class']]) />
                 </li>
             @empty
                 <li class="px-3 py-4 text-center text-[11px] text-gray-400 dark:text-gray-500">

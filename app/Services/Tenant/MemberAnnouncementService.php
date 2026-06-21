@@ -58,6 +58,33 @@ final class MemberAnnouncementService
         return $this->dispatch($announcement, $admin);
     }
 
+    public function dispatchDueScheduled(): int
+    {
+        $dispatched = 0;
+
+        MemberAnnouncement::query()
+            ->whereNull('sent_at')
+            ->whereNotNull('scheduled_for')
+            ->where('scheduled_for', '<=', now())
+            ->orderBy('scheduled_for')
+            ->each(function (MemberAnnouncement $announcement) use (&$dispatched): void {
+                $admin = $announcement->createdBy;
+
+                if ($admin === null) {
+                    $admin = User::query()->where('is_admin', true)->first();
+                }
+
+                if ($admin === null) {
+                    return;
+                }
+
+                $this->dispatch($announcement, $admin);
+                $dispatched++;
+            });
+
+        return $dispatched;
+    }
+
     public function dispatch(MemberAnnouncement $announcement, User $admin): MemberAnnouncement
     {
         $members = $this->resolveRecipients($announcement->audience);

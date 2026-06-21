@@ -10,6 +10,20 @@ namespace App\Support\Insights;
 final class InsightKpi
 {
     /**
+     * KPI card fields for a monetary value (rendered with symbol before digits).
+     *
+     * @return array{value: float, currency: string, value_compact: bool}
+     */
+    public static function moneyValue(float $amount, string $currency, bool $compact = true): array
+    {
+        return [
+            'value' => $amount,
+            'currency' => $currency,
+            'value_compact' => $compact,
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $card
      * @return array<string, mixed>
      */
