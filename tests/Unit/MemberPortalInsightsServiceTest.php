@@ -107,18 +107,18 @@ test('member portal insights snapshot includes greeting and kpis', function () {
         ->and($snapshot['loan_panel'])->toBeNull()
         ->and($snapshot['expandable'])->toHaveKeys(['insights', 'household', 'guarantor'])
         ->and($snapshot['greeting'])->toHaveKeys([
-            'period_label',
-            'first_name',
-            'name',
-            'fund_name',
-            'date',
-            'subtitle',
-            'avatar_url',
-            'initials',
-            'profile_url',
-            'balances',
-            'pills',
-        ])
+                'period_label',
+                'first_name',
+                'name',
+                'fund_name',
+                'date',
+                'subtitle',
+                'avatar_url',
+                'initials',
+                'profile_url',
+                'balances',
+                'pills',
+            ])
         ->and($snapshot['greeting']['balances'])->toHaveCount(2)
         ->and($snapshot['steps'])->not->toBeEmpty()
         ->and($snapshot['trend'])->toHaveCount(6);
@@ -165,6 +165,15 @@ test('member portal insights show lifetime contribution and repayment totals in 
         ->and($repaidKpi['sub'])->toBe(InsightFormatter::money(4_000.0))
         ->and($inflowKpi)->not->toBeNull()
         ->and($inflowKpi['sub'])->toBe(InsightFormatter::money(4_500.0));
+
+    $stats = collect($snapshot['expandable']['insights']['stats']);
+    $contributionTotalStat = $stats->firstWhere('label', __('Contribution total'));
+    $loanRepaymentsStat = $stats->firstWhere('label', __('Loan Repayments Total'));
+    $collectionTotalStat = $stats->firstWhere('label', __('Collection Total'));
+
+    expect($contributionTotalStat['amount'] ?? null)->toBe(500.0)
+        ->and($loanRepaymentsStat['amount'] ?? null)->toBe(4_000.0)
+        ->and($collectionTotalStat['amount'] ?? null)->toBe(4_500.0);
 });
 
 test('member portal emi due notice embeds amount with symbol before digits', function () {

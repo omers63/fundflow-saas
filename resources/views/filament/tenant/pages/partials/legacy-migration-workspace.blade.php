@@ -161,7 +161,9 @@
                         <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ __('Payment classification results') }}</h2>
                     </header>
                     <div class="ff-maintenance-panel__body">
-                        @include('filament.tenant.partials.legacy-migration-classification-results')
+                        <div class="ff-ltr-data" dir="ltr">
+                            @include('filament.tenant.partials.legacy-migration-classification-results')
+                        </div>
                     </div>
                 </section>
             @endif
@@ -208,7 +210,7 @@
                         <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ __('Last run result') }}</h2>
                     </header>
                     <div class="ff-maintenance-panel__body text-sm">
-                        <pre class="overflow-x-auto rounded-lg bg-gray-50 p-4 text-xs dark:bg-gray-900/50">{{ json_encode($lastRun, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
+                        <pre class="ff-ltr-data overflow-x-auto rounded-lg bg-gray-50 p-4 font-mono text-start text-xs dark:bg-gray-900/50" dir="ltr">{{ json_encode($lastRun, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
                     </div>
                 </section>
             @endif

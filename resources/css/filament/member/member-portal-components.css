@@ -925,6 +925,26 @@
     padding-top: 0.875rem;
 }
 
+.ff-member-dashboard-eligibility {
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+}
+
+.ff-member-loan-eligibility-panel .ff-member-dashboard-eligibility__copy {
+    min-width: 0;
+}
+
+.ff-member-loan-eligibility-panel .ff-member-dashboard-eligibility__actions {
+    margin-top: 0;
+    padding-top: 0;
+    flex-shrink: 0;
+}
+
+.ff-member-loan-eligibility-panel .ff-member-amount {
+    max-width: 100%;
+}
+
 .ff-member-dashboard-emi-row {
     display: flex;
     align-items: center;

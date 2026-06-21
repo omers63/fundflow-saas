@@ -975,6 +975,12 @@ html.fi.fi-panel-tenant #nprogress .peg {
   padding-right: 0.25rem;
 }
 
+.fi-body.fi-panel-tenant .ff-ltr-data {
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: start;
+}
+
 .fi-body.fi-panel-tenant .ff-system-maintenance .fi-wi-widget {
   grid-column: 1 / -1;
   margin: 0;

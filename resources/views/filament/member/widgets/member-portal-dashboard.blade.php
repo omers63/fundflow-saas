@@ -104,7 +104,7 @@
         @endphp
 
         @if ($hasLoanColumn || $hasQuickActions)
-            <div class="grid grid-cols-1 gap-3.5 lg:grid-cols-5">
+            <div class="grid grid-cols-1 gap-3.5 lg:grid-cols-5 lg:items-start">
                 @if ($hasLoanColumn)
                     <div @class(['lg:col-span-3' => $hasQuickActions, 'col-span-full' => ! $hasQuickActions])>
                         @if ($hasLoanPanel)
@@ -153,23 +153,33 @@
                             </x-member::panel>
                         @elseif ($hasEligibilityPanel)
                             @php $eligibility = $d['eligibility_panel']; @endphp
-                            <x-member::panel :title="__('Loan eligibility')">
-                                @if ($eligibility['eligible'] ?? false)
-                                    <p class="mb-2 text-sm font-semibold text-emerald-700">{{ __('You are eligible to apply for a loan') }}
-                                    </p>
-                                    <p class="ff-member-dashboard-meta mb-3">
-                                        {{ __('Maximum amount') }}:
-                                        <x-member::amount :value="$eligibility['max_amount']" :currency="$currency" />
-                                    </p>
-                                    <a href="{{ $eligibility['apply_url'] }}" wire:navigate class="fi-btn fi-btn-size-sm fi-color-primary">
-                                        {{ __('Apply for loan') }}
-                                    </a>
-                                @else
-                                    <p class="mb-2 text-sm font-semibold">{{ __('Not eligible for a loan') }}</p>
-                                    @if (filled($eligibility['reason'] ?? null))
-                                        <p class="ff-member-dashboard-meta">{{ $eligibility['reason'] }}</p>
+                            <x-member::panel :title="__('Loan eligibility')" class="ff-member-loan-eligibility-panel">
+                                <div class="ff-member-dashboard-eligibility">
+                                    @if ($eligibility['eligible'] ?? false)
+                                        <div class="ff-member-dashboard-eligibility__copy space-y-2">
+                                            <p class="m-0 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                                                {{ __('You are eligible to apply for a loan') }}
+                                            </p>
+                                            <p class="ff-member-dashboard-meta m-0">
+                                                {{ __('Maximum amount') }}:
+                                                <x-member::amount :value="$eligibility['max_amount']" :currency="$currency" />
+                                            </p>
+                                        </div>
+                                        <div class="ff-member-dashboard-actions ff-member-dashboard-eligibility__actions">
+                                            <a href="{{ $eligibility['apply_url'] }}" wire:navigate
+                                                class="fi-btn fi-btn-size-sm fi-color-primary">
+                                                {{ __('Apply for loan') }}
+                                            </a>
+                                        </div>
+                                    @else
+                                        <div class="ff-member-dashboard-eligibility__copy space-y-2">
+                                            <p class="m-0 text-sm font-semibold">{{ __('Not eligible for a loan') }}</p>
+                                            @if (filled($eligibility['reason'] ?? null))
+                                                <p class="ff-member-dashboard-meta m-0">{{ $eligibility['reason'] }}</p>
+                                            @endif
+                                        </div>
                                     @endif
-                                @endif
+                                </div>
                             </x-member::panel>
                         @endif
                     </div>
