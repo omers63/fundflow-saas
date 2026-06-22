@@ -28,6 +28,7 @@ use App\Filament\Tenant\Support\TenantPortalViewModal;
 use App\Http\Responses\FilamentLogoutResponse;
 use App\Listeners\ApplyMemberNotificationLocaleListener;
 use App\Listeners\LogNotificationDeliveryListener;
+use App\Listeners\LogWebPushDeliveryListener;
 use App\Listeners\RecordSystemJobRunListener;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Transaction;
@@ -74,6 +75,8 @@ use Illuminate\Session\SessionManager;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
+use NotificationChannels\WebPush\Events\NotificationFailed as WebPushNotificationFailed;
+use NotificationChannels\WebPush\Events\NotificationSent as WebPushNotificationSent;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -140,6 +143,9 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(NotificationSent::class, [ApplyMemberNotificationLocaleListener::class, 'handleSent']);
         Event::listen(NotificationFailed::class, [LogNotificationDeliveryListener::class, 'handleFailed']);
         Event::listen(NotificationFailed::class, [ApplyMemberNotificationLocaleListener::class, 'handleFailed']);
+
+        Event::listen(WebPushNotificationSent::class, [LogWebPushDeliveryListener::class, 'handleSent']);
+        Event::listen(WebPushNotificationFailed::class, [LogWebPushDeliveryListener::class, 'handleFailed']);
 
         Column::configureUsing(function (Column $column): Column {
             $column = $column

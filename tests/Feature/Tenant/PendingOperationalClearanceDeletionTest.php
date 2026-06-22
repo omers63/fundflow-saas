@@ -182,7 +182,7 @@ test('cleared operational lines cannot be deleted from pending bank match', func
 test('pending bank match table search does not query virtual clearance kind column', function () {
     $admin = User::create([
         'name' => 'Clearance Search Admin',
-        'email' => 'clearance-search-' . uniqid('', true) . '@test.com',
+        'email' => 'clearance-search-'.uniqid('', true).'@test.com',
         'password' => bcrypt('password'),
         'is_admin' => true,
     ]);
@@ -203,7 +203,11 @@ test('pending bank match table search does not query virtual clearance kind colu
     Filament::setCurrentPanel('tenant');
 
     Livewire::actingAs($admin, 'tenant')
-        ->test(ListBankAccounts::class, ['channel' => 'bank', 'activeTab' => 'clearance'])
+        ->test(ListBankAccounts::class, [
+            'channel' => 'bank',
+            'activeTab' => 'queue',
+            'queueFilter' => 'operations',
+        ])
         ->searchTable('expens')
         ->assertSuccessful();
 });

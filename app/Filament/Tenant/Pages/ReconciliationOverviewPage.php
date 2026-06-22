@@ -8,6 +8,7 @@ use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Concerns\EmbedsAsAuditWorkspacePanel;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\ReconciliationExceptions\Tables\ReconciliationExceptionsTable;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Filament\Tenant\Support\ReconciliationTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\FundAuditLog;
@@ -72,7 +73,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public static function getNavigationBadge(): ?string
     {
-        if (!Schema::hasTable('reconciliation_exceptions')) {
+        if (! Schema::hasTable('reconciliation_exceptions')) {
             return null;
         }
 
@@ -118,14 +119,14 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public function mount(): void
     {
-        if (!array_key_exists($this->sideTab, $this->getReconciliationTabs())) {
+        if (! array_key_exists($this->sideTab, $this->getReconciliationTabs())) {
             $this->sideTab = 'overview';
         }
     }
 
     public function setSideTab(string $tab): void
     {
-        if (!array_key_exists($tab, $this->getReconciliationTabs())) {
+        if (! array_key_exists($tab, $this->getReconciliationTabs())) {
             return;
         }
 
@@ -173,7 +174,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
      */
     public function getOpenExceptionCountByDomain(): array
     {
-        if (!Schema::hasTable('reconciliation_exceptions')) {
+        if (! Schema::hasTable('reconciliation_exceptions')) {
             return [];
         }
 
@@ -183,7 +184,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
                 ->selectRaw('domain, COUNT(*) as aggregate')
                 ->groupBy('domain')
                 ->pluck('aggregate', 'domain')
-                ->map(fn($count): int => (int) $count)
+                ->map(fn ($count): int => (int) $count)
                 ->all();
         } catch (\Throwable) {
             return [];
@@ -201,7 +202,10 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public function getBankClearingUrl(): string
     {
-        return BankAccountsResource::listUrl('clearance');
+        return BankAccountsResource::listUrl(
+            BankClearingTabRegistry::TAB_QUEUE,
+            queueFilter: BankClearingTabRegistry::FILTER_OPERATIONS,
+        );
     }
 
     public function getReconciliationSettingsUrl(): string
@@ -211,7 +215,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public function getOpenExceptionCount(): int
     {
-        if (!Schema::hasTable('reconciliation_exceptions')) {
+        if (! Schema::hasTable('reconciliation_exceptions')) {
             return 0;
         }
 
@@ -224,7 +228,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public function getResolvedExceptionCount(): int
     {
-        if (!Schema::hasTable('reconciliation_exceptions')) {
+        if (! Schema::hasTable('reconciliation_exceptions')) {
             return 0;
         }
 
@@ -239,7 +243,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public function getLastNightlyBatch(): ?FundAuditLog
     {
-        if (!Schema::hasTable('fund_audit_logs')) {
+        if (! Schema::hasTable('fund_audit_logs')) {
             return null;
         }
 
@@ -286,7 +290,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
      */
     protected function workspacePanelActions(): array
     {
-        $canRun = fn(): bool => auth('tenant')->user()?->is_admin === true;
+        $canRun = fn (): bool => auth('tenant')->user()?->is_admin === true;
         $bankSchema = $this->reconciliationBankSchema();
 
         return [
@@ -300,7 +304,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
                 ->schema($bankSchema)
                 ->modalHeading(__('Run real-time reconciliation'))
                 ->modalDescription(__('Recomputes all checks as of this moment and stores a snapshot tagged realtime.'))
-                ->action(fn(array $data) => $this->executeRun(ReconciliationSnapshot::MODE_REALTIME, $this->optionsFromActionData($data))),
+                ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_REALTIME, $this->optionsFromActionData($data))),
             ActionGroup::make([
                 Action::make('run_nightly')
                     ->label(__('Nightly batch'))
@@ -334,7 +338,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
                     ->schema($bankSchema)
                     ->modalHeading(__('Record daily snapshot'))
                     ->modalDescription(__('Uses yesterday’s calendar window (app timezone) for period metrics, plus full ledger checks as of now.'))
-                    ->action(fn(array $data) => $this->executeRun(ReconciliationSnapshot::MODE_DAILY, $this->optionsFromActionData($data))),
+                    ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_DAILY, $this->optionsFromActionData($data))),
                 Action::make('run_monthly')
                     ->label(__('Monthly snapshot'))
                     ->icon('heroicon-o-calendar')
@@ -343,7 +347,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
                     ->schema($bankSchema)
                     ->modalHeading(__('Record monthly snapshot'))
                     ->modalDescription(__('Uses the previous calendar month for period metrics, plus full ledger checks as of now.'))
-                    ->action(fn(array $data) => $this->executeRun(ReconciliationSnapshot::MODE_MONTHLY, $this->optionsFromActionData($data))),
+                    ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_MONTHLY, $this->optionsFromActionData($data))),
             ])
                 ->label(__('More runs'))
                 ->icon('heroicon-o-ellipsis-horizontal')
@@ -416,7 +420,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
         }
 
         $snapshot = ReconciliationSnapshot::query()->findOrFail($id);
-        $filename = 'reconciliation-snapshot-' . $snapshot->id . '-' . $snapshot->as_of->format('Y-m-d-His') . '.json';
+        $filename = 'reconciliation-snapshot-'.$snapshot->id.'-'.$snapshot->as_of->format('Y-m-d-His').'.json';
 
         return response()->streamDownload(
             function () use ($snapshot): void {
@@ -503,7 +507,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     protected function authorizeExport(): void
     {
-        if (!$this->canExportDownloads()) {
+        if (! $this->canExportDownloads()) {
             abort(403);
         }
     }

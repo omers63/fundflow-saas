@@ -10,6 +10,7 @@ use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
 use Illuminate\Support\HtmlString;
@@ -80,11 +81,21 @@ final class ReconciliationExceptionPresenter
 
     public static function bankClearingUrl(?ReconciliationException $record = null): string
     {
-        if ($record !== null && filled($record->affected_entities['bank_transaction_id'] ?? null)) {
-            return BankAccountsResource::listUrl('clearance');
+        $queueFilter = BankClearingTabRegistry::FILTER_OPERATIONS;
+
+        if (
+            $record !== null && in_array($record->code, [
+                'RECON_UNMATCHED_BANK_LINE',
+                'STALE_PENDING',
+            ], true)
+        ) {
+            $queueFilter = BankClearingTabRegistry::FILTER_BANK_FILE;
         }
 
-        return BankAccountsResource::listUrl('clearance');
+        return BankAccountsResource::listUrl(
+            BankClearingTabRegistry::TAB_QUEUE,
+            queueFilter: $queueFilter,
+        );
     }
 
     /**

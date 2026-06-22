@@ -10,6 +10,7 @@ use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Support\ViewNotificationLogAction;
 use App\Models\Tenant\NotificationLog;
 use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
@@ -106,6 +107,10 @@ class NotificationLogsTable
             ]))
             ->toolbarActions([
                 BulkActionGroup::make([
+                    DeleteBulkAction::make()
+                        ->authorize(fn (): bool => auth('tenant')->user()?->is_admin === true)
+                        ->modalHeading(__('Delete notification logs'))
+                        ->modalDescription(__('Soft-deletes the selected delivery log rows.')),
                     TableToolbar::refreshBulkAction(),
                 ]),
             ]), TableGrouping::notificationLogs());

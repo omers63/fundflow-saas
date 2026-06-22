@@ -6,23 +6,53 @@ namespace App\Notifications\Tenant;
 
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Models\Tenant\Loan;
+use App\Support\TenantAbsoluteUrl;
+use App\Support\WebPushNotification;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Notifications\Notification;
-use Illuminate\Support\Facades\URL;
+use NotificationChannels\WebPush\WebPushChannel;
+use NotificationChannels\WebPush\WebPushMessage;
 
 class NewLoanApplicationNotification extends Notification
 {
     public function __construct(
         public Loan $loan,
-    ) {}
+    ) {
+    }
 
     /**
      * @return array<int, string>
      */
     public function via(object $notifiable): array
     {
-        return ['database'];
+        $channels = ['database'];
+
+        if (WebPushNotification::enabled()) {
+            $channels[] = WebPushChannel::class;
+        }
+
+        return $channels;
+    }
+
+    public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
+    {
+        $this->loan->loadMissing('member');
+
+        $reviewUrl = $this->reviewUrl();
+
+        return (new WebPushMessage)
+            ->title(__('New loan application'))
+            ->body(__(':name applied for :amount.', [
+                'name' => $this->loan->member?->name ?? __('Member'),
+                'amount' => number_format((float) $this->loan->amount_requested, 2),
+            ]))
+            ->icon('/icons/icon-192x192.png')
+            ->badge('/icons/icon-192x192.png')
+            ->tag('loan-application-' . $this->loan->getKey())
+            ->data(['url' => $reviewUrl])
+            ->action(__('Review application'), 'review', '/icons/icon-192x192.png')
+            ->options(['TTL' => 86400]);
     }
 
     /**
@@ -53,6 +83,6 @@ class NewLoanApplicationNotification extends Notification
     {
         $url = LoanResource::getUrl('edit', ['record' => $this->loan], panel: 'tenant');
 
-        return str_starts_with($url, 'http') ? $url : URL::to($url);
+        return TenantAbsoluteUrl::resolve($url);
     }
 }

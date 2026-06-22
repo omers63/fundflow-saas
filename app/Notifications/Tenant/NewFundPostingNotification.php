@@ -8,10 +8,10 @@ use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
 use App\Models\Tenant\FundPosting;
 use App\Notifications\Tenant\Concerns\BuildsFundPostingDatabaseMessage;
 use App\Support\Notifications\FundPostingNotificationFormatter;
+use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Notifications\Notification;
-use Illuminate\Support\Facades\URL;
 
 class NewFundPostingNotification extends Notification
 {
@@ -19,7 +19,8 @@ class NewFundPostingNotification extends Notification
 
     public function __construct(
         public FundPosting $fundPosting,
-    ) {}
+    ) {
+    }
 
     /**
      * @return array<int, string>
@@ -54,6 +55,6 @@ class NewFundPostingNotification extends Notification
             'status' => ['value' => 'pending'],
         ]);
 
-        return str_starts_with($url, 'http') ? $url : URL::to($url);
+        return TenantAbsoluteUrl::resolve($url);
     }
 }

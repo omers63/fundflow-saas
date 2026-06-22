@@ -3,20 +3,25 @@
 namespace App\Filament\Tenant\Resources\BankAccounts\Pages;
 
 use App\Filament\Support\BankWorkspaceImportTableHeaderActions;
-use App\Filament\Support\TabLabelColors;
+use App\Filament\Tenant\Concerns\EmbedsAsBankClearingWorkspacePanel;
+use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
+use App\Filament\Tenant\Pages\Settings;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
+use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
+use App\Filament\Tenant\Resources\SmsClearing\SmsClearingResource;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Filament\Tenant\Widgets\BankAccountsInsightsWidget;
 use App\Models\Tenant\Account;
-use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Transaction;
-use App\Services\BankClearingMatchService;
+use App\Services\BankAccountsInsightsService;
+use App\Services\BankClearingQueueService;
+use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\RenderHook;
-use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\View as SchemaView;
 use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,96 +29,136 @@ use Livewire\Attributes\Url;
 
 class ListBankAccounts extends ListRecords
 {
+    use EmbedsAsBankClearingWorkspacePanel;
+
     protected static string $resource = BankAccountsResource::class;
 
-    /** @var 'bank'|'sms' */
-    #[Url(as: 'channel')]
-    public string $channel = 'bank';
+    /** @var 'all'|'bank_file'|'operations' */
+    #[Url(as: 'queueFilter')]
+    public string $queueFilter = BankClearingTabRegistry::FILTER_ALL;
 
-    /** @var 'transactions'|'history' */
-    #[Url(as: 'smsSubTab')]
-    public string $smsSubTab = 'transactions';
+    /** @var 'batches'|'closed' */
+    #[Url(as: 'historySection')]
+    public string $historySection = BankClearingTabRegistry::HISTORY_BATCHES;
 
-    /** @var 'unmatched'|'matched' */
-    #[Url(as: 'importsSection')]
-    public string $importsSection = 'unmatched';
+    public bool $showQueueBalances = false;
+
+    public bool $showClosedHistoryLines = false;
+
+    public function boot(): void
+    {
+        $this->bootEmbedsAsBankClearingWorkspacePanel();
+    }
 
     public function mount(): void
     {
+        if (request()->string('channel')->toString() === 'sms') {
+            $parameters = [];
+
+            if (request()->string('smsSubTab')->toString() === 'history') {
+                $parameters['tab'] = 'history';
+            }
+
+            $this->redirect(SmsClearingResource::getUrl('index', $parameters), navigate: true);
+
+            return;
+        }
+
         parent::mount();
 
-        if (! in_array($this->channel, ['bank', 'sms'], true)) {
-            $this->channel = 'bank';
+        $legacyTab = request()->string('tab')->toString();
+
+        if (filled($legacyTab)) {
+            $this->activeTab = BankClearingTabRegistry::normalizeTab($legacyTab);
+
+            if ($legacyFilter = BankClearingTabRegistry::legacyTabQueueFilter($legacyTab)) {
+                $this->queueFilter = $legacyFilter;
+            }
         }
 
-        if (! in_array($this->smsSubTab, ['transactions', 'history'], true)) {
-            $this->smsSubTab = 'transactions';
+        if (! in_array($this->activeTab, array_keys($this->getBankClearingTabs()), true)) {
+            $this->activeTab = BankClearingTabRegistry::TAB_QUEUE;
         }
 
-        if (! in_array($this->importsSection, ['unmatched', 'matched'], true)) {
-            $this->importsSection = 'unmatched';
-        }
+        $this->queueFilter = BankClearingTabRegistry::normalizeQueueFilter($this->queueFilter);
+        $this->historySection = BankClearingTabRegistry::normalizeHistorySection($this->historySection);
+        $this->showClosedHistoryLines = $this->historySection === BankClearingTabRegistry::HISTORY_CLOSED;
 
         unset($this->cachedTabs);
-    }
-
-    public function setImportsSection(string $importsSection): void
-    {
-        if (! in_array($importsSection, ['unmatched', 'matched'], true)) {
-            return;
-        }
-
-        if ($this->importsSection === $importsSection) {
-            return;
-        }
-
-        $this->importsSection = $importsSection;
-        $this->resetTable();
     }
 
     public function getDefaultActiveTab(): string|int|null
     {
-        return 'clearance';
+        return BankClearingTabRegistry::TAB_QUEUE;
     }
 
-    public function setChannel(string $channel): void
+    public function getSubheading(): string|Htmlable|null
     {
-        if (! in_array($channel, ['bank', 'sms'], true)) {
+        return match (BankAccountsResource::resolveListBankAccountsTab()) {
+            BankClearingTabRegistry::TAB_LEDGER => __('Posted master bank movements and manual adjustments.'),
+            BankClearingTabRegistry::TAB_HISTORY => __('Import batches and closed statement lines for audit.'),
+            default => __('Work open imports and operational bank matches from one queue.'),
+        };
+    }
+
+    public function toggleQueueBalances(): void
+    {
+        $this->showQueueBalances = ! $this->showQueueBalances;
+    }
+
+    public function toggleClosedHistoryLines(): void
+    {
+        $this->showClosedHistoryLines = ! $this->showClosedHistoryLines;
+        $this->historySection = $this->showClosedHistoryLines
+            ? BankClearingTabRegistry::HISTORY_CLOSED
+            : BankClearingTabRegistry::HISTORY_BATCHES;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function getBankClearingTabs(): array
+    {
+        return BankClearingTabRegistry::tabs();
+    }
+
+    public function setBankTab(string $tab): void
+    {
+        $tab = BankClearingTabRegistry::normalizeTab($tab);
+
+        if (! array_key_exists($tab, $this->getBankClearingTabs())) {
             return;
         }
 
-        $this->channel = $channel;
-        unset($this->cachedTabs);
-
-        if ($channel === 'bank') {
-            if (blank($this->activeTab) || ! array_key_exists($this->activeTab, $this->getCachedTabs())) {
-                $this->activeTab = $this->getDefaultActiveTab();
-            }
-
-            $this->reconfigureTableForActiveTab();
-        }
-    }
-
-    public function updatedChannel(): void
-    {
-        unset($this->cachedTabs);
-
-        if ($this->channel === 'bank') {
-            if (blank($this->activeTab) || ! array_key_exists($this->activeTab, $this->getCachedTabs())) {
-                $this->activeTab = $this->getDefaultActiveTab();
-            }
-
-            $this->reconfigureTableForActiveTab();
-        }
-    }
-
-    public function setSmsSubTab(string $smsSubTab): void
-    {
-        if (! in_array($smsSubTab, ['transactions', 'history'], true)) {
+        if ($this->activeTab === $tab) {
             return;
         }
 
-        $this->smsSubTab = $smsSubTab;
+        $this->activeTab = $tab;
+        $this->tableSort = null;
+        $this->reconfigureTableForActiveTab();
+        $this->resetTable();
+    }
+
+    public function setQueueFilter(string $queueFilter): void
+    {
+        $queueFilter = BankClearingTabRegistry::normalizeQueueFilter($queueFilter);
+
+        if ($this->queueFilter === $queueFilter) {
+            return;
+        }
+
+        $this->queueFilter = $queueFilter;
+        $this->reconfigureTableForActiveTab();
+        $this->resetTable();
+    }
+
+    public function setHistorySection(string $historySection): void
+    {
+        $historySection = BankClearingTabRegistry::normalizeHistorySection($historySection);
+
+        $this->historySection = $historySection;
+        $this->showClosedHistoryLines = $historySection === BankClearingTabRegistry::HISTORY_CLOSED;
     }
 
     public function updatedActiveTab(): void
@@ -153,29 +198,25 @@ class ListBankAccounts extends ListRecords
     }
 
     /**
+     * @return array<string>
+     */
+    public function getPageClasses(): array
+    {
+        return ['fi-page-bank-clearing'];
+    }
+
+    /**
      * @return array<int, class-string>
      */
     protected function getHeaderWidgets(): array
     {
-        return [
-            BankAccountsInsightsWidget::class,
-        ];
-    }
-
-    protected function getHeaderActions(): array
-    {
-        if ($this->channel !== 'bank') {
+        if (BankAccountsResource::resolveListBankAccountsTab() === BankClearingTabRegistry::TAB_QUEUE) {
             return [];
         }
 
-        return match (BankAccountsResource::resolveListBankAccountsTab()) {
-            'imports', 'transactions', 'clearance', 'statements' => [
-                BankWorkspaceImportTableHeaderActions::bankStatementImportAction(
-                    fn (): mixed => $this->resetTable(),
-                ),
-            ],
-            default => [],
-        };
+        return [
+            BankAccountsInsightsWidget::class,
+        ];
     }
 
     public function getHeaderWidgetsColumns(): int|array
@@ -183,78 +224,122 @@ class ListBankAccounts extends ListRecords
         return 1;
     }
 
-    public function getTabs(): array
+    protected function getHeaderActions(): array
     {
-        if ($this->channel === 'sms') {
+        return [];
+    }
+
+    /**
+     * @return array<int, Action|ActionGroup>
+     */
+    protected function workspacePanelActions(): array
+    {
+        $tab = BankAccountsResource::resolveListBankAccountsTab();
+
+        $import = BankWorkspaceImportTableHeaderActions::bankStatementImportAction(
+            fn (): mixed => $this->resetTable(),
+        )
+            ->color('primary');
+
+        if (! in_array($tab, [BankClearingTabRegistry::TAB_QUEUE, BankClearingTabRegistry::TAB_HISTORY], true)) {
             return [];
         }
 
         return [
-            'clearance' => Tab::make(__('Pending bank match'))
-                ->icon(Heroicon::OutlinedLink)
-                ->badge(fn (): ?string => ($count = app(BankClearingMatchService::class)->pendingOperationalClearanceCount()) > 0
-                    ? (string) $count
-                    : null)
-                ->extraAttributes(['data-ff-tab-key' => 'clearance', 'data-ff-tab-color' => TabLabelColors::forKey('clearance')], merge: true),
-            'imports' => Tab::make(__('Statement lines'))
-                ->icon(Heroicon::OutlinedQueueList)
-                ->extraAttributes(['data-ff-tab-key' => 'imports', 'data-ff-tab-color' => TabLabelColors::forKey('imports')], merge: true),
-            'ledger' => Tab::make(__('Master bank ledger'))
-                ->icon(Heroicon::OutlinedBookOpen)
-                ->extraAttributes(['data-ff-tab-key' => 'ledger', 'data-ff-tab-color' => TabLabelColors::forKey('ledger')], merge: true),
-            'statements' => Tab::make(__('Statements'))
-                ->icon(Heroicon::OutlinedDocumentText)
-                ->extraAttributes(['data-ff-tab-key' => 'statements', 'data-ff-tab-color' => TabLabelColors::forKey('statements')], merge: true),
+            $import,
+            ActionGroup::make([
+                Action::make('open_sms_clearing')
+                    ->label(__('SMS clearing'))
+                    ->icon('heroicon-o-device-phone-mobile')
+                    ->url(SmsClearingResource::getUrl('index')),
+                Action::make('open_reconciliation')
+                    ->label(__('Reconciliation'))
+                    ->icon('heroicon-o-scale')
+                    ->url(ReconciliationOverviewPage::getUrl()),
+            ])
+                ->label(__('More'))
+                ->icon('heroicon-o-ellipsis-horizontal')
+                ->color('gray')
+                ->button()
+                ->dropdownPlacement('bottom-end'),
         ];
+    }
+
+    /**
+     * @return array<int, array{label: string, value: string, sub: string, accent: string, url: string}>
+     */
+    public function getQueueInsightKpis(): array
+    {
+        return app(BankAccountsInsightsService::class)->snapshot()['clearing_kpis'] ?? [];
+    }
+
+    public function getBankFileQueueCount(): int
+    {
+        return app(BankClearingQueueService::class)->counts()['bank_file'];
+    }
+
+    public function getOperationsQueueCount(): int
+    {
+        return app(BankClearingQueueService::class)->counts()['operations'];
+    }
+
+    public function getOpenQueueCount(): int
+    {
+        return app(BankClearingQueueService::class)->openCount();
+    }
+
+    public function getMasterCashUrl(): string
+    {
+        $masterCash = Account::masterCash();
+
+        if ($masterCash !== null) {
+            return MasterAccountResource::getUrl('view', ['record' => $masterCash]);
+        }
+
+        return MasterAccountResource::getUrl('index', ['tab' => 'cash']);
+    }
+
+    public function getReconciliationUrl(): string
+    {
+        return ReconciliationOverviewPage::getUrl();
+    }
+
+    public function getBankTemplatesSettingsUrl(): string
+    {
+        return Settings::getUrl(['settingsTab' => 'bank-templates::tab']);
     }
 
     public function content(Schema $schema): Schema
     {
-        return $schema->components([
-            SchemaView::make('filament.tenant.resources.bank-accounts.pages.bank-workspace')
-                ->viewData([
-                    'channel' => $this->channel,
-                    'smsSubTab' => $this->smsSubTab,
+        $components = [
+            SchemaView::make('filament.tenant.pages.bank-clearing')
+                ->viewData(fn (): array => [
+                    'bankTab' => BankAccountsResource::resolveListBankAccountsTab(),
+                    'queueFilter' => $this->queueFilter,
                 ]),
-            ...($this->channel === 'bank'
-                ? [
-                    $this->getTabsContentComponent(),
-                    SchemaView::make('filament.tenant.resources.bank-accounts.partials.imports-section-pills')
-                        ->viewData(fn (): array => [
-                            'importsSection' => $this->importsSection,
-                            'visible' => BankAccountsResource::resolveListBankAccountsTab() === 'imports',
-                        ]),
-                    RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
-                    EmbeddedTable::make(),
-                    RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
-                ]
-                : []),
-        ]);
+        ];
+
+        if ($this->activeTab !== BankClearingTabRegistry::TAB_HISTORY) {
+            $components[] = RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE);
+            $components[] = EmbeddedTable::make();
+            $components[] = RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER);
+        }
+
+        return $schema->components($components);
     }
 
     protected function getTableQuery(): Builder
     {
         $masterBankId = Account::masterBank()?->id;
+        $queue = app(BankClearingQueueService::class);
 
         return match (BankAccountsResource::resolveListBankAccountsTab()) {
-            'ledger' => Transaction::query()->when(
+            BankClearingTabRegistry::TAB_LEDGER => Transaction::query()->when(
                 $masterBankId !== null,
                 fn (Builder $query): Builder => $query->where('account_id', $masterBankId),
                 fn (Builder $query): Builder => $query->whereRaw('0 = 1'),
             ),
-            'imports' => tap(
-                app(BankClearingMatchService::class)
-                    ->applyRealBankStatementLinesScope(BankTransaction::query()),
-                function (Builder $query): void {
-                    if ($this->importsSection === 'matched') {
-                        $query->whereIn('status', ['posted', 'duplicate', 'ignored']);
-                    } else {
-                        $query->whereIn('status', ['imported', 'mirrored']);
-                    }
-                },
-            ),
-            'clearance' => app(BankClearingMatchService::class)
-                ->applyPendingOperationalClearanceScope(BankTransaction::query()),
+            BankClearingTabRegistry::TAB_QUEUE => $queue->openItemsQuery(BankAccountsResource::resolveQueueFilter()),
             default => static::getResource()::getEloquentQuery(),
         };
     }

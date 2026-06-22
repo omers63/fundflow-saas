@@ -29,9 +29,9 @@ class InitializeTenancyByDomainEarly
         }
 
         $host = $request->getHost();
-        $centralDomain = config('tenancy.central_domain');
+        $centralDomains = config('tenancy.central_domains', []);
 
-        if ($host === $centralDomain) {
+        if (in_array($host, $centralDomains, true)) {
             return $next($request);
         }
 

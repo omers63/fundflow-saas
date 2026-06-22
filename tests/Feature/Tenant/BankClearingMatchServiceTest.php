@@ -524,3 +524,91 @@ test('auto match selected reports ambiguous when multiple imported lines share a
         ->and($stats['ambiguous'])->toBe(1)
         ->and($uncleared->fresh()->is_cleared)->toBeFalse();
 });
+
+test('clear without evidence marks synthetic operational row cleared', function () {
+    $masterExpense = Account::factory()->masterExpense()->withBalance(2_000)->create();
+
+    app(MasterExpenseDisbursementService::class)->disburse(
+        $masterExpense,
+        180,
+        'Office supplies',
+    );
+
+    $operational = BankTransaction::query()
+        ->where('expense_disbursement_id', '!=', null)
+        ->where('is_cleared', false)
+        ->first();
+
+    $this->matching->clearWithoutEvidence($operational, 'Bank confirmed verbally');
+
+    $operational = $operational->fresh();
+
+    expect($operational->is_cleared)->toBeTrue()
+        ->and($operational->cleared_at)->not->toBeNull()
+        ->and($operational->description)->toContain('Bank confirmed verbally');
+});
+
+test('clear without evidence rejects imported bank file lines', function () {
+    $statement = BankStatement::create([
+        'filename' => 'reject-clear.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    $imported = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => now()->toDateString(),
+        'description' => 'Imported only',
+        'amount' => 500,
+        'status' => 'imported',
+        'hash' => md5('reject-clear-import'),
+        'is_cleared' => false,
+    ]);
+
+    expect(fn () => $this->matching->clearWithoutEvidence($imported))
+        ->toThrow(InvalidArgumentException::class);
+});
+
+test('find unique candidate returns the only imported match', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-BM-UNQ',
+        'name' => 'Unique Match Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $posting = $this->fundPostings->submit($member, 880, '2026-05-21');
+    $this->fundPostings->accept($posting);
+
+    $uncleared = $posting->bankTransaction->fresh();
+    $statement = BankStatement::create([
+        'filename' => 'unique-candidate.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    $imported = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => '2026-05-21',
+        'description' => 'Unique import',
+        'amount' => 880,
+        'status' => 'imported',
+        'hash' => md5('unique-candidate-import'),
+        'is_cleared' => false,
+    ]);
+
+    $candidate = $this->matching->findUniqueCandidate($uncleared);
+
+    expect($candidate?->is($imported))->toBeTrue()
+        ->and($this->matching->autoMatchWhenUnique($uncleared))->toBeTrue()
+        ->and($uncleared->fresh()->is_cleared)->toBeTrue()
+        ->and($imported->fresh()->fund_posting_id)->toBe($posting->id);
+});

@@ -66,7 +66,7 @@ class NotificationLogResource extends Resource
 
     public static function canDelete($record): bool
     {
-        return false;
+        return auth('tenant')->user()?->is_admin === true;
     }
 
     public static function infolist(Schema $schema): Schema

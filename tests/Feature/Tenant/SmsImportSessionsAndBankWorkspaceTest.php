@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
-use App\Filament\Tenant\Resources\BankAccounts\Pages\ListBankAccounts;
+use App\Filament\Tenant\Resources\SmsClearing\Pages\ListSmsClearing;
+use App\Filament\Tenant\Support\SmsClearingTabRegistry;
 use App\Filament\Tenant\Widgets\SmsImportSessionsTableWidget;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
@@ -193,19 +194,17 @@ test('posting sms transaction credits member cash with master mirror', function 
     expect($ledgerCredit)->not->toBeNull();
 });
 
-test('bank accounts list page exposes sms workspace channel', function () {
+test('sms clearing page exposes queue workspace', function () {
     Filament::setCurrentPanel('tenant');
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(ListBankAccounts::class, ['channel' => 'sms', 'smsSubTab' => 'transactions'])
+        ->test(ListSmsClearing::class)
         ->assertSuccessful()
-        ->assertSet('channel', 'sms')
-        ->assertSet('smsSubTab', 'transactions')
-        ->assertSee(__('SMS'))
-        ->assertSee(__('Transactions'));
+        ->assertSet('activeTab', SmsClearingTabRegistry::TAB_QUEUE)
+        ->assertSee(__('Work queue'));
 });
 
-test('bank accounts sms history tab exposes table import action', function () {
+test('sms import sessions widget no longer exposes duplicate import action when embedded', function () {
     Filament::setCurrentPanel('tenant');
 
     $component = Livewire::actingAs($this->admin, 'tenant')
@@ -216,34 +215,25 @@ test('bank accounts sms history tab exposes table import action', function () {
         ->map(fn ($action) => $action->getName())
         ->all();
 
-    expect($headerNames)->toContain('importSms');
+    expect($headerNames)->not->toContain('importSms');
 });
 
-test('switching from sms to bank channel shows bank statement tabs', function () {
+test('sms clearing page switches to history tab', function () {
     Filament::setCurrentPanel('tenant');
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(ListBankAccounts::class, ['channel' => 'sms'])
-        ->call('setChannel', 'bank')
-        ->assertSet('channel', 'bank')
-        ->assertSee(__('Statement lines'))
-        ->assertSee(__('Pending bank match'))
-        ->assertSee(__('Master bank ledger'))
-        ->assertSee(__('Statements'));
+        ->test(ListSmsClearing::class)
+        ->call('setSmsTab', SmsClearingTabRegistry::TAB_HISTORY)
+        ->assertSet('activeTab', SmsClearingTabRegistry::TAB_HISTORY)
+        ->assertSee(__('Import batches'));
 });
 
-test('bank accounts sms channel resolves tab as sms', function () {
-    request()->merge(['channel' => 'sms']);
-
-    expect(BankAccountsResource::resolveChannel())->toBe('sms')
-        ->and(BankAccountsResource::resolveListBankAccountsTab())->toBe('sms');
-});
-
-test('bank accounts list url includes sms channel parameters', function () {
+test('bank accounts list url includes sms history tab parameter', function () {
     Filament::setCurrentPanel('tenant');
 
     $url = BankAccountsResource::listUrl(channel: 'sms', smsSubTab: 'history');
 
-    expect($url)->toContain('channel=sms')
-        ->and($url)->toContain('smsSubTab=history');
+    expect($url)->toContain('sms-imports')
+        ->and($url)->toContain('tab=history')
+        ->and($url)->not->toContain('channel=sms');
 });

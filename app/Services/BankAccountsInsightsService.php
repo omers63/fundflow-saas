@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTemplate;
@@ -150,14 +151,20 @@ final class BankAccountsInsightsService
                     'value' => (string) $importedToday,
                     'sub' => __('Statement lines'),
                     'accent' => 'sky',
-                    'url' => BankAccountsResource::listUrl('imports'),
+                    'url' => BankAccountsResource::listUrl(
+                        BankClearingTabRegistry::TAB_QUEUE,
+                        queueFilter: BankClearingTabRegistry::FILTER_BANK_FILE,
+                    ),
                 ],
                 [
                     'label' => __('Auto-matched'),
                     'value' => (string) $autoMatched,
                     'sub' => __('Posted + mirrored'),
                     'accent' => 'emerald',
-                    'url' => BankAccountsResource::listUrl('imports'),
+                    'url' => BankAccountsResource::listUrl(
+                        BankClearingTabRegistry::TAB_HISTORY,
+                        historySection: BankClearingTabRegistry::HISTORY_CLOSED,
+                    ),
                 ],
                 [
                     'label' => __('Unmatched'),
@@ -165,24 +172,35 @@ final class BankAccountsInsightsService
                     'sub' => __('Needs action'),
                     'accent' => $unmatched > 0 ? 'amber' : 'emerald',
                     'url' => $unmatched > 0
-                        ? BankAccountsResource::listUrl('clearance')
-                        : BankAccountsResource::listUrl('imports'),
+                        ? BankAccountsResource::listUrl(
+                            BankClearingTabRegistry::TAB_QUEUE,
+                            queueFilter: $pendingBankMatch > 0
+                            ? BankClearingTabRegistry::FILTER_OPERATIONS
+                            : BankClearingTabRegistry::FILTER_BANK_FILE,
+                        )
+                        : BankAccountsResource::listUrl(
+                            BankClearingTabRegistry::TAB_QUEUE,
+                            queueFilter: BankClearingTabRegistry::FILTER_BANK_FILE,
+                        ),
                 ],
                 [
                     'label' => __('Stale pending'),
                     'value' => (string) $stalePending,
                     'sub' => __('Older than 30 days'),
                     'accent' => $stalePending > 0 ? 'rose' : 'gray',
-                    'url' => BankAccountsResource::listUrl('imports'),
+                    'url' => BankAccountsResource::listUrl(
+                        BankClearingTabRegistry::TAB_QUEUE,
+                        queueFilter: BankClearingTabRegistry::FILTER_BANK_FILE,
+                    ),
                 ],
             ],
             'currency' => $currency,
             'active_tab' => $activeTab,
             'active_tab_label' => match ($activeTab) {
-                'ledger' => __('Master bank ledger'),
-                'statements' => __('Statements'),
-                'clearance' => __('Pending bank match'),
-                default => __('Statement lines'),
+                BankClearingTabRegistry::TAB_LEDGER => __('Bank ledger'),
+                BankClearingTabRegistry::TAB_HISTORY => __('Import history'),
+                BankClearingTabRegistry::TAB_QUEUE => __('Work queue'),
+                default => __('Work queue'),
             },
             'pending_bank_match' => $pendingBankMatch,
             'pending_post' => $pendingPost,
@@ -208,10 +226,17 @@ final class BankAccountsInsightsService
             ],
             'urls' => [
                 'index' => $indexUrl,
-                'imports' => BankAccountsResource::listUrl('imports'),
-                'clearance' => BankAccountsResource::listUrl('clearance'),
-                'ledger' => BankAccountsResource::listUrl('ledger'),
-                'transactions' => BankAccountsResource::listUrl('imports'),
+                'queue' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_QUEUE),
+                'queue_bank_file' => BankAccountsResource::listUrl(
+                    BankClearingTabRegistry::TAB_QUEUE,
+                    queueFilter: BankClearingTabRegistry::FILTER_BANK_FILE,
+                ),
+                'queue_operations' => BankAccountsResource::listUrl(
+                    BankClearingTabRegistry::TAB_QUEUE,
+                    queueFilter: BankClearingTabRegistry::FILTER_OPERATIONS,
+                ),
+                'ledger' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_LEDGER),
+                'history' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_HISTORY),
                 'fund_postings' => FundPostingResource::listUrl(),
                 'master_cash' => Account::masterCash()
                     ? MasterAccountResource::getUrl('view', ['record' => Account::masterCash()])
@@ -267,12 +292,27 @@ final class BankAccountsInsightsService
                     'accent' => $unassignedCredits > 0 ? 'amber' : 'teal',
                 ],
             ], [
-                'pending' => BankAccountsResource::listUrl('imports', ['status' => ['value' => 'imported']]),
-                'posted' => BankAccountsResource::listUrl('imports', ['status' => ['value' => 'posted']]),
-                'dupes' => BankAccountsResource::listUrl('imports', ['status' => ['value' => 'duplicate']]),
-                'templates' => BankAccountsResource::listUrl('statements'),
-                'statements' => BankAccountsResource::listUrl('statements'),
-                'unassigned' => BankAccountsResource::listUrl('imports'),
+                'pending' => BankAccountsResource::listUrl(
+                    BankClearingTabRegistry::TAB_QUEUE,
+                    ['status' => ['value' => 'imported']],
+                    queueFilter: BankClearingTabRegistry::FILTER_BANK_FILE,
+                ),
+                'posted' => BankAccountsResource::listUrl(
+                    BankClearingTabRegistry::TAB_HISTORY,
+                    ['status' => ['value' => 'posted']],
+                    historySection: BankClearingTabRegistry::HISTORY_CLOSED,
+                ),
+                'dupes' => BankAccountsResource::listUrl(
+                    BankClearingTabRegistry::TAB_HISTORY,
+                    ['status' => ['value' => 'duplicate']],
+                    historySection: BankClearingTabRegistry::HISTORY_CLOSED,
+                ),
+                'templates' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_HISTORY),
+                'statements' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_HISTORY),
+                'unassigned' => BankAccountsResource::listUrl(
+                    BankClearingTabRegistry::TAB_QUEUE,
+                    queueFilter: BankClearingTabRegistry::FILTER_BANK_FILE,
+                ),
             ]),
             'hero' => $this->buildHero(
                 $pendingPost,
@@ -303,8 +343,8 @@ final class BankAccountsInsightsService
                 'subtitle' => trans_choice(':count failed statement|:count failed statements', $failedStatements, [
                     'count' => $failedStatements,
                 ]),
-                'cta_label' => __('Statements'),
-                'cta_url' => BankAccountsResource::listUrl('statements'),
+                'cta_label' => __('Import history'),
+                'cta_url' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_HISTORY),
             ];
         }
 
@@ -326,10 +366,16 @@ final class BankAccountsInsightsService
                     ? trans_choice(':count deposit pending|:count deposits pending', $pendingFundPostings, ['count' => $pendingFundPostings])
                     : null,
                 ])->filter()->implode(' · '),
-                'cta_label' => $pendingBankMatch > 0 ? __('Pending bank match') : __('Statement lines'),
+                'cta_label' => $pendingBankMatch > 0 ? __('From operations') : __('From bank file'),
                 'cta_url' => $pendingBankMatch > 0
-                    ? BankAccountsResource::listUrl('clearance')
-                    : BankAccountsResource::listUrl('imports'),
+                    ? BankAccountsResource::listUrl(
+                        BankClearingTabRegistry::TAB_QUEUE,
+                        queueFilter: BankClearingTabRegistry::FILTER_OPERATIONS,
+                    )
+                    : BankAccountsResource::listUrl(
+                        BankClearingTabRegistry::TAB_QUEUE,
+                        queueFilter: BankClearingTabRegistry::FILTER_BANK_FILE,
+                    ),
             ];
         }
 
@@ -338,7 +384,7 @@ final class BankAccountsInsightsService
             'title' => __('Banking is up to date'),
             'subtitle' => __('Imports are posted and the queue is clear.'),
             'cta_label' => __('Import statement'),
-            'cta_url' => BankAccountsResource::listUrl('statements'),
+            'cta_url' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_QUEUE),
         ];
     }
 }

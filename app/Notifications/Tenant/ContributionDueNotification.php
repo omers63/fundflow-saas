@@ -6,12 +6,12 @@ namespace App\Notifications\Tenant;
 
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Notifications\Concerns\DeliversToMemberChannels;
+use App\Support\TenantAbsoluteUrl;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
-use Illuminate\Support\Facades\URL;
 
 class ContributionDueNotification extends Notification
 {
@@ -24,7 +24,8 @@ class ContributionDueNotification extends Notification
         public float $amount,
         public Carbon $deadline,
         public float $cashBalance,
-    ) {}
+    ) {
+    }
 
     /**
      * @return array<string, mixed>
@@ -70,6 +71,6 @@ class ContributionDueNotification extends Notification
     {
         $url = MyContributionResource::getUrl('index', panel: 'member');
 
-        return str_starts_with($url, 'http') ? $url : URL::to($url);
+        return TenantAbsoluteUrl::resolve($url);
     }
 }

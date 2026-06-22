@@ -31,7 +31,9 @@
                             @endforeach
                         </div>
                     </div>
-                    {{ $this->table }}
+                    <div wire:key="audit-system-table-audit-{{ $this->auditFilter }}">
+                        {{ $this->table }}
+                    </div>
                 </div>
             @elseif ($this->sideTab === 'notifications')
                 <div>
@@ -42,7 +44,9 @@
                             {{ __('Email, SMS, WhatsApp, and in-app delivery attempts.') }}
                         </p>
                     </div>
-                    {{ $this->table }}
+                    <div wire:key="audit-system-table-notifications">
+                        {{ $this->table }}
+                    </div>
                 </div>
             @elseif ($this->sideTab === 'jobs')
                 <div
@@ -65,7 +69,7 @@
                         {{ __('Run history') }}
                     </button>
                 </div>
-                <div>
+                <div wire:key="audit-system-table-jobs-{{ $this->jobsTab }}">
                     {{ $this->table }}
                 </div>
             @elseif ($this->sideTab === 'maintenance')

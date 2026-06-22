@@ -8,6 +8,7 @@ use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Models\Central\Tenant;
 use App\Models\Tenant\User;
 use Filament\Facades\Filament;
@@ -83,10 +84,15 @@ test('fund posting member url uses filters', function () {
 });
 
 test('bank accounts list url uses filters and includes tab when not default', function () {
-    $importsUrl = BankAccountsResource::listUrl('imports', ['status' => ['value' => 'posted']]);
+    $postedUrl = BankAccountsResource::listUrl(
+        BankClearingTabRegistry::TAB_HISTORY,
+        ['status' => ['value' => 'posted']],
+        historySection: BankClearingTabRegistry::HISTORY_CLOSED,
+    );
 
-    expect($importsUrl)
+    expect($postedUrl)
         ->toContain('filters')
+        ->toContain('tab=history')
         ->not->toContain('tableFilters');
 
     $ledgerUrl = BankAccountsResource::listUrl('ledger', ['status' => ['value' => 'posted']]);

@@ -31,6 +31,8 @@ final class TenantNavigation
     /** Consolidated sidebar — Finance */
     public const SORT_BANK_CLEARING = 10;
 
+    public const SORT_SMS_IMPORTS = 15;
+
     public const SORT_RECONCILIATION = 20;
 
     public const SORT_REPORTS = 30;

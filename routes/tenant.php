@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\LocaleSwitchController;
+use App\Http\Controllers\Tenant\AdminWebPushSubscriptionController;
 use App\Http\Controllers\Tenant\ContributionImportSampleController;
 use App\Http\Controllers\Tenant\DatabaseBackupDownloadController;
 use App\Http\Controllers\Tenant\DirectMessageAttachmentController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\Tenant\LoanSchedulePdfController;
 use App\Http\Controllers\Tenant\MemberActivityExportController;
 use App\Http\Controllers\Tenant\MemberImportSampleController;
 use App\Http\Controllers\Tenant\MembershipApplicationImportSampleController;
+use App\Http\Controllers\Tenant\MemberWebPushSubscriptionController;
 use App\Http\Controllers\Tenant\StartDependentImpersonationController;
 use App\Http\Controllers\Tenant\StatementPdfController;
 use App\Http\Controllers\Tenant\StopImpersonationController;
@@ -43,8 +45,8 @@ use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 
 Route::middleware([
     'web',
-    InitializeTenancyByDomain::class,
     PreventAccessFromCentralDomains::class,
+    InitializeTenancyByDomain::class,
 ])->group(function () {
     Route::get('/', function () {
         return view('tenant.landing');
@@ -137,6 +139,18 @@ Route::middleware([
 
         Route::get('/admin/legacy-migration/classify-payments', LegacyPaymentClassifiedDownloadController::class)
             ->name('tenant.admin.legacy-migration.classify-payments');
+
+        Route::post('/admin/webpush/subscribe', [AdminWebPushSubscriptionController::class, 'store'])
+            ->name('tenant.admin.webpush.subscribe.store');
+
+        Route::delete('/admin/webpush/subscribe', [AdminWebPushSubscriptionController::class, 'destroy'])
+            ->name('tenant.admin.webpush.subscribe.destroy');
+
+        Route::post('/member/webpush/subscribe', [MemberWebPushSubscriptionController::class, 'store'])
+            ->name('tenant.member.webpush.subscribe.store');
+
+        Route::delete('/member/webpush/subscribe', [MemberWebPushSubscriptionController::class, 'destroy'])
+            ->name('tenant.member.webpush.subscribe.destroy');
 
         Route::get('/direct-messages/{message}/attachment/{index}', DirectMessageAttachmentController::class)
             ->whereNumber('index')

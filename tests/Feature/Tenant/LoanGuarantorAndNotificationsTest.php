@@ -19,6 +19,7 @@ use App\Support\NotificationSettings;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Notification;
+use NotificationChannels\WebPush\WebPushChannel;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -26,6 +27,11 @@ uses(InitializesTenancy::class);
 beforeEach(function () {
     $this->initializeTenancy();
     Notification::fake();
+
+    config([
+        'webpush.vapid.public_key' => 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U',
+        'webpush.vapid.private_key' => 'UUxI4O8-FbRqjAihg6f42nd_pmTQj2vmanuelys70Ho',
+    ]);
 
     Account::query()->delete();
     Loan::query()->delete();
@@ -99,7 +105,7 @@ function seedPostedContributionsForLoanEligibility(Member $member): void
         $month = (int) $cursor->month;
         $year = (int) $cursor->year;
 
-        if ((float) $member->monthly_contribution_amount > 0 && ! $member->isExemptFromContributions($month, $year)) {
+        if ((float) $member->monthly_contribution_amount > 0 && !$member->isExemptFromContributions($month, $year)) {
             Contribution::create([
                 'member_id' => $member->id,
                 'period' => Contribution::periodDate($month, $year),
@@ -123,7 +129,7 @@ test('loan apply requires guarantor when amount exceeds fund balance', function 
 
     $lifecycle = app(LoanLifecycleService::class);
 
-    expect(fn () => $lifecycle->applyForLoan($this->borrower, 15000, 'Test purpose'))
+    expect(fn() => $lifecycle->applyForLoan($this->borrower, 15000, 'Test purpose'))
         ->toThrow(InvalidArgumentException::class);
 
     $loan = $lifecycle->applyForLoan(
@@ -148,10 +154,16 @@ test('loan apply requires guarantor when amount exceeds fund balance', function 
         NewLoanApplicationNotification::class,
         function (NewLoanApplicationNotification $notification, array $channels) use ($loan): bool {
             $payload = $notification->toDatabase($this->admin);
+            $actionUrl = (string) ($payload['actions'][0]['url'] ?? '');
+            $host = parse_url($actionUrl, PHP_URL_HOST);
+            $centralDomains = config('tenancy.central_domains', []);
 
             return in_array('database', $channels, true)
+                && in_array(WebPushChannel::class, $channels, true)
                 && ($payload['format'] ?? null) === 'filament'
-                && str_contains((string) ($payload['actions'][0]['url'] ?? ''), (string) $loan->id);
+                && str_contains($actionUrl, (string) $loan->id)
+                && is_string($host)
+                && !in_array($host, $centralDomains, true);
         },
     );
 });

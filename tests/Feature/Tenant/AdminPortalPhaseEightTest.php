@@ -12,6 +12,8 @@ use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Support\AuditSystemTabRegistry;
 use App\Filament\Tenant\Support\ReconciliationTabRegistry;
 use App\Filament\Tenant\Support\SettingsTabRegistry;
+use App\Models\Tenant\FundAuditLog;
+use App\Models\Tenant\NotificationLog;
 use App\Models\Tenant\User;
 use App\Support\FiscalSettings;
 use Filament\Facades\Filament;
@@ -27,16 +29,16 @@ beforeEach(function () {
     App::setLocale('en');
 });
 
-test('bank accounts default tab is pending bank match', function () {
+test('bank accounts default tab is work queue', function () {
     request()->replace([]);
 
-    expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('clearance');
+    expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('queue');
 });
 
-test('bank accounts invalid tab falls back to clearance', function () {
+test('bank accounts invalid tab falls back to work queue', function () {
     request()->replace(['tab' => 'invalid']);
 
-    expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('clearance');
+    expect(BankAccountsResource::resolveListBankAccountsTab())->toBe('queue');
 });
 
 test('settings tab registry includes reconciliation and fund tiers', function () {
@@ -157,6 +159,82 @@ test('audit system page switches workspace tabs via livewire property', function
         ->assertSee(__('Database backups'))
         ->call('setSideTab', 'invalid')
         ->assertSet('sideTab', 'maintenance');
+});
+
+test('audit system page reconfigures table columns when switching between table tabs', function () {
+    Filament::setCurrentPanel('tenant');
+
+    $admin = User::create([
+        'name' => 'Audit Table Reconfig Admin',
+        'email' => 'audit-table-reconfig@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(AuditSystemPage::class)
+        ->assertSee(__('Event'))
+        ->call('setSideTab', 'notifications')
+        ->assertSee(__('Recipient'))
+        ->assertSee(__('Channel'))
+        ->call('setSideTab', 'audit')
+        ->assertSee(__('Event'))
+        ->call('setSideTab', 'jobs')
+        ->assertSee(__('Job catalog'))
+        ->call('setJobsTab', 'history')
+        ->assertSee(__('Run history'))
+        ->call('setJobsTab', 'catalog')
+        ->assertSee(__('Scheduled jobs'));
+});
+
+test('audit system admin can bulk delete audit and notification logs', function () {
+    Filament::setCurrentPanel('tenant');
+
+    $admin = User::create([
+        'name' => 'Audit Bulk Delete Admin',
+        'email' => 'audit-bulk-delete@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $auditLog = FundAuditLog::create([
+        'event_type' => 'TEST_BULK_DELETE',
+        'domain' => 'ledger',
+        'payload' => [],
+        'checksum' => 'test-checksum',
+        'occurred_at' => now(),
+    ]);
+
+    $notificationLog = NotificationLog::create([
+        'user_id' => $admin->id,
+        'channel' => 'mail',
+        'subject' => 'Bulk delete test',
+        'body' => 'Test body',
+        'status' => 'sent',
+        'sent_at' => now(),
+    ]);
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(AuditSystemPage::class)
+        ->callTableBulkAction('delete', [$auditLog])
+        ->assertNotified();
+
+    expect(FundAuditLog::query()->whereKey($auditLog->id)->exists())->toBeFalse();
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(AuditSystemPage::class)
+        ->call('setSideTab', 'notifications')
+        ->callTableBulkAction('delete', [$notificationLog])
+        ->assertNotified();
+
+    $deletedNotification = NotificationLog::query()
+        ->withTrashed()
+        ->find($notificationLog->id);
+
+    expect($deletedNotification)->not->toBeNull()
+        ->and($deletedNotification->trashed())->toBeTrue();
 });
 
 test('audit system page falls back to audit tab for invalid query tab', function () {

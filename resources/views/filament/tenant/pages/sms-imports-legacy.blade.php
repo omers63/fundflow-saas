@@ -1,0 +1,1 @@
+{{-- Legacy route redirects in mount(); this view should not render. --}}

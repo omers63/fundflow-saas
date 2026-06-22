@@ -9,6 +9,7 @@ use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
@@ -297,7 +298,7 @@ final class AccountDetailInsightsService
                         ['label' => __('Deposits'), 'value' => (string) $pendingPostings],
                         ['label' => __('On hand'), 'value' => InsightFormatter::money($balance)],
                     ],
-                    'url' => BankAccountsResource::listUrl('imports'),
+                    'url' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_QUEUE, queueFilter: BankClearingTabRegistry::FILTER_BANK_FILE),
                     'link_label' => __('Bank transactions'),
                 ],
             ],
@@ -408,7 +409,7 @@ final class AccountDetailInsightsService
                 [
                     'title' => __('Reserve flow'),
                     'rows' => $rows,
-                    'url' => $pendingBankMatch > 0 ? BankAccountsResource::listUrl('clearance') : null,
+                    'url' => $pendingBankMatch > 0 ? BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_QUEUE, queueFilter: BankClearingTabRegistry::FILTER_OPERATIONS) : null,
                     'link_label' => $pendingBankMatch > 0 ? __('Pending bank match') : null,
                 ],
             ],
@@ -464,7 +465,7 @@ final class AccountDetailInsightsService
                         ['label' => __('Net return'), 'value' => InsightFormatter::money($netReturn)],
                         ['label' => __('Bank match'), 'value' => (string) $pendingBankMatch],
                     ],
-                    'url' => $pendingBankMatch > 0 ? BankAccountsResource::listUrl('clearance') : null,
+                    'url' => $pendingBankMatch > 0 ? BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_QUEUE, queueFilter: BankClearingTabRegistry::FILTER_OPERATIONS) : null,
                     'link_label' => $pendingBankMatch > 0 ? __('Pending bank match') : null,
                 ],
             ],
@@ -510,7 +511,7 @@ final class AccountDetailInsightsService
                         ['label' => __('Bank match'), 'value' => (string) $pendingBankMatch],
                     ],
                     'url' => $pendingBankMatch > 0
-                        ? BankAccountsResource::listUrl('clearance')
+                        ? BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_QUEUE, queueFilter: BankClearingTabRegistry::FILTER_OPERATIONS)
                         : (Account::masterCash()
                             ? MasterAccountResource::getUrl('view', ['record' => Account::masterCash()])
                             : null),
@@ -561,7 +562,7 @@ final class AccountDetailInsightsService
                     'title' => __('Bank lines awaiting posting'),
                     'subtitle' => trans_choice(':count statement line needs posting to master cash|:count statement lines need posting to master cash', $pendingPost, ['count' => $pendingPost]),
                     'cta_label' => __('Statement lines'),
-                    'cta_url' => BankAccountsResource::listUrl('imports'),
+                    'cta_url' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_QUEUE, queueFilter: BankClearingTabRegistry::FILTER_BANK_FILE),
                 ];
             }
 
@@ -571,7 +572,7 @@ final class AccountDetailInsightsService
                     'title' => __('Deposits and cash-outs awaiting bank match'),
                     'subtitle' => trans_choice(':count operation needs a bank statement match|:count operations need a bank statement match', $pendingMatch, ['count' => $pendingMatch]),
                     'cta_label' => __('Pending bank match'),
-                    'cta_url' => BankAccountsResource::listUrl('clearance'),
+                    'cta_url' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_QUEUE, queueFilter: BankClearingTabRegistry::FILTER_OPERATIONS),
                 ];
             }
         }
@@ -586,7 +587,7 @@ final class AccountDetailInsightsService
                     'title' => __('Expense disbursements awaiting bank match'),
                     'subtitle' => trans_choice(':count disbursement needs a bank statement match|:count disbursements need a bank statement match', $pendingMatch, ['count' => $pendingMatch]),
                     'cta_label' => __('Pending bank match'),
-                    'cta_url' => BankAccountsResource::listUrl('clearance'),
+                    'cta_url' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_QUEUE, queueFilter: BankClearingTabRegistry::FILTER_OPERATIONS),
                 ];
             }
         }
@@ -601,7 +602,7 @@ final class AccountDetailInsightsService
                     'title' => __('Invest flows awaiting bank match'),
                     'subtitle' => trans_choice(':count operation needs a bank statement match|:count operations need a bank statement match', $pendingMatch, ['count' => $pendingMatch]),
                     'cta_label' => __('Pending bank match'),
-                    'cta_url' => BankAccountsResource::listUrl('clearance'),
+                    'cta_url' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_QUEUE, queueFilter: BankClearingTabRegistry::FILTER_OPERATIONS),
                 ];
             }
         }
@@ -616,7 +617,7 @@ final class AccountDetailInsightsService
                     'title' => __('Fee disbursements awaiting bank match'),
                     'subtitle' => trans_choice(':count disbursement needs a bank statement match|:count disbursements need a bank statement match', $pendingMatch, ['count' => $pendingMatch]),
                     'cta_label' => __('Pending bank match'),
-                    'cta_url' => BankAccountsResource::listUrl('clearance'),
+                    'cta_url' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_QUEUE, queueFilter: BankClearingTabRegistry::FILTER_OPERATIONS),
                 ];
             }
         }

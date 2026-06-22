@@ -12,11 +12,11 @@ use App\Models\Tenant\DependentAllocationChange;
 use App\Models\Tenant\Setting;
 use App\Notifications\Concerns\DeliversToMemberChannels;
 use App\Services\Tenant\NotificationPreferenceService;
+use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
-use Illuminate\Support\Facades\URL;
 
 class DependentAllocationChangedNotification extends Notification
 {
@@ -26,7 +26,8 @@ class DependentAllocationChangedNotification extends Notification
     public function __construct(
         public DependentAllocationChange $change,
         public string $role = 'dependent',
-    ) {}
+    ) {
+    }
 
     /**
      * @return list<string|class-string>
@@ -171,6 +172,6 @@ class DependentAllocationChangedNotification extends Notification
             default => MemberResource::getUrl('index'),
         };
 
-        return str_starts_with($url, 'http') ? $url : URL::to($url);
+        return TenantAbsoluteUrl::resolve($url);
     }
 }

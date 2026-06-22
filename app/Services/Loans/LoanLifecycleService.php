@@ -238,6 +238,7 @@ final class LoanLifecycleService
         $loan->refresh();
 
         $this->notifyMember($loan, new LoanApprovedNotification(
+            loan: $loan,
             amount: $amountApproved,
             installments: $count,
             dueDate: $at->copy()->addMonths($count)->format('d M Y'),
@@ -256,7 +257,7 @@ final class LoanLifecycleService
             'rejected_at' => BusinessDay::now(),
         ]);
 
-        $this->notifyMember($loan, new LoanRejectedNotification($reason));
+        $this->notifyMember($loan, new LoanRejectedNotification($loan, $reason));
     }
 
     public function cancelLoan(Loan $loan, ?string $reason = null): void

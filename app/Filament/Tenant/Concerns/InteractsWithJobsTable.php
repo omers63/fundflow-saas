@@ -37,7 +37,14 @@ trait InteractsWithJobsTable
         }
 
         $this->jobsTab = $tab;
-        $this->resetJobsTableColumns();
+        $this->tableSort = null;
+
+        if (method_exists($this, 'reconfigureTableForSideTab')) {
+            $this->reconfigureTableForSideTab();
+        } else {
+            $this->resetJobsTableColumns();
+        }
+
         $this->resetTable();
     }
 

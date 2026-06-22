@@ -132,8 +132,10 @@ class AuditSystemPage extends Page implements HasTable
         }
 
         $this->sideTab = $tab;
+        $this->tableSort = null;
 
         if (in_array($tab, ['audit', 'notifications', 'jobs'], true)) {
+            $this->reconfigureTableForSideTab();
             $this->resetTable();
         }
     }
@@ -150,7 +152,23 @@ class AuditSystemPage extends Page implements HasTable
         }
 
         $this->auditFilter = $filter;
+        $this->reconfigureTableForSideTab();
         $this->resetTable();
+    }
+
+    protected function reconfigureTableForSideTab(): void
+    {
+        $this->table = $this->table($this->makeTable());
+
+        $this->cacheSchema('tableFiltersForm', $this->getTableFiltersForm(...));
+
+        $this->initTableColumnManager();
+
+        $this->tableColumns = [];
+        $this->cachedDefaultTableColumnState = null;
+
+        $this->tableFilters = [];
+        $this->getTableFiltersForm()->fill([]);
     }
 
     public function table(Table $table): Table

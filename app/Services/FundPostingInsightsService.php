@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Setting;
 use App\Support\BusinessDay;
@@ -164,7 +165,10 @@ final class FundPostingInsightsService
                 'deposits_pending_url' => FundPostingResource::listUrl(['status' => ['value' => 'pending']]),
                 'deposits_accepted_url' => FundPostingResource::listUrl(['status' => ['value' => 'accepted']]),
                 'deposits_rejected_url' => FundPostingResource::listUrl(['status' => ['value' => 'rejected']]),
-                'bank_url' => BankAccountsResource::listUrl('imports'),
+                'bank_url' => BankAccountsResource::listUrl(
+                    BankClearingTabRegistry::TAB_QUEUE,
+                    queueFilter: BankClearingTabRegistry::FILTER_BANK_FILE,
+                ),
             ],
         ];
     }

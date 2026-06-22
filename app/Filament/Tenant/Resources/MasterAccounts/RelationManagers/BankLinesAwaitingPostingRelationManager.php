@@ -6,22 +6,20 @@ namespace App\Filament\Tenant\Resources\MasterAccounts\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
-use App\Filament\Support\BankTransactionTableActions;
+use App\Filament\Support\BankClearingQueueActions;
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Filament\Tenant\Support\ViewBankTransactionAction;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
-use App\Services\FundFlowService;
-use App\Support\BankTransactionWorkflow;
-use Filament\Actions\Action;
+use App\Services\BankClearingMatchService;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
-use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 
@@ -42,6 +40,8 @@ class BankLinesAwaitingPostingRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
+        $count = app(BankClearingMatchService::class)->bankLinesAwaitingPostingCount();
+
         return TableGrouping::apply(
             $table
                 ->columns([
@@ -72,29 +72,21 @@ class BankLinesAwaitingPostingRelationManager extends RelationManager
                         }),
                 ])
                 ->filters([
-                    SelectFilter::make('member_id')
-                        ->label(__('Member'))
-                        ->relationship('member', 'name')
-                        ->searchable()
-                        ->preload(),
+                    DateColumnRangeFilter::make('transaction_date', __('Transaction date')),
                 ])
+                ->description($count > 0
+                    ? __(':count open — post or match from the bank clearing work queue.', ['count' => $count])
+                    : __('No imported lines awaiting posting.'))
+                ->headerActions([
+                    BankClearingQueueActions::openInBankClearingAction(BankClearingTabRegistry::FILTER_BANK_FILE),
+                ])
+                ->paginated([5, 10, 25])
+                ->defaultPaginationPageOption(5)
                 ->recordUrl(fn (): ?string => null)
                 ->recordAction(ViewAction::getDefaultName())
                 ->emptyStateDescription(__('Imported bank statement lines that still need posting to the master cash pool.'))
                 ->recordActions(TableRecordActionGroups::wrap([
                     ViewBankTransactionAction::make(),
-                    Action::make('mirrorToCash')
-                        ->label(__('Post to cash'))
-                        ->icon('heroicon-o-arrow-right')
-                        ->color('info')
-                        ->requiresConfirmation()
-                        ->modalDescription(__('Post this statement line to the master cash pool.'))
-                        ->hidden(fn (BankTransaction $record): bool => ! BankTransactionWorkflow::canPostToCash($record))
-                        ->action(function (BankTransaction $record, FundFlowService $service): void {
-                            $service->mirrorToCash([$record->id]);
-                            Notification::make()->title(__('Posted to master cash'))->success()->send();
-                        }),
-                    BankTransactionTableActions::postToMember(),
                 ]))
                 ->toolbarActions([
                     BulkActionGroup::make([

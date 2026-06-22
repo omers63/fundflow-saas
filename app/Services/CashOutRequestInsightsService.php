@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\CashOutRequests\CashOutRequestResource;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Setting;
 use App\Support\BusinessDay;
@@ -157,7 +158,10 @@ final class CashOutRequestInsightsService
                 'uncleared' => $acceptedUncleared,
                 'cleared' => $clearedCount,
                 'clearance_rate' => $clearanceRate,
-                'workspace_url' => BankAccountsResource::listUrl('imports'),
+                'workspace_url' => BankAccountsResource::listUrl(
+                    BankClearingTabRegistry::TAB_QUEUE,
+                    queueFilter: BankClearingTabRegistry::FILTER_BANK_FILE,
+                ),
             ],
             'pipeline' => [
                 'pending_requests' => $pending,
@@ -167,7 +171,10 @@ final class CashOutRequestInsightsService
                 'pending_url' => $pendingUrl,
                 'accepted_url' => $acceptedUrl,
                 'rejected_url' => $rejectedUrl,
-                'bank_url' => BankAccountsResource::listUrl('imports'),
+                'bank_url' => BankAccountsResource::listUrl(
+                    BankClearingTabRegistry::TAB_QUEUE,
+                    queueFilter: BankClearingTabRegistry::FILTER_BANK_FILE,
+                ),
             ],
         ];
     }

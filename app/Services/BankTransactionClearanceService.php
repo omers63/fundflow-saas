@@ -36,4 +36,27 @@ final class BankTransactionClearanceService
             ], $importedUpdates));
         });
     }
+
+    /**
+     * Mark an operational pending row cleared without pairing to an imported bank line.
+     */
+    public function markClearedWithoutEvidence(BankTransaction $uncleared, ?string $note = null): void
+    {
+        DB::transaction(function () use ($uncleared, $note): void {
+            $updates = [
+                'is_cleared' => true,
+                'cleared_at' => BusinessDay::now(),
+            ];
+
+            if (filled($note)) {
+                $updates['description'] = trim(
+                    ($uncleared->description ?: __('Operational bank line'))
+                    .' — '
+                    .__('Cleared without bank evidence: :note', ['note' => $note]),
+                );
+            }
+
+            $uncleared->update($updates);
+        });
+    }
 }

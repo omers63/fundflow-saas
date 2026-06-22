@@ -96,22 +96,22 @@ class BankClearingMatchService
 
         return match ($account->type) {
             'cash' => $scoped->where(function (Builder $cashQuery): void {
-                    $cashQuery->whereNotNull('fund_posting_id')
+                $cashQuery->whereNotNull('fund_posting_id')
                     ->orWhereNotNull('cash_out_request_id');
-                }),
+            }),
             'expense' => $scoped->whereNotNull('expense_disbursement_id'),
             'fees' => $scoped->whereNotNull('fee_disbursement_id'),
             'invest' => $scoped->where(function (Builder $investQuery): void {
-                    $investQuery->whereNotNull('invest_disbursement_id')
+                $investQuery->whereNotNull('invest_disbursement_id')
                     ->orWhereNotNull('invest_return_id');
-                }),
+            }),
             default => $scoped->whereRaw('0 = 1'),
         };
     }
 
     public function pendingOperationalClearanceCountForMasterAccount(Account $account): int
     {
-        if (!$account->is_master || !self::masterAccountTypeSupportsPendingClearance($account->type)) {
+        if (! $account->is_master || ! self::masterAccountTypeSupportsPendingClearance($account->type)) {
             return 0;
         }
 
@@ -148,8 +148,7 @@ class BankClearingMatchService
         protected MasterInvestDisbursementService $investDisbursements,
         protected MasterInvestReturnService $investReturns,
         protected AccountingService $accounting,
-    ) {
-    }
+    ) {}
 
     /**
      * @return list<string>
@@ -208,7 +207,7 @@ class BankClearingMatchService
         $dayRange = ContributionPolicySettings::bankMatchDateRangeDays();
 
         foreach ($records as $record) {
-            if (!$record instanceof BankTransaction) {
+            if (! $record instanceof BankTransaction) {
                 $stats['skipped']++;
 
                 continue;
@@ -262,13 +261,138 @@ class BankClearingMatchService
         return $stats;
     }
 
-    public function clearMatchPair(BankTransaction $uncleared, BankTransaction $imported): void
+    public function findUniqueCandidate(BankTransaction $record): ?BankTransaction
     {
-        if (!$this->isPendingClearance($uncleared)) {
+        $tolerance = ContributionPolicySettings::reconTolerance();
+        $dayRange = ContributionPolicySettings::bankMatchDateRangeDays();
+
+        if ($this->isPendingClearance($record)) {
+            $candidates = $this->findImportedCandidates($record, $tolerance, $dayRange);
+
+            return $candidates->count() === 1 ? $candidates->first() : null;
+        }
+
+        if ($this->isImportedMatchCandidate($record)) {
+            $candidates = $this->findUnclearedCandidates($record, $tolerance, $dayRange);
+
+            return $candidates->count() === 1 ? $candidates->first() : null;
+        }
+
+        return null;
+    }
+
+    public function autoMatchWhenUnique(BankTransaction $record): bool
+    {
+        $candidate = $this->findUniqueCandidate($record);
+
+        if ($candidate === null) {
+            return false;
+        }
+
+        if ($this->isPendingClearance($record)) {
+            $this->clearMatchPair($record, $candidate);
+
+            return true;
+        }
+
+        if ($this->isImportedMatchCandidate($record)) {
+            $this->clearMatchPair($candidate, $record);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @return array{matched: int, ambiguous: int, skipped: int}
+     */
+    public function autoMatchUnique(Collection $records): array
+    {
+        $stats = [
+            'matched' => 0,
+            'ambiguous' => 0,
+            'skipped' => 0,
+        ];
+
+        $tolerance = ContributionPolicySettings::reconTolerance();
+        $dayRange = ContributionPolicySettings::bankMatchDateRangeDays();
+
+        foreach ($records as $record) {
+            if (! $record instanceof BankTransaction) {
+                $stats['skipped']++;
+
+                continue;
+            }
+
+            if ($this->isPendingClearance($record)) {
+                $candidates = $this->findImportedCandidates($record, $tolerance, $dayRange);
+
+                if ($candidates->count() === 1) {
+                    $this->clearMatchPair($record, $candidates->first());
+                    $stats['matched']++;
+
+                    continue;
+                }
+
+                if ($candidates->count() > 1) {
+                    $stats['ambiguous']++;
+
+                    continue;
+                }
+
+                $stats['skipped']++;
+
+                continue;
+            }
+
+            if ($this->isImportedMatchCandidate($record)) {
+                $candidates = $this->findUnclearedCandidates($record, $tolerance, $dayRange);
+
+                if ($candidates->count() === 1) {
+                    $this->clearMatchPair($candidates->first(), $record);
+                    $stats['matched']++;
+
+                    continue;
+                }
+
+                if ($candidates->count() > 1) {
+                    $stats['ambiguous']++;
+
+                    continue;
+                }
+
+                $stats['skipped']++;
+
+                continue;
+            }
+
+            $stats['skipped']++;
+        }
+
+        return $stats;
+    }
+
+    public function clearWithoutEvidence(BankTransaction $uncleared, ?string $note = null): void
+    {
+        if (! $this->isPendingClearance($uncleared)) {
             throw new InvalidArgumentException(__('The pending transaction is not eligible for clearance.'));
         }
 
-        if (!$this->isImportedMatchCandidate($imported)) {
+        if (! $this->isSyntheticOperationalStatement($uncleared)) {
+            throw new InvalidArgumentException(__('Only operational pending rows can be cleared without a bank import line.'));
+        }
+
+        app(BankTransactionClearanceService::class)->markClearedWithoutEvidence($uncleared, $note);
+    }
+
+    public function clearMatchPair(BankTransaction $uncleared, BankTransaction $imported): void
+    {
+        if (! $this->isPendingClearance($uncleared)) {
+            throw new InvalidArgumentException(__('The pending transaction is not eligible for clearance.'));
+        }
+
+        if (! $this->isImportedMatchCandidate($imported)) {
             throw new InvalidArgumentException(__('The imported statement line is not eligible for matching.'));
         }
 
@@ -292,7 +416,7 @@ class BankClearingMatchService
                 $this->fundPostings->clearTransaction($uncleared, $imported);
             }
 
-            if (!$skipMasterBankLedger) {
+            if (! $skipMasterBankLedger) {
                 $this->postMatchedImportToMasterBankLedger($imported->fresh());
             }
         });
@@ -547,8 +671,8 @@ class BankClearingMatchService
      */
     protected function identifyManualPair(Collection $records): ?array
     {
-        $uncleared = $records->first(fn(BankTransaction $record): bool => $this->isPendingClearance($record));
-        $imported = $records->first(fn(BankTransaction $record): bool => $this->isImportedMatchCandidate($record));
+        $uncleared = $records->first(fn (BankTransaction $record): bool => $this->isPendingClearance($record));
+        $imported = $records->first(fn (BankTransaction $record): bool => $this->isImportedMatchCandidate($record));
 
         if ($uncleared === null || $imported === null) {
             return null;

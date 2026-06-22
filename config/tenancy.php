@@ -25,6 +25,15 @@ return [
      *
      * Only relevant if you're using the domain or subdomain identification middleware.
      */
+    'central_domains' => array_values(array_unique(array_filter([
+        env('CENTRAL_DOMAIN', 'central.localhost'),
+        '127.0.0.1',
+        'localhost',
+    ]))),
+
+    /**
+     * Primary central domain (used by app helpers and early tenancy middleware).
+     */
     'central_domain' => env('CENTRAL_DOMAIN', 'central.localhost'),
 
     /**

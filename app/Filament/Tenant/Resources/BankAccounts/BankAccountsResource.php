@@ -7,13 +7,15 @@ use App\Filament\Support\UiLabelIcons;
 use App\Filament\Tenant\Resources\BankAccounts\Pages\ListBankAccounts;
 use App\Filament\Tenant\Resources\BankAccounts\Pages\ViewBankStatement;
 use App\Filament\Tenant\Resources\BankAccounts\RelationManagers\BankTransactionsRelationManager;
+use App\Filament\Tenant\Resources\BankAccounts\Tables\BankClearingQueueTable;
 use App\Filament\Tenant\Resources\BankAccounts\Tables\BankStatementsTable;
-use App\Filament\Tenant\Resources\BankAccounts\Tables\BankTransactionsTable;
 use App\Filament\Tenant\Resources\BankAccounts\Tables\MasterBankLedgerTable;
-use App\Filament\Tenant\Resources\BankAccounts\Tables\PendingOperationalClearanceTable;
+use App\Filament\Tenant\Resources\SmsClearing\SmsClearingResource;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
+use App\Filament\Tenant\Support\SmsClearingTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\BankStatement;
-use App\Models\Tenant\BankTransaction;
+use App\Services\BankClearingQueueService;
 use BackedEnum;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Resources\Resource;
@@ -45,7 +47,7 @@ class BankAccountsResource extends Resource
     public static function getNavigationBadge(): ?string
     {
         try {
-            $count = BankTransaction::query()->uncleared()->count();
+            $count = app(BankClearingQueueService::class)->openCount();
 
             return $count > 0 ? (string) $count : null;
         } catch (\Throwable) {
@@ -69,57 +71,82 @@ class BankAccountsResource extends Resource
             ? fn (): mixed => Livewire::current()->resetTable()
             : null;
 
-        return match (self::resolveListBankAccountsTab()) {
-            'ledger' => MasterBankLedgerTable::configure(
-                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Master bank ledger'))),
+        $tab = self::resolveListBankAccountsTab();
+
+        if ($tab === BankClearingTabRegistry::TAB_LEDGER) {
+            return MasterBankLedgerTable::configure(
+                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Bank ledger'))),
                 $afterLedgerMutation,
-            ),
-            'imports', 'transactions' => BankTransactionsTable::configure(
-                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Statement lines'))),
-                $afterLedgerMutation,
-                includeImportHeaderAction: false,
-            ),
-            'clearance' => PendingOperationalClearanceTable::configure(
-                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Pending bank match'))),
-            ),
-            default => BankStatementsTable::configure(
-                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Statements'))),
-            ),
-        };
+            );
+        }
+
+        if ($tab === BankClearingTabRegistry::TAB_HISTORY) {
+            return BankStatementsTable::configure(
+                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Import history'))),
+            );
+        }
+
+        if ($tab === BankClearingTabRegistry::TAB_QUEUE) {
+            return BankClearingQueueTable::configure(
+                $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Work queue'))),
+            );
+        }
+
+        return BankStatementsTable::configure(
+            $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Import history'))),
+        );
+    }
+
+    public static function resolveQueueFilter(): string
+    {
+        $livewire = Livewire::current();
+
+        if ($livewire instanceof ListBankAccounts) {
+            return BankClearingTabRegistry::normalizeQueueFilter($livewire->queueFilter);
+        }
+
+        $legacyTab = request()->string('tab')->toString();
+
+        if (filled($legacyFilter = BankClearingTabRegistry::legacyTabQueueFilter($legacyTab ?: null))) {
+            return $legacyFilter;
+        }
+
+        $filter = request()->string('queueFilter')->toString();
+
+        return BankClearingTabRegistry::normalizeQueueFilter($filter ?: null);
+    }
+
+    public static function resolveHistorySection(): string
+    {
+        $livewire = Livewire::current();
+
+        if ($livewire instanceof ListBankAccounts) {
+            return BankClearingTabRegistry::normalizeHistorySection($livewire->historySection);
+        }
+
+        $section = request()->string('historySection')->toString();
+
+        return BankClearingTabRegistry::normalizeHistorySection($section ?: null);
     }
 
     /**
-     * Must stay aligned with {@see ListBankAccounts::getTabs()} keys and the `tab` URL query.
+     * Must stay aligned with {@see ListBankAccounts::getBankClearingTabs()} keys and URL query params.
      */
     public static function resolveListBankAccountsTab(): string
     {
-        if (self::resolveChannel() === 'sms') {
-            return 'sms';
-        }
-
         $livewire = Livewire::current();
 
         if ($livewire instanceof ListBankAccounts && filled($livewire->activeTab)) {
             $tab = $livewire->activeTab;
         } else {
-            $tab = request()->string('tab')->toString() ?: 'clearance';
+            $tab = request()->string('tab')->toString() ?: BankClearingTabRegistry::TAB_QUEUE;
         }
 
-        return match ($tab) {
-            'transactions' => 'imports',
-            'ledger', 'statements', 'imports', 'clearance', 'sms' => $tab,
-            default => 'clearance',
-        };
+        return BankClearingTabRegistry::normalizeTab($tab);
     }
 
     public static function resolveChannel(): string
     {
-        $livewire = Livewire::current();
-
-        if ($livewire instanceof ListBankAccounts) {
-            return in_array($livewire->channel, ['bank', 'sms'], true) ? $livewire->channel : 'bank';
-        }
-
         $channel = request()->string('channel')->toString();
 
         return in_array($channel, ['bank', 'sms'], true) ? $channel : 'bank';
@@ -128,20 +155,50 @@ class BankAccountsResource extends Resource
     /**
      * @param  array<string, array<string, mixed>>  $filters
      */
-    public static function listUrl(string $tab = 'imports', array $filters = [], string $channel = 'bank', string $smsSubTab = 'transactions'): string
-    {
+    public static function listUrl(
+        string $tab = BankClearingTabRegistry::TAB_QUEUE,
+        array $filters = [],
+        string $channel = 'bank',
+        string $smsSubTab = 'transactions',
+        ?string $queueFilter = null,
+        ?string $historySection = null,
+    ): string {
+        if ($channel === 'sms') {
+            $parameters = [];
+
+            $normalizedTab = $smsSubTab === 'history'
+                ? SmsClearingTabRegistry::TAB_HISTORY
+                : SmsClearingTabRegistry::TAB_QUEUE;
+
+            if ($normalizedTab !== SmsClearingTabRegistry::TAB_QUEUE) {
+                $parameters['tab'] = $normalizedTab;
+            }
+
+            return SmsClearingResource::getUrl('index', $parameters);
+        }
+
         $parameters = [];
 
-        if ($channel !== 'bank') {
-            $parameters['channel'] = $channel;
+        $normalizedTab = BankClearingTabRegistry::normalizeTab($tab);
+
+        if ($channel === 'bank' && $normalizedTab !== BankClearingTabRegistry::TAB_QUEUE) {
+            $parameters['tab'] = $normalizedTab;
         }
 
-        if ($channel === 'sms' && $smsSubTab === 'history') {
-            $parameters['smsSubTab'] = $smsSubTab;
+        if ($channel === 'bank' && $normalizedTab === BankClearingTabRegistry::TAB_QUEUE && filled($queueFilter)) {
+            $normalizedFilter = BankClearingTabRegistry::normalizeQueueFilter($queueFilter);
+
+            if ($normalizedFilter !== BankClearingTabRegistry::FILTER_ALL) {
+                $parameters['queueFilter'] = $normalizedFilter;
+            }
         }
 
-        if ($channel === 'bank' && $tab !== 'imports') {
-            $parameters['tab'] = $tab;
+        if ($channel === 'bank' && $normalizedTab === BankClearingTabRegistry::TAB_HISTORY && filled($historySection)) {
+            $normalizedSection = BankClearingTabRegistry::normalizeHistorySection($historySection);
+
+            if ($normalizedSection !== BankClearingTabRegistry::HISTORY_BATCHES) {
+                $parameters['historySection'] = $normalizedSection;
+            }
         }
 
         if ($filters !== []) {

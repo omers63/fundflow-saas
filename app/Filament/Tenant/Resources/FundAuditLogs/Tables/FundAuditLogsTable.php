@@ -8,7 +8,9 @@ use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Support\ViewFundAuditLogAction;
+use App\Models\Tenant\FundAuditLog;
 use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -59,6 +61,19 @@ class FundAuditLogsTable
             ]))
             ->toolbarActions([
                 BulkActionGroup::make([
+                    DeleteBulkAction::make()
+                        ->authorize(fn (): bool => auth('tenant')->user()?->is_admin === true)
+                        ->modalHeading(__('Delete audit log entries'))
+                        ->modalDescription(__('Permanently removes the selected audit log rows. This cannot be undone.'))
+                        ->using(function (DeleteBulkAction $action, $records): void {
+                            foreach ($records as $record) {
+                                if (! $record instanceof FundAuditLog) {
+                                    continue;
+                                }
+
+                                $record->delete();
+                            }
+                        }),
                     TableToolbar::refreshBulkAction(),
                 ]),
             ]), TableGrouping::fundAuditLogs());

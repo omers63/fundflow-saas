@@ -880,3 +880,69 @@ html[dir='rtl'] .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-he
 .fi-page-reconciliation .ff-recon-workspace-actions .fi-btn {
     max-width: 100%;
 }
+
+.fi-page-bank-clearing .ff-bank-clearing-shortcut-card {
+    display: block;
+    width: 100%;
+    text-align: start;
+}
+
+.fi-page-bank-clearing .ff-bank-clearing-workspace-actions .fi-ac {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.fi-page-bank-clearing .ff-bank-clearing-workspace-actions .fi-ac-btn-group {
+    flex-wrap: wrap;
+}
+
+.fi-page-bank-clearing .ff-bank-clearing-workspace-actions .fi-btn {
+    max-width: 100%;
+}
+
+.fi-page-bank-clearing .ff-bank-clearing-filter-chips {
+    gap: 0.5rem;
+}
+
+.fi-page-bank-clearing .ff-bank-clearing-kpis {
+    margin-bottom: 0.25rem;
+}
+
+.fi-page-bank-clearing .ff-bank-clearing-context {
+    border-radius: 0.75rem;
+    border: 1px solid var(--ff-border, #e5e7eb);
+    background: var(--ff-surface-muted, #f9fafb);
+    padding: 0.875rem 1rem;
+}
+
+.fi-page-sms-clearing .ff-sms-clearing-shortcut-card {
+    display: block;
+    width: 100%;
+    text-align: start;
+}
+
+.fi-page-sms-clearing .ff-sms-clearing-workspace-actions .fi-ac {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.fi-page-sms-clearing .ff-sms-clearing-workspace-actions .fi-ac-btn-group {
+    flex-wrap: wrap;
+}
+
+.fi-page-sms-clearing .ff-sms-clearing-workspace-actions .fi-btn {
+    max-width: 100%;
+}
+
+.fi-page-sms-clearing .ff-sms-clearing-filter-chips {
+    gap: 0.5rem;
+}
+
+.fi-page-sms-clearing .ff-sms-clearing-kpis {
+    margin-bottom: 0.25rem;
+}
+
+.dark .fi-body.fi-panel-tenant.fi-page-bank-clearing .ff-bank-clearing-context {
+    border-color: rgb(255 255 255 / 0.1);
+    background: rgb(255 255 255 / 0.04);
+}

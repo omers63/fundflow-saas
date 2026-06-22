@@ -9,11 +9,11 @@ use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Setting;
 use App\Notifications\Concerns\DeliversToMemberChannels;
+use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
-use Illuminate\Support\Facades\URL;
 
 class ContributionPostedNotification extends Notification
 {
@@ -22,7 +22,8 @@ class ContributionPostedNotification extends Notification
 
     public function __construct(
         public Contribution $contribution,
-    ) {}
+    ) {
+    }
 
     /**
      * @return array<string, mixed>
@@ -82,6 +83,6 @@ class ContributionPostedNotification extends Notification
     {
         $url = MyContributionResource::getUrl('index', panel: 'member');
 
-        return str_starts_with($url, 'http') ? $url : URL::to($url);
+        return TenantAbsoluteUrl::resolve($url);
     }
 }

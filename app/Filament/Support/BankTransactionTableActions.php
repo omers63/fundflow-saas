@@ -42,11 +42,13 @@ final class BankTransactionTableActions
             ->action(function (BankTransaction $record, array $data, Action $action, FundFlowService $service): void {
                 $member = Member::findOrFail($data['member_id']);
 
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $service->ensureMirroredAndPostToMember($record, $member),
-                    __('Could not post to member'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $service->ensureMirroredAndPostToMember($record, $member),
+                        __('Could not post to member'),
+                    )
+                ) {
                     return;
                 }
 
@@ -64,7 +66,7 @@ final class BankTransactionTableActions
             ->icon('heroicon-o-user-plus')
             ->color('success')
             ->requiresConfirmation()
-            ->modalDescription(__('Post selected statement lines to the same member. Imported lines are posted to master cash first.'))
+            ->modalDescription(__('Post statement lines to the same member. Imported lines are posted to master cash first.'))
             ->form([
                 Select::make('member_id')
                     ->label(__('Member'))

@@ -7,6 +7,7 @@ namespace App\Support;
 use App\Models\Tenant\User;
 use App\Notifications\Channels\SmsChannel;
 use App\Notifications\Channels\WhatsAppChannel;
+use NotificationChannels\WebPush\WebPushChannel;
 
 final class MemberNotificationChannels
 {
@@ -19,6 +20,10 @@ final class MemberNotificationChannels
 
         if (CommunicationSettings::inAppEnabled()) {
             $channels[] = 'database';
+        }
+
+        if ($notifiable instanceof User && WebPushNotification::enabled()) {
+            $channels[] = WebPushChannel::class;
         }
 
         if (! $notifiable instanceof User) {

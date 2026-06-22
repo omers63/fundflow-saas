@@ -5,7 +5,7 @@
 @endphp
 
 <div class="ff-app-insights w-full max-w-none space-y-3 mb-1" @if (filled($pollingInterval)) wire:poll.{{ $pollingInterval }} @endif>
-    @if ($d['active_tab'] === 'imports' || $d['active_tab'] === 'clearance' || $d['active_tab'] === 'transactions')
+    @if ($d['active_tab'] === 'queue')
         <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
             @foreach ($d['clearing_kpis'] as $kpi)
                 <a href="{{ $kpi['url'] }}"

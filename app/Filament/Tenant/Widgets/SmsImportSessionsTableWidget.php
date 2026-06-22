@@ -25,7 +25,7 @@ class SmsImportSessionsTableWidget extends TableWidget
 
     public function table(Table $table): Table
     {
-        return SmsImportSessionsTable::configure($table, embedInBankWorkspace: true)
+        return SmsImportSessionsTable::configure($table, embedInBankWorkspace: true, includeImportHeaderAction: false)
             ->recordUrl(fn (SmsImportSession $record): string => SmsImportSessionResource::getUrl('view', ['record' => $record]));
     }
 

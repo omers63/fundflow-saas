@@ -6,7 +6,9 @@ namespace App\Filament\Tenant\Resources\MasterAccounts\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
+use App\Filament\Support\BankClearingQueueActions;
 use App\Filament\Tenant\Resources\BankAccounts\Tables\PendingOperationalClearanceTable;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Models\Tenant\Account;
 use App\Services\BankClearingMatchService;
 use Filament\Tables\Table;
@@ -30,10 +32,20 @@ class PendingOperationalClearanceRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         $owner = $this->getOwnerRecord();
+        $count = app(BankClearingMatchService::class)
+            ->pendingOperationalClearanceCountForMasterAccount($owner);
 
-        return PendingOperationalClearanceTable::configure(
+        return PendingOperationalClearanceTable::configurePreview(
             $table,
             showClearanceKindColumn: in_array($owner->type, ['cash', 'invest'], true),
-        );
+        )
+            ->description($count > 0
+                ? __(':count open — resolve in the bank clearing work queue. Match pairs a bank import line; clear closes the row without bank evidence.', ['count' => $count])
+                : __('No operational rows awaiting bank clearance.'))
+            ->headerActions([
+                BankClearingQueueActions::openInBankClearingAction(BankClearingTabRegistry::FILTER_OPERATIONS),
+            ])
+            ->paginated([5, 10, 25])
+            ->defaultPaginationPageOption(5);
     }
 }

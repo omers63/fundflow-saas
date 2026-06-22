@@ -101,7 +101,10 @@ class MemberPanelProvider extends PanelProvider
                 .view('partials.arabic-display-body-class')->render()
                 .view('partials.pwa-head')->render()
             ))
-            ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))
+            ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(
+                view('partials.pwa-sw')->render()
+                .view('filament.member.partials.webpush-member')->render()
+            ))
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
@@ -114,8 +117,8 @@ class MemberPanelProvider extends PanelProvider
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
-                InitializeTenancyByDomain::class,
                 PreventAccessFromCentralDomains::class,
+                InitializeTenancyByDomain::class,
             ])
             ->authMiddleware([
                 AuthenticateMemberPanel::class,

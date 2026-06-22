@@ -9,10 +9,10 @@ use App\Models\Tenant\FundPosting;
 use App\Notifications\Concerns\DeliversToMemberChannels;
 use App\Notifications\Tenant\Concerns\BuildsFundPostingDatabaseMessage;
 use App\Support\Notifications\FundPostingNotificationFormatter;
+use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Notifications\Notification;
-use Illuminate\Support\Facades\URL;
 
 class FundPostingRejectedNotification extends Notification
 {
@@ -21,7 +21,8 @@ class FundPostingRejectedNotification extends Notification
 
     public function __construct(
         public FundPosting $fundPosting,
-    ) {}
+    ) {
+    }
 
     /**
      * @return array<string, mixed>
@@ -68,6 +69,6 @@ class FundPostingRejectedNotification extends Notification
     {
         $url = MyFundPostingResource::getUrl('index', panel: 'member');
 
-        return str_starts_with($url, 'http') ? $url : URL::to($url);
+        return TenantAbsoluteUrl::resolve($url);
     }
 }

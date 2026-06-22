@@ -7,11 +7,11 @@ namespace App\Notifications\Tenant;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\LoanEligibilityOverrideRequestResource;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
 use App\Support\LoanEligibilityGate;
+use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
-use Illuminate\Support\Facades\URL;
 
 class NewLoanEligibilityOverrideRequestNotification extends Notification
 {
@@ -19,7 +19,8 @@ class NewLoanEligibilityOverrideRequestNotification extends Notification
 
     public function __construct(
         public LoanEligibilityOverrideRequest $request,
-    ) {}
+    ) {
+    }
 
     /**
      * @return list<string>
@@ -63,6 +64,6 @@ class NewLoanEligibilityOverrideRequestNotification extends Notification
     {
         $url = LoanEligibilityOverrideRequestResource::indexUrlForRequest($this->request);
 
-        return str_starts_with($url, 'http') ? $url : URL::to($url);
+        return TenantAbsoluteUrl::resolve($url);
     }
 }

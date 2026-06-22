@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace App\Notifications\Tenant;
 
 use App\Models\Tenant\User;
+use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
-use Illuminate\Support\Facades\URL;
 
 class DelinquencyDigestNotification extends Notification
 {
@@ -90,10 +90,6 @@ class DelinquencyDigestNotification extends Notification
 
     protected function absoluteDelinquencyUrl(): string
     {
-        if (str_starts_with($this->delinquencyUrl, 'http://') || str_starts_with($this->delinquencyUrl, 'https://')) {
-            return $this->delinquencyUrl;
-        }
-
-        return URL::to($this->delinquencyUrl);
+        return TenantAbsoluteUrl::resolve($this->delinquencyUrl);
     }
 }

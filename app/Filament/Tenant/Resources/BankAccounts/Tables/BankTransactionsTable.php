@@ -2,26 +2,20 @@
 
 namespace App\Filament\Tenant\Resources\BankAccounts\Tables;
 
-use App\Filament\Support\ActionModalFailure;
+use App\Filament\Support\BankClearingQueueActions;
 use App\Filament\Support\BankTransactionTableActions;
 use App\Filament\Support\BankWorkspaceImportTableHeaderActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
+use App\Filament\Support\TableStandards;
 use App\Filament\Tenant\Support\ViewBankTransactionAction;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
-use App\Services\BankClearingMatchService;
-use App\Services\FundFlowService;
-use App\Support\BankTransactionWorkflow;
 use Closure;
-use Filament\Actions\Action;
-use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
@@ -30,12 +24,30 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Collection;
 
 class BankTransactionsTable
 {
-    public static function configure(Table $table, ?Closure $afterImport = null, bool $includeImportHeaderAction = true): Table
+    public static function configure(Table $table, ?Closure $afterImport = null, bool $includeImportHeaderAction = true, bool $auditMode = false): Table
     {
+        $recordActions = $auditMode
+            ? TableRecordActionGroups::wrap([
+                ViewBankTransactionAction::make(),
+            ])
+            : TableRecordActionGroups::wrap(BankClearingQueueActions::groupedRecordActions());
+
+        $toolbarActions = $auditMode
+            ? TableStandards::defaultToolbarActions()
+            : [
+                BulkActionGroup::make([
+                    BankClearingQueueActions::matchAllUniqueBulk(),
+                    BankClearingQueueActions::matchSelectedBulk(),
+                    BankClearingQueueActions::postToCashBulk(),
+                    BankTransactionTableActions::postToMemberBulk(),
+                    BankClearingQueueActions::ignoreBulk(),
+                    BankTransactionTableActions::deleteBulk(),
+                ]),
+            ];
+
         $table = TableGrouping::apply(
             $table
                 ->columns([
@@ -127,155 +139,11 @@ class BankTransactionsTable
                 ])
                 ->recordUrl(fn (): ?string => null)
                 ->recordAction(ViewAction::getDefaultName())
-                ->emptyStateDescription(__('Imported bank statement lines. Manual master bank credits and debits are on the Master bank ledger tab.'))
-                ->recordActions(TableRecordActionGroups::wrap([
-                    ViewBankTransactionAction::make(),
-                    Action::make('mirrorToCash')
-                        ->label(__('Post to cash'))
-                        ->icon('heroicon-o-arrow-right')
-                        ->color('info')
-                        ->requiresConfirmation()
-                        ->modalDescription(__('Post this statement line to the master cash pool.'))
-                        ->hidden(fn (BankTransaction $record): bool => ! BankTransactionWorkflow::canPostToCash($record))
-                        ->action(function ($record, FundFlowService $service) {
-                            $service->mirrorToCash([$record->id]);
-                            Notification::make()->title(__('Posted to master cash'))->success()->send();
-                        }),
-                    BankTransactionTableActions::postToMember(),
-                    Action::make('clearMatch')
-                        ->label(__('Clear / Match'))
-                        ->icon('heroicon-o-link')
-                        ->color('primary')
-                        ->requiresConfirmation()
-                        ->modalDescription(__('Match this uncleared transaction against an imported bank transaction to clear both.'))
-                        ->hidden(fn (BankTransaction $record, BankClearingMatchService $matching): bool => ! $matching->isPendingClearance($record)
-                            || $matching->isSyntheticOperationalStatement($record))
-                        ->form([
-                            Select::make('imported_transaction_id')
-                                ->label(__('Match with bank statement line'))
-                                ->options(function (BankTransaction $record, BankClearingMatchService $matching): array {
-                                    return $matching->findImportedCandidates($record)
-                                        ->mapWithKeys(fn (BankTransaction $txn): array => [
-                                            $txn->id => $matching->formatMatchOptionLabel($txn),
-                                        ])
-                                        ->all();
-                                })
-                                ->searchable()
-                                ->required()
-                                ->helperText(__('Only imported CSV statement lines within amount and date tolerance are listed.')),
-                        ])
-                        ->action(function (BankTransaction $record, array $data, Action $action, BankClearingMatchService $matching): void {
-                            $imported = BankTransaction::findOrFail($data['imported_transaction_id']);
-
-                            if (! $matching->isImportedMatchCandidate($imported)) {
-                                ActionModalFailure::present(
-                                    $action,
-                                    __('Choose a bank import line that is not already linked to a posting.'),
-                                    __('That statement line cannot be matched'),
-                                );
-                            }
-
-                            $matching->clearMatchPair($record, $imported);
-
-                            Notification::make()->title(__('Transactions matched and cleared'))->success()->send();
-                        }),
-                    Action::make('ignore')
-                        ->label(__('Ignore'))
-                        ->icon('heroicon-o-x-mark')
-                        ->color('gray')
-                        ->requiresConfirmation()
-                        ->hidden(fn ($record) => $record->status !== 'imported')
-                        ->action(function ($record) {
-                            $record->update(['status' => 'ignored']);
-                            Notification::make()->title(__('Transaction ignored'))->send();
-                        }),
-                    BankTransactionTableActions::delete(),
-                ]))
-                ->toolbarActions([
-                    BulkActionGroup::make([
-                        BulkAction::make('clearMatchSelected')
-                            ->label(__('Clear / match'))
-                            ->icon('heroicon-o-link')
-                            ->color('primary')
-                            ->requiresConfirmation()
-                            ->modalDescription(__('Match uncleared postings to imported statement lines. Select one pending and one imported line to pair directly, or select multiple lines to auto-match when amount and date uniquely identify a pair.'))
-                            ->action(function (Collection $records, BankClearingMatchService $matching): void {
-                                $stats = $matching->autoMatchSelected($records);
-
-                                if ($stats['manual_pair'] && $stats['matched'] === 1) {
-                                    Notification::make()
-                                        ->title(__('Transactions matched and cleared'))
-                                        ->success()
-                                        ->send();
-
-                                    return;
-                                }
-
-                                if ($stats['matched'] === 0 && $stats['ambiguous'] === 0 && $stats['skipped'] > 0) {
-                                    Notification::make()
-                                        ->title(__('No lines could be matched'))
-                                        ->body(__('Selected rows must be uncleared postings or imported statement lines with a unique counterpart within tolerance.'))
-                                        ->warning()
-                                        ->send();
-
-                                    return;
-                                }
-
-                                $body = collect([
-                                    $stats['matched'] > 0
-                                    ? __(':count matched', ['count' => $stats['matched']])
-                                    : null,
-                                    $stats['ambiguous'] > 0
-                                    ? __(':count ambiguous (multiple candidates)', ['count' => $stats['ambiguous']])
-                                    : null,
-                                    $stats['skipped'] > 0
-                                    ? __(':count skipped', ['count' => $stats['skipped']])
-                                    : null,
-                                ])->filter()->implode(' · ');
-
-                                Notification::make()
-                                    ->title(__('Clear / match finished'))
-                                    ->body($body)
-                                    ->success()
-                                    ->send();
-                            }),
-                        BulkAction::make('mirrorSelectedToCash')
-                            ->label(__('Post to cash'))
-                            ->icon('heroicon-o-arrow-right')
-                            ->color('info')
-                            ->requiresConfirmation()
-                            ->modalDescription(__('Post all selected imported statement lines to the master cash pool.'))
-                            ->action(function (Collection $records, FundFlowService $service) {
-                                $importedIds = $records
-                                    ->filter(fn (BankTransaction $record): bool => BankTransactionWorkflow::canPostToCash($record))
-                                    ->pluck('id');
-                                if ($importedIds->isEmpty()) {
-                                    Notification::make()->title(__('No imported transactions selected'))->warning()->send();
-
-                                    return;
-                                }
-                                $count = $service->mirrorToCash($importedIds);
-                                Notification::make()->title(__(':count transaction(s) posted to master cash', ['count' => $count]))->success()->send();
-                            }),
-                        BankTransactionTableActions::postToMemberBulk(),
-                        BulkAction::make('ignoreSelected')
-                            ->label(__('Ignore selected'))
-                            ->icon('heroicon-o-x-mark')
-                            ->color('gray')
-                            ->requiresConfirmation()
-                            ->action(function (Collection $records) {
-                                $count = 0;
-                                foreach ($records as $record) {
-                                    if ($record->status === 'imported') {
-                                        $record->update(['status' => 'ignored']);
-                                        $count++;
-                                    }
-                                }
-                                Notification::make()->title(__(':count transaction(s) ignored', ['count' => $count]))->send();
-                            }),
-                        BankTransactionTableActions::deleteBulk(),
-                    ]),
-                ])
+                ->emptyStateDescription($auditMode
+                    ? __('Closed imported statement lines for audit. Resolve new items from the work queue.')
+                    : __('Imported bank statement lines. Manual master bank credits and debits are on the Master bank ledger tab.'))
+                ->recordActions($recordActions)
+                ->toolbarActions($toolbarActions)
                 ->defaultSort('transaction_date', 'desc'),
             TableGrouping::bankTransactions()
         );
