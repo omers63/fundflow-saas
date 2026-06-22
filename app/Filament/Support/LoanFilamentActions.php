@@ -485,10 +485,14 @@ final class LoanFilamentActions
                 self::reject()->button(),
                 self::disburse()->button(),
                 Action::make('review')
-                    ->label(__('Review'))
+                    ->label(fn (Loan $record): string => $record->status === 'pending'
+                        ? __('Review application')
+                        : __('View loan'))
                     ->icon('heroicon-o-eye')
                     ->color('gray')
-                    ->url(fn (Loan $record): string => LoanResource::getUrl('view', ['record' => $record])),
+                    ->url(fn (Loan $record): string => $record->status === 'pending'
+                        ? LoanResource::getUrl('edit', ['record' => $record])
+                        : LoanResource::getUrl('view', ['record' => $record])),
             ],
         );
     }

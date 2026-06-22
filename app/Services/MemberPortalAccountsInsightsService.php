@@ -133,6 +133,7 @@ final class MemberPortalAccountsInsightsService
             'fund_balance' => $fundBalance,
             'net_worth' => $netWorth,
             'fund_negative' => $fundBalance < 0,
+            'cash_negative' => $cashBalance < 0,
             'cash_low' => $cashBalance <= 0,
             'credits30' => $credits30,
             'debits30' => $debits30,
@@ -288,11 +289,17 @@ final class MemberPortalAccountsInsightsService
                 'value' => InsightFormatter::compactAmount($cashBalance),
                 'sub' => InsightFormatter::money($cashBalance),
                 'icon' => 'heroicon-o-wallet',
-                'accent' => $cashBalance > 0 ? 'sky' : 'amber',
+                'accent' => match (true) {
+                    $cashBalance < 0 => 'rose',
+                    $cashBalance > 0 => 'sky',
+                    default => 'amber',
+                },
                 'url' => MyAccountResource::listUrl('cash'),
-                'value_class' => $cashBalance > 0
-                    ? 'text-sky-600 dark:text-sky-400'
-                    : 'text-amber-600 dark:text-amber-400',
+                'value_class' => match (true) {
+                    $cashBalance < 0 => 'text-rose-600 dark:text-rose-400',
+                    $cashBalance > 0 => 'text-sky-600 dark:text-sky-400',
+                    default => 'text-amber-600 dark:text-amber-400',
+                },
             ],
             [
                 'label' => __('Fund'),
@@ -310,8 +317,11 @@ final class MemberPortalAccountsInsightsService
                 'value' => InsightFormatter::compactAmount($netWorth),
                 'sub' => __('Cash + fund'),
                 'icon' => 'heroicon-o-scale',
-                'accent' => 'emerald',
+                'accent' => $netWorth < 0 ? 'rose' : 'emerald',
                 'url' => MyAccountResource::listUrl('all'),
+                'value_class' => $netWorth < 0
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : 'text-emerald-600 dark:text-emerald-400',
             ],
             [
                 'label' => __('Loan due'),

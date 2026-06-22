@@ -47,6 +47,7 @@ final class ContributionCycleTables
                     ->label(__('Cash balance'))
                     ->state(fn (Member $record): float => $record->getCashBalance())
                     ->money($currency)
+                    ->color(fn (Member $record): string => $record->getCashBalance() < 0 ? 'danger' : 'gray')
                     ->alignEnd()
                     ->searchable(false)
                     ->sortable(query: function (Builder $query, string $direction): void {

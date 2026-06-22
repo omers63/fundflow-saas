@@ -15,8 +15,8 @@
     $count = count($kpis);
     $gridCols = match (true) {
         $count <= 4 => 'grid-cols-2 sm:grid-cols-4',
-        $count <= 6 => 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6',
-        default => 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-7',
+        $count <= 6 => 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-4',
+        default => 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-4',
     };
 @endphp
 
@@ -34,12 +34,18 @@
             $valueCompact = (bool) ($card['value_compact'] ?? false);
             $subPrecision = (int) ($card['sub_precision'] ?? 2);
             $subText = (string) ($card['sub'] ?? '');
-            $valueIsAmount = is_int($rawValue) || is_float($rawValue);
+            $valueIsAmount = (bool) ($card['value_is_amount'] ?? false);
 
-            if (!$valueIsAmount && is_string($rawValue) && is_numeric($rawValue)) {
-                $valueIsAmount = true;
-                $rawValue = str_contains($rawValue, '.') ? (float) $rawValue : (int) $rawValue;
+            if (!$valueIsAmount && filled($currency)) {
+                if (is_int($rawValue) || is_float($rawValue)) {
+                    $valueIsAmount = true;
+                } elseif (is_string($rawValue) && is_numeric($rawValue)) {
+                    $valueIsAmount = true;
+                    $rawValue = str_contains($rawValue, '.') ? (float) $rawValue : (int) $rawValue;
+                }
             }
+
+            $subIsAmount = (bool) ($card['sub_is_amount'] ?? false);
 
             $dimmed = !$active ? 'opacity-50' : '';
         @endphp
@@ -64,7 +70,8 @@
                     <span class="shrink-0 text-[11px] font-normal text-gray-400">{{ $card['suffix'] }}</span>
                 @endif
             </div>
-            <x-ff-stat-line :text="$subText" :currency="$currency" :precision="$subPrecision" @class(['min-w-0 truncate', $textClass, 'text-[11px] font-medium']) />
+            <x-ff-stat-line :text="$subIsAmount ? null : $subText" :amount="$subIsAmount ? $subText : null"
+                :currency="$subIsAmount ? $currency : null" :precision="$subPrecision" @class(['min-w-0 truncate', $textClass, 'text-[11px] font-medium']) />
         </{{ $tag }}>
     @endforeach
 </div>

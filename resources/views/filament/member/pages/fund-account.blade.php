@@ -10,7 +10,7 @@
             </div>
         </x-member::panel>
 
-        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div class="ff-member-fund-account-stats grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <x-member::stat-card :label="__('Monthly contribution')" :amount="$monthly" :currency="$currency" />
             <x-member::stat-card :label="__('Total contributed')" :amount="$contributionsTotal" :currency="$currency" />
             <x-member::stat-card :label="__('Loan fund debits')" :amount="$loanFundDebits" :currency="$currency" />

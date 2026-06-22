@@ -247,7 +247,7 @@ final class LoanInsightsService
             ],
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'overdue', 'label' => __('Overdue'), 'value' => (string) $overdueInstallments, 'sub' => __('Installments'), 'icon' => 'heroicon-o-calendar-days', 'accent' => 'rose', 'active' => $overdueInstallments > 0, 'value_class' => $overdueInstallments > 0 ? 'text-rose-600 dark:text-rose-400' : null],
-                ['key' => 'at_risk', 'label' => __('At risk'), 'value' => (string) $overdueAmount, 'sub' => $this->formatMoneyCompact($overdueAmount, $currency), 'icon' => 'heroicon-o-scale', 'accent' => 'amber', 'active' => $overdueAmount > 0],
+                ['key' => 'at_risk', 'label' => __('At risk'), ...InsightKpi::moneyValue($overdueAmount, $currency), 'sub' => $this->formatMoneyCompact($overdueAmount, $currency), 'icon' => 'heroicon-o-scale', 'accent' => 'amber', 'active' => $overdueAmount > 0],
                 ['key' => 'arrears', 'label' => __('Arrears'), 'value' => (string) $contributionArrears, 'sub' => trans_choice(':count member|:count members', $contributionArrearsMembers, ['count' => $contributionArrearsMembers]), 'icon' => 'heroicon-o-banknotes', 'accent' => 'amber', 'active' => $contributionArrears > 0],
                 ['key' => 'delinquent', 'label' => __('Delinquent'), 'value' => (string) $delinquentMembers, 'sub' => __('Members'), 'icon' => 'heroicon-o-user-minus', 'accent' => 'violet', 'active' => $delinquentMembers > 0],
                 ['key' => 'guarantor', 'label' => __('Guarantor'), 'value' => (string) $guarantorTransferred, 'sub' => __('Liability transferred'), 'icon' => 'heroicon-o-shield-exclamation', 'accent' => 'sky', 'active' => $guarantorTransferred > 0],

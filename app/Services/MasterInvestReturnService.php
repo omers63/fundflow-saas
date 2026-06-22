@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
- * Record investment return: credit master invest only, then clear against an incoming bank import.
+ * Record investment return receipt on master invest and create a pending bank line.
+ * Prefer {@see MasterInvestInService::investIn()} for the full invest-in flow including fund return.
  */
 final class MasterInvestReturnService
 {

@@ -9,9 +9,12 @@ use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\User;
 use App\Services\ReconciliationResolutionService;
 use App\Support\Lang;
+use App\Support\Reconciliation\ReconciliationExceptionPresenter;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -19,32 +22,79 @@ use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Section;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\Auth;
 
 final class ReconciliationExceptionActions
 {
     /**
-     * @return array<int, Action>
+     * @return array<int, Action|ActionGroup>
      */
     public static function recordActions(): array
     {
-        return TableRecordActionGroups::wrap([
+        return [
             self::viewAction(),
+            self::actionsMenu(),
+        ];
+    }
+
+    public static function actionsMenu(): ActionGroup
+    {
+        return ActionGroup::make([
+            ActionGroup::make(self::resolveActions())
+                ->label(__('Resolve'))
+                ->icon('heroicon-o-check-circle'),
+            ActionGroup::make(self::ledgerActions())
+                ->label(__('Ledger'))
+                ->icon('heroicon-o-calculator'),
+            ActionGroup::make(self::workflowActions())
+                ->label(__('Workflow'))
+                ->icon('heroicon-o-user-circle'),
+            self::deleteAction(),
+        ])
+            ->label(__('Actions'))
+            ->icon('heroicon-o-ellipsis-vertical')
+            ->button();
+    }
+
+    /**
+     * @return array<int, Action>
+     */
+    private static function resolveActions(): array
+    {
+        return [
+            self::resolveAmbiguousBankMatchAction(),
+            self::postEmiOverpaymentRefundAction(),
+            self::acceptOverrideAction(),
+            self::resolveAction(),
+            self::writeOffAction(),
+        ];
+    }
+
+    /**
+     * @return array<int, Action>
+     */
+    private static function ledgerActions(): array
+    {
+        return [
+            self::postCorrectionEntryAction(),
+            self::postCashCorrectionAction(),
+            self::reverseTransactionAction(),
+            self::customJournalAction(),
+        ];
+    }
+
+    /**
+     * @return array<int, Action>
+     */
+    private static function workflowActions(): array
+    {
+        return [
             self::retryAutoResolveAction(),
             self::assignAction(),
             self::reclassifyAction(),
             self::escalateAction(),
-            self::writeOffAction(),
-            self::customJournalAction(),
-            self::postCorrectionEntryAction(),
-            self::reverseTransactionAction(),
-            self::postCashCorrectionAction(),
-            self::postEmiOverpaymentRefundAction(),
-            self::resolveAmbiguousBankMatchAction(),
-            self::acceptOverrideAction(),
-            self::resolveAction(),
-            self::deleteAction(),
-        ]);
+        ];
     }
 
     public static function deleteAction(): DeleteAction
@@ -64,32 +114,75 @@ final class ReconciliationExceptionActions
     public static function viewAction(): Action
     {
         return Action::make('viewException')
-            ->label(__('View'))
-            ->icon('heroicon-o-eye')
-            ->modalHeading(fn (ReconciliationException $record): string => $record->exception_code)
-            ->modalWidth('lg')
+            ->label(__('Open'))
+            ->icon('heroicon-o-document-magnifying-glass')
+            ->modalHeading(fn (ReconciliationException $record): string => ReconciliationExceptionPresenter::title($record))
+            ->modalDescription(fn (ReconciliationException $record): string => ReconciliationExceptionPresenter::summary($record))
+            ->modalWidth('3xl')
             ->schema(fn (ReconciliationException $record): array => [
-                Section::make(__('Exception details'))
+                Section::make(__('Summary'))
                     ->columns(2)
                     ->schema([
-                        TextEntry::make('exception_code')->label(__('Code')),
-                        TextEntry::make('domain')->label(__('Domain')),
-                        TextEntry::make('severity')->label(__('Severity')),
-                        TextEntry::make('status')->label(__('Status')),
-                        TextEntry::make('amount_delta')->label(__('Amount delta')),
-                        TextEntry::make('exception_type')->label(__('Type'))->placeholder(__('—')),
-                        TextEntry::make('raised_at')->dateTime()->label(__('Raised')),
-                        TextEntry::make('sla_deadline')->dateTime()->label(__('SLA deadline'))->placeholder(__('—')),
-                        TextEntry::make('deferred_until')->dateTime()->label(__('Deferred until'))->placeholder(__('—')),
-                        TextEntry::make('assignee.name')->label(__('Assigned to'))->placeholder(__('—')),
-                        TextEntry::make('auto_resolve_reason')->label(__('Auto-resolve'))->placeholder(__('—'))->columnSpanFull(),
-                        TextEntry::make('affected_entities')
-                            ->label(__('Affected entities'))
-                            ->formatStateUsing(fn (ReconciliationException $r): string => json_encode(
-                                $r->affected_entities ?? [],
-                                JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE,
-                            ) ?: '—')
+                        TextEntry::make('exception_code')
+                            ->label(__('Code'))
+                            ->badge()
+                            ->color('gray'),
+                        TextEntry::make('domain')
+                            ->label(__('Area'))
+                            ->formatStateUsing(fn (string $state): string => ReconciliationExceptionPresenter::domainLabel($state))
+                            ->badge(),
+                        TextEntry::make('severity')
+                            ->label(__('Severity'))
+                            ->badge()
+                            ->color(fn (string $state): string => match ($state) {
+                                'critical' => 'danger',
+                                'high' => 'warning',
+                                'medium' => 'info',
+                                'low' => 'gray',
+                                default => 'gray',
+                            }),
+                        TextEntry::make('status')
+                            ->label(__('Status'))
+                            ->badge(),
+                        TextEntry::make('amount_delta')
+                            ->label(__('Amount delta'))
+                            ->formatStateUsing(fn (?string $state): string => filled($state)
+                                ? (MoneyDisplay::format((float) $state) ?? '—')
+                                : '—'),
+                        TextEntry::make('assignee.name')
+                            ->label(__('Assigned to'))
+                            ->placeholder(__('Unassigned')),
+                        TextEntry::make('raised_at')
+                            ->dateTime()
+                            ->label(__('Raised')),
+                        TextEntry::make('sla_deadline')
+                            ->dateTime()
+                            ->label(__('SLA deadline'))
+                            ->placeholder(__('—')),
+                    ]),
+                Placeholder::make('recommended_action')
+                    ->label(__('Suggested next step'))
+                    ->content(fn (ReconciliationException $record): string => ReconciliationExceptionPresenter::recommendedAction($record))
+                    ->columnSpanFull(),
+                Placeholder::make('context')
+                    ->label(__('Related records'))
+                    ->content(fn (ReconciliationException $record): Htmlable => ReconciliationExceptionPresenter::contextHtml($record))
+                    ->columnSpanFull(),
+                Section::make(__('Diagnostics'))
+                    ->collapsed()
+                    ->schema([
+                        TextEntry::make('exception_type')
+                            ->label(__('Discrepancy type'))
+                            ->placeholder(__('—')),
+                        TextEntry::make('auto_resolve_reason')
+                            ->label(__('Auto-resolve'))
+                            ->placeholder(__('—'))
                             ->columnSpanFull(),
+                        TextEntry::make('resolution_notes')
+                            ->label(__('Resolution notes'))
+                            ->placeholder(__('—'))
+                            ->columnSpanFull()
+                            ->visible(fn (ReconciliationException $record): bool => filled($record->resolution_notes)),
                     ]),
             ])
             ->modalSubmitAction(false)
@@ -558,9 +651,6 @@ final class ReconciliationExceptionActions
 
     protected static function isActionable(ReconciliationException $record): bool
     {
-        return in_array($record->status, [
-            ReconciliationException::STATUS_OPEN,
-            ReconciliationException::STATUS_ESCALATED,
-        ], true);
+        return ReconciliationExceptionPresenter::isActionable($record);
     }
 }

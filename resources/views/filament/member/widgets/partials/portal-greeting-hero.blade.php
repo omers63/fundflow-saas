@@ -42,13 +42,22 @@
 
         <div class="ff-member-greeting__balances">
             @foreach ($g['balances'] as $balance)
-                <a href="{{ $balance['url'] }}" wire:navigate class="ff-member-greeting__balance"
+                <a href="{{ $balance['url'] }}" wire:navigate @class([
+                    'ff-member-greeting__balance',
+                    'ff-member-greeting__balance--negative' => $balance['negative'] ?? false,
+                ])
                     title="{{ $balance['full'] }}">
                     <div class="ff-member-greeting__balance-head">
                         <x-dynamic-component :component="$balance['icon']" class="ff-member-greeting__balance-icon" />
                         <span class="ff-member-greeting__balance-label">{{ $balance['label'] }}</span>
                     </div>
-                    <p class="ff-member-greeting__balance-amount">{{ $balance['amount'] }}</p>
+                    <p class="ff-member-greeting__balance-amount">
+                        @if (isset($balance['amount_value']))
+                            <x-member::amount :value="$balance['amount_value']" :currency="$currency" compact />
+                        @else
+                            {{ $balance['amount'] }}
+                        @endif
+                    </p>
                 </a>
             @endforeach
         </div>

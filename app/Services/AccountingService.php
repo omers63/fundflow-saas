@@ -926,6 +926,51 @@ class AccountingService
     }
 
     /**
+     * Return reserve account proceeds (invest or expense) back to master fund.
+     */
+    public function returnReserveAccountToMasterFund(
+        Account $reserveAccount,
+        float $amount,
+        string $description,
+        ?Model $reference = null,
+        ?DateTimeInterface $transactedAt = null,
+    ): void {
+        $this->assertMasterReserveAccount($reserveAccount);
+
+        if ($amount <= 0) {
+            throw new InvalidArgumentException(__('Amount must be greater than zero.'));
+        }
+
+        if ($amount > (float) $reserveAccount->balance) {
+            throw new InvalidArgumentException(__('Amount exceeds the available reserve balance.'));
+        }
+
+        $masterFund = Account::masterFund();
+
+        if ($masterFund === null) {
+            throw new InvalidArgumentException(__('Master fund account is not configured.'));
+        }
+
+        $description = trim($description);
+
+        if ($description === '') {
+            throw new InvalidArgumentException(__('Description is required.'));
+        }
+
+        $reserveReturnDescription = __(':description (reserve return)', ['description' => $description]);
+        $fundReturnDescription = __(':description (invest return to fund)', ['description' => $description]);
+
+        $postReturn = function () use ($masterFund, $reserveAccount, $amount, $reserveReturnDescription, $fundReturnDescription, $reference, $transactedAt): void {
+            DB::transaction(function () use ($masterFund, $reserveAccount, $amount, $reserveReturnDescription, $fundReturnDescription, $reference, $transactedAt): void {
+                $this->debit($reserveAccount, $amount, $reserveReturnDescription, $reference, $transactedAt);
+                $this->credit($masterFund, $amount, $fundReturnDescription, null, $transactedAt);
+            });
+        };
+
+        ReconciliationService::withoutRealtimeChecks($postReturn);
+    }
+
+    /**
      * Disburse from a master reserve account via master cash (check outflow).
      */
     public function disburseReserveAccountByCheck(
@@ -968,7 +1013,7 @@ class AccountingService
     }
 
     /**
-     * @deprecated Prefer {@see MasterInvestReturnService::record()} on the master invest account.
+     * @deprecated Prefer {@see MasterInvestInService::investIn()} on the master invest account.
      */
     public function recordInvestmentReturn(
         float $amount,
@@ -981,7 +1026,7 @@ class AccountingService
             throw new InvalidArgumentException(__('Master invest account is not configured.'));
         }
 
-        app(MasterInvestReturnService::class)->record(
+        app(MasterInvestInService::class)->investIn(
             $masterInvest,
             $amount,
             $description,

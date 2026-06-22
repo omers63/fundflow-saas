@@ -166,7 +166,7 @@ final class ContributionInsightsService
             ],
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'posted', 'label' => __('Posted'), 'value' => (string) $postedOpenPeriod, 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => true],
-                ['key' => 'amount', 'label' => __('Amount'), 'value' => $postedAmount, 'currency' => $currency, 'value_precision' => 0, 'sub' => $periodLabel, 'icon' => 'heroicon-o-currency-dollar', 'accent' => 'teal', 'active' => $postedAmount > 0],
+                ['key' => 'amount', 'label' => __('Amount'), 'value' => $postedAmount, 'currency' => $currency, 'value_is_amount' => true, 'value_precision' => 0, 'sub' => $periodLabel, 'icon' => 'heroicon-o-currency-dollar', 'accent' => 'teal', 'active' => $postedAmount > 0],
                 ['key' => 'remaining', 'label' => __('Remaining'), 'value' => (string) $missingOpenPeriod, 'sub' => __('Members'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $missingOpenPeriod > 0],
                 ['key' => 'contributions', 'label' => __('Contributions'), 'value' => (string) Contribution::query()->posted()->count(), 'sub' => __('All time'), 'icon' => 'heroicon-o-book-open', 'accent' => 'sky', 'active' => true],
                 ['key' => 'collect', 'label' => __('To collect'), 'value' => (string) $missingOpenPeriod, 'sub' => __('Open period'), 'icon' => 'heroicon-o-arrow-down-tray', 'accent' => 'violet', 'active' => $missingOpenPeriod > 0],

@@ -80,14 +80,14 @@
                 {{ __('Check your eligibility, choose an amount and guarantor, then submit your application for admin review.') }}
             </p>
             @if ($eligible)
-                <div class="flex flex-wrap gap-2">
+                <x-member::panel-actions>
                     <a href="{{ $applyUrl }}" wire:navigate class="fi-btn fi-btn-size-sm fi-color-primary">
                         {{ __('Start application') }}
                     </a>
                     <a href="{{ $calculatorUrl }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-gray">
                         {{ __('Loan calculator') }}
                     </a>
-                </div>
+                </x-member::panel-actions>
             @else
                 <x-member::notice tone="amber">
                     <p class="m-0">{{ $eligibilityReason ?? __('You are not eligible to apply for a loan at this time.') }}</p>

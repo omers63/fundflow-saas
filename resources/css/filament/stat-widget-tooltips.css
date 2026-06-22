@@ -41,6 +41,16 @@
     max-width: 100%;
 }
 
+.fi-body .ff-app-insights-kpi-strip .grid > * {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.fi-body .ff-stat-line {
+    min-width: 0;
+    max-width: 100%;
+}
+
 .fi-body .ff-app-insights-kpi > p,
 .fi-body .ff-app-insights-kpi .ff-stat-line {
     display: block;
@@ -62,4 +72,39 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.fi-body .ff-member-stat-card__label,
+.fi-body .ff-member-stat-card__value,
+.fi-body .ff-member-stat-card__hint {
+    display: block;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.fi-body .ff-member-stat-card .ff-member-amount {
+    display: inline-flex;
+    max-width: 100%;
+    min-width: 0;
+    vertical-align: bottom;
+}
+
+.fi-body .ff-member-stat-card .ff-member-amount__digits {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fi-body .ff-tenant-dashboard-kpi {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.fi-body .ff-tenant-dashboard-kpi > p {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }

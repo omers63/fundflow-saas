@@ -75,10 +75,10 @@
                 };
             @endphp
             <a href="{{ $stat['url'] }}"
-                class="group flex flex-col gap-1 rounded-xl border border-gray-200 bg-white px-4 py-3.5 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900">
-                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ $stat['label'] }}</p>
-                <p class="text-[26px] font-bold tabular-nums leading-none text-gray-900 dark:text-white">{{ $stat['value'] }}</p>
-                <p class="{{ $subColor }} text-[11px] font-medium">{{ $stat['sub'] }}</p>
+                class="ff-tenant-dashboard-kpi group flex min-w-0 flex-col gap-1 overflow-hidden rounded-xl border border-gray-200 bg-white px-4 py-3.5 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900">
+                <p class="truncate text-[10px] font-semibold uppercase tracking-wide text-gray-400" title="{{ $stat['label'] }}">{{ $stat['label'] }}</p>
+                <p class="truncate text-[26px] font-bold tabular-nums leading-none text-gray-900 dark:text-white" title="{{ $stat['value'] }}">{{ $stat['value'] }}</p>
+                <p class="{{ $subColor }} truncate text-[11px] font-medium" title="{{ $stat['sub'] }}">{{ $stat['sub'] }}</p>
             </a>
         @endforeach
     </div>
@@ -100,25 +100,25 @@
             @endif
         </div>
         <div class="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
-            <div>
-                <p class="text-[10px] uppercase text-gray-400">{{ __('Master cash') }}</p>
-                <p class="text-sm font-bold tabular-nums text-gray-900 dark:text-white">{!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['master_cash']) !!}</p>
-                <p class="text-[10px] text-gray-500">{{ __('Members') }}: {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['member_cash']) !!}</p>
+            <div class="min-w-0">
+                <p class="truncate text-[10px] uppercase text-gray-400">{{ __('Master cash') }}</p>
+                <p class="truncate text-sm font-bold tabular-nums text-gray-900 dark:text-white">{!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['master_cash']) !!}</p>
+                <p class="truncate text-[10px] text-gray-500">{{ __('Members') }}: {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['member_cash']) !!}</p>
             </div>
-            <div>
-                <p class="text-[10px] uppercase text-gray-400">{{ __('Master fund') }}</p>
-                <p class="text-sm font-bold tabular-nums text-gray-900 dark:text-white">{!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['master_fund']) !!}</p>
-                <p class="text-[10px] text-gray-500">{{ __('Members') }}: {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['member_fund']) !!}</p>
+            <div class="min-w-0">
+                <p class="truncate text-[10px] uppercase text-gray-400">{{ __('Master fund') }}</p>
+                <p class="truncate text-sm font-bold tabular-nums text-gray-900 dark:text-white">{!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['master_fund']) !!}</p>
+                <p class="truncate text-[10px] text-gray-500">{{ __('Members') }}: {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['member_fund']) !!}</p>
             </div>
-            <div>
-                <p class="text-[10px] uppercase text-gray-400">{{ __('Pool solvency') }}</p>
-                <p class="text-sm font-bold tabular-nums text-gray-900 dark:text-white">
+            <div class="min-w-0">
+                <p class="truncate text-[10px] uppercase text-gray-400">{{ __('Pool solvency') }}</p>
+                <p class="truncate text-sm font-bold tabular-nums text-gray-900 dark:text-white">
                     {{ $pool['solvency_ratio'] !== null ? $pool['solvency_ratio'].'×' : '—' }}
                 </p>
-                <p class="text-[10px] text-gray-500">{{ __('vs loan exposure') }}</p>
+                <p class="truncate text-[10px] text-gray-500">{{ __('vs loan exposure') }}</p>
             </div>
-            <div>
-                <p class="text-[10px] uppercase text-gray-400">{{ __('Pool drift') }}</p>
+            <div class="min-w-0">
+                <p class="truncate text-[10px] uppercase text-gray-400">{{ __('Pool drift') }}</p>
                 <p @class([
                     'text-sm font-bold tabular-nums',
                     'text-red-600 dark:text-red-400' => $pool['has_drift'],
@@ -126,7 +126,7 @@
                 ])>
                     {{ $pool['has_drift'] ? __('Variance detected') : __('Balanced') }}
                 </p>
-                <p class="text-[10px] text-gray-500">{{ __('Cash drift') }} {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['cash_drift']) !!} · {{ __('Fund drift') }} {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['fund_drift']) !!}</p>
+                <p class="truncate text-[10px] text-gray-500">{{ __('Cash drift') }} {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['cash_drift']) !!} · {{ __('Fund drift') }} {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['fund_drift']) !!}</p>
             </div>
         </div>
         @if (! empty($pool['sparkline']))

@@ -23,12 +23,12 @@
 
         <div
             class="grid grid-cols-2 gap-2 rounded-xl border border-gray-200/80 bg-white px-3 py-2 text-xs shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:grid-cols-4">
-            <div>
+            <div class="ff-member-exposure-stat min-w-0">
                 <p class="text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ __('Outstanding EMIs') }}</p>
                 <p class="font-semibold tabular-nums text-gray-900 dark:text-white">{{ $d['exposure']['outstanding_emis'] }}</p>
             </div>
-            <div>
-                <p class="text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ __('Overdue EMIs') }}</p>
+            <div class="ff-member-exposure-stat min-w-0">
+                <p class="truncate text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ __('Overdue EMIs') }}</p>
                 <p @class([
                     'font-semibold tabular-nums',
                     (int) $d['exposure']['overdue_emis'] > 0
@@ -36,8 +36,8 @@
                         : 'text-gray-900 dark:text-white',
                 ])>{{ $d['exposure']['overdue_emis'] }}</p>
             </div>
-            <div>
-                <p class="text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ __('Liability on you') }}</p>
+            <div class="ff-member-exposure-stat min-w-0">
+                <p class="truncate text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ __('Liability on you') }}</p>
                 <p @class([
                     'font-semibold tabular-nums',
                     (int) $d['exposure']['liability_on_you'] > 0
@@ -45,8 +45,8 @@
                         : 'text-gray-900 dark:text-white',
                 ])>{{ $d['exposure']['liability_on_you'] }}</p>
             </div>
-            <div>
-                <p class="text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ __('At default risk') }}</p>
+            <div class="ff-member-exposure-stat min-w-0">
+                <p class="truncate text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ __('At default risk') }}</p>
                 <p @class([
                     'font-semibold tabular-nums',
                     (int) $d['exposure']['at_risk_loans'] > 0

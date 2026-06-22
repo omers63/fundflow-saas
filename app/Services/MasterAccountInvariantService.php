@@ -31,23 +31,19 @@ class MasterAccountInvariantService
      */
     public function check(): array
     {
-        $masterFund = (float) (Account::masterFund()?->balance ?? 0);
+        $masterFundAccount = Account::masterFund();
+        $masterFund = (float) ($masterFundAccount?->balance ?? 0);
         $masterInvest = Account::masterInvest();
         $masterInvestFromFundCredits = $masterInvest === null
             ? 0.0
-            : (float) Transaction::query()
-                ->where('account_id', $masterInvest->id)
-                ->where('type', 'credit')
-                ->where('description', 'like', '%(reserve funding)%')
-                ->sum('amount');
+            : $this->sumTransactionsWithDescriptionSuffix($masterInvest->id, 'credit', '(reserve funding)');
         $masterExpense = Account::masterExpense();
         $masterExpenseFromFundCredits = $masterExpense === null
             ? 0.0
-            : (float) Transaction::query()
-                ->where('account_id', $masterExpense->id)
-                ->where('type', 'credit')
-                ->where('description', 'like', '%(reserve funding)%')
-                ->sum('amount');
+            : $this->sumTransactionsWithDescriptionSuffix($masterExpense->id, 'credit', '(reserve funding)');
+        $masterFundFromInvestReturns = $masterFundAccount === null
+            ? 0.0
+            : $this->sumTransactionsWithDescriptionSuffix($masterFundAccount->id, 'credit', '(invest return to fund)');
         $masterCash = (float) (Account::masterCash()?->balance ?? 0);
 
         $memberFundSum = (float) Account::query()
@@ -60,7 +56,10 @@ class MasterAccountInvariantService
             ->where('type', 'cash')
             ->sum('balance');
 
-        $masterFundPool = $masterFund + $masterInvestFromFundCredits + $masterExpenseFromFundCredits;
+        $masterFundPool = $masterFund
+            - $masterFundFromInvestReturns
+            + $masterInvestFromFundCredits
+            + $masterExpenseFromFundCredits;
         $expectedMasterFund = $memberFundSum;
 
         $tolerance = ContributionPolicySettings::reconTolerance();
@@ -97,5 +96,26 @@ class MasterAccountInvariantService
                 'cash_delta' => number_format($result['cash_delta'], 2),
             ],
         ));
+    }
+
+    private function sumTransactionsWithDescriptionSuffix(int $accountId, string $type, string $englishSuffix): float
+    {
+        $suffixes = [$englishSuffix];
+
+        $translatedSuffix = trim(__(':description '.$englishSuffix, ['description' => '']));
+
+        if ($translatedSuffix !== '' && $translatedSuffix !== $englishSuffix) {
+            $suffixes[] = $translatedSuffix;
+        }
+
+        return (float) Transaction::query()
+            ->where('account_id', $accountId)
+            ->where('type', $type)
+            ->where(function ($query) use ($suffixes): void {
+                foreach (array_unique($suffixes) as $suffix) {
+                    $query->orWhere('description', 'like', '%'.$suffix.'%');
+                }
+            })
+            ->sum('amount');
     }
 }

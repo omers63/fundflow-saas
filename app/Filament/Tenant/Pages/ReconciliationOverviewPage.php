@@ -5,18 +5,22 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Tenant\Concerns\EmbedsAsAuditWorkspacePanel;
+use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\ReconciliationExceptions\Tables\ReconciliationExceptionsTable;
 use App\Filament\Tenant\Support\ReconciliationTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\FundAuditLog;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\ReconciliationSnapshot;
+use App\Services\BankClearingMatchService;
 use App\Services\ReconciliationPdfService;
 use App\Services\ReconciliationReportService;
 use App\Services\ReconciliationService;
 use BackedEnum;
 use Carbon\Carbon;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -33,6 +37,7 @@ use UnitEnum;
 
 class ReconciliationOverviewPage extends Page implements HasTable
 {
+    use EmbedsAsAuditWorkspacePanel;
     use InteractsWithTable;
     use TranslatesPageNavigationLabel;
 
@@ -67,7 +72,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public static function getNavigationBadge(): ?string
     {
-        if (! Schema::hasTable('reconciliation_exceptions')) {
+        if (!Schema::hasTable('reconciliation_exceptions')) {
             return null;
         }
 
@@ -92,7 +97,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public function getSubheading(): ?string
     {
-        return __('Audit snapshots, exception queue, and ledger integrity checks.');
+        return __('Work the exception queue, review snapshots, and keep bank clearing in sync.');
     }
 
     /**
@@ -113,14 +118,14 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public function mount(): void
     {
-        if (! array_key_exists($this->sideTab, $this->getReconciliationTabs())) {
+        if (!array_key_exists($this->sideTab, $this->getReconciliationTabs())) {
             $this->sideTab = 'overview';
         }
     }
 
     public function setSideTab(string $tab): void
     {
-        if (! array_key_exists($tab, $this->getReconciliationTabs())) {
+        if (!array_key_exists($tab, $this->getReconciliationTabs())) {
             return;
         }
 
@@ -148,18 +153,65 @@ class ReconciliationOverviewPage extends Page implements HasTable
             'history' => ReconciliationException::query()
                 ->where('status', ReconciliationException::STATUS_RESOLVED)
                 ->orderByDesc('resolved_at'),
-            'exceptions' => ReconciliationException::query()->orderByDesc('raised_at'),
+            'exceptions' => ReconciliationException::query()
+                ->whereIn('status', [
+                    ReconciliationException::STATUS_OPEN,
+                    ReconciliationException::STATUS_ESCALATED,
+                ])
+                ->orderByDesc('raised_at'),
             default => ReconciliationException::query(),
         };
 
         return ReconciliationExceptionsTable::configure(
-            $table->query($query)
+            $table->query($query),
+            queueOnly: $this->sideTab === 'exceptions',
         );
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public function getOpenExceptionCountByDomain(): array
+    {
+        if (!Schema::hasTable('reconciliation_exceptions')) {
+            return [];
+        }
+
+        try {
+            return ReconciliationException::query()
+                ->open()
+                ->selectRaw('domain, COUNT(*) as aggregate')
+                ->groupBy('domain')
+                ->pluck('aggregate', 'domain')
+                ->map(fn($count): int => (int) $count)
+                ->all();
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    public function getPendingBankClearanceCount(): int
+    {
+        try {
+            return app(BankClearingMatchService::class)->pendingOperationalClearanceCount();
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
+    public function getBankClearingUrl(): string
+    {
+        return BankAccountsResource::listUrl('clearance');
+    }
+
+    public function getReconciliationSettingsUrl(): string
+    {
+        return Settings::getUrl(['settingsTab' => 'reconciliation::tab']);
     }
 
     public function getOpenExceptionCount(): int
     {
-        if (! Schema::hasTable('reconciliation_exceptions')) {
+        if (!Schema::hasTable('reconciliation_exceptions')) {
             return 0;
         }
 
@@ -172,7 +224,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public function getResolvedExceptionCount(): int
     {
-        if (! Schema::hasTable('reconciliation_exceptions')) {
+        if (!Schema::hasTable('reconciliation_exceptions')) {
             return 0;
         }
 
@@ -187,7 +239,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public function getLastNightlyBatch(): ?FundAuditLog
     {
-        if (! Schema::hasTable('fund_audit_logs')) {
+        if (!Schema::hasTable('fund_audit_logs')) {
             return null;
         }
 
@@ -226,9 +278,88 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     protected function getHeaderActions(): array
     {
-        $canRun = fn (): bool => auth('tenant')->user()?->is_admin === true;
+        return [];
+    }
 
-        $bankSchema = [
+    /**
+     * @return array<int, Action|ActionGroup>
+     */
+    protected function workspacePanelActions(): array
+    {
+        $canRun = fn(): bool => auth('tenant')->user()?->is_admin === true;
+        $bankSchema = $this->reconciliationBankSchema();
+
+        return [
+            Action::make('run_realtime')
+                ->label(__('Run now'))
+                ->icon('heroicon-o-play')
+                ->color('primary')
+                ->visible($canRun)
+                ->longRunning()
+                ->longRunningMessage(__('Running real-time reconciliation checks and saving a snapshot.'))
+                ->schema($bankSchema)
+                ->modalHeading(__('Run real-time reconciliation'))
+                ->modalDescription(__('Recomputes all checks as of this moment and stores a snapshot tagged realtime.'))
+                ->action(fn(array $data) => $this->executeRun(ReconciliationSnapshot::MODE_REALTIME, $this->optionsFromActionData($data))),
+            ActionGroup::make([
+                Action::make('run_nightly')
+                    ->label(__('Nightly batch'))
+                    ->icon('heroicon-o-arrow-path')
+                    ->requiresConfirmation()
+                    ->longRunningMessage(__('Running the nightly reconciliation batch. This can take a minute on large tenants.'))
+                    ->modalHeading(__('Run reconciliation batch'))
+                    ->modalDescription(__('Runs the nightly reconciliation scan, auto-resolves eligible issues, and refreshes the exception queue.'))
+                    ->action(function (): void {
+                        $result = app(ReconciliationService::class)->runNightlyBatch();
+
+                        Notification::make()
+                            ->title($result['halted']
+                                ? __('Reconciliation halted')
+                                : __('Reconciliation complete'))
+                            ->body(__('Raised: :raised | Resolved: :resolved', [
+                                'raised' => $result['raised'],
+                                'resolved' => $result['resolved'],
+                            ]))
+                            ->color($result['halted'] ? 'danger' : 'success')
+                            ->send();
+
+                        $this->resetTable();
+                        $this->dispatch('$refresh');
+                    }),
+                Action::make('run_daily')
+                    ->label(__('Daily snapshot'))
+                    ->icon('heroicon-o-calendar-days')
+                    ->longRunning()
+                    ->longRunningMessage(__('Recording the daily snapshot and running ledger checks.'))
+                    ->schema($bankSchema)
+                    ->modalHeading(__('Record daily snapshot'))
+                    ->modalDescription(__('Uses yesterday’s calendar window (app timezone) for period metrics, plus full ledger checks as of now.'))
+                    ->action(fn(array $data) => $this->executeRun(ReconciliationSnapshot::MODE_DAILY, $this->optionsFromActionData($data))),
+                Action::make('run_monthly')
+                    ->label(__('Monthly snapshot'))
+                    ->icon('heroicon-o-calendar')
+                    ->longRunning()
+                    ->longRunningMessage(__('Recording the monthly snapshot and running ledger checks.'))
+                    ->schema($bankSchema)
+                    ->modalHeading(__('Record monthly snapshot'))
+                    ->modalDescription(__('Uses the previous calendar month for period metrics, plus full ledger checks as of now.'))
+                    ->action(fn(array $data) => $this->executeRun(ReconciliationSnapshot::MODE_MONTHLY, $this->optionsFromActionData($data))),
+            ])
+                ->label(__('More runs'))
+                ->icon('heroicon-o-ellipsis-horizontal')
+                ->color('gray')
+                ->button()
+                ->dropdownPlacement('bottom-end')
+                ->visible($canRun),
+        ];
+    }
+
+    /**
+     * @return array<int, DatePicker|TextInput|Toggle>
+     */
+    protected function reconciliationBankSchema(): array
+    {
+        return [
             TextInput::make('declared_bank_balance')
                 ->label(__('Statement / bank closing balance'))
                 ->numeric()
@@ -241,62 +372,6 @@ class ReconciliationOverviewPage extends Page implements HasTable
             Toggle::make('bank_mismatch_treat_as_critical')
                 ->label(__('Treat bank vs book variance as critical (not only warning)'))
                 ->default(false),
-        ];
-
-        return [
-            Action::make('run_nightly')
-                ->label(__('Run reconciliation batch'))
-                ->icon('heroicon-o-arrow-path')
-                ->color('warning')
-                ->visible($canRun)
-                ->requiresConfirmation()
-                ->action(function (): void {
-                    $result = app(ReconciliationService::class)->runNightlyBatch();
-
-                    Notification::make()
-                        ->title($result['halted']
-                            ? __('Reconciliation halted')
-                            : __('Reconciliation complete'))
-                        ->body(__('Raised: :raised | Resolved: :resolved', [
-                            'raised' => $result['raised'],
-                            'resolved' => $result['resolved'],
-                        ]))
-                        ->color($result['halted'] ? 'danger' : 'success')
-                        ->send();
-
-                    $this->resetTable();
-                    $this->dispatch('$refresh');
-                }),
-
-            Action::make('run_realtime')
-                ->label(__('Run now (real-time)'))
-                ->icon('heroicon-o-play')
-                ->color('primary')
-                ->visible($canRun)
-                ->schema($bankSchema)
-                ->modalHeading(__('Run real-time reconciliation'))
-                ->modalDescription(__('Recomputes all checks as of this moment and stores a snapshot tagged realtime.'))
-                ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_REALTIME, $this->optionsFromActionData($data))),
-
-            Action::make('run_daily')
-                ->label(__('Daily snapshot'))
-                ->icon('heroicon-o-calendar-days')
-                ->color('gray')
-                ->visible($canRun)
-                ->schema($bankSchema)
-                ->modalHeading(__('Record daily snapshot'))
-                ->modalDescription(__('Uses yesterday’s calendar window (app timezone) for period metrics, plus full ledger checks as of now.'))
-                ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_DAILY, $this->optionsFromActionData($data))),
-
-            Action::make('run_monthly')
-                ->label(__('Monthly snapshot'))
-                ->icon('heroicon-o-calendar')
-                ->color('gray')
-                ->visible($canRun)
-                ->schema($bankSchema)
-                ->modalHeading(__('Record monthly snapshot'))
-                ->modalDescription(__('Uses the previous calendar month for period metrics, plus full ledger checks as of now.'))
-                ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_MONTHLY, $this->optionsFromActionData($data))),
         ];
     }
 
@@ -341,7 +416,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
         }
 
         $snapshot = ReconciliationSnapshot::query()->findOrFail($id);
-        $filename = 'reconciliation-snapshot-'.$snapshot->id.'-'.$snapshot->as_of->format('Y-m-d-His').'.json';
+        $filename = 'reconciliation-snapshot-' . $snapshot->id . '-' . $snapshot->as_of->format('Y-m-d-His') . '.json';
 
         return response()->streamDownload(
             function () use ($snapshot): void {
@@ -428,7 +503,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     protected function authorizeExport(): void
     {
-        if (! $this->canExportDownloads()) {
+        if (!$this->canExportDownloads()) {
             abort(403);
         }
     }

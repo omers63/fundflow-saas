@@ -49,25 +49,12 @@
         </div>
 
         @if ($member)
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                    <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">{{ __('Member since') }}</p>
-                    <p class="text-xl font-bold text-gray-900 dark:text-white">
-                        {{ $member->joined_at?->translatedFormat('d M Y') ?? '—' }}
-                    </p>
-                </div>
-                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                    <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">{{ __('Monthly contribution') }}</p>
-                    <p class="text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                        {!! \App\Filament\Support\MoneyDisplay::html((float) $member->monthly_contribution_amount)?->toHtml() !!}
-                    </p>
-                </div>
-                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                    <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">{{ __('Fund balance') }}</p>
-                    <p class="text-xl font-bold text-indigo-600 dark:text-indigo-400">
-                        {!! \App\Filament\Support\MoneyDisplay::html($member->getFundBalance())?->toHtml() !!}
-                    </p>
-                </div>
+            <div class="ff-member-profile-stats grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <x-member::stat-card :label="__('Member since')"
+                    :value="$member->joined_at?->translatedFormat('d M Y') ?? '—'" />
+                <x-member::stat-card :label="__('Monthly contribution')"
+                    :amount="(float) $member->monthly_contribution_amount" />
+                <x-member::stat-card :label="__('Fund balance')" :amount="$member->getFundBalance()" />
             </div>
         @endif
 

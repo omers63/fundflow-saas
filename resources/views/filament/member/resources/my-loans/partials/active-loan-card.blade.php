@@ -1,54 +1,61 @@
 @php
     $showSchedule = $showSchedule ?? ($loan['show_schedule'] ?? true);
     $showSettleButton = $loan['show_settle_button'] ?? true;
+    $hasActions = ($showSettleButton && filled($loan['settle_url'] ?? null))
+        || filled($loan['schedule_pdf_url'] ?? null);
 @endphp
 
-<x-member::panel :title="$loan['label']" :link="$loan['view_url']" :link-label="__('Details')">
-    @if (filled($loan['meta'] ?? null))
-        <p class="ff-member-dashboard-meta mb-2">{{ $loan['meta'] }}</p>
-    @endif
+<x-member::panel :title="$loan['label']" :link="$loan['view_url']" :link-label="__('Details')"
+    class="ff-member-loan-card">
+    <div class="ff-member-loan-card__summary">
+        @if (filled($loan['meta'] ?? null))
+            <p class="ff-member-dashboard-meta mb-2">{{ $loan['meta'] }}</p>
+        @endif
 
-    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div class="flex items-center gap-2">
-            <x-member::amount :value="$loan['outstanding']" :currency="$currency" class="text-xl font-bold" />
-            <x-member::chip :variant="$loan['status_variant'] ?? 'green'">{{ $loan['status_label'] }}</x-member::chip>
-        </div>
-        <p class="ff-member-dashboard-meta m-0">{{ $loan['installments_label'] }}</p>
-    </div>
-
-    <x-member::progress-bar :percent="$loan['repay_percent'] ?? 0" class="mb-2" />
-    <p class="ff-member-dashboard-meta mb-3">{{ $loan['repaid_label'] }}</p>
-
-    @if (!empty($loan['next_emi']))
-        <div class="ff-member-dashboard-emi-row mb-3">
-            <div>
-                <p class="ff-member-dashboard-meta m-0">{{ __('Next EMI due') }}</p>
-                <p class="m-0 text-sm font-semibold">{{ $loan['next_emi']['due_date'] }}</p>
+        <div class="ff-member-loan-card__header-row">
+            <div class="ff-member-loan-card__header-main">
+                <x-member::amount :value="$loan['outstanding']" :currency="$currency" class="text-xl font-bold" />
+                <x-member::chip :variant="$loan['status_variant'] ?? 'green'">{{ $loan['status_label'] }}</x-member::chip>
             </div>
-            <x-member::amount :value="$loan['next_emi']['amount']" :currency="$currency"
-                class="text-base font-bold text-primary-700" />
+            <p class="ff-member-loan-card__meta-line ff-member-dashboard-meta">{{ $loan['installments_label'] }}</p>
         </div>
-    @endif
 
-    @if (filled($loan['guarantor_name'] ?? null))
-        <p class="ff-member-dashboard-meta mb-3">
-            {{ __('Guarantor') }}: {{ $loan['guarantor_name'] }}
-        </p>
-    @endif
+        <x-member::progress-bar :percent="$loan['repay_percent'] ?? 0" class="mb-2" />
+        <p class="ff-member-dashboard-meta mb-3">{{ $loan['repaid_label'] }}</p>
 
-    <div class="mb-3 flex flex-wrap gap-2">
-        @if (filled($loan['schedule_pdf_url'] ?? null))
-            <a href="{{ $loan['schedule_pdf_url'] }}" class="fi-btn fi-btn-size-sm fi-outlined fi-color-gray"
-                target="_blank" rel="noopener">
-                {{ __('Download schedule PDF') }}
-            </a>
+        @if (!empty($loan['next_emi']))
+            <div class="ff-member-dashboard-emi-row mb-3">
+                <div class="min-w-0">
+                    <p class="ff-member-dashboard-meta m-0">{{ __('Next EMI due') }}</p>
+                    <p class="m-0 text-sm font-semibold">{{ $loan['next_emi']['due_date'] }}</p>
+                </div>
+                <x-member::amount :value="$loan['next_emi']['amount']" :currency="$currency"
+                    class="text-base font-bold text-primary-700" />
+            </div>
         @endif
-        @if ($showSettleButton)
-            <a href="{{ $loan['settle_url'] }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-primary">
-                {{ __('Settle loan') }}
-            </a>
+
+        @if (filled($loan['guarantor_name'] ?? null))
+            <p class="ff-member-dashboard-meta mb-0">
+                {{ __('Guarantor') }}: {{ $loan['guarantor_name'] }}
+            </p>
         @endif
     </div>
+
+    @if ($hasActions)
+        <x-member::panel-actions>
+            @if (filled($loan['schedule_pdf_url'] ?? null))
+                <a href="{{ $loan['schedule_pdf_url'] }}" class="fi-btn fi-btn-size-sm fi-outlined fi-color-gray"
+                    target="_blank" rel="noopener">
+                    {{ __('Download schedule PDF') }}
+                </a>
+            @endif
+            @if ($showSettleButton && filled($loan['settle_url'] ?? null))
+                <a href="{{ $loan['settle_url'] }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-primary">
+                    {{ __('Settle loan') }}
+                </a>
+            @endif
+        </x-member::panel-actions>
+    @endif
 
     @if ($showSchedule)
         @livewire(\App\Filament\Member\Widgets\MemberLoanInstallmentsTableWidget::class, ['loanId' => $loan['id']], key('loan-installments-' . $loan['id']))

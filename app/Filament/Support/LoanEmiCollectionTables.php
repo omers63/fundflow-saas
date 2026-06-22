@@ -27,7 +27,7 @@ final class LoanEmiCollectionTables
 
         return TableGrouping::apply(
             $table
-                ->query(fn() => $catalog->membersWithCollectableEmisQuery($month, $year))
+                ->query(fn () => $catalog->membersWithCollectableEmisQuery($month, $year))
                 ->heading(__('To collect – EMIs through :period', [
                     'period' => $catalog->periodLabel($month, $year),
                 ]))
@@ -41,21 +41,22 @@ final class LoanEmiCollectionTables
                         ->wrap(),
                     TextColumn::make('pending_emis')
                         ->label(__('Pending EMIs'))
-                        ->state(fn(Member $record): int => $catalog->pendingInstallmentCountForMember($record, $month, $year))
+                        ->state(fn (Member $record): int => $catalog->pendingInstallmentCountForMember($record, $month, $year))
                         ->alignEnd()
                         ->searchable(false)
                         ->sortable(false),
                     TextColumn::make('total_due')
                         ->label(__('Total due'))
-                        ->state(fn(Member $record): float => $catalog->requiredCashForMember($record, $month, $year))
+                        ->state(fn (Member $record): float => $catalog->requiredCashForMember($record, $month, $year))
                         ->money($currency)
                         ->alignEnd()
                         ->searchable(false)
                         ->sortable(false),
                     TextColumn::make('available_cash')
                         ->label(__('Cash balance'))
-                        ->state(fn(Member $record): float => $record->getCashBalance())
+                        ->state(fn (Member $record): float => $record->getCashBalance())
                         ->money($currency)
+                        ->color(fn (Member $record): string => $record->getCashBalance() < 0 ? 'danger' : 'gray')
                         ->alignEnd()
                         ->searchable(false)
                         ->sortable(false),
@@ -67,7 +68,7 @@ final class LoanEmiCollectionTables
                                 : __('Insufficient');
                         })
                         ->badge()
-                        ->color(fn(string $state): string => $state === __('Yes') ? 'success' : 'warning')
+                        ->color(fn (string $state): string => $state === __('Yes') ? 'success' : 'warning')
                         ->searchable(false)
                         ->sortable(false),
                     TextColumn::make('parent.name')
@@ -104,7 +105,7 @@ final class LoanEmiCollectionTables
                                 $skipped = 0;
 
                                 foreach ($records as $record) {
-                                    if (!$record instanceof Member) {
+                                    if (! $record instanceof Member) {
                                         continue;
                                     }
 
@@ -146,27 +147,27 @@ final class LoanEmiCollectionTables
 
         return TableGrouping::apply(
             $table
-                ->query(fn() => $catalog->collectedInstallmentsQuery($month, $year))
+                ->query(fn () => $catalog->collectedInstallmentsQuery($month, $year))
                 ->heading(__('Collected – EMIs due through :period', [
                     'period' => $catalog->periodLabel($month, $year),
                 ]))
                 ->columns([
                     TextColumn::make('loan.member.member_number')
                         ->label(__('Member #'))
-                        ->url(fn(LoanInstallment $record): ?string => MemberTableColumns::resolveMemberUrl(
+                        ->url(fn (LoanInstallment $record): ?string => MemberTableColumns::resolveMemberUrl(
                             'loan.member.name',
                             $record,
                         )),
                     TextColumn::make('loan.member.name')
                         ->label(__('Member'))
                         ->wrap()
-                        ->url(fn(LoanInstallment $record): ?string => MemberTableColumns::resolveMemberUrl(
+                        ->url(fn (LoanInstallment $record): ?string => MemberTableColumns::resolveMemberUrl(
                             'loan.member.name',
                             $record,
                         )),
                     TextColumn::make('loan_id')
                         ->label(__('Loan'))
-                        ->formatStateUsing(fn(int $state): string => '#' . $state),
+                        ->formatStateUsing(fn (int $state): string => '#'.$state),
                     TextColumn::make('installment_number')
                         ->label(__('#'))
                         ->sortable(),

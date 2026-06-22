@@ -46,13 +46,26 @@ class MemberLoanInsightsWidget extends Widget
         $memberId = CurrentMember::id();
 
         if ($this->resolvedContext() === 'loan_detail') {
-            $loan = $this->record instanceof Loan
-                ? $this->record
-                : (is_int($this->record) ? Loan::query()->find($this->record) : null);
+            $loan = $this->resolveLoan();
 
             return $loan ? app(LoanInsightsService::class)->loanDetailSnapshot($loan) : [];
         }
 
         return app(LoanInsightsService::class)->memberPortfolioSnapshot($memberId);
+    }
+
+    protected function resolveLoan(): ?Loan
+    {
+        $loanId = match (true) {
+            $this->record instanceof Loan => $this->record->getKey(),
+            is_int($this->record) => $this->record,
+            default => null,
+        };
+
+        if ($loanId === null) {
+            return null;
+        }
+
+        return Loan::query()->find($loanId);
     }
 }

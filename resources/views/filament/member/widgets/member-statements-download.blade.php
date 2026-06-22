@@ -2,7 +2,7 @@
     <p class="mb-3 text-sm text-gray-600">
         {{ __('Export your activity or download monthly statements and loan schedules.') }}
     </p>
-    <div class="flex flex-wrap gap-2">
+    <x-member::panel-actions>
         <a href="{{ $activityPageUrl }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-gray">
             {{ __('Activity & CSV export') }}
         </a>
@@ -22,5 +22,5 @@
                 {{ __('Loan schedules') }}
             </a>
         @endif
-    </div>
+    </x-member::panel-actions>
 </x-member::panel>

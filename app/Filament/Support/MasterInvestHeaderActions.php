@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Filament\Support;
 
 use App\Models\Tenant\Account;
-use App\Services\AccountingService;
-use App\Services\MasterInvestDisbursementService;
-use App\Services\MasterInvestReturnService;
+use App\Services\MasterInvestInService;
+use App\Services\MasterInvestOutService;
 use App\Support\BusinessDay;
 use Carbon\Carbon;
 use Closure;
@@ -30,106 +29,78 @@ final class MasterInvestHeaderActions
      */
     public static function make(Closure $resolveAccount, ?Closure $after = null): array
     {
-        $fundInvest = Action::make('fundInvest')
-            ->label(__('Fund Invest'))
-            ->icon('heroicon-o-arrow-down-circle')
-            ->color('success')
-            ->visible(fn (): bool => self::isMasterInvestAdmin($resolveAccount))
-            ->modalHeading(__('Fund Invest'))
-            ->modalDescription(__('Transfer funds from Master Fund into the Master Invest account.'))
-            ->modalWidth('md')
-            ->schema(self::formSchema(__('Invest funding from master fund')))
-            ->action(function (array $data, Action $action, AccountingService $accounting) use ($resolveAccount): void {
-                $account = $resolveAccount();
-
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $accounting->fundReserveAccountFromMasterFund(
-                        $account,
-                        (float) $data['amount'],
-                        (string) $data['description'],
-                        Carbon::parse($data['transacted_at']),
-                    ),
-                    __('Funding failed'),
-                )) {
-                    return;
-                }
-
-                Notification::make()
-                    ->title(__('Funding posted'))
-                    ->success()
-                    ->send();
-            });
-
-        $disburseInvest = Action::make('disburseInvest')
-            ->label(__('Disburse Invest'))
-            ->icon('heroicon-o-arrow-up-circle')
+        $investOut = Action::make('investOut')
+            ->label(__('Invest Out'))
+            ->icon('heroicon-o-arrow-up-tray')
             ->color('warning')
             ->visible(fn (): bool => self::isMasterInvestAdmin($resolveAccount))
-            ->modalHeading(__('Disburse Invest'))
-            ->modalDescription(__('Debits master invest only, then creates a pending bank line to match when the payment appears on an imported statement.'))
+            ->modalHeading(__('Invest Out'))
+            ->modalDescription(__('Transfers funds from Master Fund into Master Invest, then debits Master Invest and creates a pending bank line to match when the payment appears on an imported statement.'))
             ->modalWidth('md')
             ->schema(self::formSchema())
-            ->action(function (array $data, Action $action, MasterInvestDisbursementService $investDisbursements) use ($resolveAccount): void {
+            ->action(function (array $data, Action $action, MasterInvestOutService $investOutService) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $investDisbursements->disburse(
-                        $account,
-                        (float) $data['amount'],
-                        (string) $data['description'],
-                        Carbon::parse($data['transacted_at']),
-                    ),
-                    __('Disbursement failed'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $investOutService->investOut(
+                            $account,
+                            (float) $data['amount'],
+                            (string) $data['description'],
+                            Carbon::parse($data['transacted_at']),
+                        ),
+                        __('Invest out failed'),
+                    )
+                ) {
                     return;
                 }
 
                 Notification::make()
-                    ->title(__('Disbursement posted'))
+                    ->title(__('Invest out posted'))
                     ->success()
                     ->send();
             });
 
-        $recordReturn = Action::make('recordReturn')
-            ->label(__('Record Return'))
-            ->icon('heroicon-o-arrow-path-rounded-square')
-            ->color('info')
+        $investIn = Action::make('investIn')
+            ->label(__('Invest In'))
+            ->icon('heroicon-o-arrow-down-tray')
+            ->color('success')
             ->visible(fn (): bool => self::isMasterInvestAdmin($resolveAccount))
-            ->modalHeading(__('Record Return'))
-            ->modalDescription(__('Credits master invest only, then creates a pending bank line to match when the receipt appears on an imported statement.'))
+            ->modalHeading(__('Invest In'))
+            ->modalDescription(__('Credits master invest, transfers the return to master fund, then creates a pending bank line to match when the receipt appears on an imported statement.'))
             ->modalWidth('md')
             ->schema(self::formSchema(__('Investment return')))
-            ->action(function (array $data, Action $action, MasterInvestReturnService $investReturns) use ($resolveAccount): void {
+            ->action(function (array $data, Action $action, MasterInvestInService $investInService) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
-                if (! ActionModalFailure::attemptThrowable(
-                    $action,
-                    fn () => $investReturns->record(
-                        $account,
-                        (float) $data['amount'],
-                        (string) $data['description'],
-                        Carbon::parse($data['transacted_at']),
-                    ),
-                    __('Return posting failed'),
-                )) {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $investInService->investIn(
+                            $account,
+                            (float) $data['amount'],
+                            (string) $data['description'],
+                            Carbon::parse($data['transacted_at']),
+                        ),
+                        __('Invest in failed'),
+                    )
+                ) {
                     return;
                 }
 
                 Notification::make()
-                    ->title(__('Investment return recorded'))
+                    ->title(__('Invest in posted'))
                     ->success()
                     ->send();
             });
 
         if ($after !== null) {
-            $fundInvest->after($after);
-            $disburseInvest->after($after);
-            $recordReturn->after($after);
+            $investOut->after($after);
+            $investIn->after($after);
         }
 
-        return [$fundInvest, $disburseInvest, $recordReturn];
+        return [$investOut, $investIn];
     }
 
     /**

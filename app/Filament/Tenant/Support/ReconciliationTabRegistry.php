@@ -15,7 +15,7 @@ final class ReconciliationTabRegistry
     {
         return [
             'overview' => __('Overview'),
-            'exceptions' => __('Exceptions'),
+            'exceptions' => __('Queue'),
             'history' => __('History'),
             'snapshots' => __('Snapshots'),
             'methodology' => __('Methodology'),

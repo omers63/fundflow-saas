@@ -12,7 +12,7 @@ final class InsightKpi
     /**
      * KPI card fields for a monetary value (rendered with symbol before digits).
      *
-     * @return array{value: float, currency: string, value_compact: bool}
+     * @return array{value: float, currency: string, value_compact: bool, value_is_amount: true}
      */
     public static function moneyValue(float $amount, string $currency, bool $compact = true): array
     {
@@ -20,6 +20,20 @@ final class InsightKpi
             'value' => $amount,
             'currency' => $currency,
             'value_compact' => $compact,
+            'value_is_amount' => true,
+        ];
+    }
+
+    /**
+     * KPI card fields for a quantity / count (never rendered as currency).
+     *
+     * @return array{value: string, value_is_amount: false}
+     */
+    public static function countValue(int|float|string $count): array
+    {
+        return [
+            'value' => (string) $count,
+            'value_is_amount' => false,
         ];
     }
 

@@ -106,12 +106,14 @@ final class MoneyDisplay
         $precision = $parts['precision'];
 
         if ($precision !== null) {
-            return self::html($parts['amount'], $currency, precision: $precision)
+            return self::html($amount, $currency, precision: $precision)
                 ?? new HtmlString('—');
         }
 
+        $colorClass = $amount < 0 ? ' ff-member-amount--danger' : '';
+
         return new HtmlString(
-            '<span class="ff-member-amount tabular-nums" dir="ltr">'
+            '<span class="ff-member-amount tabular-nums'.$colorClass.'" dir="ltr">'
             .self::symbolSpanHtml($currency)
             .'<span class="ff-member-amount__digits">'.$parts['digits'].'</span>'
             .'</span>'
@@ -199,9 +201,11 @@ final class MoneyDisplay
             return null;
         }
 
-        $colorClass = $signed
-            ? ' ff-member-amount--'.self::color($amount)
-            : '';
+        $colorClass = match (true) {
+            ((float) $amount) < 0 => ' ff-member-amount--danger',
+            $signed => ' ff-member-amount--'.self::color($amount),
+            default => '',
+        };
 
         return new HtmlString(
             '<span class="ff-member-amount tabular-nums'.$colorClass.'" dir="ltr">'
@@ -279,7 +283,7 @@ final class MoneyDisplay
         }
 
         if (is_int($value) || is_float($value)) {
-            return self::html($value, $currency, signed: $signed, precision: $precision)?->toHtml() ?? e('—');
+            return self::html($value, $currency, signed: $signed || (float) $value < 0, precision: $precision)?->toHtml() ?? e('—');
         }
 
         $text = trim((string) $value);
@@ -317,7 +321,7 @@ final class MoneyDisplay
             return self::html(
                 $parsed['amount'],
                 $parsed['currency'] ?? $currency,
-                signed: $signed,
+                signed: $signed || $parsed['amount'] < 0,
                 precision: $parsed['precision'],
             )?->toHtml() ?? e($text);
         }

@@ -8,6 +8,7 @@ use App\Models\Tenant\ReconciliationException;
 use App\Services\AccountingService;
 use App\Services\BankClearingMatchService;
 use App\Services\MasterInvestDisbursementService;
+use App\Services\MasterInvestInService;
 use App\Services\MasterInvestReturnService;
 use Tests\Concerns\InitializesTenancy;
 
@@ -17,6 +18,7 @@ beforeEach(function () {
     $this->initializeTenancy();
     Account::query()->delete();
     BankTransaction::query()->delete();
+    ReconciliationException::query()->delete();
 
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 20_000, 'is_master' => true]);
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 10_000, 'is_master' => true]);
@@ -77,6 +79,28 @@ test('record return credits master invest only and creates positive uncleared ba
         ->and((float) $investReturn->bankTransaction->amount)->toBe(1_200.0);
 });
 
+test('invest in records return on master invest then transfers proceeds to master fund', function () {
+    $masterFund = Account::masterFund();
+    $masterInvest = Account::masterInvest();
+
+    $investReturn = app(MasterInvestInService::class)->investIn(
+        $masterInvest,
+        1_200,
+        'Q1 return',
+    );
+
+    expect((float) $masterFund->fresh()->balance)->toBe(21_200.0)
+        ->and((float) $masterInvest->fresh()->balance)->toBe(0.0)
+        ->and((float) Account::masterCash()->fresh()->balance)->toBe(10_000.0)
+        ->and($masterInvest->transactions()->count())->toBe(2)
+        ->and($masterInvest->transactions()->where('type', 'credit')->count())->toBe(1)
+        ->and($masterInvest->transactions()->where('type', 'debit')->count())->toBe(1)
+        ->and(Account::masterCash()->transactions()->count())->toBe(0)
+        ->and($investReturn->bankTransaction)->not->toBeNull()
+        ->and($investReturn->bankTransaction->is_cleared)->toBeFalse()
+        ->and((float) $investReturn->bankTransaction->amount)->toBe(1_200.0);
+});
+
 test('pending operational clearance scopes invest disbursements and returns to master invest', function () {
     $masterInvest = Account::masterInvest();
     $masterInvest->update(['balance' => 3_000]);
@@ -90,6 +114,6 @@ test('pending operational clearance scopes invest disbursements and returns to m
         ->get();
 
     expect($investScope)->toHaveCount(2)
-        ->and($investScope->pluck('amount')->map(fn($amount): float => (float) $amount)->all())
+        ->and($investScope->pluck('amount')->map(fn ($amount): float => (float) $amount)->all())
         ->toContain(-500.0, 200.0);
 });

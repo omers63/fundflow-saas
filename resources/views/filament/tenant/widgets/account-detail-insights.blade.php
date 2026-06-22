@@ -25,7 +25,7 @@
                                     ? 'text-rose-600 dark:text-rose-400'
                                     : 'text-emerald-600 dark:text-emerald-400',
                             ])>
-                                {!! \App\Filament\Support\MoneyDisplay::markupForDisplay($d['balance_display']) !!}
+                                <x-member::amount :value="$d['balance']" :currency="$d['currency']" />
                             </p>
                             <p class="text-[10px] text-gray-400">{{ __('Current balance') }}</p>
                         </div>

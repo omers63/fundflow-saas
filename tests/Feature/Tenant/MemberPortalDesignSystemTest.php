@@ -154,7 +154,10 @@ test('x-member blade components render prototype class hooks', function () {
         </x-member::panel>
         <x-member::notice tone="amber" :title="__('Reminder')">{{ __('Payment due') }}</x-member::notice>
         <x-member::chip variant="green">{{ __('Active') }}</x-member::chip>
-        <x-member::stat-card :label="__('Balance')" :value="'—'" />
+        <x-member::stat-card :label="__('Balance')" :amount="1234567.89" currency="SAR" />
+        <x-member::panel-actions>
+            <span class="fi-btn fi-btn-size-sm">{{ __('Action') }}</span>
+        </x-member::panel-actions>
         <x-member::quick-action href="#" icon="💰" :title="__('Deposit')" />
         <x-member::progress-bar :percent="65" />
         <x-member::detail-grid :items="[['label' => __('Period'), 'value' => 'Jan 2026']]" />
@@ -168,10 +171,34 @@ test('x-member blade components render prototype class hooks', function () {
         ->toContain('ff-member-notice--amber')
         ->toContain('ff-member-chip--green')
         ->toContain('ff-member-stat-card')
+        ->toContain('ff-member-panel-actions')
+        ->toContain('min-w-0')
+        ->toContain('title="')
         ->toContain('ff-member-quick-action')
         ->toContain('ff-member-progress')
         ->toContain('ff-member-detail-grid')
         ->toContain('ff-member-record-modal');
+});
+
+test('member portal component css clips stat card overflow', function () {
+    $components = file_get_contents(resource_path('css/filament/member/member-portal-components.css'));
+    $currency = file_get_contents(resource_path('css/filament/currency-display.css'));
+    $tooltips = file_get_contents(resource_path('css/filament/stat-widget-tooltips.css'));
+
+    expect($components)
+        ->toContain('.ff-member-stat-card__value')
+        ->toContain('text-overflow: ellipsis')
+        ->toContain('ff-member-fund-account-stats')
+        ->toContain('ff-member-dashboard-insights-stats')
+        ->toContain('ff-member-contribution-option')
+        ->toContain('ff-member-panel-actions');
+
+    expect($currency)
+        ->toContain('.ff-member-stat-card .ff-member-amount')
+        ->toContain('.ff-member-greeting__balance .ff-member-amount')
+        ->toContain('.ff-member-cash-stat .ff-member-amount');
+
+    expect($tooltips)->toContain('.ff-app-insights-kpi-strip .grid > *');
 });
 
 test('member portal component css defines record modal layout hooks', function () {
@@ -185,6 +212,16 @@ test('member portal component css defines record modal layout hooks', function (
         ->toContain('ff-member-cash-hero')
         ->toContain('.fi-sidebar:not(.fi-sidebar-open) .ff-member-sidebar-profile__meta')
         ->toContain('width: 1.5rem');
+});
+
+test('x-member.amount renders negative fund balances in red without signed prop', function () {
+    $html = Blade::render(
+        '<x-member::amount :value="-1500" currency="SAR" class="ff-member-dashboard-balance__value ff-member-dashboard-balance__value--fund" />',
+    );
+
+    expect($html)
+        ->toContain('ff-member-amount--danger')
+        ->toContain('1,500.00');
 });
 
 test('x-member.amount uses western digits and places riyal symbol before amount in arabic', function () {

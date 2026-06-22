@@ -17,6 +17,7 @@ use App\Filament\Tenant\Resources\Loans\RelationManagers\InstallmentsRelationMan
 use App\Filament\Tenant\Resources\Loans\RelationManagers\RepaymentsRelationManager;
 use App\Filament\Tenant\Resources\Loans\Schemas\LoanForm;
 use App\Filament\Tenant\Resources\Loans\Tables\LoansTable;
+use App\Filament\Tenant\Resources\Loans\Widgets\LoanViewInsights;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
@@ -237,13 +238,44 @@ class LoanResource extends Resource
             return;
         }
 
-        $targetName = json_encode(
-            app('livewire.factory')->resolveComponentName(LoanInsightsWidget::class),
-            JSON_THROW_ON_ERROR
+        static::refreshLoanPageRecord($livewire);
+
+        $factory = app('livewire.factory');
+        $widgetNames = array_map(
+            fn (string $class): string => json_encode(
+                $factory->resolveComponentName($class),
+                JSON_THROW_ON_ERROR,
+            ),
+            [
+                LoanInsightsWidget::class,
+                LoanViewInsights::class,
+            ],
         );
 
-        $livewire->js(
-            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
-        );
+        $refreshWidgetsJs = implode('', array_map(
+            fn (string $name): string => "window.Livewire.getByName({$name}).forEach(w => w.\$refresh());",
+            $widgetNames,
+        ));
+
+        $livewire->js('setTimeout(() => { '.$refreshWidgetsJs.' $wire.$refresh(); }, 0)');
+    }
+
+    private static function refreshLoanPageRecord(Component $livewire): void
+    {
+        if (! method_exists($livewire, 'getRecord')) {
+            return;
+        }
+
+        $record = $livewire->getRecord();
+
+        if (! $record instanceof Loan) {
+            return;
+        }
+
+        $record->refresh();
+
+        if (method_exists($livewire, 'fillForm')) {
+            $livewire->fillForm();
+        }
     }
 }

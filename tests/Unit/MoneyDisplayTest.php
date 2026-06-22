@@ -80,10 +80,32 @@ it('uses svg styling class for arabic riyal sign in html', function (): void {
         ->and(MoneyDisplay::usesSvgSymbol('SAR'))->toBeTrue();
 });
 
-it('returns danger color for negative amounts and success for zero or positive', function (): void {
-    expect(MoneyDisplay::color(-1))->toBe('danger')
-        ->and(MoneyDisplay::color(0))->toBe('success')
-        ->and(MoneyDisplay::color(100))->toBe('success');
+it('renders negative html amounts with danger styling without signed flag', function (): void {
+    app()->setLocale('en');
+
+    $html = (string) MoneyDisplay::html(-1250.5, 'SAR');
+
+    expect($html)
+        ->toContain('ff-member-amount--danger')
+        ->toContain('1,250.50');
+});
+
+it('renders positive html amounts without danger styling when unsigned', function (): void {
+    app()->setLocale('en');
+
+    $html = (string) MoneyDisplay::html(1250.5, 'SAR');
+
+    expect($html)
+        ->not->toContain('ff-member-amount--danger')
+        ->not->toContain('ff-member-amount--success');
+});
+
+it('renders negative compact html with danger styling', function (): void {
+    app()->setLocale('en');
+
+    $html = MoneyDisplay::compactHtml(-2500, 'SAR')->toHtml();
+
+    expect($html)->toContain('ff-member-amount--danger');
 });
 
 it('supports custom precision for whole-number amounts', function (): void {

@@ -8,6 +8,10 @@
             </p>
         </header>
 
+        @include('filament.tenant.partials.audit-system.workspace-actions', [
+            'class' => 'ff-audit-workspace-actions ff-recon-workspace-actions mb-4',
+        ])
+
         @include('filament.tenant.partials.reconciliation-tab-pills')
 
         <div class="min-w-0 space-y-6" wire:key="reconciliation-workspace-{{ $this->sideTab }}">
@@ -25,20 +29,13 @@
                 </div>
                 <button type="button" wire:click="setSideTab('exceptions')"
                     class="ff-tenant-btn ff-tenant-btn--danger ms-auto shrink-0 px-3 py-1 text-xs">
-                    {{ __('Review') }}
+                        {{ __('Review queue') }}
                 </button>
             </div>
             @endif
 
             @if ($this->sideTab === 'overview')
-            <section
-                class="overflow-hidden rounded-xl border border-gray-200 bg-white px-6 py-6 shadow-sm dark:border-white/10 dark:bg-slate-800">
-                <p class="text-xs font-semibold uppercase tracking-[0.12em] text-sky-600 dark:text-sky-400">{{ __('Finance control') }}</p>
-                <h2 class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">{{ __('Reconciliation control center') }}</h2>
-                <p class="mt-2 max-w-3xl text-sm text-gray-600 dark:text-gray-300">
-                    {{ __('Run checks on demand or rely on scheduled daily and monthly snapshots. Critical failures mean stored balances disagree with the ledger — investigate before period close.') }}
-                </p>
-            </section>
+            @include('filament.tenant.partials.reconciliation-workspace-shortcuts')
 
             @php($latest = $this->getLatestSnapshots()->first())
                 @php($lastBatch = $this->getLastNightlyBatch())
@@ -94,7 +91,7 @@
                     </div>
                 </div>
 
-                <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <div
                         class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
                         <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Latest snapshot') }}</p>
@@ -123,24 +120,16 @@
                     </div>
                     <div
                         class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Unposted bank (now)') }}</p>
-                        <p class="mt-1 text-lg font-semibold tabular-nums text-gray-900 dark:text-white">
-                            {{ $latest ? number_format($latest->summary['pipeline']['bank_unposted_count'] ?? 0) : '—' }}
-                        </p>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ __('Rows awaiting cash post') }}</p>
-                    </div>
-                    <div
-                        class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Resolved (session)') }}</p>
-                        <p class="mt-1 text-lg font-semibold tabular-nums text-gray-900 dark:text-white">
-                            {{ number_format($this->getResolvedExceptionCount()) }}
+                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Pending bank match') }}</p>
+                        <p class="mt-1 text-lg font-semibold tabular-nums {{ $this->getPendingBankClearanceCount() > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white' }}">
+                            {{ number_format($this->getPendingBankClearanceCount()) }}
                         </p>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            @if ($this->getResolvedExceptionCount() > 0)
-                                <button type="button" wire:click="setSideTab('history')"
-                                    class="font-semibold text-sky-600 hover:underline dark:text-sky-400">{{ __('View history') }}</button>
+                            @if ($this->getPendingBankClearanceCount() > 0)
+                                <a href="{{ $this->getBankClearingUrl() }}"
+                                    class="font-semibold text-sky-600 hover:underline dark:text-sky-400">{{ __('Open bank clearing') }}</a>
                             @else
-                                {{ __('None since last batch reset') }}
+                                {{ __('All lines matched') }}
                             @endif
                         </p>
                     </div>
@@ -155,25 +144,8 @@
                 </div>
 
                 <div
-                    class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('How to use') }}</h3>
-                    <ul class="mt-3 list-inside list-disc space-y-1 text-sm text-gray-600 dark:text-gray-400">
-                        <li>{{ __('Use') }} <strong>{{ __('Run now (real-time)') }}</strong>
-                            {{ __('before sensitive operations or after bulk imports.') }}</li>
-                        <li><strong>{{ __('Daily') }}</strong> {{ __('and') }} <strong>{{ __('monthly') }}</strong>
-                            {{ __('snapshots tag the reporting window for audit; full ledger checks always use the current database state.') }}
-                        </li>
-                        <li>{{ __('Open') }} <strong>{{ __('Exceptions') }}</strong>
-                            {{ __('for the nightly control queue — resolve, defer, or run the batch from header actions.') }}
-                        </li>
-                        <li>{{ __('Open') }} <strong>{{ __('Snapshots') }}</strong> {{ __('to inspect history; download') }}
-                            <strong>{{ __('JSON') }}</strong> {{ __('(full machine-readable) or') }} <strong>{{ __('PDF') }}</strong>
-                            {{ __('(human-readable summary, truncated payload).') }}</li>
-                        <li>{{ __('Optional') }} <strong>{{ __('statement balance') }}</strong>
-                            {{ __('on each run compares master cash (book) to your declared closing balance; scheduled runs read') }}
-                            <code class="text-xs">reconciliation.bank_statement_balance</code> {{ __('and') }} <code
-                                class="text-xs">reconciliation.bank_statement_date</code> {{ __('from settings.') }}</li>
-                    </ul>
+                    class="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 p-4 text-sm text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
+                    {{ __('Click any queue row to open a guided workspace with links, suggested next steps, and grouped actions. Use header actions to run snapshots or the nightly batch.') }}
                 </div>
             @elseif ($this->sideTab === 'history')
                 <div
@@ -203,11 +175,15 @@
                     class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
                     <div class="mb-4">
                         <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
-                            {{ __('Reconciliation exceptions') }}</h3>
+                            {{ __('Exception queue') }}</h3>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            {{ __('Operational issues raised by the nightly batch or realtime checks. Resolve individually or run the batch again from header actions.') }}
+                            {{ __('Open and escalated issues only. Click a row to review context, follow links, and choose a resolution action from the grouped menu.') }}
                         </p>
                     </div>
+
+                    @include('filament.tenant.partials.reconciliation-queue-insights')
+                    @include('filament.tenant.partials.reconciliation-workspace-shortcuts')
+
                     {{ $this->table }}
                 </div>
             @elseif ($this->sideTab === 'snapshots')

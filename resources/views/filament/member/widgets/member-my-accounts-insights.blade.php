@@ -16,14 +16,17 @@
                 <a href="{{ $d['accounts']['cash']['url'] }}"
                     @class([
                         'block overflow-hidden rounded-xl border px-3 py-2 shadow-sm transition hover:shadow-md',
+                        'border-rose-200/80 bg-gradient-to-br from-rose-50 to-orange-50/60 dark:border-rose-500/25 dark:from-rose-950/30 dark:to-orange-950/20' => $d['cash_negative'] ?? false,
+                        'border-amber-200/80 bg-gradient-to-br from-amber-50 to-orange-50/60 dark:border-amber-500/25 dark:from-amber-950/30 dark:to-orange-950/20' => ($d['cash_low'] ?? false) && ! ($d['cash_negative'] ?? false),
                         'border-sky-200/80 bg-gradient-to-br from-sky-50 to-cyan-50/60 dark:border-sky-500/25 dark:from-sky-950/30 dark:to-cyan-950/20' => ! ($d['cash_low'] ?? false),
-                        'border-amber-200/80 bg-gradient-to-br from-amber-50 to-orange-50/60 dark:border-amber-500/25 dark:from-amber-950/30 dark:to-orange-950/20' => $d['cash_low'] ?? false,
                     ])>
                     <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{{ $d['accounts']['cash']['label'] }}</p>
                     <p @class([
-                        'text-lg font-bold tabular-nums leading-tight',
-                        ($d['cash_low'] ?? false) ? 'text-amber-700 dark:text-amber-300' : 'text-sky-700 dark:text-sky-300',
-                    ])>{{ $d['accounts']['cash']['balance'] }}</p>
+                        'min-w-0 truncate text-lg font-bold tabular-nums leading-tight',
+                        ($d['cash_negative'] ?? false) ? 'text-rose-700 dark:text-rose-300' : (($d['cash_low'] ?? false) ? 'text-amber-700 dark:text-amber-300' : 'text-sky-700 dark:text-sky-300'),
+                    ]) title="{{ \App\Filament\Support\MoneyDisplay::format($d['cash_balance'], $d['currency']) }}">
+                        <x-member::amount :value="$d['cash_balance']" :currency="$d['currency']" />
+                    </p>
                 </a>
                 <a href="{{ $d['accounts']['fund']['url'] }}"
                     @class([
@@ -33,9 +36,11 @@
                     ])>
                     <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{{ $d['accounts']['fund']['label'] }}</p>
                     <p @class([
-                        'text-lg font-bold tabular-nums leading-tight',
+                        'min-w-0 truncate text-lg font-bold tabular-nums leading-tight',
                         ($d['fund_negative'] ?? false) ? 'text-rose-700 dark:text-rose-300' : 'text-indigo-700 dark:text-indigo-300',
-                    ])>{{ $d['accounts']['fund']['balance'] }}</p>
+                    ]) title="{{ \App\Filament\Support\MoneyDisplay::format($d['fund_balance'], $d['currency']) }}">
+                        <x-member::amount :value="$d['fund_balance']" :currency="$d['currency']" />
+                    </p>
                 </a>
             </div>
         </div>

@@ -7,6 +7,7 @@ use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Models\Tenant\Account;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
@@ -35,6 +36,7 @@ class MyMemberAccountsTable
 
         $columns[] = TextColumn::make('balance')
             ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
+            ->color(fn (Account $record): string => (float) $record->balance < 0 ? 'danger' : 'gray')
             ->sortable();
 
         $columns[] = TextColumn::make('updated_at')

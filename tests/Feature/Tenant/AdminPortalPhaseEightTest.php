@@ -199,11 +199,11 @@ test('reconciliation page switches workspace tabs via livewire method', function
     Livewire::actingAs($admin, 'tenant')
         ->test(ReconciliationOverviewPage::class)
         ->assertSet('sideTab', 'overview')
-        ->assertSee(__('Finance control'))
+        ->assertSee(__('Open exceptions'))
         ->call('setSideTab', 'methodology')
         ->assertSet('sideTab', 'methodology')
         ->assertSee(__('Reconciliation approach'))
-        ->assertDontSee(__('Finance control'))
+        ->assertDontSee(__('Open exceptions'))
         ->call('setSideTab', 'invalid')
         ->assertSet('sideTab', 'methodology');
 });

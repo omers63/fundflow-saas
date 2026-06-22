@@ -86,7 +86,7 @@ final class MemberPortalInsightsService
         $unreadMessages = (int) DirectMessage::query()
             ->where('to_user_id', $member->user_id)
             ->whereNull('read_at')
-            ->whereHas('sender', fn($q) => $q->where('is_admin', true))
+            ->whereHas('sender', fn ($q) => $q->where('is_admin', true))
             ->count();
 
         $latestStatement = MonthlyStatement::query()
@@ -112,7 +112,7 @@ final class MemberPortalInsightsService
         $contributionsPosted = (int) ($contributionMetrics?->posted_count ?? 0);
         $contributionsPostedTotal = (float) ($contributionMetrics?->posted_total ?? 0.0);
         $lifetimeRepaidTotal = (float) LoanRepayment::query()
-            ->whereHas('loan', fn($query) => $query->where('member_id', $member->id))
+            ->whereHas('loan', fn ($query) => $query->where('member_id', $member->id))
             ->sum('amount');
         $totalFundInflow = $contributionsPostedTotal + $lifetimeRepaidTotal + $cashBalance;
         $dependentsCount = $member->dependents()->count();
@@ -252,7 +252,7 @@ final class MemberPortalInsightsService
                 'status_label' => Loan::statusOptions()[$activeLoan->status] ?? $activeLoan->status,
                 'outstanding' => InsightFormatter::money($loanOutstanding),
                 'repay_percent' => $repayPercent,
-                'installments' => $installmentsPaid . '/' . $installmentsTotal,
+                'installments' => $installmentsPaid.'/'.$installmentsTotal,
                 'installments_paid' => $installmentsPaid,
                 'installments_total' => $installmentsTotal,
                 'overdue_count' => $installmentsOverdue,
@@ -331,7 +331,7 @@ final class MemberPortalInsightsService
                 ->latest()
                 ->limit(4)
                 ->get()
-                ->map(fn(FundPosting $posting): array => [
+                ->map(fn (FundPosting $posting): array => [
                     'amount' => InsightFormatter::money((float) $posting->amount),
                     'status' => $posting->status,
                     'status_label' => match ($posting->status) {
@@ -506,6 +506,8 @@ final class MemberPortalInsightsService
                     'variant' => 'cash',
                     'label' => __('Cash'),
                     'amount' => $cashKpi['display'],
+                    'amount_value' => $cashBalance,
+                    'negative' => $cashKpi['is_negative'],
                     'full' => $cashKpi['full'],
                     'icon' => 'heroicon-o-wallet',
                     'url' => $member->cashAccount
@@ -516,6 +518,8 @@ final class MemberPortalInsightsService
                     'variant' => 'fund',
                     'label' => __('Fund'),
                     'amount' => $fundKpi['display'],
+                    'amount_value' => $fundBalance,
+                    'negative' => $fundKpi['is_negative'],
                     'full' => $fundKpi['full'],
                     'icon' => 'heroicon-o-building-library',
                     'url' => $member->fundAccount
@@ -540,7 +544,7 @@ final class MemberPortalInsightsService
             ? mb_substr($parts[array_key_last($parts)], 0, 1)
             : '';
 
-        return mb_strtoupper($first . $last);
+        return mb_strtoupper($first.$last);
     }
 
     /**
@@ -754,7 +758,7 @@ final class MemberPortalInsightsService
     {
         $display = InsightFormatter::compactAmount($amount);
 
-        return $amount < 0 ? '-' . $display : $display;
+        return $amount < 0 ? '-'.$display : $display;
     }
 
     /**
@@ -789,7 +793,7 @@ final class MemberPortalInsightsService
                 'icon' => 'heroicon-o-document-plus',
                 'tone' => 'loan',
                 'badge' => null,
-                'visible' => $eligible && !$pendingLoan,
+                'visible' => $eligible && ! $pendingLoan,
             ],
             [
                 'label' => __('Request eligibility review'),
@@ -800,7 +804,7 @@ final class MemberPortalInsightsService
                 'icon' => 'heroicon-o-shield-exclamation',
                 'tone' => 'loan',
                 'badge' => $hasPendingOverrideRequest ? __('Pending') : null,
-                'visible' => !$eligible && ($canRequestOverride || $hasPendingOverrideRequest),
+                'visible' => ! $eligible && ($canRequestOverride || $hasPendingOverrideRequest),
             ],
             [
                 'label' => __('Statements'),
@@ -866,15 +870,15 @@ final class MemberPortalInsightsService
 
     private function contributionNotPostedApplies(Member $member, bool $postedThisCycle): bool
     {
-        return !$postedThisCycle
+        return ! $postedThisCycle
             && $member->status === 'active'
             && (float) $member->monthly_contribution_amount > 0
-            && !$member->hasActiveLoanRepaymentObligation();
+            && ! $member->hasActiveLoanRepaymentObligation();
     }
 
     private function loanRepaymentCycleAttentionApplies(Member $member, bool $postedThisCycle): bool
     {
-        return !$postedThisCycle
+        return ! $postedThisCycle
             && $member->hasActiveLoanRepaymentObligation();
     }
 
@@ -1158,7 +1162,7 @@ final class MemberPortalInsightsService
             'actions' => [
                 [
                     'label' => __('Deposit'),
-                    'url' => $cashUrl . '#deposit',
+                    'url' => $cashUrl.'#deposit',
                     'icon' => 'heroicon-o-arrow-down-tray',
                 ],
                 [
@@ -1257,7 +1261,7 @@ final class MemberPortalInsightsService
         float $fundBalance,
     ): array {
         return [
-            'eligible' => $eligibility['eligible'] && !$pendingLoan,
+            'eligible' => $eligibility['eligible'] && ! $pendingLoan,
             'reason' => $eligibility['reasons'][0] ?? null,
             'max_amount' => LoanSettings::maxLoanAmountForMember($fundBalance),
             'can_request_override' => $canRequestOverride,

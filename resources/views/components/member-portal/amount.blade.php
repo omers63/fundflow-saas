@@ -9,21 +9,26 @@
     use App\Filament\Support\MoneyDisplay;
 
     $digits = MoneyDisplay::amount($value, (int) $precision);
-    $colorClass = $signed && $value !== null && $value !== ''
-        ? 'ff-member-amount--' . MoneyDisplay::color($value)
-        : null;
+    $colorClass = null;
+    if ($value !== null && $value !== '') {
+        if ((float) $value < 0) {
+            $colorClass = 'ff-member-amount--danger';
+        } elseif ($signed) {
+            $colorClass = 'ff-member-amount--'.MoneyDisplay::color($value);
+        }
+    }
 @endphp
 
 @if (filled($digits))
-    @if ($compact)
-        {!! MoneyDisplay::compactHtml((float) $value, $currency)->toHtml() !!}
-    @else
-        <span
-            {{ $attributes->class(array_filter(['ff-member-amount', 'tabular-nums', $colorClass])) }}
-            dir="ltr"
-        >
-            {!! MoneyDisplay::symbolHtml($currency)->toHtml() !!}
-            <span class="ff-member-amount__digits">{{ $digits }}</span>
-        </span>
-    @endif
+        @if ($compact)
+            {!! MoneyDisplay::compactHtml((float) $value, $currency)->toHtml() !!}
+        @else
+            <span
+                {{ $attributes->class(array_filter(['ff-member-amount', 'tabular-nums', $colorClass])) }}
+                dir="ltr"
+            >
+                {!! MoneyDisplay::symbolHtml($currency)->toHtml() !!}
+                <span class="ff-member-amount__digits">{{ $digits }}</span>
+            </span>
+        @endif
 @endif

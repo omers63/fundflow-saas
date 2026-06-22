@@ -74,7 +74,7 @@ test('master invariant treats master invest balance as part of fund pool', funct
 
     $result = app(MasterAccountInvariantService::class)->check();
 
-    expect($result['master_fund'])->toBe(1000.0)
+    expect($result['master_fund'])->toBe(1300.0)
         ->and($result['master_invest_from_fund_credits'])->toBe(500.0)
         ->and($result['master_expense_from_fund_credits'])->toBe(300.0)
         ->and($result['master_fund_pool'])->toBe(1800.0)

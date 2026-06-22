@@ -9,20 +9,24 @@
                 </div>
 
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    <div class="ff-member-cash-stat min-w-0 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                        <p class="truncate text-xs font-semibold uppercase tracking-wide text-gray-500"
+                            title="{{ __('Available to withdraw') }}">
                             {{ __('Available to withdraw') }}
                         </p>
-                        <div class="mt-1">
+                        <div class="mt-1 min-w-0"
+                            title="{{ \App\Filament\Support\MoneyDisplay::format($available, $currency) }}">
                             <x-member::amount :value="$available" :currency="$currency" />
                         </div>
                     </div>
                     @if (filled($reserved))
-                        <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                            <p class="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                        <div class="ff-member-cash-stat min-w-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                            <p class="truncate text-xs font-semibold uppercase tracking-wide text-amber-800"
+                                title="{{ __('Reserved (next EMI)') }}">
                                 {{ __('Reserved (next EMI)') }}
                             </p>
-                            <div class="mt-1">
+                            <div class="mt-1 min-w-0"
+                                title="{{ \App\Filament\Support\MoneyDisplay::format($reserved, $currency) }}">
                                 <x-member::amount :value="$reserved" :currency="$currency" />
                             </div>
                         </div>

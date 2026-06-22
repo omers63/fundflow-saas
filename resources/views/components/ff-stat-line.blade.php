@@ -22,6 +22,6 @@
     @elseif ($slot->isNotEmpty())
         {!! MoneyDisplay::markupForDisplay($slot->toHtml(), $currency, precision: (int) $precision) !!}
     @elseif (filled($text))
-        {!! MoneyDisplay::markupForDisplay($text, $currency, precision: (int) $precision) !!}
+        {!! MoneyDisplay::markupForDisplay($text, filled($amount) ? $currency : null, precision: (int) $precision) !!}
     @endif
 </p>

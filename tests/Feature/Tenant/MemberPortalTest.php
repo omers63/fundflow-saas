@@ -7,6 +7,7 @@ use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Member\Resources\MyMessages\MyMessageResource;
+use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DirectMessage;
@@ -230,6 +231,20 @@ test('loan calculator page renders for member', function () {
         ->assertSee(__('Estimate your loan repayment'))
         ->set('loanAmount', 10000)
         ->assertSet('loanAmount', 10000);
+});
+
+test('loan calculator intro renders fund balance as text not raw html', function () {
+    $this->actingAs($this->memberUserA, 'tenant');
+
+    $member = Member::query()->where('user_id', $this->memberUserA->id)->firstOrFail();
+    $formatted = MoneyDisplay::format($member->getFundBalance()) ?? '—';
+
+    Livewire::test(LoanCalculatorPage::class)
+        ->assertSuccessful()
+        ->assertSee(__('Calculations use your current fund balance (:amount)', [
+            'amount' => $formatted,
+        ]), false)
+        ->assertDontSee('&lt;span class=&quot;ff-member-amount', false);
 });
 
 test('loan calculator shows repayment estimate when tier matches', function () {

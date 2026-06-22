@@ -27,7 +27,8 @@
 
 <div
     class="ff-app-insights-kpi-strip overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 lg:col-span-2">
-    <div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-6">
+    <div
+        class="grid min-w-0 grid-cols-2 gap-2 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-3 xl:grid-cols-6">
         @foreach ($kpis as $i => $card)
             @php
                 $accent = $card['accent'] ?? 'gray';

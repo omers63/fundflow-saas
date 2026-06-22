@@ -11,12 +11,14 @@ use App\Filament\Support\LateSettledArrearsTableStyling;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class InstallmentsRelationManager extends RelationManager
 {
@@ -25,6 +27,12 @@ class InstallmentsRelationManager extends RelationManager
     protected static string $relationship = 'installments';
 
     protected static ?string $title = 'Repayment schedule';
+
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        return $ownerRecord instanceof Loan
+            && $ownerRecord->installments()->exists();
+    }
 
     public function table(Table $table): Table
     {
@@ -48,9 +56,9 @@ class InstallmentsRelationManager extends RelationManager
                     ->placeholder(__('—')),
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn(string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusLabel($record))
-                    ->color(fn(string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusColor($record))
-                    ->tooltip(fn(LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentWasSettledLate($record)
+                    ->formatStateUsing(fn (string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusLabel($record))
+                    ->color(fn (string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusColor($record))
+                    ->tooltip(fn (LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentWasSettledLate($record)
                         ? LateSettledArrearsTableStyling::eligibilityHint()
                         : null),
                 TextColumn::make('paid_at')
@@ -58,7 +66,7 @@ class InstallmentsRelationManager extends RelationManager
                     ->placeholder(__('—')),
                 TextColumn::make('paid_by_guarantor')
                     ->label(__('Guarantor paid'))
-                    ->formatStateUsing(fn(bool $state): string => $state ? __('Yes') : __('No'))
+                    ->formatStateUsing(fn (bool $state): string => $state ? __('Yes') : __('No'))
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
@@ -71,7 +79,7 @@ class InstallmentsRelationManager extends RelationManager
                 DateColumnRangeFilter::make('due_date', __('Due date')),
             ])
             ->defaultSort('installment_number')
-            ->recordClasses(fn(LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentRecordClasses($record))
+            ->recordClasses(fn (LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentRecordClasses($record))
             ->recordActions(TableRecordActionGroups::wrap([]))
             ->toolbarActions([
                 BulkActionGroup::make([

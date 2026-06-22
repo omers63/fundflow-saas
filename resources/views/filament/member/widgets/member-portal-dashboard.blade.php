@@ -111,11 +111,13 @@
                             @php $loan = $d['loan_panel']; @endphp
                             <x-member::panel :title="$loan['label'] ?? __('Active loan')" :link="$loan['view_url'] ?? null"
                                 :link-label="__('Details')">
-                                <div class="mb-2 flex items-center justify-between gap-2">
-                                    <x-member::amount :value="$loan['outstanding']" :currency="$currency" class="text-xl font-bold" />
-                                    <x-member::chip :variant="$loan['status_variant'] ?? 'green'">{{ $loan['status_label'] ?? '' }}</x-member::chip>
+                                <div class="ff-member-loan-card__header-row mb-2">
+                                    <div class="ff-member-loan-card__header-main">
+                                        <x-member::amount :value="$loan['outstanding']" :currency="$currency" class="text-xl font-bold" />
+                                        <x-member::chip :variant="$loan['status_variant'] ?? 'green'">{{ $loan['status_label'] ?? '' }}</x-member::chip>
+                                    </div>
+                                    <p class="ff-member-loan-card__meta-line ff-member-dashboard-meta">{{ $loan['installments_label'] ?? '' }}</p>
                                 </div>
-                                <p class="ff-member-dashboard-meta mb-2">{{ $loan['installments_label'] ?? '' }}</p>
                                 <x-member::progress-bar :percent="$loan['repay_percent'] ?? 0" class="mb-2" />
                                 <p class="ff-member-dashboard-meta mb-3">
                                     @if (filled($loan['repaid_amount'] ?? null))
@@ -126,7 +128,7 @@
                                     @endif
                                 </p>
                                 @if (! empty($loan['next_emi']))
-                                    <div class="ff-member-dashboard-emi-row">
+                                    <div class="ff-member-dashboard-emi-row mb-3">
                                         <div>
                                             <p class="ff-member-dashboard-meta m-0">{{ __('Next EMI due') }}</p>
                                             <p class="m-0 text-sm font-semibold">{{ $loan['next_emi']['due_date'] ?? '—' }}</p>
@@ -136,19 +138,19 @@
                                     </div>
                                 @endif
                                 @if (filled($loan['guarantor_name'] ?? null))
-                                    <p class="ff-member-dashboard-meta mt-2">
+                                    <p class="ff-member-dashboard-meta mb-0">
                                         {{ __('Guarantor') }}: {{ $loan['guarantor_name'] }}
                                     </p>
                                 @endif
                                 @if (filled($loan['settle_url'] ?? null))
-                                    <div class="ff-member-dashboard-actions mt-3">
+                                    <x-member::panel-actions>
                                         <a href="{{ $loan['settle_url'] }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-gray">
                                             {{ __('Partial settle') }}
                                         </a>
                                         <a href="{{ $loan['settle_url'] }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-primary">
                                             {{ __('Full settle') }}
                                         </a>
-                                    </div>
+                                    </x-member::panel-actions>
                                 @endif
                             </x-member::panel>
                         @elseif ($hasEligibilityPanel)
@@ -271,7 +273,7 @@
                 <div class="mt-3 space-y-3">
                     @if (! empty($d['expandable']['insights']['stats']))
                         <x-member::panel :title="__('My insights')">
-                            <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            <div class="ff-member-dashboard-insights-stats grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                                 @foreach ($d['expandable']['insights']['stats'] as $stat)
                                     <x-member::stat-card :label="$stat['label']" :value="$stat['value'] ?? null"
                                         :amount="$stat['amount'] ?? null" :currency="$currency" />

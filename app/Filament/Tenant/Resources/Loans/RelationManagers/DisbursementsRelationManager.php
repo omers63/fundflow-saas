@@ -10,10 +10,12 @@ use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Models\Tenant\Loan;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class DisbursementsRelationManager extends RelationManager
 {
@@ -22,6 +24,12 @@ class DisbursementsRelationManager extends RelationManager
     protected static string $relationship = 'disbursements';
 
     protected static ?string $title = 'Disbursement history';
+
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        return $ownerRecord instanceof Loan
+            && $ownerRecord->disbursements()->exists();
+    }
 
     public function table(Table $table): Table
     {

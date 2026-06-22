@@ -80,6 +80,7 @@ test('loans hub renders tab shell and active loan card', function () {
     $this->get('http://'.$this->domain.'/member/my-loans')
         ->assertSuccessful()
         ->assertSee('ff-member-loans-hub', false)
+        ->assertSee('ff-member-panel-actions', false)
         ->assertSee(__('Active loans'), false)
         ->assertSee(__('Repayment schedule'), false)
         ->assertSee(__('Loan #:id', ['id' => $this->loan->id]), false);

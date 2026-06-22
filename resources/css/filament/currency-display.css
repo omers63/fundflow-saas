@@ -84,12 +84,28 @@
 }
 
 /* Stat / insight cards: clip long amounts instead of overflowing the grid cell */
-.ff-app-insights .ff-member-amount {
+.ff-app-insights .ff-member-amount,
+.ff-member-stat-card .ff-member-amount,
+.ff-member-dashboard-balance .ff-member-amount,
+.ff-member-greeting__balance .ff-member-amount,
+.ff-member-cash-stat .ff-member-amount,
+.ff-member-contribution-option .ff-member-amount,
+.ff-member-exposure-stat .ff-member-amount,
+.ff-member-accounts-insights .grid > a .ff-member-amount,
+.ff-member-profile-stat .ff-member-amount {
     max-width: 100%;
     min-width: 0;
 }
 
-.ff-app-insights .ff-member-amount__digits {
+.ff-app-insights .ff-member-amount__digits,
+.ff-member-stat-card .ff-member-amount__digits,
+.ff-member-dashboard-balance .ff-member-amount__digits,
+.ff-member-greeting__balance .ff-member-amount__digits,
+.ff-member-cash-stat .ff-member-amount__digits,
+.ff-member-contribution-option .ff-member-amount__digits,
+.ff-member-exposure-stat .ff-member-amount__digits,
+.ff-member-accounts-insights .grid > a .ff-member-amount__digits,
+.ff-member-profile-stat .ff-member-amount__digits {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -108,6 +124,14 @@
 
 .ff-stat-line .ff-member-amount {
     display: inline-flex;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.ff-stat-line .ff-member-amount__digits {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .ff-money-text {

@@ -98,7 +98,8 @@ class ViewMyAccount extends ViewRecord
                                 'fund' => 'success',
                             }),
                         TextEntry::make('balance')
-                            ->money(fn (): string => Setting::get('general', 'currency', 'USD')),
+                            ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
+                            ->color(fn (float $state): string => $state < 0 ? 'danger' : 'success'),
                     ]),
             ]);
     }

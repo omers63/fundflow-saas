@@ -82,6 +82,8 @@ return [
     ':description (from reserve)' => ':description (من الاحتياطي)',
     ':description (master fund transfer)' => ':description (تحويل صندوق الإدارة)',
     ':description (reserve funding)' => ':description (تمويل الاحتياطي)',
+    ':description (reserve return)' => ':description (إرجاع الاحتياطي)',
+    ':description (invest return to fund)' => ':description (عائد الاستثمار إلى الصندوق)',
     ':description (to master cash)' => ':description (إلى النقد الرئيسي)',
     ':disburse in-flight loan(s) and :review pending review must be resolved before close.' => 'يجب حل صرف القروض قيد التنفيذ و:review مراجعة معلّقة قبل الإغلاق.',
     ':id — :amount (:date)' => 'معرّف :id — :amount (:date)',

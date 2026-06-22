@@ -69,6 +69,9 @@ class LoansTable
                 ->recordActions(TableRecordActionGroups::wrap([
                     ViewAction::make(),
                     EditAction::make()
+                        ->label(fn (Loan $record): string => $record->status === 'pending'
+                            ? __('Review')
+                            : __('Edit'))
                         ->hidden(fn (Loan $record): bool => ! in_array($record->status, ['pending', 'approved'], true)),
                     ...LoanFilamentActions::workflowActions(),
                 ]))

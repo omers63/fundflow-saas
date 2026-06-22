@@ -123,11 +123,14 @@
         {!! __('Use <strong>Save allocation</strong> above to apply your new amount immediately; administrators are notified automatically.') !!}
     </x-slot>
 
-    <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
         @foreach ($options as $value => $label)
-            @php $isActive = $value == $current; @endphp
+            @php
+                $isActive = $value == $current;
+                $amountTitle = MoneyDisplay::format($value, null, precision: 0);
+            @endphp
             <div @class([
-                'relative flex flex-col items-center justify-center rounded-xl p-3 text-center transition-all',
+                'ff-member-contribution-option relative flex min-w-0 flex-col items-center justify-center rounded-xl p-3 text-center transition-all',
                 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/30' => $isActive,
                 'ring-1 ring-gray-200 dark:ring-gray-700 bg-white dark:bg-gray-800 hover:ring-primary-300 dark:hover:ring-primary-700' => !$isActive,
             ])>
@@ -138,10 +141,10 @@
                     </div>
                 @endif
                 <p @class([
-                    'text-lg font-bold tabular-nums',
+                    'ff-member-contribution-option__amount text-lg font-bold tabular-nums',
                     'text-primary-700 dark:text-primary-300' => $isActive,
                     'text-gray-700 dark:text-gray-300' => !$isActive,
-                ])>
+                ]) title="{{ $amountTitle }}">
                     {!! MoneyDisplay::html($value, null, precision: 0)?->toHtml() !!}
                 </p>
             </div>

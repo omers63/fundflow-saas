@@ -8,8 +8,8 @@ use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
-use App\Services\MasterInvestDisbursementService;
-use App\Services\MasterInvestReturnService;
+use App\Services\MasterInvestInService;
+use App\Services\MasterInvestOutService;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -17,47 +17,65 @@ uses(InitializesTenancy::class);
 beforeEach(function () {
     $this->initializeTenancy();
     Account::query()->delete();
+    ReconciliationException::query()->delete();
 });
 
-test('fund invest disburse invest and record return header actions are visible on master invest for admins', function () {
+test('invest out and invest in header actions are visible on master invest for admins', function () {
     $admin = User::create([
         'name' => 'Admin',
-        'email' => 'admin-invest-actions-' . uniqid('', true) . '@test.com',
+        'email' => 'admin-invest-actions-'.uniqid('', true).'@test.com',
         'password' => bcrypt('password'),
         'is_admin' => true,
     ]);
     $this->actingAs($admin, 'tenant');
 
     $account = Account::factory()->masterInvest()->create();
-    $actions = MasterInvestHeaderActions::make(fn() => $account);
+    $actions = MasterInvestHeaderActions::make(fn () => $account);
 
-    expect($actions)->toHaveCount(3)
-        ->and($actions[0]->getName())->toBe('fundInvest')
-        ->and($actions[0]->getLabel())->toBe(__('Fund Invest'))
-        ->and($actions[1]->getName())->toBe('disburseInvest')
-        ->and($actions[1]->getLabel())->toBe(__('Disburse Invest'))
-        ->and($actions[2]->getName())->toBe('recordReturn')
-        ->and($actions[2]->getLabel())->toBe(__('Record Return'))
+    expect($actions)->toHaveCount(2)
+        ->and($actions[0]->getName())->toBe('investOut')
+        ->and($actions[0]->getLabel())->toBe(__('Invest Out'))
+        ->and($actions[0]->getIcon())->toBe('heroicon-o-arrow-up-tray')
+        ->and($actions[1]->getName())->toBe('investIn')
+        ->and($actions[1]->getLabel())->toBe(__('Invest In'))
+        ->and($actions[1]->getIcon())->toBe('heroicon-o-arrow-down-tray')
         ->and($actions[0]->isHidden())->toBeFalse()
-        ->and($actions[1]->isHidden())->toBeFalse()
-        ->and($actions[2]->isHidden())->toBeFalse();
+        ->and($actions[1]->isHidden())->toBeFalse();
 });
 
 test('master invest header actions are hidden on non-invest master accounts', function () {
     $admin = User::create([
         'name' => 'Admin',
-        'email' => 'admin-invest-hidden-' . uniqid('', true) . '@test.com',
+        'email' => 'admin-invest-hidden-'.uniqid('', true).'@test.com',
         'password' => bcrypt('password'),
         'is_admin' => true,
     ]);
     $this->actingAs($admin, 'tenant');
 
     $account = Account::factory()->masterExpense()->create();
-    $actions = MasterInvestHeaderActions::make(fn() => $account);
+    $actions = MasterInvestHeaderActions::make(fn () => $account);
 
     expect($actions[0]->isHidden())->toBeTrue()
-        ->and($actions[1]->isHidden())->toBeTrue()
-        ->and($actions[2]->isHidden())->toBeTrue();
+        ->and($actions[1]->isHidden())->toBeTrue();
+});
+
+test('invest out transfers from master fund through master invest and creates uncleared bank line', function () {
+    $masterFund = Account::factory()->masterFund()->withBalance(20_000)->create();
+    Account::factory()->masterCash()->withBalance(10_000)->create();
+    $masterInvest = Account::factory()->masterInvest()->withBalance(0)->create();
+
+    app(MasterInvestOutService::class)->investOut(
+        $masterInvest,
+        5_000,
+        'External investment placement',
+    );
+
+    expect((float) $masterFund->fresh()->balance)->toBe(15_000.0)
+        ->and((float) $masterInvest->fresh()->balance)->toBe(0.0)
+        ->and((float) Account::masterCash()->fresh()->balance)->toBe(10_000.0)
+        ->and($masterInvest->transactions()->count())->toBe(2)
+        ->and(BankTransaction::query()->count())->toBe(1)
+        ->and((float) BankTransaction::query()->value('amount'))->toBe(-5_000.0);
 });
 
 test('fund invest transfers from master fund to master invest', function () {
@@ -78,34 +96,23 @@ test('fund invest transfers from master fund to master invest', function () {
             ->count())->toBe(0);
 });
 
-test('disburse invest debits master invest only and leaves master cash unchanged', function () {
-    Account::factory()->masterCash()->withBalance(10_000)->create();
-    $masterInvest = Account::factory()->masterInvest()->withBalance(2_000)->create();
-
-    app(MasterInvestDisbursementService::class)->disburse(
-        $masterInvest,
-        750,
-        'Check #2002',
-    );
-
-    expect((float) $masterInvest->fresh()->balance)->toBe(1_250.0)
-        ->and((float) Account::masterCash()->fresh()->balance)->toBe(10_000.0)
-        ->and(BankTransaction::query()->count())->toBe(1);
-});
-
-test('record return credits master invest only and leaves master cash unchanged', function () {
+test('invest in credits master invest transfers to master fund and leaves master cash unchanged', function () {
+    $masterFund = Account::factory()->masterFund()->withBalance(20_000)->create();
     Account::factory()->masterCash()->withBalance(10_000)->create();
     $masterInvest = Account::factory()->masterInvest()->withBalance(0)->create();
 
-    app(MasterInvestReturnService::class)->record(
+    app(MasterInvestInService::class)->investIn(
         $masterInvest,
         1_200,
         'Q1 return',
     );
 
-    expect((float) $masterInvest->fresh()->balance)->toBe(1_200.0)
+    expect((float) $masterFund->fresh()->balance)->toBe(21_200.0)
+        ->and((float) $masterInvest->fresh()->balance)->toBe(0.0)
         ->and((float) Account::masterCash()->fresh()->balance)->toBe(10_000.0)
+        ->and($masterInvest->transactions()->count())->toBe(2)
         ->and($masterInvest->transactions()->where('type', 'credit')->count())->toBe(1)
+        ->and($masterInvest->transactions()->where('type', 'debit')->count())->toBe(1)
         ->and(Account::masterCash()->transactions()->count())->toBe(0)
         ->and(BankTransaction::query()->count())->toBe(1);
 });

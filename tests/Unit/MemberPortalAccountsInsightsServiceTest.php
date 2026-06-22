@@ -59,6 +59,28 @@ test('member portal accounts insights snapshot includes balances and kpis', func
         ->and($snapshot['trend'])->toHaveCount(6);
 });
 
+test('member portal accounts insights flags negative cash and fund balances for styling', function () {
+    $this->member->cashAccount()->update(['balance' => -250]);
+    $this->member->fundAccount()->update(['balance' => -750]);
+
+    $snapshot = app(MemberPortalAccountsInsightsService::class)->snapshot(
+        $this->member->fresh(['cashAccount', 'fundAccount']),
+    );
+
+    $cashKpi = collect($snapshot['kpis'])->firstWhere('label', __('Cash'));
+    $fundKpi = collect($snapshot['kpis'])->firstWhere('label', __('Fund'));
+    $netKpi = collect($snapshot['kpis'])->firstWhere('label', __('Net worth'));
+
+    expect($snapshot['cash_negative'])->toBeTrue()
+        ->and($snapshot['fund_negative'])->toBeTrue()
+        ->and($cashKpi['accent'])->toBe('rose')
+        ->and($cashKpi['value_class'])->toContain('text-rose-600')
+        ->and($fundKpi['accent'])->toBe('rose')
+        ->and($fundKpi['value_class'])->toContain('text-rose-600')
+        ->and($netKpi['accent'])->toBe('rose')
+        ->and($netKpi['value_class'])->toContain('text-rose-600');
+});
+
 test('member portal accounts insights returns empty without member', function () {
     expect(app(MemberPortalAccountsInsightsService::class)->snapshot(null))->toBe([]);
 });
