@@ -125,7 +125,7 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(NotificationSending::class, [ApplyMemberNotificationLocaleListener::class, 'handleSending']);
 
         Event::listen(NotificationSent::class, function (NotificationSent $event): void {
-            if ($event->channel !== 'database' || !Filament::hasBroadcasting() || !config('filament.broadcasting.echo')) {
+            if ($event->channel !== 'database' || ! Filament::hasBroadcasting() || ! config('filament.broadcasting.echo')) {
                 return;
             }
 
@@ -194,7 +194,7 @@ class AppServiceProvider extends ServiceProvider
                 $entry = $entry
                     ->html()
                     ->formatStateUsing(
-                        fn($state): Htmlable => ArabicTypography::display(
+                        fn ($state): Htmlable => ArabicTypography::display(
                             is_scalar($state) ? (string) $state : null,
                         ),
                     );
@@ -207,21 +207,17 @@ class AppServiceProvider extends ServiceProvider
                 $entryName = $entry->getName();
 
                 $entry = $entry->url(
-                    fn(mixed $record): ?string => MemberTableColumns::resolveMemberUrl($entryName, $record),
+                    fn (mixed $record): ?string => MemberTableColumns::resolveMemberUrl($entryName, $record),
                 );
             }
 
             return $entry;
         });
 
-        Field::configureUsing(fn(Field $field): Field => $field->translateLabel());
+        Field::configureUsing(fn (Field $field): Field => $field->translateLabel());
 
         FilamentAction::configureUsing(function (FilamentAction $action): FilamentAction {
             $action = $action->translateLabel();
-
-            if (Filament::getCurrentPanel()?->getId() !== 'tenant') {
-                return $action;
-            }
 
             if ($action instanceof ViewAction) {
                 return TenantPortalViewModal::apply($action);
@@ -240,9 +236,9 @@ class AppServiceProvider extends ServiceProvider
             return $action;
         });
 
-        BaseFilter::configureUsing(fn(BaseFilter $filter): BaseFilter => $filter->translateLabel());
+        BaseFilter::configureUsing(fn (BaseFilter $filter): BaseFilter => $filter->translateLabel());
 
-        Fieldset::configureUsing(fn(Fieldset $fieldset): Fieldset => $fieldset->translateLabel());
+        Fieldset::configureUsing(fn (Fieldset $fieldset): Fieldset => $fieldset->translateLabel());
 
         Tab::configureUsing(function (Tab $tab): Tab {
             $color = TabLabelColors::forLabel($tab->getLabel());
@@ -260,7 +256,7 @@ class AppServiceProvider extends ServiceProvider
             return $tab;
         });
 
-        Tabs::configureUsing(fn(Tabs $tabs): Tabs => $tabs->translateLabel());
+        Tabs::configureUsing(fn (Tabs $tabs): Tabs => $tabs->translateLabel());
 
         Table::configureUsing(function (Table $table): Table {
             return TableSummaryFooter::applyToTable(

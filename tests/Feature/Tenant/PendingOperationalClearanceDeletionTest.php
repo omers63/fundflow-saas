@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Tenant\Resources\BankAccounts\Pages\ListBankAccounts;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\CashOutRequest;
@@ -9,13 +10,16 @@ use App\Models\Tenant\ExpenseDisbursement;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
+use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\FundPostingService;
 use App\Services\MasterExpenseDisbursementService;
 use App\Services\MemberCashOutService;
 use App\Services\PendingOperationalClearanceDeletionService;
 use App\Support\BankTransactionDeletion;
+use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Notification;
+use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -174,3 +178,32 @@ test('cleared operational lines cannot be deleted from pending bank match', func
 
     app(PendingOperationalClearanceDeletionService::class)->delete($line);
 })->throws(InvalidArgumentException::class);
+
+test('pending bank match table search does not query virtual clearance kind column', function () {
+    $admin = User::create([
+        'name' => 'Clearance Search Admin',
+        'email' => 'clearance-search-' . uniqid('', true) . '@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    $masterExpense = Account::masterExpense();
+    app(AccountingService::class)->fundReserveAccountFromMasterFund(
+        $masterExpense,
+        1_000,
+        'Search test reserve',
+    );
+
+    app(MasterExpenseDisbursementService::class)->disburse(
+        $masterExpense,
+        250,
+        'Office expense supplies',
+    );
+
+    Filament::setCurrentPanel('tenant');
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(ListBankAccounts::class, ['channel' => 'bank', 'activeTab' => 'clearance'])
+        ->searchTable('expens')
+        ->assertSuccessful();
+});

@@ -15,7 +15,8 @@ final class DeleteAccountTransactionsBulkAction
     {
         return DeleteBulkAction::make()
             ->authorize(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
-            ->modalDescription(__('Reverses each selected line on its account balance, then deletes it.'))
+            ->modalHeading(__('Delete selected transactions?'))
+            ->modalDescription(__('Each selected line is reversed on its account balance, then removed.'))
             ->using(function (DeleteBulkAction $action, $records): void {
                 $accounting = app(AccountingService::class);
 

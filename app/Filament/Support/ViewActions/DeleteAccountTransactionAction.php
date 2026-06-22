@@ -14,7 +14,8 @@ final class DeleteAccountTransactionAction
     {
         return DeleteAction::make()
             ->authorize(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
-            ->modalDescription(__('Reverses this line on the account balance and removes the row. If this was one leg of a paired posting, delete or adjust the other leg separately if needed.'))
+            ->modalHeading(__('Delete transaction?'))
+            ->modalDescription(__('This reverses the line on the account balance and removes it permanently.'))
             ->using(function (Transaction $record): void {
                 app(AccountingService::class)->deleteTransaction($record);
             })

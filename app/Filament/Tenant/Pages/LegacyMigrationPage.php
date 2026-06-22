@@ -165,25 +165,27 @@ class LegacyMigrationPage extends Page implements HasForms
                 ->label(__('Preview'))
                 ->icon('heroicon-o-eye')
                 ->color('gray')
-                ->action(fn(): mixed => $this->previewMigration()),
+                ->action(fn (): mixed => $this->previewMigration()),
             Action::make('classifyPayments')
                 ->label(__('Classify payments'))
                 ->icon('heroicon-o-tag')
                 ->color('gray')
-                ->action(fn(): mixed => $this->classifyPayments()),
+                ->action(fn (): mixed => $this->classifyPayments()),
             Action::make('dryRun')
                 ->label(__('Dry run'))
                 ->icon('heroicon-o-beaker')
                 ->color('warning')
-                ->action(fn(): mixed => $this->runMigration(true)),
+                ->action(fn (): mixed => $this->runMigration(true)),
             Action::make('runMigration')
                 ->label(__('Run migration'))
                 ->icon('heroicon-o-play')
                 ->color('primary')
                 ->requiresConfirmation()
+                ->longRunning()
+                ->longRunningMessage(__('Importing members, loans, and payments. This can take a few minutes.'))
                 ->modalHeading(__('Run migration now?'))
                 ->modalDescription(__('This writes members, loans, and optional payments to the database.'))
-                ->action(fn(): mixed => $this->runMigration(false)),
+                ->action(fn (): mixed => $this->runMigration(false)),
         ];
     }
 
@@ -240,7 +242,7 @@ class LegacyMigrationPage extends Page implements HasForms
                     ->directory('legacy-migration')
                     ->maxFiles(1)
                     ->acceptedFileTypes(['text/csv', 'text/plain', 'application/csv', 'application/vnd.ms-excel'])
-                    ->visible(fn(): bool => ($this->data['strategy'] ?? 'snapshot') === 'historical')
+                    ->visible(fn (): bool => ($this->data['strategy'] ?? 'snapshot') === 'historical')
                     ->helperText(__('Optional for historical strategy. Classify rows before import — members (and loans) CSV on this page are used to match payment rows.')),
             ]);
     }
@@ -332,7 +334,7 @@ class LegacyMigrationPage extends Page implements HasForms
             return;
         }
 
-        if ($paths['loans'] === null && !Loan::query()->whereNotNull('disbursed_at')->exists()) {
+        if ($paths['loans'] === null && ! Loan::query()->whereNotNull('disbursed_at')->exists()) {
             Notification::make()
                 ->title(__('Loans CSV required'))
                 ->body(__('Upload a loans CSV or import loans first. Repayment windows cannot be detected without loan disbursement dates.'))
@@ -375,16 +377,16 @@ class LegacyMigrationPage extends Page implements HasForms
             if (($result['errors'] ?? []) !== []) {
                 $preview = implode("\n", array_slice($result['errors'], 0, 5));
                 if (count($result['errors']) > 5) {
-                    $preview .= "\n… " . __('and :count more row error(s)', ['count' => count($result['errors']) - 5]);
+                    $preview .= "\n… ".__('and :count more row error(s)', ['count' => count($result['errors']) - 5]);
                 }
 
-                $body .= "\n\n" . $preview;
+                $body .= "\n\n".$preview;
             }
 
             Notification::make()
                 ->title(__('Payments classified'))
-                ->body($body . ($this->classifiedPaymentsReady
-                    ? "\n\n" . __('Download the full classified CSV from the results panel below.')
+                ->body($body.($this->classifiedPaymentsReady
+                    ? "\n\n".__('Download the full classified CSV from the results panel below.')
                     : ''))
                 ->color(($result['stats']['failed'] ?? 0) > 0 ? 'warning' : 'success')
                 ->persistent(($result['stats']['failed'] ?? 0) > 0)
@@ -444,7 +446,7 @@ class LegacyMigrationPage extends Page implements HasForms
             return;
         }
 
-        if (!$dryRun && Setting::get('legacy_migration', 'run_status') === 'running') {
+        if (! $dryRun && Setting::get('legacy_migration', 'run_status') === 'running') {
             Notification::make()
                 ->title(__('Migration already running'))
                 ->body(__('A migration is already in progress. This page will update when it finishes.'))
