@@ -6,7 +6,9 @@ use App\Filament\Tenant\Resources\Members\Pages\EditMember;
 use App\Filament\Tenant\Resources\Members\RelationManagers\AccountsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\ContributionsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\DependentsRelationManager;
+use App\Filament\Tenant\Resources\Members\RelationManagers\GuarantorExposureRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\LoansRelationManager;
+use App\Filament\Tenant\Resources\Members\RelationManagers\MemberTransactionsTabsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\MessagesRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\RepaymentsRelationManager;
 use App\Models\Tenant\Member;
@@ -61,6 +63,9 @@ test('edit member page uses member title and combined full-width section', funct
         ->assertSee('MEM-0042')
         ->assertSee(__('Membership'))
         ->assertSee('500')
+        ->assertSee('ff-member-detail-shell', false)
+        ->assertSee('ff-member-stepper', false)
+        ->assertDontSee('ff-app-insights-kpi-strip', false)
         ->assertDontSee(__('Member Information'))
         ->assertDontSee(__('Membership Details'))
         ->assertSee(__('Loans'))
@@ -203,9 +208,11 @@ test('member resource relation tabs are ordered with loans before dependents and
 
     expect($relations)->toBe([
         AccountsRelationManager::class,
-        ContributionsRelationManager::class,
-        RepaymentsRelationManager::class,
         LoansRelationManager::class,
+        GuarantorExposureRelationManager::class,
+        ContributionsRelationManager::class,
+        MemberTransactionsTabsRelationManager::class,
+        RepaymentsRelationManager::class,
         DependentsRelationManager::class,
         MessagesRelationManager::class,
     ]);

@@ -772,23 +772,11 @@ final class LoanInsightsService
             ? $this->memberLoanViewUrl($loan)
             : LoanResource::getUrl('view', ['record' => $loan]);
 
-        $kpiUrls = $memberPanel
-            ? [
-                'requested' => $loanViewUrl,
-                'approved' => $loanViewUrl,
-                'disbursed' => $loanViewUrl,
-                'outstanding' => $loanViewUrl,
-                'queue' => $this->memberLoansIndexUrl('pending'),
-                'schedule' => $loanViewUrl,
-            ]
-            : [
-                'requested' => LoanResource::getUrl('edit', ['record' => $loan]),
-                'approved' => LoanResource::getUrl('edit', ['record' => $loan]),
-                'disbursed' => LoanResource::getUrl('edit', ['record' => $loan]),
-                'outstanding' => LoanResource::getUrl('edit', ['record' => $loan]),
-                'queue' => LoanResource::getUrl('queue'),
-                'schedule' => LoanResource::getUrl('edit', ['record' => $loan]),
-            ];
+        $queueUrl = $loan->status === 'pending'
+            ? ($memberPanel ? $this->memberLoansIndexUrl('pending') : LoanResource::getUrl('queue'))
+            : null;
+
+        $remainingToDisburse = max(0, $approved - $disbursed);
 
         return [
             'currency' => $currency,
@@ -797,28 +785,25 @@ final class LoanInsightsService
             'status' => $loan->status,
             'status_label' => Loan::statusOptions()[$loan->status] ?? $loan->status,
             'is_emergency' => $loan->is_emergency,
-            'hero' => [
-                'tone' => $installmentsOverdue > 0 ? 'danger' : ($loan->status === 'pending' ? 'amber' : 'success'),
-                'title' => __(':member · Loan #:id', ['member' => $loan->member?->name ?? '—', 'id' => $loan->id]),
-                'subtitle' => Loan::statusOptions()[$loan->status] ?? $loan->status,
-                'cta_label' => $loan->status === 'pending'
-                    ? ($memberPanel ? __('My loans') : __('Open queue'))
-                    : null,
-                'cta_url' => $loan->status === 'pending'
-                    ? ($memberPanel ? $this->memberLoansIndexUrl('pending') : LoanResource::getUrl('queue'))
-                    : null,
-            ],
-            'kpis' => InsightKpi::linkMany([
-                ['key' => 'requested', 'label' => __('Requested'), ...InsightKpi::moneyValue((float) $loan->amount_requested, $currency), 'sub' => __('Application'), 'icon' => 'heroicon-o-document-text', 'accent' => 'sky', 'active' => true],
-                ['key' => 'approved', 'label' => __('Approved'), ...($loan->amount_approved ? InsightKpi::moneyValue($approved, $currency) : ['value' => '—']), 'sub' => __('Terms'), 'icon' => 'heroicon-o-check-badge', 'accent' => 'emerald', 'active' => (bool) $loan->amount_approved],
-                ['key' => 'disbursed', 'label' => __('Disbursed'), ...InsightKpi::moneyValue($disbursed, $currency), 'sub' => $disbursePercent.'%', 'icon' => 'heroicon-o-banknotes', 'accent' => 'indigo', 'active' => $disbursed > 0],
-                ['key' => 'outstanding', 'label' => __('Outstanding'), ...InsightKpi::moneyValue($outstanding, $currency), 'sub' => __('Balance'), 'icon' => 'heroicon-o-scale', 'accent' => 'violet', 'active' => $outstanding > 0],
-                ['key' => 'queue', 'label' => __('Queue'), 'value' => $loan->queue_position ? '#'.$loan->queue_position : '—', 'sub' => $loan->fundTier?->label ?? '—', 'icon' => 'heroicon-o-queue-list', 'accent' => 'amber', 'active' => (bool) $loan->queue_position],
-                ['key' => 'schedule', 'label' => __('Schedule'), 'value' => $installmentsTotal > 0 ? $installmentsPaid.'/'.$installmentsTotal : '—', 'sub' => $repayPercent.'% '.__('paid'), 'icon' => 'heroicon-o-calendar-days', 'accent' => 'teal', 'active' => $installmentsTotal > 0],
-            ], $kpiUrls),
-            'progress' => [
-                'disburse' => ['percent' => $disbursePercent, 'label' => __('Ledger disbursement')],
-                'repay' => ['percent' => $repayPercent, 'label' => __('Repayment schedule')],
+            'snapshot' => [
+                'requested' => (float) $loan->amount_requested,
+                'approved' => $loan->amount_approved !== null ? (float) $loan->amount_approved : null,
+                'disbursed' => $disbursed,
+                'outstanding' => $outstanding,
+                'remaining_to_disburse' => $remainingToDisburse,
+                'disbursed_formatted' => $this->formatMoneyCompact($disbursed, $currency),
+                'remaining_formatted' => $this->formatMoneyCompact($remainingToDisburse, $currency),
+                'disburse_percent' => $disbursePercent,
+                'repay_percent' => $repayPercent,
+                'installments_paid' => $installmentsPaid,
+                'installments_total' => $installmentsTotal,
+                'installments_overdue' => $installmentsOverdue,
+                'queue_position' => $loan->queue_position,
+                'fund_tier' => $loan->fundTier?->label,
+                'tranche_count' => $loan->disbursements->count(),
+                'legacy_repayment_total' => (float) $loan->repayments->sum('amount'),
+                'queue_url' => $queueUrl,
+                'queue_label' => $memberPanel ? __('My loans') : __('Open queue'),
             ],
             'next_due' => $nextInstallment ? [
                 'amount' => (float) $nextInstallment->amount,
@@ -826,34 +811,6 @@ final class LoanInsightsService
                 'status' => $nextInstallment->status,
                 'is_overdue' => $nextInstallment->status === 'overdue',
             ] : null,
-            'relation_summaries' => array_values(array_filter([
-                [
-                    'key' => 'installments',
-                    'label' => __('Repayment schedule'),
-                    'value' => $installmentsTotal > 0 ? $installmentsPaid.' / '.$installmentsTotal.' '.__('paid') : __('Not generated'),
-                    'hint' => $installmentsOverdue > 0 ? trans_choice(':count overdue|:count overdue', $installmentsOverdue, ['count' => $installmentsOverdue]) : ($nextInstallment ? __('Next :date', ['date' => $nextInstallment->due_date?->format('d M')]) : null),
-                    'accent' => $installmentsOverdue > 0 ? 'rose' : 'teal',
-                    'icon' => 'heroicon-o-calendar-days',
-                ],
-                [
-                    'key' => 'disbursements',
-                    'label' => __('Disbursements'),
-                    'value' => $this->formatMoneyCompact($disbursed, $currency).' / '.$this->formatMoneyCompact($approved ?: (float) $loan->amount_requested, $currency),
-                    'hint' => trans_choice(':count tranche|:count tranches', $loan->disbursements->count(), ['count' => $loan->disbursements->count()]),
-                    'accent' => 'indigo',
-                    'icon' => 'heroicon-o-arrow-down-tray',
-                ],
-                $loan->repayments->isNotEmpty() ? [
-                    'key' => 'repayments',
-                    'label' => __('Imported/legacy repayments'),
-                    'money_amount' => (float) $loan->repayments->sum('amount'),
-                    'money_compact' => true,
-                    'value' => $this->formatMoneyCompact((float) $loan->repayments->sum('amount'), $currency),
-                    'hint' => __('Imported rows · schedule drives balance'),
-                    'accent' => 'violet',
-                    'icon' => 'heroicon-o-receipt-refund',
-                ] : null,
-            ])),
             'guarantor' => $loan->guarantor ? [
                 'name' => $loan->guarantor->name,
                 'released' => $loan->isGuarantorReleased(),

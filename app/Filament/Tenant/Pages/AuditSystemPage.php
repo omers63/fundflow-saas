@@ -13,7 +13,9 @@ use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\FundAuditLog;
 use App\Models\Tenant\NotificationLog;
 use App\Models\Tenant\ReconciliationException;
+use App\Services\SystemLogMaintenanceService;
 use App\Support\BatchPostingGate;
+use App\Support\SystemLoggingSettings;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -52,6 +54,10 @@ class AuditSystemPage extends Page implements HasTable
     /** @var 'all'|'admin'|'overrides'|'recon'|'loans' */
     #[Url(as: 'auditFilter')]
     public string $auditFilter = 'all';
+
+    public bool $auditLoggingEnabled = true;
+
+    public bool $notificationLoggingEnabled = true;
 
     public static function canAccess(): bool
     {
@@ -119,6 +125,9 @@ class AuditSystemPage extends Page implements HasTable
         if (! in_array($this->jobsTab, ['catalog', 'history'], true)) {
             $this->jobsTab = 'catalog';
         }
+
+        $this->auditLoggingEnabled = SystemLoggingSettings::fundAuditLogEnabled();
+        $this->notificationLoggingEnabled = SystemLoggingSettings::notificationLogEnabled();
     }
 
     public function setSideTab(string $tab): void
@@ -153,6 +162,88 @@ class AuditSystemPage extends Page implements HasTable
 
         $this->auditFilter = $filter;
         $this->reconfigureTableForSideTab();
+        $this->resetTable();
+    }
+
+    public function fundAuditLogRowCount(): int
+    {
+        return app(SystemLogMaintenanceService::class)->fundAuditLogRowCount();
+    }
+
+    public function notificationLogRowCount(): int
+    {
+        return app(SystemLogMaintenanceService::class)->notificationLogRowCount();
+    }
+
+    public function updatedAuditLoggingEnabled(bool $value): void
+    {
+        if (! $this->tenantUserIsAdmin()) {
+            $this->auditLoggingEnabled = SystemLoggingSettings::fundAuditLogEnabled();
+
+            return;
+        }
+
+        SystemLoggingSettings::setFundAuditLogEnabled($value);
+
+        Notification::make()
+            ->title($value ? __('Audit logging enabled') : __('Audit logging disabled'))
+            ->body($value
+                ? __('New fund audit events will be stored in the audit log table.')
+                : __('New fund audit events will not be stored until logging is turned back on.'))
+            ->success()
+            ->send();
+    }
+
+    public function updatedNotificationLoggingEnabled(bool $value): void
+    {
+        if (! $this->tenantUserIsAdmin()) {
+            $this->notificationLoggingEnabled = SystemLoggingSettings::notificationLogEnabled();
+
+            return;
+        }
+
+        SystemLoggingSettings::setNotificationLogEnabled($value);
+
+        Notification::make()
+            ->title($value ? __('Notification logging enabled') : __('Notification logging disabled'))
+            ->body($value
+                ? __('Delivery attempts will be stored in the notification log table.')
+                : __('Delivery attempts will not be stored until logging is turned back on.'))
+            ->success()
+            ->send();
+    }
+
+    public function truncateFundAuditLogs(): void
+    {
+        abort_unless($this->tenantUserIsAdmin(), 403);
+
+        $removed = app(SystemLogMaintenanceService::class)->truncateFundAuditLogs();
+
+        Notification::make()
+            ->title(__('Audit log table emptied'))
+            ->body($removed > 0
+                ? __('Removed :count audit log row(s).', ['count' => number_format($removed)])
+                : __('The audit log table was already empty.'))
+            ->success()
+            ->send();
+
+        $this->resetTable();
+    }
+
+    public function truncateNotificationLogs(): void
+    {
+        abort_unless($this->tenantUserIsAdmin(), 403);
+
+        $removed = app(SystemLogMaintenanceService::class)->truncateNotificationLogs();
+
+        Notification::make()
+            ->title(__('Notification log table emptied'))
+            ->body($removed > 0
+                ? __('Removed :count notification log row(s).', ['count' => number_format($removed)])
+                : __('The notification log table was already empty.'))
+            ->success()
+            ->send();
+
         $this->resetTable();
     }
 

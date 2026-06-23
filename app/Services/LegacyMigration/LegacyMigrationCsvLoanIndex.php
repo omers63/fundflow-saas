@@ -37,7 +37,7 @@ final class LegacyMigrationCsvLoanIndex
 
             $approvedRaw = trim((string) ($row['amount_approved'] ?? ''));
 
-            if ($approvedRaw === '' || ! is_numeric($approvedRaw)) {
+            if ($approvedRaw === '' || !is_numeric($approvedRaw)) {
                 continue;
             }
 
@@ -62,7 +62,7 @@ final class LegacyMigrationCsvLoanIndex
         foreach ($index->loansByMemberNumber as $memberNumber => $loans) {
             usort(
                 $loans,
-                fn (array $left, array $right): int => $left['disbursed_at']->timestamp <=> $right['disbursed_at']->timestamp,
+                fn(array $left, array $right): int => $left['disbursed_at']->timestamp <=> $right['disbursed_at']->timestamp,
             );
 
             $index->loansByMemberNumber[$memberNumber] = $loans;
@@ -79,21 +79,16 @@ final class LegacyMigrationCsvLoanIndex
         Carbon $paymentDate,
         array $cumulativeRepaidByLoanKey,
     ): ?LegacyLoanRepaymentWindow {
-        foreach ($this->loansByMemberNumber[trim($memberNumber)] ?? [] as $loan) {
-            $window = $this->buildWindow(trim($memberNumber), $loan);
+        $windows = array_map(
+            fn(array $loan): LegacyLoanRepaymentWindow => $this->buildWindow(trim($memberNumber), $loan),
+            $this->loansByMemberNumber[trim($memberNumber)] ?? [],
+        );
 
-            if (! $window->isDisbursedOnOrBefore($paymentDate)) {
-                continue;
-            }
-
-            $cumulative = $cumulativeRepaidByLoanKey[$window->loanKey] ?? 0.0;
-
-            if ($window->hasRemainingRepayment($cumulative)) {
-                return $window;
-            }
-        }
-
-        return null;
+        return LegacyLoanRepaymentWindow::firstOpenWindow(
+            $windows,
+            $paymentDate,
+            $cumulativeRepaidByLoanKey,
+        );
     }
 
     public function isEmpty(): bool

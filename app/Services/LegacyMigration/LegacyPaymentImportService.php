@@ -579,7 +579,7 @@ final class LegacyPaymentImportService
             return 'no_loan';
         }
 
-        $loan = $this->resolveExplicitLoan($row) ?? $allocation['loan'];
+        $loan = $allocation['loan'];
 
         if (!in_array($loan->status, ['active', 'transferred', 'completed', 'early_settled'], true)) {
             throw new InvalidArgumentException(__('Loan must be active or settled to receive imported repayments.'));
@@ -831,5 +831,46 @@ final class LegacyPaymentImportService
         }
 
         return null;
+    }
+
+    /**
+     * @param  list<int>  $affectedLoanIds
+     * @param  array<string, float>  $cumulativeRepaidByLoanKey
+     */
+    public function postAllocatedLoanRepaymentForRepair(
+        Loan $loan,
+        float $amount,
+        Carbon $paidAt,
+        string $notes,
+        array &$affectedLoanIds,
+        array &$cumulativeRepaidByLoanKey,
+    ): bool {
+        if ($this->legacyLoanRepaymentAlreadyImported($loan, $amount, $paidAt)) {
+            $this->repaymentWindowResolver->recordRepayment($loan, $loan->member, $amount, $cumulativeRepaidByLoanKey);
+
+            return false;
+        }
+
+        $this->postAllocatedLoanRepayment(
+            $loan,
+            $amount,
+            $paidAt,
+            $notes,
+            $affectedLoanIds,
+            $cumulativeRepaidByLoanKey,
+        );
+
+        return true;
+    }
+
+    public function postLegacyContributionForRepair(
+        Member $member,
+        int $month,
+        int $year,
+        float $amount,
+        Carbon $postedAt,
+        string $notes,
+    ): void {
+        $this->postLegacyContribution($member, $month, $year, $amount, $postedAt, $notes);
     }
 }

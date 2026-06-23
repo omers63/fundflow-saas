@@ -445,8 +445,30 @@ class ContributionService
             throw new InvalidArgumentException(__('Cycle and import contributions cannot be deleted. Use reconciliation or reversal tools to correct ledger entries.'));
         }
 
-        AccountingService::withoutMemberCashCollection(function () use ($contribution): void {
-            DB::transaction(function () use ($contribution): void {
+        $this->reverseAndDeleteContribution($contribution);
+    }
+
+    /**
+     * Reverse ledger legs and remove a legacy-import contribution during migration repair.
+     */
+    public function reverseImportedContributionForMigrationRepair(Contribution $contribution): void
+    {
+        if (
+            ! in_array($contribution->payment_method, [
+                Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+                Contribution::PAYMENT_METHOD_IMPORT_CSV,
+            ], true)
+        ) {
+            throw new InvalidArgumentException(__('Only legacy-import contributions can be reversed by migration repair.'));
+        }
+
+        $this->reverseAndDeleteContribution($contribution, forceDelete: true);
+    }
+
+    private function reverseAndDeleteContribution(Contribution $contribution, bool $forceDelete = false): void
+    {
+        AccountingService::withoutMemberCashCollection(function () use ($contribution, $forceDelete): void {
+            DB::transaction(function () use ($contribution, $forceDelete): void {
                 $contribution->loadMissing('member');
 
                 if ($contribution->status === 'posted') {
@@ -464,7 +486,11 @@ class ContributionService
 
                 $contribution->transactions()->delete();
 
-                $contribution->delete();
+                if ($forceDelete) {
+                    $contribution->forceDelete();
+                } else {
+                    $contribution->delete();
+                }
             });
         });
     }

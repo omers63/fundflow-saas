@@ -9,6 +9,7 @@ use App\Models\Tenant\User;
 use App\Notifications\Channels\SmsChannel;
 use App\Notifications\Channels\WhatsAppChannel;
 use App\Support\MemberLocale;
+use App\Support\SystemLoggingSettings;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Events\NotificationFailed;
@@ -21,7 +22,7 @@ class LogNotificationDeliveryListener
 {
     public function handleSent(NotificationSent $event): void
     {
-        if (! Schema::hasTable('notification_logs')) {
+        if (! SystemLoggingSettings::notificationLogEnabled() || ! Schema::hasTable('notification_logs')) {
             return;
         }
 
@@ -30,7 +31,7 @@ class LogNotificationDeliveryListener
 
     public function handleFailed(NotificationFailed $event): void
     {
-        if (! Schema::hasTable('notification_logs')) {
+        if (! SystemLoggingSettings::notificationLogEnabled() || ! Schema::hasTable('notification_logs')) {
             return;
         }
 

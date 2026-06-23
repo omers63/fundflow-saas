@@ -8,6 +8,7 @@
 @source '../../../../vendor/bezhansalleh/filament-language-switch/resources/views/**/*.blade.php';
 @source '../../../../app/Filament/Tenant/**/*';
 @source '../../../../resources/views/filament/**/*';
+@source '../../../../resources/views/components/**/*.blade.php';
 
 /* ── Admin portal design tokens (sky-blue primary) ── */
 .fi-body.fi-panel-tenant {
@@ -1381,11 +1382,11 @@ html.fi.fi-panel-tenant #nprogress .peg {
     padding-block: 0.25rem;
 }
 
-/* ── Loan lifecycle pipeline stepper (loan view insights) ── */
-@keyframes ff-loan-pipeline-step-in {
+/* ── Loan detail shell (view / edit insights) ── */
+@keyframes ff-loan-stepper-step-in {
     from {
         opacity: 0;
-        transform: translateY(6px);
+        transform: translateY(4px);
     }
 
     to {
@@ -1394,71 +1395,483 @@ html.fi.fi-panel-tenant #nprogress .peg {
     }
 }
 
-@keyframes ff-loan-pipeline-pulse {
+@keyframes ff-loan-stepper-pulse {
     0%,
     100% {
         box-shadow:
-            0 0 0 0 rgb(14 165 233 / 0.4),
-            0 4px 6px -4px rgb(2 132 199 / 0.35);
+            0 0 0 0 rgb(14 165 233 / 0.45),
+            0 0 0 1px rgb(14 165 233 / 0.35);
     }
 
     50% {
         box-shadow:
-            0 0 0 8px rgb(14 165 233 / 0),
-            0 4px 6px -4px rgb(2 132 199 / 0.35);
+            0 0 0 7px rgb(14 165 233 / 0),
+            0 0 0 1px rgb(14 165 233 / 0.55);
     }
 }
 
-@keyframes ff-loan-pipeline-pulse-warning {
-    0%,
-    100% {
-        box-shadow:
-            0 0 0 0 rgb(244 63 94 / 0.45),
-            0 4px 6px -4px rgb(225 29 72 / 0.35);
-    }
-
-    50% {
-        box-shadow:
-            0 0 0 8px rgb(244 63 94 / 0),
-            0 4px 6px -4px rgb(225 29 72 / 0.35);
-    }
+.fi-body.fi-panel-tenant .ff-loan-detail-shell {
+    overflow: hidden;
+    border-radius: 1rem;
+    border: 1px solid rgb(226 232 240 / 0.95);
+    background: linear-gradient(165deg, rgb(255 255 255) 0%, rgb(248 250 252 / 0.9) 48%, rgb(239 246 255 / 0.55) 100%);
+    box-shadow:
+        0 1px 2px rgb(15 23 42 / 0.04),
+        0 10px 30px -18px rgb(14 116 144 / 0.35);
 }
 
-.fi-body.fi-panel-tenant .ff-loan-pipeline__step {
-    animation: ff-loan-pipeline-step-in 0.5s ease-out both;
+.dark .fi-body.fi-panel-tenant .ff-loan-detail-shell {
+    border-color: rgb(255 255 255 / 0.08);
+    background: linear-gradient(165deg, rgb(15 23 42 / 0.92) 0%, rgb(15 23 42 / 0.78) 55%, rgb(30 41 59 / 0.65) 100%);
 }
 
-.fi-body.fi-panel-tenant .ff-loan-pipeline__track {
+.fi-body.fi-panel-tenant .ff-loan-stepper {
+    padding: 1rem 1rem 0.75rem;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__header {
+    display: flex;
     align-items: flex-start;
-    gap: 0;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.65rem;
 }
 
-.fi-body.fi-panel-tenant .ff-loan-pipeline__rail {
+.fi-body.fi-panel-tenant .ff-loan-stepper__eyebrow {
+    margin: 0;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgb(100 116 139);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-loan-stepper__eyebrow {
+    color: rgb(148 163 184);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__current {
+    margin: 0.15rem 0 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.3;
+    color: rgb(15 23 42);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-loan-stepper__current {
+    color: rgb(248 250 252);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__percent {
     flex-shrink: 0;
+    border-radius: 9999px;
+    background: rgb(224 242 254);
+    padding: 0.2rem 0.55rem;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgb(3 105 161);
 }
 
-.fi-body.fi-panel-tenant .ff-loan-pipeline__body {
-    flex: 1 1 auto;
+.dark .fi-body.fi-panel-tenant .ff-loan-stepper__percent {
+    background: rgb(12 74 110 / 0.45);
+    color: rgb(186 230 253);
 }
 
-.fi-body.fi-panel-tenant .ff-loan-pipeline__nav {
-    overflow-y: visible;
+.fi-body.fi-panel-tenant .ff-loan-stepper__track {
+    position: relative;
+    height: 0.3rem;
+    overflow: hidden;
+    border-radius: 9999px;
+    background: rgb(226 232 240);
 }
 
-.fi-body.fi-panel-tenant .ff-loan-pipeline__node--pulse {
-    animation: ff-loan-pipeline-pulse 2.2s ease-in-out infinite;
+.dark .fi-body.fi-panel-tenant .ff-loan-stepper__track {
+    background: rgb(51 65 85);
 }
 
-.fi-body.fi-panel-tenant .ff-loan-pipeline__node--pulse-warning {
-    animation-name: ff-loan-pipeline-pulse-warning;
+.fi-body.fi-panel-tenant .ff-loan-stepper__track-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, rgb(16 185 129), rgb(14 165 233), rgb(99 102 241));
+    transition: width 0.45s ease;
 }
 
-.fi-body.fi-panel-tenant .ff-loan-pipeline__connector,
-.fi-body.fi-panel-tenant .ff-loan-pipeline__arrow {
+.fi-body.fi-panel-tenant .ff-loan-stepper__nav {
+    margin-top: 0.8rem;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__nav::-webkit-scrollbar {
+    display: none;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__steps {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.35rem;
+    min-width: min(100%, 42rem);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__steps--terminal {
+    justify-content: center;
+    gap: 1.25rem;
+    min-width: 100%;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__step {
+    display: flex;
+    min-width: 4.5rem;
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    animation: ff-loan-stepper-step-in 0.45s ease-out both;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__node {
+    display: inline-flex;
+    height: 1.85rem;
+    width: 1.85rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: 2px solid transparent;
     transition:
-        background-color 0.35s ease,
-        border-color 0.35s ease,
-        color 0.35s ease;
+        transform 0.25s ease,
+        background-color 0.25s ease,
+        border-color 0.25s ease,
+        color 0.25s ease;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__node--complete {
+    border-color: rgb(52 211 153);
+    background: rgb(236 253 245);
+    color: rgb(5 150 105);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-loan-stepper__node--complete {
+    border-color: rgb(16 185 129 / 0.65);
+    background: rgb(6 78 59 / 0.35);
+    color: rgb(110 231 183);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__node--current {
+    transform: scale(1.08);
+    border-color: rgb(14 165 233);
+    background: rgb(14 165 233);
+    color: white;
+    animation: ff-loan-stepper-pulse 2.4s ease-in-out infinite;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__node--upcoming {
+    border-color: rgb(203 213 225);
+    background: rgb(248 250 252);
+    color: rgb(148 163 184);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-loan-stepper__node--upcoming {
+    border-color: rgb(71 85 105);
+    background: rgb(30 41 59);
+    color: rgb(100 116 139);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__node--danger {
+    transform: scale(1.08);
+    border-color: rgb(244 63 94);
+    background: rgb(244 63 94);
+    color: white;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__label {
+    width: 100%;
+    text-align: center;
+    font-size: 0.625rem;
+    font-weight: 600;
+    line-height: 1.25;
+    color: rgb(100 116 139);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__label--current {
+    color: rgb(3 105 161);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-loan-stepper__label--current {
+    color: rgb(125 211 252);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__label--complete {
+    color: rgb(5 150 105);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-loan-stepper__label--complete {
+    color: rgb(110 231 183);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-stepper__caption {
+    margin: 0.55rem 0 0;
+    border-radius: 0.65rem;
+    background: rgb(241 245 249 / 0.85);
+    padding: 0.45rem 0.65rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1.45;
+    color: rgb(71 85 105);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-loan-stepper__caption {
+    background: rgb(30 41 59 / 0.65);
+    color: rgb(203 213 225);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-snapshot {
+    display: grid;
+    gap: 0.85rem;
+    border-top: 1px solid rgb(226 232 240 / 0.9);
+    padding: 0.9rem 1rem 1rem;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-loan-detail-snapshot {
+    border-top-color: rgb(255 255 255 / 0.08);
+}
+
+@media (min-width: 768px) {
+    .fi-body.fi-panel-tenant .ff-loan-detail-snapshot {
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+        align-items: center;
+    }
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-snapshot__eyebrow {
+    margin: 0;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgb(100 116 139);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-snapshot__amount {
+    margin: 0.2rem 0 0;
+    font-size: clamp(1.35rem, 2.4vw, 1.75rem);
+    font-weight: 800;
+    line-height: 1.1;
+    color: rgb(15 23 42);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-loan-detail-snapshot__amount {
+    color: rgb(248 250 252);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-snapshot__meta {
+    margin: 0.35rem 0 0;
+    font-size: 0.75rem;
+    line-height: 1.45;
+    color: rgb(100 116 139);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-snapshot__progress {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-snapshot__bar-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: rgb(100 116 139);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-snapshot__bar-track {
+    margin-top: 0.25rem;
+    height: 0.45rem;
+    overflow: hidden;
+    border-radius: 9999px;
+    background: rgb(226 232 240);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-loan-detail-snapshot__bar-track {
+    background: rgb(51 65 85);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-snapshot__bar-fill {
+    height: 100%;
+    border-radius: inherit;
+    transition: width 0.4s ease;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-snapshot__bar-fill--indigo {
+    background: linear-gradient(90deg, rgb(99 102 241), rgb(129 140 248));
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-snapshot__bar-fill--teal {
+    background: linear-gradient(90deg, rgb(20 184 166), rgb(45 212 191));
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-footnotes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    border-top: 1px solid rgb(226 232 240 / 0.9);
+    padding: 0.7rem 1rem 0.9rem;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-loan-detail-footnotes {
+    border-top-color: rgb(255 255 255 / 0.08);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-chip {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 9999px;
+    padding: 0.3rem 0.65rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-chip--muted {
+    border: 1px solid rgb(226 232 240);
+    background: rgb(248 250 252);
+    color: rgb(71 85 105);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-loan-detail-chip--muted {
+    border-color: rgb(255 255 255 / 0.08);
+    background: rgb(30 41 59 / 0.55);
+    color: rgb(203 213 225);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-chip--warning {
+    border: 1px solid rgb(251 191 36 / 0.55);
+    background: rgb(255 251 235);
+    color: rgb(146 64 14);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-loan-detail-chip--warning {
+    border-color: rgb(245 158 11 / 0.35);
+    background: rgb(69 26 3 / 0.45);
+    color: rgb(253 230 138);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-chip--danger {
+    border: 1px solid rgb(254 202 202);
+    background: rgb(254 242 242);
+    color: rgb(185 28 28);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-loan-detail-chip--danger {
+    border-color: rgb(244 63 94 / 0.35);
+    background: rgb(69 10 10 / 0.45);
+    color: rgb(252 165 165);
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-chip--link {
+    border: 1px solid rgb(186 230 253);
+    background: rgb(240 249 255);
+    color: rgb(3 105 161);
+    text-decoration: none;
+    transition: background-color 0.2s ease;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-detail-chip--link:hover {
+    background: rgb(224 242 254);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-loan-detail-chip--link {
+    border-color: rgb(14 165 233 / 0.35);
+    background: rgb(8 47 73 / 0.45);
+    color: rgb(186 230 253);
+}
+
+/* ── Member detail shell (edit insights) ── */
+.fi-body.fi-panel-tenant .ff-member-detail-shell {
+    overflow: hidden;
+    border-radius: 1rem;
+    border: 1px solid rgb(226 232 240 / 0.95);
+    background: linear-gradient(165deg, rgb(255 255 255) 0%, rgb(248 250 252 / 0.9) 48%, rgb(240 253 250 / 0.55) 100%);
+    box-shadow:
+        0 1px 2px rgb(15 23 42 / 0.04),
+        0 10px 30px -18px rgb(13 148 136 / 0.28);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-member-detail-shell {
+    border-color: rgb(255 255 255 / 0.08);
+    background: linear-gradient(165deg, rgb(15 23 42 / 0.92) 0%, rgb(15 23 42 / 0.78) 55%, rgb(19 78 74 / 0.35) 100%);
+}
+
+.fi-body.fi-panel-tenant .ff-member-stepper {
+    padding: 1rem 1rem 0.75rem;
+}
+
+.fi-body.fi-panel-tenant .ff-member-detail-chip {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 9999px;
+    border: 1px solid rgb(226 232 240 / 0.95);
+    padding: 0.25rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.fi-body.fi-panel-tenant .ff-member-detail-chip--muted {
+    border-color: rgb(226 232 240 / 0.9);
+    background: rgb(248 250 252 / 0.85);
+    color: rgb(51 65 85);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-member-detail-chip--muted {
+    border-color: rgb(255 255 255 / 0.08);
+    background: rgb(30 41 59 / 0.55);
+    color: rgb(226 232 240);
+}
+
+.fi-body.fi-panel-tenant .ff-member-detail-chip--danger {
+    border-color: rgb(254 202 202);
+    background: rgb(254 242 242);
+    color: rgb(185 28 28);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-member-detail-chip--danger {
+    border-color: rgb(244 63 94 / 0.35);
+    background: rgb(76 5 25 / 0.45);
+    color: rgb(254 205 211);
+}
+
+.fi-body.fi-panel-tenant .ff-member-detail-chip--link {
+    border-color: rgb(153 246 228);
+    background: rgb(240 253 250);
+    color: rgb(15 118 110);
+    transition: background-color 150ms ease;
+}
+
+.fi-body.fi-panel-tenant .ff-member-detail-chip--link:hover {
+    background: rgb(204 251 241);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-member-detail-chip--link {
+    border-color: rgb(45 212 191 / 0.35);
+    background: rgb(19 78 74 / 0.45);
+    color: rgb(153 246 228);
+}
+
+/* Legacy class kept for tests asserting pipeline markup */
+.fi-body.fi-panel-tenant .ff-loan-pipeline,
+.fi-body.fi-panel-tenant .ff-loan-stepper {
+    /* shared loan progress region */
 }
 
 /* ── RTL layout (Arabic locale) ── */

@@ -17,7 +17,8 @@ final class LegacyLoanRepaymentWindowResolver
 {
     public function __construct(
         private readonly LegacyMigrationDatabaseLoanResolver $loanResolver,
-    ) {}
+    ) {
+    }
 
     public function resolveLoan(
         Member $member,
@@ -85,26 +86,18 @@ final class LegacyLoanRepaymentWindowResolver
         Carbon $paymentDate,
         array $cumulativeRepaidByLoanKey,
     ): ?LegacyLoanRepaymentWindow {
-        foreach ($member->loans()
+        $windows = $member->loans()
             ->whereIn('status', ['active', 'transferred', 'completed', 'early_settled'])
             ->whereNotNull('disbursed_at')
-            ->where('disbursed_at', '<=', $paymentDate)
             ->orderBy('disbursed_at')
-            ->get() as $loan) {
-            $window = $this->buildDatabaseWindow($member, $loan);
+            ->get()
+            ->map(fn(Loan $loan): LegacyLoanRepaymentWindow => $this->buildDatabaseWindow($member, $loan));
 
-            if (! $window->isDisbursedOnOrBefore($paymentDate)) {
-                continue;
-            }
-
-            $cumulative = $cumulativeRepaidByLoanKey[$window->loanKey] ?? 0.0;
-
-            if ($window->hasRemainingRepayment($cumulative)) {
-                return $window;
-            }
-        }
-
-        return null;
+        return LegacyLoanRepaymentWindow::firstOpenWindow(
+            $windows,
+            $paymentDate,
+            $cumulativeRepaidByLoanKey,
+        );
     }
 
     private function buildDatabaseWindow(Member $member, Loan $loan): LegacyLoanRepaymentWindow

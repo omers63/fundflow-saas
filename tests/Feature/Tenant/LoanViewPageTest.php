@@ -27,7 +27,7 @@ beforeEach(function () {
     $this->actingAs($admin, 'tenant');
 });
 
-test('loan view page shows legacy detail tabs', function () {
+test('loan view page shows lifecycle insights and detail sections', function () {
     $member = Member::factory()->create(['status' => 'active']);
 
     $loan = Loan::factory()->for($member)->create([
@@ -44,5 +44,8 @@ test('loan view page shows legacy detail tabs', function () {
         ->assertSuccessful()
         ->assertSee('Home renovation', false)
         ->assertSee('Witness One', false)
-        ->assertSeeHtml('ff-loan-pipeline');
+        ->assertSeeHtml('ff-loan-detail-shell')
+        ->assertSeeHtml('ff-loan-stepper')
+        ->assertSee(__('Application & purpose'), false)
+        ->assertSee(__('Details'), false);
 });

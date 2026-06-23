@@ -12,6 +12,8 @@ use App\Models\Tenant\Loan;
 use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
 
 class ViewLoan extends ViewRecord
@@ -21,6 +23,32 @@ class ViewLoan extends ViewRecord
     public function getHeading(): string
     {
         return __('Loan #:id', ['id' => $this->record->getKey()]);
+    }
+
+    public function getSubheading(): string|Htmlable|null
+    {
+        $loan = $this->getRecord();
+        $status = Loan::statusOptions()[$loan->status] ?? $loan->status;
+
+        return __(':member · :status', [
+            'member' => $loan->member?->name ?? __('Unknown member'),
+            'status' => $status,
+        ]);
+    }
+
+    public function hasCombinedRelationManagerTabsWithContent(): bool
+    {
+        return true;
+    }
+
+    public function getContentTabLabel(): ?string
+    {
+        return __('Details');
+    }
+
+    public function getContentTabIcon(): string|\BackedEnum|Htmlable|null
+    {
+        return Heroicon::OutlinedDocumentText;
     }
 
     /**
@@ -61,6 +89,17 @@ class ViewLoan extends ViewRecord
     public function infolist(Schema $schema): Schema
     {
         return LoanViewInfolist::configure($schema);
+    }
+
+    /**
+     * @return array<string>
+     */
+    public function getPageClasses(): array
+    {
+        return [
+            ...parent::getPageClasses(),
+            'ff-tenant-loan-detail',
+        ];
     }
 
     protected function resolveRecord(int|string $key): Model

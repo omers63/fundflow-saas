@@ -109,6 +109,7 @@ final class MemberDetailInsightsService
         $fundKpi = InsightFormatter::moneyKpi($fundBalance);
 
         $hero = $this->buildHero($member, $arrears, $cycleStatus, $activeLoan, $installmentsOverdue);
+        $steps = $this->lifecycleSteps($member, $postedThisPeriod, $activeLoan, $arrears);
         $kpis = $this->buildKpis(
             $member,
             $cashKpi,
@@ -152,8 +153,28 @@ final class MemberDetailInsightsService
             ],
             'currency' => $currency,
             'hero' => $hero,
+            'snapshot' => $this->buildSnapshot(
+                $hero,
+                $cycleStatus,
+                $monthly,
+                $activeLoan,
+                $installmentsPaid,
+                $installmentsTotal,
+                $repayPercent,
+                $monthly > 0 ? min(100, (int) round(($fundBalance / $monthly) * 100)) : null,
+            ),
+            'metrics' => $this->buildMetrics(
+                $member,
+                $lifetimeDisbursed,
+                $disbursedLoanCount,
+                $contributionsPostedTotal,
+                $lifetimeRepaid,
+                $contributionsPostedCount,
+                $pendingPostings,
+                $dependentsCount,
+            ),
             'kpis' => $kpis,
-            'steps' => $this->lifecycleSteps($member, $postedThisPeriod, $activeLoan, $arrears),
+            'steps' => $steps,
             'balances' => [
                 'cash' => [
                     'amount' => $cashBalance,
@@ -264,6 +285,97 @@ final class MemberDetailInsightsService
      * @param  array{key: string, label: string, tone: string}  $cycleStatus
      * @return array{tone: string, title: string, subtitle: string, cta_label: ?string, cta_url: ?string}
      */
+    /**
+     * @param  array{tone: string, title: string, subtitle: string, cta_label: ?string, cta_url: ?string}  $hero
+     * @param  array{key: string, label: string, tone: string, short: string, period?: string}  $cycleStatus
+     * @return array<string, mixed>
+     */
+    private function buildSnapshot(
+        array $hero,
+        array $cycleStatus,
+        float $monthly,
+        ?Loan $activeLoan,
+        int $installmentsPaid,
+        int $installmentsTotal,
+        int $repayPercent,
+        ?int $fundMinimumPct,
+    ): array {
+        return [
+            'status_tone' => $hero['tone'],
+            'status_title' => $hero['title'],
+            'status_subtitle' => $hero['subtitle'],
+            'status_cta_label' => $hero['cta_label'],
+            'status_cta_url' => $hero['cta_url'],
+            'monthly_formatted' => InsightFormatter::money($monthly),
+            'cycle_summary' => $cycleStatus['short'].' · '.($cycleStatus['period'] ?? ''),
+            'fund_minimum_pct' => $fundMinimumPct,
+            'installments_paid' => $installmentsPaid,
+            'installments_total' => $installmentsTotal,
+            'repay_percent' => $repayPercent,
+            'loan_outstanding' => $activeLoan ? $activeLoan->getOutstandingBalance() : null,
+        ];
+    }
+
+    /**
+     * @return list<array{label: string, value: string, url: ?string}>
+     */
+    private function buildMetrics(
+        Member $member,
+        float $lifetimeDisbursed,
+        int $_disbursedLoanCount,
+        float $lifetimeContributions,
+        float $lifetimeRepaid,
+        int $contributionsPostedCount,
+        int $pendingPostings,
+        int $dependentsCount,
+    ): array {
+        $metrics = [];
+
+        if (abs($lifetimeContributions) > 0.00001) {
+            $metrics[] = [
+                'label' => __('Contributions'),
+                'value' => InsightFormatter::compactAmount($lifetimeContributions),
+                'url' => ContributionResource::ledgerUrlForMember($member),
+            ];
+        }
+
+        if (abs($lifetimeRepaid) > 0.00001) {
+            $metrics[] = [
+                'label' => __('Repaid'),
+                'value' => InsightFormatter::compactAmount($lifetimeRepaid),
+                'url' => LoanResource::portfolioUrlForMember($member),
+            ];
+        }
+
+        if ($lifetimeDisbursed > 0) {
+            $metrics[] = [
+                'label' => __('Disbursed'),
+                'value' => InsightFormatter::compactAmount($lifetimeDisbursed),
+                'url' => LoanResource::portfolioUrlForMember($member),
+            ];
+        }
+
+        if ($contributionsPostedCount > 0 || $pendingPostings > 0) {
+            $metrics[] = [
+                'label' => __('Posted'),
+                'value' => $pendingPostings > 0
+                    ? (string) $contributionsPostedCount.' · '.trans_choice(':count pending|:count pending', $pendingPostings, ['count' => $pendingPostings])
+                    : (string) $contributionsPostedCount,
+                'url' => ContributionResource::ledgerUrlForMember($member),
+            ];
+        }
+
+        if ($dependentsCount > 0) {
+            $metrics[] = [
+                'label' => __('Household'),
+                'value' => trans_choice(':count dependent|:count dependents', $dependentsCount, ['count' => $dependentsCount]),
+                'url' => MemberResource::getUrl('edit', ['record' => $member]),
+            ];
+        }
+
+        return array_slice($metrics, 0, 5);
+    }
+
     /**
      * @param  array{has_arrears: bool, is_delinquent: bool, overdue_installment_count: int, unpaid_contribution_periods: list<string>}  $arrears
      * @return array{cta_label: string, cta_url: string}
@@ -667,7 +779,46 @@ final class MemberDetailInsightsService
             ];
         }
 
-        return $steps;
+        return array_map(
+            fn (array $step): array => [
+                ...$step,
+                'description' => $this->lifecycleStepDescription($step, $member, $postedThisPeriod, $activeLoan, $arrears),
+            ],
+            $steps,
+        );
+    }
+
+    /**
+     * @param  array{key: string, label: string, state: string}  $step
+     * @param  array{has_arrears: bool, is_delinquent: bool}  $arrears
+     */
+    private function lifecycleStepDescription(
+        array $step,
+        Member $member,
+        bool $postedThisPeriod,
+        ?Loan $activeLoan,
+        array $arrears,
+    ): ?string {
+        return match ($step['key'] ?? '') {
+            'joined' => $member->joined_at !== null
+            ? __('Joined :date', ['date' => Carbon::parse((string) $member->joined_at)->format('d M Y')])
+            : null,
+            'active' => match ($member->status) {
+                'active' => __('Membership is active'),
+                'delinquent' => __('Member is delinquent — clear arrears to restore'),
+                default => Member::statusOptions()[$member->status] ?? ucfirst($member->status),
+            },
+            'cycle' => $postedThisPeriod
+            ? __('Contribution posted for the open cycle')
+            : __('Open-cycle contribution is not yet posted'),
+            'loan' => $activeLoan !== null
+            ? __(':status — repayment in progress', ['status' => Loan::statusOptions()[$activeLoan->status] ?? $activeLoan->status])
+            : null,
+            'arrears' => $arrears['is_delinquent']
+            ? __('Delinquent status — review obligations')
+            : __('Outstanding contributions or installments need attention'),
+            default => null,
+        };
     }
 
     /**

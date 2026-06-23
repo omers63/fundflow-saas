@@ -18,9 +18,7 @@ class MemberForm
     {
         return $schema
             ->components([
-                Section::make(__('Membership'))
-                    ->icon('heroicon-o-identification')
-                    ->columnSpanFull()
+                self::detailSection(__('Membership'), __('Core profile and contribution settings.'))
                     ->columns(2)
                     ->schema([
                         TextInput::make('member_number')
@@ -86,9 +84,7 @@ class MemberForm
                             ->dehydrated(false)
                             ->helperText(__('Initial password for this member\'s own login account.')),
                     ]),
-                Section::make(__('Portal & household'))
-                    ->icon('heroicon-o-home')
-                    ->columnSpanFull()
+                self::detailSection(__('Portal & household'), __('Login and household linkage — shown in the summary panel when relevant.'))
                     ->columns(2)
                     ->schema([
                         TextInput::make('household_email')
@@ -115,5 +111,19 @@ class MemberForm
                             ->helperText(__('Automatically enabled for dependents with their own email so they can sign in directly.')),
                     ]),
             ]);
+    }
+
+    private static function detailSection(string $heading, ?string $description = null): Section
+    {
+        $section = Section::make($heading)
+            ->compact()
+            ->secondary()
+            ->columnSpanFull();
+
+        if ($description !== null) {
+            $section->description($description);
+        }
+
+        return $section;
     }
 }

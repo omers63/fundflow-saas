@@ -791,6 +791,51 @@ html[dir='rtl'] .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-he
 }
 
 /* Pending loan application review (edit page) */
+.fi-body.fi-panel-tenant .ff-tenant-loan-detail .fi-main {
+    max-width: 72rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-loan-detail .ff-app-insights {
+    margin-bottom: 0.25rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-loan-detail .fi-header-widgets {
+    margin-bottom: 0.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-loan-detail .fi-infolist > .fi-sc-section,
+.fi-body.fi-panel-tenant .ff-tenant-loan-detail .fi-fo-section {
+    margin-top: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-loan-detail .fi-infolist > .fi-sc-section + .fi-sc-section,
+.fi-body.fi-panel-tenant .ff-tenant-loan-detail .fi-fo-section + .fi-fo-section {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgb(226 232 240 / 0.9);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-tenant-loan-detail .fi-infolist > .fi-sc-section + .fi-sc-section,
+.dark .fi-body.fi-panel-tenant .ff-tenant-loan-detail .fi-fo-section + .fi-fo-section {
+    border-top-color: rgb(255 255 255 / 0.08);
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-loan-detail .fi-resource-relation-managers {
+    margin-top: 0.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-loan-detail .fi-resource-relation-managers .fi-tabs {
+    gap: 0.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-loan-detail .fi-resource-relation-managers .fi-tabs-panel {
+    padding-top: 0.75rem;
+}
+
 .fi-body.fi-panel-tenant .ff-tenant-loan-review .fi-main {
     max-width: 56rem;
 }
@@ -798,6 +843,45 @@ html[dir='rtl'] .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-he
 .fi-body.fi-panel-tenant .ff-tenant-loan-review .fi-header-actions {
     flex-wrap: wrap;
     gap: 0.5rem;
+}
+
+/* Member detail (edit page) */
+.fi-body.fi-panel-tenant .ff-tenant-member-detail .fi-main {
+    max-width: 72rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-member-detail .ff-app-insights {
+    margin-bottom: 0.25rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-member-detail .fi-header-widgets {
+    margin-bottom: 0.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-member-detail .fi-fo-section {
+    margin-top: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-member-detail .fi-fo-section + .fi-fo-section {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgb(226 232 240 / 0.9);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-tenant-member-detail .fi-fo-section + .fi-fo-section {
+    border-top-color: rgb(255 255 255 / 0.08);
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-member-detail .fi-resource-relation-managers {
+    margin-top: 0.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-member-detail .fi-resource-relation-managers .fi-tabs-panel {
+    padding-top: 0.75rem;
 }
 
 /* Audit & System embedded workspaces */

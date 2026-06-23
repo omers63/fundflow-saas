@@ -40,7 +40,7 @@ test('pending loan edit page is structured for application review with workflow 
     Livewire::test(EditLoan::class, ['record' => $loan->getKey()])
         ->assertSuccessful()
         ->assertSee(__('Review loan application #:id', ['id' => $loan->getKey()]), false)
-        ->assertSee(__('Application queue'), false)
+        ->assertSee(__('Eligibility'), false)
         ->assertSee(__('Approval preview'), false)
         ->assertSee(__('Application details'), false)
         ->assertActionVisible('approve')

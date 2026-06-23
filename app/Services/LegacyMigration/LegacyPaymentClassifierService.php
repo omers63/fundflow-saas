@@ -267,6 +267,10 @@ final class LegacyPaymentClassifierService
             $minimumInstallment > 0.00001
             && $cumulative <= 0.00001
             && $amount + 0.00001 < $minimumInstallment
+            && ! (
+                $member->monthlyContribution > 0.00001
+                && abs($amount - $member->monthlyContribution) <= 0.00001
+            )
         ) {
             return [
                 'loan' => null,

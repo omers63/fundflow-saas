@@ -36,7 +36,7 @@ beforeEach(function () {
 
 test('portfolio snapshot returns pipeline counts and hero', function () {
     $member = Member::create([
-        'member_number' => 'MEM-' . uniqid(),
+        'member_number' => 'MEM-'.uniqid(),
         'name' => 'Test Member',
         'monthly_contribution_amount' => 5000,
         'joined_at' => now()->subMonths(18),
@@ -62,7 +62,7 @@ test('portfolio snapshot returns pipeline counts and hero', function () {
 
 test('loan detail snapshot includes stepper and relation summaries', function () {
     $member = Member::create([
-        'member_number' => 'MEM-' . uniqid(),
+        'member_number' => 'MEM-'.uniqid(),
         'name' => 'Test Member',
         'monthly_contribution_amount' => 5000,
         'joined_at' => now()->subMonths(18),
@@ -83,10 +83,10 @@ test('loan detail snapshot includes stepper and relation summaries', function ()
 
     $snapshot = $this->service->loanDetailSnapshot($loan);
 
-    expect($snapshot)->toHaveKeys(['steps', 'kpis', 'progress', 'relation_summaries'])
+    expect($snapshot)->toHaveKeys(['steps', 'snapshot', 'next_due', 'guarantor'])
         ->and($snapshot['steps'])->not->toBeEmpty()
         ->and(collect($snapshot['steps'])->pluck('key'))->toContain('under_review')
-        ->and($snapshot['relation_summaries'])->toHaveCount(2);
+        ->and($snapshot['snapshot'])->toHaveKeys(['requested', 'approved', 'disburse_percent', 'repay_percent']);
 });
 
 test('loan detail snapshot includes imported repayments summary when legacy rows exist', function () {
@@ -112,8 +112,7 @@ test('loan detail snapshot includes imported repayments summary when legacy rows
 
     $snapshot = $this->service->loanDetailSnapshot($loan->fresh());
 
-    expect($snapshot['relation_summaries'])->toHaveCount(3)
-        ->and(collect($snapshot['relation_summaries'])->pluck('key'))->toContain('repayments');
+    expect($snapshot['snapshot']['legacy_repayment_total'])->toBe(500.0);
 });
 
 test('emi collect snapshot reports pending members and preview', function () {
@@ -213,7 +212,7 @@ test('emi collected snapshot reports paid installments for open period', functio
 });
 
 test('eligibility reviews snapshot reports pending pipeline and preview', function () {
-    if (!LoanEligibilityOverrideRequest::isTableReady()) {
+    if (! LoanEligibilityOverrideRequest::isTableReady()) {
         $this->markTestSkipped('loan_eligibility_override_requests table not migrated');
     }
 
@@ -227,7 +226,7 @@ test('eligibility reviews snapshot reports pending pipeline and preview', functi
 
     $member = Member::create([
         'user_id' => $memberUser->id,
-        'member_number' => 'MEM-' . uniqid(),
+        'member_number' => 'MEM-'.uniqid(),
         'name' => 'Review Insights Member',
         'monthly_contribution_amount' => 5000,
         'joined_at' => now()->subMonths(6),
@@ -276,7 +275,7 @@ test('member portfolio snapshot links to my loans routes on member panel', funct
     Filament::setCurrentPanel('member');
 
     $member = Member::create([
-        'member_number' => 'MEM-' . uniqid(),
+        'member_number' => 'MEM-'.uniqid(),
         'name' => 'Member Insights',
         'monthly_contribution_amount' => 5000,
         'joined_at' => now()->subMonths(6),
@@ -307,7 +306,7 @@ test('loan detail snapshot on member panel uses my loan view urls', function () 
     Filament::setCurrentPanel('member');
 
     $member = Member::create([
-        'member_number' => 'MEM-' . uniqid(),
+        'member_number' => 'MEM-'.uniqid(),
         'name' => 'Detail Member',
         'monthly_contribution_amount' => 5000,
         'joined_at' => now()->subMonths(6),
@@ -328,9 +327,5 @@ test('loan detail snapshot on member panel uses my loan view urls', function () 
     $snapshot = $this->service->loanDetailSnapshot($loan);
 
     expect($snapshot['view_url'])->toBe(MyLoanResource::getUrl('view', ['record' => $loan]))
-        ->and($snapshot['hero']['cta_url'])->toContain('/member/my-loans');
-
-    foreach (collect($snapshot['kpis'])->pluck('url')->unique()->all() as $url) {
-        expect($url)->toContain('/member/my-loans');
-    }
+        ->and($snapshot['snapshot']['queue_url'])->toContain('/member/my-loans');
 });

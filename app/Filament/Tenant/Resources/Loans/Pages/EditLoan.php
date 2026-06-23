@@ -14,6 +14,7 @@ use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 
 class EditLoan extends EditRecord
@@ -33,10 +34,46 @@ class EditLoan extends EditRecord
 
     public function getSubheading(): string|Htmlable|null
     {
-        return match ($this->getRecord()->status) {
-            'pending' => __('Check eligibility, adjust application details if needed, then approve or reject using the actions above.'),
-            'approved', 'partially_disbursed' => __('Release approved funds to the member when the bank transfer is ready.'),
+        $loan = $this->getRecord();
+        $status = Loan::statusOptions()[$loan->status] ?? $loan->status;
+        $member = $loan->member?->name ?? __('Unknown member');
+
+        $context = match ($loan->status) {
+            'pending' => __('Check eligibility, adjust details if needed, then approve or reject.'),
+            'approved', 'partially_disbursed' => __('Release approved funds when the bank transfer is ready.'),
             default => null,
+        };
+
+        $headline = __(':member · :status', [
+            'member' => $member,
+            'status' => $status,
+        ]);
+
+        return $context !== null
+            ? $headline.' — '.$context
+            : $headline;
+    }
+
+    public function hasCombinedRelationManagerTabsWithContent(): bool
+    {
+        return true;
+    }
+
+    public function getContentTabLabel(): ?string
+    {
+        return match ($this->getRecord()->status) {
+            'pending' => __('Review'),
+            'approved', 'partially_disbursed' => __('Disbursement'),
+            default => __('Details'),
+        };
+    }
+
+    public function getContentTabIcon(): string|\BackedEnum|Htmlable|null
+    {
+        return match ($this->getRecord()->status) {
+            'pending' => Heroicon::OutlinedClipboardDocumentCheck,
+            'approved', 'partially_disbursed' => Heroicon::OutlinedBanknotes,
+            default => Heroicon::OutlinedDocumentText,
         };
     }
 
@@ -45,7 +82,10 @@ class EditLoan extends EditRecord
      */
     public function getPageClasses(): array
     {
-        $classes = parent::getPageClasses();
+        $classes = [
+            ...parent::getPageClasses(),
+            'ff-tenant-loan-detail',
+        ];
 
         if ($this->getRecord()->status === 'pending') {
             $classes[] = 'ff-tenant-loan-review';

@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\Tenant\FundAuditLog;
 use App\Models\Tenant\Member;
 use App\Support\BusinessDay;
+use App\Support\SystemLoggingSettings;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 
@@ -18,7 +19,11 @@ class FundAuditLogService
         ?Model $subject = null,
         ?Member $member = null,
         ?array $payload = null,
-    ): FundAuditLog {
+    ): ?FundAuditLog {
+        if (! SystemLoggingSettings::fundAuditLogEnabled()) {
+            return null;
+        }
+
         $occurredAt = BusinessDay::now();
         $operatorId = Auth::guard('tenant')->id();
 

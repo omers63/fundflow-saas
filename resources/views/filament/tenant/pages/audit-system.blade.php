@@ -31,6 +31,16 @@
                             @endforeach
                         </div>
                     </div>
+                    @include('filament.tenant.partials.audit-system-logging-controls', [
+                        'loggingTitle' => __('Audit logging'),
+                        'loggingDescription' => __('Turn off to stop writing new rows to the fund audit log table. Existing rows stay until you empty the table.'),
+                        'toggleProperty' => 'auditLoggingEnabled',
+                        'toggleLabel' => __('Record new audit log entries'),
+                        'rowCount' => $this->fundAuditLogRowCount(),
+                        'truncateAction' => 'truncateFundAuditLogs',
+                        'truncateLabel' => __('Empty audit log table'),
+                        'truncateConfirm' => __('Permanently delete every row in the fund audit log table? This cannot be undone.'),
+                    ])
                     <div wire:key="audit-system-table-audit-{{ $this->auditFilter }}">
                         {{ $this->table }}
                     </div>
@@ -44,6 +54,16 @@
                             {{ __('Email, SMS, WhatsApp, and in-app delivery attempts.') }}
                         </p>
                     </div>
+                    @include('filament.tenant.partials.audit-system-logging-controls', [
+                        'loggingTitle' => __('Notification logging'),
+                        'loggingDescription' => __('Turn off to stop writing new rows to the notification log table. Existing rows stay until you empty the table.'),
+                        'toggleProperty' => 'notificationLoggingEnabled',
+                        'toggleLabel' => __('Record notification delivery log entries'),
+                        'rowCount' => $this->notificationLogRowCount(),
+                        'truncateAction' => 'truncateNotificationLogs',
+                        'truncateLabel' => __('Empty notification log table'),
+                        'truncateConfirm' => __('Permanently delete every row in the notification log table? This cannot be undone.'),
+                    ])
                     <div wire:key="audit-system-table-notifications">
                         {{ $this->table }}
                     </div>

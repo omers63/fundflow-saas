@@ -27,7 +27,7 @@ final class LegacyPaymentLoanAllocator
         return $cumulativeRepaidOnLoan <= self::AMOUNT_TOLERANCE;
     }
 
-    public function qualifiesForLoanRepayment(Loan $loan, float $amount, float $cumulativeRepaidOnLoan = 0.0): bool
+    public function qualifiesForLoanRepayment(Loan $loan, Member $member, float $amount, float $cumulativeRepaidOnLoan = 0.0): bool
     {
         if ($amount <= self::AMOUNT_TOLERANCE) {
             return false;
@@ -35,12 +35,22 @@ final class LegacyPaymentLoanAllocator
 
         $minimumInstallment = $this->minimumInstallmentAmount($loan);
 
-        if (
-            $minimumInstallment > self::AMOUNT_TOLERANCE
-            && $this->isAtRepaymentCycleStart($cumulativeRepaidOnLoan)
-            && $amount + self::AMOUNT_TOLERANCE < $minimumInstallment
-        ) {
-            return false;
+        if ($this->isAtRepaymentCycleStart($cumulativeRepaidOnLoan)) {
+            $monthlyContribution = round((float) $member->monthly_contribution_amount, 2);
+
+            if (
+                $monthlyContribution > self::AMOUNT_TOLERANCE
+                && abs($amount - $monthlyContribution) <= self::AMOUNT_TOLERANCE
+            ) {
+                return true;
+            }
+
+            if (
+                $minimumInstallment > self::AMOUNT_TOLERANCE
+                && $amount + self::AMOUNT_TOLERANCE < $minimumInstallment
+            ) {
+                return false;
+            }
         }
 
         return true;
@@ -80,7 +90,7 @@ final class LegacyPaymentLoanAllocator
 
         $cumulative = $cumulativeRepaidByLoanKey[$window->loanKey] ?? 0.0;
 
-        if (! $this->qualifiesForLoanRepayment($loan, $amount, $cumulative)) {
+        if (! $this->qualifiesForLoanRepayment($loan, $member, $amount, $cumulative)) {
             return $this->contributionOnly($amount);
         }
         $targetRemaining = $window->remainingRepayment($cumulative);

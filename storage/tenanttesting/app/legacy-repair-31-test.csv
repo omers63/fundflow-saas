@@ -1,0 +1,3 @@
+member_email,member_number,payment_date,amount,payment_type,loan_number,period,notes
+,LEG-REPAIR-31,2023-12-01,500,contribution,,2023-12,"Misclassified legacy payment"
+,LEG-REPAIR-31,2024-01-01,500,contribution,,2024-01,"Misclassified legacy payment"

@@ -9,7 +9,6 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanEligibilityService;
-use App\Services\Loans\LoanQueuePriorityScoreService;
 use App\Support\LoanEligibilityGate;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
@@ -200,9 +199,10 @@ class LoanForm
         $currency = Setting::get('general', 'currency', 'USD');
 
         return $schema
+            ->columns(1)
             ->components([
-                Section::make(__('Loan application'))
-                    ->columns(2)
+                self::loanSection(__('Application details'), __('Editable fields for this loan request.'))
+                    ->columns(['default' => 1, 'md' => 2])
                     ->schema([
                         Select::make('member_id')
                             ->label(__('Member'))
@@ -251,32 +251,12 @@ class LoanForm
         );
 
         return $schema
+            ->columns(1)
             ->components([
-                Section::make(__('Application queue'))
-                    ->description(__('Use the header actions to approve, reject, or cancel after reviewing the application below.'))
+                self::loanSection(__('Eligibility'), __('Fund balance and gates — the amount and queue summary is in the panel above.'))
                     ->schema([
-                        Placeholder::make('queue_context')
-                            ->hiddenLabel()
-                            ->content(function () use ($loanResolver, $currency): HtmlString {
-                                $loan = $loanResolver();
-                                $loan->loadMissing('member');
-                                $priority = app(LoanQueuePriorityScoreService::class)->calculate($loan);
-                                $waiting = $loan->applied_at?->diffForHumans() ?? '—';
-
-                                return new HtmlString(
-                                    '<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">'
-                                    .self::snapshotRow(__('Member'), (string) ($loan->member?->name ?? '—'))
-                                    .self::snapshotRow(__('Applied'), $loan->applied_at?->toDayDateTimeString() ?? '—')
-                                    .self::snapshotRow(__('Waiting'), $waiting)
-                                    .self::snapshotRow(__('Priority score'), (string) $priority)
-                                    .self::snapshotRow(__('Queue position'), $loan->queue_position !== null ? (string) $loan->queue_position : '—')
-                                    .self::snapshotRow(__('Amount requested'), MoneyDisplay::format((float) $loan->amount_requested, $currency) ?? '—')
-                                    .'</div>'
-                                );
-                            })
-                            ->columnSpanFull(),
                         Placeholder::make('eligibility_summary')
-                            ->label(__('Eligibility'))
+                            ->hiddenLabel()
                             ->content(function () use ($loanResolver, $currency): HtmlString {
                                 $loan = $loanResolver();
                                 $member = $loan->member;
@@ -297,7 +277,7 @@ class LoanForm
                                     : '<span class="ff-chip bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">'.e(__('Eligibility review needed')).'</span>';
 
                                 return new HtmlString(
-                                    '<div class="space-y-2 rounded-lg border border-gray-200 bg-gray-50/80 px-3 py-2 dark:border-white/10 dark:bg-white/5">'
+                                    '<div class="space-y-2 rounded-xl border border-gray-200/70 bg-white/60 px-3 py-3 dark:border-white/10 dark:bg-white/5">'
                                     .'<div class="flex flex-wrap items-center gap-2">'.$status.'</div>'
                                     .'<div class="grid gap-2 sm:grid-cols-2">'
                                     .self::snapshotRow(__('Fund balance'), MoneyDisplay::format($fundBal, $currency) ?? '—')
@@ -314,9 +294,8 @@ class LoanForm
                             })
                             ->columnSpanFull(),
                     ]),
-                Section::make(__('Application details'))
-                    ->description(__('Adjust before approval if the member or board requested changes.'))
-                    ->columns(2)
+                self::loanSection(__('Application details'), __('Adjust before approval if the member or board requested changes.'))
+                    ->columns(['default' => 1, 'md' => 2])
                     ->schema([
                         Select::make('member_id')
                             ->label(__('Member'))
@@ -358,6 +337,10 @@ class LoanForm
                             ->rows(3)
                             ->maxLength(2000)
                             ->columnSpanFull(),
+                    ]),
+                self::loanSection(__('Witnesses'), __('Optional witnesses recorded with the application.'))
+                    ->columns(['default' => 1, 'md' => 2])
+                    ->schema([
                         TextInput::make('witness1_name')
                             ->label(__('Witness 1 name'))
                             ->maxLength(255),
@@ -373,16 +356,15 @@ class LoanForm
                             ->tel()
                             ->maxLength(50),
                     ]),
-                Section::make(__('Funding'))
-                    ->columns(2)
+                self::loanSection(__('Funding'))
+                    ->columns(['default' => 1, 'md' => 2])
                     ->schema([
                         $strategyRadio,
                         $strategyFixed,
                         $excessDisposition,
                         $fundingPreview,
                     ]),
-                Section::make(__('Approval preview'))
-                    ->description(__('Estimated tier, fund split, and repayment period if you approve at the requested amount.'))
+                self::loanSection(__('Approval preview'), __('Estimated tier, fund split, and repayment period if you approve at the requested amount.'))
                     ->schema([
                         Placeholder::make('approval_schedule_preview')
                             ->hiddenLabel()
@@ -405,30 +387,15 @@ class LoanForm
         $currency = Setting::get('general', 'currency', 'USD');
 
         return $schema
+            ->columns(1)
             ->components([
-                Section::make(__('Approved loan'))
-                    ->description(__('Record disbursement using the Disburse action above when funds are released to the member.'))
-                    ->schema([
-                        Placeholder::make('approved_summary')
-                            ->hiddenLabel()
-                            ->content(function () use ($loanResolver, $currency): HtmlString {
-                                $loan = $loanResolver();
-                                $loan->loadMissing(['member', 'fundTier', 'loanTier']);
-                                $remaining = $loan->remainingToDisburse();
-
-                                return new HtmlString(
-                                    '<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">'
-                                    .self::snapshotRow(__('Member'), (string) ($loan->member?->name ?? '—'))
-                                    .self::snapshotRow(__('Approved amount'), MoneyDisplay::format((float) $loan->amount_approved, $currency) ?? '—')
-                                    .self::snapshotRow(__('Remaining to disburse'), MoneyDisplay::format($remaining, $currency) ?? '—')
-                                    .self::snapshotRow(__('Fund tier'), (string) ($loan->fundTier?->label ?? '—'))
-                                    .self::snapshotRow(__('Loan tier'), (string) ($loan->loanTier?->label ?? '—'))
-                                    .self::snapshotRow(__('Approved at'), $loan->approved_at?->toDayDateTimeString() ?? '—')
-                                    .'</div>'
-                                );
-                            })
-                            ->columnSpanFull(),
-                    ]),
+                Placeholder::make('disburse_guidance')
+                    ->hiddenLabel()
+                    ->content(fn (): HtmlString => new HtmlString(
+                        '<p class="rounded-xl border border-indigo-200/70 bg-indigo-50/50 px-4 py-3 text-sm text-indigo-950 dark:border-indigo-500/25 dark:bg-indigo-950/25 dark:text-indigo-100">'
+                        .e(__('Amounts and disbursement progress are shown in the summary panel above. When the bank transfer is ready, use the Disburse action in the page header.'))
+                        .'</p>'
+                    )),
             ]);
     }
 
@@ -463,9 +430,23 @@ class LoanForm
         );
     }
 
+    private static function loanSection(string $heading, ?string $description = null): Section
+    {
+        $section = Section::make($heading)
+            ->compact()
+            ->secondary();
+
+        if ($description !== null) {
+            $section->description($description);
+        }
+
+        return $section;
+    }
+
     private static function snapshotRow(string $label, string $value): string
     {
-        return '<div><p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e($label).'</p>'
-            .'<p class="mt-0.5 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">'.e($value).'</p></div>';
+        return '<div class="rounded-lg border border-gray-200/70 bg-white/80 px-3 py-2.5 dark:border-white/10 dark:bg-white/5">'
+            .'<p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e($label).'</p>'
+            .'<p class="mt-1 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">'.e($value).'</p></div>';
     }
 }

@@ -74,6 +74,7 @@ class EditMember extends EditRecord
         return [
             ...parent::getPageClasses(),
             'fi-page-member-detail',
+            'ff-tenant-member-detail',
         ];
     }
 

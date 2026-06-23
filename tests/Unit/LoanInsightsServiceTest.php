@@ -67,10 +67,10 @@ test('loan detail snapshot includes stepper and relation summaries', function ()
 
     $snapshot = $this->service->loanDetailSnapshot($loan);
 
-    expect($snapshot)->toHaveKeys(['steps', 'kpis', 'progress', 'relation_summaries'])
+    expect($snapshot)->toHaveKeys(['steps', 'snapshot', 'next_due', 'guarantor'])
         ->and($snapshot['steps'])->not->toBeEmpty()
         ->and(collect($snapshot['steps'])->pluck('key'))->toContain('under_review')
-        ->and($snapshot['relation_summaries'])->toHaveCount(2);
+        ->and($snapshot['snapshot'])->toHaveKeys(['requested', 'approved', 'disburse_percent', 'repay_percent']);
 });
 
 test('fund tiers snapshot reports utilization', function () {
