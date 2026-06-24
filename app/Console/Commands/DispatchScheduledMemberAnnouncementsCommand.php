@@ -4,16 +4,14 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Services\Tenant\MemberAnnouncementService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
-use Stancl\Tenancy\Concerns\HasATenantsOption;
-use Stancl\Tenancy\Concerns\TenantAwareCommand;
 
 class DispatchScheduledMemberAnnouncementsCommand extends Command
 {
-    use HasATenantsOption;
-    use TenantAwareCommand;
+    use TenantAwareScheduledCommand;
 
     protected $signature = 'announcements:dispatch-scheduled';
 

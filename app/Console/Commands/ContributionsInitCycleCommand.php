@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Console\Concerns\EnsuresBatchPostingAllowed;
+use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Services\ContributionCollectionCycleService;
 use App\Services\ContributionCycleService;
 use Illuminate\Console\Command;
@@ -10,6 +11,7 @@ use Illuminate\Console\Command;
 class ContributionsInitCycleCommand extends Command
 {
     use EnsuresBatchPostingAllowed;
+    use TenantAwareScheduledCommand;
 
     protected $signature = 'contributions:init-cycle {--month=} {--year=}';
 

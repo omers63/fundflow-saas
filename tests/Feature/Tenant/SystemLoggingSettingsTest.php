@@ -7,6 +7,7 @@ use App\Models\Tenant\FundAuditLog;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MonthlyStatement;
 use App\Models\Tenant\NotificationLog;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\MonthlyStatementNotification;
 use App\Services\AccountingService;
@@ -27,6 +28,13 @@ beforeEach(function () {
 
     SystemLoggingSettings::setFundAuditLogEnabled(true);
     SystemLoggingSettings::setNotificationLogEnabled(true);
+});
+
+test('system logging defaults to disabled when settings are not stored', function () {
+    Setting::query()->where('group', SystemLoggingSettings::GROUP)->delete();
+
+    expect(SystemLoggingSettings::fundAuditLogEnabled())->toBeFalse()
+        ->and(SystemLoggingSettings::notificationLogEnabled())->toBeFalse();
 });
 
 test('fund audit log service skips persistence when audit logging is disabled', function () {

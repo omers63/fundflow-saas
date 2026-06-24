@@ -16,6 +16,7 @@ use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class MyLoansTable
@@ -35,7 +36,8 @@ class MyLoansTable
                     TextColumn::make('outstanding')
                         ->label(__('Outstanding'))
                         ->state(fn (Loan $record): float => $record->getOutstandingBalance())
-                        ->money($currency),
+                        ->money($currency)
+                        ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByOutstanding($direction)),
                     TextColumn::make('installments_count')
                         ->label(__('Installments'))
                         ->placeholder(__('—')),

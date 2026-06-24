@@ -33,6 +33,9 @@ class LoanDelinquencyService
 
     private ?int $contributionArrearsPeriodCountCache = null;
 
+    /** @var array{periods: int, members: int}|null */
+    private ?array $contributionArrearsDigestStatsCache = null;
+
     public function __construct(
         protected ContributionCycleService $cycles,
         protected LateFeeService $lateFees,
@@ -126,15 +129,15 @@ class LoanDelinquencyService
      */
     public function digestCounts(): array
     {
-        $records = $this->contributionArrearsTableRecords();
+        $arrears = $this->contributionArrearsDigestStats();
 
         return [
             'overdue_installments' => (int) LoanInstallment::query()
                 ->where('status', 'overdue')
                 ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
                 ->count(),
-            'contribution_arrears_periods' => $records->count(),
-            'contribution_arrears_members' => $records->pluck('member_id')->unique()->count(),
+            'contribution_arrears_periods' => $arrears['periods'],
+            'contribution_arrears_members' => $arrears['members'],
             'delinquent_members' => (int) Member::query()->where('status', 'delinquent')->count(),
             'guarantor_at_risk' => $this->loansAtGuarantorRiskCount(),
             'guarantor_transferred' => (int) Loan::query()
@@ -425,7 +428,57 @@ class LoanDelinquencyService
             return $this->contributionArrearsPeriodCountCache;
         }
 
-        return $this->contributionArrearsPeriodCountCache = $this->computeContributionArrearsPeriodCount();
+        return $this->contributionArrearsPeriodCountCache = $this->contributionArrearsDigestStats()['periods'];
+    }
+
+    /**
+     * @return array{periods: int, members: int}
+     */
+    private function contributionArrearsDigestStats(): array
+    {
+        if ($this->contributionArrearsDigestStatsCache !== null) {
+            return $this->contributionArrearsDigestStatsCache;
+        }
+
+        $periods = 0;
+        $membersWithArrears = 0;
+
+        $members = Member::query()
+            ->select(['id', 'monthly_contribution_amount', 'joined_at', 'contribution_arrears_cutoff_date'])
+            ->whereIn('status', ['active', 'delinquent'])
+            ->where('monthly_contribution_amount', '>', 0)
+            ->orderBy('name')
+            ->get();
+
+        $memberIds = $members->pluck('id')->map(fn ($id): int => (int) $id)->all();
+        $globalExemptions = $this->preloadGlobalContributionExemptions($memberIds);
+        $preloadedContributions = $this->memberContributionsByPeriodForMembers($memberIds);
+        $now = BusinessDay::now();
+
+        foreach ($members as $member) {
+            $unpaidPeriods = $this->buildUnpaidContributionPeriods(
+                $member,
+                $preloadedContributions[$member->id] ?? [],
+                $now,
+                $globalExemptions[$member->id] ?? false,
+            );
+
+            $unpaidCount = count($unpaidPeriods);
+
+            if ($unpaidCount === 0) {
+                continue;
+            }
+
+            $membersWithArrears++;
+            $periods += $unpaidCount;
+        }
+
+        $this->contributionArrearsPeriodCountCache = $periods;
+
+        return $this->contributionArrearsDigestStatsCache = [
+            'periods' => $periods,
+            'members' => $membersWithArrears,
+        ];
     }
 
     /**
@@ -487,30 +540,7 @@ class LoanDelinquencyService
 
     private function computeContributionArrearsPeriodCount(): int
     {
-        $count = 0;
-
-        $members = Member::query()
-            ->select(['id', 'monthly_contribution_amount', 'joined_at', 'contribution_arrears_cutoff_date'])
-            ->whereIn('status', ['active', 'delinquent'])
-            ->where('monthly_contribution_amount', '>', 0)
-            ->orderBy('name')
-            ->get();
-
-        $memberIds = $members->pluck('id')->map(fn ($id): int => (int) $id)->all();
-        $globalExemptions = $this->preloadGlobalContributionExemptions($memberIds);
-        $preloadedContributions = $this->memberContributionsByPeriodForMembers($memberIds);
-        $now = BusinessDay::now();
-
-        foreach ($members as $member) {
-            $count += count($this->buildUnpaidContributionPeriods(
-                $member,
-                $preloadedContributions[$member->id] ?? [],
-                $now,
-                $globalExemptions[$member->id] ?? false,
-            ));
-        }
-
-        return $count;
+        return $this->contributionArrearsDigestStats()['periods'];
     }
 
     /**

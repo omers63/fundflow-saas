@@ -11,6 +11,9 @@ use App\Services\ContributionService;
 use App\Services\Loans\LoanImportService;
 use App\Services\MemberImportService;
 use App\Support\AssociativeCsv;
+use App\Support\LegacyMigrationFundingStrategySettings;
+use App\Support\LegacyMigrationGraceCycleSettings;
+use App\Support\LoanFundingStrategy;
 use Carbon\Carbon;
 
 final class LegacyMigrationOrchestrator
@@ -22,7 +25,8 @@ final class LegacyMigrationOrchestrator
         private readonly LegacyMigrationPreviewService $preview,
         private readonly LegacyPaymentClassifierService $classifier,
         private readonly AccountingService $accounting,
-    ) {}
+    ) {
+    }
 
     /**
      * @param  array{
@@ -42,7 +46,7 @@ final class LegacyMigrationOrchestrator
      */
     public function run(array $options, bool $dryRun = false): array
     {
-        if (! $dryRun) {
+        if (!$dryRun) {
             @set_time_limit(0);
         }
 
@@ -109,7 +113,11 @@ final class LegacyMigrationOrchestrator
         $this->assertAllCsvMembersPresent((string) $options['members_path'], $result['members']);
 
         if (filled($options['loans_path'] ?? null)) {
-            $result['loans'] = $this->loans->import((string) $options['loans_path']);
+            $result['loans'] = $this->loans->import(
+                (string) $options['loans_path'],
+                $this->resolveGraceCycles($options),
+                $this->resolveFundingStrategy($options),
+            );
         }
 
         return $result;
@@ -136,7 +144,7 @@ final class LegacyMigrationOrchestrator
         }
 
         return ContributionService::withoutPostedNotifications(
-            fn (): array => $this->payments->import($paymentsPath),
+            fn(): array => $this->payments->import($paymentsPath),
         );
     }
 
@@ -197,13 +205,13 @@ final class LegacyMigrationOrchestrator
     public static function summarizeForDisplay(array $result): array
     {
         foreach (['members', 'loans', 'payments'] as $section) {
-            if (! is_array($result[$section] ?? null)) {
+            if (!is_array($result[$section] ?? null)) {
                 continue;
             }
 
             $errors = $result[$section]['errors'] ?? null;
 
-            if (! is_array($errors) || count($errors) <= 25) {
+            if (!is_array($errors) || count($errors) <= 25) {
                 continue;
             }
 
@@ -230,7 +238,7 @@ final class LegacyMigrationOrchestrator
                 continue;
             }
 
-            if (! Member::query()->where('member_number', $memberNumber)->exists()) {
+            if (!Member::query()->where('member_number', $memberNumber)->exists()) {
                 $missingNumbers[] = $memberNumber;
             }
         }
@@ -394,5 +402,33 @@ final class LegacyMigrationOrchestrator
     {
         return ($options['strategy'] ?? 'snapshot') === 'historical'
             && $this->resolvePaymentsImportPath($options) !== null;
+    }
+
+    /**
+     * @param  array{grace_cycles?: int|string|null}  $options
+     */
+    private function resolveGraceCycles(array $options): int
+    {
+        if (array_key_exists('grace_cycles', $options) && $options['grace_cycles'] !== null && $options['grace_cycles'] !== '') {
+            return max(0, min(2, (int) $options['grace_cycles']));
+        }
+
+        return LegacyMigrationGraceCycleSettings::graceCycles();
+    }
+
+    /**
+     * @param  array{loan_funding_strategy?: string|null}  $options
+     */
+    private function resolveFundingStrategy(array $options): string
+    {
+        if (
+            array_key_exists('loan_funding_strategy', $options)
+            && is_string($options['loan_funding_strategy'])
+            && $options['loan_funding_strategy'] !== ''
+        ) {
+            return LoanFundingStrategy::normalize($options['loan_funding_strategy']);
+        }
+
+        return LegacyMigrationFundingStrategySettings::fundingStrategy();
     }
 }

@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Services\ReconciliationService;
 use Illuminate\Console\Command;
 
 class FundNightlyReconciliationCommand extends Command
 {
+    use TenantAwareScheduledCommand;
+
     protected $signature = 'fund:nightly-reconciliation';
 
     protected $description = 'Run nightly reconciliation batch (master invariants, domain checks, auto-resolve)';

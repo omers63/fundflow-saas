@@ -55,9 +55,9 @@ class AuditSystemPage extends Page implements HasTable
     #[Url(as: 'auditFilter')]
     public string $auditFilter = 'all';
 
-    public bool $auditLoggingEnabled = true;
+    public bool $auditLoggingEnabled = false;
 
-    public bool $notificationLoggingEnabled = true;
+    public bool $notificationLoggingEnabled = false;
 
     public static function canAccess(): bool
     {

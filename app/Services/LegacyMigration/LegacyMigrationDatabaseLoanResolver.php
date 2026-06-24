@@ -46,6 +46,7 @@ final class LegacyMigrationDatabaseLoanResolver
             disbursedAt: $window->disbursedAt,
             amountApproved: $window->amountApproved,
             repaymentTargetAmount: $window->repaymentTargetAmount,
+            firstRepaymentAt: $window->firstRepaymentAt,
             loanId: $loanId,
         );
     }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Models\Tenant\Member;
 use App\Services\MonthlyStatementService;
 use App\Support\BusinessDay;
@@ -12,6 +13,8 @@ use Illuminate\Console\Command;
 
 class GenerateMonthlyStatements extends Command
 {
+    use TenantAwareScheduledCommand;
+
     protected $signature = 'statements:generate {--period=} {--notify} {--member=}';
 
     protected $description = 'Generate monthly member statements';

@@ -417,6 +417,76 @@ test('portfolio tab table includes import and export header actions', function (
     expect($names)->toContain('importLoans', 'exportLoans', 'importRepayments', 'exportRepayments');
 });
 
+test('portfolio tab table can sort by outstanding balance', function () {
+    $member = Member::create([
+        'member_number' => 'OUT-SORT-1',
+        'name' => 'Outstanding Sort Member',
+        'email' => 'outstanding-sort@fund.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $loanTier = LoanTier::query()->first()
+        ?? LoanTier::create([
+            'tier_number' => 88,
+            'label' => 'Sort tier',
+            'min_amount' => 1_000,
+            'max_amount' => 100_000,
+            'min_monthly_installment' => 500,
+            'is_active' => true,
+        ]);
+
+    $lowerOutstanding = Loan::create([
+        'member_id' => $member->id,
+        'loan_tier_id' => $loanTier->id,
+        'amount' => 5_000,
+        'amount_requested' => 5_000,
+        'amount_approved' => 5_000,
+        'interest_rate' => 0,
+        'term_months' => 10,
+        'monthly_repayment' => 500,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(2),
+        'approved_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+    $higherOutstanding = Loan::create([
+        'member_id' => $member->id,
+        'loan_tier_id' => $loanTier->id,
+        'amount' => 15_000,
+        'amount_requested' => 15_000,
+        'amount_approved' => 15_000,
+        'interest_rate' => 0,
+        'term_months' => 10,
+        'monthly_repayment' => 1_500,
+        'status' => 'active',
+        'applied_at' => now()->subMonth(),
+        'approved_at' => now()->subMonth(),
+        'disbursed_at' => now()->subMonth(),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $lowerOutstanding->id,
+        'installment_number' => 1,
+        'amount' => 500,
+        'due_date' => now()->addMonth(),
+        'status' => 'pending',
+    ]);
+    LoanInstallment::create([
+        'loan_id' => $higherOutstanding->id,
+        'installment_number' => 1,
+        'amount' => 1_500,
+        'due_date' => now()->addMonth(),
+        'status' => 'pending',
+    ]);
+
+    Livewire::actingAs($this->admin, 'tenant')
+        ->test(ListLoans::class)
+        ->call('sortTable', 'outstanding')
+        ->assertSuccessful();
+});
+
 test('emi collection tab table omits loan import export header actions', function () {
     $component = Livewire::test(ListLoans::class)
         ->set('activeTab', 'emi_collect');

@@ -338,8 +338,8 @@ test('audit system page embeds migration workspace for tenant admin', function (
     Livewire::actingAs($admin, 'tenant')
         ->test(AuditSystemPage::class, ['sideTab' => 'migration'])
         ->assertSuccessful()
-        ->assertSee(__('Migration steps'))
-        ->assertSee(__('Recommended approach'));
+        ->assertSee(__('Legacy migration wizard'))
+        ->assertSee(__('How legacy migration works'));
 });
 
 test('audit system page embeds fiscal year close workspace', function () {
@@ -416,10 +416,11 @@ test('embedded migration panel renders wizard steps', function () {
     Livewire::actingAs($admin, 'tenant')
         ->test(LegacyMigrationPage::class, ['embedded' => true])
         ->assertSuccessful()
-        ->assertSee(__('Recommended approach'))
-        ->assertDontSee(__('Upload files & settings'))
-        ->call('goToStep', 5)
-        ->assertSee(__('Upload files & settings'))
+        ->assertSee(__('How legacy migration works'))
+        ->assertDontSee(__('Upload data'))
+        ->call('goToStep', 2)
+        ->assertSee(__('Upload data'))
+        ->call('goToStep', 3)
         ->assertSeeHtml('wire:click="mountAction(\'previewMigration\'')
         ->assertSet('embedded', true);
 });

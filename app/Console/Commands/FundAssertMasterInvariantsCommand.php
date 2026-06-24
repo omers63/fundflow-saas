@@ -2,11 +2,14 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Services\MasterAccountInvariantService;
 use Illuminate\Console\Command;
 
 class FundAssertMasterInvariantsCommand extends Command
 {
+    use TenantAwareScheduledCommand;
+
     protected $signature = 'fund:assert-master-invariants';
 
     protected $description = 'Assert master fund/cash equals sum of member accounts';

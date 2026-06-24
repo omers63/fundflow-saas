@@ -20,6 +20,7 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class GuarantorExposureRelationManager extends RelationManager
@@ -96,7 +97,8 @@ class GuarantorExposureRelationManager extends RelationManager
                     TextColumn::make('outstanding')
                         ->label(__('Outstanding'))
                         ->money($currency)
-                        ->getStateUsing(fn (Loan $record): float => $record->getOutstandingBalance()),
+                        ->getStateUsing(fn (Loan $record): float => $record->getOutstandingBalance())
+                        ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByOutstanding($direction)),
                     TextColumn::make('status')
                         ->badge()
                         ->formatStateUsing(fn (string $state): string => __(ucfirst(str_replace('_', ' ', $state))))

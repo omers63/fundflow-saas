@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanRepaymentService;
 use Illuminate\Console\Command;
 
 class LoansSendDueNotificationsCommand extends Command
 {
+    use TenantAwareScheduledCommand;
+
     protected $signature = 'loans:send-due-notifications {--month=} {--year=}';
 
     protected $description = 'Notify active borrowers of installments due in the given or current open period';

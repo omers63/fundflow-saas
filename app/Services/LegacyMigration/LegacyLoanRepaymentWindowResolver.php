@@ -6,6 +6,7 @@ namespace App\Services\LegacyMigration;
 
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
+use App\Support\LegacyMigrationGraceCycleSettings;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 
@@ -17,8 +18,7 @@ final class LegacyLoanRepaymentWindowResolver
 {
     public function __construct(
         private readonly LegacyMigrationDatabaseLoanResolver $loanResolver,
-    ) {
-    }
+    ) {}
 
     public function resolveLoan(
         Member $member,
@@ -91,7 +91,7 @@ final class LegacyLoanRepaymentWindowResolver
             ->whereNotNull('disbursed_at')
             ->orderBy('disbursed_at')
             ->get()
-            ->map(fn(Loan $loan): LegacyLoanRepaymentWindow => $this->buildDatabaseWindow($member, $loan));
+            ->map(fn (Loan $loan): LegacyLoanRepaymentWindow => $this->buildDatabaseWindow($member, $loan));
 
         return LegacyLoanRepaymentWindow::firstOpenWindow(
             $windows,
@@ -110,6 +110,10 @@ final class LegacyLoanRepaymentWindowResolver
             disbursedAt: $disbursedAt,
             amountApproved: $approved,
             repaymentTargetAmount: LegacyLoanRepaymentTarget::totalRepaymentDue($approved),
+            firstRepaymentAt: LegacyLoanRepaymentWindow::firstRepaymentAtForLoan(
+                $loan,
+                LegacyMigrationGraceCycleSettings::graceCycles(),
+            ),
             loanId: $loan->id,
         );
     }

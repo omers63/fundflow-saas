@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Services\ContributionCycleService;
 use App\Support\BusinessDay;
 use Carbon\Carbon;
@@ -11,6 +12,8 @@ use Illuminate\Console\Command;
 
 class SendContributionNotifications extends Command
 {
+    use TenantAwareScheduledCommand;
+
     protected $signature = 'contributions:notify {--month=} {--year=}';
 
     protected $description = 'Send contribution due notifications for a cycle period';

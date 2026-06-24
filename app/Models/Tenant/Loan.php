@@ -6,6 +6,7 @@ use App\Services\Loans\LoanEarlySettlementService;
 use App\Support\BusinessDay;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -631,5 +632,18 @@ class Loan extends Model
         return (float) $this->installments()
             ->whereIn('status', ['pending', 'overdue'])
             ->sum('amount');
+    }
+
+    public function scopeOrderByOutstanding(Builder $query, string $direction = 'desc'): Builder
+    {
+        $direction = strtolower($direction) === 'asc' ? 'asc' : 'desc';
+
+        return $query->orderBy(
+            LoanInstallment::query()
+                ->selectRaw('coalesce(sum(amount), 0)')
+                ->whereColumn('loan_installments.loan_id', 'loans.id')
+                ->whereIn('status', ['pending', 'overdue']),
+            $direction,
+        );
     }
 }

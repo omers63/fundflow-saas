@@ -1,0 +1,2 @@
+member_number,name,email,monthly_contribution_amount,cutoff_cash_balance,cutoff_fund_balance
+TOP-1,"Topup Strategy Member",topup-strategy@fund.test,1000,0,3000

@@ -24,12 +24,17 @@ use App\Services\LegacyMigration\LegacyMigrationPreviewService;
 use App\Services\LegacyMigration\LegacyMisclassifiedContributionRepairService;
 use App\Services\LegacyMigration\LegacyPaymentClassifierService;
 use App\Services\LegacyMigration\LegacyPaymentImportService;
+use App\Services\Loans\LoanImportService;
 use App\Services\MemberImportService;
 use App\Support\AssociativeCsv;
 use App\Support\FilamentStoredUploadPath;
 use App\Support\LegacyMigrationDateFormatSettings;
 use App\Support\LegacyMigrationDateParser;
+use App\Support\LegacyMigrationFundingStrategySettings;
+use App\Support\LegacyMigrationGraceCycleSettings;
 use App\Support\LegacyMigrationSampleCsv;
+use App\Support\LoanFundingStrategy;
+use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Notification;
@@ -78,9 +83,9 @@ test('tenant admin can access legacy migration page', function () {
     Livewire::actingAs($this->admin, 'tenant')
         ->test(LegacyMigrationPage::class)
         ->assertSuccessful()
-        ->assertSee(__('Recommended approach'))
-        ->call('goToStep', 5)
-        ->assertSee(__('Upload files & settings'));
+        ->assertSee(__('How legacy migration works'))
+        ->call('goToStep', 2)
+        ->assertSee(__('Upload data'));
 });
 
 test('legacy migration preview reads stored member csv upload', function () {
@@ -149,7 +154,7 @@ test('legacy migration preview detects member_number in utf-8 bom csv', function
     expect($preview['headers'])->toContain('member_number')
         ->and($preview['row_count'])->toBe(1)
         ->and(collect($preview['warnings'])->contains(
-            fn (string $warning): bool => str_contains($warning, 'member_number'),
+            fn(string $warning): bool => str_contains($warning, 'member_number'),
         ))->toBeFalse();
 
     @unlink($path);
@@ -158,7 +163,7 @@ test('legacy migration preview detects member_number in utf-8 bom csv', function
 test('legacy migration preview accepts real legacy members export shape', function () {
     $source = base_path('docs/legacy/legacy-members-import-1.csv');
 
-    if (! is_readable($source)) {
+    if (!is_readable($source)) {
         skip('Sample legacy members CSV is not present in docs/legacy.');
     }
 
@@ -167,7 +172,7 @@ test('legacy migration preview accepts real legacy members export shape', functi
     expect($preview['headers'])->toContain('member_number')
         ->and($preview['row_count'])->toBeGreaterThan(0)
         ->and(collect($preview['warnings'])->contains(
-            fn (string $warning): bool => str_contains($warning, 'member_number'),
+            fn(string $warning): bool => str_contains($warning, 'member_number'),
         ))->toBeFalse();
 });
 
@@ -310,6 +315,86 @@ test('legacy migration orchestrator dry run classifies payments when classified 
     @unlink($paymentsPath);
 });
 
+test('legacy migration loan import uses split funding strategy when csv omits portions', function () {
+    $this->actingAs($this->admin, 'tenant');
+
+    LoanSettings::save(['member_funding_split_pct' => 40]);
+    LegacyMigrationFundingStrategySettings::saveFundingStrategy(LoanFundingStrategy::SPLIT_PERCENTAGE);
+
+    $membersPath = storage_path('app/legacy-funding-members.csv');
+    $loansPath = storage_path('app/legacy-funding-loans.csv');
+
+    AssociativeCsv::write($membersPath, [
+        'member_number',
+        'name',
+        'email',
+        'monthly_contribution_amount',
+        'cutoff_cash_balance',
+        'cutoff_fund_balance',
+    ], [
+        ['FUND-1', 'Funding Strategy Member', 'funding-strategy@fund.test', '1000', '0', '8000'],
+    ]);
+    AssociativeCsv::write($loansPath, ['loan_status', 'member_number', 'amount_approved', 'disbursed_at', 'installments_count'], [
+        ['active', 'FUND-1', '10000', '2024-06-01', '10'],
+    ]);
+
+    app(LegacyMigrationOrchestrator::class)->importMembersAndLoans([
+        'default_password' => 'password123',
+        'members_path' => $membersPath,
+        'loans_path' => $loansPath,
+        'loan_funding_strategy' => LoanFundingStrategy::SPLIT_PERCENTAGE,
+    ], '2025-12-31');
+
+    $loan = Loan::query()->whereHas('member', fn($query) => $query->where('member_number', 'FUND-1'))->firstOrFail();
+
+    expect((float) $loan->member_portion)->toBe(4000.0)
+        ->and((float) $loan->master_portion)->toBe(6000.0)
+        ->and($loan->funding_strategy)->toBe(LoanFundingStrategy::SPLIT_PERCENTAGE);
+
+    @unlink($membersPath);
+    @unlink($loansPath);
+});
+
+test('legacy migration loan import uses member fund topup strategy when csv omits portions', function () {
+    $this->actingAs($this->admin, 'tenant');
+
+    Account::masterCash()->update(['balance' => 200_000]);
+    Account::masterFund()->update(['balance' => 200_000]);
+
+    $member = Member::create([
+        'member_number' => 'TOP-1',
+        'name' => 'Topup Strategy Member',
+        'email' => 'topup-strategy@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+    AccountingService::withoutMemberCashCollection(
+        fn() => app(AccountingService::class)->credit($member->fundAccount, 3000, 'Seed fund'),
+    );
+    expect((float) $member->fresh()->fundAccount->balance)->toBe(3000.0);
+
+    $loansPath = storage_path('app/legacy-topup-loans.csv');
+    AssociativeCsv::write($loansPath, ['loan_status', 'member_number', 'amount_approved', 'disbursed_at', 'installments_count'], [
+        ['active', 'TOP-1', '10000', '2024-06-01', '10'],
+    ]);
+
+    app(LoanImportService::class)->import(
+        $loansPath,
+        1,
+        LoanFundingStrategy::MEMBER_FUND_TOPUP,
+    );
+
+    $loan = Loan::query()->where('member_id', $member->id)->firstOrFail();
+
+    expect((float) $loan->member_portion)->toBe(3000.0)
+        ->and((float) $loan->master_portion)->toBe(7000.0)
+        ->and($loan->funding_strategy)->toBe(LoanFundingStrategy::MEMBER_FUND_TOPUP);
+
+    @unlink($loansPath);
+});
+
 test('legacy migration orchestrator imports payments without contribution notifications', function () {
     Notification::fake();
 
@@ -326,7 +411,7 @@ test('legacy migration orchestrator imports payments without contribution notifi
     Account::masterCash()->update(['balance' => 100_000]);
     Account::masterFund()->update(['balance' => 100_000]);
     AccountingService::withoutMemberCashCollection(
-        fn () => app(AccountingService::class)->credit($member->cashAccount, 5000, 'Seed'),
+        fn() => app(AccountingService::class)->credit($member->cashAccount, 5000, 'Seed'),
     );
 
     $classifiedPath = storage_path('app/legacy-payment-import-test.csv');
@@ -344,7 +429,7 @@ test('legacy migration orchestrator imports payments without contribution notifi
     ]);
 
     $result = ContributionService::withoutPostedNotifications(
-        fn (): array => app(LegacyPaymentImportService::class)->import($classifiedPath),
+        fn(): array => app(LegacyPaymentImportService::class)->import($classifiedPath),
     );
 
     $member = $member->fresh();
@@ -362,7 +447,7 @@ test('legacy migration orchestrator imports payments without contribution notifi
     $transactionDates = $contribution->transactions()
         ->pluck('transacted_at')
         ->filter()
-        ->map(fn ($date) => Carbon::parse((string) $date)->toDateString())
+        ->map(fn($date) => Carbon::parse((string) $date)->toDateString())
         ->unique()
         ->values()
         ->all();
@@ -440,7 +525,7 @@ test('legacy payment import posts historical contributions even when member has 
     Account::masterCash()->update(['balance' => 100_000]);
     Account::masterFund()->update(['balance' => 100_000]);
     AccountingService::withoutMemberCashCollection(
-        fn () => app(AccountingService::class)->credit($member->cashAccount, 5000, 'Seed'),
+        fn() => app(AccountingService::class)->credit($member->cashAccount, 5000, 'Seed'),
     );
 
     Loan::create([
@@ -478,7 +563,7 @@ test('legacy payment import posts historical contributions even when member has 
     ]);
 
     $result = ContributionService::withoutPostedNotifications(
-        fn (): array => app(LegacyPaymentImportService::class)->import($classifiedPath),
+        fn(): array => app(LegacyPaymentImportService::class)->import($classifiedPath),
     );
 
     expect($result['contributions'])->toBe(1)
@@ -516,7 +601,7 @@ test('legacy payment import resolves member by member_number when household emai
     Account::masterCash()->update(['balance' => 100_000]);
     Account::masterFund()->update(['balance' => 100_000]);
     AccountingService::withoutMemberCashCollection(
-        fn () => app(AccountingService::class)->credit($dependent->cashAccount, 5000, 'Seed'),
+        fn() => app(AccountingService::class)->credit($dependent->cashAccount, 5000, 'Seed'),
     );
 
     $classifiedPath = storage_path('app/legacy-payment-member-number-test.csv');
@@ -570,10 +655,24 @@ test('legacy migration classify payments writes downloadable classified csv', fu
         ])
         ->call('classifyPayments')
         ->assertNotified(__('Payments classified'))
+        ->assertSet('currentStep', 3)
         ->assertSet('classifiedPaymentsReady', true)
         ->assertSet('classificationStats.contribution', 1);
 
     expect(Storage::disk('local')->exists('legacy-migration/last-classified-payments.csv'))->toBeTrue();
+
+    $tenant = tenant();
+    $domain = $tenant->domains()->first()?->domain ?? 'testing.localhost';
+
+    if (!$tenant->domains()->where('domain', 'testing.localhost')->exists()) {
+        $tenant->domains()->create(['domain' => 'testing.localhost']);
+        $domain = 'testing.localhost';
+    }
+
+    $this->actingAs($this->admin, 'tenant')
+        ->get('http://' . $domain . route('tenant.admin.legacy-migration.classified-payments-download', [], false))
+        ->assertSuccessful()
+        ->assertDownload('legacy-payments-classified.csv');
 
     Storage::disk('local')->delete([
         'legacy-migration/classify-members.csv',
@@ -581,6 +680,71 @@ test('legacy migration classify payments writes downloadable classified csv', fu
         'legacy-migration/classify-payments.csv',
         'legacy-migration/last-classified-payments.csv',
     ]);
+});
+
+test('legacy migration can classify payments without default password', function () {
+    Filament::setCurrentPanel('tenant');
+
+    Storage::disk('local')->put('legacy-migration/classify-members.csv', implode("\n", [
+        'member_number,name,email,monthly_contribution_amount',
+        '1,Classify Member,classify@fund.test,1000',
+    ]));
+    Storage::disk('local')->put('legacy-migration/classify-loans.csv', implode("\n", [
+        'member_number,amount_approved,disbursed_at,loan_status',
+    ]));
+    Storage::disk('local')->put('legacy-migration/classify-payments.csv', implode("\n", [
+        'member_number,payment_date,amount',
+        '1,2025-10-01,1000',
+    ]));
+
+    Livewire::actingAs($this->admin, 'tenant')
+        ->test(LegacyMigrationPage::class)
+        ->fillForm([
+            'strategy' => 'historical',
+            'cutoff_date' => '2025-12-31',
+            'default_password' => '',
+            'members_csv' => ['legacy-migration/classify-members.csv'],
+            'loans_csv' => ['legacy-migration/classify-loans.csv'],
+            'payments_csv' => ['legacy-migration/classify-payments.csv'],
+        ])
+        ->call('classifyPayments')
+        ->assertNotified(__('Payments classified'))
+        ->assertSet('classifiedPaymentsReady', true);
+
+    Storage::disk('local')->delete([
+        'legacy-migration/classify-members.csv',
+        'legacy-migration/classify-loans.csv',
+        'legacy-migration/classify-payments.csv',
+        'legacy-migration/last-classified-payments.csv',
+    ]);
+});
+
+test('legacy migration pollClassificationStatus updates results when classification completes', function () {
+    Filament::setCurrentPanel('tenant');
+
+    Setting::set('legacy_migration', 'classify_stats', json_encode([
+        'contribution' => 4189,
+        'loan_repayment' => 2837,
+        'unclassified' => 0,
+        'ignore' => 0,
+        'failed' => 0,
+    ]));
+    Setting::set('legacy_migration', 'classify_errors', json_encode([]));
+    Setting::set('legacy_migration', 'classify_status', 'completed');
+
+    Storage::disk('local')->put('legacy-migration/last-classified-payments.csv', "header\n");
+
+    Livewire::actingAs($this->admin, 'tenant')
+        ->test(LegacyMigrationPage::class)
+        ->set('currentStep', 3)
+        ->set('lastKnownClassificationStatus', 'running')
+        ->call('pollClassificationStatus')
+        ->assertNotified(__('Payments classified'))
+        ->assertSet('classificationStats.contribution', 4189)
+        ->assertSet('classifiedPaymentsReady', true)
+        ->assertSet('classificationRunning', false);
+
+    Storage::disk('local')->delete('legacy-migration/last-classified-payments.csv');
 });
 
 test('payment classifier resolves members from members csv before database import', function () {
@@ -612,7 +776,7 @@ test('payment classifier matches legacy payments export to members csv', functio
     $payments = base_path('docs/legacy/legacy-payments-import.csv');
     $loans = base_path('docs/legacy/legacy-loans-import.csv');
 
-    if (! is_readable($members) || ! is_readable($payments)) {
+    if (!is_readable($members) || !is_readable($payments)) {
         skip('Legacy sample CSVs are not present in docs/legacy.');
     }
 
@@ -624,11 +788,11 @@ test('payment classifier matches legacy payments export to members csv', functio
     );
 
     $loanRepaymentsIn2014 = collect($result['rows'])
-        ->filter(fn (array $row): bool => $row['payment_type'] === 'loan_repayment' && str_starts_with($row['payment_date'], '2014'))
+        ->filter(fn(array $row): bool => $row['payment_type'] === 'loan_repayment' && str_starts_with($row['payment_date'], '2014'))
         ->count();
 
     $memberOneAfterLoan = collect($result['rows'])
-        ->filter(fn (array $row): bool => $row['member_number'] === '1' && $row['payment_date'] >= '2016-08-01' && $row['payment_date'] <= '2016-10-31')
+        ->filter(fn(array $row): bool => $row['member_number'] === '1' && $row['payment_date'] >= '2016-08-01' && $row['payment_date'] <= '2016-10-31')
         ->pluck('payment_type')
         ->unique()
         ->all();
@@ -849,6 +1013,8 @@ test('payment classifier reclassifies legacy contribution rows inside an active 
         'approved_at' => '2017-06-14',
         'applied_at' => '2017-06-14',
         'installments_count' => 24,
+        'grace_cycles' => 0,
+        'has_grace_cycle' => false,
     ]);
 
     $paymentsPath = storage_path('app/classify-explicit-contribution-payments.csv');
@@ -909,6 +1075,8 @@ test('payment classifier treats below minimum installment payments as contributi
         'approved_at' => '2021-08-28',
         'applied_at' => '2021-08-28',
         'installments_count' => 24,
+        'grace_cycles' => 0,
+        'has_grace_cycle' => false,
     ]);
 
     $paymentsPath = storage_path('app/classify-below-emi-payments.csv');
@@ -929,6 +1097,55 @@ test('payment classifier treats below minimum installment payments as contributi
         ->and($result['stats']['contribution'])->toBe(1)
         ->and($result['stats']['loan_repayment'])->toBe(1);
 
+    @unlink($paymentsPath);
+});
+
+test('payment classifier respects legacy migration grace cycles for csv loans', function () {
+    LegacyMigrationGraceCycleSettings::saveGraceCycles(1);
+
+    $membersPath = storage_path('app/classify-grace-members.csv');
+    $loansPath = storage_path('app/classify-grace-loans.csv');
+    $paymentsPath = storage_path('app/classify-grace-payments.csv');
+
+    AssociativeCsv::write($membersPath, ['member_number', 'name', 'email', 'monthly_contribution_amount'], [
+        ['GRACE-1', 'Grace Member', 'grace-member@fund.test', '1000'],
+    ]);
+    AssociativeCsv::write($loansPath, ['member_number', 'amount_approved', 'disbursed_at', 'loan_status'], [
+        ['GRACE-1', '12000', '2025-01-15', 'active'],
+    ]);
+    AssociativeCsv::write($paymentsPath, ['member_number', 'payment_date', 'amount'], [
+        ['GRACE-1', '2025-02-01', '1000'],
+        ['GRACE-1', '2025-04-01', '1000'],
+    ]);
+
+    $result = app(LegacyPaymentClassifierService::class)->classifyFile(
+        $paymentsPath,
+        now()->parse('2025-12-31'),
+        $membersPath,
+        $loansPath,
+        1,
+    );
+
+    expect($result['rows'][0]['payment_type'])->toBe('contribution')
+        ->and($result['rows'][1]['payment_type'])->toBe('loan_repayment')
+        ->and($result['stats']['contribution'])->toBe(1)
+        ->and($result['stats']['loan_repayment'])->toBe(1);
+
+    LegacyMigrationGraceCycleSettings::saveGraceCycles(0);
+
+    $zeroGraceResult = app(LegacyPaymentClassifierService::class)->classifyFile(
+        $paymentsPath,
+        now()->parse('2025-12-31'),
+        $membersPath,
+        $loansPath,
+        0,
+    );
+
+    expect($zeroGraceResult['rows'][0]['payment_type'])->toBe('loan_repayment')
+        ->and($zeroGraceResult['stats']['loan_repayment'])->toBe(2);
+
+    @unlink($membersPath);
+    @unlink($loansPath);
     @unlink($paymentsPath);
 });
 
@@ -968,6 +1185,8 @@ test('payment classifier accepts below minimum installment payments after repaym
         'approved_at' => '2021-08-28',
         'applied_at' => '2021-08-28',
         'installments_count' => 24,
+        'grace_cycles' => 0,
+        'has_grace_cycle' => false,
     ]);
 
     $paymentsPath = storage_path('app/classify-partial-emi-payments.csv');
@@ -1350,6 +1569,8 @@ test('payment classifier allocates overpayment across multiple installments befo
         'approved_at' => '2021-08-28',
         'applied_at' => '2021-08-28',
         'installments_count' => 24,
+        'grace_cycles' => 0,
+        'has_grace_cycle' => false,
     ]);
 
     LoanInstallment::create([
@@ -1727,7 +1948,7 @@ test('legacy migration payments job authenticates queued admin without ambient s
     Account::masterCash()->update(['balance' => 100_000]);
     Account::masterFund()->update(['balance' => 100_000]);
     AccountingService::withoutMemberCashCollection(
-        fn () => app(AccountingService::class)->credit($member->cashAccount, 5000, 'Seed'),
+        fn() => app(AccountingService::class)->credit($member->cashAccount, 5000, 'Seed'),
     );
 
     $classifiedPath = storage_path('app/legacy-migration-job-payments.csv');
@@ -1846,9 +2067,9 @@ test('legacy payment import marks installments paid from bulk repayments', funct
     $repaymentDates = LoanRepayment::query()
         ->where('loan_id', $loan->id)
         ->get()
-        ->flatMap(fn ($repayment) => $repayment->transactions->pluck('transacted_at'))
+        ->flatMap(fn($repayment) => $repayment->transactions->pluck('transacted_at'))
         ->filter()
-        ->map(fn ($date) => Carbon::parse((string) $date)->toDateString())
+        ->map(fn($date) => Carbon::parse((string) $date)->toDateString())
         ->unique()
         ->values()
         ->all();
@@ -1986,12 +2207,12 @@ test('legacy payment import assigns repayments to the correct loan when member h
 
     $olderDescriptions = Transaction::query()
         ->where('member_id', $member->id)
-        ->where('description', 'like', '%Loan #'.$olderLoan->id.' repayments (import, bulk)%')
+        ->where('description', 'like', '%Loan #' . $olderLoan->id . ' repayments (import, bulk)%')
         ->count();
 
     $newerDescriptions = Transaction::query()
         ->where('member_id', $member->id)
-        ->where('description', 'like', '%Loan #'.$newerLoan->id.' repayments (import, bulk)%')
+        ->where('description', 'like', '%Loan #' . $newerLoan->id . ' repayments (import, bulk)%')
         ->count();
 
     expect($olderDescriptions)->toBeGreaterThan(0)

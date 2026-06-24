@@ -29,10 +29,8 @@ test('admin portal core page translation keys have arabic entries', function ():
         'Custom report builder',
         'Audit trail, notification delivery, scheduled jobs, maintenance, migration, and year-end close.',
         'Standard exports and shortcuts to portfolio, collection, and reconciliation views.',
-        'Choose strategy, cut-off date, default password, and CSV files. Wait until each upload finishes before preview or run.',
-        'Use the actions above to preview, classify, dry run, or run the migration.',
-        'Purge removes all rows from every table that does not have a deleted_at column, except protected system tables (users, permissions, migrations, queues, cache, sessions).',
-        'Migration steps',
+        'Legacy migration wizard',
+        'Review & classify',
         'Readiness report',
     ];
 
@@ -72,10 +70,10 @@ test('settings reports audit and dashboard render primary arabic headings', func
 
     Livewire::actingAs($admin, 'tenant')
         ->test(LegacyMigrationPage::class, ['embedded' => true])
-        ->call('goToStep', 5)
+        ->call('goToStep', 3)
         ->assertSuccessful()
-        ->assertSee(__('Migration steps', locale: 'ar'), false)
-        ->assertSee(__('Upload files & settings', locale: 'ar'), false)
+        ->assertSee(__('Legacy migration wizard', locale: 'ar'), false)
+        ->assertSee(__('Review & classify', locale: 'ar'), false)
         ->assertSee(__('Preview', locale: 'ar'), false);
 
     Livewire::actingAs($admin, 'tenant')

@@ -19,6 +19,7 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class LoansRelationManager extends RelationManager
 {
@@ -66,7 +67,8 @@ class LoansRelationManager extends RelationManager
                     TextColumn::make('outstanding')
                         ->label(__('Outstanding'))
                         ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
-                        ->getStateUsing(fn (Loan $record): float => $record->getOutstandingBalance()),
+                        ->getStateUsing(fn (Loan $record): float => $record->getOutstandingBalance())
+                        ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByOutstanding($direction)),
                     TextColumn::make('applied_at')
                         ->label(__('Applied'))
                         ->dateTime()

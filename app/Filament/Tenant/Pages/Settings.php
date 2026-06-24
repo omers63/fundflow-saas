@@ -208,7 +208,7 @@ class Settings extends Page implements HasForms
             'loan_eligibility_months' => $loan['eligibility_months'] ?? 12,
             'loan_min_fund_balance' => $loan['min_fund_balance'] ?? 6000,
             'loan_max_borrow_multiplier' => $loan['max_borrow_multiplier'] ?? 2,
-            'loan_default_interest_rate' => $loan['default_interest_rate'] ?? 10,
+            'loan_default_interest_rate' => $loan['default_interest_rate'] ?? LoanSettings::defaults()['default_interest_rate'],
             'loan_default_term_months' => $loan['default_term_months'] ?? 12,
             'loan_max_loan_amount' => $loan['max_loan_amount'] ?? 0,
             'loan_settlement_threshold_pct' => ($loan['settlement_threshold_pct'] ?? 0.16) * 100,

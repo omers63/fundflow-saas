@@ -970,6 +970,110 @@ html[dir='rtl'] .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-he
     flex-wrap: wrap;
 }
 
+/* Legacy migration wizard */
+.fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__list {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.5rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__item {
+    min-width: 0;
+}
+
+.fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__button {
+    display: flex;
+    width: 100%;
+    align-items: flex-start;
+    gap: 0.625rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgb(229 231 235);
+    background: rgb(255 255 255);
+    padding: 0.625rem 0.75rem;
+    text-align: start;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__button {
+    border-color: rgb(255 255 255 / 0.1);
+    background: rgb(17 24 39 / 0.5);
+}
+
+.fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__item--active .ff-legacy-wizard-stepper__button {
+    border-color: rgb(14 165 233);
+    box-shadow: 0 0 0 1px rgb(14 165 233 / 0.35);
+}
+
+.fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__item--complete .ff-legacy-wizard-stepper__button {
+    border-color: rgb(16 185 129 / 0.45);
+}
+
+.fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__marker {
+    display: inline-flex;
+    height: 1.75rem;
+    width: 1.75rem;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: rgb(243 244 246);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: rgb(75 85 99);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__marker {
+    background: rgb(31 41 55);
+    color: rgb(209 213 219);
+}
+
+.fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__item--active .ff-legacy-wizard-stepper__marker {
+    background: rgb(14 165 233);
+    color: white;
+}
+
+.fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__item--complete .ff-legacy-wizard-stepper__marker {
+    background: rgb(16 185 129);
+    color: white;
+}
+
+.fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.25;
+    color: rgb(17 24 39);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__label {
+    color: rgb(243 244 246);
+}
+
+.fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__description {
+    font-size: 0.6875rem;
+    line-height: 1.35;
+    color: rgb(107 114 128);
+}
+
+.fi-body.fi-panel-tenant .ff-legacy-wizard-format-docs summary::-webkit-details-marker {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__list {
+        grid-template-columns: 1fr;
+    }
+}
+
 @media (max-width: 640px) {
     .fi-body.fi-panel-tenant .ff-audit-wizard-steps {
         grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Loans;
 
+use App\Models\Tenant\Account;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
@@ -21,20 +22,30 @@ use Throwable;
 
 class LoanImportService
 {
+    private ?int $graceCyclesForImport = null;
+
+    private ?string $fundingStrategyForImport = null;
+
     public function __construct(
         private readonly LoanLedgerService $ledger,
         private readonly LegacyMemberIdentifierResolver $memberResolver,
         private readonly MemberCashOutService $cashOuts,
-    ) {}
+    ) {
+    }
 
     /**
      * Import loans from a UTF-8 CSV with a header row.
      *
      * @return array{created: int, failed: int, errors: array<int, string>}
      */
-    public function import(string $absolutePath): array
+    public function import(string $absolutePath, ?int $graceCycles = null, ?string $fundingStrategy = null): array
     {
         $this->authorizeImport();
+
+        $graceCycles = max(0, min(2, $graceCycles ?? 1));
+        $this->fundingStrategyForImport = $fundingStrategy !== null
+            ? LoanFundingStrategy::normalize($fundingStrategy)
+            : null;
 
         $created = 0;
         $failed = 0;
@@ -52,16 +63,23 @@ class LoanImportService
 
         $lineBase = 2;
 
-        foreach ($rows as $index => $row) {
-            $lineNumber = $lineBase + $index;
+        $this->graceCyclesForImport = $graceCycles;
 
-            try {
-                $this->importRow($row);
-                $created++;
-            } catch (Throwable $e) {
-                $failed++;
-                $errors[] = "Row {$lineNumber}: {$e->getMessage()}";
+        try {
+            foreach ($rows as $index => $row) {
+                $lineNumber = $lineBase + $index;
+
+                try {
+                    $this->importRow($row);
+                    $created++;
+                } catch (Throwable $e) {
+                    $failed++;
+                    $errors[] = "Row {$lineNumber}: {$e->getMessage()}";
+                }
             }
+        } finally {
+            $this->graceCyclesForImport = null;
+            $this->fundingStrategyForImport = null;
         }
 
         return [
@@ -222,7 +240,8 @@ class LoanImportService
         );
         $paidCount = $allPaid ? $count : $this->parsePaidInstallmentsCount($row, $count);
         $disbursedAt = $this->parseDisbursedAt($this->cell($row, 'disbursed_at'));
-        $exemption = Loan::computeExemptionAndFirstRepayment($disbursedAt);
+        $graceCycles = $this->graceCyclesForImport ?? 1;
+        $exemption = Loan::computeExemptionAndFirstRepayment($disbursedAt, $graceCycles);
         $exemption = Loan::finalizeExemptionForDisbursement($member, $exemption, $disbursedAt);
 
         $purpose = $this->cell($row, 'purpose');
@@ -253,7 +272,9 @@ class LoanImportService
         $appliedAt = $this->parseOptionalDateTime($this->cell($row, 'applied_at')) ?? $disbursedAt;
         $approvedAt = $this->parseOptionalDateTime($this->cell($row, 'approved_at')) ?? $disbursedAt;
 
-        DB::transaction(function () use ($member, $loanTier, $fundTier, $amount, $amountRequested, $purpose, $count, $disbursedAt, $exemption, $threshold, $isEmergency, $memberPortion, $masterPortion, $paidCount, $minInstall, $totalRepaid, $terminalStatus, $settledAt, $appliedAt, $approvedAt, $guarantorMemberId): void {
+        $fundingStrategy = $this->fundingStrategyForImport;
+
+        DB::transaction(function () use ($member, $loanTier, $fundTier, $amount, $amountRequested, $purpose, $count, $disbursedAt, $exemption, $threshold, $isEmergency, $memberPortion, $masterPortion, $paidCount, $minInstall, $totalRepaid, $terminalStatus, $settledAt, $appliedAt, $approvedAt, $guarantorMemberId, $graceCycles, $fundingStrategy): void {
             $loan = Loan::create([
                 'member_id' => $member->id,
                 'loan_tier_id' => $loanTier?->id,
@@ -274,6 +295,9 @@ class LoanImportService
                 'exempted_year' => $exemption['exempted_year'],
                 'first_repayment_month' => $exemption['first_repayment_month'],
                 'first_repayment_year' => $exemption['first_repayment_year'],
+                'grace_cycles' => $graceCycles,
+                'has_grace_cycle' => $graceCycles > 0,
+                ...(filled($fundingStrategy) ? ['funding_strategy' => $fundingStrategy] : []),
                 'settlement_threshold' => $threshold,
                 'is_emergency' => $isEmergency,
                 'member_portion' => $memberPortion,
@@ -343,7 +367,26 @@ class LoanImportService
         $masterCell = $this->cell($row, 'master_portion');
 
         if ($memberCell === '' && $masterCell === '') {
-            // Legacy migration defaults to the baseline loan flow:
+            if ($this->fundingStrategyForImport !== null) {
+                $fundBalance = (float) (Account::query()
+                    ->where('member_id', $member->id)
+                    ->where('type', 'fund')
+                    ->where('is_master', false)
+                    ->value('balance') ?? 0);
+                $portions = LoanSettings::resolveFundingPortions(
+                    $amount,
+                    $fundBalance,
+                    $this->fundingStrategyForImport,
+                );
+
+                return [
+                    $portions['member_portion'],
+                    $portions['master_portion'],
+                    false,
+                ];
+            }
+
+            // Direct CSV import without migration funding strategy:
             // member fund takes the full disbursement and can go negative.
             $memberPortion = round($amount, 2);
             $masterPortion = 0.0;
@@ -531,7 +574,7 @@ class LoanImportService
         }
 
         throw new \InvalidArgumentException(
-            'loan_status must be pending, approved, active, completed, or early_settled (got: '.$value.')'
+            'loan_status must be pending, approved, active, completed, or early_settled (got: ' . $value . ')'
         );
     }
 
@@ -560,7 +603,7 @@ class LoanImportService
             return null;
         }
 
-        if (! is_numeric($value)) {
+        if (!is_numeric($value)) {
             throw new \InvalidArgumentException("{$column} must be numeric (got: {$value})");
         }
 
@@ -572,7 +615,7 @@ class LoanImportService
      */
     private function parseAssociativeCsv(string $absolutePath): array
     {
-        if (! is_readable($absolutePath)) {
+        if (!is_readable($absolutePath)) {
             throw new \InvalidArgumentException(__('Cannot read the uploaded file.'));
         }
 
@@ -584,7 +627,7 @@ class LoanImportService
         $content = preg_replace('/^\xEF\xBB\xBF/', '', $content) ?? $content;
 
         $lines = preg_split('/\r\n|\r|\n/', $content);
-        $lines = array_values(array_filter($lines, fn ($line) => trim((string) $line) !== ''));
+        $lines = array_values(array_filter($lines, fn($line) => trim((string) $line) !== ''));
 
         if (count($lines) < 2) {
             return [];
@@ -592,7 +635,7 @@ class LoanImportService
 
         $headerLine = array_shift($lines);
         $headers = str_getcsv((string) $headerLine);
-        $headers = array_map(fn ($header) => strtolower(trim((string) $header)), $headers);
+        $headers = array_map(fn($header) => strtolower(trim((string) $header)), $headers);
 
         $rows = [];
 
@@ -625,7 +668,7 @@ class LoanImportService
             throw new \InvalidArgumentException("{$column} is required.");
         }
 
-        if (! is_numeric($value)) {
+        if (!is_numeric($value)) {
             throw new \InvalidArgumentException("{$column} must be numeric (got: {$value})");
         }
 
@@ -643,7 +686,7 @@ class LoanImportService
             return LoanSettings::settlementThreshold();
         }
 
-        if (! is_numeric($value)) {
+        if (!is_numeric($value)) {
             throw new \InvalidArgumentException("settlement_threshold must be numeric (got: {$value})");
         }
 
@@ -687,7 +730,7 @@ class LoanImportService
             return $default;
         }
 
-        if (! ctype_digit($value)) {
+        if (!ctype_digit($value)) {
             throw new \InvalidArgumentException(__('installments_count must be a positive integer.'));
         }
 
@@ -708,7 +751,7 @@ class LoanImportService
     ): int {
         $cell = $this->cell($row, 'installments_count');
         if ($cell !== '') {
-            if (! ctype_digit($cell)) {
+            if (!ctype_digit($cell)) {
                 throw new \InvalidArgumentException(__('installments_count must be a positive integer.'));
             }
             $count = (int) $cell;
@@ -734,7 +777,7 @@ class LoanImportService
     ): int {
         $cell = $this->cell($row, 'installments_count');
         if ($cell !== '') {
-            if (! ctype_digit($cell)) {
+            if (!ctype_digit($cell)) {
                 throw new \InvalidArgumentException(__('installments_count must be a positive integer.'));
             }
             $count = (int) $cell;
@@ -742,7 +785,7 @@ class LoanImportService
             return $count >= 1 ? $count : throw new \InvalidArgumentException(__('installments_count must be at least 1.'));
         }
 
-        if (! $portionsExplicit) {
+        if (!$portionsExplicit && $this->fundingStrategyForImport === null) {
             $schedulePortions = LoanSettings::resolveFundingPortions(
                 $amount,
                 0,
@@ -769,7 +812,7 @@ class LoanImportService
             return 0;
         }
 
-        if (! preg_match('/^\d+$/', $paidCell)) {
+        if (!preg_match('/^\d+$/', $paidCell)) {
             throw new \InvalidArgumentException(__('paid_installments_count must be a non-negative integer.'));
         }
 
@@ -788,7 +831,7 @@ class LoanImportService
     {
         $tierNum = $this->cell($row, 'loan_tier_number');
         if ($tierNum !== '') {
-            if (! ctype_digit($tierNum)) {
+            if (!ctype_digit($tierNum)) {
                 throw new \InvalidArgumentException(__('loan_tier_number must be a non-negative integer.'));
             }
             $tier = LoanTier::where('tier_number', (int) $tierNum)->where('is_active', true)->first();
@@ -818,7 +861,7 @@ class LoanImportService
     {
         $tierNum = $this->cell($row, 'loan_tier_number');
         if ($tierNum !== '') {
-            if (! ctype_digit($tierNum)) {
+            if (!ctype_digit($tierNum)) {
                 throw new \InvalidArgumentException(__('loan_tier_number must be a non-negative integer.'));
             }
             $tier = LoanTier::where('tier_number', (int) $tierNum)->where('is_active', true)->first();
@@ -849,7 +892,7 @@ class LoanImportService
 
         $fundNum = $this->cell($row, 'fund_tier_number');
         if ($fundNum !== '') {
-            if (! ctype_digit($fundNum)) {
+            if (!ctype_digit($fundNum)) {
                 throw new \InvalidArgumentException(__('fund_tier_number must be a non-negative integer.'));
             }
             $fundTier = FundTier::where('tier_number', (int) $fundNum)->where('is_active', true)->first();

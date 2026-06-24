@@ -6,6 +6,7 @@ namespace App\Services\LegacyMigration;
 
 use App\Support\AssociativeCsv;
 use App\Support\LegacyMigrationDateParser;
+use App\Support\LegacyMigrationGraceCycleSettings;
 use Carbon\Carbon;
 
 final class LegacyMigrationCsvLoanIndex
@@ -18,9 +19,15 @@ final class LegacyMigrationCsvLoanIndex
      */
     private array $loansByMemberNumber = [];
 
-    public static function fromPath(string $absolutePath): self
+    private function __construct(
+        private readonly int $graceCycles,
+    ) {}
+
+    public static function fromPath(string $absolutePath, ?int $graceCycles = null): self
     {
-        $index = new self;
+        $index = new self(
+            max(0, min(2, $graceCycles ?? LegacyMigrationGraceCycleSettings::graceCycles())),
+        );
 
         foreach (AssociativeCsv::read($absolutePath) as $rowIndex => $row) {
             $status = strtolower(trim((string) ($row['loan_status'] ?? 'active')));
@@ -37,7 +44,7 @@ final class LegacyMigrationCsvLoanIndex
 
             $approvedRaw = trim((string) ($row['amount_approved'] ?? ''));
 
-            if ($approvedRaw === '' || !is_numeric($approvedRaw)) {
+            if ($approvedRaw === '' || ! is_numeric($approvedRaw)) {
                 continue;
             }
 
@@ -62,7 +69,7 @@ final class LegacyMigrationCsvLoanIndex
         foreach ($index->loansByMemberNumber as $memberNumber => $loans) {
             usort(
                 $loans,
-                fn(array $left, array $right): int => $left['disbursed_at']->timestamp <=> $right['disbursed_at']->timestamp,
+                fn (array $left, array $right): int => $left['disbursed_at']->timestamp <=> $right['disbursed_at']->timestamp,
             );
 
             $index->loansByMemberNumber[$memberNumber] = $loans;
@@ -80,7 +87,7 @@ final class LegacyMigrationCsvLoanIndex
         array $cumulativeRepaidByLoanKey,
     ): ?LegacyLoanRepaymentWindow {
         $windows = array_map(
-            fn(array $loan): LegacyLoanRepaymentWindow => $this->buildWindow(trim($memberNumber), $loan),
+            fn (array $loan): LegacyLoanRepaymentWindow => $this->buildWindow(trim($memberNumber), $loan),
             $this->loansByMemberNumber[trim($memberNumber)] ?? [],
         );
 
@@ -108,6 +115,10 @@ final class LegacyMigrationCsvLoanIndex
             disbursedAt: $loan['disbursed_at'],
             amountApproved: $approved,
             repaymentTargetAmount: LegacyLoanRepaymentTarget::totalRepaymentDue($approved),
+            firstRepaymentAt: LegacyLoanRepaymentWindow::firstRepaymentAtForDisbursement(
+                $loan['disbursed_at'],
+                $this->graceCycles,
+            ),
         );
     }
 }

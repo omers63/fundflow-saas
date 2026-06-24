@@ -3,12 +3,14 @@
 namespace App\Console\Commands;
 
 use App\Console\Concerns\EnsuresBatchPostingAllowed;
+use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Services\BankClearingMatchService;
 use Illuminate\Console\Command;
 
 class BankAutoMatchCommand extends Command
 {
     use EnsuresBatchPostingAllowed;
+    use TenantAwareScheduledCommand;
 
     protected $signature = 'bank:auto-match';
 

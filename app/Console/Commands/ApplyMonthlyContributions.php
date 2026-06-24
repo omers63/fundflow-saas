@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Console\Concerns\EnsuresBatchPostingAllowed;
+use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Services\ContributionCycleService;
 use App\Support\BusinessDay;
 use Illuminate\Console\Command;
@@ -12,6 +13,7 @@ use Illuminate\Console\Command;
 class ApplyMonthlyContributions extends Command
 {
     use EnsuresBatchPostingAllowed;
+    use TenantAwareScheduledCommand;
 
     protected $signature = 'contributions:apply {--month=} {--year=}';
 

@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Services\Loans\LoanDelinquencyService;
 use Illuminate\Console\Command;
 
 class LoansCheckDefaultsCommand extends Command
 {
+    use TenantAwareScheduledCommand;
+
     protected $signature = 'loans:check-defaults';
 
     protected $description = 'Mark overdue installments, sync member delinquency, and process guarantor defaults';

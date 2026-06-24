@@ -10,6 +10,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Support\AssociativeCsv;
 use App\Support\LegacyMigrationDateParser;
+use App\Support\LegacyMigrationGraceCycleSettings;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -73,6 +74,7 @@ final class LegacyPaymentClassifierService
         ?Carbon $cutoffDate = null,
         ?string $membersCsvPath = null,
         ?string $loansCsvPath = null,
+        ?int $graceCycles = null,
     ): array {
         $rows = AssociativeCsv::read($absolutePath);
 
@@ -85,7 +87,10 @@ final class LegacyPaymentClassifierService
             : null;
 
         $loanIndex = filled($loansCsvPath) && is_readable($loansCsvPath)
-            ? LegacyMigrationCsvLoanIndex::fromPath($loansCsvPath)
+            ? LegacyMigrationCsvLoanIndex::fromPath(
+                $loansCsvPath,
+                $graceCycles ?? LegacyMigrationGraceCycleSettings::graceCycles(),
+            )
             : null;
 
         $stats = [
@@ -220,6 +225,12 @@ final class LegacyPaymentClassifierService
      */
     public function writeClassifiedCsv(string $absolutePath, array $rows): void
     {
+        $directory = dirname($absolutePath);
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
         AssociativeCsv::write($absolutePath, [
             'member_email',
             'member_number',
@@ -306,6 +317,10 @@ final class LegacyPaymentClassifierService
             disbursedAt: $disbursedAt,
             amountApproved: $approved,
             repaymentTargetAmount: LegacyLoanRepaymentTarget::totalRepaymentDue($approved),
+            firstRepaymentAt: LegacyLoanRepaymentWindow::firstRepaymentAtForLoan(
+                $loan,
+                LegacyMigrationGraceCycleSettings::graceCycles(),
+            ),
             loanId: $loan->id,
         );
     }

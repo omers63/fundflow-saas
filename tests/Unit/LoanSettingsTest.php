@@ -16,7 +16,7 @@ beforeEach(function () {
 
 it('uses defaults when loan settings are not stored', function () {
     expect(LoanSettings::eligibilityMonths())->toBe(12)
-        ->and(LoanSettings::defaultInterestRate())->toBe(10.0)
+        ->and(LoanSettings::defaultInterestRate())->toBe(0.0)
         ->and(LoanSettings::guarantorTransferMissedThreshold())->toBe(3)
         ->and(LoanSettings::latePaymentConsecutiveThreshold())->toBe(3)
         ->and(LoanSettings::latePaymentRollingThreshold())->toBe(15)

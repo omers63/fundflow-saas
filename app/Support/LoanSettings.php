@@ -20,7 +20,7 @@ final class LoanSettings
             'eligibility_months' => 12,
             'min_fund_balance' => 6000,
             'max_borrow_multiplier' => 2,
-            'default_interest_rate' => 10,
+            'default_interest_rate' => 0,
             'default_term_months' => 12,
             'max_loan_amount' => 0,
             'settlement_threshold_pct' => 0.16,
@@ -64,7 +64,7 @@ final class LoanSettings
 
     public static function defaultInterestRate(): float
     {
-        return (float) self::get('default_interest_rate', 10);
+        return (float) self::get('default_interest_rate', self::defaults()['default_interest_rate']);
     }
 
     public static function defaultTermMonths(): int

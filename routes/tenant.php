@@ -12,6 +12,7 @@ use App\Http\Controllers\Tenant\LegacyLoanImportSampleController;
 use App\Http\Controllers\Tenant\LegacyMemberImportSampleController;
 use App\Http\Controllers\Tenant\LegacyPaymentClassifiedDownloadController;
 use App\Http\Controllers\Tenant\LegacyPaymentImportSampleController;
+use App\Http\Controllers\Tenant\LegacyStoredClassifiedPaymentsDownloadController;
 use App\Http\Controllers\Tenant\LoanImportSampleController;
 use App\Http\Controllers\Tenant\LoanRepaymentImportSampleController;
 use App\Http\Controllers\Tenant\LoanSchedulePdfController;
@@ -139,6 +140,9 @@ Route::middleware([
 
         Route::get('/admin/legacy-migration/classify-payments', LegacyPaymentClassifiedDownloadController::class)
             ->name('tenant.admin.legacy-migration.classify-payments');
+
+        Route::get('/admin/legacy-migration/classified-payments/download', LegacyStoredClassifiedPaymentsDownloadController::class)
+            ->name('tenant.admin.legacy-migration.classified-payments-download');
 
         Route::post('/admin/webpush/subscribe', [AdminWebPushSubscriptionController::class, 'store'])
             ->name('tenant.admin.webpush.subscribe.store');
