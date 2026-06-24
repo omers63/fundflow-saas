@@ -1,0 +1,348 @@
+/**
+ * Shared responsive layout for admin, tenant, and member Filament panels.
+ * Complements Filament's stackedOnMobile() tables and tightens page chrome on narrow viewports.
+ */
+
+/* ── Page shell ── */
+@media (max-width: 1023px) {
+    .fi-body .fi-page-header-main-ctn {
+        gap: 1.25rem;
+        padding-block: 1.25rem;
+    }
+
+    .fi-body .fi-page-content {
+        gap: 1.25rem;
+    }
+}
+
+@media (max-width: 639px) {
+    .fi-body .fi-main {
+        padding-inline: 0.75rem;
+    }
+
+    .fi-body .fi-page-header-main-ctn {
+        gap: 1rem;
+        padding-block: 1rem;
+    }
+
+    .fi-body .fi-header-heading {
+        font-size: 1.25rem;
+        line-height: 1.3;
+    }
+
+    .fi-body .fi-header-subheading {
+        font-size: 0.8125rem;
+        line-height: 1.4;
+    }
+}
+
+/* ── Header / page actions ── */
+@media (max-width: 639px) {
+    .fi-body .fi-header-actions-ctn {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: stretch;
+        gap: 0.5rem;
+    }
+
+    .fi-body .fi-header-actions-ctn > .fi-ac {
+        width: 100%;
+        flex: 1 1 100%;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .fi-body .fi-header-actions-ctn .fi-ac-btn-group {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    .fi-body .fi-header-actions-ctn .fi-btn:not(.fi-icon-btn) {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .fi-body .fi-page-header .fi-ac,
+    .fi-body .fi-ta-header .fi-ac {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+}
+
+/* ── Table toolbar ── */
+@media (max-width: 639px) {
+    .fi-body .fi-ta-ctn .fi-ta-header-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+        padding-inline: 0.75rem;
+    }
+
+    .fi-body .fi-ta-ctn .fi-ta-header-toolbar > * {
+        width: 100%;
+        margin-inline: 0 !important;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .fi-body .fi-ta-ctn .fi-ta-header-toolbar .fi-ta-search-field {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .fi-body .fi-ta-ctn .fi-ta-header-toolbar .fi-ta-search-field .fi-input-wrp {
+        width: 100%;
+    }
+
+    .fi-body .fi-ta-ctn .fi-ta-header-toolbar .fi-ta-actions {
+        justify-content: flex-start;
+        width: 100%;
+    }
+
+    .fi-body .fi-ta-ctn .fi-ta-header-toolbar .fi-btn.fi-icon-btn {
+        min-width: 2.75rem;
+        min-height: 2.75rem;
+    }
+
+    .fi-body .fi-ta-filter-indicators {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+        padding-inline: 0.75rem;
+    }
+
+    .fi-body .fi-ta-filter-indicators > :nth-child(1) {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .fi-body .fi-ta-selection-indicator {
+        padding-inline: 0.75rem;
+    }
+
+    .fi-body .fi-ta-selection-indicator-actions-ctn {
+        flex-wrap: wrap;
+    }
+}
+
+/* ── Stacked mobile tables (Filament stackedOnMobile) ── */
+@media (max-width: 639px) {
+    .fi-body .fi-ta-table.fi-ta-table-stacked-on-mobile > tbody > tr {
+        border-bottom: 1px solid rgb(var(--gray-200));
+        margin-bottom: 0.25rem;
+    }
+
+    .dark .fi-body .fi-ta-table.fi-ta-table-stacked-on-mobile > tbody > tr {
+        border-bottom-color: rgb(255 255 255 / 0.08);
+    }
+
+    .fi-body .fi-ta-table.fi-ta-table-stacked-on-mobile .fi-ta-cell-label {
+        font-size: 0.6875rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        color: rgb(var(--gray-500));
+    }
+
+    .dark .fi-body .fi-ta-table.fi-ta-table-stacked-on-mobile .fi-ta-cell-label {
+        color: rgb(var(--gray-400));
+    }
+
+    .fi-body .fi-ta-table.fi-ta-table-stacked-on-mobile .fi-ta-cell-content {
+        font-size: 0.8125rem;
+        line-height: 1.45;
+    }
+
+    .fi-body .fi-ta-table.fi-ta-table-stacked-on-mobile .fi-ta-cell:not(.fi-ta-selection-cell):has(.fi-ta-actions) {
+        padding-block: 0.75rem;
+    }
+
+    .fi-body .fi-ta-table.fi-ta-table-stacked-on-mobile .fi-ta-actions {
+        justify-content: flex-start;
+    }
+
+    .fi-body .fi-ta-table-stacked-header-row .fi-ta-table-stacked-header-cell {
+        padding-inline: 0.75rem;
+    }
+
+    .fi-body .fi-ta-table.fi-ta-table-stacked-on-mobile .fi-ta-summary-row .fi-ta-cell {
+        padding-inline: 0.75rem;
+    }
+}
+
+/* Horizontal scroll fallback for non-stacked / wide grids */
+.fi-body .fi-ta-content-ctn {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+}
+
+/* ── Pagination ── */
+@media (max-width: 639px) {
+    .fi-body .fi-pagination {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.5rem;
+        padding-inline: 0.75rem;
+    }
+
+    .fi-body .fi-pagination-overview {
+        flex: 1 1 100%;
+        text-align: center;
+        font-size: 0.75rem;
+    }
+}
+
+/* ── Forms & infolists ── */
+@media (max-width: 639px) {
+    .fi-body .fi-fo-actions {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .fi-body .fi-fo-actions .fi-btn {
+        flex: 1 1 auto;
+        min-width: min(100%, 8rem);
+    }
+
+    .fi-body .fi-sc-section,
+    .fi-body .fi-section {
+        border-radius: 0.75rem;
+    }
+
+    .fi-body .fi-in-entry {
+        min-width: 0;
+    }
+
+    .fi-body .fi-in-text,
+    .fi-body .fi-in-key-value {
+        overflow-wrap: anywhere;
+    }
+}
+
+/* ── Tabs ── */
+@media (max-width: 1023px) {
+    .fi-body .fi-tabs:not(.fi-tabs-vertical) {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .fi-body .fi-tabs:not(.fi-tabs-vertical)::-webkit-scrollbar {
+        display: none;
+    }
+
+    .fi-body .fi-tabs:not(.fi-tabs-vertical) .fi-tabs-item {
+        flex-shrink: 0;
+    }
+}
+
+/* ── Widgets & insight strips ── */
+@media (max-width: 639px) {
+    .fi-body .fi-wi-stats-overview {
+        gap: 0.75rem;
+    }
+
+    .fi-body .fi-wi-stats-overview-stat {
+        padding: 0.875rem 1rem;
+    }
+
+    .fi-body .ff-app-insights [class*='grid-cols-2'],
+    .fi-body .ff-app-insights [class*='grid-cols-3'],
+    .fi-body .ff-app-insights [class*='grid-cols-4'] {
+        grid-template-columns: 1fr !important;
+    }
+
+    .fi-body .ff-app-insights .grid.divide-x > :not(:last-child) {
+        border-inline-end-width: 0;
+        border-bottom-width: 1px;
+        border-bottom-style: solid;
+        border-bottom-color: rgb(243 244 246);
+        padding-bottom: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .dark .fi-body .ff-app-insights .grid.divide-x > :not(:last-child) {
+        border-bottom-color: rgb(255 255 255 / 0.08);
+    }
+
+    .fi-body .ff-app-insights-kpi-strip {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* ── Custom detail grids (Blade modals / views) ── */
+@media (max-width: 639px) {
+    .ff-tenant-detail-grid,
+    .ff-tenant-detail-grid--3col,
+    .ff-member-detail-grid,
+    .ff-member-detail-grid--3col {
+        grid-template-columns: 1fr;
+        gap: 0.625rem;
+        padding-inline: 0.75rem;
+    }
+
+    .ff-member-detail-grid__value {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: unset;
+    }
+}
+
+/* ── Modals ── */
+@media (max-width: 639px) {
+    .fi-body .fi-modal-window:not(.fi-width-screen) {
+        width: calc(100vw - 1rem) !important;
+        max-width: calc(100vw - 1rem) !important;
+        margin-inline: 0.5rem;
+    }
+
+    .fi-body .fi-modal-header,
+    .fi-body .fi-modal-footer {
+        padding-inline: 1rem;
+    }
+
+    .fi-body .fi-modal-content {
+        padding-inline: 1rem;
+    }
+
+    .fi-body .fi-modal-footer .fi-ac {
+        flex-wrap: wrap;
+        width: 100%;
+        gap: 0.5rem;
+    }
+
+    .fi-body .fi-modal-footer .fi-btn {
+        flex: 1 1 auto;
+        min-width: min(100%, 7rem);
+    }
+}
+
+/* ── Relation managers ── */
+@media (max-width: 639px) {
+    .fi-body .fi-resource-relation-manager > .fi-ta-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+
+    .fi-body .fi-resource-relation-manager .fi-ta-header .fi-ta-actions {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+}
+
+/* ── Wizards & steppers ── */
+@media (max-width: 639px) {
+    .fi-body .fi-sc-wizard-header {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+
+    .fi-body .fi-sc-wizard-header::-webkit-scrollbar {
+        display: none;
+    }
+}

@@ -121,7 +121,17 @@ final class MemberTableColumns
             );
     }
 
+    public static function memberRecordUrl(Member $record): string
+    {
+        return MemberResource::getUrl('view', ['record' => $record]);
+    }
+
     public static function memberRecordEditUrl(Member $record): string
+    {
+        return self::memberRecordUrl($record);
+    }
+
+    public static function memberProfileEditUrl(Member $record): string
     {
         return MemberResource::getUrl('edit', ['record' => $record]);
     }
@@ -142,7 +152,7 @@ final class MemberTableColumns
      */
     public static function memberIdEditUrl(array $record): string
     {
-        return MemberResource::getUrl('edit', ['record' => $record['member_id']]);
+        return MemberResource::getUrl('view', ['record' => $record['member_id']]);
     }
 
     private static function extractMemberId(mixed $record): ?int
@@ -167,8 +177,8 @@ final class MemberTableColumns
         return match ($columnName) {
             'member.name' => $record->member instanceof Member ? $record->member : null,
             'loan.member.name' => ($record->loan?->member ?? $record->member ?? null) instanceof Member
-                ? ($record->loan?->member ?? $record->member)
-                : null,
+            ? ($record->loan?->member ?? $record->member)
+            : null,
             'guarantor.name' => $record->guarantor instanceof Member ? $record->guarantor : null,
             'loan.guarantor.name' => $record->loan?->guarantor instanceof Member ? $record->loan->guarantor : null,
             default => null,

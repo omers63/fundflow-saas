@@ -200,7 +200,23 @@ class ListMembershipApplications extends ListRecords
 
     public function getSubheading(): ?string
     {
-        return __('Review new membership applications, track approval rates, and manage the onboarding pipeline.');
+        return match (MembershipApplicationResource::resolveListTab()) {
+            'pending' => __('Applications awaiting document check, fee confirmation, and approval.'),
+            'approved' => __('Approved applications — members were created on acceptance.'),
+            'rejected' => __('Rejected applications kept for audit.'),
+            default => __('Review new membership applications and manage the onboarding pipeline.'),
+        };
+    }
+
+    /**
+     * @return array<string>
+     */
+    public function getPageClasses(): array
+    {
+        return [
+            ...parent::getPageClasses(),
+            'ff-tenant-applications-workspace',
+        ];
     }
 
     private function sendImportNotification(Notification $notification): void

@@ -10,7 +10,6 @@ use App\Services\Tenant\HouseholdMemberService;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
-use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -148,9 +147,7 @@ final class HouseholdDependentFilamentActions
     {
         return [
             ViewAction::make()
-                ->url(fn (Member $record): string => MemberResource::getUrl('edit', ['record' => $record])),
-            EditAction::make()
-                ->url(fn (Member $record): string => MemberResource::getUrl('edit', ['record' => $record])),
+                ->url(fn (Member $record): string => MemberResource::getUrl('view', ['record' => $record])),
             ...DependentAllocationFilamentActions::forRow($resolveParent),
             ...MemberFilamentActions::forHouseholdDependentMemberRow(),
             ...MemberDelinquencyActions::forMemberListRow(),

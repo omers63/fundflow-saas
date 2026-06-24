@@ -95,3 +95,58 @@ it('suspends when miss counts breach configured thresholds', function () {
 
     Carbon::setTestNow();
 });
+
+it('does not count contribution misses during a historical loan repayment cycle', function () {
+    Carbon::setTestNow(Carbon::create(2024, 3, 20));
+    Setting::set('delinquency', 'total_miss_lookback_months', 24);
+    Setting::set('delinquency', 'total_miss_threshold', 3);
+
+    $member = Member::factory()->create([
+        'joined_at' => Carbon::create(2021, 1, 10),
+        'monthly_contribution_amount' => 500,
+        'status' => 'active',
+    ]);
+
+    Loan::create([
+        'member_id' => $member->id,
+        'amount' => 5000,
+        'amount_requested' => 5000,
+        'amount_approved' => 5000,
+        'amount_disbursed' => 5000,
+        'interest_rate' => 0,
+        'term_months' => 6,
+        'monthly_repayment' => 500,
+        'total_repaid' => 0,
+        'status' => 'completed',
+        'applied_at' => Carbon::create(2021, 8, 28),
+        'disbursed_at' => Carbon::create(2021, 8, 28),
+        'settled_at' => Carbon::create(2024, 2, 29),
+    ]);
+
+    $stats = app(MemberDelinquencyEvaluator::class)->evaluate($member->fresh());
+
+    expect($stats['rolling_total'])->toBe(0)
+        ->and($stats['trailing_consecutive'])->toBe(0);
+
+    Carbon::setTestNow();
+});
+
+it('ignores closed periods before the legacy migration contribution cut-off', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+    Setting::set('delinquency', 'total_miss_lookback_months', 60);
+    Setting::set('delinquency', 'total_miss_threshold', 15);
+
+    $member = Member::factory()->create([
+        'joined_at' => Carbon::create(2014, 10, 29),
+        'contribution_arrears_cutoff_date' => Carbon::create(2026, 6, 1),
+        'monthly_contribution_amount' => 500,
+        'status' => 'delinquent',
+    ]);
+
+    $stats = app(MemberDelinquencyEvaluator::class)->evaluate($member->fresh());
+
+    expect($stats['rolling_total'])->toBe(0)
+        ->and($stats['trailing_consecutive'])->toBe(0);
+
+    Carbon::setTestNow();
+});

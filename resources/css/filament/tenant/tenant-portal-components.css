@@ -884,6 +884,52 @@ html[dir='rtl'] .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-he
     padding-top: 0.75rem;
 }
 
+.fi-body.fi-panel-tenant .ff-tenant-member-detail .fi-header-actions {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* Members list workspace */
+.fi-body.fi-panel-tenant .ff-tenant-members-workspace .ff-members-list-insights {
+    margin-bottom: 0.25rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-members-workspace .ff-members-roster-panel a {
+    text-decoration: none;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-members-workspace .fi-ta-table {
+    border-radius: 1rem;
+    overflow: hidden;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-members-workspace .ff-tenant-tab-pills {
+    margin-bottom: 0.25rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-applications-workspace .ff-applications-list-insights,
+.fi-body.fi-panel-tenant .ff-tenant-member-requests-workspace .ff-member-requests-insights {
+    margin-bottom: 0.25rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-application-review .fi-header-widgets {
+    margin-bottom: 0.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-application-review--pending .fi-header-actions {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-member-request-detail .fi-header-actions {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-member-profile-edit .fi-main {
+    max-width: 56rem;
+}
+
 /* Audit & System embedded workspaces */
 .fi-body.fi-panel-tenant .ff-audit-wizard-steps {
     display: grid;

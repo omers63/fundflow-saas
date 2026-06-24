@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Tenant\Contribution;
-use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Support\BusinessDay;
@@ -19,16 +18,10 @@ use Carbon\Carbon;
 class MemberDelinquencyEvaluator
 {
     /** @var array<string, bool> */
-    protected array $exemptFromContributionCache = [];
-
-    /** @var array<string, bool> */
     protected array $postedContributionPeriods = [];
 
     /** @var array<string, bool> */
     protected array $repaymentMissPeriods = [];
-
-    /** @var list<string> */
-    protected array $contributionExemptStarts = [];
 
     public function __construct(
         protected ContributionCycleService $cycles,
@@ -44,19 +37,24 @@ class MemberDelinquencyEvaluator
      */
     public function evaluate(Member $member): array
     {
-        $this->exemptFromContributionCache = [];
         $this->postedContributionPeriods = [];
         $this->repaymentMissPeriods = [];
-        $this->contributionExemptStarts = [];
 
         $now = BusinessDay::now();
         [$lastM, $lastY] = $this->lastClosedPeriodMonthYear($now);
 
-        $joined = $member->joined_at instanceof Carbon
-            ? $member->joined_at->copy()->startOfMonth()
-            : Carbon::parse($member->joined_at)->startOfMonth();
+        $liabilityStart = $member->contributionLiabilityStartMonth();
 
-        if ($this->periodKey($lastY, $lastM) < $this->periodKey((int) $joined->year, (int) $joined->month)) {
+        if ($liabilityStart === null) {
+            return [
+                'trailing_consecutive' => 0,
+                'rolling_total' => 0,
+                'last_closed_month' => null,
+                'last_closed_year' => null,
+            ];
+        }
+
+        if ($this->periodKey($lastY, $lastM) < $this->periodKey((int) $liabilityStart->year, (int) $liabilityStart->month)) {
             return [
                 'trailing_consecutive' => 0,
                 'rolling_total' => 0,
@@ -66,14 +64,14 @@ class MemberDelinquencyEvaluator
         }
 
         $lookback = ContributionPolicySettings::totalMissLookbackMonths();
-        $this->warmPeriodCaches($member, $joined, $lastM, $lastY);
+        $this->warmPeriodCaches($member, $liabilityStart, $lastM, $lastY);
 
         $rollingTotal = 0;
         $cursor = Carbon::create($lastY, $lastM, 1)->startOfMonth();
         for ($i = 0; $i < $lookback; $i++) {
             $m = (int) $cursor->month;
             $y = (int) $cursor->year;
-            if ($cursor->lt($joined)) {
+            if ($cursor->lt($liabilityStart)) {
                 break;
             }
             if ($this->periodHasMiss($member, $m, $y)) {
@@ -87,7 +85,7 @@ class MemberDelinquencyEvaluator
         for ($i = 0; $i < 240; $i++) {
             $m = (int) $cursor->month;
             $y = (int) $cursor->year;
-            if ($cursor->lt($joined)) {
+            if ($cursor->lt($liabilityStart)) {
                 break;
             }
             if (! $this->periodHasMiss($member, $m, $y)) {
@@ -109,11 +107,6 @@ class MemberDelinquencyEvaluator
     {
         return $trailingConsecutive >= ContributionPolicySettings::consecutiveMissThreshold()
             || $rollingTotal >= ContributionPolicySettings::totalMissThreshold();
-    }
-
-    public function clearCaches(): void
-    {
-        $this->exemptFromContributionCache = [];
     }
 
     /**
@@ -138,26 +131,34 @@ class MemberDelinquencyEvaluator
 
     protected function periodHasMiss(Member $member, int $month, int $year): bool
     {
+        if (! $this->periodCountsForDelinquency($member, $month, $year)) {
+            return false;
+        }
+
         return $this->contributionMiss($member, $month, $year)
             || $this->repaymentMiss($member, $month, $year);
     }
 
-    protected function contributionMiss(Member $member, int $month, int $year): bool
+    protected function periodCountsForDelinquency(Member $member, int $month, int $year): bool
     {
-        $periodStart = Carbon::create($year, $month, 1)->startOfMonth();
-        $joined = $member->joined_at instanceof Carbon
-            ? $member->joined_at->copy()->startOfMonth()
-            : Carbon::parse($member->joined_at)->startOfMonth();
+        $liabilityStart = $member->contributionLiabilityStartMonth();
 
-        if ($periodStart->lt($joined)) {
+        if ($liabilityStart === null) {
             return false;
         }
 
+        $periodStart = Carbon::create($year, $month, 1)->startOfMonth();
+
+        return $periodStart->greaterThanOrEqualTo($liabilityStart);
+    }
+
+    protected function contributionMiss(Member $member, int $month, int $year): bool
+    {
         if ((float) $member->monthly_contribution_amount <= 0) {
             return false;
         }
 
-        if ($this->isExemptFromContributionsInMonth($member, $month, $year)) {
+        if ($member->isExemptFromContributions($month, $year)) {
             return false;
         }
 
@@ -174,21 +175,6 @@ class MemberDelinquencyEvaluator
         return $this->repaymentMissPeriods[$this->monthKey($month, $year)] ?? false;
     }
 
-    protected function isExemptFromContributionsInMonth(Member $member, int $month, int $year): bool
-    {
-        $k = "{$year}-{$month}";
-        if (array_key_exists($k, $this->exemptFromContributionCache)) {
-            return $this->exemptFromContributionCache[$k];
-        }
-
-        $monthKey = $this->monthKey($month, $year);
-        $v = collect($this->contributionExemptStarts)->contains(
-            fn (string $start): bool => $start <= $monthKey
-        );
-
-        return $this->exemptFromContributionCache[$k] = $v;
-    }
-
     protected function periodKey(int $year, int $month): int
     {
         return $year * 12 + $month;
@@ -199,13 +185,13 @@ class MemberDelinquencyEvaluator
         return sprintf('%04d-%02d', $year, $month);
     }
 
-    protected function warmPeriodCaches(Member $member, Carbon $joined, int $lastMonth, int $lastYear): void
+    protected function warmPeriodCaches(Member $member, Carbon $liabilityStart, int $lastMonth, int $lastYear): void
     {
         $endOfLastClosed = Carbon::create($lastYear, $lastMonth, 1)->endOfMonth();
 
         $this->postedContributionPeriods = Contribution::query()
             ->where('member_id', $member->id)
-            ->whereBetween('period', [$joined->toDateString(), $endOfLastClosed->toDateString()])
+            ->whereBetween('period', [$liabilityStart->toDateString(), $endOfLastClosed->toDateString()])
             ->get(['period'])
             ->filter(fn (Contribution $contribution): bool => $contribution->period !== null)
             ->mapWithKeys(function (Contribution $contribution): array {
@@ -220,7 +206,7 @@ class MemberDelinquencyEvaluator
                 'loan',
                 fn ($query) => $query
                     ->where('member_id', $member->id)
-                    ->where('status', 'active')
+                    ->whereIn('status', ['active', 'transferred'])
             )
             ->whereIn('status', ['pending', 'overdue'])
             ->whereDate('due_date', '<=', $endOfLastClosed)
@@ -231,21 +217,6 @@ class MemberDelinquencyEvaluator
 
                 return [$this->monthKey((int) $dueDate->month, (int) $dueDate->year) => true];
             })
-            ->all();
-
-        $this->contributionExemptStarts = Loan::query()
-            ->where('member_id', $member->id)
-            ->where('status', 'active')
-            ->whereDate('disbursed_at', '<=', $endOfLastClosed)
-            ->whereHas('installments', fn ($query) => $query->whereIn('status', ['pending', 'overdue']))
-            ->get(['disbursed_at'])
-            ->filter(fn (Loan $loan): bool => $loan->disbursed_at !== null)
-            ->map(function (Loan $loan): string {
-                $disbursedAt = Carbon::parse((string) $loan->disbursed_at);
-
-                return $this->monthKey((int) $disbursedAt->month, (int) $disbursedAt->year);
-            })
-            ->values()
             ->all();
     }
 }

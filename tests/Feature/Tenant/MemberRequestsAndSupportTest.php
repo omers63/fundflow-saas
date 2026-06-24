@@ -6,6 +6,7 @@ use App\Filament\Member\Pages\SupportPage;
 use App\Filament\Member\Widgets\MyMemberRequestsTableWidget;
 use App\Filament\Tenant\Resources\MemberRequests\MemberRequestResource;
 use App\Filament\Tenant\Resources\MemberRequests\Pages\ListMemberRequests;
+use App\Filament\Tenant\Resources\MemberRequests\Pages\ViewMemberRequest;
 use App\Filament\Tenant\Resources\SupportRequests\Pages\ListSupportRequests;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberRequest;
@@ -157,4 +158,30 @@ test('admin can approve independence request', function () {
 
     expect($dependent->fresh()->parent_member_id)->toBeNull()
         ->and($request->fresh()->status)->toBe(MemberRequest::STATUS_APPROVED);
+});
+
+test('member requests list opens view page on row click without row actions column', function () {
+    $request = MemberRequest::query()->create([
+        'requester_member_id' => $this->member->id,
+        'type' => MemberRequest::TYPE_ADD_DEPENDENT,
+        'status' => MemberRequest::STATUS_PENDING,
+        'payload' => ['details' => 'Add dependent from list test.'],
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+
+    $component = Livewire::actingAs($this->admin, 'tenant')
+        ->test(ListMemberRequests::class)
+        ->assertSuccessful()
+        ->assertSee('ff-member-requests-insights', false);
+
+    expect($component->instance()->getTable()->getRecordActions())->toBe([])
+        ->and($component->instance()->getTable()->getRecordUrl($request))
+        ->toBe(MemberRequestResource::getUrl('view', ['record' => $request]));
+
+    Livewire::actingAs($this->admin, 'tenant')
+        ->test(ViewMemberRequest::class, ['record' => $request->getRouteKey()])
+        ->assertSuccessful()
+        ->assertSee(__('Approve'))
+        ->assertSee('Add dependent from list test.');
 });

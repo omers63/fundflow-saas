@@ -115,11 +115,10 @@ test('applications list shows purpose subheading and header actions for admin', 
     Livewire::actingAs($admin, 'tenant')
         ->test(ListMembershipApplications::class)
         ->assertSuccessful()
-        ->assertSee(__('Review new membership applications, track approval rates, and manage the onboarding pipeline.'))
+        ->assertSee(__('Review new membership applications and manage the onboarding pipeline.'))
         ->assertSee(__('Import Applications'))
         ->assertSee(__('New Application'))
         ->assertSee(__('Applications need your attention'))
-        ->assertSee(__('Pipeline'))
         ->assertSee(__('Review queue'));
 });
 
@@ -421,8 +420,8 @@ test('admin can delete membership application from applications table', function
     Filament::setCurrentPanel('tenant');
 
     Livewire::actingAs($admin, 'tenant')
-        ->test(ListMembershipApplications::class)
-        ->callTableAction('delete', $application)
+        ->test(EditMembershipApplication::class, ['record' => $application->getRouteKey()])
+        ->callAction('delete')
         ->assertNotified();
 
     expect(MembershipApplication::query()->find($application->id))->toBeNull();

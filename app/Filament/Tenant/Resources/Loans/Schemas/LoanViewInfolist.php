@@ -29,7 +29,7 @@ final class LoanViewInfolist
                         TextEntry::make('member.name')
                             ->label(__('Member'))
                             ->url(fn (Loan $record): ?string => $record->member_id
-                                ? MemberResource::getUrl('edit', ['record' => $record->member_id])
+                                ? MemberResource::getUrl('view', ['record' => $record->member_id])
                                 : null),
                         TextEntry::make('member.member_number')
                             ->label(__('Member number'))
@@ -180,7 +180,7 @@ final class LoanViewInfolist
                         TextEntry::make('guarantor.name')
                             ->label(__('Guarantor'))
                             ->url(fn (Loan $record): ?string => $record->guarantor_member_id
-                                ? MemberResource::getUrl('edit', ['record' => $record->guarantor_member_id])
+                                ? MemberResource::getUrl('view', ['record' => $record->guarantor_member_id])
                                 : null)
                             ->placeholder(__('—'))
                             ->visible(fn (Loan $record): bool => $record->guarantor_member_id !== null),

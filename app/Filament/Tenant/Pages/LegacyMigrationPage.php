@@ -15,12 +15,14 @@ use App\Services\LegacyMigration\LegacyMigrationPreviewService;
 use App\Services\LegacyMigration\LegacyPaymentClassifierService;
 use App\Support\BusinessDay;
 use App\Support\FilamentStoredUploadPath;
+use App\Support\LegacyMigrationDateFormatSettings;
 use BackedEnum;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Radio;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -101,6 +103,7 @@ class LegacyMigrationPage extends Page implements HasForms
             'strategy' => 'snapshot',
             'cutoff_date' => BusinessDay::now()->subMonth()->endOfMonth()->toDateString(),
             'default_password' => '',
+            'slash_date_format' => LegacyMigrationDateFormatSettings::slashDateFormat(),
         ]);
 
         $this->classifiedPaymentsReady = Storage::disk('local')->exists(self::CLASSIFIED_PAYMENTS_PATH);
@@ -216,6 +219,12 @@ class LegacyMigrationPage extends Page implements HasForms
                     ->maxDate(BusinessDay::now())
                     ->native(false)
                     ->helperText(__('Balances and arrears before this date are treated as legacy. Late fees and delinquency history are not imported.')),
+                Select::make('slash_date_format')
+                    ->label(__('Ambiguous slash dates'))
+                    ->options(LegacyMigrationDateFormatSettings::slashDateFormatOptions())
+                    ->default(LegacyMigrationDateFormatSettings::defaultSlashDateFormat())
+                    ->required()
+                    ->helperText(__('How to read dates like 11/3/2025 when both parts are 12 or less. ISO dates (2025-11-03) always parse correctly.')),
                 TextInput::make('default_password')
                     ->label(__('Default member password'))
                     ->password()
@@ -272,6 +281,8 @@ class LegacyMigrationPage extends Page implements HasForms
             return;
         }
 
+        $this->persistDateFormatFromState($state);
+
         $paths = $this->resolveUploadedPathsFromState($state);
 
         if ($paths['members'] === null) {
@@ -321,6 +332,8 @@ class LegacyMigrationPage extends Page implements HasForms
 
             return;
         }
+
+        $this->persistDateFormatFromState($state);
 
         $paths = $this->resolveUploadedPathsFromState($state);
 
@@ -422,6 +435,8 @@ class LegacyMigrationPage extends Page implements HasForms
 
             return;
         }
+
+        $this->persistDateFormatFromState($state);
 
         $paths = $this->resolveUploadedPathsFromState($state);
         $password = (string) ($state['default_password'] ?? '');
@@ -620,6 +635,16 @@ class LegacyMigrationPage extends Page implements HasForms
             ->body(collect($exception->errors())->flatten()->first() ?? __('Fix the highlighted fields and try again.'))
             ->danger()
             ->send();
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function persistDateFormatFromState(array $state): void
+    {
+        LegacyMigrationDateFormatSettings::saveSlashDateFormat(
+            (string) ($state['slash_date_format'] ?? LegacyMigrationDateFormatSettings::defaultSlashDateFormat()),
+        );
     }
 
     /**

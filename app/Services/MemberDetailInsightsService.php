@@ -148,7 +148,7 @@ final class MemberDetailInsightsService
                 'is_parent' => $member->isParent(),
                 'parent_name' => $member->parent?->name,
                 'parent_url' => $member->parent
-                    ? MemberResource::getUrl('edit', ['record' => $member->parent])
+                    ? MemberResource::getUrl('view', ['record' => $member->parent])
                     : null,
             ],
             'currency' => $currency,
@@ -234,7 +234,7 @@ final class MemberDetailInsightsService
                         'name' => $dependent->name,
                         'number' => $dependent->member_number,
                         'status' => Member::statusOptions()[$dependent->status] ?? $dependent->status,
-                        'edit_url' => MemberResource::getUrl('edit', ['record' => $dependent]),
+                        'edit_url' => MemberResource::getUrl('view', ['record' => $dependent]),
                     ])
                     ->all(),
                 'dependents_count' => $dependentsCount,
@@ -369,7 +369,7 @@ final class MemberDetailInsightsService
             $metrics[] = [
                 'label' => __('Household'),
                 'value' => trans_choice(':count dependent|:count dependents', $dependentsCount, ['count' => $dependentsCount]),
-                'url' => MemberResource::getUrl('edit', ['record' => $member]),
+                'url' => MemberResource::getUrl('view', ['record' => $member]),
             ];
         }
 
@@ -425,7 +425,7 @@ final class MemberDetailInsightsService
                 'title' => __('Member is delinquent'),
                 'subtitle' => __('Restore active after arrears are cleared, or use force restore on the member record.'),
                 'cta_label' => __('Member record'),
-                'cta_url' => MemberResource::getUrl('edit', ['record' => $member]),
+                'cta_url' => MemberResource::getUrl('view', ['record' => $member]),
             ];
         }
 
@@ -973,7 +973,7 @@ final class MemberDetailInsightsService
                 'accent' => 'sky',
                 'icon' => 'heroicon-o-users',
                 'url' => $member->parent
-                    ? MemberResource::getUrl('edit', ['record' => $member->parent])
+                    ? MemberResource::getUrl('view', ['record' => $member->parent])
                     : null,
             ],
         ];

@@ -112,7 +112,7 @@ final class ReconciliationExceptionPresenter
             $items[] = [
                 'label' => __('Member'),
                 'value' => $member?->name ?? __('Member #:id', ['id' => $memberId]),
-                'url' => MemberResource::getUrl('edit', ['record' => $memberId]),
+                'url' => MemberResource::getUrl('view', ['record' => $memberId]),
             ];
         }
 

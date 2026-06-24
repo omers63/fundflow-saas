@@ -60,7 +60,7 @@ class DependentsRelationManager extends RelationManager
                 ...HouseholdDependentFilamentActions::headerActions(fn (): Member => $this->getOwnerRecord()),
                 $this->buildMemberAllocateDependentsAction(),
             ])
-            ->recordUrl(fn (Member $record): string => MemberResource::getUrl('edit', ['record' => $record]))
+            ->recordUrl(fn (Member $record): string => MemberResource::getUrl('view', ['record' => $record]))
             ->recordActions(TableRecordActionGroups::wrap(
                 HouseholdDependentFilamentActions::forRow(fn (): Member => $this->getOwnerRecord()),
             ))

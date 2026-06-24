@@ -25,7 +25,9 @@ use App\Support\LoanEligibilityGate;
 use Carbon\Carbon;
 use Closure;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
+use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Forms\Components\DateTimePicker;
@@ -41,51 +43,85 @@ use Livewire\Component;
 final class MemberFilamentActions
 {
     /**
-     * @return list<Action>
+     * Member list rows open the edit workspace on click — operational actions live on the edit page header.
+     *
+     * @return list<Action|ActionGroup>
      */
     public static function forMemberListRow(): array
     {
+        return [];
+    }
+
+    /**
+     * Grouped header actions on the member edit workspace.
+     *
+     * @return list<ActionGroup>
+     */
+    public static function forMemberEditHeader(): array
+    {
         return [
-            self::contribute(),
-            self::repayment(),
-            self::application(),
-            self::adjustCash(),
-            self::adjustFund(),
-            self::sendMessage(),
-            self::sendNotification(),
-            self::suspend(),
-            self::restoreSuspended(),
-            self::terminate(),
-            self::chargeAnnualSubscription(),
-            self::adminOverride(),
-            self::delete(),
+            self::treasuryActionGroup(),
+            self::communicationsActionGroup(),
+            self::membershipStatusActionGroup(),
+            self::delinquencyAndAdminActionGroup(),
         ];
     }
 
     /**
      * Row actions for dependents listed on a household head's member edit page.
      *
-     * @return list<Action>
+     * @return list<Action|ActionGroup>
      */
     public static function forHouseholdDependentMemberRow(): array
     {
         return [
-            self::contribute(),
-            self::repayment(),
-            self::adjustCash(),
-            self::adjustFund(),
-            self::sendMessage(),
-            self::sendNotification(),
-            self::suspend(),
-            self::restoreSuspended(),
-            self::terminate(),
-            self::chargeAnnualSubscription(),
-            self::adminOverride(),
-            self::delete(),
+            self::treasuryActionGroup(),
+            self::communicationsActionGroup(),
+            ActionGroup::make([
+                self::suspend(),
+                self::restoreSuspended(),
+                self::terminate(),
+                self::adminOverride(),
+                self::delete(),
+            ])
+                ->label(__('More'))
+                ->icon('heroicon-o-ellipsis-horizontal')
+                ->color('gray'),
         ];
     }
 
     /**
+     * @return list<BulkActionGroup>
+     */
+    public static function forMemberListBulkGroups(): array
+    {
+        return [
+            BulkActionGroup::make([
+                self::contributeBulk(),
+                self::repaymentBulk(),
+                self::adjustCashBulk(),
+                self::adjustFundBulk(),
+            ])->label(__('Treasury')),
+            BulkActionGroup::make([
+                self::sendMessageBulk(),
+                self::sendNotificationBulk(),
+            ])->label(__('Communicate')),
+            BulkActionGroup::make([
+                self::suspendBulk(),
+                self::restoreSuspendedBulk(),
+                self::terminateBulk(),
+            ])->label(__('Status')),
+            BulkActionGroup::make([
+                self::chargeAnnualSubscriptionBulk(),
+                self::adminOverrideBulk(),
+                self::deleteBulk(),
+            ])->label(__('Admin')),
+        ];
+    }
+
+    /**
+     * Flat bulk actions for nested toolbars (e.g. household dependents).
+     *
      * @return list<BulkAction>
      */
     public static function forMemberListBulk(): array
@@ -104,6 +140,56 @@ final class MemberFilamentActions
             self::adminOverrideBulk(),
             self::deleteBulk(),
         ];
+    }
+
+    public static function treasuryActionGroup(): ActionGroup
+    {
+        return ActionGroup::make([
+            self::contribute(),
+            self::repayment(),
+            self::adjustCash(),
+            self::adjustFund(),
+        ])
+            ->label(__('Treasury'))
+            ->icon('heroicon-o-banknotes')
+            ->color('success');
+    }
+
+    public static function communicationsActionGroup(): ActionGroup
+    {
+        return ActionGroup::make([
+            self::sendMessage(),
+            self::sendNotification(),
+        ])
+            ->label(__('Communicate'))
+            ->icon('heroicon-o-chat-bubble-left-right')
+            ->color('gray');
+    }
+
+    public static function membershipStatusActionGroup(): ActionGroup
+    {
+        return ActionGroup::make([
+            self::application(),
+            self::suspend(),
+            self::restoreSuspended(),
+            self::terminate(),
+        ])
+            ->label(__('Membership'))
+            ->icon('heroicon-o-user-circle')
+            ->color('warning');
+    }
+
+    public static function delinquencyAndAdminActionGroup(): ActionGroup
+    {
+        return ActionGroup::make([
+            ...MemberDelinquencyActions::forMemberEditHeaderNested(),
+            self::chargeAnnualSubscription(),
+            self::adminOverride(),
+            self::delete(),
+        ])
+            ->label(__('Compliance'))
+            ->icon('heroicon-o-shield-check')
+            ->color('danger');
     }
 
     public static function contribute(): Action

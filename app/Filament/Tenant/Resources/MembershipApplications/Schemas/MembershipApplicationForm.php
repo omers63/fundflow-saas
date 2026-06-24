@@ -235,7 +235,7 @@ class MembershipApplicationForm
         if (! $forCreate) {
             $detailsSchema[] = Section::make(__('Review status'))
                 ->icon('heroicon-o-clipboard-document-check')
-                ->description(__('Use Approve / Reject on the list for workflow actions. You can correct the rejection reason here.'))
+                ->description(__('Use Approve / Reject in the page header for workflow actions. You can correct the rejection reason here after the fact.'))
                 ->schema([
                     Select::make('status')
                         ->options(MembershipApplication::statusOptions())

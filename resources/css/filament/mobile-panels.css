@@ -5,6 +5,7 @@
 @import './ui-label-capitalization.css';
 @import '../arabic-typography.css';
 @import './rtl-table-phases.css';
+@import './mobile-portal-layout.css';
 
 /* Topbar height matches the legacy app: Filament min-h-16 + panel brandLogoHeight (5rem). */
 .fi-body .fi-topbar .fi-logo,

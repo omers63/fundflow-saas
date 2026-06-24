@@ -189,7 +189,7 @@ final class AccountDetailInsightsService
                     ['label' => __('Number'), 'value' => $member->member_number],
                     ['label' => __('Status'), 'value' => Member::statusOptions()[$member->status] ?? $member->status],
                 ],
-                'url' => MemberResource::getUrl('edit', ['record' => $member]),
+                'url' => MemberResource::getUrl('view', ['record' => $member]),
                 'link_label' => __('View member'),
             ],
         ];

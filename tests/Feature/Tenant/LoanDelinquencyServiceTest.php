@@ -11,6 +11,7 @@ use App\Models\Tenant\Setting;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Support\BusinessDaySettings;
 use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
 
@@ -86,7 +87,11 @@ test('pending installment past cycle deadline is marked overdue', function () {
 });
 
 test('member with overdue installments is marked delinquent', function () {
-    $member = createMemberForDelinquency(app(AccountingService::class));
+    BusinessDaySettings::saveFromForm('2026-05-20');
+
+    $member = createMemberForDelinquency(app(AccountingService::class), [
+        'joined_at' => Carbon::create(2026, 1, 10),
+    ]);
 
     $loan = Loan::create([
         'member_id' => $member->id,
@@ -99,15 +104,15 @@ test('member with overdue installments is marked delinquent', function () {
         'monthly_repayment' => 1000,
         'total_repaid' => 0,
         'status' => 'active',
-        'applied_at' => now()->subMonths(2),
-        'disbursed_at' => now()->subMonths(2),
+        'applied_at' => Carbon::create(2026, 3, 1),
+        'disbursed_at' => Carbon::create(2026, 3, 1),
     ]);
 
     LoanInstallment::create([
         'loan_id' => $loan->id,
         'installment_number' => 1,
         'amount' => 1000,
-        'due_date' => now()->subMonth(),
+        'due_date' => Carbon::create(2026, 4, 5),
         'status' => 'overdue',
     ]);
 
@@ -118,6 +123,8 @@ test('member with overdue installments is marked delinquent', function () {
     $member->refresh();
     expect($result['marked_delinquent'])->toBe(1)
         ->and($member->status)->toBe('delinquent');
+
+    BusinessDaySettings::saveFromForm(null);
 });
 
 test('guarantor liability can be transferred when installments are overdue', function () {

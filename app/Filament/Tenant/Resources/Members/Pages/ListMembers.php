@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tenant\Resources\Members\Pages;
 
+use App\Filament\Tenant\Resources\MemberRequests\MemberRequestResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Filament\Tenant\Widgets\MemberInsightsWidget;
@@ -52,6 +53,13 @@ class ListMembers extends ListRecords
                 ->badge(MembershipApplicationResource::getNavigationBadge())
                 ->badgeColor(MembershipApplicationResource::getNavigationBadgeColor())
                 ->url(MembershipApplicationResource::listTabUrl('pending')),
+            Action::make('member_requests')
+                ->label(__('Requests'))
+                ->icon('heroicon-o-inbox')
+                ->color('gray')
+                ->badge(MemberRequestResource::getNavigationBadge())
+                ->badgeColor(MemberRequestResource::getNavigationBadgeColor())
+                ->url(MemberRequestResource::listTabUrl('pending')),
         ];
     }
 
@@ -74,6 +82,7 @@ class ListMembers extends ListRecords
         return [
             ...parent::getPageClasses(),
             'fi-page-members-list',
+            'ff-tenant-members-workspace',
         ];
     }
 

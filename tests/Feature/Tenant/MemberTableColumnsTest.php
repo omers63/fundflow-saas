@@ -16,29 +16,33 @@ beforeEach(function () {
     Filament::setCurrentPanel('tenant');
 });
 
-test('member table columns resolve member edit urls', function () {
+test('member table columns resolve member workspace urls', function () {
     $member = Member::factory()->create();
 
-    $editUrl = MemberTableColumns::memberRecordEditUrl($member);
+    $workspaceUrl = MemberTableColumns::memberRecordUrl($member);
 
-    expect($editUrl)
+    expect($workspaceUrl)
+        ->toBe(MemberResource::getUrl('view', ['record' => $member]))
+        ->and(MemberTableColumns::memberRecordEditUrl($member))
+        ->toBe($workspaceUrl)
+        ->and(MemberTableColumns::memberProfileEditUrl($member))
         ->toBe(MemberResource::getUrl('edit', ['record' => $member]))
-        ->and($editUrl)->toContain((string) $member->getKey());
+        ->and($workspaceUrl)->toContain((string) $member->getKey());
 });
 
-test('member table columns resolve related member edit urls', function () {
+test('member table columns resolve related member workspace urls', function () {
     $member = Member::factory()->create();
     $contribution = Contribution::factory()->for($member)->create();
 
     expect(MemberTableColumns::relatedMemberEditUrl($contribution))
-        ->toBe(MemberResource::getUrl('edit', ['record' => $member]));
+        ->toBe(MemberResource::getUrl('view', ['record' => $member]));
 });
 
-test('member table columns resolve member id edit urls', function () {
+test('member table columns resolve member id workspace urls', function () {
     $member = Member::factory()->create();
 
     expect(MemberTableColumns::memberIdEditUrl(['member_id' => $member->id]))
-        ->toBe(MemberResource::getUrl('edit', ['record' => $member]));
+        ->toBe(MemberResource::getUrl('view', ['record' => $member]));
 });
 
 test('member table columns resolve urls for related and array records', function () {
@@ -47,13 +51,13 @@ test('member table columns resolve urls for related and array records', function
     $loan = Loan::factory()->for($member)->create();
 
     expect(MemberTableColumns::resolveMemberUrl('member.name', $contribution))
-        ->toBe(MemberResource::getUrl('edit', ['record' => $member]))
+        ->toBe(MemberResource::getUrl('view', ['record' => $member]))
         ->and(MemberTableColumns::resolveMemberUrl('loan.member.name', $loan))
-        ->toBe(MemberResource::getUrl('edit', ['record' => $member]))
+        ->toBe(MemberResource::getUrl('view', ['record' => $member]))
         ->and(MemberTableColumns::resolveMemberUrl('member_name', ['member_id' => $member->id]))
-        ->toBe(MemberResource::getUrl('edit', ['record' => $member]))
+        ->toBe(MemberResource::getUrl('view', ['record' => $member]))
         ->and(MemberTableColumns::resolveMemberUrl('name', $member))
-        ->toBe(MemberResource::getUrl('edit', ['record' => $member]));
+        ->toBe(MemberResource::getUrl('view', ['record' => $member]));
 });
 
 test('tenant panel auto-links member name table columns', function () {
@@ -63,5 +67,5 @@ test('tenant panel auto-links member name table columns', function () {
     $column = TextColumn::make('member.name')->record($contribution);
 
     expect($column->getUrl($member->name))
-        ->toBe(MemberResource::getUrl('edit', ['record' => $member]));
+        ->toBe(MemberResource::getUrl('view', ['record' => $member]));
 });

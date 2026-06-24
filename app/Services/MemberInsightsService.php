@@ -87,7 +87,7 @@ final class MemberInsightsService
                 'status' => Member::statusOptions()[$member->status] ?? $member->status,
                 'status_key' => $member->status,
                 'contribution_amount' => (float) $member->monthly_contribution_amount,
-                'view_url' => MemberResource::getUrl('edit', ['record' => $member]),
+                'view_url' => MemberResource::getUrl('view', ['record' => $member]),
             ])
             ->all();
 

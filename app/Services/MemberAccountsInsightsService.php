@@ -137,7 +137,7 @@ final class MemberAccountsInsightsService
 
                 return [
                     'name' => $member->name,
-                    'url' => MemberResource::getUrl('edit', ['record' => $member]),
+                    'url' => MemberResource::getUrl('view', ['record' => $member]),
                     'cash' => (float) ($accounts->get('cash')?->balance ?? 0),
                     'fund' => (float) ($accounts->get('fund')?->balance ?? 0),
                 ];

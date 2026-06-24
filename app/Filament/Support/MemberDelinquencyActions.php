@@ -11,6 +11,7 @@ use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
+use Filament\Actions\BulkActionGroup;
 use Filament\Forms\Components\Checkbox;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Collection;
@@ -20,15 +21,41 @@ use Throwable;
 final class MemberDelinquencyActions
 {
     /**
+     * Delinquency actions are on the member edit header (Compliance group), not the list grid.
+     *
      * @return list<Action>
      */
     public static function forMemberListRow(): array
+    {
+        return [];
+    }
+
+    /**
+     * Nested actions inside {@see MemberFilamentActions::delinquencyAndAdminActionGroup()}.
+     *
+     * @return list<Action>
+     */
+    public static function forMemberEditHeaderNested(): array
     {
         return [
             self::syncDelinquency(),
             self::markDelinquent(),
             self::restoreActive(),
             self::openDelinquencyWorkspace(),
+        ];
+    }
+
+    /**
+     * @return list<BulkActionGroup>
+     */
+    public static function forMemberListBulkGroups(): array
+    {
+        return [
+            BulkActionGroup::make([
+                self::syncDelinquencyBulk(),
+                self::markDelinquentBulk(),
+                self::restoreActiveBulk(),
+            ])->label(__('Delinquency')),
         ];
     }
 
@@ -119,7 +146,7 @@ final class MemberDelinquencyActions
                     return LoanResource::overdueInstallmentsUrlForMember($record);
                 }
 
-                return MemberResource::getUrl('edit', ['record' => $record]);
+                return MemberResource::getUrl('view', ['record' => $record]);
             });
     }
 

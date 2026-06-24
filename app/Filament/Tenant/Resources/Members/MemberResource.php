@@ -6,6 +6,7 @@ use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Tenant\Resources\Members\Pages\CreateMember;
 use App\Filament\Tenant\Resources\Members\Pages\EditMember;
 use App\Filament\Tenant\Resources\Members\Pages\ListMembers;
+use App\Filament\Tenant\Resources\Members\Pages\ViewMember;
 use App\Filament\Tenant\Resources\Members\RelationManagers\AccountsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\ContributionsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\DependentsRelationManager;
@@ -127,13 +128,13 @@ class MemberResource extends Resource
     public static function getRelations(): array
     {
         return [
-            AccountsRelationManager::class,
             LoansRelationManager::class,
-            GuarantorExposureRelationManager::class,
             ContributionsRelationManager::class,
             MemberTransactionsTabsRelationManager::class,
+            AccountsRelationManager::class,
             RepaymentsRelationManager::class,
             DependentsRelationManager::class,
+            GuarantorExposureRelationManager::class,
             MessagesRelationManager::class,
         ];
     }
@@ -143,25 +144,36 @@ class MemberResource extends Resource
         return [
             'index' => ListMembers::route('/'),
             'create' => CreateMember::route('/create'),
+            'view' => ViewMember::route('/{record}'),
             'edit' => EditMember::route('/{record}/edit'),
         ];
     }
 
     /**
-     * Edit URL with a specific relation manager tab active (uses Filament's `relation` query param).
+     * Workspace URL with a specific relation manager tab active (uses Filament's `relation` query param).
      */
-    public static function editUrlWithRelationManager(Member|int|string $record, string $relationManagerClass): string
+    public static function workspaceUrl(Member|int|string $record, ?string $relationManagerClass = null): string
     {
         $recordKey = $record instanceof Member ? $record->getKey() : $record;
         $parameters = ['record' => $recordKey];
 
-        $managerIndex = array_search($relationManagerClass, static::getRelations(), true);
+        if ($relationManagerClass !== null) {
+            $managerIndex = array_search($relationManagerClass, static::getRelations(), true);
 
-        if ($managerIndex !== false) {
-            $parameters['relation'] = (string) $managerIndex;
+            if ($managerIndex !== false) {
+                $parameters['relation'] = (string) $managerIndex;
+            }
         }
 
-        return static::getUrl('edit', $parameters);
+        return static::getUrl('view', $parameters);
+    }
+
+    /**
+     * @deprecated Use {@see workspaceUrl()} — kept for callers that still reference edit URLs with relation tabs.
+     */
+    public static function editUrlWithRelationManager(Member|int|string $record, string $relationManagerClass): string
+    {
+        return static::workspaceUrl($record, $relationManagerClass);
     }
 
     public static function dispatchInsightsRefresh(?Component $livewire): void

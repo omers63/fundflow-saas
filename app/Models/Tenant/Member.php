@@ -329,18 +329,40 @@ class Member extends Model
 
     public function isInActiveLoanContributionExemptCycle(int $month, int $year): bool
     {
+        return $this->wasInLoanRepaymentCycle($month, $year);
+    }
+
+    /**
+     * Whether the member was in a loan repayment cycle during the given month
+     * (contributions are not expected; only loan installment obligations apply).
+     */
+    public function wasInLoanRepaymentCycle(int $month, int $year): bool
+    {
+        $periodStart = Carbon::create($year, $month, 1)->startOfMonth();
+        $periodEnd = $periodStart->copy()->endOfMonth();
         $periodKey = sprintf('%04d-%02d', $year, $month);
 
         return Loan::query()
             ->where('member_id', $this->id)
-            ->where('status', 'active')
             ->whereNotNull('disbursed_at')
-            ->whereHas('installments', fn ($query) => $query->whereIn('status', ['pending', 'overdue']))
-            ->get(['disbursed_at'])
-            ->contains(function (Loan $loan) use ($periodKey): bool {
+            ->whereIn('status', ['active', 'transferred', 'completed', 'early_settled'])
+            ->whereDate('disbursed_at', '<=', $periodEnd)
+            ->get(['disbursed_at', 'settled_at', 'completed_at', 'status'])
+            ->contains(function (Loan $loan) use ($periodStart, $periodKey): bool {
                 $disbursedAt = Carbon::parse((string) $loan->disbursed_at);
+                $disbursedKey = sprintf('%04d-%02d', (int) $disbursedAt->year, (int) $disbursedAt->month);
 
-                return sprintf('%04d-%02d', (int) $disbursedAt->year, (int) $disbursedAt->month) <= $periodKey;
+                if ($disbursedKey > $periodKey) {
+                    return false;
+                }
+
+                $cycleEnd = $loan->settled_at ?? $loan->completed_at;
+
+                if ($cycleEnd === null) {
+                    return in_array($loan->status, ['active', 'transferred'], true);
+                }
+
+                return Carbon::parse((string) $cycleEnd)->endOfMonth()->greaterThanOrEqualTo($periodStart);
             });
     }
 
