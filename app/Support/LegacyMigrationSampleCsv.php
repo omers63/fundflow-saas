@@ -49,6 +49,7 @@ final class LegacyMigrationSampleCsv
     public static function loanHeaders(): array
     {
         return [
+            'loan_id',
             'loan_status',
             'member_number',
             'member_name',
@@ -71,9 +72,9 @@ final class LegacyMigrationSampleCsv
     public static function loanRows(): array
     {
         return [
-            ['active', '', 'Omar Mansour', '12000', '4800', '7200', '2025-08-07', '12', '5', '5500', 'MEM-1002', 'Fatimah Hassan', 'Active loan — borrower matched by member_name; guarantor by number and name'],
-            ['active', 'MEM-1001', '', '4000', '4000', '0', '2025-11-04', '6', '1', '700', '', '', 'Small emergency loan — borrower matched by member_number'],
-            ['completed', 'MEM-1001', '', '10000', '3500', '6500', '2022-02-15', '10', '10', '10000', 'MEM-1002', '', 'Historical loan — guarantor by member_number only'],
+            ['262', 'active', '', 'Omar Mansour', '12000', '4800', '7200', '2025-08-07', '12', '5', '5500', 'MEM-1002', 'Fatimah Hassan', 'Active loan — borrower matched by member_name; guarantor by number and name'],
+            ['263', 'active', 'MEM-1001', '', '4000', '4000', '0', '2025-11-04', '6', '1', '700', '', '', 'Small emergency loan — borrower matched by member_number'],
+            ['264', 'completed', 'MEM-1001', '', '10000', '3500', '6500', '2022-02-15', '10', '10', '10000', 'MEM-1002', '', 'Historical loan — guarantor by member_number only'],
         ];
     }
 
@@ -133,6 +134,7 @@ final class LegacyMigrationSampleCsv
     public static function loanColumnDocs(): array
     {
         return [
+            ['loan_id', false, __('Legacy loan ID from the old system — preserved on import and used when classifying repayments')],
             ['loan_status', true, __('active for open loans; completed or early_settled when fully repaid')],
             ['member_number / member_name', true, __('Borrower — one identifier required; must match an imported member row')],
             ['amount_approved', true, __('Original approved principal')],

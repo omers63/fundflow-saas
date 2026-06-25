@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
- * Member list status tabs (All / Active / Migration pending / Delinquent / Suspended).
+ * Member list status tabs.
  */
 final class MemberListTabService
 {
@@ -19,16 +19,28 @@ final class MemberListTabService
      */
     public function tabKeys(): array
     {
-        return ['all', 'active', 'migration_pending', 'delinquent', 'suspended'];
+        return [
+            'all',
+            'active',
+            'inactive',
+            'migration_pending',
+            'delinquent',
+            'suspended',
+            'withdrawn',
+            'terminated',
+        ];
     }
 
     public function tabLabel(string $tab): string
     {
         return match ($tab) {
             'active' => __('Active'),
+            'inactive' => __('Inactive'),
             'migration_pending' => __('Migration pending'),
             'delinquent' => __('Delinquent'),
             'suspended' => __('Suspended'),
+            'withdrawn' => __('Withdrawn'),
+            'terminated' => __('Terminated'),
             default => __('All'),
         };
     }
@@ -44,9 +56,12 @@ final class MemberListTabService
             return [
                 'all' => Member::query()->count(),
                 'active' => Member::query()->where('status', 'active')->count(),
+                'inactive' => Member::query()->where('status', 'inactive')->count(),
                 'migration_pending' => count($migrationPendingIds),
                 'delinquent' => Member::query()->where('status', 'delinquent')->count(),
                 'suspended' => Member::query()->where('status', 'suspended')->count(),
+                'withdrawn' => Member::query()->where('status', 'withdrawn')->count(),
+                'terminated' => Member::query()->where('status', 'terminated')->count(),
             ];
         });
     }
@@ -55,16 +70,17 @@ final class MemberListTabService
     {
         return match ($tab) {
             'active' => $query->where('members.status', 'active'),
+            'inactive' => $query->where('members.status', 'inactive'),
             'migration_pending' => $query->whereIn('members.id', $this->migrationPendingMemberIds()),
             'delinquent' => $query->where('members.status', 'delinquent'),
             'suspended' => $query->where('members.status', 'suspended'),
+            'withdrawn' => $query->where('members.status', 'withdrawn'),
+            'terminated' => $query->where('members.status', 'terminated'),
             default => $query,
         };
     }
 
     /**
-     * Imported members with opening balances who still owe contribution arrears periods.
-     *
      * @return list<int>
      */
     public function migrationPendingMemberIds(): array
@@ -97,8 +113,10 @@ final class MemberListTabService
             'count' => $counts[$key] ?? 0,
             'variant' => match ($key) {
                 'migration_pending' => 'violet',
+                'inactive' => 'gray',
                 'delinquent' => 'danger',
                 'suspended' => 'warning',
+                'withdrawn', 'terminated' => 'danger',
                 default => 'neutral',
             },
         ]);

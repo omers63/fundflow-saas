@@ -6,6 +6,7 @@ use App\Models\Tenant\Member;
 use App\Services\MemberMonthlyAllocationService;
 use App\Support\BusinessDay;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -64,7 +65,16 @@ class MemberForm
                         Select::make('status')
                             ->options(Member::statusOptions())
                             ->default('active')
-                            ->required(),
+                            ->disabled()
+                            ->dehydrated(fn (string $operation): bool => $operation === 'create')
+                            ->visible(fn (string $operation): bool => $operation === 'edit')
+                            ->helperText(__('Use Membership actions to change status — not this field.')),
+                        Placeholder::make('status_reason_display')
+                            ->label(__('Status note'))
+                            ->content(fn (?Member $record): string => filled($record?->status_reason)
+                                ? (string) $record->status_reason
+                                : '—')
+                            ->visible(fn (?Member $record): bool => $record !== null && filled($record->status_reason)),
                         Select::make('parent_member_id')
                             ->label(__('Parent member'))
                             ->options(fn (?Member $record) => Member::query()

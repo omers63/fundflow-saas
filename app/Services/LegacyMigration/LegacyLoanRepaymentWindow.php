@@ -5,10 +5,15 @@ declare(strict_types=1);
 namespace App\Services\LegacyMigration;
 
 use App\Models\Tenant\Loan;
+use App\Support\LoanRepaymentWindowPolicy;
 use Carbon\Carbon;
 
 /**
  * Loan repayment window used by the legacy payment classifier.
+ *
+ * Legacy migration always opens the repayment window at disbursement. Grace cycles
+ * still determine the first EMI cycle on imported loans, not when repayments may
+ * be classified.
  */
 final readonly class LegacyLoanRepaymentWindow
 {
@@ -19,44 +24,53 @@ final readonly class LegacyLoanRepaymentWindow
         public float $repaymentTargetAmount,
         public Carbon $firstRepaymentAt,
         public ?int $loanId = null,
-    ) {}
+        public int $graceCycles = 0,
+        public ?string $memberNumber = null,
+        public ?int $installmentsCount = null,
+    ) {
+    }
 
     public static function firstRepaymentAtForDisbursement(Carbon $disbursedAt, int $graceCycles): Carbon
     {
-        $exemption = Loan::computeExemptionAndFirstRepayment($disbursedAt, max(0, min(2, $graceCycles)));
-
-        return Carbon::create(
-            $exemption['first_repayment_year'],
-            $exemption['first_repayment_month'],
-            1,
-        )->startOfDay();
+        return app(LoanRepaymentWindowPolicy::class)
+            ->firstRepaymentCycleStartForDisbursement($disbursedAt, $graceCycles);
     }
 
     public static function firstRepaymentAtForLoan(Loan $loan, int $defaultGraceCycles): Carbon
     {
-        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? now()->startOfDay();
-
         if ($loan->first_repayment_year !== null && $loan->first_repayment_month !== null) {
-            return Carbon::create(
-                (int) $loan->first_repayment_year,
+            return app(LoanRepaymentWindowPolicy::class)->normalLoanWindowOpensAt(
                 (int) $loan->first_repayment_month,
-                1,
-            )->startOfDay();
+                (int) $loan->first_repayment_year,
+            );
         }
 
+        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? now()->startOfDay();
         $graceCycles = $loan->grace_cycles ?? ($loan->has_grace_cycle ? 1 : $defaultGraceCycles);
 
         return self::firstRepaymentAtForDisbursement($disbursedAt, (int) $graceCycles);
     }
 
-    public static function loanKey(string $memberNumber, Carbon $disbursedAt): string
+    public static function loanKey(string $memberNumber, Carbon $disbursedAt, ?int $loanId = null): string
     {
-        return trim($memberNumber).'|'.$disbursedAt->toDateString();
+        if ($loanId !== null && $loanId > 0) {
+            return (string) $loanId;
+        }
+
+        return trim($memberNumber) . '|' . $disbursedAt->toDateString();
+    }
+
+    public function repaymentWindowOpensAt(): Carbon
+    {
+        return app(LoanRepaymentWindowPolicy::class)->legacyMigrationWindowOpensAt($this->disbursedAt);
     }
 
     public function acceptsRepaymentOn(Carbon $paymentDate): bool
     {
-        return $paymentDate->gte($this->firstRepaymentAt);
+        return app(LoanRepaymentWindowPolicy::class)->acceptsRepaymentOn(
+            $paymentDate,
+            $this->repaymentWindowOpensAt(),
+        );
     }
 
     public function hasRemainingRepayment(float $cumulativeRepaid): bool
@@ -66,7 +80,7 @@ final readonly class LegacyLoanRepaymentWindow
 
     public function isRepaymentWindowClosed(float $cumulativeRepaid): bool
     {
-        return ! $this->hasRemainingRepayment($cumulativeRepaid);
+        return !$this->hasRemainingRepayment($cumulativeRepaid);
     }
 
     public function remainingRepayment(float $cumulativeRepaid): float
@@ -85,10 +99,19 @@ final readonly class LegacyLoanRepaymentWindow
         iterable $windowsInDisbursementOrder,
         Carbon $paymentDate,
         array $cumulativeRepaidByLoanKey,
+        ?LegacyLoanRepaymentInstallmentTracker $installmentTracker = null,
     ): ?self {
         foreach ($windowsInDisbursementOrder as $window) {
-            if (! $window->acceptsRepaymentOn($paymentDate)) {
+            if (!$window->acceptsRepaymentOn($paymentDate)) {
                 continue;
+            }
+
+            if ($installmentTracker !== null) {
+                $installmentTracker->registerWindow($window);
+
+                if ($installmentTracker->isScheduleSatisfied($window->loanKey)) {
+                    continue;
+                }
             }
 
             $cumulative = $cumulativeRepaidByLoanKey[$window->loanKey] ?? 0.0;

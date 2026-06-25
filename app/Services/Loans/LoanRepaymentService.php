@@ -124,6 +124,15 @@ class LoanRepaymentService
             return 'skipped';
         }
 
+        $cycles = app(ContributionCycleService::class);
+        $periodStart = $cycles->cycleStartAt($month, $year);
+
+        if ($periodStart->lt($loan->repaymentWindowOpensAt())) {
+            $results['skipped'][] = $loan;
+
+            return 'skipped';
+        }
+
         $member = $loan->member;
 
         if (Contribution::blocksLoanRepaymentForMemberPeriod($member, $month, $year)) {

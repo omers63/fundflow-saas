@@ -66,6 +66,9 @@ class MemberLoginPage extends Component
         if (session()->pull('member_suspended_notice')) {
             $this->statusType = 'suspended';
             $this->statusMessage = __('Your member portal access is currently suspended. Please contact fund administration for support.');
+        } elseif (session()->pull('member_inactive_notice')) {
+            $this->statusType = 'inactive';
+            $this->statusMessage = __('Your membership is inactive (frozen). Member portal access is paused until fund administration unfreezes your account.');
         } elseif (session()->pull('member_withdrawn_notice')) {
             $this->statusType = 'withdrawn';
             $this->statusMessage = __('Your membership has been withdrawn. Member portal access is no longer available. Please contact fund administration for support.');
@@ -268,6 +271,13 @@ class MemberLoginPage extends Component
             if ($member->status === 'suspended') {
                 $this->statusType = 'suspended';
                 $this->statusMessage = __('Your member portal access is currently suspended. Please contact fund administration for support.');
+
+                return;
+            }
+
+            if ($member->status === 'inactive') {
+                $this->statusType = 'inactive';
+                $this->statusMessage = __('Your membership is inactive (frozen). Member portal access is paused until fund administration unfreezes your account.');
 
                 return;
             }

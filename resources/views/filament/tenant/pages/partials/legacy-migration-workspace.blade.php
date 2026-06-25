@@ -82,6 +82,15 @@
                             @endif
                         </div>
                     </details>
+
+                    @if ($uploadDiagnostics)
+                        <div class="space-y-2">
+                            <p class="text-sm font-medium text-gray-800 dark:text-gray-200">{{ __('Uploaded file summary') }}</p>
+                            @include('filament.tenant.partials.legacy-migration-upload-diagnostics', [
+                                'uploadDiagnostics' => $uploadDiagnostics,
+                            ])
+                        </div>
+                    @endif
                 </div>
             </section>
         @endif
@@ -115,6 +124,12 @@
                             : ['previewMigration'],
                         'class' => '',
                     ])
+
+                    @if ($uploadDiagnostics)
+                        @include('filament.tenant.partials.legacy-migration-upload-diagnostics', [
+                            'uploadDiagnostics' => $uploadDiagnostics,
+                        ])
+                    @endif
 
                     @if ($lastPreview)
                         <div class="space-y-4 text-sm">

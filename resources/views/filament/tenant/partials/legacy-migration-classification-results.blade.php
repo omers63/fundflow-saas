@@ -1,9 +1,14 @@
 <div class="space-y-4 text-sm">
     <ul class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:grid-cols-5">
-        <li>{{ __('Contributions') }}: {{ $classificationStats['contribution'] ?? 0 }}</li>
-        <li>{{ __('Loan repayments') }}: {{ $classificationStats['loan_repayment'] ?? 0 }}</li>
-        <li>{{ __('Unclassified') }}: {{ $classificationStats['unclassified'] ?? 0 }}</li>
-        <li>{{ __('Ignored') }}: {{ $classificationStats['ignore'] ?? 0 }}</li>
+        <li>{{ __('Contributions') }}:
+            {{ $classificationStats['contributions'] ?? $classificationStats['contribution'] ?? 0 }}
+        </li>
+        <li>{{ __('Future contributions') }}: {{ $classificationStats['future_contributions'] ?? 0 }}</li>
+        <li>{{ __('Loan repayments') }}:
+            {{ $classificationStats['loan_repayments'] ?? $classificationStats['loan_repayment'] ?? 0 }}
+        </li>
+        <li>{{ __('Reclassified as contribution') }}: {{ $classificationStats['reclassified_as_contribution'] ?? 0 }}
+        </li>
         <li>{{ __('Failed rows') }}: {{ $classificationStats['failed'] ?? 0 }}</li>
     </ul>
 
@@ -15,7 +20,7 @@
             </x-filament::button>
         </p>
         <p class="text-xs text-gray-500 dark:text-gray-400">
-            {{ __('Open in Excel or a spreadsheet editor. Review payment_type, fix unclassified rows, then continue to the Import step.') }}
+            {{ __('Classification uses the uploaded working CSV files. Re-run Classify after replacing any upload.') }}
         </p>
     @endif
 

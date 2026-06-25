@@ -20,6 +20,7 @@ class MemberFactory extends Factory
             'monthly_contribution_amount' => fake()->randomElement([500, 1000, 2000, 5000]),
             'joined_at' => fake()->dateTimeBetween('-3 years', 'now'),
             'status' => 'active',
+            'contribution_cycles_active' => true,
         ];
     }
 
@@ -41,6 +42,14 @@ class MemberFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'status' => 'delinquent',
+        ]);
+    }
+
+    public function inactive(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => 'inactive',
+            'contribution_cycles_active' => false,
         ]);
     }
 

@@ -8,6 +8,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Services\ContributionService;
+use App\Support\LegacyMigrationGraceCycleSettings;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -36,7 +37,7 @@ final class LegacyMisclassifiedContributionRepairService
      *     installments_marked: int
      * }
      */
-    public function repairMember(Member $member): array
+    public function repairMember(Member $member, ?LegacyMigrationCsvLoanIndex $loanIndex = null): array
     {
         @set_time_limit(0);
 
@@ -54,8 +55,8 @@ final class LegacyMisclassifiedContributionRepairService
 
         $events = $this->paymentTimeline($member);
 
-        ContributionService::withoutPostedNotifications(function () use ($member, $events, &$cumulativeRepaidByLoanKey, &$affectedLoanIds, &$stats): void {
-            ContributionService::withoutLiveCollectionGuards(function () use ($member, $events, &$cumulativeRepaidByLoanKey, &$affectedLoanIds, &$stats): void {
+        ContributionService::withoutPostedNotifications(function () use ($member, $events, $loanIndex, &$cumulativeRepaidByLoanKey, &$affectedLoanIds, &$stats): void {
+            ContributionService::withoutLiveCollectionGuards(function () use ($member, $events, $loanIndex, &$cumulativeRepaidByLoanKey, &$affectedLoanIds, &$stats): void {
                 foreach ($events as $event) {
                     if ($event['type'] === 'repayment') {
                         /** @var LoanRepayment $repayment */
@@ -84,6 +85,7 @@ final class LegacyMisclassifiedContributionRepairService
                         $amount,
                         $postedAt,
                         $cumulativeRepaidByLoanKey,
+                        $loanIndex,
                     );
 
                     if ($allocation['repayment_amount'] <= 0.00001 || $allocation['loan'] === null) {
@@ -94,7 +96,7 @@ final class LegacyMisclassifiedContributionRepairService
                     $contributionRemainder = $allocation['contribution_amount'];
                     $notes = $contribution->notes ?: __('Legacy migration contribution repair');
 
-                    DB::transaction(function () use ($member, $contribution, $allocation, $repaymentAmount, $contributionRemainder, $postedAt, $notes, &$affectedLoanIds, &$cumulativeRepaidByLoanKey, &$stats): void {
+                    DB::transaction(function () use ($member, $contribution, $allocation, $repaymentAmount, $contributionRemainder, $postedAt, $notes, $loanIndex, &$affectedLoanIds, &$cumulativeRepaidByLoanKey, &$stats): void {
                         $this->contributions->reverseImportedContributionForMigrationRepair($contribution);
                         $stats['contributions_removed']++;
 
@@ -119,6 +121,7 @@ final class LegacyMisclassifiedContributionRepairService
                                 $remainingAmount,
                                 $postedAt,
                                 $cumulativeRepaidByLoanKey,
+                                $loanIndex,
                             );
 
                             if ($followUp['repayment_amount'] <= 0.00001 || $followUp['loan'] === null) {
@@ -223,7 +226,29 @@ final class LegacyMisclassifiedContributionRepairService
      *     installments_marked: int
      * }
      */
-    public function repairMembers(iterable $members): array
+    public function repairMembersWithLegacyRoutedContributions(
+        ?string $loansCsvPath = null,
+        ?int $graceCycles = null,
+    ): array {
+        $loanIndex = filled($loansCsvPath) && is_readable($loansCsvPath)
+            ? LegacyMigrationCsvLoanIndex::fromPath(
+                $loansCsvPath,
+                $graceCycles ?? LegacyMigrationGraceCycleSettings::graceCycles(),
+            )
+            : null;
+
+        $members = Member::query()
+            ->whereHas('contributions', function ($query): void {
+                $query->where('status', 'posted')
+                    ->where('notes', 'like', '%legacy-routed%');
+            })
+            ->orderBy('member_number')
+            ->get();
+
+        return $this->repairMembers($members, $loanIndex);
+    }
+
+    public function repairMembers(iterable $members, ?LegacyMigrationCsvLoanIndex $loanIndex = null): array
     {
         $totals = [
             'members_processed' => 0,
@@ -239,7 +264,7 @@ final class LegacyMisclassifiedContributionRepairService
                 continue;
             }
 
-            $result = $this->repairMember($member);
+            $result = $this->repairMember($member, $loanIndex);
             $totals['members_processed']++;
             $totals['contributions_removed'] += $result['contributions_removed'];
             $totals['repayments_posted'] += $result['repayments_posted'];

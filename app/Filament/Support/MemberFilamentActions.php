@@ -22,6 +22,7 @@ use App\Services\Tenant\MemberPortalNotificationService;
 use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
 use App\Support\LoanEligibilityGate;
+use App\Support\MemberMembershipPolicy;
 use Carbon\Carbon;
 use Closure;
 use Filament\Actions\Action;
@@ -80,6 +81,7 @@ final class MemberFilamentActions
             ActionGroup::make([
                 self::suspend(),
                 self::restoreSuspended(),
+                self::withdraw(),
                 self::terminate(),
                 self::adminOverride(),
                 self::delete(),
@@ -109,6 +111,7 @@ final class MemberFilamentActions
             BulkActionGroup::make([
                 self::suspendBulk(),
                 self::restoreSuspendedBulk(),
+                self::withdrawBulk(),
                 self::terminateBulk(),
             ])->label(__('Status')),
             BulkActionGroup::make([
@@ -135,6 +138,7 @@ final class MemberFilamentActions
             self::sendNotificationBulk(),
             self::suspendBulk(),
             self::restoreSuspendedBulk(),
+            self::withdrawBulk(),
             self::terminateBulk(),
             self::chargeAnnualSubscriptionBulk(),
             self::adminOverrideBulk(),
@@ -170,9 +174,14 @@ final class MemberFilamentActions
     {
         return ActionGroup::make([
             self::application(),
+            self::freeze(),
+            self::unfreeze(),
             self::suspend(),
             self::restoreSuspended(),
+            self::withdraw(),
             self::terminate(),
+            self::reinstate(),
+            self::releasePayoutReview(),
         ])
             ->label(__('Membership'))
             ->icon('heroicon-o-user-circle')
@@ -201,7 +210,7 @@ final class MemberFilamentActions
             ->visible(function (Member $record): bool {
                 $cycles = app(ContributionCycleService::class);
 
-                return $record->status === 'active'
+                return app(MemberMembershipPolicy::class)->canAdminContribute($record)
                     && $cycles->contributionCycleSelectOptionsForMember($record) !== [];
             })
             ->schema([
@@ -387,13 +396,69 @@ final class MemberFilamentActions
             });
     }
 
+    public static function freeze(): Action
+    {
+        return Action::make('freezeMember')
+            ->label(__('Freeze'))
+            ->icon('heroicon-o-pause-circle')
+            ->color('warning')
+            ->visible(fn (Member $record): bool => in_array($record->status, ['active', 'delinquent'], true))
+            ->requiresConfirmation()
+            ->modalDescription(__('Pauses membership. Portal access and contribution cycles stop until unfrozen.'))
+            ->schema([
+                Textarea::make('reason')
+                    ->label(__('Reason'))
+                    ->rows(3)
+                    ->maxLength(500),
+            ])
+            ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $statuses->freeze($record, (string) ($data['reason'] ?? '')),
+                        __('Cannot freeze'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()->title(__('Member frozen'))->success()->send();
+                self::refreshMembersList($livewire);
+            });
+    }
+
+    public static function unfreeze(): Action
+    {
+        return Action::make('unfreezeMember')
+            ->label(__('Unfreeze'))
+            ->icon('heroicon-o-play-circle')
+            ->color('success')
+            ->visible(fn (Member $record): bool => $record->status === 'inactive')
+            ->requiresConfirmation()
+            ->modalDescription(__('Restores membership. Status becomes active or delinquent depending on arrears.'))
+            ->action(function (Member $record, Action $action, MemberStatusService $statuses, Component $livewire): void {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $statuses->unfreeze($record),
+                        __('Cannot unfreeze'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()->title(__('Member unfrozen'))->success()->send();
+                self::refreshMembersList($livewire);
+            });
+    }
+
     public static function suspend(): Action
     {
         return Action::make('suspendMember')
             ->label(__('Suspend'))
             ->icon('heroicon-o-no-symbol')
             ->color('danger')
-            ->visible(fn (Member $record): bool => ! in_array($record->status, ['suspended', 'withdrawn', 'terminated'], true))
+            ->visible(fn (Member $record): bool => ! in_array($record->status, ['suspended', 'inactive', 'withdrawn', 'terminated'], true))
             ->requiresConfirmation()
             ->modalDescription(__('Blocks portal access and admin-approved transactions until suspension is lifted.'))
             ->schema([
@@ -473,6 +538,107 @@ final class MemberFilamentActions
                 }
 
                 Notification::make()->title(__('Member terminated'))->success()->send();
+                self::refreshMembersList($livewire);
+            });
+    }
+
+    public static function withdraw(): Action
+    {
+        return Action::make('withdrawMember')
+            ->label(__('Withdraw'))
+            ->icon('heroicon-o-arrow-right-on-rectangle')
+            ->color('danger')
+            ->visible(fn (Member $record): bool => self::isTenantAdmin()
+                && ! in_array($record->status, ['withdrawn', 'terminated'], true))
+            ->requiresConfirmation()
+            ->modalDescription(__('Records voluntary departure. Member portal access ends. Settlement may proceed.'))
+            ->schema([
+                Textarea::make('reason')
+                    ->label(__('Reason'))
+                    ->rows(3)
+                    ->maxLength(500),
+            ])
+            ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $statuses->withdraw($record, (string) ($data['reason'] ?? '')),
+                        __('Cannot withdraw'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()->title(__('Member withdrawn'))->success()->send();
+                self::refreshMembersList($livewire);
+            });
+    }
+
+    public static function reinstate(): Action
+    {
+        return Action::make('reinstateMember')
+            ->label(__('Reinstate'))
+            ->icon('heroicon-o-arrow-path')
+            ->color('success')
+            ->visible(fn (Member $record): bool => self::isTenantAdmin()
+                && in_array($record->status, ['withdrawn', 'terminated'], true))
+            ->requiresConfirmation()
+            ->modalDescription(__('Returns member to active status and resets cash and fund balances to zero.'))
+            ->schema([
+                Textarea::make('reason')
+                    ->label(__('Reason'))
+                    ->required()
+                    ->rows(3)
+                    ->minLength(10)
+                    ->maxLength(500),
+            ])
+            ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $statuses->reinstate($record, (string) ($data['reason'] ?? '')),
+                        __('Cannot reinstate'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()->title(__('Member reinstated'))->success()->send();
+                self::refreshMembersList($livewire);
+            });
+    }
+
+    public static function releasePayoutReview(): Action
+    {
+        return Action::make('releaseMemberPayoutReview')
+            ->label(__('Release payout'))
+            ->icon('heroicon-o-lock-open')
+            ->color('warning')
+            ->visible(fn (Member $record): bool => self::isTenantAdmin()
+                && $record->status === 'terminated'
+                && $record->payout_frozen_at !== null)
+            ->requiresConfirmation()
+            ->modalDescription(__('Allows settlement payouts for this terminated member after admin review.'))
+            ->schema([
+                Textarea::make('reason')
+                    ->label(__('Reason'))
+                    ->required()
+                    ->rows(3)
+                    ->minLength(10)
+                    ->maxLength(500),
+            ])
+            ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $statuses->releasePayoutReview($record, (string) ($data['reason'] ?? '')),
+                        __('Cannot release payout'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()->title(__('Payout review released'))->success()->send();
                 self::refreshMembersList($livewire);
             });
     }
@@ -650,7 +816,7 @@ final class MemberFilamentActions
                 $skipped = 0;
 
                 foreach ($records as $record) {
-                    if (! $record instanceof Member || $record->status !== 'active') {
+                    if (! $record instanceof Member || ! app(MemberMembershipPolicy::class)->canAdminContribute($record)) {
                         $skipped++;
 
                         continue;
@@ -928,6 +1094,45 @@ final class MemberFilamentActions
                 }
 
                 self::notifyBulkOutcome(__('Terminate complete'), $terminated, $failed);
+                self::refreshMembersList($livewire);
+            });
+    }
+
+    public static function withdrawBulk(): BulkAction
+    {
+        return BulkAction::make('withdrawSelectedMembers')
+            ->label(__('Withdraw'))
+            ->icon('heroicon-o-arrow-right-on-rectangle')
+            ->color('danger')
+            ->visible(fn (): bool => self::isTenantAdmin())
+            ->requiresConfirmation()
+            ->modalDescription(__('Records voluntary departure for selected members. Portal access ends. Settlement may proceed.'))
+            ->schema([
+                Textarea::make('reason')
+                    ->label(__('Reason'))
+                    ->rows(3)
+                    ->maxLength(500)
+                    ->helperText(__('Optional note stored in the audit log for each member.')),
+            ])
+            ->action(function (Collection $records, array $data, MemberStatusService $statuses, Component $livewire): void {
+                $reason = (string) ($data['reason'] ?? '');
+                $withdrawn = 0;
+                $failed = 0;
+
+                foreach ($records as $record) {
+                    if (! $record instanceof Member || in_array($record->status, ['withdrawn', 'terminated'], true)) {
+                        continue;
+                    }
+
+                    try {
+                        $statuses->withdraw($record, $reason);
+                        $withdrawn++;
+                    } catch (\Throwable) {
+                        $failed++;
+                    }
+                }
+
+                self::notifyBulkOutcome(__('Withdraw complete'), $withdrawn, $failed);
                 self::refreshMembersList($livewire);
             });
     }

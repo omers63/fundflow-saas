@@ -118,7 +118,7 @@ final class LegacyLoanRepaymentReimportService
 
         $import = ContributionService::withoutPostedNotifications(
             fn (): array => ContributionService::withoutLiveCollectionGuards(
-                fn (): array => $this->payments->import($classifiedOutputPath),
+                fn (): array => $this->payments->import($classifiedOutputPath, $loansPath),
             ),
         );
 

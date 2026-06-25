@@ -24,7 +24,7 @@ final class LegacyMemberStatusMapper
         // English synonyms
         'continuing' => 'active',
         'ongoing' => 'active',
-        'inactive' => 'withdrawn',
+        'inactive' => 'inactive',
         'resigned' => 'withdrawn',
     ];
 

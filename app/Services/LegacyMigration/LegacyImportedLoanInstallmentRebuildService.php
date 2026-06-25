@@ -7,6 +7,7 @@ namespace App\Services\LegacyMigration;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Support\LoanFundingStrategy;
+use App\Support\LoanRepaymentWindowPolicy;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -97,19 +98,25 @@ final class LegacyImportedLoanInstallmentRebuildService
     {
         $minInstall = (float) ($loan->loanTier?->min_monthly_installment ?? 1000);
         $disbursedAt = Carbon::parse((string) $loan->disbursed_at);
-        $startDate = $loan->first_repayment_year !== null && $loan->first_repayment_month !== null
-            ? Carbon::create((int) $loan->first_repayment_year, (int) $loan->first_repayment_month, 5)
-            : $disbursedAt->copy()->addMonthNoOverflow()->startOfMonth()->addDays(4);
+        $policy = app(LoanRepaymentWindowPolicy::class);
+        $firstPeriod = $loan->first_repayment_year !== null && $loan->first_repayment_month !== null
+            ? Carbon::create((int) $loan->first_repayment_year, (int) $loan->first_repayment_month, 1)
+            : $disbursedAt->copy()->addMonthNoOverflow()->startOfMonth();
 
-        DB::transaction(function () use ($loan, $count, $minInstall, $disbursedAt, $startDate): void {
+        DB::transaction(function () use ($loan, $count, $minInstall, $disbursedAt, $firstPeriod, $policy): void {
             $loan->installments()->forceDelete();
 
             for ($i = 1; $i <= $count; $i++) {
+                $period = $firstPeriod->copy()->addMonths($i - 1);
+
                 LoanInstallment::create([
                     'loan_id' => $loan->id,
                     'installment_number' => $i,
                     'amount' => $minInstall,
-                    'due_date' => $startDate->copy()->addMonths($i - 1)->toDateString(),
+                    'due_date' => $policy->installmentDueDateForCycle(
+                        (int) $period->month,
+                        (int) $period->year,
+                    )->toDateString(),
                     'status' => 'pending',
                 ]);
             }

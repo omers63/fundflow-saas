@@ -125,6 +125,8 @@ final class LegacyImportedLoanScheduleSyncService
         $touchedLoanIds = [];
         /** @var array<string, float> $cumulativeRepaidByLoanKey */
         $cumulativeRepaidByLoanKey = [];
+        /** @var array<int, float> $pendingInstallmentPoolByLoanId */
+        $pendingInstallmentPoolByLoanId = [];
 
         foreach ($repayments as $repayment) {
             $this->allocateRepaymentAcrossWindows(
@@ -136,6 +138,7 @@ final class LegacyImportedLoanScheduleSyncService
                 $installmentsByLoan,
                 $updates,
                 $touchedLoanIds,
+                $pendingInstallmentPoolByLoanId,
                 (int) $repayment->loan_id,
             );
         }
@@ -177,6 +180,7 @@ final class LegacyImportedLoanScheduleSyncService
      * @param  Collection<int, Collection<int, LoanInstallment>>  $installmentsByLoan
      * @param  array<int, array{status: string, paid_at: CarbonInterface|string|null}>  $updates
      * @param  array<int, bool>  $touchedLoanIds
+     * @param  array<int, float>  $pendingInstallmentPoolByLoanId
      */
     private function allocateRepaymentAcrossWindows(
         Member $member,
@@ -187,6 +191,7 @@ final class LegacyImportedLoanScheduleSyncService
         Collection $installmentsByLoan,
         array &$updates,
         array &$touchedLoanIds,
+        array &$pendingInstallmentPoolByLoanId,
         ?int $preferredLoanId = null,
     ): void {
         $remaining = round($amount, 2);
@@ -204,6 +209,7 @@ final class LegacyImportedLoanScheduleSyncService
                     $installmentsByLoan,
                     $updates,
                     $touchedLoanIds,
+                    $pendingInstallmentPoolByLoanId,
                 );
             }
         }
@@ -234,6 +240,7 @@ final class LegacyImportedLoanScheduleSyncService
                 $installmentsByLoan,
                 $updates,
                 $touchedLoanIds,
+                $pendingInstallmentPoolByLoanId,
             );
         }
     }
@@ -243,6 +250,7 @@ final class LegacyImportedLoanScheduleSyncService
      * @param  Collection<int, Collection<int, LoanInstallment>>  $installmentsByLoan
      * @param  array<int, array{status: string, paid_at: CarbonInterface|string|null}>  $updates
      * @param  array<int, bool>  $touchedLoanIds
+     * @param  array<int, float>  $pendingInstallmentPoolByLoanId
      */
     private function allocateChunkToLoanWindow(
         Member $member,
@@ -253,9 +261,10 @@ final class LegacyImportedLoanScheduleSyncService
         Collection $installmentsByLoan,
         array &$updates,
         array &$touchedLoanIds,
+        array &$pendingInstallmentPoolByLoanId,
     ): float {
         $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? now()->startOfDay();
-        $loanKey = LegacyLoanRepaymentWindow::loanKey((string) $member->member_number, $disbursedAt);
+        $loanKey = LegacyLoanRepaymentWindow::loanKey((string) $member->member_number, $disbursedAt, (int) $loan->id);
         $cumulative = $cumulativeRepaidByLoanKey[$loanKey] ?? 0.0;
         $target = LegacyLoanRepaymentTarget::totalRepaymentDue((float) ($loan->amount_approved ?? $loan->amount));
         $windowCap = round(max(0.0, $target - $cumulative), 2);
@@ -273,6 +282,7 @@ final class LegacyImportedLoanScheduleSyncService
             $installmentsByLoan,
             $updates,
             $touchedLoanIds,
+            $pendingInstallmentPoolByLoanId,
         );
 
         $this->repaymentWindowResolver->recordRepayment(
@@ -304,7 +314,7 @@ final class LegacyImportedLoanScheduleSyncService
 
         $shouldComplete = ! $hasUnpaid
             || $paidInstallmentSum + self::AMOUNT_TOLERANCE >= $target
-            || ($repaidOnLoan + self::AMOUNT_TOLERANCE >= $target && $paidInstallmentSum > self::AMOUNT_TOLERANCE);
+            || $repaidOnLoan + self::AMOUNT_TOLERANCE >= $target;
 
         if (! $shouldComplete) {
             return;
@@ -369,17 +379,21 @@ final class LegacyImportedLoanScheduleSyncService
      * @param  Collection<int, Collection<int, LoanInstallment>>  $installmentsByLoan
      * @param  array<int, array{status: string, paid_at: CarbonInterface|string|null}>  $updates
      * @param  array<int, bool>  $touchedLoanIds
+     * @param  array<int, float>  $pendingInstallmentPoolByLoanId
      */
     private function applyPoolToLoanInstallments(
         int $loanId,
-        float $pool,
+        float $chunk,
         CarbonInterface $paidAt,
         Collection $installmentsByLoan,
         array &$updates,
         array &$touchedLoanIds,
-    ): float {
+        array &$pendingInstallmentPoolByLoanId,
+    ): void {
         /** @var Collection<int, LoanInstallment> $installments */
         $installments = $installmentsByLoan->get($loanId, collect());
+
+        $pool = round(($pendingInstallmentPoolByLoanId[$loanId] ?? 0.0) + $chunk, 2);
 
         foreach ($installments as $installment) {
             if ($installment->isPaid() || isset($updates[$installment->id])) {
@@ -392,18 +406,14 @@ final class LegacyImportedLoanScheduleSyncService
                 break;
             }
 
-            $pool -= $needed;
+            $pool = round($pool - $needed, 2);
             $updates[$installment->id] = [
                 'status' => 'paid',
                 'paid_at' => $paidAt,
             ];
             $touchedLoanIds[$loanId] = true;
-
-            if ($pool <= self::AMOUNT_TOLERANCE) {
-                break;
-            }
         }
 
-        return $pool;
+        $pendingInstallmentPoolByLoanId[$loanId] = $pool;
     }
 }

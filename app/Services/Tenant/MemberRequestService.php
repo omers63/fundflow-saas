@@ -9,6 +9,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\User;
 use App\Services\DependentAllocationService;
+use App\Services\MemberStatusService;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -18,11 +19,13 @@ class MemberRequestService
     public function __construct(
         private readonly HouseholdMemberService $householdMembers,
         private readonly DependentAllocationService $allocations,
+        private readonly MemberStatusService $statuses,
     ) {}
 
     public function submit(Member $requester, string $type, array $payload): MemberRequest
     {
         $this->validatePayload($requester, $type, $payload);
+        $this->assertNoPendingDuplicate($requester, $type);
 
         $request = MemberRequest::query()->create([
             'requester_member_id' => $requester->id,
@@ -60,6 +63,9 @@ class MemberRequestService
             MemberRequest::TYPE_OWN_ALLOCATION => $this->validateOwnAllocation($requester, $payload),
             MemberRequest::TYPE_DEPENDENT_ALLOCATION => $this->validateDependentAllocation($requester, $payload),
             MemberRequest::TYPE_REQUEST_INDEPENDENCE => $this->validateIndependence($requester),
+            MemberRequest::TYPE_FREEZE_MEMBERSHIP => $this->validateFreezeMembership($requester, $payload),
+            MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => $this->validateUnfreezeMembership($requester),
+            MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => $this->validateWithdrawMembership($requester, $payload),
             default => throw ValidationException::withMessages(['type' => __('Invalid request type.')]),
         };
     }
@@ -144,6 +150,48 @@ class MemberRequestService
         }
     }
 
+    protected function validateFreezeMembership(Member $requester, array $payload): void
+    {
+        if ($requester->status !== 'active') {
+            throw ValidationException::withMessages([
+                'member' => __('Only active members can request a membership freeze.'),
+            ]);
+        }
+    }
+
+    protected function validateUnfreezeMembership(Member $requester): void
+    {
+        if ($requester->status !== 'inactive') {
+            throw ValidationException::withMessages([
+                'member' => __('Only inactive members can request to unfreeze membership.'),
+            ]);
+        }
+    }
+
+    protected function validateWithdrawMembership(Member $requester, array $payload): void
+    {
+        if (in_array($requester->status, ['withdrawn', 'terminated'], true)) {
+            throw ValidationException::withMessages([
+                'member' => __('Your membership has already ended.'),
+            ]);
+        }
+    }
+
+    protected function assertNoPendingDuplicate(Member $requester, string $type): void
+    {
+        $exists = MemberRequest::query()
+            ->where('requester_member_id', $requester->id)
+            ->where('type', $type)
+            ->where('status', MemberRequest::STATUS_PENDING)
+            ->exists();
+
+        if ($exists) {
+            throw ValidationException::withMessages([
+                'type' => __('You already have a pending request of this type.'),
+            ]);
+        }
+    }
+
     public function approve(MemberRequest $request, User $admin): void
     {
         if (! $request->isPending()) {
@@ -162,6 +210,9 @@ class MemberRequestService
                 MemberRequest::TYPE_OWN_ALLOCATION => $this->applyOwnAllocation($requester, $payload),
                 MemberRequest::TYPE_DEPENDENT_ALLOCATION => $this->applyDependentAllocation($requester, $payload, $admin),
                 MemberRequest::TYPE_REQUEST_INDEPENDENCE => $this->applyIndependence($requester),
+                MemberRequest::TYPE_FREEZE_MEMBERSHIP => $this->applyFreezeMembership($requester, $payload),
+                MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => $this->applyUnfreezeMembership($requester),
+                MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => $this->applyWithdrawMembership($requester, $payload),
                 default => throw ValidationException::withMessages(['type' => __('Unknown request type.')]),
             };
 
@@ -269,6 +320,21 @@ class MemberRequestService
         }
 
         $this->householdMembers->removeFromHousehold($member);
+    }
+
+    protected function applyFreezeMembership(Member $member, array $payload): void
+    {
+        $this->statuses->freeze($member, (string) ($payload['reason'] ?? ''));
+    }
+
+    protected function applyUnfreezeMembership(Member $member): void
+    {
+        $this->statuses->unfreeze($member);
+    }
+
+    protected function applyWithdrawMembership(Member $member, array $payload): void
+    {
+        $this->statuses->withdraw($member, (string) ($payload['reason'] ?? ''));
     }
 
     protected function notifyRequester(Member $requester, MemberRequest $request, string $outcome): void

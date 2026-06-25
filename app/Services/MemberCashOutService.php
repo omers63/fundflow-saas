@@ -14,6 +14,7 @@ use App\Notifications\Tenant\CashOutRequestAcceptedNotification;
 use App\Notifications\Tenant\CashOutRequestRejectedNotification;
 use App\Notifications\Tenant\NewCashOutRequestNotification;
 use App\Support\BusinessDay;
+use App\Support\MemberMembershipPolicy;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -129,6 +130,10 @@ final class MemberCashOutService
 
     public function submit(Member $member, float $amount, ?string $notes = null, bool $bypassAvailabilityGuard = false): CashOutRequest
     {
+        if (! $bypassAvailabilityGuard && ! app(MemberMembershipPolicy::class)->canRequestCashOut($member)) {
+            throw new InvalidArgumentException(__('Cash-out is not available for this membership status.'));
+        }
+
         if ($amount <= 0) {
             throw new InvalidArgumentException(__('Enter a withdrawal amount greater than zero.'));
         }

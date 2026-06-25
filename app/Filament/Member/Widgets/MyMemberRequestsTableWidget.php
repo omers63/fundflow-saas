@@ -59,6 +59,94 @@ class MyMemberRequestsTableWidget extends TableWidget
                     ->heading(__('Your requests'))
                     ->description(__('Track requests you have submitted. Use the actions above to ask for independence or to add or remove a dependent. Pending items are reviewed by administration.'))
                     ->headerActions([
+                        Action::make('requestFreezeMembership')
+                            ->label(__('Freeze membership'))
+                            ->icon('heroicon-o-pause-circle')
+                            ->color('warning')
+                            ->visible(fn (): bool => CurrentMember::get()?->status === 'active')
+                            ->schema([
+                                Textarea::make('reason')
+                                    ->label(__('Reason (optional)'))
+                                    ->rows(3)
+                                    ->maxLength(500),
+                            ])
+                            ->requiresConfirmation()
+                            ->modalHeading(__('Request membership freeze'))
+                            ->modalDescription(__('Pauses your portal access and contribution cycles until administration approves and later unfreezes your account.'))
+                            ->action(function (array $data) use ($service): void {
+                                $member = CurrentMember::get();
+
+                                if ($member === null) {
+                                    return;
+                                }
+
+                                try {
+                                    $service->submit($member, MemberRequest::TYPE_FREEZE_MEMBERSHIP, [
+                                        'reason' => $data['reason'] ?? '',
+                                    ]);
+                                    Notification::make()->title(__('Request submitted'))->success()->send();
+                                } catch (ValidationException $exception) {
+                                    $this->validationToNotification($exception);
+                                }
+                            }),
+                        Action::make('requestUnfreezeMembership')
+                            ->label(__('Unfreeze membership'))
+                            ->icon('heroicon-o-play-circle')
+                            ->color('success')
+                            ->visible(fn (): bool => CurrentMember::get()?->status === 'inactive')
+                            ->schema([
+                                Textarea::make('reason')
+                                    ->label(__('Reason (optional)'))
+                                    ->rows(3)
+                                    ->maxLength(500),
+                            ])
+                            ->requiresConfirmation()
+                            ->action(function (array $data) use ($service): void {
+                                $member = CurrentMember::get();
+
+                                if ($member === null) {
+                                    return;
+                                }
+
+                                try {
+                                    $service->submit($member, MemberRequest::TYPE_UNFREEZE_MEMBERSHIP, [
+                                        'reason' => $data['reason'] ?? '',
+                                    ]);
+                                    Notification::make()->title(__('Request submitted'))->success()->send();
+                                } catch (ValidationException $exception) {
+                                    $this->validationToNotification($exception);
+                                }
+                            }),
+                        Action::make('requestWithdrawMembership')
+                            ->label(__('Withdraw from fund'))
+                            ->icon('heroicon-o-arrow-right-on-rectangle')
+                            ->color('danger')
+                            ->visible(fn (): bool => in_array(CurrentMember::get()?->status, ['active', 'inactive', 'delinquent', 'suspended'], true))
+                            ->schema([
+                                Textarea::make('reason')
+                                    ->label(__('Reason (optional)'))
+                                    ->rows(3)
+                                    ->maxLength(500),
+                            ])
+                            ->requiresConfirmation()
+                            ->modalHeading(__('Request withdrawal'))
+                            ->modalDescription(__('Voluntary exit from the fund. Administration will review before your membership is closed.'))
+                            ->action(function (array $data) use ($service): void {
+                                $member = CurrentMember::get();
+
+                                if ($member === null) {
+                                    return;
+                                }
+
+                                try {
+                                    $service->submit($member, MemberRequest::TYPE_WITHDRAW_MEMBERSHIP, [
+                                        'reason' => $data['reason'] ?? '',
+                                    ]);
+                                    Notification::make()->title(__('Request submitted'))->success()->send();
+                                } catch (ValidationException $exception) {
+                                    $this->validationToNotification($exception);
+                                }
+                            }),
                         Action::make('requestIndependence')
                             ->label(__('Become independent'))
                             ->icon('heroicon-o-arrow-right-start-on-rectangle')

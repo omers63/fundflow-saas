@@ -12,6 +12,7 @@ use App\Models\Tenant\Setting;
 use App\Notifications\Tenant\ContributionDueNotification;
 use App\Services\Loans\LateFeeService;
 use App\Support\BusinessDay;
+use App\Support\MemberMembershipPolicy;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -188,7 +189,7 @@ class ContributionCycleService
 
     public function memberIsLiableForContributionPeriod(Member $member, int $month, int $year): bool
     {
-        if ($member->status !== 'active' || (float) $member->monthly_contribution_amount <= 0) {
+        if (! app(MemberMembershipPolicy::class)->canParticipateInContributionCycles($member)) {
             return false;
         }
 
@@ -222,8 +223,7 @@ class ContributionCycleService
     public function pendingMembersQueryForPeriod(int $month, int $year): Builder
     {
         return Member::query()
-            ->active()
-            ->where('monthly_contribution_amount', '>', 0)
+            ->contributionCycleEligible()
             ->whereDoesntHave('contributions', function (Builder $query) use ($month, $year): void {
                 $query->forPeriod($month, $year)->posted();
             })

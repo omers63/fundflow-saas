@@ -4,6 +4,7 @@ namespace App\Models\Tenant;
 
 use App\Services\Loans\LoanEarlySettlementService;
 use App\Support\BusinessDay;
+use App\Support\LoanRepaymentWindowPolicy;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -412,10 +413,11 @@ class Loan extends Model
      * that day number in the month (e.g. day 5 when cycle starts on the 6th), exempt the previous
      * calendar month's contribution; otherwise exempt the current month.
      *
-     * With grace, first_repayment_* is the **calendar month of the installment due date** (e.g. 5th —
-     * the day after cutoff). Grace is stored as exempted_month/year (calendar month labeling the
-     * skipped cycle). Apply {@see finalizeExemptionForDisbursement()} after this so an existing
-     * contribution for the grace period shifts grace and first repayment together.
+     * With grace, first_repayment_* labels the **first repayment cycle** (window opens on the
+     * contribution cycle start day; EMI is due on the cycle end day). Grace is stored as
+     * exempted_month/year (calendar month labeling the skipped cycle). Apply
+     * {@see finalizeExemptionForDisbursement()} after this so an existing contribution for the
+     * grace period shifts grace and first repayment together.
      */
     /**
      * @param  bool|int  $grace  Legacy bool (true = 1 cycle) or explicit grace_cycles 0–2
@@ -456,6 +458,25 @@ class Loan extends Model
         }
 
         return $result;
+    }
+
+    /**
+     * When repayments may be applied for this loan.
+     *
+     * Legacy migration opens at disbursement; normal loans open on the first day of the first
+     * repayment cycle after grace ({@see LoanRepaymentWindowPolicy}).
+     */
+    public function repaymentWindowOpensAt(bool $legacyMigration = false): Carbon
+    {
+        $policy = app(LoanRepaymentWindowPolicy::class);
+
+        if ($legacyMigration) {
+            $disbursedAt = $this->disbursed_at?->copy()->startOfDay() ?? now()->startOfDay();
+
+            return $policy->legacyMigrationWindowOpensAt($disbursedAt);
+        }
+
+        return $policy->normalLoanWindowOpensAtForLoan($this);
     }
 
     /**

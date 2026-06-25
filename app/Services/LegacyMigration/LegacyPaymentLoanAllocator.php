@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\LegacyMigration;
 
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -29,11 +30,39 @@ final class LegacyPaymentLoanAllocator
 
     public function qualifiesForLoanRepayment(Loan $loan, Member $member, float $amount, float $cumulativeRepaidOnLoan = 0.0): bool
     {
+        return $this->qualifiesForMinimumInstallment(
+            $this->minimumInstallmentAmount($loan),
+            $member,
+            $amount,
+            $cumulativeRepaidOnLoan,
+        );
+    }
+
+    public function qualifiesForCsvWindowRepayment(
+        LegacyLoanRepaymentWindow $window,
+        Member $member,
+        float $amount,
+        float $cumulativeRepaidOnLoan = 0.0,
+    ): bool {
+        $minimumInstallment = (float) (LoanTier::forAmount($window->amountApproved)?->min_monthly_installment ?? 0);
+
+        return $this->qualifiesForMinimumInstallment(
+            $minimumInstallment,
+            $member,
+            $amount,
+            $cumulativeRepaidOnLoan,
+        );
+    }
+
+    private function qualifiesForMinimumInstallment(
+        float $minimumInstallment,
+        Member $member,
+        float $amount,
+        float $cumulativeRepaidOnLoan,
+    ): bool {
         if ($amount <= self::AMOUNT_TOLERANCE) {
             return false;
         }
-
-        $minimumInstallment = $this->minimumInstallmentAmount($loan);
 
         if ($this->isAtRepaymentCycleStart($cumulativeRepaidOnLoan)) {
             $monthlyContribution = round((float) $member->monthly_contribution_amount, 2);
@@ -58,13 +87,15 @@ final class LegacyPaymentLoanAllocator
 
     /**
      * @param  array<string, float>  $cumulativeRepaidByLoanKey
-     * @return array{loan: ?Loan, repayment_amount: float, contribution_amount: float}
+     * @return array{loan: ?Loan, repayment_amount: float, contribution_amount: float, window: ?LegacyLoanRepaymentWindow}
      */
     public function allocate(
         Member $member,
         float $amount,
         CarbonInterface $paidAt,
         array &$cumulativeRepaidByLoanKey,
+        ?LegacyMigrationCsvLoanIndex $loanIndex = null,
+        ?LegacyLoanRepaymentInstallmentTracker $installmentTracker = null,
     ): array {
         $amount = round($amount, 2);
 
@@ -76,45 +107,95 @@ final class LegacyPaymentLoanAllocator
             LegacyPaymentClassifyMember::fromDatabase($member),
             Carbon::parse($paidAt),
             $cumulativeRepaidByLoanKey,
+            $loanIndex,
+            $installmentTracker,
         );
 
-        if ($window === null || $window->loanId === null) {
+        if ($window === null) {
             return $this->contributionOnly($amount);
         }
 
-        $loan = Loan::query()->with('loanTier')->find($window->loanId);
+        $installmentTracker?->registerWindow($window);
 
-        if ($loan === null) {
+        if ($installmentTracker?->isScheduleSatisfied($window->loanKey) === true) {
+            return $this->contributionOnly($amount);
+        }
+
+        $useCsvLoans = $loanIndex !== null
+            && ! $loanIndex->isEmpty()
+            && $loanIndex->hasMember((string) $member->member_number);
+
+        $loan = $window->loanId !== null
+            ? Loan::query()->with('loanTier')->find($window->loanId)
+            : null;
+
+        if ($loan === null && ! $useCsvLoans) {
             return $this->contributionOnly($amount);
         }
 
         $cumulative = $cumulativeRepaidByLoanKey[$window->loanKey] ?? 0.0;
 
-        if (! $this->qualifiesForLoanRepayment($loan, $member, $amount, $cumulative)) {
+        if ($loan !== null) {
+            if (! $this->qualifiesForLoanRepayment($loan, $member, $amount, $cumulative)) {
+                return $this->contributionOnly($amount);
+            }
+
+            $targetRemaining = $window->remainingRepayment($cumulative);
+
+            if ($targetRemaining <= self::AMOUNT_TOLERANCE) {
+                return $this->contributionOnly($amount);
+            }
+
+            $scheduleCapacity = $installmentTracker?->remainingScheduleCapacity($window->loanKey)
+                ?? $this->installmentSpilloverCapacity($loan, $amount);
+
+            $maxLoanAllocation = min(
+                $amount,
+                $targetRemaining,
+                $scheduleCapacity,
+            );
+
+            $repaymentAmount = round(max(0.0, $maxLoanAllocation), 2);
+
+            if ($repaymentAmount <= self::AMOUNT_TOLERANCE) {
+                return $this->contributionOnly($amount);
+            }
+
+            $installmentTracker?->applyRepayment($window->loanKey, $repaymentAmount);
+
+            return [
+                'loan' => $loan,
+                'repayment_amount' => $repaymentAmount,
+                'contribution_amount' => round(max(0.0, $amount - $repaymentAmount), 2),
+                'window' => $window,
+            ];
+        }
+
+        if (! $this->qualifiesForCsvWindowRepayment($window, $member, $amount, $cumulative)) {
             return $this->contributionOnly($amount);
         }
+
         $targetRemaining = $window->remainingRepayment($cumulative);
 
         if ($targetRemaining <= self::AMOUNT_TOLERANCE) {
             return $this->contributionOnly($amount);
         }
 
-        $maxLoanAllocation = min(
-            $amount,
-            $targetRemaining,
-            $this->installmentSpilloverCapacity($loan, $amount),
-        );
+        $scheduleCapacity = $installmentTracker?->remainingScheduleCapacity($window->loanKey) ?? $amount;
 
-        $repaymentAmount = round(max(0.0, $maxLoanAllocation), 2);
+        $repaymentAmount = round(min($amount, $targetRemaining, $scheduleCapacity), 2);
 
         if ($repaymentAmount <= self::AMOUNT_TOLERANCE) {
             return $this->contributionOnly($amount);
         }
 
+        $installmentTracker?->applyRepayment($window->loanKey, $repaymentAmount);
+
         return [
-            'loan' => $loan,
+            'loan' => null,
             'repayment_amount' => $repaymentAmount,
             'contribution_amount' => round(max(0.0, $amount - $repaymentAmount), 2),
+            'window' => $window,
         ];
     }
 
@@ -124,7 +205,7 @@ final class LegacyPaymentLoanAllocator
     }
 
     /**
-     * @return array{loan: null, repayment_amount: float, contribution_amount: float}
+     * @return array{loan: null, repayment_amount: float, contribution_amount: float, window: null}
      */
     private function contributionOnly(float $amount): array
     {
@@ -132,6 +213,7 @@ final class LegacyPaymentLoanAllocator
             'loan' => null,
             'repayment_amount' => 0.0,
             'contribution_amount' => round($amount, 2),
+            'window' => null,
         ];
     }
 

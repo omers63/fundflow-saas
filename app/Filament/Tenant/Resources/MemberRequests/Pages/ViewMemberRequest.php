@@ -95,7 +95,12 @@ class ViewMemberRequest extends ViewRecord
                 ->visible(fn (): bool => $this->record->isPending())
                 ->requiresConfirmation()
                 ->modalHeading(__('Approve this request?'))
-                ->modalDescription(__('The change will be applied immediately for supported request types.'))
+                ->modalDescription(fn (): string => match ($this->record->type) {
+                    MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => __('The member will be marked withdrawn and portal access will end.'),
+                    MemberRequest::TYPE_FREEZE_MEMBERSHIP => __('The member will be marked inactive until unfrozen.'),
+                    MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => __('The member will be restored to active or delinquent depending on arrears.'),
+                    default => __('The change will be applied immediately for supported request types.'),
+                })
                 ->action(function (): void {
                     try {
                         app(MemberRequestService::class)->approve(

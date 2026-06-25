@@ -8,6 +8,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\FundAuditLogService;
+use App\Services\MemberStatusService;
 use App\Support\BusinessDay;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -52,7 +53,8 @@ class LoanGuarantorTransferService
                 'guarantor_liability_transferred_at' => BusinessDay::now(),
             ]);
 
-            $borrower->update(['status' => 'suspended']);
+            $borrower->refresh();
+            app(MemberStatusService::class)->suspendForGuarantorTransfer($borrower);
 
             $remaining = $this->remainingGuarantorObligation($loan->fresh());
 

@@ -44,31 +44,37 @@ final class FilamentStoredUploadPath
         }
 
         if (is_array($state)) {
-            foreach (Arr::wrap($state) as $value) {
+            foreach (array_reverse(Arr::wrap($state)) as $value) {
                 if ($value instanceof TemporaryUploadedFile) {
-                    $resolved = self::resolveTemporaryUploadedFile($value);
+                    $candidate = self::resolveTemporaryUploadedFile($value);
 
-                    if ($resolved !== null) {
-                        return $resolved;
+                    if ($candidate !== null) {
+                        return $candidate;
                     }
+
+                    continue;
                 }
 
                 if (is_string($value) && trim($value) !== '') {
-                    $resolved = self::resolveStoredRelativePath(trim($value));
+                    $candidate = self::resolveStoredRelativePath(trim($value));
 
-                    if ($resolved !== null) {
-                        return $resolved;
+                    if ($candidate !== null) {
+                        return $candidate;
                     }
+
+                    continue;
                 }
 
                 if (is_array($value)) {
-                    $resolved = self::tryResolveReadableCsvToAbsolutePath($value);
+                    $candidate = self::tryResolveReadableCsvToAbsolutePath($value);
 
-                    if ($resolved !== null) {
-                        return $resolved;
+                    if ($candidate !== null) {
+                        return $candidate;
                     }
                 }
             }
+
+            return null;
         }
 
         $relative = self::toRelativePath($state);

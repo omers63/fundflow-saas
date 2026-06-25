@@ -11,9 +11,13 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
+use App\Services\LegacyMigration\LegacyMigrationLoanFundingSimulator;
 use App\Services\MemberCashOutService;
+use App\Support\AssociativeCsv;
+use App\Support\LegacyLoanCsvIdentity;
 use App\Support\LegacyMemberIdentifierResolver;
 use App\Support\LoanFundingStrategy;
+use App\Support\LoanRepaymentWindowPolicy;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -26,26 +30,45 @@ class LoanImportService
 
     private ?string $fundingStrategyForImport = null;
 
+    private ?LegacyMigrationLoanFundingSimulator $fundingSimulator = null;
+
+    private ?bool $skipSettlementThresholdForImport = null;
+
+    private ?int $maxLegacyLoanIdUsed = null;
+
     public function __construct(
         private readonly LoanLedgerService $ledger,
         private readonly LegacyMemberIdentifierResolver $memberResolver,
         private readonly MemberCashOutService $cashOuts,
-    ) {
-    }
+    ) {}
 
     /**
      * Import loans from a UTF-8 CSV with a header row.
      *
      * @return array{created: int, failed: int, errors: array<int, string>}
      */
-    public function import(string $absolutePath, ?int $graceCycles = null, ?string $fundingStrategy = null): array
-    {
+    public function import(
+        string $absolutePath,
+        ?int $graceCycles = null,
+        ?string $fundingStrategy = null,
+        ?string $paymentsCsvForFunding = null,
+        ?bool $skipSettlementThreshold = null,
+    ): array {
         $this->authorizeImport();
 
         $graceCycles = max(0, min(2, $graceCycles ?? 1));
         $this->fundingStrategyForImport = $fundingStrategy !== null
             ? LoanFundingStrategy::normalize($fundingStrategy)
             : null;
+        $this->skipSettlementThresholdForImport = $skipSettlementThreshold;
+
+        if (
+            $this->fundingStrategyForImport === LoanFundingStrategy::MEMBER_FUND_TOPUP
+            && filled($paymentsCsvForFunding)
+            && is_readable($paymentsCsvForFunding)
+        ) {
+            $this->fundingSimulator = LegacyMigrationLoanFundingSimulator::fromPaymentsCsv($paymentsCsvForFunding);
+        }
 
         $created = 0;
         $failed = 0;
@@ -59,6 +82,10 @@ class LoanImportService
                 'failed' => 0,
                 'errors' => [__('The file is empty or has no data rows after the header.')],
             ];
+        }
+
+        if ($this->fundingStrategyForImport === LoanFundingStrategy::MEMBER_FUND_TOPUP) {
+            $rows = $this->sortRowsByDisbursedAt($rows);
         }
 
         $lineBase = 2;
@@ -78,8 +105,15 @@ class LoanImportService
                 }
             }
         } finally {
+            if ($this->maxLegacyLoanIdUsed !== null) {
+                $this->syncLoanPrimaryKeySequence($this->maxLegacyLoanIdUsed);
+                $this->maxLegacyLoanIdUsed = null;
+            }
+
             $this->graceCyclesForImport = null;
             $this->fundingStrategyForImport = null;
+            $this->fundingSimulator = null;
+            $this->skipSettlementThresholdForImport = null;
         }
 
         return [
@@ -144,7 +178,7 @@ class LoanImportService
         $installmentsCount = $this->parseOptionalPositiveInt($this->cell($row, 'installments_count'), 12);
         $appliedAt = $this->parseOptionalDateTime($this->cell($row, 'applied_at')) ?? now();
 
-        Loan::create([
+        $this->createLoanRecord([
             'member_id' => $member->id,
             'loan_tier_id' => $loanTier?->id,
             'fund_tier_id' => null,
@@ -158,7 +192,7 @@ class LoanImportService
             'applied_at' => $appliedAt,
             'is_emergency' => $isEmergency,
             'guarantor_member_id' => $guarantorMemberId,
-        ]);
+        ], $this->parseOptionalLegacyLoanId($row));
     }
 
     /**
@@ -186,7 +220,7 @@ class LoanImportService
         $approvedAt = $this->parseOptionalDateTime($this->cell($row, 'approved_at')) ?? now();
         $appliedAt = $this->parseOptionalDateTime($this->cell($row, 'applied_at')) ?? $approvedAt;
 
-        Loan::create([
+        $this->createLoanRecord([
             'member_id' => $member->id,
             'loan_tier_id' => $loanTier?->id,
             'fund_tier_id' => $fundTier->id,
@@ -203,7 +237,7 @@ class LoanImportService
             'settlement_threshold' => $threshold,
             'is_emergency' => $isEmergency,
             'guarantor_member_id' => $guarantorMemberId,
-        ]);
+        ], $this->parseOptionalLegacyLoanId($row));
 
         LoanQueueOrderingService::resequenceFundTier($fundTier->id);
     }
@@ -223,7 +257,14 @@ class LoanImportService
             throw new \InvalidArgumentException(__('amount_approved must be positive.'));
         }
 
-        [$memberPortion, $masterPortion, $portionsExplicit] = $this->resolvePortions($row, $amount, $member);
+        $disbursedAt = $this->parseDisbursedAt($this->cell($row, 'disbursed_at'));
+
+        [$memberPortion, $masterPortion, $portionsExplicit] = $this->resolvePortions(
+            $row,
+            $amount,
+            $member,
+            $disbursedAt,
+        );
 
         $isEmergency = $this->parseBool($this->cell($row, 'is_emergency'));
         $loanTier = $this->resolveLoanTier($row, $amount, $isEmergency);
@@ -239,7 +280,6 @@ class LoanImportService
             $portionsExplicit,
         );
         $paidCount = $allPaid ? $count : $this->parsePaidInstallmentsCount($row, $count);
-        $disbursedAt = $this->parseDisbursedAt($this->cell($row, 'disbursed_at'));
         $graceCycles = $this->graceCyclesForImport ?? 1;
         $exemption = Loan::computeExemptionAndFirstRepayment($disbursedAt, $graceCycles);
         $exemption = Loan::finalizeExemptionForDisbursement($member, $exemption, $disbursedAt);
@@ -273,9 +313,10 @@ class LoanImportService
         $approvedAt = $this->parseOptionalDateTime($this->cell($row, 'approved_at')) ?? $disbursedAt;
 
         $fundingStrategy = $this->fundingStrategyForImport;
+        $legacyLoanId = $this->parseOptionalLegacyLoanId($row);
 
-        DB::transaction(function () use ($member, $loanTier, $fundTier, $amount, $amountRequested, $purpose, $count, $disbursedAt, $exemption, $threshold, $isEmergency, $memberPortion, $masterPortion, $paidCount, $minInstall, $totalRepaid, $terminalStatus, $settledAt, $appliedAt, $approvedAt, $guarantorMemberId, $graceCycles, $fundingStrategy): void {
-            $loan = Loan::create([
+        DB::transaction(function () use ($member, $loanTier, $fundTier, $amount, $amountRequested, $purpose, $count, $disbursedAt, $exemption, $threshold, $isEmergency, $memberPortion, $masterPortion, $paidCount, $minInstall, $totalRepaid, $terminalStatus, $settledAt, $appliedAt, $approvedAt, $guarantorMemberId, $graceCycles, $fundingStrategy, $legacyLoanId): void {
+            $loan = $this->createLoanRecord([
                 'member_id' => $member->id,
                 'loan_tier_id' => $loanTier?->id,
                 'fund_tier_id' => $fundTier->id,
@@ -303,7 +344,7 @@ class LoanImportService
                 'member_portion' => $memberPortion,
                 'master_portion' => $masterPortion,
                 'guarantor_member_id' => $guarantorMemberId,
-            ]);
+            ], $legacyLoanId);
 
             $this->ledger->postImportedLoanDisbursementWithPortions(
                 $loan,
@@ -327,14 +368,16 @@ class LoanImportService
                 $loan->refresh();
             }
 
-            $startDate = Carbon::create(
+            $policy = app(LoanRepaymentWindowPolicy::class);
+            $firstPeriod = Carbon::create(
                 $exemption['first_repayment_year'],
                 $exemption['first_repayment_month'],
-                5
+                1,
             );
 
             for ($i = 1; $i <= $count; $i++) {
-                $dueDate = $startDate->copy()->addMonths($i - 1);
+                $period = $firstPeriod->copy()->addMonths($i - 1);
+                $dueDate = $policy->installmentDueDateForCycle((int) $period->month, (int) $period->year);
                 $isPaid = $i <= $paidCount;
                 LoanInstallment::create([
                     'loan_id' => $loan->id,
@@ -354,6 +397,8 @@ class LoanImportService
             }
         });
 
+        $this->fundingSimulator?->recordDisbursement($member, $disbursedAt, $memberPortion);
+
         LoanQueueOrderingService::resequenceFundTier($fundTier->id);
     }
 
@@ -361,18 +406,24 @@ class LoanImportService
      * @param  array<string, string>  $row
      * @return array{0: float, 1: float, 2: bool}
      */
-    private function resolvePortions(array $row, float $amount, Member $member): array
+    private function resolvePortions(array $row, float $amount, Member $member, Carbon $disbursedAt): array
     {
         $memberCell = $this->cell($row, 'member_portion');
         $masterCell = $this->cell($row, 'master_portion');
 
         if ($memberCell === '' && $masterCell === '') {
             if ($this->fundingStrategyForImport !== null) {
-                $fundBalance = (float) (Account::query()
-                    ->where('member_id', $member->id)
-                    ->where('type', 'fund')
-                    ->where('is_master', false)
-                    ->value('balance') ?? 0);
+                if ($this->fundingSimulator !== null) {
+                    $fundBalance = $this->fundingSimulator->fundBalanceBeforeDisbursement($member, $disbursedAt);
+                } else {
+                    $fundBalance = (float) (Account::query()
+                        ->where('member_id', $member->id)
+                        ->where('type', 'fund')
+                        ->where('is_master', false)
+                        ->value('balance') ?? 0);
+                    $fundBalance = max(0.0, $fundBalance);
+                }
+
                 $portions = LoanSettings::resolveFundingPortions(
                     $amount,
                     $fundBalance,
@@ -574,7 +625,7 @@ class LoanImportService
         }
 
         throw new \InvalidArgumentException(
-            'loan_status must be pending, approved, active, completed, or early_settled (got: ' . $value . ')'
+            'loan_status must be pending, approved, active, completed, or early_settled (got: '.$value.')'
         );
     }
 
@@ -603,7 +654,7 @@ class LoanImportService
             return null;
         }
 
-        if (!is_numeric($value)) {
+        if (! is_numeric($value)) {
             throw new \InvalidArgumentException("{$column} must be numeric (got: {$value})");
         }
 
@@ -611,47 +662,44 @@ class LoanImportService
     }
 
     /**
+     * @param  array<int, array<string, string>>  $rows
+     * @return array<int, array<string, string>>
+     */
+    private function sortRowsByDisbursedAt(array $rows): array
+    {
+        $withDates = [];
+
+        foreach ($rows as $index => $row) {
+            $raw = trim((string) ($row['disbursed_at'] ?? ''));
+
+            try {
+                $at = $raw !== '' ? $this->parseDisbursedAt($raw) : now()->addYears(100);
+            } catch (Throwable) {
+                $at = now()->addYears(100);
+            }
+
+            $withDates[] = [
+                'index' => $index,
+                'row' => $row,
+                'at' => $at,
+            ];
+        }
+
+        usort(
+            $withDates,
+            fn (array $left, array $right): int => $left['at']->timestamp <=> $right['at']->timestamp
+            ?: $left['index'] <=> $right['index'],
+        );
+
+        return array_map(fn (array $item): array => $item['row'], $withDates);
+    }
+
+    /**
      * @return array<int, array<string, string>>
      */
     private function parseAssociativeCsv(string $absolutePath): array
     {
-        if (!is_readable($absolutePath)) {
-            throw new \InvalidArgumentException(__('Cannot read the uploaded file.'));
-        }
-
-        $content = file_get_contents($absolutePath);
-        if ($content === false) {
-            throw new \InvalidArgumentException(__('Cannot read the uploaded file.'));
-        }
-
-        $content = preg_replace('/^\xEF\xBB\xBF/', '', $content) ?? $content;
-
-        $lines = preg_split('/\r\n|\r|\n/', $content);
-        $lines = array_values(array_filter($lines, fn($line) => trim((string) $line) !== ''));
-
-        if (count($lines) < 2) {
-            return [];
-        }
-
-        $headerLine = array_shift($lines);
-        $headers = str_getcsv((string) $headerLine);
-        $headers = array_map(fn($header) => strtolower(trim((string) $header)), $headers);
-
-        $rows = [];
-
-        foreach ($lines as $line) {
-            $cells = str_getcsv((string) $line);
-            $assoc = [];
-            foreach ($headers as $index => $key) {
-                if ($key === '') {
-                    continue;
-                }
-                $assoc[$key] = isset($cells[$index]) ? trim((string) $cells[$index]) : '';
-            }
-            $rows[] = $assoc;
-        }
-
-        return $rows;
+        return AssociativeCsv::read($absolutePath);
     }
 
     /**
@@ -668,7 +716,7 @@ class LoanImportService
             throw new \InvalidArgumentException("{$column} is required.");
         }
 
-        if (!is_numeric($value)) {
+        if (! is_numeric($value)) {
             throw new \InvalidArgumentException("{$column} must be numeric (got: {$value})");
         }
 
@@ -683,10 +731,14 @@ class LoanImportService
     private function parseThreshold(string $value): float
     {
         if ($value === '') {
+            if ($this->skipSettlementThresholdForImport === true) {
+                return 0.0;
+            }
+
             return LoanSettings::settlementThreshold();
         }
 
-        if (!is_numeric($value)) {
+        if (! is_numeric($value)) {
             throw new \InvalidArgumentException("settlement_threshold must be numeric (got: {$value})");
         }
 
@@ -730,7 +782,7 @@ class LoanImportService
             return $default;
         }
 
-        if (!ctype_digit($value)) {
+        if (! ctype_digit($value)) {
             throw new \InvalidArgumentException(__('installments_count must be a positive integer.'));
         }
 
@@ -751,7 +803,7 @@ class LoanImportService
     ): int {
         $cell = $this->cell($row, 'installments_count');
         if ($cell !== '') {
-            if (!ctype_digit($cell)) {
+            if (! ctype_digit($cell)) {
                 throw new \InvalidArgumentException(__('installments_count must be a positive integer.'));
             }
             $count = (int) $cell;
@@ -777,7 +829,7 @@ class LoanImportService
     ): int {
         $cell = $this->cell($row, 'installments_count');
         if ($cell !== '') {
-            if (!ctype_digit($cell)) {
+            if (! ctype_digit($cell)) {
                 throw new \InvalidArgumentException(__('installments_count must be a positive integer.'));
             }
             $count = (int) $cell;
@@ -785,7 +837,7 @@ class LoanImportService
             return $count >= 1 ? $count : throw new \InvalidArgumentException(__('installments_count must be at least 1.'));
         }
 
-        if (!$portionsExplicit && $this->fundingStrategyForImport === null) {
+        if (! $portionsExplicit && $this->fundingStrategyForImport === null) {
             $schedulePortions = LoanSettings::resolveFundingPortions(
                 $amount,
                 0,
@@ -812,7 +864,7 @@ class LoanImportService
             return 0;
         }
 
-        if (!preg_match('/^\d+$/', $paidCell)) {
+        if (! preg_match('/^\d+$/', $paidCell)) {
             throw new \InvalidArgumentException(__('paid_installments_count must be a non-negative integer.'));
         }
 
@@ -831,7 +883,7 @@ class LoanImportService
     {
         $tierNum = $this->cell($row, 'loan_tier_number');
         if ($tierNum !== '') {
-            if (!ctype_digit($tierNum)) {
+            if (! ctype_digit($tierNum)) {
                 throw new \InvalidArgumentException(__('loan_tier_number must be a non-negative integer.'));
             }
             $tier = LoanTier::where('tier_number', (int) $tierNum)->where('is_active', true)->first();
@@ -861,7 +913,7 @@ class LoanImportService
     {
         $tierNum = $this->cell($row, 'loan_tier_number');
         if ($tierNum !== '') {
-            if (!ctype_digit($tierNum)) {
+            if (! ctype_digit($tierNum)) {
                 throw new \InvalidArgumentException(__('loan_tier_number must be a non-negative integer.'));
             }
             $tier = LoanTier::where('tier_number', (int) $tierNum)->where('is_active', true)->first();
@@ -892,7 +944,7 @@ class LoanImportService
 
         $fundNum = $this->cell($row, 'fund_tier_number');
         if ($fundNum !== '') {
-            if (!ctype_digit($fundNum)) {
+            if (! ctype_digit($fundNum)) {
                 throw new \InvalidArgumentException(__('fund_tier_number must be a non-negative integer.'));
             }
             $fundTier = FundTier::where('tier_number', (int) $fundNum)->where('is_active', true)->first();
@@ -927,5 +979,59 @@ class LoanImportService
             'monthly_repayment' => 0,
             'total_repaid' => 0,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function createLoanRecord(array $attributes, ?int $legacyLoanId = null): Loan
+    {
+        if ($legacyLoanId === null) {
+            return Loan::create($attributes);
+        }
+
+        if ($legacyLoanId <= 0) {
+            throw new \InvalidArgumentException(__('loan_id must be a positive integer.'));
+        }
+
+        if (Loan::withTrashed()->whereKey($legacyLoanId)->exists()) {
+            throw new \InvalidArgumentException(__('loan_id :id is already assigned to another loan.', [
+                'id' => $legacyLoanId,
+            ]));
+        }
+
+        $loan = new Loan($attributes);
+        $loan->id = $legacyLoanId;
+        $loan->save();
+
+        $this->maxLegacyLoanIdUsed = max($this->maxLegacyLoanIdUsed ?? 0, $legacyLoanId);
+
+        return $loan;
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     */
+    private function parseOptionalLegacyLoanId(array $row): ?int
+    {
+        return LegacyLoanCsvIdentity::legacyLoanIdFromRow($row);
+    }
+
+    private function syncLoanPrimaryKeySequence(int $usedId): void
+    {
+        $connection = DB::connection();
+        $driver = $connection->getDriverName();
+
+        if ($driver === 'pgsql') {
+            $next = max($usedId, (int) Loan::withTrashed()->max('id'));
+            $connection->statement("SELECT setval(pg_get_serial_sequence('loans', 'id'), ?)", [$next]);
+
+            return;
+        }
+
+        if ($driver === 'mysql') {
+            $next = max($usedId + 1, (int) Loan::withTrashed()->max('id') + 1);
+            $connection->statement('ALTER TABLE loans AUTO_INCREMENT = '.$next);
+        }
     }
 }

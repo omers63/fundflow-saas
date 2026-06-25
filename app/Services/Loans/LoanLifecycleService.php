@@ -22,6 +22,7 @@ use App\Notifications\Tenant\NewLoanApplicationNotification;
 use App\Services\OperationalReviewWorkflowService;
 use App\Support\BusinessDay;
 use App\Support\LoanFundingStrategy;
+use App\Support\LoanRepaymentWindowPolicy;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -400,18 +401,24 @@ final class LoanLifecycleService
             } catch (Throwable) {
             }
 
-            $startDate = Carbon::create(
+            $policy = app(LoanRepaymentWindowPolicy::class);
+            $firstPeriod = Carbon::create(
                 $exemption['first_repayment_year'],
                 $exemption['first_repayment_month'],
-                5,
+                1,
             );
 
             for ($i = 1; $i <= $count; $i++) {
+                $period = $firstPeriod->copy()->addMonths($i - 1);
+
                 LoanInstallment::create([
                     'loan_id' => $loan->id,
                     'installment_number' => $i,
                     'amount' => $minInstall,
-                    'due_date' => $startDate->copy()->addMonths($i - 1)->toDateString(),
+                    'due_date' => $policy->installmentDueDateForCycle(
+                        (int) $period->month,
+                        (int) $period->year,
+                    )->toDateString(),
                     'status' => 'pending',
                 ]);
             }

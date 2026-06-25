@@ -27,10 +27,11 @@ final class MemberInsightsService
         $total = Member::query()->count();
         $active = Member::query()->active()->count();
         $delinquent = Member::query()->where('status', 'delinquent')->count();
+        $inactive = Member::query()->where('status', 'inactive')->count();
         $suspended = Member::query()->where('status', 'suspended')->count();
         $withdrawn = Member::query()->where('status', 'withdrawn')->count();
         $terminated = Member::query()->where('status', 'terminated')->count();
-        $inactive = $suspended + $withdrawn + $terminated;
+        $inactiveAggregate = $inactive + $suspended + $withdrawn + $terminated;
 
         $newThisMonth = Member::query()
             ->whereMonth('joined_at', $now->month)

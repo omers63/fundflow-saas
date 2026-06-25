@@ -28,6 +28,12 @@ class MemberRequest extends Model
 
     public const TYPE_REQUEST_INDEPENDENCE = 'request_independence';
 
+    public const TYPE_FREEZE_MEMBERSHIP = 'freeze_membership';
+
+    public const TYPE_UNFREEZE_MEMBERSHIP = 'unfreeze_membership';
+
+    public const TYPE_WITHDRAW_MEMBERSHIP = 'withdraw_membership';
+
     protected $fillable = [
         'requester_member_id',
         'type',
@@ -69,6 +75,9 @@ class MemberRequest extends Model
             self::TYPE_OWN_ALLOCATION => __('My contribution allocation'),
             self::TYPE_DEPENDENT_ALLOCATION => __('Dependent allocation'),
             self::TYPE_REQUEST_INDEPENDENCE => __('Become independent'),
+            self::TYPE_FREEZE_MEMBERSHIP => __('Freeze membership'),
+            self::TYPE_UNFREEZE_MEMBERSHIP => __('Unfreeze membership'),
+            self::TYPE_WITHDRAW_MEMBERSHIP => __('Withdraw from fund'),
             default => $type,
         };
     }
@@ -97,6 +106,9 @@ class MemberRequest extends Model
             self::TYPE_OWN_ALLOCATION => self::typeLabel(self::TYPE_OWN_ALLOCATION),
             self::TYPE_DEPENDENT_ALLOCATION => self::typeLabel(self::TYPE_DEPENDENT_ALLOCATION),
             self::TYPE_REQUEST_INDEPENDENCE => self::typeLabel(self::TYPE_REQUEST_INDEPENDENCE),
+            self::TYPE_FREEZE_MEMBERSHIP => self::typeLabel(self::TYPE_FREEZE_MEMBERSHIP),
+            self::TYPE_UNFREEZE_MEMBERSHIP => self::typeLabel(self::TYPE_UNFREEZE_MEMBERSHIP),
+            self::TYPE_WITHDRAW_MEMBERSHIP => self::typeLabel(self::TYPE_WITHDRAW_MEMBERSHIP),
         ];
     }
 
@@ -158,13 +170,16 @@ class MemberRequest extends Model
             self::TYPE_ADD_DEPENDENT => Str::limit(trim((string) ($payload['details'] ?? '')), 120) ?: __('—'),
             self::TYPE_REMOVE_DEPENDENT => $this->formatDependentLabel($payload['dependent_member_id'] ?? null),
             self::TYPE_OWN_ALLOCATION => isset($payload['requested_amount'])
-                ? (string) (int) $payload['requested_amount']
-                : __('—'),
+            ? (string) (int) $payload['requested_amount']
+            : __('—'),
             self::TYPE_DEPENDENT_ALLOCATION => $this->formatDependentLabel($payload['dependent_member_id'] ?? null)
-                .(isset($payload['requested_amount'])
-                    ? ' → '.(string) (int) $payload['requested_amount']
-                    : ''),
+            .(isset($payload['requested_amount'])
+                ? ' → '.(string) (int) $payload['requested_amount']
+                : ''),
             self::TYPE_REQUEST_INDEPENDENCE => __('Unlink from household parent'),
+            self::TYPE_FREEZE_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Pause membership'),
+            self::TYPE_UNFREEZE_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Resume membership'),
+            self::TYPE_WITHDRAW_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Voluntary withdrawal'),
             default => __('—'),
         };
     }

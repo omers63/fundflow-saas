@@ -88,6 +88,10 @@ final class RunLegacyMigrationPaymentsJob implements ShouldQueue
             throw $exception;
         } finally {
             foreach ($this->uploadPathsToDelete as $relative) {
+                if (str_starts_with($relative, 'legacy-migration/working/')) {
+                    continue;
+                }
+
                 try {
                     Storage::disk('local')->delete($relative);
                 } catch (Throwable) {

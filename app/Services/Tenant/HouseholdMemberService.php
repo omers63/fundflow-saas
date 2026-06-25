@@ -8,6 +8,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Support\MemberMembershipPolicy;
 use App\Support\MemberUserEmail;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
@@ -207,7 +208,7 @@ class HouseholdMemberService
             throw new InvalidArgumentException(__('The selected member is a dependent. Choose the household parent instead.'));
         }
 
-        if (in_array($parent->status, Member::PORTAL_BLOCKED_STATUSES, true)) {
+        if ($parent->status !== 'active') {
             throw new InvalidArgumentException(__('The selected parent member cannot accept dependents while their membership is not active.'));
         }
 
@@ -244,7 +245,21 @@ class HouseholdMemberService
 
     public function memberCanUsePortal(Member $member): bool
     {
-        return ! in_array($member->status, Member::PORTAL_BLOCKED_STATUSES, true);
+        $policy = app(MemberMembershipPolicy::class);
+
+        if (! $policy->canAccessPortal($member)) {
+            return false;
+        }
+
+        if ($member->parent_member_id !== null) {
+            $parent = Member::query()->find($member->parent_member_id);
+
+            if ($parent instanceof Member && $policy->blocksHouseholdDependents($parent->status)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function createMemberWithUser(

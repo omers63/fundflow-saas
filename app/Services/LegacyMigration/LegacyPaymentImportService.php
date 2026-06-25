@@ -15,6 +15,7 @@ use App\Support\AssociativeCsv;
 use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
 use App\Support\LegacyMigrationDateParser;
+use App\Support\LegacyMigrationGraceCycleSettings;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -26,6 +27,22 @@ final class LegacyPaymentImportService
 
     private const MAX_SUPPORTED_PAYMENT_DATE = '2037-12-31 23:59:59';
 
+    private bool $simulationMode = false;
+
+    /**
+     * @var array<string, true>
+     */
+    private array $simulatedOccupiedPeriods = [];
+
+    /**
+     * @var list<array<string, string>>
+     */
+    private array $simulatedOutputRows = [];
+
+    private ?LegacyMigrationCsvLoanIndex $loanIndexForImport = null;
+
+    private ?LegacyLoanRepaymentInstallmentTracker $importInstallmentTracker = null;
+
     public function __construct(
         private readonly AccountingService $accounting,
         private readonly ContributionService $contributions,
@@ -34,7 +51,8 @@ final class LegacyPaymentImportService
         private readonly LegacyLoanRepaymentWindowResolver $repaymentWindowResolver,
         private readonly LegacyPaymentClassifierService $classifier,
         private readonly LegacyPaymentLoanAllocator $loanAllocator,
-    ) {}
+    ) {
+    }
 
     /**
      * Repair a classified payments CSV by downgrading unresolvable loan repayments to contributions.
@@ -50,7 +68,7 @@ final class LegacyPaymentImportService
         $reclassified = $this->precheckAndReclassifyUnresolvedRepayments($rows, []);
 
         if ($reclassified > 0) {
-            $this->persistClassifiedRows($absolutePath, $rows);
+            $this->persistImportOutcomeRows($absolutePath, $rows);
         }
 
         return $reclassified;
@@ -61,13 +79,70 @@ final class LegacyPaymentImportService
      *
      * @return array{contributions: int, future_contributions: int, loan_repayments: int, ignored: int, failed: int, reclassified_as_contribution: int, errors: list<string>}
      */
-    public function import(string $absolutePath): array
+    public function import(string $absolutePath, ?string $loansCsvPath = null, ?int $graceCycles = null): array
     {
-        return ContributionService::withoutPostedNotifications(
-            fn (): array => ContributionService::withoutLiveCollectionGuards(
-                fn (): array => $this->importRows($absolutePath),
-            ),
-        );
+        $this->loanIndexForImport = filled($loansCsvPath) && is_readable($loansCsvPath)
+            ? LegacyMigrationCsvLoanIndex::fromPath(
+                $loansCsvPath,
+                $graceCycles ?? LegacyMigrationGraceCycleSettings::graceCycles(),
+            )
+            : null;
+
+        try {
+            return ContributionService::withoutPostedNotifications(
+                fn(): array => ContributionService::withoutLiveCollectionGuards(
+                    fn(): array => $this->importRows($absolutePath),
+                ),
+            );
+        } finally {
+            $this->loanIndexForImport = null;
+        }
+    }
+
+    /**
+     * Simulate payment import after members and loans exist — matches {@see import()} without persisting.
+     *
+     * @return array{
+     *     contributions: int,
+     *     future_contributions: int,
+     *     loan_repayments: int,
+     *     ignored: int,
+     *     failed: int,
+     *     reclassified_as_contribution: int,
+     *     errors: list<string>,
+     *     rows: list<array<string, string>>
+     * }
+     */
+    public function simulateMigrationPayments(string $absolutePath, ?string $loansCsvPath = null, ?int $graceCycles = null): array
+    {
+        $this->simulationMode = true;
+        $this->simulatedOccupiedPeriods = [];
+        $this->simulatedOutputRows = [];
+        $this->loanIndexForImport = filled($loansCsvPath) && is_readable($loansCsvPath)
+            ? LegacyMigrationCsvLoanIndex::fromPath(
+                $loansCsvPath,
+                $graceCycles ?? LegacyMigrationGraceCycleSettings::graceCycles(),
+            )
+            : null;
+
+        try {
+            $result = ContributionService::withoutPostedNotifications(
+                fn(): array => ContributionService::withoutLiveCollectionGuards(
+                    fn(): array => $this->importRows($absolutePath),
+                ),
+            );
+
+            return [
+                ...$result,
+                'rows' => $this->simulatedOutputRows,
+            ];
+        } finally {
+            $this->simulationMode = false;
+            $this->simulatedOccupiedPeriods = [];
+            $this->simulatedOutputRows = [];
+            $this->loanIndexForImport = null;
+            $this->importInstallmentTracker = null;
+        }
     }
 
     /**
@@ -101,13 +176,31 @@ final class LegacyPaymentImportService
         $deferredRows = [];
         /** @var array<string, float> $cumulativeRepaidByLoanKey */
         $cumulativeRepaidByLoanKey = [];
+        $this->importInstallmentTracker = app(LegacyLoanRepaymentInstallmentTracker::class);
         $lineBase = 2;
+
+        $upgradedRows = $this->upgradeMisclassifiedContributionRows($rows, $cumulativeRepaidByLoanKey);
+
+        if ($upgradedRows > 0 && !$this->simulationMode) {
+            $this->persistImportOutcomeRows($absolutePath, $rows);
+        }
 
         foreach ($rows as $index => $row) {
             $lineNumber = $lineBase + $index;
 
             try {
                 $type = strtolower($this->cell($row, 'payment_type'));
+
+                if ($type === '' && $this->simulationMode) {
+                    $deferredRows[] = [
+                        'index' => $index,
+                        'line' => $lineNumber,
+                        'row' => $row,
+                        'type' => '',
+                    ];
+
+                    continue;
+                }
 
                 match ($type) {
                     'ignore', 'skipped', 'skip' => $this->tallyContributionImport(
@@ -141,9 +234,28 @@ final class LegacyPaymentImportService
 
         foreach ($deferredRows as $item) {
             try {
-                if (in_array($item['type'], ['loan_repayment', 'loan', 'repayment'], true)) {
+                $itemType = $item['type'] !== ''
+                    ? $item['type']
+                    : $this->inferPaymentType($item['row'], $cumulativeRepaidByLoanKey);
+
+                if ($itemType === 'contribution') {
+                    $inferred = $this->inferPaymentType($item['row'], $cumulativeRepaidByLoanKey);
+
+                    if ($inferred === 'loan_repayment') {
+                        $itemType = 'loan_repayment';
+                        $rows[$item['index']] = array_merge($item['row'], [
+                            'payment_type' => 'loan_repayment',
+                        ]);
+                        $item['row'] = $rows[$item['index']];
+                    }
+                }
+
+                if (in_array($itemType, ['loan_repayment', 'loan', 'repayment'], true)) {
                     $this->processDeferredLoanRepaymentRow(
-                        $item,
+                        [
+                            ...$item,
+                            'type' => $itemType,
+                        ],
                         $rows,
                         $affectedLoanIds,
                         $cumulativeRepaidByLoanKey,
@@ -167,11 +279,11 @@ final class LegacyPaymentImportService
             }
         }
 
-        if ($reclassifiedAsContribution > 0) {
-            $this->persistClassifiedRows($absolutePath, $rows);
+        if ($reclassifiedAsContribution > 0 && !$this->simulationMode) {
+            $this->persistImportOutcomeRows($absolutePath, $rows);
         }
 
-        if ($affectedLoanIds !== []) {
+        if ($affectedLoanIds !== [] && !$this->simulationMode) {
             $this->scheduleSync->syncLoans($affectedLoanIds);
         }
 
@@ -249,7 +361,7 @@ final class LegacyPaymentImportService
             $reclassifiedAsContribution++;
 
             $this->tallyContributionImport(
-                $this->importContributionRow($reclassifiedRow, $affectedLoanIds, $cumulativeRepaidByLoanKey, $loanRepayments),
+                $this->importContributionRow($reclassifiedRow, $affectedLoanIds, $cumulativeRepaidByLoanKey, $loanRepayments, reclassified: true),
                 $contributions,
                 $futureContributions,
             );
@@ -290,6 +402,7 @@ final class LegacyPaymentImportService
         array &$affectedLoanIds,
         array &$cumulativeRepaidByLoanKey,
         int &$loanRepayments,
+        bool $reclassified = false,
     ): string {
         $email = strtolower($this->cell($row, 'member_email'));
         $number = $this->cell($row, 'member_number');
@@ -305,7 +418,7 @@ final class LegacyPaymentImportService
 
         $postedAt = $this->parseOptionalDateTime($paymentDate) ?? BusinessDay::now();
         $baseNotes = $this->cell($row, 'notes') ?: __('Legacy migration contribution');
-        $allocation = $this->loanAllocator->allocate($member, $amount, $postedAt, $cumulativeRepaidByLoanKey);
+        $allocation = $this->allocateForImport($member, $amount, $postedAt, $cumulativeRepaidByLoanKey);
 
         if ($allocation['repayment_amount'] > 0.00001 && $allocation['loan'] !== null) {
             $this->postAllocatedLoanRepayment(
@@ -317,12 +430,28 @@ final class LegacyPaymentImportService
                 $cumulativeRepaidByLoanKey,
             );
             $loanRepayments++;
+
         }
 
         if ($this->legacyImportRowAlreadyPosted($member, $row)) {
-            return $this->legacyImportRowWasFutureContribution($member, $row)
+            if (
+                !$this->simulationMode
+                && $allocation['contribution_amount'] <= 0.00001
+                && $allocation['repayment_amount'] > 0.00001
+                && $allocation['loan'] !== null
+            ) {
+                $this->reverseMisroutedContributionForRow($member, $row);
+            }
+
+            $outcome = $this->legacyImportRowWasFutureContribution($member, $row)
                 ? 'future_contribution'
                 : 'contribution';
+
+            if ($this->simulationMode) {
+                $this->recordSimulatedOutputRow($member, $row, $outcome);
+            }
+
+            return $outcome;
         }
 
         $amount = $allocation['contribution_amount'];
@@ -333,7 +462,7 @@ final class LegacyPaymentImportService
 
         [$month, $year] = $this->resolveContributionPeriod($periodRaw, $paymentDate);
 
-        if (! Contribution::memberPeriodRecordExists((int) $member->id, $month, $year)) {
+        if (!$this->memberPeriodOccupied((int) $member->id, $month, $year)) {
             $this->postLegacyContribution(
                 $member,
                 $month,
@@ -343,17 +472,27 @@ final class LegacyPaymentImportService
                 $this->appendLegacyImportFingerprint($baseNotes, $row),
             );
 
+            if ($this->simulationMode) {
+                $this->recordSimulatedOutputRow(
+                    $member,
+                    $row,
+                    $reclassified ? 'reclassified_contribution' : 'contribution',
+                    amount: $amount,
+                    period: sprintf('%04d-%02d', $year, $month),
+                );
+            }
+
             return 'contribution';
         }
 
-        if ($this->legacyContributionRowAlreadyImported($member, $month, $year, $amount, $postedAt)) {
+        if (!$this->simulationMode && $this->legacyContributionRowAlreadyImported($member, $month, $year, $amount, $postedAt)) {
             return 'contribution';
         }
 
         $periodLabel = Carbon::create($year, $month, 1)->format('M Y');
         [$futureMonth, $futureYear] = $this->findNextAvailableContributionPeriod($member, $month, $year);
         $futureNotes = $this->appendLegacyImportFingerprint(
-            '[legacy-routed] '.__('Routed from :period — :notes', [
+            '[legacy-routed] ' . __('Routed from :period — :notes', [
                 'period' => $periodLabel,
                 'notes' => $baseNotes,
             ]),
@@ -368,6 +507,21 @@ final class LegacyPaymentImportService
             $postedAt,
             $futureNotes,
         );
+
+        if ($this->simulationMode) {
+            $futureRow = array_merge($row, [
+                'amount' => (string) round($amount, 2),
+                'period' => sprintf('%04d-%02d', $futureYear, $futureMonth),
+                'notes' => $futureNotes,
+            ]);
+            $this->recordSimulatedOutputRow(
+                $member,
+                $futureRow,
+                $reclassified ? 'reclassified_contribution' : 'future_contribution',
+                amount: $amount,
+                period: sprintf('%04d-%02d', $futureYear, $futureMonth),
+            );
+        }
 
         return 'future_contribution';
     }
@@ -411,7 +565,7 @@ final class LegacyPaymentImportService
             $month = (int) $cursor->month;
             $year = (int) $cursor->year;
 
-            if (! Contribution::memberPeriodRecordExists((int) $member->id, $month, $year)) {
+            if (!$this->memberPeriodOccupied((int) $member->id, $month, $year)) {
                 return [$month, $year];
             }
 
@@ -431,6 +585,12 @@ final class LegacyPaymentImportService
         Carbon $postedAt,
         string $notes,
     ): void {
+        if ($this->simulationMode) {
+            $this->simulatedOccupiedPeriods[$this->periodKey((int) $member->id, $month, $year)] = true;
+
+            return;
+        }
+
         DB::transaction(function () use ($member, $month, $year, $amount, $postedAt, $notes): void {
             $contribution = Contribution::query()->create([
                 'member_id' => $member->id,
@@ -488,6 +648,103 @@ final class LegacyPaymentImportService
 
     /**
      * @param  array<int, array<string, string>>  $rows
+     * @param  array<string, float>  $cumulativeRepaidByLoanKey
+     */
+    private function upgradeMisclassifiedContributionRows(array &$rows, array &$cumulativeRepaidByLoanKey): int
+    {
+        $upgraded = 0;
+        /** @var list<array{index: int, row: array<string, string>}> $contributionRows */
+        $contributionRows = [];
+
+        foreach ($rows as $index => $row) {
+            $type = strtolower($this->cell($row, 'payment_type'));
+
+            if ($type !== 'contribution') {
+                continue;
+            }
+
+            $contributionRows[] = [
+                'index' => $index,
+                'row' => $row,
+            ];
+        }
+
+        usort($contributionRows, function (array $left, array $right): int {
+            $leftDate = $this->parseOptionalDateTime($this->cell($left['row'], 'payment_date')) ?? Carbon::minValue();
+            $rightDate = $this->parseOptionalDateTime($this->cell($right['row'], 'payment_date')) ?? Carbon::minValue();
+
+            $comparison = $leftDate->timestamp <=> $rightDate->timestamp;
+
+            return $comparison !== 0 ? $comparison : ($left['index'] <=> $right['index']);
+        });
+
+        foreach ($contributionRows as $item) {
+            $row = $item['row'];
+            $email = strtolower($this->cell($row, 'member_email'));
+            $number = $this->cell($row, 'member_number');
+            $member = $this->resolveMemberForImportRow($email, $number);
+
+            if ($member === null) {
+                continue;
+            }
+
+            $amount = $this->parseMoney($this->cell($row, 'amount'), 'amount');
+            $paidAt = $this->parseOptionalDateTime($this->cell($row, 'payment_date')) ?? BusinessDay::now();
+            $allocation = $this->allocateForImport($member, $amount, $paidAt, $cumulativeRepaidByLoanKey);
+
+            if ($allocation['repayment_amount'] <= 0.00001 || ($allocation['loan'] === null && ($allocation['window']?->loanId ?? null) === null)) {
+                continue;
+            }
+
+            $loanNumber = $allocation['loan'] !== null
+                ? (string) $allocation['loan']->id
+                : (string) ($allocation['window']?->loanId ?? '');
+
+            $rows[$item['index']] = array_merge($row, [
+                'payment_type' => 'loan_repayment',
+                'loan_number' => $loanNumber,
+                'period' => '',
+            ]);
+            $this->reverseMisroutedContributionsForUpgradedRow($member, $paidAt, $amount);
+            $upgraded++;
+
+            if ($allocation['loan'] !== null) {
+                $this->repaymentWindowResolver->recordRepayment(
+                    $allocation['loan'],
+                    $member,
+                    $allocation['repayment_amount'],
+                    $cumulativeRepaidByLoanKey,
+                );
+            } elseif ($allocation['window'] !== null) {
+                $cumulativeRepaidByLoanKey[$allocation['window']->loanKey] = round(
+                    ($cumulativeRepaidByLoanKey[$allocation['window']->loanKey] ?? 0.0) + $allocation['repayment_amount'],
+                    2,
+                );
+            }
+        }
+
+        return $upgraded;
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     */
+    private function reverseMisroutedContributionForRow(Member $member, array $row): void
+    {
+        $contribution = Contribution::query()
+            ->where('member_id', $member->id)
+            ->where('notes', 'like', '%' . $this->legacyImportFingerprint($row) . '%')
+            ->first();
+
+        if ($contribution === null) {
+            return;
+        }
+
+        $this->contributions->reverseImportedContributionForMigrationRepair($contribution);
+    }
+
+    /**
+     * @param  array<int, array<string, string>>  $rows
      */
     private function precheckAndReclassifyUnresolvedRepayments(array &$rows, array $cumulativeRepaidByLoanKey): int
     {
@@ -498,7 +755,7 @@ final class LegacyPaymentImportService
         foreach ($rows as $index => $row) {
             $type = strtolower($this->cell($row, 'payment_type'));
 
-            if (! in_array($type, ['loan_repayment', 'loan', 'repayment'], true)) {
+            if (!in_array($type, ['loan_repayment', 'loan', 'repayment'], true)) {
                 continue;
             }
 
@@ -529,7 +786,7 @@ final class LegacyPaymentImportService
 
             $amount = $this->parseMoney($this->cell($row, 'amount'), 'amount');
             $paidAt = $this->parseOptionalDateTime($this->cell($row, 'payment_date')) ?? BusinessDay::now();
-            $allocation = $this->loanAllocator->allocate($member, $amount, $paidAt, $cumulativeRepaidByLoanKey);
+            $allocation = $this->allocateForImport($member, $amount, $paidAt, $cumulativeRepaidByLoanKey);
 
             if ($allocation['repayment_amount'] > 0.00001 && $allocation['loan'] !== null) {
                 $this->repaymentWindowResolver->recordRepayment(
@@ -573,34 +830,110 @@ final class LegacyPaymentImportService
             throw new InvalidArgumentException(__('Member not found for loan repayment row.'));
         }
 
-        $allocation = $this->loanAllocator->allocate($member, $amount, $paidAt, $cumulativeRepaidByLoanKey);
+        $explicitLoan = $this->resolveExplicitLoan($row);
 
-        if ($allocation['repayment_amount'] <= 0.00001 || $allocation['loan'] === null) {
-            return 'no_loan';
+        $allocation = $this->allocateForImport($member, $amount, $paidAt, $cumulativeRepaidByLoanKey);
+
+        if ($allocation['repayment_amount'] > 0.00001) {
+            $loan = $allocation['loan'] ?? $explicitLoan;
+
+            if ($loan === null && ($allocation['window']?->loanId ?? null) !== null) {
+                $loan = Loan::query()->find((int) $allocation['window']->loanId);
+            }
+
+            if ($loan === null) {
+                return 'no_loan';
+            }
+
+            if ((int) $loan->member_id !== (int) $member->id) {
+                return 'no_loan';
+            }
+
+            if (!in_array($loan->status, ['active', 'transferred', 'completed', 'early_settled'], true)) {
+                throw new InvalidArgumentException(__('Loan must be active or settled to receive imported repayments.'));
+            }
+
+            $this->reverseMisroutedContributionsForUpgradedRow($member, $paidAt, $allocation['repayment_amount']);
+
+            $this->postAllocatedLoanRepayment(
+                $loan,
+                $allocation['repayment_amount'],
+                $paidAt,
+                $notes,
+                $affectedLoanIds,
+                $cumulativeRepaidByLoanKey,
+            );
+
+            $contributionRemainder = $allocation['contribution_amount'];
+
+            if ($contributionRemainder > 0.00001) {
+                return 'split';
+            }
+
+            return 'repayment';
         }
 
-        $loan = $allocation['loan'];
+        if ($explicitLoan !== null) {
+            if ((int) $explicitLoan->member_id !== (int) $member->id) {
+                return 'no_loan';
+            }
 
-        if (! in_array($loan->status, ['active', 'transferred', 'completed', 'early_settled'], true)) {
-            throw new InvalidArgumentException(__('Loan must be active or settled to receive imported repayments.'));
+            if (!in_array($explicitLoan->status, ['active', 'transferred', 'completed', 'early_settled'], true)) {
+                throw new InvalidArgumentException(__('Loan must be active or settled to receive imported repayments.'));
+            }
+
+            $this->reverseMisroutedContributionsForUpgradedRow($member, $paidAt, $amount);
+
+            $window = $this->repaymentWindowResolver->windowForLoan($member, $explicitLoan);
+            $this->importInstallmentTracker?->registerWindow($window);
+            $cumulative = $cumulativeRepaidByLoanKey[$window->loanKey] ?? 0.0;
+            $scheduleCapacity = $this->importInstallmentTracker?->remainingScheduleCapacity($window->loanKey) ?? $amount;
+            $repaymentAmount = round(min(
+                $amount,
+                $window->remainingRepayment($cumulative),
+                $scheduleCapacity,
+            ), 2);
+
+            if ($repaymentAmount <= 0.00001) {
+                $contributionRemainder = $amount;
+
+                return 'no_loan';
+            }
+
+            if ($this->legacyLoanRepaymentAlreadyImported($explicitLoan, $repaymentAmount, $paidAt)) {
+                $this->repaymentWindowResolver->recordRepayment(
+                    $explicitLoan,
+                    $member,
+                    $repaymentAmount,
+                    $cumulativeRepaidByLoanKey,
+                );
+                $this->importInstallmentTracker?->applyRepayment($window->loanKey, $repaymentAmount);
+
+                $contributionRemainder = round(max(0.0, $amount - $repaymentAmount), 2);
+
+                return $contributionRemainder > 0.00001 ? 'split' : 'repayment';
+            }
+
+            $this->postAllocatedLoanRepayment(
+                $explicitLoan,
+                $repaymentAmount,
+                $paidAt,
+                $notes,
+                $affectedLoanIds,
+                $cumulativeRepaidByLoanKey,
+            );
+            $this->importInstallmentTracker?->applyRepayment($window->loanKey, $repaymentAmount);
+
+            $contributionRemainder = round(max(0.0, $amount - $repaymentAmount), 2);
+
+            if ($contributionRemainder > 0.00001) {
+                return 'split';
+            }
+
+            return 'repayment';
         }
 
-        $this->postAllocatedLoanRepayment(
-            $loan,
-            $allocation['repayment_amount'],
-            $paidAt,
-            $notes,
-            $affectedLoanIds,
-            $cumulativeRepaidByLoanKey,
-        );
-
-        $contributionRemainder = $allocation['contribution_amount'];
-
-        if ($contributionRemainder > 0.00001) {
-            return 'split';
-        }
-
-        return 'repayment';
+        return 'no_loan';
     }
 
     /**
@@ -615,6 +948,28 @@ final class LegacyPaymentImportService
         array &$affectedLoanIds,
         array &$cumulativeRepaidByLoanKey,
     ): void {
+        if ($this->simulationMode) {
+            $this->repaymentWindowResolver->recordRepayment($loan, $loan->member, $amount, $cumulativeRepaidByLoanKey);
+            $this->recordSimulatedOutputRow(
+                $loan->member,
+                [
+                    'member_email' => (string) $loan->member->email,
+                    'member_number' => (string) $loan->member->member_number,
+                    'payment_date' => $paidAt->toDateString(),
+                    'amount' => (string) round($amount, 2),
+                    'payment_type' => 'loan_repayment',
+                    'loan_number' => (string) $loan->id,
+                    'period' => '',
+                    'notes' => $notes,
+                ],
+                'loan_repayment',
+                loan: $loan,
+                amount: $amount,
+            );
+
+            return;
+        }
+
         if ($this->legacyLoanRepaymentAlreadyImported($loan, $amount, $paidAt)) {
             $this->repaymentWindowResolver->recordRepayment($loan, $loan->member, $amount, $cumulativeRepaidByLoanKey);
 
@@ -636,6 +991,32 @@ final class LegacyPaymentImportService
         $affectedLoanIds[] = $loan->id;
     }
 
+    private function reverseMisroutedContributionsForUpgradedRow(Member $member, Carbon $paidAt, float $amount): void
+    {
+        if ($this->simulationMode) {
+            return;
+        }
+
+        $targetAmount = round($amount, 2);
+
+        Contribution::query()
+            ->where('member_id', $member->id)
+            ->where('status', 'posted')
+            ->where(function ($query) use ($paidAt): void {
+                $query->whereDate('posted_at', $paidAt->toDateString())
+                    ->orWhereDate('paid_at', $paidAt->toDateString());
+            })
+            ->whereRaw('ABS(amount - ?) < ?', [$targetAmount, 0.02])
+            ->where(function ($query): void {
+                $query->where('notes', 'like', '%legacy-import%')
+                    ->orWhere('notes', 'like', '%legacy-routed%');
+            })
+            ->get()
+            ->each(function (Contribution $contribution): void {
+                $this->contributions->reverseImportedContributionForMigrationRepair($contribution);
+            });
+    }
+
     /**
      * @param  array<string, string>  $row
      */
@@ -643,7 +1024,7 @@ final class LegacyPaymentImportService
     {
         $loanNumber = $this->cell($row, 'loan_number') ?: $this->cell($row, 'suggested_loan_number');
 
-        if ($loanNumber === '' || ! is_numeric($loanNumber)) {
+        if ($loanNumber === '' || !is_numeric($loanNumber)) {
             return null;
         }
 
@@ -681,9 +1062,41 @@ final class LegacyPaymentImportService
     /**
      * @param  array<int, array<string, string>>  $rows
      */
-    private function persistClassifiedRows(string $absolutePath, array $rows): void
+    private function persistImportOutcomeRows(string $absolutePath, array $rows): void
     {
-        $normalized = array_map(fn (array $row): array => [
+        if (self::isCanonicalClassifiedPaymentsPath($absolutePath)) {
+            return;
+        }
+
+        $this->writeNormalizedImportRows($absolutePath, $rows);
+    }
+
+    public static function isCanonicalClassifiedPaymentsPath(string $absolutePath): bool
+    {
+        $canonicalPath = LegacyPaymentClassifierService::classifiedPaymentsAbsolutePath();
+
+        if ($canonicalPath === null) {
+            return false;
+        }
+
+        if ($absolutePath === $canonicalPath) {
+            return true;
+        }
+
+        $resolvedCanonical = realpath($canonicalPath);
+        $resolvedPath = realpath($absolutePath);
+
+        return $resolvedCanonical !== false
+            && $resolvedPath !== false
+            && $resolvedCanonical === $resolvedPath;
+    }
+
+    /**
+     * @param  array<int, array<string, string>>  $rows
+     */
+    private function writeNormalizedImportRows(string $absolutePath, array $rows): void
+    {
+        $normalized = array_map(fn(array $row): array => [
             'member_email' => $this->cell($row, 'member_email'),
             'member_number' => $this->cell($row, 'member_number'),
             'payment_date' => $this->cell($row, 'payment_date'),
@@ -691,16 +1104,23 @@ final class LegacyPaymentImportService
             'payment_type' => $this->cell($row, 'payment_type'),
             'loan_number' => $this->cell($row, 'loan_number') ?: $this->cell($row, 'suggested_loan_number'),
             'period' => $this->cell($row, 'period'),
+            'migration_outcome' => in_array(strtolower($this->cell($row, 'payment_type')), ['loan_repayment', 'loan', 'repayment'], true)
+                ? 'loan_repayment'
+                : 'contribution',
             'notes' => $this->cell($row, 'notes'),
         ], array_values($rows));
 
         $this->classifier->writeClassifiedCsv($absolutePath, $normalized);
+    }
 
-        $canonicalPath = LegacyPaymentClassifierService::classifiedPaymentsAbsolutePath();
-
-        if ($canonicalPath !== null && $canonicalPath !== $absolutePath) {
-            $this->classifier->writeClassifiedCsv($canonicalPath, $normalized);
-        }
+    /**
+     * @deprecated Use {@see persistImportOutcomeRows()} — kept for non-canonical test fixtures only.
+     *
+     * @param  array<int, array<string, string>>  $rows
+     */
+    private function persistClassifiedRows(string $absolutePath, array $rows): void
+    {
+        $this->persistImportOutcomeRows($absolutePath, $rows);
     }
 
     /**
@@ -713,7 +1133,7 @@ final class LegacyPaymentImportService
 
     private function parseMoney(string $value, string $column): float
     {
-        if ($value === '' || ! is_numeric($value)) {
+        if ($value === '' || !is_numeric($value)) {
             throw new InvalidArgumentException("{$column} must be numeric.");
         }
 
@@ -747,6 +1167,10 @@ final class LegacyPaymentImportService
 
     private function legacyLoanRepaymentAlreadyImported(Loan $loan, float $amount, Carbon $paidAt): bool
     {
+        if ($this->simulationMode) {
+            return false;
+        }
+
         return LoanRepayment::query()
             ->where('loan_id', $loan->id)
             ->where('amount', $amount)
@@ -779,9 +1203,13 @@ final class LegacyPaymentImportService
      */
     private function legacyImportRowAlreadyPosted(Member $member, array $row): bool
     {
+        if ($this->simulationMode) {
+            return false;
+        }
+
         return Contribution::query()
             ->where('member_id', $member->id)
-            ->where('notes', 'like', '%'.$this->legacyImportFingerprint($row).'%')
+            ->where('notes', 'like', '%' . $this->legacyImportFingerprint($row) . '%')
             ->exists();
     }
 
@@ -792,7 +1220,7 @@ final class LegacyPaymentImportService
     {
         return Contribution::query()
             ->where('member_id', $member->id)
-            ->where('notes', 'like', '%'.$this->legacyImportFingerprint($row).'%')
+            ->where('notes', 'like', '%' . $this->legacyImportFingerprint($row) . '%')
             ->where('notes', 'like', '%legacy-routed%')
             ->exists();
     }
@@ -802,7 +1230,7 @@ final class LegacyPaymentImportService
      */
     private function appendLegacyImportFingerprint(string $notes, array $row): string
     {
-        return $notes.' ['.$this->legacyImportFingerprint($row).']';
+        return $notes . ' [' . $this->legacyImportFingerprint($row) . ']';
     }
 
     /**
@@ -810,7 +1238,7 @@ final class LegacyPaymentImportService
      */
     private function legacyImportFingerprint(array $row): string
     {
-        return 'legacy-import:'.implode('|', [
+        return 'legacy-import:' . implode('|', [
             $this->cell($row, 'member_number'),
             $this->cell($row, 'member_email'),
             $this->cell($row, 'payment_date'),
@@ -871,6 +1299,118 @@ final class LegacyPaymentImportService
         Carbon $postedAt,
         string $notes,
     ): void {
+        if ($this->memberPeriodOccupied((int) $member->id, $month, $year)) {
+            [$month, $year] = $this->findNextAvailableContributionPeriod($member, $month, $year);
+            $periodLabel = Carbon::create($year, $month, 1)->subMonthNoOverflow()->format('M Y');
+            $notes = '[legacy-routed] ' . __('Routed from :period — :notes', [
+                'period' => $periodLabel,
+                'notes' => $notes,
+            ]);
+        }
+
         $this->postLegacyContribution($member, $month, $year, $amount, $postedAt, $notes);
+    }
+
+    /**
+     * @param  array<string, float>  $cumulativeRepaidByLoanKey
+     */
+    private function inferPaymentType(array $row, array $cumulativeRepaidByLoanKey): string
+    {
+        $explicit = strtolower($this->cell($row, 'payment_type'));
+
+        if ($explicit !== '') {
+            return $explicit;
+        }
+
+        $email = strtolower($this->cell($row, 'member_email'));
+        $number = $this->cell($row, 'member_number');
+        $member = $this->resolveMemberForImportRow($email, $number);
+
+        if ($member === null) {
+            throw new InvalidArgumentException(__('Member not found for payment row.'));
+        }
+
+        $amount = $this->parseMoney($this->cell($row, 'amount'), 'amount');
+        $paidAt = $this->parseOptionalDateTime($this->cell($row, 'payment_date')) ?? BusinessDay::now();
+        $allocation = $this->allocateForImport($member, $amount, $paidAt, $cumulativeRepaidByLoanKey);
+
+        return $allocation['repayment_amount'] > 0.00001 ? 'loan_repayment' : 'contribution';
+    }
+
+    /**
+     * @param  array<string, float>  $cumulativeRepaidByLoanKey
+     * @return array{loan: ?Loan, repayment_amount: float, contribution_amount: float, window: ?LegacyLoanRepaymentWindow}
+     */
+    private function allocateForImport(
+        Member $member,
+        float $amount,
+        Carbon $paidAt,
+        array &$cumulativeRepaidByLoanKey,
+    ): array {
+        return $this->loanAllocator->allocate(
+            $member,
+            $amount,
+            $paidAt,
+            $cumulativeRepaidByLoanKey,
+            $this->loanIndexForImport,
+            $this->importInstallmentTracker,
+        );
+    }
+
+    private function memberPeriodOccupied(int $memberId, int $month, int $year): bool
+    {
+        if ($this->simulationMode) {
+            return isset($this->simulatedOccupiedPeriods[$this->periodKey($memberId, $month, $year)]);
+        }
+
+        return Contribution::memberPeriodRecordExists($memberId, $month, $year);
+    }
+
+    private function periodKey(int $memberId, int $month, int $year): string
+    {
+        return "{$memberId}:{$year}-" . str_pad((string) $month, 2, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     */
+    private function recordSimulatedOutputRow(
+        Member $member,
+        array $row,
+        string $migrationOutcome,
+        ?Loan $loan = null,
+        ?float $amount = null,
+        ?string $period = null,
+    ): void {
+        $paymentType = $migrationOutcome === 'loan_repayment' ? 'loan_repayment' : 'contribution';
+        $resolvedAmount = $amount ?? $this->parseMoney($this->cell($row, 'amount'), 'amount');
+        $paymentDate = $this->cell($row, 'payment_date');
+
+        if ($paymentDate === '') {
+            $paymentDate = BusinessDay::now()->toDateString();
+        } elseif ($this->parseOptionalDateTime($paymentDate) !== null) {
+            $paymentDate = $this->parseOptionalDateTime($paymentDate)->toDateString();
+        }
+
+        $resolvedPeriod = $period ?? $this->cell($row, 'period');
+
+        if ($resolvedPeriod === '' && $paymentType === 'contribution' && $paymentDate !== '') {
+            $resolvedPeriod = ($this->parseOptionalDateTime($paymentDate) ?? BusinessDay::now())
+                ->copy()
+                ->startOfMonth()
+                ->format('Y-m');
+        }
+
+        $this->simulatedOutputRows[] = [
+            'member_email' => (string) $member->email,
+            'member_number' => (string) $member->member_number,
+            'payment_date' => $paymentDate,
+            'amount' => (string) round($resolvedAmount, 2),
+            'payment_type' => $paymentType,
+            'loan_number' => $loan !== null ? (string) $loan->id : $this->cell($row, 'loan_number'),
+            'period' => $resolvedPeriod,
+            'migration_outcome' => $migrationOutcome,
+            'notes' => $this->cell($row, 'notes'),
+        ];
     }
 }

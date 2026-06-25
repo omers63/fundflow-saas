@@ -18,23 +18,28 @@ class LegacyRepairMisclassifiedContributionsCommand extends Command
 
     protected $signature = 'legacy:repair-misclassified-contributions
         {--member= : Member number or database id to repair}
-        {--delinquent : Repair all delinquent members}';
+        {--delinquent : Repair all delinquent members}
+        {--legacy-routed : Repair all members with legacy-routed contribution rows}';
 
-    protected $description = 'Convert legacy contributions that should have been loan repayments (monthly amount below tier EMI at cycle start)';
+    protected $description = 'Convert legacy contributions that should have been loan repayments';
 
     public function handle(LegacyMisclassifiedContributionRepairService $service): int
     {
-        $members = $this->resolveMembers();
+        if ($this->option('legacy-routed')) {
+            $this->info(__('Repairing members with legacy-routed contributions…'));
+            $totals = $service->repairMembersWithLegacyRoutedContributions();
+        } else {
+            $members = $this->resolveMembers();
 
-        if ($members->isEmpty()) {
-            $this->error(__('Pass --member=<number|id> or --delinquent.'));
+            if ($members->isEmpty()) {
+                $this->error(__('Pass --member=<number|id>, --delinquent, or --legacy-routed.'));
 
-            return self::FAILURE;
+                return self::FAILURE;
+            }
+
+            $this->info(__('Repairing :count member(s)…', ['count' => $members->count()]));
+            $totals = $service->repairMembers($members);
         }
-
-        $this->info(__('Repairing :count member(s)…', ['count' => $members->count()]));
-
-        $totals = $service->repairMembers($members);
 
         $this->table(
             ['Metric', 'Count'],

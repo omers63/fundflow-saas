@@ -1,0 +1,2 @@
+member_email,member_number,payment_date,amount,payment_type,loan_number,period,migration_outcome,notes
+,LEG-CONTRIB-REPAY,2017-07-02,2000,contribution,,2017-07,contribution,"Already imported contribution"

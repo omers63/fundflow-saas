@@ -27,6 +27,8 @@ beforeEach(function () {
 });
 
 test('classify legacy payments job writes classified csv and stores stats', function () {
+    $this->actingAs($this->admin, 'tenant');
+
     $membersPath = storage_path('app/classify-job-members.csv');
     $loansPath = storage_path('app/classify-job-loans.csv');
     $paymentsPath = storage_path('app/classify-job-payments.csv');
@@ -39,16 +41,17 @@ test('classify legacy payments job writes classified csv and stores stats', func
         ['1', '2025-10-01', '1000'],
     ]);
 
-    ClassifyLegacyPaymentsJob::dispatchSync(
-        $paymentsPath,
-        '2025-12-31',
-        $membersPath,
-        $loansPath,
-        $this->admin->id,
-    );
+    ClassifyLegacyPaymentsJob::dispatchSync([
+        'cutoff_date' => '2025-12-31',
+        'default_password' => 'password12345',
+        'members_path' => $membersPath,
+        'loans_path' => $loansPath,
+        'payments_path' => $paymentsPath,
+        'strategy' => 'historical',
+    ], $this->admin->id);
 
     expect(Setting::get('legacy_migration', 'classify_status'))->toBe('completed')
-        ->and(json_decode((string) Setting::get('legacy_migration', 'classify_stats'), true)['contribution'] ?? 0)->toBe(1);
+        ->and(json_decode((string) Setting::get('legacy_migration', 'classify_stats'), true)['contributions'] ?? 0)->toBe(1);
 
     expect(file_exists(storage_path('app/'.LegacyPaymentClassifierService::CLASSIFIED_PAYMENTS_DISK_PATH)))->toBeTrue();
 

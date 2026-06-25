@@ -119,6 +119,49 @@ function writeLoanImportCsv(string $contents): string
     return $path;
 }
 
+test('loan import preserves legacy loan_id from csv when provided', function () {
+    $member = createLoanImportMember($this->accounting, 'legacy-loan-id-import@example.test');
+    $legacyLoanId = 77_881;
+
+    $csv = <<<CSV
+loan_status,member_email,amount_approved,member_portion,master_portion,disbursed_at,installments_count,loan_id
+active,{$member->email},10000,4000,6000,2024-06-01,10,{$legacyLoanId}
+CSV;
+
+    $path = writeLoanImportCsv($csv);
+    $result = app(LoanImportService::class)->import($path);
+
+    expect($result)->toMatchArray(['created' => 1, 'failed' => 0]);
+
+    $loan = Loan::query()->find($legacyLoanId);
+
+    expect($loan)->not->toBeNull()
+        ->and($loan->member_id)->toBe($member->id)
+        ->and($loan->disbursed_at?->toDateString())->toBe('2024-06-01');
+
+    @unlink($path);
+});
+
+test('loan import with multiple legacy loan ids completes without transaction errors', function () {
+    $firstMember = createLoanImportMember($this->accounting, 'legacy-batch-a@example.test');
+    $secondMember = createLoanImportMember($this->accounting, 'legacy-batch-b@example.test');
+
+    $csv = <<<CSV
+loan_status,member_email,amount_approved,member_portion,master_portion,disbursed_at,installments_count,loan_id
+active,{$firstMember->email},10000,4000,6000,2024-06-01,10,94
+active,{$secondMember->email},12000,5000,7000,2024-07-01,12,95
+CSV;
+
+    $path = writeLoanImportCsv($csv);
+    $result = app(LoanImportService::class)->import($path);
+
+    expect($result)->toMatchArray(['created' => 2, 'failed' => 0])
+        ->and(Loan::query()->find(94))->not->toBeNull()
+        ->and(Loan::query()->find(95))->not->toBeNull();
+
+    @unlink($path);
+});
+
 test('loan import creates pending loan from csv row', function () {
     $member = createLoanImportMember($this->accounting, 'pending-import@example.test');
 

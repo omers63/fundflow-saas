@@ -5,6 +5,7 @@ namespace App\Models\Tenant;
 use App\Filament\Support\MoneyDisplay;
 use App\Services\LoanService;
 use App\Services\MemberMonthlyAllocationService;
+use App\Support\MemberMembershipPolicy;
 use App\Support\MemberNumberSettings;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -22,10 +23,10 @@ class Member extends Model
     public const CONTRIBUTION_STEPS = [500, 1000, 1500, 2000, 2500, 3000];
 
     /** @var list<string> */
-    public const STATUSES = ['active', 'suspended', 'withdrawn', 'delinquent', 'terminated'];
+    public const STATUSES = ['active', 'inactive', 'delinquent', 'suspended', 'withdrawn', 'terminated'];
 
     /** @var list<string> */
-    public const PORTAL_BLOCKED_STATUSES = ['suspended', 'withdrawn', 'delinquent', 'terminated'];
+    public const PORTAL_BLOCKED_STATUSES = MemberMembershipPolicy::PORTAL_BLOCKED_STATUSES;
 
     protected $fillable = [
         'user_id',
@@ -45,6 +46,10 @@ class Member extends Model
         'opening_fund_balance',
         'opening_balances_posted_at',
         'status',
+        'contribution_cycles_active',
+        'payout_frozen_at',
+        'status_reason',
+        'status_changed_at',
     ];
 
     protected function casts(): array
@@ -56,6 +61,9 @@ class Member extends Model
             'opening_cash_balance' => 'decimal:2',
             'opening_fund_balance' => 'decimal:2',
             'opening_balances_posted_at' => 'datetime',
+            'contribution_cycles_active' => 'boolean',
+            'payout_frozen_at' => 'datetime',
+            'status_changed_at' => 'datetime',
             'is_separated' => 'boolean',
             'direct_login_enabled' => 'boolean',
         ];
@@ -192,6 +200,19 @@ class Member extends Model
         return $query->where('status', 'active');
     }
 
+    public function scopeContributionCycleEligible($query)
+    {
+        return $query
+            ->where('monthly_contribution_amount', '>', 0)
+            ->where(function ($query): void {
+                $query->whereIn('status', ['active', 'delinquent'])
+                    ->orWhere(function ($inner): void {
+                        $inner->where('status', 'suspended')
+                            ->where('contribution_cycles_active', true);
+                    });
+            });
+    }
+
     public function scopeActiveWithZeroCash($query)
     {
         return $query
@@ -271,6 +292,7 @@ class Member extends Model
     {
         return [
             'active' => __('Active'),
+            'inactive' => __('Inactive'),
             'suspended' => __('Suspended'),
             'withdrawn' => __('Withdrawn'),
             'delinquent' => __('Delinquent'),
@@ -282,6 +304,7 @@ class Member extends Model
     {
         return match ($state) {
             'active' => 'success',
+            'inactive' => 'gray',
             'suspended' => 'warning',
             'withdrawn', 'delinquent', 'terminated' => 'danger',
             default => 'gray',
@@ -291,6 +314,7 @@ class Member extends Model
     public static function portalBlockedSessionKey(string $status): string
     {
         return match ($status) {
+            'inactive' => 'member_inactive_notice',
             'withdrawn' => 'member_withdrawn_notice',
             'delinquent' => 'member_delinquent_notice',
             'terminated' => 'member_terminated_notice',
