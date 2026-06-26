@@ -14,6 +14,7 @@ use App\Services\Loans\LoanLedgerService;
 use App\Support\AssociativeCsv;
 use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
+use App\Support\LegacyImportedLoan;
 use App\Support\LegacyMigrationDateParser;
 use App\Support\LegacyMigrationGraceCycleSettings;
 use Carbon\Carbon;
@@ -89,9 +90,11 @@ final class LegacyPaymentImportService
             : null;
 
         try {
-            return ContributionService::withoutPostedNotifications(
-                fn(): array => ContributionService::withoutLiveCollectionGuards(
-                    fn(): array => $this->importRows($absolutePath),
+            return AccountingService::withoutMemberCashCollection(
+                fn(): array => ContributionService::withoutPostedNotifications(
+                    fn(): array => ContributionService::withoutLiveCollectionGuards(
+                        fn(): array => $this->importRows($absolutePath),
+                    ),
                 ),
             );
         } finally {
@@ -126,9 +129,11 @@ final class LegacyPaymentImportService
             : null;
 
         try {
-            $result = ContributionService::withoutPostedNotifications(
-                fn(): array => ContributionService::withoutLiveCollectionGuards(
-                    fn(): array => $this->importRows($absolutePath),
+            $result = AccountingService::withoutMemberCashCollection(
+                fn(): array => ContributionService::withoutPostedNotifications(
+                    fn(): array => ContributionService::withoutLiveCollectionGuards(
+                        fn(): array => $this->importRows($absolutePath),
+                    ),
                 ),
             );
 
@@ -285,6 +290,7 @@ final class LegacyPaymentImportService
 
         if ($affectedLoanIds !== [] && !$this->simulationMode) {
             $this->scheduleSync->syncLoans($affectedLoanIds);
+            $this->waiveLateFeesOnImportedLoans($affectedLoanIds);
         }
 
         return [
@@ -822,7 +828,10 @@ final class LegacyPaymentImportService
         $number = $this->cell($row, 'member_number');
         $amount = $this->parseMoney($this->cell($row, 'amount'), 'amount');
         $paidAt = $this->parseOptionalDateTime($this->cell($row, 'payment_date')) ?? BusinessDay::now();
-        $notes = $this->cell($row, 'notes') ?: __('Legacy migration loan repayment');
+        $notes = $this->appendLegacyImportFingerprint(
+            $this->cell($row, 'notes') ?: __('Legacy migration loan repayment'),
+            $row,
+        );
 
         $member = $this->resolveMemberForImportRow($email, $number);
 
@@ -1412,5 +1421,19 @@ final class LegacyPaymentImportService
             'migration_outcome' => $migrationOutcome,
             'notes' => $this->cell($row, 'notes'),
         ];
+    }
+
+    /**
+     * @param  list<int>  $loanIds
+     */
+    private function waiveLateFeesOnImportedLoans(array $loanIds): void
+    {
+        foreach (array_unique($loanIds) as $loanId) {
+            if (!LegacyImportedLoan::isLoan((int) $loanId)) {
+                continue;
+            }
+
+            LegacyImportedLoan::waiveAutomatedLateFees((int) $loanId);
+        }
     }
 }

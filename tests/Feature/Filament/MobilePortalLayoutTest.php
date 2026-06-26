@@ -81,4 +81,9 @@ test('mobile portal layout stylesheet is bundled with filament themes', function
     foreach (array_slice($paths, 2) as $themePath) {
         expect(file_get_contents($themePath))->toContain("@import '../mobile-panels.css'");
     }
+
+    $mobileLayout = file_get_contents($paths[1]);
+
+    expect($mobileLayout)->toContain('grid-template-columns: minmax(5.25rem, 36%) minmax(0, 1fr)')
+        ->and($mobileLayout)->toContain('.fi-ta-cell-label');
 });

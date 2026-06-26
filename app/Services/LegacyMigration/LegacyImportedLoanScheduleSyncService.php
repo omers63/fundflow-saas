@@ -27,7 +27,8 @@ final class LegacyImportedLoanScheduleSyncService
 
     public function __construct(
         private readonly LegacyLoanRepaymentWindowResolver $repaymentWindowResolver,
-    ) {}
+    ) {
+    }
 
     /**
      * @param  iterable<int|string>  $loanIds
@@ -227,7 +228,7 @@ final class LegacyImportedLoanScheduleSyncService
 
             $loan = $loans->firstWhere('id', $window->loanId);
 
-            if ($loan === null || ! $this->paymentAppliesToLoan($loan, $paidAt)) {
+            if ($loan === null || !$this->paymentAppliesToLoan($loan, $paidAt)) {
                 break;
             }
 
@@ -297,11 +298,11 @@ final class LegacyImportedLoanScheduleSyncService
 
     private function syncLoanSettlement(Loan $loan): void
     {
-        if (! in_array($loan->status, ['active', 'transferred'], true)) {
+        if (!in_array($loan->status, ['active', 'transferred'], true)) {
             return;
         }
 
-        if (! $loan->installments()->exists()) {
+        if (!$loan->installments()->exists()) {
             return;
         }
 
@@ -312,11 +313,11 @@ final class LegacyImportedLoanScheduleSyncService
             ->whereIn('status', ['pending', 'overdue'])
             ->exists();
 
-        $shouldComplete = ! $hasUnpaid
+        $shouldComplete = !$hasUnpaid
             || $paidInstallmentSum + self::AMOUNT_TOLERANCE >= $target
             || $repaidOnLoan + self::AMOUNT_TOLERANCE >= $target;
 
-        if (! $shouldComplete) {
+        if (!$shouldComplete) {
             return;
         }
 
@@ -342,6 +343,10 @@ final class LegacyImportedLoanScheduleSyncService
                 ->update([
                     'status' => 'paid',
                     'paid_at' => $settledAt,
+                    'is_late' => false,
+                    'late_fee_amount' => 0,
+                    'late_fee_tier' => 0,
+                    'overdue_since' => null,
                 ]);
         });
     }
@@ -359,6 +364,8 @@ final class LegacyImportedLoanScheduleSyncService
                 'paid_at' => null,
                 'is_late' => false,
                 'late_fee_amount' => 0,
+                'late_fee_tier' => 0,
+                'overdue_since' => null,
             ]);
 
         Loan::query()
@@ -372,7 +379,7 @@ final class LegacyImportedLoanScheduleSyncService
 
     private function paymentAppliesToLoan(Loan $loan, CarbonInterface $paidAt): bool
     {
-        return $loan->disbursed_at === null || ! $paidAt->lt($loan->disbursed_at);
+        return $loan->disbursed_at === null || !$paidAt->lt($loan->disbursed_at);
     }
 
     /**

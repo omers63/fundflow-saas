@@ -12,6 +12,7 @@ use App\Models\Tenant\Member;
 use App\Services\ContributionCycleService;
 use App\Support\BusinessDay;
 use App\Support\InstallmentCollectionStatus;
+use App\Support\LegacyImportedLoan;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -23,7 +24,8 @@ class LoanInstallmentCollectionService
         protected LoanLedgerService $ledger,
         protected LateFeeService $lateFees,
         protected ContributionCycleService $cycles,
-    ) {}
+    ) {
+    }
 
     public function onMemberCashIncreased(Member $member): void
     {
@@ -84,7 +86,7 @@ class LoanInstallmentCollectionService
         $member = $member?->fresh() ?? $loan->member;
         $member->unsetRelation('accounts');
 
-        if (! $loan instanceof Loan || ! in_array($loan->status, ['active', 'transferred'], true)) {
+        if (!$loan instanceof Loan || !in_array($loan->status, ['active', 'transferred'], true)) {
             return 'inactive';
         }
 
@@ -143,6 +145,12 @@ class LoanInstallmentCollectionService
 
     protected function outstandingLateFee(LoanInstallment $installment): float
     {
+        $installment->loadMissing('loan');
+
+        if ($installment->loan !== null && LegacyImportedLoan::isLoan($installment->loan)) {
+            return 0.0;
+        }
+
         [$cycleMonth, $cycleYear] = $this->cycles->cyclePeriodForDueDate($installment->due_date);
         $deadline = $this->cycles->deadline($cycleMonth, $cycleYear);
         $days = $this->lateFees->daysPastDue($deadline, BusinessDay::now());

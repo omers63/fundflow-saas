@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Services\LegacyMigration\LegacyImportedLoanScheduleSyncService;
+use App\Support\LegacyImportedLoan;
 use Illuminate\Console\Command;
 use Stancl\Tenancy\Concerns\HasATenantsOption;
 use Stancl\Tenancy\Concerns\TenantAwareCommand;
@@ -33,6 +34,13 @@ class LegacySyncLoanSchedulesCommand extends Command
             'loans' => $result['loans'],
             'installments' => $result['installments'],
         ]));
+
+        if (is_string($loanId) && $loanId !== '') {
+            if (LegacyImportedLoan::isLoan((int) $loanId)) {
+                $waived = LegacyImportedLoan::waiveAutomatedLateFees((int) $loanId);
+                $this->info(__('Waived automated late fees on :count installment(s).', ['count' => $waived]));
+            }
+        }
 
         return self::SUCCESS;
     }

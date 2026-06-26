@@ -11,6 +11,7 @@ use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
 use App\Support\ContributionPolicySettings;
 use App\Support\InstallmentCollectionStatus;
+use App\Support\LegacyImportedLoan;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -23,7 +24,8 @@ class LoanInstallmentLateFeeService
         protected LateFeeService $lateFees,
         protected ContributionCycleService $cycles,
         protected AccountingService $accounting,
-    ) {}
+    ) {
+    }
 
     public function applyNightlyLateFees(): int
     {
@@ -32,7 +34,7 @@ class LoanInstallmentLateFeeService
         LoanInstallment::query()
             ->where('status', 'overdue')
             ->whereNotNull('overdue_since')
-            ->whereHas('loan', fn ($q) => $q->whereIn('status', ['active', 'transferred']))
+            ->whereHas('loan', fn($q) => $q->whereIn('status', ['active', 'transferred']))
             ->with('loan.member')
             ->each(function (LoanInstallment $installment) use (&$updated): void {
                 if ($this->applyLateFeeTierForInstallment($installment)) {
@@ -46,6 +48,12 @@ class LoanInstallmentLateFeeService
     public function applyLateFeeTierForInstallment(LoanInstallment $installment): bool
     {
         if ($installment->overdue_since === null) {
+            return false;
+        }
+
+        $installment->loadMissing('loan');
+
+        if ($installment->loan !== null && LegacyImportedLoan::isLoan($installment->loan)) {
             return false;
         }
 
