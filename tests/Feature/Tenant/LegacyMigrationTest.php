@@ -16,6 +16,7 @@ use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\ContributionService;
+use App\Services\LegacyMigration\LegacyExcessLoanRepaymentRepairService;
 use App\Services\LegacyMigration\LegacyImportedLoanInstallmentRebuildService;
 use App\Services\LegacyMigration\LegacyImportedLoanScheduleSyncService;
 use App\Services\LegacyMigration\LegacyLoanRepaymentTarget;
@@ -26,6 +27,7 @@ use App\Services\LegacyMigration\LegacyMisclassifiedContributionRepairService;
 use App\Services\LegacyMigration\LegacyPaymentClassifierService;
 use App\Services\LegacyMigration\LegacyPaymentImportService;
 use App\Services\Loans\LoanImportService;
+use App\Services\Loans\LoanLedgerService;
 use App\Services\MemberImportService;
 use App\Support\AssociativeCsv;
 use App\Support\FilamentStoredUploadPath;
@@ -155,7 +157,7 @@ test('legacy migration preview detects member_number in utf-8 bom csv', function
     expect($preview['headers'])->toContain('member_number')
         ->and($preview['row_count'])->toBe(1)
         ->and(collect($preview['warnings'])->contains(
-            fn(string $warning): bool => str_contains($warning, 'member_number'),
+            fn (string $warning): bool => str_contains($warning, 'member_number'),
         ))->toBeFalse();
 
     @unlink($path);
@@ -164,7 +166,7 @@ test('legacy migration preview detects member_number in utf-8 bom csv', function
 test('legacy migration preview accepts real legacy members export shape', function () {
     $source = base_path('docs/legacy/legacy-members-import-1.csv');
 
-    if (!is_readable($source)) {
+    if (! is_readable($source)) {
         skip('Sample legacy members CSV is not present in docs/legacy.');
     }
 
@@ -173,7 +175,7 @@ test('legacy migration preview accepts real legacy members export shape', functi
     expect($preview['headers'])->toContain('member_number')
         ->and($preview['row_count'])->toBeGreaterThan(0)
         ->and(collect($preview['warnings'])->contains(
-            fn(string $warning): bool => str_contains($warning, 'member_number'),
+            fn (string $warning): bool => str_contains($warning, 'member_number'),
         ))->toBeFalse();
 });
 
@@ -346,7 +348,7 @@ test('legacy migration loan import uses split funding strategy when csv omits po
         'loan_funding_strategy' => LoanFundingStrategy::SPLIT_PERCENTAGE,
     ], '2025-12-31');
 
-    $loan = Loan::query()->whereHas('member', fn($query) => $query->where('member_number', 'FUND-1'))->firstOrFail();
+    $loan = Loan::query()->whereHas('member', fn ($query) => $query->where('member_number', 'FUND-1'))->firstOrFail();
 
     expect((float) $loan->member_portion)->toBe(4000.0)
         ->and((float) $loan->master_portion)->toBe(6000.0)
@@ -372,7 +374,7 @@ test('legacy migration loan import uses member fund topup strategy when csv omit
     ]);
     app(AccountingService::class)->createMemberAccounts($member);
     AccountingService::withoutMemberCashCollection(
-        fn() => app(AccountingService::class)->credit($member->fundAccount, 3000, 'Seed fund'),
+        fn () => app(AccountingService::class)->credit($member->fundAccount, 3000, 'Seed fund'),
     );
     expect((float) $member->fresh()->fundAccount->balance)->toBe(3000.0);
 
@@ -401,7 +403,7 @@ test('legacy migration loan import replays historical contributions for member f
     $loansPath = base_path('docs/legacy/legacy-loans-import.csv');
     $paymentsPath = base_path('docs/legacy/legacy-payments-import.csv');
 
-    if (!is_readable($membersPath) || !is_readable($loansPath) || !is_readable($paymentsPath)) {
+    if (! is_readable($membersPath) || ! is_readable($loansPath) || ! is_readable($paymentsPath)) {
         skip('Legacy sample CSVs are not present in docs/legacy.');
     }
 
@@ -515,7 +517,7 @@ test('legacy migration loan import can skip settlement threshold', function () {
         'skip_settlement_threshold' => true,
     ], '2025-12-31');
 
-    $loan = Loan::query()->whereHas('member', fn($query) => $query->where('member_number', 'SKIP-TH'))->firstOrFail();
+    $loan = Loan::query()->whereHas('member', fn ($query) => $query->where('member_number', 'SKIP-TH'))->firstOrFail();
 
     expect((float) $loan->settlement_threshold)->toBe(0.0)
         ->and($loan->installments_count)->toBe(5);
@@ -540,7 +542,7 @@ test('legacy migration orchestrator imports payments without contribution notifi
     Account::masterCash()->update(['balance' => 100_000]);
     Account::masterFund()->update(['balance' => 100_000]);
     AccountingService::withoutMemberCashCollection(
-        fn() => app(AccountingService::class)->credit($member->cashAccount, 5000, 'Seed'),
+        fn () => app(AccountingService::class)->credit($member->cashAccount, 5000, 'Seed'),
     );
 
     $classifiedPath = storage_path('app/legacy-payment-import-test.csv');
@@ -558,7 +560,7 @@ test('legacy migration orchestrator imports payments without contribution notifi
     ]);
 
     $result = ContributionService::withoutPostedNotifications(
-        fn(): array => app(LegacyPaymentImportService::class)->import($classifiedPath),
+        fn (): array => app(LegacyPaymentImportService::class)->import($classifiedPath),
     );
 
     $member = $member->fresh();
@@ -576,7 +578,7 @@ test('legacy migration orchestrator imports payments without contribution notifi
     $transactionDates = $contribution->transactions()
         ->pluck('transacted_at')
         ->filter()
-        ->map(fn($date) => Carbon::parse((string) $date)->toDateString())
+        ->map(fn ($date) => Carbon::parse((string) $date)->toDateString())
         ->unique()
         ->values()
         ->all();
@@ -654,7 +656,7 @@ test('legacy payment import posts historical contributions even when member has 
     Account::masterCash()->update(['balance' => 100_000]);
     Account::masterFund()->update(['balance' => 100_000]);
     AccountingService::withoutMemberCashCollection(
-        fn() => app(AccountingService::class)->credit($member->cashAccount, 5000, 'Seed'),
+        fn () => app(AccountingService::class)->credit($member->cashAccount, 5000, 'Seed'),
     );
 
     Loan::create([
@@ -692,7 +694,7 @@ test('legacy payment import posts historical contributions even when member has 
     ]);
 
     $result = ContributionService::withoutPostedNotifications(
-        fn(): array => app(LegacyPaymentImportService::class)->import($classifiedPath),
+        fn (): array => app(LegacyPaymentImportService::class)->import($classifiedPath),
     );
 
     expect($result['contributions'])->toBe(1)
@@ -730,7 +732,7 @@ test('legacy payment import resolves member by member_number when household emai
     Account::masterCash()->update(['balance' => 100_000]);
     Account::masterFund()->update(['balance' => 100_000]);
     AccountingService::withoutMemberCashCollection(
-        fn() => app(AccountingService::class)->credit($dependent->cashAccount, 5000, 'Seed'),
+        fn () => app(AccountingService::class)->credit($dependent->cashAccount, 5000, 'Seed'),
     );
 
     $classifiedPath = storage_path('app/legacy-payment-member-number-test.csv');
@@ -793,13 +795,13 @@ test('legacy migration classify payments writes downloadable classified csv', fu
     $tenant = tenant();
     $domain = $tenant->domains()->first()?->domain ?? 'testing.localhost';
 
-    if (!$tenant->domains()->where('domain', 'testing.localhost')->exists()) {
+    if (! $tenant->domains()->where('domain', 'testing.localhost')->exists()) {
         $tenant->domains()->create(['domain' => 'testing.localhost']);
         $domain = 'testing.localhost';
     }
 
     $this->actingAs($this->admin, 'tenant')
-        ->get('http://' . $domain . route('tenant.admin.legacy-migration.classified-payments-download', [], false))
+        ->get('http://'.$domain.route('tenant.admin.legacy-migration.classified-payments-download', [], false))
         ->assertSuccessful()
         ->assertDownload('legacy-payments-classified.csv');
 
@@ -905,7 +907,7 @@ test('payment classifier matches legacy payments export to members csv', functio
     $payments = base_path('docs/legacy/legacy-payments-import.csv');
     $loans = base_path('docs/legacy/legacy-loans-import.csv');
 
-    if (!is_readable($members) || !is_readable($payments)) {
+    if (! is_readable($members) || ! is_readable($payments)) {
         skip('Legacy sample CSVs are not present in docs/legacy.');
     }
 
@@ -917,11 +919,11 @@ test('payment classifier matches legacy payments export to members csv', functio
     );
 
     $loanRepaymentsIn2014 = collect($result['rows'])
-        ->filter(fn(array $row): bool => $row['payment_type'] === 'loan_repayment' && str_starts_with($row['payment_date'], '2014'))
+        ->filter(fn (array $row): bool => $row['payment_type'] === 'loan_repayment' && str_starts_with($row['payment_date'], '2014'))
         ->count();
 
     $memberOneAfterLoan = collect($result['rows'])
-        ->filter(fn(array $row): bool => $row['member_number'] === '1' && $row['payment_date'] >= '2016-08-01' && $row['payment_date'] <= '2016-10-31')
+        ->filter(fn (array $row): bool => $row['member_number'] === '1' && $row['payment_date'] >= '2016-08-01' && $row['payment_date'] <= '2016-10-31')
         ->pluck('payment_type')
         ->unique()
         ->all();
@@ -960,12 +962,27 @@ test('payment classifier suggests contribution for monthly amount match', functi
     @unlink($path);
 });
 
-test('legacy loan repayment target uses fifty fifty allocation plus sixteen percent fee', function () {
-    expect(LegacyLoanRepaymentTarget::totalRepaymentDue(100_000))->toBe(66_000.0)
-        ->and(LegacyLoanRepaymentTarget::totalRepaymentDue(12_000))->toBe(7_920.0);
+test('legacy loan repayment target uses fund portion master slice', function () {
+    expect(LegacyLoanRepaymentTarget::estimateFromApprovedAmount(100_000))->toBe(50_000.0)
+        ->and(LegacyLoanRepaymentTarget::estimateFromApprovedAmount(12_000))->toBe(6_000.0);
+
+    $loan = Loan::create([
+        'member_id' => Member::factory()->create()->id,
+        'amount' => 150_000,
+        'amount_approved' => 150_000,
+        'term_months' => 27,
+        'master_portion' => 79_500,
+        'settlement_threshold' => 0,
+        'status' => 'active',
+        'disbursed_at' => '2016-02-09',
+        'approved_at' => '2016-02-09',
+        'applied_at' => '2016-02-09',
+    ]);
+
+    expect(LegacyLoanRepaymentTarget::forLoan($loan))->toBe(79_500.0);
 });
 
-test('legacy loan installment rebuild expands implicit portion schedules to split repayment count', function () {
+test('legacy loan installment rebuild expands under-counted settlement schedules for member-funded loans', function () {
     $member = Member::create([
         'member_number' => 'LEG-REBUILD',
         'name' => 'Legacy Rebuild Member',
@@ -993,37 +1010,27 @@ test('legacy loan installment rebuild expands implicit portion schedules to spli
         'amount_approved' => 72_000,
         'amount_disbursed' => 72_000,
         'interest_rate' => 0,
-        'term_months' => 6,
+        'term_months' => 1,
         'monthly_repayment' => 2000,
-        'total_repaid' => 12_000,
+        'total_repaid' => 0,
         'member_portion' => 72_000,
         'master_portion' => 0,
         'settlement_threshold' => 0.16,
-        'status' => 'completed',
+        'status' => 'active',
         'disbursed_at' => '2024-09-29',
         'approved_at' => '2024-09-29',
         'applied_at' => '2024-09-29',
         'first_repayment_month' => 11,
         'first_repayment_year' => 2024,
-        'installments_count' => 6,
-        'settled_at' => '2025-03-01',
+        'installments_count' => 1,
     ]);
 
-    for ($i = 1; $i <= 6; $i++) {
-        LoanInstallment::create([
-            'loan_id' => $loan->id,
-            'installment_number' => $i,
-            'amount' => 2000,
-            'due_date' => now()->subMonths(6 - $i)->toDateString(),
-            'status' => 'paid',
-            'paid_at' => now()->subMonths(6 - $i),
-        ]);
-    }
-
-    LoanRepayment::create([
+    LoanInstallment::create([
         'loan_id' => $loan->id,
-        'amount' => 28_000,
-        'paid_at' => now()->subMonths(2),
+        'installment_number' => 1,
+        'amount' => 2000,
+        'due_date' => now()->subMonths(1)->toDateString(),
+        'status' => 'pending',
     ]);
 
     $result = app(LegacyImportedLoanInstallmentRebuildService::class)->rebuildImplicitPortionLoans($loan->id);
@@ -1031,10 +1038,56 @@ test('legacy loan installment rebuild expands implicit portion schedules to spli
     $loan->refresh();
 
     expect($result['loans'])->toBe(1)
-        ->and($loan->installments()->count())->toBe(24)
-        ->and($loan->installments_count)->toBe(24)
-        ->and($loan->installments()->where('status', 'paid')->count())->toBe(14)
-        ->and($loan->status)->toBe('active');
+        ->and($loan->installments()->count())->toBe(6)
+        ->and($loan->installments_count)->toBe(6);
+});
+
+test('legacy loan installment rebuild completes fully member-funded loans with no settlement due', function () {
+    $member = Member::create([
+        'member_number' => 'LEG-FUND-ONLY',
+        'name' => 'Fund Only Member',
+        'email' => 'legacy-fund-only@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYears(5),
+        'status' => 'active',
+    ]);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 10_000,
+        'amount_requested' => 10_000,
+        'amount_approved' => 10_000,
+        'amount_disbursed' => 10_000,
+        'interest_rate' => 0,
+        'term_months' => 1,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'member_portion' => 10_000,
+        'master_portion' => 0,
+        'settlement_threshold' => 0,
+        'status' => 'active',
+        'disbursed_at' => '2023-03-26',
+        'approved_at' => '2023-03-26',
+        'applied_at' => '2023-03-26',
+        'installments_count' => 1,
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => '2023-05-05',
+        'status' => 'pending',
+    ]);
+
+    $result = app(LegacyImportedLoanInstallmentRebuildService::class)->rebuildImplicitPortionLoans($loan->id);
+
+    $loan->refresh();
+
+    expect($result['loans'])->toBe(1)
+        ->and($loan->status)->toBe('completed')
+        ->and($loan->installments()->count())->toBe(0)
+        ->and($loan->installments_count)->toBe(0);
 });
 
 test('payment classifier fills suggested loan number from database disbursement date', function () {
@@ -1524,7 +1577,8 @@ test('legacy misclassified contribution repair converts monthly payments inside 
     expect($repair['contributions_removed'])->toBe(2)
         ->and($repair['repayments_posted'])->toBe(2)
         ->and(Contribution::query()->where('member_id', $member->id)->where('status', 'posted')->count())->toBe(0)
-        ->and(LoanRepayment::query()->where('loan_id', $loan->id)->count())->toBe(2);
+        ->and(LoanRepayment::query()->where('loan_id', $loan->id)->count())->toBe(2)
+        ->and((float) $member->fresh()->getCashBalance())->toBe(0.0);
 });
 
 test('misclassified contribution repair converts jul disbursement window payment to loan repayment', function () {
@@ -1582,7 +1636,7 @@ test('misclassified contribution repair converts jul disbursement window payment
         2020,
         1000,
         $postedAt,
-        '[legacy-routed] ' . __('Routed from :period — :notes', [
+        '[legacy-routed] '.__('Routed from :period — :notes', [
             'period' => 'Jul 2020',
             'notes' => __('Misclassified legacy payment'),
         ]),
@@ -1596,7 +1650,8 @@ test('misclassified contribution repair converts jul disbursement window payment
     expect($repair['contributions_removed'])->toBe(1)
         ->and($repair['repayments_posted'])->toBe(1)
         ->and(Contribution::query()->where('member_id', $member->id)->where('status', 'posted')->count())->toBe(0)
-        ->and(LoanRepayment::query()->where('loan_id', $loan->id)->whereDate('paid_at', '2020-07-29')->count())->toBe(1);
+        ->and(LoanRepayment::query()->where('loan_id', $loan->id)->whereDate('paid_at', '2020-07-29')->count())->toBe(1)
+        ->and((float) $member->fresh()->getCashBalance())->toBe(0.0);
 });
 
 test('legacy loan csv loan_id is preserved on import and used when classifying repayments', function () {
@@ -2440,7 +2495,7 @@ test('legacy migration payments job authenticates queued admin without ambient s
     Account::masterCash()->update(['balance' => 100_000]);
     Account::masterFund()->update(['balance' => 100_000]);
     AccountingService::withoutMemberCashCollection(
-        fn() => app(AccountingService::class)->credit($member->cashAccount, 5000, 'Seed'),
+        fn () => app(AccountingService::class)->credit($member->cashAccount, 5000, 'Seed'),
     );
 
     $classifiedPath = storage_path('app/legacy-migration-job-payments.csv');
@@ -2559,9 +2614,9 @@ test('legacy payment import marks installments paid from bulk repayments', funct
     $repaymentDates = LoanRepayment::query()
         ->where('loan_id', $loan->id)
         ->get()
-        ->flatMap(fn($repayment) => $repayment->transactions->pluck('transacted_at'))
+        ->flatMap(fn ($repayment) => $repayment->transactions->pluck('transacted_at'))
         ->filter()
-        ->map(fn($date) => Carbon::parse((string) $date)->toDateString())
+        ->map(fn ($date) => Carbon::parse((string) $date)->toDateString())
         ->unique()
         ->values()
         ->all();
@@ -2651,6 +2706,7 @@ test('legacy payment import assigns repayments to the correct loan when member h
         'term_months' => 2,
         'monthly_repayment' => 1000,
         'total_repaid' => 0,
+        'master_portion' => 1000,
         'status' => 'active',
         'disbursed_at' => '2016-01-01',
         'approved_at' => '2016-01-01',
@@ -2668,6 +2724,7 @@ test('legacy payment import assigns repayments to the correct loan when member h
         'term_months' => 5,
         'monthly_repayment' => 1000,
         'total_repaid' => 0,
+        'master_portion' => 2500,
         'status' => 'active',
         'disbursed_at' => '2018-01-01',
         'approved_at' => '2018-01-01',
@@ -2675,7 +2732,7 @@ test('legacy payment import assigns repayments to the correct loan when member h
         'installments_count' => 5,
     ]);
 
-    $olderTarget = LegacyLoanRepaymentTarget::totalRepaymentDue(2000);
+    $olderTarget = LegacyLoanRepaymentTarget::forLoan($olderLoan);
     $classifiedPath = storage_path('app/legacy-multi-loan-import-test.csv');
     AssociativeCsv::write($classifiedPath, [
         'member_email',
@@ -2699,12 +2756,12 @@ test('legacy payment import assigns repayments to the correct loan when member h
 
     $olderDescriptions = Transaction::query()
         ->where('member_id', $member->id)
-        ->where('description', 'like', '%Loan #' . $olderLoan->id . ' repayments (import, bulk)%')
+        ->where('description', 'like', '%Loan #'.$olderLoan->id.' repayments (import, bulk)%')
         ->count();
 
     $newerDescriptions = Transaction::query()
         ->where('member_id', $member->id)
-        ->where('description', 'like', '%Loan #' . $newerLoan->id . ' repayments (import, bulk)%')
+        ->where('description', 'like', '%Loan #'.$newerLoan->id.' repayments (import, bulk)%')
         ->count();
 
     expect($olderDescriptions)->toBeGreaterThan(0)
@@ -3237,6 +3294,7 @@ test('legacy schedule sync completes loans when repayment target is met and rero
         'approved_at' => '2017-06-14',
         'applied_at' => '2017-06-14',
         'installments_count' => 27,
+        'master_portion' => 52_800,
     ]);
 
     $newerLoan = Loan::create([
@@ -3277,7 +3335,7 @@ test('legacy schedule sync completes loans when repayment target is met and rero
         ]);
     }
 
-    $target = LegacyLoanRepaymentTarget::totalRepaymentDue(80_000);
+    $target = LegacyLoanRepaymentTarget::forLoan($olderLoan);
 
     $olderLoan->repayments()->createMany([
         ['amount' => 2000, 'paid_at' => '2017-07-02'],
@@ -3341,6 +3399,7 @@ test('legacy schedule sync completes loan when repayment target is met via sub-i
         'first_repayment_month' => 5,
         'first_repayment_year' => 2023,
         'grace_cycles' => 0,
+        'master_portion' => 3960,
     ]);
 
     foreach (range(1, 6) as $number) {
@@ -3353,7 +3412,7 @@ test('legacy schedule sync completes loan when repayment target is met via sub-i
         ]);
     }
 
-    $target = LegacyLoanRepaymentTarget::totalRepaymentDue(6000);
+    $target = LegacyLoanRepaymentTarget::forLoan($loan);
 
     foreach ([
         '2023-05-28',
@@ -3452,7 +3511,7 @@ test('legacy schedule sync accumulates sub-minimum repayments across payments fo
         ->where('status', 'paid')
         ->orderBy('installment_number')
         ->pluck('paid_at', 'installment_number')
-        ->map(fn($paidAt) => Carbon::parse((string) $paidAt)->toDateString());
+        ->map(fn ($paidAt) => Carbon::parse((string) $paidAt)->toDateString());
 
     expect($loan->installments()->where('status', 'paid')->count())->toBe(9)
         ->and($paidAtByNumber[8])->toBe('2018-03-22')
@@ -3567,7 +3626,7 @@ test('payment classifier routes post-schedule repayments to contributions after 
         'amount',
         'payment_type',
     ], array_map(
-        fn(array $row): array => [$row[0], $row[1], $row[2], ''],
+        fn (array $row): array => [$row[0], $row[1], $row[2], ''],
         $paymentRows,
     ));
 
@@ -3647,7 +3706,7 @@ test('payment classifier routes post-schedule repayments using csv schedule esti
         'amount',
         'payment_type',
     ], array_map(
-        fn(array $row): array => [$row[0], $row[1], $row[2], ''],
+        fn (array $row): array => [$row[0], $row[1], $row[2], ''],
         $paymentRows,
     ));
 
@@ -3797,7 +3856,7 @@ test('historical payment import reclassifies from uploads and repairs misrouted 
 
     $staleDirectory = dirname($staleClassifiedPath);
 
-    if (!is_dir($staleDirectory)) {
+    if (! is_dir($staleDirectory)) {
         mkdir($staleDirectory, 0755, true);
     }
 
@@ -3840,7 +3899,7 @@ test('historical payment import reclassifies from uploads and repairs misrouted 
 
     $classifiedRows = AssociativeCsv::read($staleClassifiedPath);
     $julRow = collect($classifiedRows)->first(
-        fn(array $row): bool => ($row['member_number'] ?? '') === '58'
+        fn (array $row): bool => ($row['member_number'] ?? '') === '58'
         && ($row['payment_date'] ?? '') === '2020-07-29',
     );
 
@@ -3853,4 +3912,148 @@ test('historical payment import reclassifies from uploads and repairs misrouted 
     @unlink($loansPath);
     @unlink($paymentsPath);
     @unlink($staleClassifiedPath);
+});
+
+test('legacy payment import stops allocating to loan after fund portion is satisfied', function () {
+    Notification::fake();
+
+    $member = Member::create([
+        'member_number' => 'LEG-FUND-PORTION',
+        'name' => 'Fund Portion Member',
+        'email' => 'fund-portion@fund.test',
+        'monthly_contribution_amount' => 3000,
+        'joined_at' => now()->subYears(12),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+    Account::masterCash()->update(['balance' => 500_000]);
+    Account::masterFund()->update(['balance' => 500_000]);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 150_000,
+        'amount_requested' => 150_000,
+        'amount_approved' => 150_000,
+        'amount_disbursed' => 150_000,
+        'interest_rate' => 0,
+        'term_months' => 27,
+        'monthly_repayment' => 3000,
+        'total_repaid' => 0,
+        'master_portion' => 79_500,
+        'member_portion' => 70_500,
+        'settlement_threshold' => 0,
+        'status' => 'active',
+        'disbursed_at' => '2016-02-09',
+        'approved_at' => '2016-02-09',
+        'applied_at' => '2016-02-09',
+        'installments_count' => 27,
+    ]);
+
+    $paymentDates = [
+        '2016-02-10', '2016-03-12', '2016-03-25', '2016-05-09', '2016-06-08', '2016-06-29',
+        '2016-08-06', '2016-09-04', '2016-09-30', '2016-11-05', '2016-12-05', '2017-01-05',
+        '2017-02-04', '2017-03-03', '2017-03-31', '2017-05-02', '2017-06-03', '2017-07-05',
+        '2017-08-04', '2017-08-29', '2017-10-06', '2017-11-04', '2017-12-04', '2018-01-05',
+        '2018-02-02', '2018-03-05', '2018-04-02', '2018-05-04',
+    ];
+
+    $classifiedPath = storage_path('app/legacy-fund-portion-import-test.csv');
+    AssociativeCsv::write(
+        $classifiedPath,
+        ['member_email', 'member_number', 'payment_date', 'amount', 'payment_type', 'loan_number', 'period', 'notes'],
+        collect($paymentDates)->map(fn (string $date): array => [
+            'member_email' => 'fund-portion@fund.test',
+            'member_number' => 'LEG-FUND-PORTION',
+            'payment_date' => $date,
+            'amount' => $date === '2016-02-10' ? '4500' : '3000',
+            'payment_type' => 'loan_repayment',
+            'loan_number' => (string) $loan->id,
+            'period' => '',
+            'notes' => '',
+        ])->all(),
+    );
+
+    $result = app(LegacyPaymentImportService::class)->import($classifiedPath);
+
+    $repaymentSum = (float) LoanRepayment::query()->where('loan_id', $loan->id)->sum('amount');
+
+    expect($result['failed'])->toBe(0)
+        ->and($repaymentSum)->toBe(79_500.0)
+        ->and(Carbon::parse((string) LoanRepayment::query()->where('loan_id', $loan->id)->orderByDesc('paid_at')->value('paid_at'))->toDateString())
+        ->toBe('2018-03-05')
+        ->and(Contribution::query()->where('member_id', $member->id)->whereDate('paid_at', '2018-04-02')->exists())->toBeTrue();
+
+    @unlink($classifiedPath);
+});
+
+test('legacy excess loan repayment repair moves repayments beyond fund portion to contributions', function () {
+    Notification::fake();
+
+    $member = Member::create([
+        'member_number' => 'LEG-EXCESS-REPAIR',
+        'name' => 'Excess Repair Member',
+        'email' => 'excess-repair@fund.test',
+        'monthly_contribution_amount' => 3000,
+        'joined_at' => now()->subYears(12),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+    Account::masterCash()->update(['balance' => 500_000]);
+    Account::masterFund()->update(['balance' => 500_000]);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 15_000,
+        'amount_requested' => 15_000,
+        'amount_approved' => 15_000,
+        'amount_disbursed' => 15_000,
+        'interest_rate' => 0,
+        'term_months' => 5,
+        'monthly_repayment' => 3000,
+        'total_repaid' => 0,
+        'master_portion' => 7_500,
+        'member_portion' => 7_500,
+        'settlement_threshold' => 0,
+        'status' => 'completed',
+        'disbursed_at' => '2016-02-09',
+        'approved_at' => '2016-02-09',
+        'applied_at' => '2016-02-09',
+        'installments_count' => 5,
+    ]);
+
+    $chronology = [
+        ['2016-02-10', 4500],
+        ['2016-03-12', 3000],
+        ['2016-04-02', 3000],
+    ];
+
+    foreach ($chronology as [$date, $amount]) {
+        $repayment = $loan->repayments()->create([
+            'amount' => $amount,
+            'paid_at' => $date,
+            'notes' => 'Legacy repayment',
+        ]);
+
+        app(LoanLedgerService::class)->postImportedLoanRepaymentWithCashFlow(
+            $loan->fresh(),
+            $repayment,
+            (float) $amount,
+            Carbon::parse($date),
+        );
+    }
+
+    $loan->refresh();
+
+    expect((float) $loan->repayments()->sum('amount'))->toBe(10_500.0)
+        ->and((float) $loan->repaid_to_master)->toBe(7_500.0);
+
+    $stats = app(LegacyExcessLoanRepaymentRepairService::class)->repairLoan($loan->fresh());
+
+    $loan->refresh();
+
+    expect($stats['repayments_reversed'])->toBe(1)
+        ->and((float) $loan->repayments()->sum('amount'))->toBe(7_500.0)
+        ->and((float) $loan->repaid_to_master)->toBe(7_500.0);
 });

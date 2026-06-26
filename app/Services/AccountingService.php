@@ -388,6 +388,79 @@ class AccountingService
     }
 
     /**
+     * Signed net of all credit and debit lines on an account.
+     */
+    public function transactionNetForAccount(int $accountId): float
+    {
+        $credits = (float) Transaction::query()
+            ->where('account_id', $accountId)
+            ->where('type', 'credit')
+            ->sum('amount');
+
+        $debits = (float) Transaction::query()
+            ->where('account_id', $accountId)
+            ->where('type', 'debit')
+            ->sum('amount');
+
+        return round($credits - $debits, 2);
+    }
+
+    /**
+     * Balance implied by ledger lines plus any cut-off baseline not yet posted as lines.
+     */
+    public function expectedBalanceFromTransactionLines(Account $account): float
+    {
+        return round(
+            $this->accountBaselineBalanceNotInTransactionLines($account)
+            + $this->transactionNetForAccount((int) $account->id),
+            2,
+        );
+    }
+
+    /**
+     * Set {@see Account::$balance} from transaction lines plus any cut-off baseline not yet posted as lines.
+     */
+    public function rebuildAccountBalanceFromTransactionLines(Account $account): float
+    {
+        $account->refresh();
+
+        $expected = $this->expectedBalanceFromTransactionLines($account);
+
+        if (abs((float) $account->balance - $expected) > 0.004) {
+            $account->update(['balance' => $expected]);
+            $account->refresh();
+        }
+
+        $this->reconcileAccountLedgerBalances($account);
+
+        return $expected;
+    }
+
+    /**
+     * Rebuild stored balances for every account that has ledger lines.
+     *
+     * @return int Number of accounts whose stored balance changed
+     */
+    public function rebuildAllLedgerAccountBalancesFromTransactionLines(): int
+    {
+        $corrected = 0;
+
+        Account::query()
+            ->whereHas('transactions')
+            ->orderBy('id')
+            ->eachById(function (Account $account) use (&$corrected): void {
+                $before = round((float) $account->balance, 2);
+                $after = $this->rebuildAccountBalanceFromTransactionLines($account);
+
+                if (abs($before - $after) > 0.004) {
+                    $corrected++;
+                }
+            });
+
+        return $corrected;
+    }
+
+    /**
      * Recompute balance_after on each ledger line from chronological order.
      *
      * Preserves the account's current balance (including opening balance not stored as lines).
@@ -1396,6 +1469,29 @@ class AccountingService
                 __('Insufficient member cash balance for auto-collection.'),
             );
         }
+    }
+
+    private function accountBaselineBalanceNotInTransactionLines(Account $account): float
+    {
+        if ($account->is_master || $account->member_id === null) {
+            return 0.0;
+        }
+
+        if (! in_array($account->type, ['cash', 'fund'], true)) {
+            return 0.0;
+        }
+
+        $member = Member::query()->find($account->member_id);
+
+        if ($member === null || $member->opening_balances_posted_at !== null) {
+            return 0.0;
+        }
+
+        return match ($account->type) {
+            'cash' => (float) ($member->opening_cash_balance ?? 0),
+            'fund' => (float) ($member->opening_fund_balance ?? 0),
+            default => 0.0,
+        };
     }
 
     private function assertBooksOpenFor(?DateTimeInterface $transactedAt): void

@@ -7,6 +7,7 @@ namespace App\Services\LegacyMigration;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
+use App\Services\AccountingService;
 use App\Services\ContributionService;
 use App\Support\LegacyMigrationGraceCycleSettings;
 use Carbon\Carbon;
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\DB;
 final class LegacyMisclassifiedContributionRepairService
 {
     public function __construct(
+        private readonly AccountingService $accounting,
         private readonly LegacyPaymentLoanAllocator $loanAllocator,
         private readonly LegacyPaymentImportService $paymentImport,
         private readonly LegacyLoanRepaymentWindowResolver $repaymentWindowResolver,
@@ -57,111 +59,113 @@ final class LegacyMisclassifiedContributionRepairService
 
         ContributionService::withoutPostedNotifications(function () use ($member, $events, $loanIndex, &$cumulativeRepaidByLoanKey, &$affectedLoanIds, &$stats): void {
             ContributionService::withoutLiveCollectionGuards(function () use ($member, $events, $loanIndex, &$cumulativeRepaidByLoanKey, &$affectedLoanIds, &$stats): void {
-                foreach ($events as $event) {
-                    if ($event['type'] === 'repayment') {
-                        /** @var LoanRepayment $repayment */
-                        $repayment = $event['record'];
-                        $loan = $repayment->loan;
+                AccountingService::withoutMemberCashCollection(function () use ($member, $events, $loanIndex, &$cumulativeRepaidByLoanKey, &$affectedLoanIds, &$stats): void {
+                    foreach ($events as $event) {
+                        if ($event['type'] === 'repayment') {
+                            /** @var LoanRepayment $repayment */
+                            $repayment = $event['record'];
+                            $loan = $repayment->loan;
 
-                        if ($loan !== null) {
-                            $this->repaymentWindowResolver->recordRepayment(
-                                $loan,
-                                $member,
-                                (float) $repayment->amount,
-                                $cumulativeRepaidByLoanKey,
-                            );
-                        }
-
-                        continue;
-                    }
-
-                    /** @var Contribution $contribution */
-                    $contribution = $event['record'];
-                    $postedAt = Carbon::parse((string) ($contribution->posted_at ?? $contribution->period));
-                    $amount = (float) $contribution->amount;
-
-                    $allocation = $this->loanAllocator->allocate(
-                        $member,
-                        $amount,
-                        $postedAt,
-                        $cumulativeRepaidByLoanKey,
-                        $loanIndex,
-                    );
-
-                    if ($allocation['repayment_amount'] <= 0.00001 || $allocation['loan'] === null) {
-                        continue;
-                    }
-
-                    $repaymentAmount = $allocation['repayment_amount'];
-                    $contributionRemainder = $allocation['contribution_amount'];
-                    $notes = $contribution->notes ?: __('Legacy migration contribution repair');
-
-                    DB::transaction(function () use ($member, $contribution, $allocation, $repaymentAmount, $contributionRemainder, $postedAt, $notes, $loanIndex, &$affectedLoanIds, &$cumulativeRepaidByLoanKey, &$stats): void {
-                        $this->contributions->reverseImportedContributionForMigrationRepair($contribution);
-                        $stats['contributions_removed']++;
-
-                        $posted = $this->paymentImport->postAllocatedLoanRepaymentForRepair(
-                            $allocation['loan'],
-                            $repaymentAmount,
-                            $postedAt,
-                            $notes,
-                            $affectedLoanIds,
-                            $cumulativeRepaidByLoanKey,
-                        );
-
-                        if ($posted) {
-                            $stats['repayments_posted']++;
-                        }
-
-                        $remainingAmount = $contributionRemainder;
-
-                        while ($remainingAmount > 0.00001) {
-                            $followUp = $this->loanAllocator->allocate(
-                                $member,
-                                $remainingAmount,
-                                $postedAt,
-                                $cumulativeRepaidByLoanKey,
-                                $loanIndex,
-                            );
-
-                            if ($followUp['repayment_amount'] <= 0.00001 || $followUp['loan'] === null) {
-                                break;
+                            if ($loan !== null) {
+                                $this->repaymentWindowResolver->recordRepayment(
+                                    $loan,
+                                    $member,
+                                    (float) $repayment->amount,
+                                    $cumulativeRepaidByLoanKey,
+                                );
                             }
 
-                            $followUpPosted = $this->paymentImport->postAllocatedLoanRepaymentForRepair(
-                                $followUp['loan'],
-                                $followUp['repayment_amount'],
+                            continue;
+                        }
+
+                        /** @var Contribution $contribution */
+                        $contribution = $event['record'];
+                        $postedAt = Carbon::parse((string) ($contribution->posted_at ?? $contribution->period));
+                        $amount = (float) $contribution->amount;
+
+                        $allocation = $this->loanAllocator->allocate(
+                            $member,
+                            $amount,
+                            $postedAt,
+                            $cumulativeRepaidByLoanKey,
+                            $loanIndex,
+                        );
+
+                        if ($allocation['repayment_amount'] <= 0.00001 || $allocation['loan'] === null) {
+                            continue;
+                        }
+
+                        $repaymentAmount = $allocation['repayment_amount'];
+                        $contributionRemainder = $allocation['contribution_amount'];
+                        $notes = $contribution->notes ?: __('Legacy migration contribution repair');
+
+                        DB::transaction(function () use ($member, $contribution, $allocation, $repaymentAmount, $contributionRemainder, $postedAt, $notes, $loanIndex, &$affectedLoanIds, &$cumulativeRepaidByLoanKey, &$stats): void {
+                            $this->contributions->reverseImportedContributionForMigrationRepair($contribution);
+                            $stats['contributions_removed']++;
+
+                            $posted = $this->paymentImport->postAllocatedLoanRepaymentForRepair(
+                                $allocation['loan'],
+                                $repaymentAmount,
                                 $postedAt,
                                 $notes,
                                 $affectedLoanIds,
                                 $cumulativeRepaidByLoanKey,
                             );
 
-                            if ($followUpPosted) {
+                            if ($posted) {
                                 $stats['repayments_posted']++;
                             }
 
-                            $remainingAmount = $followUp['contribution_amount'];
-                        }
+                            $remainingAmount = $contributionRemainder;
 
-                        if ($remainingAmount > 0.00001) {
-                            [$month, $year] = [
-                                (int) $postedAt->month,
-                                (int) $postedAt->year,
-                            ];
+                            while ($remainingAmount > 0.00001) {
+                                $followUp = $this->loanAllocator->allocate(
+                                    $member,
+                                    $remainingAmount,
+                                    $postedAt,
+                                    $cumulativeRepaidByLoanKey,
+                                    $loanIndex,
+                                );
 
-                            $this->paymentImport->postLegacyContributionForRepair(
-                                $member,
-                                $month,
-                                $year,
-                                $remainingAmount,
-                                $postedAt,
-                                $notes.' ['.__('Repaired — contribution remainder after loan allocation').']',
-                            );
-                            $stats['contributions_adjusted']++;
-                        }
-                    });
-                }
+                                if ($followUp['repayment_amount'] <= 0.00001 || $followUp['loan'] === null) {
+                                    break;
+                                }
+
+                                $followUpPosted = $this->paymentImport->postAllocatedLoanRepaymentForRepair(
+                                    $followUp['loan'],
+                                    $followUp['repayment_amount'],
+                                    $postedAt,
+                                    $notes,
+                                    $affectedLoanIds,
+                                    $cumulativeRepaidByLoanKey,
+                                );
+
+                                if ($followUpPosted) {
+                                    $stats['repayments_posted']++;
+                                }
+
+                                $remainingAmount = $followUp['contribution_amount'];
+                            }
+
+                            if ($remainingAmount > 0.00001) {
+                                [$month, $year] = [
+                                    (int) $postedAt->month,
+                                    (int) $postedAt->year,
+                                ];
+
+                                $this->paymentImport->postLegacyContributionForRepair(
+                                    $member,
+                                    $month,
+                                    $year,
+                                    $remainingAmount,
+                                    $postedAt,
+                                    $notes.' ['.__('Repaired — contribution remainder after loan allocation').']',
+                                );
+                                $stats['contributions_adjusted']++;
+                            }
+                        });
+                    }
+                });
             });
         });
 
@@ -170,6 +174,8 @@ final class LegacyMisclassifiedContributionRepairService
             $stats['loans_synced'] = $sync['loans'];
             $stats['installments_marked'] = $sync['installments'];
         }
+
+        $this->accounting->rebuildAllLedgerAccountBalancesFromTransactionLines();
 
         return $stats;
     }

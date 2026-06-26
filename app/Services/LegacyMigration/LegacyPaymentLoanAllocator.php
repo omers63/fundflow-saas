@@ -117,7 +117,9 @@ final class LegacyPaymentLoanAllocator
 
         $installmentTracker?->registerWindow($window);
 
-        if ($installmentTracker?->isScheduleSatisfied($window->loanKey) === true) {
+        $cumulative = $cumulativeRepaidByLoanKey[$window->loanKey] ?? 0.0;
+
+        if ($window->isRepaymentWindowClosed($cumulative)) {
             return $this->contributionOnly($amount);
         }
 
@@ -146,16 +148,7 @@ final class LegacyPaymentLoanAllocator
                 return $this->contributionOnly($amount);
             }
 
-            $scheduleCapacity = $installmentTracker?->remainingScheduleCapacity($window->loanKey)
-                ?? $this->installmentSpilloverCapacity($loan, $amount);
-
-            $maxLoanAllocation = min(
-                $amount,
-                $targetRemaining,
-                $scheduleCapacity,
-            );
-
-            $repaymentAmount = round(max(0.0, $maxLoanAllocation), 2);
+            $repaymentAmount = round(min($amount, $targetRemaining), 2);
 
             if ($repaymentAmount <= self::AMOUNT_TOLERANCE) {
                 return $this->contributionOnly($amount);
@@ -181,9 +174,7 @@ final class LegacyPaymentLoanAllocator
             return $this->contributionOnly($amount);
         }
 
-        $scheduleCapacity = $installmentTracker?->remainingScheduleCapacity($window->loanKey) ?? $amount;
-
-        $repaymentAmount = round(min($amount, $targetRemaining, $scheduleCapacity), 2);
+        $repaymentAmount = round(min($amount, $targetRemaining), 2);
 
         if ($repaymentAmount <= self::AMOUNT_TOLERANCE) {
             return $this->contributionOnly($amount);

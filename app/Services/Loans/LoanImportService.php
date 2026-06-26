@@ -389,7 +389,15 @@ class LoanImportService
                 ]);
             }
 
-            if ($terminalStatus !== 'active') {
+            if ($count === 0) {
+                $loan->update([
+                    'status' => 'completed',
+                    'settled_at' => $disbursedAt,
+                    'installments_count' => 0,
+                    'term_months' => 0,
+                ]);
+                $loan->refresh()->releaseGuarantorIfDue();
+            } elseif ($terminalStatus !== 'active') {
                 $loan->update([
                     'status' => $terminalStatus,
                     'settled_at' => $settledAt,
@@ -827,6 +835,15 @@ class LoanImportService
         float $threshold,
         bool $portionsExplicit,
     ): int {
+        if (
+            $portionsExplicit
+            && abs($memberPortion - $amount) < 0.02
+            && ($amount - $memberPortion) < 0.02
+            && $threshold < 0.00001
+        ) {
+            return 0;
+        }
+
         $cell = $this->cell($row, 'installments_count');
         if ($cell !== '') {
             if (! ctype_digit($cell)) {

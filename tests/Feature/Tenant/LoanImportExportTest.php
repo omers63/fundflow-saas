@@ -243,6 +243,28 @@ CSV;
         ->and($loan->installments()->count())->toBe(7);
 });
 
+test('loan import completes fully member-funded loans with zero settlement threshold', function () {
+    $member = createLoanImportMember($this->accounting, 'fund-only-zero-settlement@example.test', 10_000);
+
+    $csv = <<<CSV
+loan_status,member_email,amount_approved,member_portion,master_portion,settlement_threshold,disbursed_at,paid_installments_count
+active,{$member->email},10000,10000,0,0,2023-03-26,0
+CSV;
+
+    $path = writeLoanImportCsv($csv);
+    $result = app(LoanImportService::class)->import($path);
+
+    expect($result)->toMatchArray(['created' => 1, 'failed' => 0]);
+
+    $loan = Loan::query()->where('member_id', $member->id)->latest('id')->firstOrFail();
+
+    expect($loan->status)->toBe('completed')
+        ->and((float) $loan->member_portion)->toBe(10000.0)
+        ->and((float) $loan->master_portion)->toBe(0.0)
+        ->and($loan->installments()->count())->toBe(0)
+        ->and($loan->installments_count)->toBe(0);
+});
+
 test('loan import derives installment count from split repayment formula when portions are omitted', function () {
     $tierNumber = max(1, (int) LoanTier::withTrashed()->max('tier_number') + 1);
 

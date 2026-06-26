@@ -27,8 +27,7 @@ final readonly class LegacyLoanRepaymentWindow
         public int $graceCycles = 0,
         public ?string $memberNumber = null,
         public ?int $installmentsCount = null,
-    ) {
-    }
+    ) {}
 
     public static function firstRepaymentAtForDisbursement(Carbon $disbursedAt, int $graceCycles): Carbon
     {
@@ -57,7 +56,7 @@ final readonly class LegacyLoanRepaymentWindow
             return (string) $loanId;
         }
 
-        return trim($memberNumber) . '|' . $disbursedAt->toDateString();
+        return trim($memberNumber).'|'.$disbursedAt->toDateString();
     }
 
     public function repaymentWindowOpensAt(): Carbon
@@ -75,17 +74,23 @@ final readonly class LegacyLoanRepaymentWindow
 
     public function hasRemainingRepayment(float $cumulativeRepaid): bool
     {
-        return $cumulativeRepaid + 0.00001 < $this->repaymentTargetAmount;
+        return LegacyLoanRepaymentTarget::hasRemainingFundPortion(
+            $this->repaymentTargetAmount,
+            $cumulativeRepaid,
+        );
     }
 
     public function isRepaymentWindowClosed(float $cumulativeRepaid): bool
     {
-        return !$this->hasRemainingRepayment($cumulativeRepaid);
+        return ! $this->hasRemainingRepayment($cumulativeRepaid);
     }
 
     public function remainingRepayment(float $cumulativeRepaid): float
     {
-        return max(0.0, round($this->repaymentTargetAmount - $cumulativeRepaid, 2));
+        return LegacyLoanRepaymentTarget::remainingFundPortionObligation(
+            $this->repaymentTargetAmount,
+            $cumulativeRepaid,
+        );
     }
 
     /**
@@ -102,14 +107,19 @@ final readonly class LegacyLoanRepaymentWindow
         ?LegacyLoanRepaymentInstallmentTracker $installmentTracker = null,
     ): ?self {
         foreach ($windowsInDisbursementOrder as $window) {
-            if (!$window->acceptsRepaymentOn($paymentDate)) {
+            if (! $window->acceptsRepaymentOn($paymentDate)) {
                 continue;
             }
 
             if ($installmentTracker !== null) {
                 $installmentTracker->registerWindow($window);
 
-                if ($installmentTracker->isScheduleSatisfied($window->loanKey)) {
+                $cumulative = $cumulativeRepaidByLoanKey[$window->loanKey] ?? 0.0;
+
+                if (
+                    $installmentTracker->isScheduleSatisfied($window->loanKey)
+                    && $window->isRepaymentWindowClosed($cumulative)
+                ) {
                     continue;
                 }
             }

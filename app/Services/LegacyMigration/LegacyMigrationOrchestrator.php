@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services\LegacyMigration;
 
-use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\AccountingService;
@@ -353,12 +352,7 @@ final class LegacyMigrationOrchestrator
 
     private function reconcileLedgerRunningBalances(): void
     {
-        Account::query()
-            ->whereHas('transactions')
-            ->orderBy('id')
-            ->eachById(function (Account $account): void {
-                $this->accounting->reconcileAccountLedgerBalances($account);
-            });
+        $this->accounting->rebuildAllLedgerAccountBalancesFromTransactionLines();
     }
 
     private function validateMembersCsv(string $membersPath): void

@@ -27,8 +27,7 @@ final class LegacyImportedLoanScheduleSyncService
 
     public function __construct(
         private readonly LegacyLoanRepaymentWindowResolver $repaymentWindowResolver,
-    ) {
-    }
+    ) {}
 
     /**
      * @param  iterable<int|string>  $loanIds
@@ -228,7 +227,7 @@ final class LegacyImportedLoanScheduleSyncService
 
             $loan = $loans->firstWhere('id', $window->loanId);
 
-            if ($loan === null || !$this->paymentAppliesToLoan($loan, $paidAt)) {
+            if ($loan === null || ! $this->paymentAppliesToLoan($loan, $paidAt)) {
                 break;
             }
 
@@ -267,7 +266,7 @@ final class LegacyImportedLoanScheduleSyncService
         $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? now()->startOfDay();
         $loanKey = LegacyLoanRepaymentWindow::loanKey((string) $member->member_number, $disbursedAt, (int) $loan->id);
         $cumulative = $cumulativeRepaidByLoanKey[$loanKey] ?? 0.0;
-        $target = LegacyLoanRepaymentTarget::totalRepaymentDue((float) ($loan->amount_approved ?? $loan->amount));
+        $target = LegacyLoanRepaymentTarget::forLoan($loan);
         $windowCap = round(max(0.0, $target - $cumulative), 2);
 
         if ($windowCap <= self::AMOUNT_TOLERANCE) {
@@ -298,26 +297,26 @@ final class LegacyImportedLoanScheduleSyncService
 
     private function syncLoanSettlement(Loan $loan): void
     {
-        if (!in_array($loan->status, ['active', 'transferred'], true)) {
+        if (! in_array($loan->status, ['active', 'transferred'], true)) {
             return;
         }
 
-        if (!$loan->installments()->exists()) {
+        if (! $loan->installments()->exists()) {
             return;
         }
 
-        $target = LegacyLoanRepaymentTarget::totalRepaymentDue((float) ($loan->amount_approved ?? $loan->amount));
+        $target = LegacyLoanRepaymentTarget::forLoan($loan);
         $paidInstallmentSum = (float) $loan->installments()->where('status', 'paid')->sum('amount');
         $repaidOnLoan = (float) $loan->repayments()->sum('amount');
         $hasUnpaid = $loan->installments()
             ->whereIn('status', ['pending', 'overdue'])
             ->exists();
 
-        $shouldComplete = !$hasUnpaid
+        $shouldComplete = ! $hasUnpaid
             || $paidInstallmentSum + self::AMOUNT_TOLERANCE >= $target
             || $repaidOnLoan + self::AMOUNT_TOLERANCE >= $target;
 
-        if (!$shouldComplete) {
+        if (! $shouldComplete) {
             return;
         }
 
@@ -379,7 +378,7 @@ final class LegacyImportedLoanScheduleSyncService
 
     private function paymentAppliesToLoan(Loan $loan, CarbonInterface $paidAt): bool
     {
-        return $loan->disbursed_at === null || !$paidAt->lt($loan->disbursed_at);
+        return $loan->disbursed_at === null || ! $paidAt->lt($loan->disbursed_at);
     }
 
     /**

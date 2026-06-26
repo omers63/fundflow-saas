@@ -23,12 +23,11 @@ final class LegacyPaymentClassifierService
         private readonly LegacyMigrationDatabaseLoanResolver $loanResolver,
         private readonly LegacyLoanRepaymentWindowResolver $repaymentWindowResolver,
         private readonly LegacyPaymentLoanAllocator $loanAllocator,
-    ) {
-    }
+    ) {}
 
     public static function classifiedPaymentsAbsolutePath(): ?string
     {
-        if (!Storage::disk('local')->exists(self::CLASSIFIED_PAYMENTS_DISK_PATH)) {
+        if (! Storage::disk('local')->exists(self::CLASSIFIED_PAYMENTS_DISK_PATH)) {
             return null;
         }
 
@@ -147,7 +146,7 @@ final class LegacyPaymentClassifierService
                 $paymentDate = $this->parsePaymentDate($this->cell($row, 'payment_date'), $line);
                 $explicitType = strtolower($this->cell($row, 'payment_type'));
                 $useCsvLoans = $loanIndex !== null
-                    && !$loanIndex->isEmpty()
+                    && ! $loanIndex->isEmpty()
                     && $loanIndex->hasMember($member->memberNumber);
 
                 if (in_array($explicitType, ['ignore', 'skipped', 'skip'], true)) {
@@ -236,7 +235,7 @@ final class LegacyPaymentClassifierService
     {
         $directory = dirname($absolutePath);
 
-        if (!is_dir($directory)) {
+        if (! is_dir($directory)) {
             mkdir($directory, 0755, true);
         }
 
@@ -267,10 +266,10 @@ final class LegacyPaymentClassifierService
         ?LegacyLoanRepaymentInstallmentTracker $installmentTracker = null,
     ): array {
         $useCsvLoans = $loanIndex !== null
-            && !$loanIndex->isEmpty()
+            && ! $loanIndex->isEmpty()
             && $loanIndex->hasMember($member->memberNumber);
 
-        if ($member->databaseMember !== null && !$useCsvLoans) {
+        if ($member->databaseMember !== null && ! $useCsvLoans) {
             return $this->loanAllocator->allocate(
                 $member->databaseMember,
                 $amount,
@@ -291,14 +290,6 @@ final class LegacyPaymentClassifierService
 
         $installmentTracker?->registerWindow($repaymentWindow);
 
-        if ($installmentTracker?->isScheduleSatisfied($repaymentWindow->loanKey) === true) {
-            return [
-                'loan' => null,
-                'repayment_amount' => 0.0,
-                'contribution_amount' => $amount,
-            ];
-        }
-
         $cumulative = $cumulativeRepaidByLoanKey[$repaymentWindow->loanKey] ?? 0.0;
         $minimumInstallment = (float) (LoanTier::forAmount($repaymentWindow->amountApproved)?->min_monthly_installment ?? 0);
 
@@ -306,7 +297,7 @@ final class LegacyPaymentClassifierService
             $minimumInstallment > 0.00001
             && $cumulative <= 0.00001
             && $amount + 0.00001 < $minimumInstallment
-            && !(
+            && ! (
                 $member->monthlyContribution > 0.00001
                 && abs($amount - $member->monthlyContribution) <= 0.00001
             )
@@ -318,7 +309,7 @@ final class LegacyPaymentClassifierService
             ];
         }
 
-        if (!$repaymentWindow->hasRemainingRepayment($cumulative)) {
+        if (! $repaymentWindow->hasRemainingRepayment($cumulative)) {
             return [
                 'loan' => null,
                 'repayment_amount' => 0.0,
@@ -326,12 +317,11 @@ final class LegacyPaymentClassifierService
             ];
         }
 
-        $scheduleCapacity = $installmentTracker?->remainingScheduleCapacity($repaymentWindow->loanKey) ?? $amount;
+        $targetRemaining = $repaymentWindow->remainingRepayment($cumulative);
 
         $repaymentAmount = round(min(
             $amount,
-            $repaymentWindow->remainingRepayment($cumulative),
-            $scheduleCapacity,
+            $targetRemaining,
         ), 2);
 
         $installmentTracker?->applyRepayment($repaymentWindow->loanKey, $repaymentAmount);
@@ -354,7 +344,7 @@ final class LegacyPaymentClassifierService
             loanKey: LegacyLoanRepaymentWindow::loanKey((string) $member->memberNumber, $disbursedAt, (int) $loan->id),
             disbursedAt: $disbursedAt,
             amountApproved: $approved,
-            repaymentTargetAmount: LegacyLoanRepaymentTarget::totalRepaymentDue($approved),
+            repaymentTargetAmount: LegacyLoanRepaymentTarget::forLoan($loan),
             firstRepaymentAt: LegacyLoanRepaymentWindow::firstRepaymentAtForLoan(
                 $loan,
                 LegacyMigrationGraceCycleSettings::graceCycles(),
@@ -377,7 +367,7 @@ final class LegacyPaymentClassifierService
         $memberName = $this->cell($row, 'member_name') ?: $this->cell($row, 'name');
 
         if ($email === '' && $number === '' && $nationalId === '' && $memberName === '') {
-            throw new InvalidArgumentException("Row {$line}: " . __('Provide member_email, member_number, national_id, or member_name.'));
+            throw new InvalidArgumentException("Row {$line}: ".__('Provide member_email, member_number, national_id, or member_name.'));
         }
 
         $databaseMember = $this->tryResolveDatabaseMember($email, $number, $nationalId, $memberName);
@@ -393,24 +383,24 @@ final class LegacyPaymentClassifierService
         }
 
         if ($number !== '') {
-            throw new InvalidArgumentException("Row {$line}: " . __('No member found for member_number :number — import members first or upload the matching members CSV on this page.', [
+            throw new InvalidArgumentException("Row {$line}: ".__('No member found for member_number :number — import members first or upload the matching members CSV on this page.', [
                 'number' => $number,
             ]));
         }
 
         if ($email !== '') {
-            throw new InvalidArgumentException("Row {$line}: " . __('No member found for email :email — import members first or upload the matching members CSV on this page.', [
+            throw new InvalidArgumentException("Row {$line}: ".__('No member found for email :email — import members first or upload the matching members CSV on this page.', [
                 'email' => $email,
             ]));
         }
 
         if ($nationalId !== '') {
-            throw new InvalidArgumentException("Row {$line}: " . __('No member found for national_id :id — import members first or upload the matching members CSV on this page.', [
+            throw new InvalidArgumentException("Row {$line}: ".__('No member found for national_id :id — import members first or upload the matching members CSV on this page.', [
                 'id' => $nationalId,
             ]));
         }
 
-        throw new InvalidArgumentException("Row {$line}: " . __('member_name must match exactly one member in the database or members CSV.'));
+        throw new InvalidArgumentException("Row {$line}: ".__('member_name must match exactly one member in the database or members CSV.'));
     }
 
     private function tryResolveDatabaseMember(
@@ -460,7 +450,7 @@ final class LegacyPaymentClassifierService
 
     private function parseMoney(string $value, string $column, int $line): float
     {
-        if ($value === '' || !is_numeric($value)) {
+        if ($value === '' || ! is_numeric($value)) {
             throw new InvalidArgumentException("Row {$line}: {$column} must be numeric.");
         }
 

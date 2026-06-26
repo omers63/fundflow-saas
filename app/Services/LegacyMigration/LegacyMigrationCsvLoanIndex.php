@@ -17,15 +17,16 @@ final class LegacyMigrationCsvLoanIndex
      *     disbursed_at: Carbon,
      *     amount_approved: float,
      *     legacy_loan_id: int|null,
-     *     installments_count: int|null
+     *     installments_count: int|null,
+     *     master_portion: float|null,
+     *     settlement_threshold: float|null,
      * }>>
      */
     private array $loansByMemberNumber = [];
 
     private function __construct(
         private readonly int $graceCycles,
-    ) {
-    }
+    ) {}
 
     public static function fromPath(string $absolutePath, ?int $graceCycles = null): self
     {
@@ -48,7 +49,7 @@ final class LegacyMigrationCsvLoanIndex
 
             $approvedRaw = trim((string) ($row['amount_approved'] ?? ''));
 
-            if ($approvedRaw === '' || !is_numeric($approvedRaw)) {
+            if ($approvedRaw === '' || ! is_numeric($approvedRaw)) {
                 continue;
             }
 
@@ -71,18 +72,34 @@ final class LegacyMigrationCsvLoanIndex
                 $installmentsCount = max(1, (int) $installmentsCell);
             }
 
+            $masterPortion = null;
+            $masterCell = trim((string) ($row['master_portion'] ?? ''));
+
+            if ($masterCell !== '' && is_numeric($masterCell)) {
+                $masterPortion = (float) $masterCell;
+            }
+
+            $settlementThreshold = null;
+            $settlementCell = trim((string) ($row['settlement_threshold'] ?? ''));
+
+            if ($settlementCell !== '' && is_numeric($settlementCell)) {
+                $settlementThreshold = (float) $settlementCell;
+            }
+
             $index->loansByMemberNumber[$memberNumber][] = [
                 'disbursed_at' => $disbursedAt,
                 'amount_approved' => (float) $approvedRaw,
                 'legacy_loan_id' => LegacyLoanCsvIdentity::legacyLoanIdFromRow($row),
                 'installments_count' => $installmentsCount,
+                'master_portion' => $masterPortion,
+                'settlement_threshold' => $settlementThreshold,
             ];
         }
 
         foreach ($index->loansByMemberNumber as $memberNumber => $loans) {
             usort(
                 $loans,
-                fn(array $left, array $right): int => $left['disbursed_at']->timestamp <=> $right['disbursed_at']->timestamp,
+                fn (array $left, array $right): int => $left['disbursed_at']->timestamp <=> $right['disbursed_at']->timestamp,
             );
 
             $index->loansByMemberNumber[$memberNumber] = $loans;
@@ -101,7 +118,7 @@ final class LegacyMigrationCsvLoanIndex
         ?LegacyLoanRepaymentInstallmentTracker $installmentTracker = null,
     ): ?LegacyLoanRepaymentWindow {
         $windows = array_map(
-            fn(array $loan): LegacyLoanRepaymentWindow => $this->buildWindow(trim($memberNumber), $loan),
+            fn (array $loan): LegacyLoanRepaymentWindow => $this->buildWindow(trim($memberNumber), $loan),
             $this->loansByMemberNumber[trim($memberNumber)] ?? [],
         );
 
@@ -124,7 +141,7 @@ final class LegacyMigrationCsvLoanIndex
     }
 
     /**
-     * @param  array{disbursed_at: Carbon, amount_approved: float, legacy_loan_id: int|null, installments_count: int|null}  $loan
+     * @param  array{disbursed_at: Carbon, amount_approved: float, legacy_loan_id: int|null, installments_count: int|null, master_portion: float|null, settlement_threshold: float|null}  $loan
      */
     private function buildWindow(string $memberNumber, array $loan): LegacyLoanRepaymentWindow
     {
@@ -135,7 +152,10 @@ final class LegacyMigrationCsvLoanIndex
             loanKey: LegacyLoanRepaymentWindow::loanKey($memberNumber, $loan['disbursed_at'], $legacyLoanId),
             disbursedAt: $loan['disbursed_at'],
             amountApproved: $approved,
-            repaymentTargetAmount: LegacyLoanRepaymentTarget::totalRepaymentDue($approved),
+            repaymentTargetAmount: LegacyLoanRepaymentTarget::fromLoansCsvRow([
+                'master_portion' => $loan['master_portion'] !== null ? (string) $loan['master_portion'] : '',
+                'settlement_threshold' => $loan['settlement_threshold'] !== null ? (string) $loan['settlement_threshold'] : '',
+            ], $approved),
             firstRepaymentAt: LegacyLoanRepaymentWindow::firstRepaymentAtForDisbursement(
                 $loan['disbursed_at'],
                 $this->graceCycles,

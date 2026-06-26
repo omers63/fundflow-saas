@@ -563,9 +563,12 @@ final class LoanLedgerService
         DB::transaction(function () use ($loan, $member, $cash, $amount, $description, $repayment, $at): void {
             Loan::query()->whereKey($loan->getKey())->lockForUpdate()->firstOrFail();
 
-            AccountingService::withoutMemberCashCollection(function () use ($cash, $amount, $description, $repayment, $at, $member): void {
+            $lockedCash = Account::query()->lockForUpdate()->findOrFail($cash->id);
+            $lockedCash->refresh();
+
+            AccountingService::withoutMemberCashCollection(function () use ($lockedCash, $amount, $description, $repayment, $at, $member): void {
                 $this->accounting->creditMemberCashWithMasterMirror(
-                    $cash,
+                    $lockedCash,
                     $amount,
                     $description,
                     __('(loan repayment cash-in mirror)'),
@@ -573,17 +576,17 @@ final class LoanLedgerService
                     $at,
                     $member->id,
                 );
-            });
 
-            $this->accounting->debitMemberCashWithMasterMirror(
-                $cash,
-                $amount,
-                $description,
-                __('(loan repayment mirror)'),
-                $repayment,
-                $at,
-                $member->id,
-            );
+                $this->accounting->debitMemberCashWithMasterMirror(
+                    $lockedCash,
+                    $amount,
+                    $description,
+                    __('(loan repayment mirror)'),
+                    $repayment,
+                    $at,
+                    $member->id,
+                );
+            });
 
             $this->postLoanPrincipalRepayment($loan, $amount, $description, $repayment, $member->id, $at);
         });

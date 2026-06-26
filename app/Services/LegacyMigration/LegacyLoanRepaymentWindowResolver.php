@@ -11,15 +11,14 @@ use Carbon\Carbon;
 use Carbon\CarbonInterface;
 
 /**
- * Resolves which loan a historical legacy payment should repay, using the same
- * cumulative 50/50 + 16% target windows as {@see LegacyPaymentClassifierService}.
+ * Resolves which loan a historical legacy payment should repay, using fund-portion
+ * targets ({@see LegacyLoanRepaymentTarget}) aligned with {@see Loan::fullRepaymentThreshold()}.
  */
 final class LegacyLoanRepaymentWindowResolver
 {
     public function __construct(
         private readonly LegacyMigrationDatabaseLoanResolver $loanResolver,
-    ) {
-    }
+    ) {}
 
     public function resolveLoan(
         Member $member,
@@ -56,7 +55,7 @@ final class LegacyLoanRepaymentWindowResolver
         ?LegacyMigrationCsvLoanIndex $loanIndex = null,
         ?LegacyLoanRepaymentInstallmentTracker $installmentTracker = null,
     ): ?LegacyLoanRepaymentWindow {
-        if ($loanIndex !== null && !$loanIndex->isEmpty() && $loanIndex->hasMember($member->memberNumber)) {
+        if ($loanIndex !== null && ! $loanIndex->isEmpty() && $loanIndex->hasMember($member->memberNumber)) {
             $window = $loanIndex->repaymentWindowAt($member->memberNumber, $paymentDate, $cumulativeRepaidByLoanKey, $installmentTracker);
 
             if ($window === null) {
@@ -109,7 +108,7 @@ final class LegacyLoanRepaymentWindowResolver
             ->whereNotNull('disbursed_at')
             ->orderBy('disbursed_at')
             ->get()
-            ->map(fn(Loan $loan): LegacyLoanRepaymentWindow => $this->buildDatabaseWindow($member, $loan));
+            ->map(fn (Loan $loan): LegacyLoanRepaymentWindow => $this->buildDatabaseWindow($member, $loan));
 
         return LegacyLoanRepaymentWindow::firstOpenWindow(
             $windows,
@@ -131,7 +130,7 @@ final class LegacyLoanRepaymentWindowResolver
             loanKey: LegacyLoanRepaymentWindow::loanKey((string) $member->member_number, $disbursedAt, (int) $loan->id),
             disbursedAt: $disbursedAt,
             amountApproved: $approved,
-            repaymentTargetAmount: LegacyLoanRepaymentTarget::totalRepaymentDue($approved),
+            repaymentTargetAmount: LegacyLoanRepaymentTarget::forLoan($loan),
             firstRepaymentAt: LegacyLoanRepaymentWindow::firstRepaymentAtForLoan(
                 $loan,
                 $defaultGraceCycles,

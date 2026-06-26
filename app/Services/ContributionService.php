@@ -462,7 +462,29 @@ class ContributionService
             throw new InvalidArgumentException(__('Only legacy-import contributions can be reversed by migration repair.'));
         }
 
-        $this->reverseAndDeleteContribution($contribution, forceDelete: true);
+        $this->reverseAndDeleteImportedContributionForMigrationRepair($contribution);
+    }
+
+    /**
+     * Remove a legacy-import contribution by deleting each ledger line with balance reconciliation.
+     *
+     * Do not call {@see reverseContributionPrincipal()} here — it credits member cash and
+     * {@see reverseAndDeleteContribution()} then hard-deletes rows without adjusting balances,
+     * which strands cash on the account (legacy migration repair drift).
+     */
+    private function reverseAndDeleteImportedContributionForMigrationRepair(Contribution $contribution): void
+    {
+        AccountingService::withoutMemberCashCollection(function () use ($contribution): void {
+            DB::transaction(function () use ($contribution): void {
+                $transactions = $contribution->transactions()->orderByDesc('id')->get();
+
+                foreach ($transactions as $transaction) {
+                    $this->accounting->deleteTransaction($transaction);
+                }
+
+                $contribution->forceDelete();
+            });
+        });
     }
 
     private function reverseAndDeleteContribution(Contribution $contribution, bool $forceDelete = false): void

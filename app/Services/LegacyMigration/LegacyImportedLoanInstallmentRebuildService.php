@@ -6,7 +6,6 @@ namespace App\Services\LegacyMigration;
 
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
-use App\Support\LoanFundingStrategy;
 use App\Support\LoanRepaymentWindowPolicy;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
@@ -41,6 +40,13 @@ final class LegacyImportedLoanInstallmentRebuildService
 
         foreach ($query->orderBy('id')->cursor() as $loan) {
             if (! $this->usesImplicitLegacyLedgerPortions($loan)) {
+                continue;
+            }
+
+            if ($loan->hasNoRepaymentScheduleObligation()) {
+                $loan->completeAsFullyMemberFundedLegacyImport();
+                $loansRebuilt++;
+
                 continue;
             }
 
@@ -80,15 +86,10 @@ final class LegacyImportedLoanInstallmentRebuildService
         $amount = (float) $loan->amount_approved;
         $minInstall = (float) ($loan->loanTier?->min_monthly_installment ?? 1000);
         $threshold = (float) ($loan->settlement_threshold ?? LoanSettings::settlementThreshold());
-        $schedulePortions = LoanSettings::resolveFundingPortions(
-            $amount,
-            0,
-            LoanFundingStrategy::SPLIT_PERCENTAGE,
-        );
 
         return Loan::computeInstallmentsCountFromPortions(
             $amount,
-            $schedulePortions['member_portion'],
+            (float) $loan->member_portion,
             $minInstall,
             $threshold,
         );

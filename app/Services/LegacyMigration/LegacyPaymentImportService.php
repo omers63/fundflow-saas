@@ -52,8 +52,7 @@ final class LegacyPaymentImportService
         private readonly LegacyLoanRepaymentWindowResolver $repaymentWindowResolver,
         private readonly LegacyPaymentClassifierService $classifier,
         private readonly LegacyPaymentLoanAllocator $loanAllocator,
-    ) {
-    }
+    ) {}
 
     /**
      * Repair a classified payments CSV by downgrading unresolvable loan repayments to contributions.
@@ -91,9 +90,9 @@ final class LegacyPaymentImportService
 
         try {
             return AccountingService::withoutMemberCashCollection(
-                fn(): array => ContributionService::withoutPostedNotifications(
-                    fn(): array => ContributionService::withoutLiveCollectionGuards(
-                        fn(): array => $this->importRows($absolutePath),
+                fn (): array => ContributionService::withoutPostedNotifications(
+                    fn (): array => ContributionService::withoutLiveCollectionGuards(
+                        fn (): array => $this->importRows($absolutePath),
                     ),
                 ),
             );
@@ -130,9 +129,9 @@ final class LegacyPaymentImportService
 
         try {
             $result = AccountingService::withoutMemberCashCollection(
-                fn(): array => ContributionService::withoutPostedNotifications(
-                    fn(): array => ContributionService::withoutLiveCollectionGuards(
-                        fn(): array => $this->importRows($absolutePath),
+                fn (): array => ContributionService::withoutPostedNotifications(
+                    fn (): array => ContributionService::withoutLiveCollectionGuards(
+                        fn (): array => $this->importRows($absolutePath),
                     ),
                 ),
             );
@@ -186,7 +185,7 @@ final class LegacyPaymentImportService
 
         $upgradedRows = $this->upgradeMisclassifiedContributionRows($rows, $cumulativeRepaidByLoanKey);
 
-        if ($upgradedRows > 0 && !$this->simulationMode) {
+        if ($upgradedRows > 0 && ! $this->simulationMode) {
             $this->persistImportOutcomeRows($absolutePath, $rows);
         }
 
@@ -284,13 +283,17 @@ final class LegacyPaymentImportService
             }
         }
 
-        if ($reclassifiedAsContribution > 0 && !$this->simulationMode) {
+        if ($reclassifiedAsContribution > 0 && ! $this->simulationMode) {
             $this->persistImportOutcomeRows($absolutePath, $rows);
         }
 
-        if ($affectedLoanIds !== [] && !$this->simulationMode) {
+        if ($affectedLoanIds !== [] && ! $this->simulationMode) {
             $this->scheduleSync->syncLoans($affectedLoanIds);
             $this->waiveLateFeesOnImportedLoans($affectedLoanIds);
+        }
+
+        if (! $this->simulationMode) {
+            $this->accounting->rebuildAllLedgerAccountBalancesFromTransactionLines();
         }
 
         return [
@@ -441,7 +444,7 @@ final class LegacyPaymentImportService
 
         if ($this->legacyImportRowAlreadyPosted($member, $row)) {
             if (
-                !$this->simulationMode
+                ! $this->simulationMode
                 && $allocation['contribution_amount'] <= 0.00001
                 && $allocation['repayment_amount'] > 0.00001
                 && $allocation['loan'] !== null
@@ -468,7 +471,7 @@ final class LegacyPaymentImportService
 
         [$month, $year] = $this->resolveContributionPeriod($periodRaw, $paymentDate);
 
-        if (!$this->memberPeriodOccupied((int) $member->id, $month, $year)) {
+        if (! $this->memberPeriodOccupied((int) $member->id, $month, $year)) {
             $this->postLegacyContribution(
                 $member,
                 $month,
@@ -491,14 +494,14 @@ final class LegacyPaymentImportService
             return 'contribution';
         }
 
-        if (!$this->simulationMode && $this->legacyContributionRowAlreadyImported($member, $month, $year, $amount, $postedAt)) {
+        if (! $this->simulationMode && $this->legacyContributionRowAlreadyImported($member, $month, $year, $amount, $postedAt)) {
             return 'contribution';
         }
 
         $periodLabel = Carbon::create($year, $month, 1)->format('M Y');
         [$futureMonth, $futureYear] = $this->findNextAvailableContributionPeriod($member, $month, $year);
         $futureNotes = $this->appendLegacyImportFingerprint(
-            '[legacy-routed] ' . __('Routed from :period — :notes', [
+            '[legacy-routed] '.__('Routed from :period — :notes', [
                 'period' => $periodLabel,
                 'notes' => $baseNotes,
             ]),
@@ -571,7 +574,7 @@ final class LegacyPaymentImportService
             $month = (int) $cursor->month;
             $year = (int) $cursor->year;
 
-            if (!$this->memberPeriodOccupied((int) $member->id, $month, $year)) {
+            if (! $this->memberPeriodOccupied((int) $member->id, $month, $year)) {
                 return [$month, $year];
             }
 
@@ -739,7 +742,7 @@ final class LegacyPaymentImportService
     {
         $contribution = Contribution::query()
             ->where('member_id', $member->id)
-            ->where('notes', 'like', '%' . $this->legacyImportFingerprint($row) . '%')
+            ->where('notes', 'like', '%'.$this->legacyImportFingerprint($row).'%')
             ->first();
 
         if ($contribution === null) {
@@ -761,7 +764,7 @@ final class LegacyPaymentImportService
         foreach ($rows as $index => $row) {
             $type = strtolower($this->cell($row, 'payment_type'));
 
-            if (!in_array($type, ['loan_repayment', 'loan', 'repayment'], true)) {
+            if (! in_array($type, ['loan_repayment', 'loan', 'repayment'], true)) {
                 continue;
             }
 
@@ -858,7 +861,7 @@ final class LegacyPaymentImportService
                 return 'no_loan';
             }
 
-            if (!in_array($loan->status, ['active', 'transferred', 'completed', 'early_settled'], true)) {
+            if (! in_array($loan->status, ['active', 'transferred', 'completed', 'early_settled'], true)) {
                 throw new InvalidArgumentException(__('Loan must be active or settled to receive imported repayments.'));
             }
 
@@ -887,7 +890,7 @@ final class LegacyPaymentImportService
                 return 'no_loan';
             }
 
-            if (!in_array($explicitLoan->status, ['active', 'transferred', 'completed', 'early_settled'], true)) {
+            if (! in_array($explicitLoan->status, ['active', 'transferred', 'completed', 'early_settled'], true)) {
                 throw new InvalidArgumentException(__('Loan must be active or settled to receive imported repayments.'));
             }
 
@@ -896,11 +899,9 @@ final class LegacyPaymentImportService
             $window = $this->repaymentWindowResolver->windowForLoan($member, $explicitLoan);
             $this->importInstallmentTracker?->registerWindow($window);
             $cumulative = $cumulativeRepaidByLoanKey[$window->loanKey] ?? 0.0;
-            $scheduleCapacity = $this->importInstallmentTracker?->remainingScheduleCapacity($window->loanKey) ?? $amount;
             $repaymentAmount = round(min(
                 $amount,
                 $window->remainingRepayment($cumulative),
-                $scheduleCapacity,
             ), 2);
 
             if ($repaymentAmount <= 0.00001) {
@@ -1033,7 +1034,7 @@ final class LegacyPaymentImportService
     {
         $loanNumber = $this->cell($row, 'loan_number') ?: $this->cell($row, 'suggested_loan_number');
 
-        if ($loanNumber === '' || !is_numeric($loanNumber)) {
+        if ($loanNumber === '' || ! is_numeric($loanNumber)) {
             return null;
         }
 
@@ -1105,7 +1106,7 @@ final class LegacyPaymentImportService
      */
     private function writeNormalizedImportRows(string $absolutePath, array $rows): void
     {
-        $normalized = array_map(fn(array $row): array => [
+        $normalized = array_map(fn (array $row): array => [
             'member_email' => $this->cell($row, 'member_email'),
             'member_number' => $this->cell($row, 'member_number'),
             'payment_date' => $this->cell($row, 'payment_date'),
@@ -1142,7 +1143,7 @@ final class LegacyPaymentImportService
 
     private function parseMoney(string $value, string $column): float
     {
-        if ($value === '' || !is_numeric($value)) {
+        if ($value === '' || ! is_numeric($value)) {
             throw new InvalidArgumentException("{$column} must be numeric.");
         }
 
@@ -1218,7 +1219,7 @@ final class LegacyPaymentImportService
 
         return Contribution::query()
             ->where('member_id', $member->id)
-            ->where('notes', 'like', '%' . $this->legacyImportFingerprint($row) . '%')
+            ->where('notes', 'like', '%'.$this->legacyImportFingerprint($row).'%')
             ->exists();
     }
 
@@ -1229,7 +1230,7 @@ final class LegacyPaymentImportService
     {
         return Contribution::query()
             ->where('member_id', $member->id)
-            ->where('notes', 'like', '%' . $this->legacyImportFingerprint($row) . '%')
+            ->where('notes', 'like', '%'.$this->legacyImportFingerprint($row).'%')
             ->where('notes', 'like', '%legacy-routed%')
             ->exists();
     }
@@ -1239,7 +1240,7 @@ final class LegacyPaymentImportService
      */
     private function appendLegacyImportFingerprint(string $notes, array $row): string
     {
-        return $notes . ' [' . $this->legacyImportFingerprint($row) . ']';
+        return $notes.' ['.$this->legacyImportFingerprint($row).']';
     }
 
     /**
@@ -1247,7 +1248,7 @@ final class LegacyPaymentImportService
      */
     private function legacyImportFingerprint(array $row): string
     {
-        return 'legacy-import:' . implode('|', [
+        return 'legacy-import:'.implode('|', [
             $this->cell($row, 'member_number'),
             $this->cell($row, 'member_email'),
             $this->cell($row, 'payment_date'),
@@ -1311,7 +1312,7 @@ final class LegacyPaymentImportService
         if ($this->memberPeriodOccupied((int) $member->id, $month, $year)) {
             [$month, $year] = $this->findNextAvailableContributionPeriod($member, $month, $year);
             $periodLabel = Carbon::create($year, $month, 1)->subMonthNoOverflow()->format('M Y');
-            $notes = '[legacy-routed] ' . __('Routed from :period — :notes', [
+            $notes = '[legacy-routed] '.__('Routed from :period — :notes', [
                 'period' => $periodLabel,
                 'notes' => $notes,
             ]);
@@ -1377,7 +1378,7 @@ final class LegacyPaymentImportService
 
     private function periodKey(int $memberId, int $month, int $year): string
     {
-        return "{$memberId}:{$year}-" . str_pad((string) $month, 2, '0', STR_PAD_LEFT);
+        return "{$memberId}:{$year}-".str_pad((string) $month, 2, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -1429,7 +1430,7 @@ final class LegacyPaymentImportService
     private function waiveLateFeesOnImportedLoans(array $loanIds): void
     {
         foreach (array_unique($loanIds) as $loanId) {
-            if (!LegacyImportedLoan::isLoan((int) $loanId)) {
+            if (! LegacyImportedLoan::isLoan((int) $loanId)) {
                 continue;
             }
 

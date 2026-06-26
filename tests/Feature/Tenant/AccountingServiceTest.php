@@ -70,6 +70,21 @@ test('reconcile account ledger balances rebuilds balance_after from chronologica
         ->and((float) $second->fresh()->balance_after)->toBe(150.0);
 });
 
+test('rebuild account balance from transaction lines corrects stored drift', function () {
+    $account = Account::masterCash();
+    $account->update(['balance' => 0]);
+
+    $this->service->credit($account, 1000, 'In');
+    $this->service->debit($account, 1000, 'Out');
+
+    $account->update(['balance' => 40500]);
+
+    $this->service->rebuildAccountBalanceFromTransactionLines($account);
+
+    expect((float) $account->fresh()->balance)->toBe(0.0)
+        ->and($this->service->transactionNetForAccount((int) $account->id))->toBe(0.0);
+});
+
 test('update transaction adjusts account balance when amount changes', function () {
     $account = Account::masterCash();
     $account->update(['balance' => 1000]);

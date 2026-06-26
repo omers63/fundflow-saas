@@ -37,18 +37,15 @@ class RepaymentsRelationManager extends RelationManager
         $currency = Setting::get('general', 'currency', 'USD');
 
         return TableGrouping::apply($table
-            ->columnManager(true)
+            ->columnManager(false)
             ->columns([
                 TextColumn::make('paid_at')
                     ->label(__('Paid at'))
-                    ->dateTime()
+                    ->date()
                     ->sortable(),
                 TextColumn::make('amount')
                     ->money($currency)
                     ->sortable(),
-                TextColumn::make('notes')
-                    ->placeholder(__('—'))
-                    ->wrap(),
             ])
             ->filters([
                 DateColumnRangeFilter::make('paid_at', __('Paid at')),

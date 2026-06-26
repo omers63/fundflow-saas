@@ -7,12 +7,14 @@ use App\Support\BusinessDay;
 use App\Support\LoanRepaymentWindowPolicy;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class Loan extends Model
 {
@@ -358,6 +360,56 @@ class Loan extends Model
         ]);
     }
 
+    /**
+     * Legacy import: loan disbursed entirely from the member's fund with no pool slice or settlement due.
+     */
+    public function isFullyMemberFundedAtDisbursement(): bool
+    {
+        $approved = (float) $this->amount_approved;
+
+        if ($approved <= 0.00001) {
+            return false;
+        }
+
+        return abs((float) $this->member_portion - $approved) < 0.02
+            && (float) $this->master_portion < 0.02;
+    }
+
+    /**
+     * No EMI schedule is required (master slice + settlement threshold both zero).
+     */
+    public function hasNoRepaymentScheduleObligation(): bool
+    {
+        return $this->fullRepaymentThreshold() <= 0.01;
+    }
+
+    /**
+     * Close a fully member-funded legacy loan whose principal was applied at disbursement.
+     */
+    public function completeAsFullyMemberFundedLegacyImport(?CarbonInterface $settledAt = null): void
+    {
+        if (! $this->isFullyMemberFundedAtDisbursement() || ! $this->hasNoRepaymentScheduleObligation()) {
+            return;
+        }
+
+        $at = $settledAt
+            ?? ($this->disbursed_at !== null ? Carbon::parse((string) $this->disbursed_at) : BusinessDay::now());
+
+        DB::transaction(function () use ($at): void {
+            $this->installments()->delete();
+
+            $this->update([
+                'status' => 'completed',
+                'settled_at' => $at,
+                'installments_count' => 0,
+                'term_months' => 0,
+            ]);
+
+            $this->refresh();
+            $this->releaseGuarantorIfDue();
+        });
+    }
+
     // -----------------------------------------------------------------------
     // Repayment cycle: contribution exemption logic
     // -----------------------------------------------------------------------
@@ -401,7 +453,11 @@ class Loan extends Model
         $settlementAmt = $loanAmount * $settlementThresholdPct;
         $totalToRepay = $masterPortion + $settlementAmt;
 
-        return max(1, (int) ceil($totalToRepay / max(1, $minMonthlyInstallment)));
+        if ($totalToRepay <= 0.01) {
+            return 0;
+        }
+
+        return (int) ceil($totalToRepay / max(1, $minMonthlyInstallment));
     }
 
     /**
