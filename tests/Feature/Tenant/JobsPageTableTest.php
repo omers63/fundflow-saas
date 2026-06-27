@@ -44,16 +44,26 @@ test('scheduled job catalog rows include display fields', function () {
         ->and($records->has($definitions[0]['key']))->toBeTrue();
 });
 
-test('jobs page renders scheduled job labels in catalog table', function () {
+test('jobs page renders automation status by default', function () {
+    Livewire::test(JobsPage::class)
+        ->assertOk()
+        ->assertSet('jobsTab', 'status')
+        ->assertSee(__('Collections'))
+        ->assertDontSee(__('Scheduled jobs'));
+});
+
+test('jobs page renders scheduled job labels in catalog table when advanced', function () {
     $label = ScheduledJobRegistry::all()[0]['label'];
 
     Livewire::test(JobsPage::class)
+        ->call('setAdvancedUi', true)
+        ->call('setJobsTab', 'catalog')
         ->assertOk()
         ->assertSee(__('Scheduled jobs'))
         ->assertSee($label);
 });
 
-test('run history tab renders after switching from catalog', function () {
+test('run history tab renders after switching from catalog in advanced mode', function () {
     $definition = ScheduledJobRegistry::all()[0];
 
     SystemJobRun::query()->delete();
@@ -71,6 +81,8 @@ test('run history tab renders after switching from catalog', function () {
     ]);
 
     Livewire::test(JobsPage::class)
+        ->call('setAdvancedUi', true)
+        ->call('setJobsTab', 'catalog')
         ->assertSee(__('Scheduled jobs'))
         ->assertSee($definition['label'])
         ->call('setJobsTab', 'history')

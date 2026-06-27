@@ -1,33 +1,54 @@
 <x-filament-panels::page>
-    <div
-        class="mb-4 overflow-hidden rounded-xl border border-sky-200 bg-white px-4 py-3 text-sm text-gray-700 shadow-sm dark:border-sky-800/40 dark:bg-slate-800 dark:text-gray-300">
-        <p class="font-semibold text-gray-900 dark:text-white">{{ __('Server scheduler required') }}</p>
-        <p class="mt-1 text-xs leading-relaxed">
-            {{ __('Scheduled jobs run via Laravel’s scheduler. On the host, add a cron entry that runs every minute:') }}
-            <code
-                class="mt-1 block rounded border border-gray-200 bg-gray-50 px-2 py-1 font-mono text-[11px] text-gray-800 dark:border-white/10 dark:bg-slate-900 dark:text-gray-200">* * * * * cd {{ base_path() }} && php artisan schedule:run >> /dev/null 2>&1</code>
-        </p>
-        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-            {{ __('Use Run now below for manual runs. Tenant schedules are defined in routes/console.php.') }}
-        </p>
+    <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+            <p class="text-sm text-gray-600 dark:text-gray-400">{{ $this->getSubheading() }}</p>
+        </div>
+        @if ($this->advancedUiAvailable())
+            @include('filament.tenant.partials.advanced-ui-toggle')
+        @endif
     </div>
-
+    
+    @if ($this->batchPostingIsHalted())
+        <div role="alert"
+            class="mb-4 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900 shadow-sm dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200">
+            <x-heroicon-o-exclamation-triangle class="mt-0.5 h-5 w-5 shrink-0" />
+            <div class="min-w-0 text-sm">
+                <p class="font-semibold">{{ __('Batch posting halted') }}</p>
+                <p class="mt-0.5 text-xs">{{ $this->batchPostingHaltReason() ?? __('Critical reconciliation issue') }}</p>
+            </div>
+        </div>
+    @endif
+    
+    @include('filament.tenant.partials.jobs.scheduler-notice')
+    
     <div class="ff-tenant-tab-pills mb-4 flex flex-wrap gap-2">
-        <button type="button" wire:click="setJobsTab('catalog')" @class([
-            'ff-tenant-tab-pills__item',
-            'ff-tenant-tab-pills__item--active' => $jobsTab === 'catalog',
-        ])>
-            {{ __('Job catalog') }}
+        <button type="button" wire:click="setJobsTab('status')" @class([
+    'ff-tenant-tab-pills__item',
+    'ff-tenant-tab-pills__item--active' => $jobsTab === 'status',
+])>
+            {{ __('Status') }}
         </button>
-        <button type="button" wire:click="setJobsTab('history')" @class([
-            'ff-tenant-tab-pills__item',
-            'ff-tenant-tab-pills__item--active' => $jobsTab === 'history',
-        ])>
-            {{ __('Run history') }}
-        </button>
+        @if ($this->advancedUi)
+            <button type="button" wire:click="setJobsTab('catalog')" @class([
+        'ff-tenant-tab-pills__item',
+        'ff-tenant-tab-pills__item--active' => $jobsTab === 'catalog',
+    ])>
+                {{ __('Job catalog') }}
+            </button>
+            <button type="button" wire:click="setJobsTab('history')" @class([
+        'ff-tenant-tab-pills__item',
+        'ff-tenant-tab-pills__item--active' => $jobsTab === 'history',
+    ])>
+                {{ __('Run history') }}
+            </button>
+        @endif
     </div>
-
-    <div wire:key="jobs-table-{{ $jobsTab }}">
-        {{ $this->table }}
-    </div>
-</x-filament-panels::page>
+    
+    @if ($jobsTab === 'status')
+        @include('filament.tenant.partials.jobs.automation-status')
+    @else
+        <div wire:key="jobs-table-{{ $jobsTab }}-{{ (int) $this->advancedUi }}">
+            {{ $this->table }}
+        </div>
+    @endif
+    </x-filament-panels::page>

@@ -4,6 +4,7 @@ namespace App\Models\Tenant;
 
 use App\Models\Tenant\Relations\MasterAccountBankLinesAwaitingPostingRelation;
 use App\Models\Tenant\Relations\MasterAccountPendingClearanceRelation;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -47,6 +48,34 @@ class Account extends Model
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class);
+    }
+
+    public function scopeWithLastActivityAt(Builder $query): Builder
+    {
+        if ($query->getQuery()->columns === null) {
+            $query->select($query->qualifyColumn('*'));
+        }
+
+        return $query->addSelect([
+            'last_activity_at' => Transaction::query()
+                ->selectRaw('max(transacted_at)')
+                ->whereColumn('account_id', 'accounts.id'),
+        ]);
+    }
+
+    public static function lastLedgerActivitySubquery(): string
+    {
+        return '(select max(transacted_at) from transactions where transactions.account_id = accounts.id)';
+    }
+
+    public function scopeWhereLastActivityDateOnOrAfter(Builder $query, string $date): Builder
+    {
+        return $query->whereRaw('date('.self::lastLedgerActivitySubquery().') >= ?', [$date]);
+    }
+
+    public function scopeWhereLastActivityDateOnOrBefore(Builder $query, string $date): Builder
+    {
+        return $query->whereRaw('date('.self::lastLedgerActivitySubquery().') <= ?', [$date]);
     }
 
     public function pendingOperationalClearanceBankTransactions(): MasterAccountPendingClearanceRelation

@@ -12,6 +12,7 @@ use App\Models\Tenant\NotificationLog;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\MonthlyStatementNotification;
 use App\Services\AccountingService;
+use App\Support\SystemLoggingSettings;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
@@ -53,6 +54,8 @@ beforeEach(function () {
     ]);
 
     app(AccountingService::class)->createMemberAccounts($this->member);
+
+    SystemLoggingSettings::setNotificationLogEnabled(true);
 });
 
 test('tenant admin can access system maintenance and notification log pages', function () {
@@ -61,7 +64,13 @@ test('tenant admin can access system maintenance and notification log pages', fu
     Livewire::actingAs($this->admin, 'tenant')
         ->test(SystemMaintenancePage::class)
         ->assertSuccessful()
-        ->assertSee(__('Database backups'));
+        ->assertSee(__('Database backups'))
+        ->assertDontSee(__('Purge database (destructive)'));
+
+    Livewire::actingAs($this->admin, 'tenant')
+        ->test(SystemMaintenancePage::class)
+        ->call('setAdvancedUi', true)
+        ->assertSee(__('Purge database (destructive)'));
 
     Livewire::actingAs($this->admin, 'tenant')
         ->test(ListNotificationLogs::class)

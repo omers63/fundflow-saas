@@ -6,8 +6,10 @@ namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Concerns\EmbedsAsAuditWorkspacePanel;
+use App\Filament\Tenant\Concerns\InteractsWithAdvancedUi;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Services\DatabaseMaintenanceService;
+use App\Support\MemberPortalMaintenance;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
@@ -20,6 +22,7 @@ use UnitEnum;
 class SystemMaintenancePage extends Page
 {
     use EmbedsAsAuditWorkspacePanel;
+    use InteractsWithAdvancedUi;
     use TranslatesPageNavigationLabel;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedWrenchScrewdriver;
@@ -47,6 +50,10 @@ class SystemMaintenancePage extends Page
     /** @var list<string> */
     public array $softDeleteSkippedTables = [];
 
+    public bool $memberPortalMaintenanceEnabled = false;
+
+    public ?string $memberPortalMaintenanceMessage = null;
+
     public static function canAccess(): bool
     {
         return auth('tenant')->user()?->is_admin === true;
@@ -60,7 +67,50 @@ class SystemMaintenancePage extends Page
     public function mount(DatabaseMaintenanceService $service, bool $embedded = false): void
     {
         $this->mountEmbedded($embedded);
+        $this->mountAdvancedUi();
         $this->refreshTableLists($service);
+        $this->memberPortalMaintenanceEnabled = MemberPortalMaintenance::isEnabled();
+        $this->memberPortalMaintenanceMessage = MemberPortalMaintenance::storedMessage();
+    }
+
+    public function updatedMemberPortalMaintenanceEnabled(bool $value): void
+    {
+        if ($value) {
+            MemberPortalMaintenance::enable($this->memberPortalMaintenanceMessage);
+            $this->memberPortalMaintenanceMessage = MemberPortalMaintenance::storedMessage();
+
+            Notification::make()
+                ->title(__('Member portal maintenance enabled'))
+                ->body(__('Members cannot sign in and active sessions will be ended on their next request.'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        MemberPortalMaintenance::disable();
+        $this->memberPortalMaintenanceMessage = null;
+
+        Notification::make()
+            ->title(__('Member portal maintenance disabled'))
+            ->body(__('Member sign-in is available again.'))
+            ->success()
+            ->send();
+    }
+
+    public function saveMemberPortalMaintenanceMessage(): void
+    {
+        if (! $this->memberPortalMaintenanceEnabled) {
+            return;
+        }
+
+        MemberPortalMaintenance::updateMessage($this->memberPortalMaintenanceMessage);
+        $this->memberPortalMaintenanceMessage = MemberPortalMaintenance::storedMessage();
+
+        Notification::make()
+            ->title(__('Maintenance message updated'))
+            ->success()
+            ->send();
     }
 
     public function getTitle(): string
@@ -70,7 +120,7 @@ class SystemMaintenancePage extends Page
 
     public function getSubheading(): ?string
     {
-        return __('Back up your tenant database, review stored copies, and manage destructive purge operations.');
+        return __('Download or save a copy of your fund data.');
     }
 
     /**
@@ -132,11 +182,12 @@ class SystemMaintenancePage extends Page
                 ->label(__('Purge now'))
                 ->icon(Heroicon::OutlinedTrash)
                 ->color('danger')
+                ->visible(fn (): bool => $this->advancedUi)
                 ->requiresConfirmation()
                 ->modalHeading(__('Purge tables without soft deletes?'))
                 ->modalDescription(
-                    __('All rows in each listed table will be permanently removed. ') .
-                    __('Tables with a deleted_at column are skipped. ') .
+                    __('All rows in each listed table will be permanently removed. ').
+                    __('Tables with a deleted_at column are skipped. ').
                     __('Users, permissions, sessions, queues, cache, and migrations are always preserved.')
                 )
                 ->schema([

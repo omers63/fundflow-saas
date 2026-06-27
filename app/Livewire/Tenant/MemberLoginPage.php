@@ -6,6 +6,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\Tenant\HouseholdProfileVerificationService;
 use App\Services\Tenant\MemberHouseholdLoginService;
+use App\Support\MemberPortalMaintenance;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
@@ -47,23 +48,35 @@ class MemberLoginPage extends Component
             $user = Auth::guard('tenant')->user();
 
             if ($user instanceof User) {
-                if ($user->canAccessPanel(Filament::getPanel('member'))) {
+                if (
+                    MemberPortalMaintenance::isEnabled()
+                    && ! MemberPortalMaintenance::isExempt(request())
+                    && ! MemberPortalMaintenance::sessionEpochIsValid()
+                ) {
+                    Auth::guard('tenant')->logout();
+                    request()->session()->invalidate();
+                    request()->session()->regenerateToken();
+                } elseif ($user->canAccessPanel(Filament::getPanel('member'))) {
                     $this->redirect(Filament::getPanel('member')->getUrl());
 
                     return;
-                }
-
-                if ($user->canAccessPanel(Filament::getPanel('tenant'))) {
+                } elseif ($user->canAccessPanel(Filament::getPanel('tenant'))) {
                     $this->redirect(Filament::getPanel('tenant')->getUrl());
 
                     return;
+                } else {
+                    Auth::guard('tenant')->logout();
                 }
+            } else {
+                Auth::guard('tenant')->logout();
             }
-
-            Auth::guard('tenant')->logout();
         }
 
-        if (session()->pull('member_suspended_notice')) {
+        if (session()->pull(MemberPortalMaintenance::MAINTENANCE_NOTICE_SESSION_KEY)) {
+            $this->applyMaintenanceStatus();
+        } elseif (MemberPortalMaintenance::isEnabled() && ! MemberPortalMaintenance::isExempt(request())) {
+            $this->applyMaintenanceStatus();
+        } elseif (session()->pull('member_suspended_notice')) {
             $this->statusType = 'suspended';
             $this->statusMessage = __('Your member portal access is currently suspended. Please contact fund administration for support.');
         } elseif (session()->pull('member_inactive_notice')) {
@@ -100,6 +113,20 @@ class MemberLoginPage extends Component
         $this->email = app(MemberHouseholdLoginService::class)->normalizeEmail($this->email);
 
         if (! $this->ensureIsNotRateLimited('login')) {
+            return;
+        }
+
+        if (MemberPortalMaintenance::isEnabled()) {
+            $adminUser = $this->resolveAdminUser();
+            if ($adminUser !== null) {
+                RateLimiter::clear($this->throttleKey('login'));
+                $this->completeLogin($adminUser);
+
+                return;
+            }
+
+            $this->applyMaintenanceStatus();
+
             return;
         }
 
@@ -190,6 +217,12 @@ class MemberLoginPage extends Component
     {
         $this->resetErrorBag('verificationSecret');
 
+        if (MemberPortalMaintenance::isEnabled() && ! MemberPortalMaintenance::isExempt(request())) {
+            $this->applyMaintenanceStatus();
+
+            return;
+        }
+
         if (! $this->ensureIsNotRateLimited('profile_verification')) {
             return;
         }
@@ -268,6 +301,22 @@ class MemberLoginPage extends Component
                 ]);
             }
 
+            if (MemberPortalMaintenance::isEnabled() && ! MemberPortalMaintenance::isExempt(request())) {
+                if ($user->is_admin && $user->canAccessPanel($tenantPanel)) {
+                    Auth::guard('tenant')->login($user, $this->remember);
+                    session()->regenerate();
+                    session()->put('locale', $user->preferredLocale());
+
+                    $this->redirectIntended($tenantPanel->getUrl());
+
+                    return;
+                }
+
+                $this->applyMaintenanceStatus();
+
+                return;
+            }
+
             if ($member->status === 'suspended') {
                 $this->statusType = 'suspended';
                 $this->statusMessage = __('Your member portal access is currently suspended. Please contact fund administration for support.');
@@ -307,6 +356,7 @@ class MemberLoginPage extends Component
             session()->regenerate();
             session()->put('locale', $user->preferredLocale());
             session()->put('active_member_id', $member->id);
+            MemberPortalMaintenance::syncSessionEpoch();
 
             $this->redirectIntended($memberPanel->getUrl());
 
@@ -326,6 +376,18 @@ class MemberLoginPage extends Component
         throw ValidationException::withMessages([
             'email' => __('No member account is linked to this login. If you applied for membership, check your application status.'),
         ]);
+    }
+
+    protected function applyMaintenanceStatus(): void
+    {
+        $this->statusType = 'maintenance';
+        $this->statusMessage = MemberPortalMaintenance::message();
+        $this->showProfilePicker = false;
+        $this->householdParentId = null;
+        $this->selectedMemberId = null;
+        $this->availableProfiles = [];
+        $this->verificationSecret = '';
+        $this->password = '';
     }
 
     protected function resolveAdminUser(): ?User

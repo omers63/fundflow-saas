@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Tenant\Concerns\InteractsWithAdvancedUi;
 use App\Filament\Tenant\Concerns\InteractsWithJobsTable;
 use App\Filament\Tenant\Resources\FundAuditLogs\Tables\FundAuditLogsTable;
 use App\Filament\Tenant\Resources\NotificationLogs\Tables\NotificationLogsTable;
@@ -31,6 +32,7 @@ use UnitEnum;
 
 class AuditSystemPage extends Page implements HasTable
 {
+    use InteractsWithAdvancedUi;
     use InteractsWithJobsTable;
     use InteractsWithTable;
     use TranslatesPageNavigationLabel;
@@ -91,7 +93,7 @@ class AuditSystemPage extends Page implements HasTable
 
     public function getSubheading(): ?string
     {
-        return __('Audit trail, notification delivery, scheduled jobs, maintenance, migration, and year-end close.');
+        return __('Audit trail, notification delivery, automation, maintenance, migration, and year-end close.');
     }
 
     /**
@@ -112,6 +114,8 @@ class AuditSystemPage extends Page implements HasTable
 
     public function mount(): void
     {
+        $this->mountAdvancedUi();
+
         $allowedTabs = array_keys($this->getAuditSystemTabs());
 
         if (! in_array($this->sideTab, $allowedTabs, true)) {
@@ -122,12 +126,29 @@ class AuditSystemPage extends Page implements HasTable
             $this->auditFilter = 'all';
         }
 
-        if (! in_array($this->jobsTab, ['catalog', 'history'], true)) {
-            $this->jobsTab = 'catalog';
+        if (! in_array($this->jobsTab, ['status', 'catalog', 'history'], true)) {
+            $this->jobsTab = 'status';
         }
 
         $this->auditLoggingEnabled = SystemLoggingSettings::fundAuditLogEnabled();
         $this->notificationLoggingEnabled = SystemLoggingSettings::notificationLogEnabled();
+    }
+
+    public function batchPostingIsHalted(): bool
+    {
+        return app(BatchPostingGate::class)->isHalted();
+    }
+
+    public function batchPostingHaltReason(): ?string
+    {
+        return app(BatchPostingGate::class)->reason();
+    }
+
+    protected function onAdvancedUiToggled(): void
+    {
+        if ($this->sideTab === 'jobs' && ! $this->advancedUi && in_array($this->jobsTab, ['catalog', 'history'], true)) {
+            $this->setJobsTab('status');
+        }
     }
 
     public function setSideTab(string $tab): void

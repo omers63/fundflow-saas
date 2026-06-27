@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnforceMemberPortalMaintenance;
 use App\Http\Middleware\InitializeTenancyByDomainEarly;
 use App\Http\Middleware\SetApplicationLocale;
 use App\Http\Middleware\StartWallClockSession;
@@ -43,6 +44,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             SetApplicationLocale::class,
             UseWallClockForSessions::class,
+        ]);
+        $middleware->alias([
+            'member-portal-maintenance' => EnforceMemberPortalMaintenance::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

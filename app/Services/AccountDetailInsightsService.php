@@ -17,6 +17,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Support\BusinessDay;
 use App\Support\Insights\InsightFormatter;
+use App\Support\Insights\MasterInvestNetReturn;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 
@@ -388,16 +389,32 @@ final class AccountDetailInsightsService
             ->where('description', 'like', '%(reserve funding)%')
             ->sum('amount');
 
+        $disburseOutSuffix = match ($type) {
+            'expense' => '(expense out)',
+            default => '(to master cash)',
+        };
+
         $disbursedOut = (float) Transaction::query()
             ->where('account_id', $account->id)
             ->where('type', 'debit')
-            ->where('description', 'like', '%(to master cash)%')
+            ->where('description', 'like', '%'.$disburseOutSuffix)
             ->sum('amount');
+
+        $reserveIsOverdrawn = $disbursedOut > $fundedIn;
+        $availableValueClass = $reserveIsOverdrawn
+            ? 'text-rose-600 dark:text-rose-400'
+            : ($fundedIn > $disbursedOut
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-gray-900 dark:text-white');
 
         $rows = [
             ['label' => __('Funded in'), 'value' => InsightFormatter::money($fundedIn)],
             ['label' => __('Disbursed out'), 'value' => InsightFormatter::money($disbursedOut)],
-            ['label' => __('Available'), 'value' => InsightFormatter::money($balance)],
+            [
+                'label' => __('Available'),
+                'value' => InsightFormatter::money($balance),
+                'value_class' => $availableValueClass,
+            ],
         ];
 
         if ($type === 'expense') {
@@ -428,7 +445,8 @@ final class AccountDetailInsightsService
                     'value' => InsightFormatter::compactAmount($balance),
                     'sub' => __('Balance'),
                     'icon' => 'heroicon-o-wallet',
-                    'accent' => $balance > 0 ? 'emerald' : 'amber',
+                    'accent' => $reserveIsOverdrawn ? 'rose' : 'emerald',
+                    'value_class' => $availableValueClass,
                 ],
         ];
     }
@@ -441,19 +459,11 @@ final class AccountDetailInsightsService
         $pendingBankMatch = app(BankClearingMatchService::class)
             ->pendingOperationalClearanceCountForMasterAccount($account);
 
-        $investedOut = (float) Transaction::query()
-            ->where('account_id', $account->id)
-            ->where('type', 'debit')
-            ->where('description', 'like', '%(invest out)%')
-            ->sum('amount');
-
-        $returnsIn = (float) Transaction::query()
-            ->where('account_id', $account->id)
-            ->where('type', 'credit')
-            ->where('description', 'like', '%(investment return)%')
-            ->sum('amount');
-
-        $netReturn = $returnsIn - $investedOut;
+        $netReturnSummary = MasterInvestNetReturn::summarize($account);
+        $returnsIn = $netReturnSummary['returns_in'];
+        $investedOut = $netReturnSummary['invested_out'];
+        $netReturn = $netReturnSummary['net_return'];
+        $netReturnIsNegative = $netReturnSummary['is_negative'];
 
         return [
             'panels' => [
@@ -462,7 +472,15 @@ final class AccountDetailInsightsService
                     'rows' => [
                         ['label' => __('Returns in'), 'value' => InsightFormatter::money($returnsIn)],
                         ['label' => __('Invested out'), 'value' => InsightFormatter::money($investedOut)],
-                        ['label' => __('Net return'), 'value' => InsightFormatter::money($netReturn)],
+                        [
+                            'label' => __('Net return'),
+                            'value' => InsightFormatter::money($netReturn),
+                            'value_class' => $netReturnIsNegative
+                                ? 'text-rose-600 dark:text-rose-400'
+                                : ($netReturn > 0
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-gray-900 dark:text-white'),
+                        ],
                         ['label' => __('Bank match'), 'value' => (string) $pendingBankMatch],
                     ],
                     'url' => $pendingBankMatch > 0 ? BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_QUEUE, queueFilter: BankClearingTabRegistry::FILTER_OPERATIONS) : null,
@@ -484,10 +502,10 @@ final class AccountDetailInsightsService
                     'value' => ($netReturn >= 0 ? '+' : '−').InsightFormatter::compactAmount($netReturn),
                     'sub' => __('Lifetime'),
                     'icon' => 'heroicon-o-arrow-path-rounded-square',
-                    'accent' => $netReturn >= 0 ? 'emerald' : 'rose',
-                    'value_class' => $netReturn >= 0
-                        ? 'text-emerald-600 dark:text-emerald-400'
-                        : 'text-rose-600 dark:text-rose-400',
+                    'accent' => $netReturnIsNegative ? 'rose' : 'emerald',
+                    'value_class' => $netReturnIsNegative
+                        ? 'text-rose-600 dark:text-rose-400'
+                        : 'text-emerald-600 dark:text-emerald-400',
                 ],
         ];
     }

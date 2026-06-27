@@ -94,6 +94,7 @@ class MasterAccountResource extends Resource
         return MasterAccountsTable::configure(
             $table->pluralModelLabel(UiLabelIcons::tableModelLabel(self::tabLabel($tab))),
             showTypeColumn: $tab === 'all',
+            activeTab: $tab,
         );
     }
 

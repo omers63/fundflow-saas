@@ -4,22 +4,25 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Support;
 
-use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
-
 final class ReconciliationTabRegistry
 {
     /**
      * @return array<string, string>
      */
-    public static function tabs(): array
+    public static function tabs(bool $advancedUi = false): array
     {
-        return [
+        $tabs = [
             'overview' => __('Overview'),
-            'exceptions' => __('Queue'),
+            'exceptions' => __('Issues'),
             'history' => __('History'),
-            'snapshots' => __('Snapshots'),
-            'methodology' => __('Methodology'),
         ];
+
+        if ($advancedUi) {
+            $tabs['snapshots'] = __('Snapshots');
+            $tabs['methodology'] = __('Methodology');
+        }
+
+        return $tabs;
     }
 
     public static function url(string $sideTab): string

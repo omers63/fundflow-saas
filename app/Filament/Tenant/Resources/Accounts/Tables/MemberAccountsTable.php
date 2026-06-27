@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\Accounts\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberAccountsListTableHeaderActions;
 use App\Filament\Support\MemberAccountTableActions;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -54,6 +55,7 @@ class MemberAccountsTable
 
         return TableGrouping::apply(
             $table
+                ->headerActions(MemberAccountsListTableHeaderActions::accounts())
                 ->columns($columns)
                 ->filters([
                     SelectFilter::make('member_id')

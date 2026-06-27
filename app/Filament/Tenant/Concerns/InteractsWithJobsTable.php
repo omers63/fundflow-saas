@@ -24,11 +24,11 @@ use Livewire\Attributes\Url;
 trait InteractsWithJobsTable
 {
     #[Url(as: 'jobsTab')]
-    public string $jobsTab = 'catalog';
+    public string $jobsTab = 'status';
 
     public function setJobsTab(string $tab): void
     {
-        if (! in_array($tab, ['catalog', 'history'], true)) {
+        if (! in_array($tab, ['status', 'catalog', 'history'], true)) {
             return;
         }
 
@@ -60,7 +60,18 @@ trait InteractsWithJobsTable
             return $this->configureJobsHistoryTable($table);
         }
 
-        return $this->configureJobsCatalogTable($table);
+        if ($this->jobsTab === 'catalog') {
+            return $this->configureJobsCatalogTable($table);
+        }
+
+        return $table
+            ->query(SystemJobRun::query()->whereRaw('1 = 0'))
+            ->paginated(false);
+    }
+
+    protected function jobsAdvancedUi(): bool
+    {
+        return property_exists($this, 'advancedUi') && $this->advancedUi;
     }
 
     protected function configureJobsCatalogTable(Table $table): Table
@@ -101,6 +112,10 @@ trait InteractsWithJobsTable
                     ->label(__('Last started'))
                     ->dateTime()
                     ->placeholder(__('—')),
+                TextColumn::make('last_duration_ms')
+                    ->label(__('Duration'))
+                    ->formatStateUsing(fn (?int $state): string => $state ? $state.' ms' : '—')
+                    ->visible(fn (): bool => $this->jobsAdvancedUi()),
             ])
             ->recordActions(TableRecordActionGroups::wrap([
                 Action::make('run')
@@ -125,6 +140,21 @@ trait InteractsWithJobsTable
 
                         $this->resetTable();
                     }),
+                Action::make('view_output')
+                    ->label(__('Last output'))
+                    ->icon('heroicon-o-document-text')
+                    ->visible(fn (array $record): bool => $this->jobsAdvancedUi()
+                        && app(SystemJobRunnerService::class)->latestRun($record['key']) !== null)
+                    ->modalHeading(fn (array $record): string => $record['job_label'])
+                    ->schema(fn (array $record): array => [
+                        Placeholder::make('output')
+                            ->label(__('Output'))
+                            ->content(fn (): HtmlString => new HtmlString(
+                                '<pre class="max-h-96 overflow-auto whitespace-pre-wrap text-xs">'
+                                .e(app(SystemJobRunnerService::class)->latestRun($record['key'])?->output ?? '—')
+                                .'</pre>'
+                            )),
+                    ]),
             ]))
             ->toolbarActions([
                 BulkActionGroup::make([
@@ -160,6 +190,10 @@ trait InteractsWithJobsTable
                 TextColumn::make('started_at')
                     ->dateTime()
                     ->sortable(),
+                TextColumn::make('exit_code')
+                    ->label(__('Exit code'))
+                    ->placeholder(__('—'))
+                    ->visible(fn (): bool => $this->jobsAdvancedUi()),
             ])
             ->recordActions(TableRecordActionGroups::wrap([
                 Action::make('view_run')

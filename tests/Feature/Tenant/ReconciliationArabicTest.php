@@ -20,11 +20,12 @@ beforeEach(function (): void {
 
 test('reconciliation page translation keys have arabic entries', function (): void {
     $keys = [
-        'Reconciliation control center',
-        'Finance control',
-        'Audit snapshots, exception queue, and ledger integrity checks.',
-        'Open exceptions',
+        'Reconciliation',
+        'Fund status',
+        'Open issues',
         'Methodology',
+        'Simple',
+        'Advanced',
     ];
 
     /** @var array<string, string> $arabic */
@@ -48,6 +49,6 @@ test('reconciliation overview renders primary arabic headings', function (): voi
     Livewire::actingAs($admin, 'tenant')
         ->test(ReconciliationOverviewPage::class)
         ->assertSuccessful()
-        ->assertSee(__('Reconciliation control center', locale: 'ar'), false)
+        ->assertSee(__('Reconciliation', locale: 'ar'), false)
         ->assertSee(__('Overview', locale: 'ar'), false);
 });

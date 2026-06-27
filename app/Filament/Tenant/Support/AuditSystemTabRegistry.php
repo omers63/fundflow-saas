@@ -16,7 +16,7 @@ final class AuditSystemTabRegistry
         return [
             'audit' => __('Audit log'),
             'notifications' => __('Notification log'),
-            'jobs' => __('Jobs'),
+            'jobs' => __('Automation'),
             'maintenance' => __('Maintenance'),
             'migration' => __('Migration'),
             'fiscal' => __('Year-end close'),

@@ -10,6 +10,7 @@ use App\Filament\Member\Support\MemberNavigation;
 use App\Filament\Member\Support\ReturnToParentPortalAction;
 use App\Filament\Support\DatabaseNotificationsRefresh;
 use App\Http\Middleware\AuthenticateMemberPanel;
+use App\Http\Middleware\EnforceMemberPortalMaintenance;
 use App\Http\Middleware\SetFilamentPanelAuthGuard;
 use App\Http\Middleware\StartWallClockSession;
 use App\Http\Middleware\UseWallClockForSessions;
@@ -117,6 +118,7 @@ class MemberPanelProvider extends PanelProvider
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
+                EnforceMemberPortalMaintenance::class,
                 PreventAccessFromCentralDomains::class,
                 InitializeTenancyByDomain::class,
             ])

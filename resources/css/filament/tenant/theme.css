@@ -246,6 +246,11 @@ html.fi.fi-panel-tenant #nprogress .peg {
     color: #374151 !important;
 }
 
+/* Info solid buttons keep --text at white; flatten theme uses a light surface — force a visible icon */
+.fi-body.fi-panel-tenant .fi-btn.fi-color-info:not(.fi-outlined) > .fi-icon {
+    color: var(--ff-muted) !important;
+}
+
 /* Primary outlined: sky border, sky text, white background */
 .fi-body.fi-panel-tenant .fi-btn.fi-outlined.fi-color-primary {
     background: var(--ff-surface) !important;
@@ -861,12 +866,14 @@ html.fi.fi-panel-tenant #nprogress .peg {
 }
 
 .fi-body.fi-panel-tenant .ff-maintenance-panel__header--emerald,
-.fi-body.fi-panel-tenant .ff-maintenance-panel__header--blue {
+.fi-body.fi-panel-tenant .ff-maintenance-panel__header--blue,
+.fi-body.fi-panel-tenant .ff-maintenance-panel__header--amber {
   background: var(--ff-surface, #fff);
 }
 
 .dark .fi-body.fi-panel-tenant .ff-maintenance-panel__header--emerald,
-.dark .fi-body.fi-panel-tenant .ff-maintenance-panel__header--blue {
+.dark .fi-body.fi-panel-tenant .ff-maintenance-panel__header--blue,
+.dark .fi-body.fi-panel-tenant .ff-maintenance-panel__header--amber {
   background: #1e293b;
 }
 

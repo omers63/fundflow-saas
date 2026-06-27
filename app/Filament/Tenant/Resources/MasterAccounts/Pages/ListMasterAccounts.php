@@ -75,7 +75,8 @@ class ListMasterAccounts extends ListRecords
 
     protected function getTableQuery(): Builder
     {
-        $query = static::getResource()::getEloquentQuery();
+        $query = static::getResource()::getEloquentQuery()
+            ->withLastActivityAt();
 
         $type = MasterAccountResource::resolveListMasterAccountsTab();
 

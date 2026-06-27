@@ -153,7 +153,7 @@ test('audit system page switches workspace tabs via livewire property', function
         ->assertSee(__('Fund audit log'))
         ->call('setSideTab', 'jobs')
         ->assertSet('sideTab', 'jobs')
-        ->assertSee(__('Job catalog'))
+        ->assertSee(__('Collections'))
         ->assertDontSee(__('Fund audit log'))
         ->call('setSideTab', 'maintenance')
         ->assertSet('sideTab', 'maintenance')
@@ -182,7 +182,10 @@ test('audit system page reconfigures table columns when switching between table 
         ->call('setSideTab', 'audit')
         ->assertSee(__('Event'))
         ->call('setSideTab', 'jobs')
-        ->assertSee(__('Job catalog'))
+        ->assertSee(__('Collections'))
+        ->call('setAdvancedUi', true)
+        ->call('setJobsTab', 'catalog')
+        ->assertSee(__('Scheduled jobs'))
         ->call('setJobsTab', 'history')
         ->assertSee(__('Run history'))
         ->call('setJobsTab', 'catalog')
@@ -255,7 +258,11 @@ test('audit system page falls back to audit tab for invalid query tab', function
 });
 
 test('reconciliation tab registry exposes workspace tabs', function () {
-    expect(ReconciliationTabRegistry::tabs())->toHaveKeys([
+    expect(ReconciliationTabRegistry::tabs(false))->toHaveKeys([
+        'overview',
+        'exceptions',
+        'history',
+    ])->and(ReconciliationTabRegistry::tabs(true))->toHaveKeys([
         'overview',
         'exceptions',
         'history',
@@ -278,11 +285,12 @@ test('reconciliation page switches workspace tabs via livewire method', function
     Livewire::actingAs($admin, 'tenant')
         ->test(ReconciliationOverviewPage::class)
         ->assertSet('sideTab', 'overview')
-        ->assertSee(__('Open exceptions'))
+        ->assertSee(__('Fund status'))
+        ->call('setAdvancedUi', true)
         ->call('setSideTab', 'methodology')
         ->assertSet('sideTab', 'methodology')
         ->assertSee(__('Reconciliation approach'))
-        ->assertDontSee(__('Open exceptions'))
+        ->assertDontSee(__('Fund status'))
         ->call('setSideTab', 'invalid')
         ->assertSet('sideTab', 'methodology');
 });
@@ -321,8 +329,7 @@ test('audit system page embeds maintenance workspace for tenant admin', function
     Livewire::actingAs($admin, 'tenant')
         ->test(AuditSystemPage::class, ['sideTab' => 'maintenance'])
         ->assertSuccessful()
-        ->assertSee(__('Database backups'))
-        ->assertSee(__('Save backup to server'));
+        ->assertSee(__('Database backups'));
 });
 
 test('audit system page embeds migration workspace for tenant admin', function () {

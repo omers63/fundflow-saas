@@ -111,20 +111,28 @@ Route::middleware([
         Route::redirect('/member/my-profile', '/member/settings?tab=profile');
         Route::redirect('/member/my-messages', '/member/help?tab=messages');
 
-        Route::get('/member/dependents/{dependent}/impersonate', StartDependentImpersonationController::class)
-            ->name('tenant.member.dependents.impersonate');
+        Route::middleware('member-portal-maintenance')->group(function () {
+            Route::get('/member/dependents/{dependent}/impersonate', StartDependentImpersonationController::class)
+                ->name('tenant.member.dependents.impersonate');
 
-        Route::post('/member/impersonation/stop', StopImpersonationController::class)
-            ->name('tenant.member.impersonation.stop');
+            Route::post('/member/impersonation/stop', StopImpersonationController::class)
+                ->name('tenant.member.impersonation.stop');
 
-        Route::get('/member/statements/{statement}/pdf', [StatementPdfController::class, '__invoke'])
-            ->name('tenant.member.statement.pdf');
+            Route::get('/member/statements/{statement}/pdf', [StatementPdfController::class, '__invoke'])
+                ->name('tenant.member.statement.pdf');
 
-        Route::get('/member/loans/{loan}/schedule/pdf', LoanSchedulePdfController::class)
-            ->name('tenant.member.loan.schedule.pdf');
+            Route::get('/member/loans/{loan}/schedule/pdf', LoanSchedulePdfController::class)
+                ->name('tenant.member.loan.schedule.pdf');
 
-        Route::get('/member/activity/export', MemberActivityExportController::class)
-            ->name('tenant.member.activity.export');
+            Route::get('/member/activity/export', MemberActivityExportController::class)
+                ->name('tenant.member.activity.export');
+
+            Route::post('/member/webpush/subscribe', [MemberWebPushSubscriptionController::class, 'store'])
+                ->name('tenant.member.webpush.subscribe.store');
+
+            Route::delete('/member/webpush/subscribe', [MemberWebPushSubscriptionController::class, 'destroy'])
+                ->name('tenant.member.webpush.subscribe.destroy');
+        });
 
         Route::get('/admin/statements/{statement}/pdf', [StatementPdfController::class, 'admin'])
             ->name('tenant.admin.statement.pdf');
@@ -149,12 +157,6 @@ Route::middleware([
 
         Route::delete('/admin/webpush/subscribe', [AdminWebPushSubscriptionController::class, 'destroy'])
             ->name('tenant.admin.webpush.subscribe.destroy');
-
-        Route::post('/member/webpush/subscribe', [MemberWebPushSubscriptionController::class, 'store'])
-            ->name('tenant.member.webpush.subscribe.store');
-
-        Route::delete('/member/webpush/subscribe', [MemberWebPushSubscriptionController::class, 'destroy'])
-            ->name('tenant.member.webpush.subscribe.destroy');
 
         Route::get('/direct-messages/{message}/attachment/{index}', DirectMessageAttachmentController::class)
             ->whereNumber('index')

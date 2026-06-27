@@ -2,7 +2,7 @@
     <section
         class="rounded-2xl border border-gray-200 bg-white px-5 py-5 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
         <header class="mb-4 border-b border-gray-100 pb-4 dark:border-white/10">
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('Reconciliation control center') }}</h2>
+            <h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('Reconciliation') }}</h2>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 {{ $this->getSubheading() }}
             </p>
@@ -14,7 +14,7 @@
 
         @include('filament.tenant.partials.reconciliation-tab-pills')
 
-        <div class="min-w-0 space-y-6" wire:key="reconciliation-workspace-{{ $this->sideTab }}">
+        <div class="min-w-0 space-y-6" wire:key="reconciliation-workspace-{{ $this->sideTab }}-{{ (int) $this->advancedUi }}">
             @php($criticalCount = \App\Models\Tenant\ReconciliationException::query()->open()->where('severity', 'critical')->count())
             @if ($criticalCount > 0)
             <div role="alert" class="flex items-start gap-3 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-red-900 shadow-sm dark:border-red-700/60 dark:bg-red-950/40 dark:text-red-200">
@@ -24,128 +24,24 @@
                         {{ trans_choice(':count critical exception open|:count critical exceptions open', $criticalCount, ['count' => $criticalCount]) }}
                     </p>
                     <p class="mt-0.5 text-xs text-red-700 dark:text-red-300">
-                        {{ __('Ledger balances may be inconsistent. Review the Exceptions tab and resolve before period close.') }}
+                        {{ __('Ledger balances may be inconsistent. Review open issues and resolve before period close.') }}
                     </p>
                 </div>
                 <button type="button" wire:click="setSideTab('exceptions')"
                     class="ff-tenant-btn ff-tenant-btn--danger ms-auto shrink-0 px-3 py-1 text-xs">
-                        {{ __('Review queue') }}
+                        {{ __('Review issues') }}
                 </button>
             </div>
             @endif
 
             @if ($this->sideTab === 'overview')
-            @include('filament.tenant.partials.reconciliation-workspace-shortcuts')
-
-            @php($latest = $this->getLatestSnapshots()->first())
-                @php($lastBatch = $this->getLastNightlyBatch())
-                <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    <div
-                        class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Open exceptions') }}</p>
-                        <p
-                            class="mt-1 text-lg font-semibold tabular-nums {{ $this->getOpenExceptionCount() > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white' }}">
-                            {{ number_format($this->getOpenExceptionCount()) }}
-                        </p>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            @if ($this->getOpenExceptionCount() > 0)
-                                <button type="button" wire:click="setSideTab('exceptions')"
-                                    class="font-semibold text-sky-600 hover:underline dark:text-sky-400">{{ __('Review queue') }}</button>
-                            @else
-                                {{ __('Operational queue clear') }}
-                            @endif
-                        </p>
-                    </div>
-                    <div
-                        class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Auto-resolved (last batch)') }}</p>
-                        <p class="mt-1 text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-                            {{ number_format($this->getLastBatchAutoResolvedCount()) }}
-                        </p>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ __('From nightly batch') }}</p>
-                    </div>
-                    <div
-                        class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Last batch run') }}</p>
-                        <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
-                            {{ $lastBatch?->occurred_at?->diffForHumans() ?? '—' }}
-                        </p>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            @if ($lastBatch)
-                                {{ __('Raised') }} {{ $lastBatch->payload['raised'] ?? 0 }} · {{ __('Resolved') }}
-                                {{ $lastBatch->payload['resolved'] ?? 0 }}
-                            @else
-                                {{ __('No batch logged yet') }}
-                            @endif
-                        </p>
-                    </div>
-                    <div
-                        class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Next batch') }}</p>
-                        <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
-                            {{ $this->getNextBatchRunAt()->format('H:i') }}
-                        </p>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            {{ $this->getNextBatchRunAt()->format('d M Y') }} · {{ __('Daily at 06:30') }}
-                        </p>
-                    </div>
-                </div>
-
-                <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    <div
-                        class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Latest snapshot') }}</p>
-                        <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
-                            {{ $latest ? '#' . $latest->id : '—' }}
-                        </p>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            {{ $latest?->as_of?->diffForHumans() ?? __('Run from header actions') }}
-                        </p>
-                    </div>
-                    <div
-                        class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Latest verdict') }}</p>
-                        <p
-                            class="mt-1 text-lg font-semibold {{ $latest?->is_passing ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400' }}">
-                            {{ $latest ? ($latest->is_passing ? __('Pass') : __('Fail')) : '—' }}
-                        </p>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            @if ($latest)
-                                {{ __('Critical') }} {{ $latest->critical_issues }} · {{ __('Warnings') }}
-                                {{ $latest->warnings }}
-                            @else
-                                {{ __('No data yet') }}
-                            @endif
-                        </p>
-                    </div>
-                    <div
-                        class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Pending bank match') }}</p>
-                        <p class="mt-1 text-lg font-semibold tabular-nums {{ $this->getPendingBankClearanceCount() > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white' }}">
-                            {{ number_format($this->getPendingBankClearanceCount()) }}
-                        </p>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            @if ($this->getPendingBankClearanceCount() > 0)
-                                <a href="{{ $this->getBankClearingUrl() }}"
-                                    class="font-semibold text-sky-600 hover:underline dark:text-sky-400">{{ __('Open bank clearing') }}</a>
-                            @else
-                                {{ __('All lines matched') }}
-                            @endif
-                        </p>
-                    </div>
-                    <div
-                        class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Ledger mismatches') }}</p>
-                        <p class="mt-1 text-lg font-semibold tabular-nums text-gray-900 dark:text-white">
-                            {{ $latest ? number_format($latest->report['checks']['ledger_balances']['mismatch_count'] ?? 0) : '—' }}
-                        </p>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ __('Accounts out of balance') }}</p>
-                    </div>
-                </div>
+                @include('filament.tenant.partials.reconciliation-workspace-shortcuts')
+                @include('filament.tenant.partials.reconciliation.health-cards')
+                @include('filament.tenant.partials.reconciliation.next-steps')
 
                 <div
                     class="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 p-4 text-sm text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
-                    {{ __('Click any queue row to open a guided workspace with links, suggested next steps, and grouped actions. Use header actions to run snapshots or the nightly batch.') }}
+                    {{ __('Open an issue row for context, links, and resolution actions. Use Run check now to refresh the fund status.') }}
                 </div>
             @elseif ($this->sideTab === 'history')
                 <div
@@ -175,9 +71,9 @@
                     class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
                     <div class="mb-4">
                         <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
-                            {{ __('Exception queue') }}</h3>
+                            {{ __('Open issues') }}</h3>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            {{ __('Open and escalated issues only. Click a row to review context, follow links, and choose a resolution action from the grouped menu.') }}
+                            {{ __('Open and escalated items only. Click a row for context and resolution actions.') }}
                         </p>
                     </div>
 
@@ -186,7 +82,7 @@
 
                     {{ $this->table }}
                 </div>
-            @elseif ($this->sideTab === 'snapshots')
+            @elseif ($this->sideTab === 'snapshots' && $this->advancedUi)
             <div class="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900/60">
                 <div class="border-b border-gray-100 px-5 py-4 dark:border-white/10">
                     <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('Stored snapshots') }}</h3>
@@ -306,7 +202,7 @@
                         @endif
                     </div>
                 @endif
-            @else
+            @elseif ($this->sideTab === 'methodology' && $this->advancedUi)
             <div class="prose prose-sm max-w-none dark:prose-invert">
                 <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ __('Reconciliation approach') }}
                 </h3>

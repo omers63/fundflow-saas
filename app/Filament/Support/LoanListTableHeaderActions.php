@@ -16,7 +16,6 @@ use App\Services\Members\GuarantorExposureExportService;
 use App\Support\FilamentStoredUploadPath;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
-use Filament\Actions\CreateAction;
 use Filament\Forms\Components\FileUpload;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
@@ -36,7 +35,7 @@ final class LoanListTableHeaderActions
             self::exportLoansAction(),
             self::importRepaymentsAction(),
             self::exportRepaymentsAction(),
-            CreateAction::make(),
+            self::createLoanAction(),
         ];
     }
 
@@ -103,9 +102,9 @@ final class LoanListTableHeaderActions
 
     public static function importLoansAction(): Action
     {
-        return Action::make('importLoans')
+        $action = Action::make('importLoans')
             ->label(__('Import loans'))
-            ->icon('heroicon-o-arrow-up-tray')
+            ->icon(Heroicon::OutlinedArrowUpTray)
             ->color('success')
             ->visible(fn (): bool => LoanResource::canCreate())
             ->modalHeading(__('Import loans from CSV'))
@@ -191,16 +190,20 @@ final class LoanListTableHeaderActions
                         ->send();
                 }
             });
+
+        return self::portfolioToolbarAction($action);
     }
 
     public static function exportLoansAction(): Action
     {
-        return Action::make('exportLoans')
-            ->label(__('Export loans'))
-            ->icon('heroicon-o-arrow-down-tray')
-            ->color('warning')
-            ->visible(fn (): bool => LoanResource::canCreate())
-            ->action(fn (): mixed => app(LoanExportService::class)->downloadCsv());
+        return self::portfolioToolbarAction(
+            Action::make('exportLoans')
+                ->label(__('Export loans'))
+                ->icon(Heroicon::OutlinedArrowDownTray)
+                ->color('warning')
+                ->visible(fn(): bool => LoanResource::canCreate())
+                ->action(fn(): mixed => app(LoanExportService::class)->downloadCsv()),
+        );
     }
 
     public static function exportGuarantorExposureAction(): Action
@@ -215,9 +218,9 @@ final class LoanListTableHeaderActions
 
     public static function importRepaymentsAction(): Action
     {
-        return Action::make('importRepayments')
+        $action = Action::make('importRepayments')
             ->label(__('Import repayments'))
-            ->icon('heroicon-o-arrow-up-tray')
+            ->icon(Heroicon::OutlinedArrowUpTray)
             ->color('success')
             ->visible(fn (): bool => LoanResource::canCreate())
             ->modalHeading(__('Import loan repayments from CSV'))
@@ -303,15 +306,41 @@ final class LoanListTableHeaderActions
                         ->send();
                 }
             });
+
+        return self::portfolioToolbarAction($action);
     }
 
     public static function exportRepaymentsAction(): Action
     {
-        return Action::make('exportRepayments')
-            ->label(__('Export repayments'))
-            ->icon('heroicon-o-arrow-down-tray')
-            ->color('info')
-            ->visible(fn (): bool => LoanResource::canCreate())
-            ->action(fn (): mixed => app(LoanRepaymentExportService::class)->downloadCsv());
+        return self::portfolioToolbarAction(
+            Action::make('exportRepayments')
+                ->label(__('Export repayments'))
+                ->icon(Heroicon::OutlinedArrowDownTray)
+                ->color('warning')
+                ->visible(fn(): bool => LoanResource::canCreate())
+                ->action(fn(): mixed => app(LoanRepaymentExportService::class)->downloadCsv()),
+        );
+    }
+
+    public static function createLoanAction(): Action
+    {
+        return self::portfolioToolbarAction(
+            Action::make('create')
+                ->label(__('New loan'))
+                ->icon(Heroicon::OutlinedPlusCircle)
+                ->url(fn(): string => LoanResource::getUrl('create'))
+                ->visible(fn(): bool => LoanResource::canCreate()),
+        );
+    }
+
+    private static function portfolioToolbarAction(Action $action): Action
+    {
+        $icon = $action->getIcon();
+
+        if ($icon !== null) {
+            $action->tableIcon($icon);
+        }
+
+        return $action->button();
     }
 }

@@ -40,7 +40,14 @@
                 </div>
             @endif
 
-            @if (!$showProfilePicker)
+            @if ($statusType === 'maintenance')
+                <div class="member-login-alert member-login-alert--amber">
+                    <p class="member-login-alert__title">{{ __('System under maintenance') }}</p>
+                    <p class="member-login-alert__text">{{ $statusMessage }}</p>
+                </div>
+            @endif
+            
+            @if ($statusType !== 'maintenance' && !$showProfilePicker)
                 <form wire:submit="login" class="member-login-form">
                     <div>
                         <label class="member-login-label" for="member-login-email">{{ __('Email address') }}</label>
@@ -82,7 +89,7 @@
                         </span>
                     </button>
                 </form>
-            @else
+            @elseif ($statusType !== 'maintenance' && $showProfilePicker)
                 <form wire:submit="verifySelectedProfile" class="member-login-form member-login-profile-picker">
                     <div>
                         <p class="member-login-profile-picker__heading">{{ __('Who is accessing the portal?') }}</p>
@@ -143,6 +150,7 @@
                 </form>
             @endif
 
+            @if ($statusType !== 'maintenance')
             <div class="member-login-links">
                 <p>
                     {{ __('Not a member yet?') }}
@@ -155,6 +163,7 @@
                         class="member-login-links__accent-teal">{{ __('Check your status') }}</a>
                 </p>
             </div>
+            @endif
         </div>
     </div>
 </div>

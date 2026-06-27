@@ -19,72 +19,73 @@ use Illuminate\Database\Eloquent\Builder;
 
 class LoansTable
 {
-    public static function configure(Table $table): Table
+    public static function configure(Table $table, bool $withHeaderActions = true): Table
     {
         $currency = Setting::get('general', 'currency', 'USD');
 
-        return TableGrouping::apply(
-            $table
-                ->headerActions(LoanListTableHeaderActions::portfolio())
-                ->columnManager(true)
-                ->columns([
-                    TextColumn::make('id')
-                        ->label(__('Loan #'))
-                        ->sortable(),
-                    TextColumn::make('member.name')
-                        ->searchable()
-                        ->sortable(),
-                    TextColumn::make('amount_requested')
-                        ->label(__('Requested'))
-                        ->money($currency)
-                        ->sortable(),
-                    TextColumn::make('amount_approved')
-                        ->label(__('Approved'))
-                        ->money($currency)
-                        ->placeholder(__('—')),
-                    TextColumn::make('queue_position')
-                        ->label(__('Queue'))
-                        ->placeholder(__('—')),
-                    TextColumn::make('loanTier.label')
-                        ->label(__('Tier'))
-                        ->placeholder(__('—')),
-                    TextColumn::make('outstanding')
-                        ->label(__('Outstanding'))
-                        ->state(fn (Loan $record): float => $record->getOutstandingBalance())
-                        ->money($currency)
-                        ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByOutstanding($direction)),
-                    TextColumn::make('status')
-                        ->badge()
-                        ->formatStateUsing(fn (string $state): string => Loan::statusOptions()[$state] ?? $state)
-                        ->color(fn (string $state): string => Loan::statusColor($state)),
-                    TextColumn::make('applied_at')
-                        ->dateTime()
-                        ->sortable(),
-                ])
-                ->filters([
-                    SelectFilter::make('status')
-                        ->options(Loan::statusOptions()),
-                    SelectFilter::make('member_id')
-                        ->label('Member')
-                        ->relationship('member', 'name')
-                        ->searchable()
-                        ->preload(),
-                    DateColumnRangeFilter::make('applied_at', 'Applied'),
-                ])
-                ->recordActions(TableRecordActionGroups::wrap([
-                    ViewAction::make(),
-                    EditAction::make()
-                        ->label(fn (Loan $record): string => $record->status === 'pending'
-                            ? __('Review')
-                            : __('Edit'))
-                        ->hidden(fn (Loan $record): bool => ! in_array($record->status, ['pending', 'approved'], true)),
-                    ...LoanFilamentActions::workflowActions(),
-                ]))
-                ->toolbarActions([
-                    BulkActionGroup::make(LoanFilamentActions::bulkActions()),
-                ])
-                ->defaultSort('applied_at', 'desc'),
-            TableGrouping::loans()
-        );
+        $table = $table->columnManager(true)
+            ->columns([
+                TextColumn::make('id')
+                    ->label(__('Loan #'))
+                    ->sortable(),
+                TextColumn::make('member.name')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('amount_requested')
+                    ->label(__('Requested'))
+                    ->money($currency)
+                    ->sortable(),
+                TextColumn::make('amount_approved')
+                    ->label(__('Approved'))
+                    ->money($currency)
+                    ->placeholder(__('—')),
+                TextColumn::make('queue_position')
+                    ->label(__('Queue'))
+                    ->placeholder(__('—')),
+                TextColumn::make('loanTier.label')
+                    ->label(__('Tier'))
+                    ->placeholder(__('—')),
+                TextColumn::make('outstanding')
+                    ->label(__('Outstanding'))
+                    ->state(fn (Loan $record): float => $record->getOutstandingBalance())
+                    ->money($currency)
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByOutstanding($direction)),
+                TextColumn::make('status')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state): string => Loan::statusOptions()[$state] ?? $state)
+                    ->color(fn (string $state): string => Loan::statusColor($state)),
+                TextColumn::make('applied_at')
+                    ->dateTime()
+                    ->sortable(),
+            ])
+            ->filters([
+                SelectFilter::make('status')
+                    ->options(Loan::statusOptions()),
+                SelectFilter::make('member_id')
+                    ->label('Member')
+                    ->relationship('member', 'name')
+                    ->searchable()
+                    ->preload(),
+                DateColumnRangeFilter::make('applied_at', 'Applied'),
+            ])
+            ->recordActions(TableRecordActionGroups::wrap([
+                ViewAction::make(),
+                EditAction::make()
+                    ->label(fn (Loan $record): string => $record->status === 'pending'
+                        ? __('Review')
+                        : __('Edit'))
+                    ->hidden(fn (Loan $record): bool => ! in_array($record->status, ['pending', 'approved'], true)),
+                ...LoanFilamentActions::workflowActions(),
+            ]))
+            ->toolbarActions([
+                BulkActionGroup::make(LoanFilamentActions::bulkActions()),
+            ])
+            ->defaultSort('applied_at', 'desc');
+
+        if ($withHeaderActions) {
+            $table->headerActions(LoanListTableHeaderActions::portfolio());
+        }
+
+        return TableGrouping::apply($table, TableGrouping::loans());
     }
 }

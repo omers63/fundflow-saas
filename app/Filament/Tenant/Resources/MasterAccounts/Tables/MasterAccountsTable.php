@@ -9,6 +9,7 @@ use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Setting;
+use App\Support\Insights\MasterInvestNetReturn;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
@@ -17,7 +18,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class MasterAccountsTable
 {
-    public static function configure(Table $table, bool $showTypeColumn = false): Table
+    public static function configure(Table $table, bool $showTypeColumn = false, string $activeTab = 'all'): Table
     {
         $columns = [
             TextColumn::make('name')
@@ -44,11 +45,40 @@ class MasterAccountsTable
                 ->formatStateUsing(fn (string $state): string => MasterAccountResource::tabLabel($state));
         }
 
-        $columns[] = TextColumn::make('balance')
+        $showsInvestNetReturn = $activeTab === 'invest' || $showTypeColumn;
+
+        $balanceColumn = TextColumn::make('balance')
+            ->label($activeTab === 'invest' ? __('Net return') : __('Balance'))
+            ->state(function (Account $record) use ($showsInvestNetReturn): float {
+                if ($showsInvestNetReturn && $record->type === 'invest') {
+                    return MasterInvestNetReturn::netReturn($record);
+                }
+
+                return (float) $record->balance;
+            })
             ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
+            ->color(function (Account $record) use ($showsInvestNetReturn): ?string {
+                if (! $showsInvestNetReturn || $record->type !== 'invest') {
+                    return null;
+                }
+
+                $summary = MasterInvestNetReturn::summarize($record);
+
+                return match (true) {
+                    $summary['is_negative'] => 'danger',
+                    $summary['net_return'] > 0 => 'success',
+                    default => null,
+                };
+            })
             ->sortable();
 
-        $columns[] = TextColumn::make('updated_at')
+        if ($showsInvestNetReturn) {
+            $balanceColumn->summarize([]);
+        }
+
+        $columns[] = $balanceColumn;
+
+        $columns[] = TextColumn::make('last_activity_at')
             ->label(__('Last activity'))
             ->dateTime()
             ->sortable();
@@ -57,7 +87,7 @@ class MasterAccountsTable
             $table
                 ->columns($columns)
                 ->filters([
-                    DateColumnRangeFilter::make('updated_at', __('Last activity')),
+                    DateColumnRangeFilter::forLastLedgerActivity(),
                 ])
                 ->recordUrl(fn (Model $record): string => MasterAccountResource::getUrl('view', ['record' => $record]))
                 ->recordActions(TableRecordActionGroups::wrap([

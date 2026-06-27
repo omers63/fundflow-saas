@@ -30,12 +30,55 @@ final class ReconciliationExceptionActions
     /**
      * @return array<int, Action|ActionGroup>
      */
-    public static function recordActions(): array
+    public static function recordActionsForMode(bool $advancedUi): array
     {
+        if ($advancedUi) {
+            return [
+                self::viewAction(),
+                self::actionsMenu(),
+            ];
+        }
+
         return [
             self::viewAction(),
-            self::actionsMenu(),
+            self::primaryBankClearingAction(),
+            self::primaryResolveAction(),
+            self::moreActionsMenu(),
         ];
+    }
+
+    public static function moreActionsMenu(): ActionGroup
+    {
+        return self::actionsMenu()
+            ->label(__('More actions…'));
+    }
+
+    public static function primaryBankClearingAction(): Action
+    {
+        return Action::make('primaryBankClearing')
+            ->label(__('Open bank clearing'))
+            ->icon('heroicon-o-building-library')
+            ->color('primary')
+            ->visible(fn (ReconciliationException $record): bool => self::isActionable($record)
+                && ReconciliationExceptionPresenter::isBankClearingRelated($record))
+            ->url(fn (ReconciliationException $record): string => ReconciliationExceptionPresenter::bankClearingUrl($record));
+    }
+
+    public static function primaryResolveAction(): Action
+    {
+        return self::resolveAction()
+            ->name('primaryResolve')
+            ->label(__('Resolve with notes'))
+            ->visible(fn (ReconciliationException $record): bool => self::isActionable($record)
+                && ! ReconciliationExceptionPresenter::isBankClearingRelated($record));
+    }
+
+    /**
+     * @return array<int, Action|ActionGroup>
+     */
+    public static function recordActions(): array
+    {
+        return self::recordActionsForMode(true);
     }
 
     public static function actionsMenu(): ActionGroup

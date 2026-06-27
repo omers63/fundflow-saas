@@ -18,7 +18,7 @@ use Filament\Tables\Table;
 
 class ReconciliationExceptionsTable
 {
-    public static function configure(Table $table, bool $queueOnly = false): Table
+    public static function configure(Table $table, bool $queueOnly = false, bool $advancedUi = false): Table
     {
         $table = $table
             ->modifyQueryUsing(function ($query) use ($queueOnly) {
@@ -37,7 +37,7 @@ class ReconciliationExceptionsTable
                     ->label(__('Issue'))
                     ->searchable()
                     ->wrap()
-                    ->description(fn (ReconciliationException $record): string => $record->exception_code)
+                    ->description(fn (ReconciliationException $record): ?string => $advancedUi ? $record->exception_code : null)
                     ->formatStateUsing(fn (string $state, ReconciliationException $record): string => ReconciliationExceptionPresenter::title($record)),
                 TextColumn::make('domain')
                     ->label(__('Area'))
@@ -55,7 +55,8 @@ class ReconciliationExceptionsTable
                 TextColumn::make('amount_delta')
                     ->label(__('Delta'))
                     ->numeric(decimalPlaces: 2)
-                    ->placeholder(__('—')),
+                    ->placeholder(__('—'))
+                    ->toggleable(isToggledHiddenByDefault: ! $advancedUi),
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
@@ -67,13 +68,14 @@ class ReconciliationExceptionsTable
                 TextColumn::make('assignee.name')
                     ->label(__('Owner'))
                     ->placeholder(__('Unassigned'))
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: ! $advancedUi),
                 TextColumn::make('sla_deadline')
                     ->label(__('SLA'))
                     ->since()
                     ->dateTimeTooltip()
                     ->placeholder(__('—'))
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->visible($advancedUi),
                 TextColumn::make('raised_at')
                     ->label(__('Raised'))
                     ->since()
@@ -82,18 +84,21 @@ class ReconciliationExceptionsTable
                 TextColumn::make('exception_type')
                     ->label(__('Type'))
                     ->placeholder(__('—'))
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->visible($advancedUi),
                 TextColumn::make('resolved_at')
                     ->label(__('Resolved at'))
                     ->dateTime()
                     ->placeholder(__('—'))
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->visible($advancedUi),
                 TextColumn::make('resolution_notes')
                     ->label(__('Resolution notes'))
                     ->placeholder(__('—'))
                     ->wrap()
                     ->limit(80)
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->visible($advancedUi),
             ])
             ->filters([
                 SelectFilter::make('status')
@@ -126,10 +131,9 @@ class ReconciliationExceptionsTable
 
         return TableGrouping::apply($table
             ->recordAction('viewException')
-            ->recordActions(TableRecordActionGroups::wrap([
-                ReconciliationExceptionActions::viewAction(),
-                ReconciliationExceptionActions::actionsMenu(),
-            ]))
+            ->recordActions(TableRecordActionGroups::wrap(
+                ReconciliationExceptionActions::recordActionsForMode($advancedUi),
+            ))
             ->toolbarActions([
                 BulkActionGroup::make([
                     ReconciliationExceptionActions::deleteBulkAction(),
