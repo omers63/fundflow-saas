@@ -14,6 +14,7 @@ use App\Filament\Tenant\Support\ReconciliationTabRegistry;
 use App\Filament\Tenant\Support\SettingsTabRegistry;
 use App\Models\Tenant\FundAuditLog;
 use App\Models\Tenant\NotificationLog;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Support\FiscalSettings;
 use Filament\Facades\Filament;
@@ -339,7 +340,7 @@ test('audit system page embeds migration workspace for tenant admin', function (
         ->test(AuditSystemPage::class, ['sideTab' => 'migration'])
         ->assertSuccessful()
         ->assertSee(__('Legacy migration wizard'))
-        ->assertSee(__('How legacy migration works'));
+        ->assertSee(__('Step 1: Import members'));
 });
 
 test('audit system page embeds fiscal year close workspace', function () {
@@ -413,15 +414,18 @@ test('embedded migration panel renders wizard steps', function () {
         'is_admin' => true,
     ]);
 
+    Setting::set('legacy_migration', 'members_imported', '1');
+    Setting::set('legacy_migration', 'loans_imported', '1');
+
     Livewire::actingAs($admin, 'tenant')
         ->test(LegacyMigrationPage::class, ['embedded' => true])
         ->assertSuccessful()
-        ->assertSee(__('How legacy migration works'))
-        ->assertDontSee(__('Upload data'))
+        ->assertSee(__('Step 1: Import members'))
+        ->assertDontSee(__('Step 2: Import loans'))
         ->call('goToStep', 2)
-        ->assertSee(__('Upload data'))
+        ->assertSee(__('Step 2: Import loans'))
         ->call('goToStep', 3)
-        ->assertSeeHtml('wire:click="mountAction(\'previewMigration\'')
+        ->assertSeeHtml('wire:click="mountAction(\'classifyPayments\'')
         ->assertSet('embedded', true);
 });
 

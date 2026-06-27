@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Services\LegacyMigration\LegacyExcessLoanRepaymentRepairService;
+use App\Services\LegacyMigration\LegacyLoanRepaymentTarget;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Stancl\Tenancy\Concerns\HasATenantsOption;
@@ -19,7 +20,8 @@ class LegacyRepairExcessLoanRepaymentsCommand extends Command
 
     protected $signature = 'legacy:repair-excess-loan-repayments
         {--loan= : Loan id to repair}
-        {--member= : Member number or database id — repair all of their loans}';
+        {--member= : Member number or database id — repair all of their loans}
+        {--fund-only : Repair all fully member-funded loans (zero pool obligation) that have repayments}';
 
     protected $description = 'Move legacy loan repayments that exceed the fund-portion target back to contributions';
 
@@ -49,6 +51,17 @@ class LegacyRepairExcessLoanRepaymentsCommand extends Command
      */
     private function resolveLoans(): Collection
     {
+        if ($this->option('fund-only')) {
+            return Loan::query()
+                ->whereNotNull('disbursed_at')
+                ->where('master_portion', '<=', LegacyLoanRepaymentTarget::AMOUNT_TOLERANCE)
+                ->where('settlement_threshold', '<=', LegacyLoanRepaymentTarget::AMOUNT_TOLERANCE)
+                ->whereRaw('ABS(member_portion - amount_approved) < ?', [LegacyLoanRepaymentTarget::AMOUNT_TOLERANCE])
+                ->whereHas('repayments')
+                ->orderBy('id')
+                ->get();
+        }
+
         $loanOption = (string) ($this->option('loan') ?? '');
 
         if ($loanOption !== '') {

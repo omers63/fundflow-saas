@@ -108,6 +108,8 @@ final class LegacyLoanRepaymentWindowResolver
             ->whereNotNull('disbursed_at')
             ->orderBy('disbursed_at')
             ->get()
+            ->reject(fn (Loan $loan): bool => $loan->isFullyMemberFundedAtDisbursement()
+                && $loan->hasNoRepaymentScheduleObligation())
             ->map(fn (Loan $loan): LegacyLoanRepaymentWindow => $this->buildDatabaseWindow($member, $loan));
 
         return LegacyLoanRepaymentWindow::firstOpenWindow(

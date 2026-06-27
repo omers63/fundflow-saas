@@ -8,18 +8,15 @@ use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\LegacyMigration\LegacyMigrationOrchestrator;
 use App\Services\LegacyMigration\LegacyMigrationWorkingCopy;
-use App\Services\LegacyMigration\LegacyPaymentClassifierService;
-use App\Support\AssociativeCsv;
 use Filament\Notifications\Notification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Storage;
 use Throwable;
 
-final class ClassifyLegacyPaymentsJob implements ShouldQueue
+final class ImportLegacyMembersAndLoansJob implements ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -31,10 +28,10 @@ final class ClassifyLegacyPaymentsJob implements ShouldQueue
     /**
      * @param  array{
      *     cutoff_date?: string|null,
-     *     default_password?: string|null,
+     *     default_password: string,
      *     members_path: string,
      *     loans_path?: string|null,
-     *     payments_path: string,
+     *     payments_path?: string|null,
      *     strategy?: 'snapshot'|'historical',
      *     grace_cycles?: int|string|null,
      *     loan_funding_strategy?: string|null,
@@ -43,6 +40,7 @@ final class ClassifyLegacyPaymentsJob implements ShouldQueue
      */
     public function __construct(
         public array $migrationOptions,
+        public ?string $cutoff = null,
         public ?int $notifyUserId = null,
     ) {}
 
@@ -59,10 +57,6 @@ final class ClassifyLegacyPaymentsJob implements ShouldQueue
                 if ($user !== null) {
                     auth('tenant')->login($user);
                 }
-            }
-
-            if (Storage::disk('local')->exists(LegacyPaymentClassifierService::CLASSIFIED_PAYMENTS_DISK_PATH)) {
-                Storage::disk('local')->delete(LegacyPaymentClassifierService::CLASSIFIED_PAYMENTS_DISK_PATH);
             }
 
             $snapshot = $workingCopy->snapshot([
@@ -88,30 +82,23 @@ final class ClassifyLegacyPaymentsJob implements ShouldQueue
                     ?? null,
             ];
 
-            Setting::set('legacy_migration', 'classify_inputs', json_encode([
-                'members_path' => $this->migrationOptions['members_path'] ?? null,
-                'loans_path' => $this->migrationOptions['loans_path'] ?? null,
-                'payments_path' => $this->migrationOptions['payments_path'] ?? null,
-                'loans_header' => filled($this->migrationOptions['loans_path'] ?? null)
-                    ? AssociativeCsv::headers((string) $this->migrationOptions['loans_path'])
-                    : [],
-            ], JSON_THROW_ON_ERROR));
+            $result = $orchestrator->importMembersAndLoans($this->migrationOptions, $this->cutoff);
 
-            $result = $orchestrator->classifyAndPersistPayments($this->migrationOptions);
-            Setting::set('legacy_migration', 'classify_errors', json_encode(
-                array_slice($result['errors'] ?? [], 0, 10),
+            Setting::set('legacy_migration', 'members_loans_imported', '1');
+            Setting::set('legacy_migration', 'members_loans_import_result', json_encode(
+                LegacyMigrationOrchestrator::summarizeForDisplay(['members' => $result['members'], 'loans' => $result['loans'] ?? null]),
                 JSON_THROW_ON_ERROR,
             ));
-            Setting::set('legacy_migration', 'classify_status', 'completed');
-            Setting::set('legacy_migration', 'classify_error', '');
+            Setting::set('legacy_migration', 'members_loans_import_status', 'completed');
+            Setting::set('legacy_migration', 'members_loans_import_error', '');
         } catch (Throwable $exception) {
             report($exception);
 
-            Setting::set('legacy_migration', 'classify_status', 'failed');
-            Setting::set('legacy_migration', 'classify_error', $exception->getMessage());
+            Setting::set('legacy_migration', 'members_loans_import_status', 'failed');
+            Setting::set('legacy_migration', 'members_loans_import_error', $exception->getMessage());
 
             $this->notifyRequester(
-                __('Classification failed'),
+                __('Import failed'),
                 $exception->getMessage(),
                 'danger',
             );

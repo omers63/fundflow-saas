@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Services\LegacyMigration;
 
-use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
+use App\Services\ContributionCycleService;
 use App\Services\ContributionService;
 use App\Services\Loans\LoanLedgerService;
 use Carbon\Carbon;
@@ -22,6 +22,7 @@ final class LegacyExcessLoanRepaymentRepairService
 {
     public function __construct(
         private readonly AccountingService $accounting,
+        private readonly ContributionCycleService $cycles,
         private readonly ContributionService $contributions,
         private readonly LegacyImportedLoanScheduleSyncService $scheduleSync,
         private readonly LegacyPaymentImportService $paymentImport,
@@ -110,7 +111,11 @@ final class LegacyExcessLoanRepaymentRepairService
         $sync = $this->scheduleSync->syncLoans([$loan->id]);
         $stats['installments_marked'] = $sync['installments'];
 
-        $this->accounting->rebuildAllLedgerAccountBalancesFromTransactionLines();
+        $loan->refresh();
+
+        if ($loan->isFullyMemberFundedAtDisbursement() && $loan->hasNoRepaymentScheduleObligation()) {
+            $loan->completeAsFullyMemberFundedLegacyImport();
+        }
 
         return $stats;
     }
@@ -145,6 +150,10 @@ final class LegacyExcessLoanRepaymentRepairService
             $totals['repayments_resplit'] += $result['repayments_resplit'];
             $totals['contributions_posted'] += $result['contributions_posted'];
             $totals['installments_marked'] += $result['installments_marked'];
+        }
+
+        if ($totals['loans_processed'] > 0) {
+            $this->accounting->rebuildAllLedgerAccountBalancesFromTransactionLines();
         }
 
         return $totals;
@@ -191,16 +200,7 @@ final class LegacyExcessLoanRepaymentRepairService
             return;
         }
 
-        $month = (int) $paidAt->month;
-        $year = (int) $paidAt->year;
-
-        if (Contribution::memberPeriodRecordExists($member->id, $month, $year)) {
-            $month = (int) $paidAt->copy()->addMonth()->month;
-            $year = (int) $paidAt->copy()->addMonth()->year;
-        }
-
-        $affectedLoanIds = [];
-        $cumulativeRepaidByLoanKey = [];
+        [$month, $year] = $this->cycles->cyclePeriodForDueDate($paidAt);
 
         $this->paymentImport->postLegacyContributionForRepair(
             $member,

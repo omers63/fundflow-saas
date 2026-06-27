@@ -18,13 +18,18 @@ final class LegacyLoanRepaymentTarget
 
     public static function forLoan(Loan $loan): float
     {
-        $masterPortion = (float) $loan->master_portion;
+        if ($loan->isFullyMemberFundedAtDisbursement() && $loan->hasNoRepaymentScheduleObligation()) {
+            return 0.0;
+        }
+
+        $threshold = $loan->fullRepaymentThreshold();
+
+        if ($threshold > self::AMOUNT_TOLERANCE) {
+            return $threshold;
+        }
+
         $approved = (float) ($loan->amount_approved ?? $loan->amount);
         $settlement = (float) ($loan->settlement_threshold ?? 0);
-
-        if ($masterPortion > self::AMOUNT_TOLERANCE || $settlement > self::AMOUNT_TOLERANCE) {
-            return round($masterPortion + ($approved * $settlement), 2);
-        }
 
         return self::estimateFromApprovedAmount($approved, $settlement);
     }
@@ -35,6 +40,7 @@ final class LegacyLoanRepaymentTarget
     public static function fromLoansCsvRow(array $csvRow, float $amountApproved): float
     {
         $masterCell = trim((string) ($csvRow['master_portion'] ?? ''));
+        $memberCell = trim((string) ($csvRow['member_portion'] ?? ''));
         $settlementCell = trim((string) ($csvRow['settlement_threshold'] ?? ''));
 
         if ($masterCell !== '' && is_numeric($masterCell)) {
@@ -43,6 +49,14 @@ final class LegacyLoanRepaymentTarget
                 : 0.0;
 
             return round((float) $masterCell + ($amountApproved * $settlement), 2);
+        }
+
+        if (
+            $memberCell !== ''
+            && is_numeric($memberCell)
+            && abs((float) $memberCell - $amountApproved) < self::AMOUNT_TOLERANCE
+        ) {
+            return 0.0;
         }
 
         $settlement = $settlementCell !== '' && is_numeric($settlementCell)

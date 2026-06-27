@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\LegacyMigration;
 
+use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\AccountingService;
@@ -27,7 +28,8 @@ final class LegacyMigrationOrchestrator
         private readonly LegacyMigrationPreviewService $preview,
         private readonly LegacyPaymentClassifierService $classifier,
         private readonly AccountingService $accounting,
-        private readonly LegacyMisclassifiedContributionRepairService $misclassifiedContributionRepair,
+        private readonly LegacyExcessLoanRepaymentRepairService $excessRepaymentRepair,
+        private readonly LegacyMigrationZeroBalanceLoanCompletionService $zeroBalanceLoanCompletion,
     ) {}
 
     /**
@@ -96,32 +98,81 @@ final class LegacyMigrationOrchestrator
      *     payments?: array{contributions: int, loan_repayments: int, ignored: int, failed: int, errors: list<string>}
      * }
      */
-    public function importMembersAndLoans(array $options, ?string $cutoff = null): array
+    public function importMembers(array $options, ?string $cutoff = null): array
     {
+        @set_time_limit(0);
+
         $this->validateMembersCsv($options['members_path']);
 
         $cutoff ??= filled($options['cutoff_date'] ?? null)
             ? Carbon::parse((string) $options['cutoff_date'])->toDateString()
             : null;
 
-        $result = [
-            'members' => $this->members->import(
-                $options['members_path'],
-                $options['default_password'],
-                $cutoff,
-            ),
-        ];
+        $members = $this->members->import(
+            $options['members_path'],
+            $options['default_password'],
+            $cutoff,
+        );
 
-        $this->assertAllCsvMembersPresent((string) $options['members_path'], $result['members']);
+        $this->assertAllCsvMembersPresent((string) $options['members_path'], $members);
 
-        if (filled($options['loans_path'] ?? null)) {
-            $result['loans'] = $this->loans->import(
-                (string) $options['loans_path'],
+        return ['members' => $members];
+    }
+
+    /**
+     * @param  array{
+     *     loans_path: string,
+     *     strategy?: 'snapshot'|'historical',
+     *     grace_cycles?: int|string|null,
+     *     loan_funding_strategy?: string|null,
+     *     payments_path?: string|null,
+     *     skip_settlement_threshold?: bool|string|int|null,
+     * }  $options
+     * @return array{loans: array{created: int, failed: int, errors: list<string>}}
+     */
+    public function importLoans(array $options): array
+    {
+        @set_time_limit(0);
+
+        $loansPath = $options['loans_path'] ?? null;
+
+        if (! is_string($loansPath) || $loansPath === '' || ! is_readable($loansPath)) {
+            throw new \InvalidArgumentException(__('Loans CSV is required.'));
+        }
+
+        return [
+            'loans' => $this->loans->import(
+                $loansPath,
                 $this->resolveGraceCycles($options),
                 $this->resolveFundingStrategy($options),
                 $this->resolvePaymentsPathForLoanFunding($options),
                 $this->resolveSkipSettlementThreshold($options),
-            );
+            ),
+        ];
+    }
+
+    /**
+     * @param  array{
+     *     cutoff_date?: string|null,
+     *     default_password: string,
+     *     members_path: string,
+     *     loans_path?: string|null,
+     *     payments_path?: string|null,
+     *     classified_payments_path?: string|null,
+     *     strategy?: 'snapshot'|'historical'
+     * }  $options
+     * @return array{
+     *     members: array{created: int, skipped: int, failed: int, errors: list<string>},
+     *     loans?: array{created: int, failed: int, errors: list<string>},
+     *     payments?: array{contributions: int, loan_repayments: int, ignored: int, failed: int, errors: list<string>}
+     * }
+     */
+    public function importMembersAndLoans(array $options, ?string $cutoff = null): array
+    {
+        $result = $this->importMembers($options, $cutoff);
+
+        if (filled($options['loans_path'] ?? null)) {
+            $result['loans'] = $this->importLoans($options)['loans'];
         }
 
         return $result;
@@ -288,36 +339,92 @@ final class LegacyMigrationOrchestrator
             return null;
         }
 
-        if (! is_string($options['loans_path'] ?? null) || $options['loans_path'] === '' || ! is_readable($options['loans_path'])) {
-            throw new \InvalidArgumentException(__('Loans CSV is required for historical payment import.'));
+        return $this->applyClassifiedPayments($options);
+    }
+
+    /**
+     * Replay the classified payments CSV (step 5). Does not re-import members/loans or re-classify.
+     *
+     * @param  array{
+     *     loans_path?: string|null,
+     *     classified_payments_path?: string|null,
+     *     grace_cycles?: int|string|null,
+     * }  $options
+     * @return array{
+     *     contributions: int,
+     *     loan_repayments: int,
+     *     ignored: int,
+     *     failed: int,
+     *     errors: list<string>,
+     *     classification: array{contributions: int, loan_repayments: int, failed: int}
+     * }
+     */
+    public function applyClassifiedPayments(array $options): array
+    {
+        @set_time_limit(0);
+
+        $classifiedPath = $this->resolveClassifiedPaymentsPath($options);
+
+        if ($classifiedPath === null) {
+            throw new \InvalidArgumentException(__('Classified payments CSV is required. Classify payments before applying the migration.'));
         }
 
-        $classification = $this->classifyAndPersistPayments($options);
-        $options['classified_payments_path'] = $classification['path'];
+        $preImportStats = $this->classifier->summarizeClassifiedFile($classifiedPath);
 
         $result = ContributionService::withoutPostedNotifications(
             fn (): array => $this->payments->import(
-                $classification['path'],
-                (string) $options['loans_path'],
+                $classifiedPath,
+                is_string($options['loans_path'] ?? null) && is_readable($options['loans_path'])
+                ? $options['loans_path']
+                : null,
                 $this->resolveGraceCycles($options),
+                rebuildBalances: false,
             ),
         );
 
-        $repair = $this->misclassifiedContributionRepair->repairMembersWithLegacyRoutedContributions(
-            (string) $options['loans_path'],
-            $this->resolveGraceCycles($options),
-        );
+        $this->accounting->rebuildAllLedgerAccountBalancesFromTransactionLines(reconcileLineBalances: false);
 
-        $finalClassification = $this->classifyAndPersistPayments($options);
+        $this->repairStrayRepaymentsOnFundOnlyLoans();
+
+        $this->reconcileLedgerRunningBalances();
+
+        $loansCompleted = $this->zeroBalanceLoanCompletion->completeAll();
 
         return [
             ...$result,
             'classification' => [
-                'contributions' => $finalClassification['stats']['contributions'],
-                'loan_repayments' => $finalClassification['stats']['loan_repayments'],
-                'failed' => $finalClassification['stats']['failed'],
+                'contributions' => $preImportStats['contributions'],
+                'loan_repayments' => $preImportStats['loan_repayments'],
+                'failed' => $preImportStats['failed'],
             ],
-            'misclassified_repairs' => $repair,
+            'loans_completed' => $loansCompleted,
+        ];
+    }
+
+    /**
+     * @param  array{
+     *     classified_payments_path?: string|null,
+     * }  $options
+     * @return array{payments: array{contributions: int, loan_repayments: int, ignored: int, failed: int, errors: list<string>}}
+     */
+    public function dryRunClassifiedApply(array $options): array
+    {
+        $classifiedPath = $this->resolveClassifiedPaymentsPath($options);
+
+        if ($classifiedPath === null) {
+            throw new \InvalidArgumentException(__('Classified payments CSV is required. Classify payments before applying the migration.'));
+        }
+
+        $summary = $this->classifier->summarizeClassifiedFile($classifiedPath);
+
+        return [
+            'payments' => [
+                'contributions' => $summary['contributions'],
+                'loan_repayments' => $summary['loan_repayments'],
+                'ignored' => $summary['ignored'] ?? 0,
+                'failed' => $summary['failed'],
+                'errors' => [],
+            ],
         ];
     }
 
@@ -471,34 +578,36 @@ final class LegacyMigrationOrchestrator
         }
 
         $classifiedPath = $this->resolveClassifiedPaymentsPath($options);
+        $paymentsPath = $options['payments_path'] ?? null;
 
-        if ($classifiedPath !== null) {
-            $summary = $this->classifier->summarizeClassifiedFile($classifiedPath);
+        if (is_string($paymentsPath) && $paymentsPath !== '' && is_readable($paymentsPath)) {
+            $membersPath = $options['members_path'] ?? null;
 
-            return [
-                ...$summary,
-                'errors' => [],
-            ];
-        }
+            if (! filled($membersPath) || ! is_readable($membersPath)) {
+                $preview = $this->preview->previewPayments($paymentsPath);
 
-        $path = $options['payments_path'] ?? null;
+                return [
+                    'contributions' => $preview['row_count'] ?? 0,
+                    'loan_repayments' => 0,
+                    'ignored' => 0,
+                    'failed' => count($preview['missing_columns'] ?? []),
+                    'errors' => array_merge(
+                        $preview['missing_columns'] ?? [],
+                        [__('Classify payments first, or upload members CSV so dry run can classify payment rows.')],
+                    ),
+                ];
+            }
 
-        if ($path === null || $path === '') {
-            return null;
-        }
-
-        $membersPath = $options['members_path'] ?? null;
-
-        if (filled($membersPath) && is_readable($membersPath)) {
             $cutoff = filled($options['cutoff_date'] ?? null)
                 ? Carbon::parse((string) $options['cutoff_date'])
                 : null;
 
             $result = $this->classifier->classifyFile(
-                $path,
+                $paymentsPath,
                 $cutoff,
                 $membersPath,
                 $options['loans_path'] ?? null,
+                $this->resolveGraceCycles($options),
             );
 
             return [
@@ -510,18 +619,16 @@ final class LegacyMigrationOrchestrator
             ];
         }
 
-        $preview = $this->preview->previewPayments($path);
+        if ($classifiedPath !== null) {
+            $summary = $this->classifier->summarizeClassifiedFile($classifiedPath);
 
-        return [
-            'contributions' => $preview['row_count'] ?? 0,
-            'loan_repayments' => 0,
-            'ignored' => 0,
-            'failed' => count($preview['missing_columns'] ?? []),
-            'errors' => array_merge(
-                $preview['missing_columns'] ?? [],
-                [__('Classify payments first, or upload members CSV so dry run can classify payment rows.')],
-            ),
-        ];
+            return [
+                ...$summary,
+                'errors' => [],
+            ];
+        }
+
+        return null;
     }
 
     /**
@@ -625,14 +732,26 @@ final class LegacyMigrationOrchestrator
             return null;
         }
 
-        $classified = $this->resolveClassifiedPaymentsPath($options);
-
-        if ($classified !== null) {
-            return $classified;
-        }
-
         $paymentsPath = $options['payments_path'] ?? null;
 
         return filled($paymentsPath) && is_readable($paymentsPath) ? (string) $paymentsPath : null;
+    }
+
+    private function repairStrayRepaymentsOnFundOnlyLoans(): void
+    {
+        Loan::query()
+            ->where('status', '!=', 'cancelled')
+            ->orderBy('id')
+            ->each(function (Loan $loan): void {
+                if (LegacyLoanRepaymentTarget::forLoan($loan) > 0.01) {
+                    return;
+                }
+
+                if (! $loan->repayments()->exists()) {
+                    return;
+                }
+
+                $this->excessRepaymentRepair->repairLoan($loan);
+            });
     }
 }

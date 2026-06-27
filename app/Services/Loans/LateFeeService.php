@@ -41,6 +41,11 @@ class LateFeeService
         return $this->feeForTier($tier, 'contribution');
     }
 
+    public function repaymentLateFeeForTier(int $tier): float
+    {
+        return $this->feeForTier($tier, 'repayment');
+    }
+
     private function tieredAmount(int $daysPast, string $prefix): float
     {
         if ($daysPast <= ContributionPolicySettings::lateFeeReminderDays()) {

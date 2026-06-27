@@ -28,9 +28,27 @@ final class LegacyMigrationLoanFundingSimulator
      */
     private array $disbursementsByMemberId = [];
 
+    /**
+     * @var array<int, float>
+     */
+    private array $openingFundBalanceByMemberId = [];
+
+    public static function forLegacyMigration(string $absolutePath): self
+    {
+        $simulator = self::fromPaymentsCsv($absolutePath);
+        $simulator->seedOpeningFundBalancesFromMembers();
+
+        return $simulator;
+    }
+
     public static function fromPaymentsCsv(string $absolutePath): self
     {
         $simulator = new self;
+
+        $memberIdsByNumber = Member::query()
+            ->whereNotNull('member_number')
+            ->pluck('id', 'member_number')
+            ->all();
 
         foreach (AssociativeCsv::read($absolutePath) as $rowIndex => $row) {
             $type = strtolower(trim((string) ($row['payment_type'] ?? '')));
@@ -45,7 +63,7 @@ final class LegacyMigrationLoanFundingSimulator
                 continue;
             }
 
-            $memberId = Member::query()->where('member_number', $memberNumber)->value('id');
+            $memberId = $memberIdsByNumber[$memberNumber] ?? null;
 
             if ($memberId === null) {
                 continue;
@@ -93,12 +111,26 @@ final class LegacyMigrationLoanFundingSimulator
         return $simulator;
     }
 
+    public function seedOpeningFundBalancesFromMembers(): void
+    {
+        Member::query()
+            ->whereNotNull('member_number')
+            ->select(['id', 'opening_fund_balance'])
+            ->each(function (Member $member): void {
+                $opening = round((float) ($member->opening_fund_balance ?? 0), 2);
+
+                if ($opening > 0.00001) {
+                    $this->openingFundBalanceByMemberId[(int) $member->id] = $opening;
+                }
+            });
+    }
+
     public function fundBalanceBeforeDisbursement(Member $member, CarbonInterface $disbursedAt): float
     {
         $memberId = (int) $member->id;
         $cutoff = Carbon::parse($disbursedAt)->startOfDay();
 
-        $balance = 0.0;
+        $balance = $this->openingFundBalanceByMemberId[$memberId] ?? 0.0;
 
         foreach ($this->contributionsByMemberId[$memberId] ?? [] as $contribution) {
             if ($contribution['paid_at']->lt($cutoff)) {

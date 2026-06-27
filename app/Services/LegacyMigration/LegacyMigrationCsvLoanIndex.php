@@ -141,6 +141,19 @@ final class LegacyMigrationCsvLoanIndex
     }
 
     /**
+     * @return list<LegacyMemberLoanWindow>
+     */
+    public function loanWindowsForMember(string $memberNumber): array
+    {
+        $memberNumber = trim($memberNumber);
+
+        return array_map(
+            fn (array $loan): LegacyMemberLoanWindow => LegacyMemberLoanWindow::fromCsvLoan($memberNumber, $loan),
+            $this->loansByMemberNumber[$memberNumber] ?? [],
+        );
+    }
+
+    /**
      * @param  array{disbursed_at: Carbon, amount_approved: float, legacy_loan_id: int|null, installments_count: int|null, master_portion: float|null, settlement_threshold: float|null}  $loan
      */
     private function buildWindow(string $memberNumber, array $loan): LegacyLoanRepaymentWindow

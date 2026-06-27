@@ -41,7 +41,7 @@ class LegacyMigrationCommand extends Command
         $members = (string) ($this->option('members') ?? '');
         $password = (string) ($this->option('password') ?? '');
 
-        if ($members === '' || !is_readable($members)) {
+        if ($members === '' || ! is_readable($members)) {
             $this->error('--members must point to a readable CSV file.');
 
             return self::FAILURE;
@@ -54,7 +54,7 @@ class LegacyMigrationCommand extends Command
         }
 
         $strategy = (string) $this->option('strategy');
-        if (!in_array($strategy, ['snapshot', 'historical'], true)) {
+        if (! in_array($strategy, ['snapshot', 'historical'], true)) {
             $this->error('--strategy must be snapshot or historical.');
 
             return self::FAILURE;
@@ -84,7 +84,7 @@ class LegacyMigrationCommand extends Command
     {
         $source = (string) ($this->option('payments') ?? '');
 
-        if ($source === '' || !is_readable($source)) {
+        if ($source === '' || ! is_readable($source)) {
             $this->error('Provide --payments=source.csv with --classify-payments=output.csv');
 
             return self::FAILURE;
@@ -94,7 +94,15 @@ class LegacyMigrationCommand extends Command
             ? Carbon::parse((string) $this->option('cutoff'))
             : null;
 
-        $result = $classifier->classifyFile($source, $cutoff);
+        $members = (string) ($this->option('members') ?? '');
+        $loans = (string) ($this->option('loans') ?? '');
+
+        $result = $classifier->classifyFile(
+            $source,
+            $cutoff,
+            $members !== '' && is_readable($members) ? $members : null,
+            $loans !== '' && is_readable($loans) ? $loans : null,
+        );
         $classifier->writeClassifiedCsv($outputPath, $result['rows']);
 
         $this->info("Classified {$result['stats']['contribution']} contributions, {$result['stats']['loan_repayment']} loan repayments.");

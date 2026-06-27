@@ -45,7 +45,7 @@ final class RunLegacyMigrationPaymentsJob implements ShouldQueue
         try {
             $this->actAsImportingAdmin();
 
-            $payments = $orchestrator->importPayments($this->options);
+            $payments = $orchestrator->applyClassifiedPayments($this->options);
 
             $lastRunJson = Setting::get('legacy_migration', 'last_run');
             $lastRun = is_string($lastRunJson) ? json_decode($lastRunJson, true) : [];
@@ -64,10 +64,9 @@ final class RunLegacyMigrationPaymentsJob implements ShouldQueue
 
             $this->notifyRequester(
                 __('Migration complete'),
-                __('Members created: :created · Payments contributions: :contributions · Future contributions: :future_contributions · Loan repayments: :repayments · Reclassified: :reclassified', [
+                __('Members created: :created · Payment contributions: :contributions · Loan repayments: :repayments · Reclassified: :reclassified', [
                     'created' => $members['created'] ?? 0,
                     'contributions' => $payments['contributions'] ?? 0,
-                    'future_contributions' => $payments['future_contributions'] ?? 0,
                     'repayments' => $payments['loan_repayments'] ?? 0,
                     'reclassified' => $payments['reclassified_as_contribution'] ?? 0,
                 ]),

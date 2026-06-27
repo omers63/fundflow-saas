@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\LegacyMigration;
 
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
@@ -16,13 +17,14 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Replays legacy imported payments chronologically and converts contributions
- * that should have been loan repayments (e.g. monthly amount below tier EMI at cycle start).
+ * that should have been loan repayments under the member payment chronology.
  */
 final class LegacyMisclassifiedContributionRepairService
 {
     public function __construct(
         private readonly AccountingService $accounting,
-        private readonly LegacyPaymentLoanAllocator $loanAllocator,
+        private readonly LegacyMemberLoanSchedule $loanSchedule,
+        private readonly LegacyMemberPaymentChronology $chronology,
         private readonly LegacyPaymentImportService $paymentImport,
         private readonly LegacyLoanRepaymentWindowResolver $repaymentWindowResolver,
         private readonly LegacyImportedLoanScheduleSyncService $scheduleSync,
@@ -54,12 +56,13 @@ final class LegacyMisclassifiedContributionRepairService
 
         $cumulativeRepaidByLoanKey = [];
         $affectedLoanIds = [];
-
+        $classifyMember = LegacyPaymentClassifyMember::fromDatabase($member);
+        $loanWindows = $this->loanSchedule->forMember($classifyMember, $loanIndex);
         $events = $this->paymentTimeline($member);
 
-        ContributionService::withoutPostedNotifications(function () use ($member, $events, $loanIndex, &$cumulativeRepaidByLoanKey, &$affectedLoanIds, &$stats): void {
-            ContributionService::withoutLiveCollectionGuards(function () use ($member, $events, $loanIndex, &$cumulativeRepaidByLoanKey, &$affectedLoanIds, &$stats): void {
-                AccountingService::withoutMemberCashCollection(function () use ($member, $events, $loanIndex, &$cumulativeRepaidByLoanKey, &$affectedLoanIds, &$stats): void {
+        ContributionService::withoutPostedNotifications(function () use ($member, $events, $loanWindows, &$cumulativeRepaidByLoanKey, &$affectedLoanIds, &$stats): void {
+            ContributionService::withoutLiveCollectionGuards(function () use ($member, $events, $loanWindows, &$cumulativeRepaidByLoanKey, &$affectedLoanIds, &$stats): void {
+                AccountingService::withoutMemberCashCollection(function () use ($member, $events, $loanWindows, &$cumulativeRepaidByLoanKey, &$affectedLoanIds, &$stats): void {
                     foreach ($events as $event) {
                         if ($event['type'] === 'repayment') {
                             /** @var LoanRepayment $repayment */
@@ -83,28 +86,34 @@ final class LegacyMisclassifiedContributionRepairService
                         $postedAt = Carbon::parse((string) ($contribution->posted_at ?? $contribution->period));
                         $amount = (float) $contribution->amount;
 
-                        $allocation = $this->loanAllocator->allocate(
-                            $member,
-                            $amount,
+                        $allocation = $this->chronology->allocate(
                             $postedAt,
+                            $amount,
+                            $loanWindows,
                             $cumulativeRepaidByLoanKey,
-                            $loanIndex,
+                            commit: false,
                         );
 
-                        if ($allocation['repayment_amount'] <= 0.00001 || $allocation['loan'] === null) {
+                        if ($allocation->repaymentAmount <= LegacyLoanRepaymentTarget::AMOUNT_TOLERANCE || $allocation->loanId === null) {
                             continue;
                         }
 
-                        $repaymentAmount = $allocation['repayment_amount'];
-                        $contributionRemainder = $allocation['contribution_amount'];
+                        $loan = Loan::query()->find($allocation->loanId);
+
+                        if ($loan === null) {
+                            continue;
+                        }
+
+                        $repaymentAmount = $allocation->repaymentAmount;
+                        $contributionRemainder = $allocation->contributionAmount;
                         $notes = $contribution->notes ?: __('Legacy migration contribution repair');
 
-                        DB::transaction(function () use ($member, $contribution, $allocation, $repaymentAmount, $contributionRemainder, $postedAt, $notes, $loanIndex, &$affectedLoanIds, &$cumulativeRepaidByLoanKey, &$stats): void {
+                        DB::transaction(function () use ($member, $contribution, $loan, $repaymentAmount, $contributionRemainder, $postedAt, $notes, $allocation, &$affectedLoanIds, &$cumulativeRepaidByLoanKey, &$stats): void {
                             $this->contributions->reverseImportedContributionForMigrationRepair($contribution);
                             $stats['contributions_removed']++;
 
                             $posted = $this->paymentImport->postAllocatedLoanRepaymentForRepair(
-                                $allocation['loan'],
+                                $loan,
                                 $repaymentAmount,
                                 $postedAt,
                                 $notes,
@@ -114,40 +123,15 @@ final class LegacyMisclassifiedContributionRepairService
 
                             if ($posted) {
                                 $stats['repayments_posted']++;
-                            }
-
-                            $remainingAmount = $contributionRemainder;
-
-                            while ($remainingAmount > 0.00001) {
-                                $followUp = $this->loanAllocator->allocate(
-                                    $member,
-                                    $remainingAmount,
-                                    $postedAt,
-                                    $cumulativeRepaidByLoanKey,
-                                    $loanIndex,
-                                );
-
-                                if ($followUp['repayment_amount'] <= 0.00001 || $followUp['loan'] === null) {
-                                    break;
-                                }
-
-                                $followUpPosted = $this->paymentImport->postAllocatedLoanRepaymentForRepair(
-                                    $followUp['loan'],
-                                    $followUp['repayment_amount'],
-                                    $postedAt,
-                                    $notes,
-                                    $affectedLoanIds,
+                            } elseif ($allocation->loanKey !== null) {
+                                $this->chronology->recordRepayment(
+                                    $allocation->loanKey,
+                                    $repaymentAmount,
                                     $cumulativeRepaidByLoanKey,
                                 );
-
-                                if ($followUpPosted) {
-                                    $stats['repayments_posted']++;
-                                }
-
-                                $remainingAmount = $followUp['contribution_amount'];
                             }
 
-                            if ($remainingAmount > 0.00001) {
+                            if ($contributionRemainder > LegacyLoanRepaymentTarget::AMOUNT_TOLERANCE) {
                                 [$month, $year] = [
                                     (int) $postedAt->month,
                                     (int) $postedAt->year,
@@ -157,7 +141,7 @@ final class LegacyMisclassifiedContributionRepairService
                                     $member,
                                     $month,
                                     $year,
-                                    $remainingAmount,
+                                    $contributionRemainder,
                                     $postedAt,
                                     $notes.' ['.__('Repaired — contribution remainder after loan allocation').']',
                                 );

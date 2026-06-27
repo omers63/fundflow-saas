@@ -67,7 +67,7 @@ class LoanImportService
             && filled($paymentsCsvForFunding)
             && is_readable($paymentsCsvForFunding)
         ) {
-            $this->fundingSimulator = LegacyMigrationLoanFundingSimulator::fromPaymentsCsv($paymentsCsvForFunding);
+            $this->fundingSimulator = LegacyMigrationLoanFundingSimulator::forLegacyMigration($paymentsCsvForFunding);
         }
 
         $created = 0;
@@ -275,6 +275,7 @@ class LoanImportService
             $row,
             $amount,
             $memberPortion,
+            $masterPortion,
             $minInstall,
             $threshold,
             $portionsExplicit,
@@ -396,6 +397,8 @@ class LoanImportService
                     'installments_count' => 0,
                     'term_months' => 0,
                 ]);
+                $loan->refresh();
+                $loan->completeAsFullyMemberFundedLegacyImport($disbursedAt);
                 $loan->refresh()->releaseGuarantorIfDue();
             } elseif ($terminalStatus !== 'active') {
                 $loan->update([
@@ -831,10 +834,19 @@ class LoanImportService
         array $row,
         float $amount,
         float $memberPortion,
+        float $masterPortion,
         float $minInstall,
         float $threshold,
         bool $portionsExplicit,
     ): int {
+        if (
+            abs($memberPortion - $amount) < 0.02
+            && $masterPortion < 0.02
+            && $threshold < 0.00001
+        ) {
+            return 0;
+        }
+
         if (
             $portionsExplicit
             && abs($memberPortion - $amount) < 0.02

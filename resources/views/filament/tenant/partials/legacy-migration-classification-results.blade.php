@@ -1,9 +1,8 @@
 <div class="space-y-4 text-sm">
-    <ul class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:grid-cols-5">
+    <ul class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
         <li>{{ __('Contributions') }}:
             {{ $classificationStats['contributions'] ?? $classificationStats['contribution'] ?? 0 }}
         </li>
-        <li>{{ __('Future contributions') }}: {{ $classificationStats['future_contributions'] ?? 0 }}</li>
         <li>{{ __('Loan repayments') }}:
             {{ $classificationStats['loan_repayments'] ?? $classificationStats['loan_repayment'] ?? 0 }}
         </li>
@@ -20,7 +19,7 @@
             </x-filament::button>
         </p>
         <p class="text-xs text-gray-500 dark:text-gray-400">
-            {{ __('Classification uses the uploaded working CSV files. Re-run Classify after replacing any upload.') }}
+            {{ __('Classification rebuilds a migration blueprint from the raw payments CSV and database loan funding. Re-run Classify after changing uploads. Download is available only after classification completes.') }}
         </p>
     @endif
 

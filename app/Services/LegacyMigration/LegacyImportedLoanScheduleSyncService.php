@@ -90,17 +90,23 @@ final class LegacyImportedLoanScheduleSyncService
      */
     public function syncMemberLoans(Member $member): array
     {
-        $loans = $member->loans()
+        $allLoans = $member->loans()
             ->whereIn('status', ['active', 'transferred', 'completed', 'early_settled'])
             ->whereNotNull('disbursed_at')
             ->orderBy('disbursed_at')
             ->get();
 
-        if ($loans->isEmpty()) {
+        $this->completeFullyMemberFundedLegacyImportLoans($allLoans);
+
+        $scheduleLoans = $allLoans->reject(
+            fn (Loan $loan): bool => $loan->isFullyMemberFundedAtDisbursement() && $loan->hasNoRepaymentScheduleObligation(),
+        );
+
+        if ($scheduleLoans->isEmpty()) {
             return ['loans' => 0, 'installments' => 0];
         }
 
-        $loanIds = $loans->pluck('id');
+        $loanIds = $scheduleLoans->pluck('id');
 
         $repayments = LoanRepayment::query()
             ->whereIn('loan_id', $loanIds)
@@ -131,7 +137,7 @@ final class LegacyImportedLoanScheduleSyncService
         foreach ($repayments as $repayment) {
             $this->allocateRepaymentAcrossWindows(
                 $member,
-                $loans,
+                $scheduleLoans,
                 (float) $repayment->amount,
                 Carbon::parse($repayment->paid_at),
                 $cumulativeRepaidByLoanKey,
@@ -153,9 +159,11 @@ final class LegacyImportedLoanScheduleSyncService
             });
         }
 
-        foreach ($loans as $loan) {
+        foreach ($scheduleLoans as $loan) {
             $this->syncLoanSettlement($loan->fresh());
         }
+
+        $this->completeFullyMemberFundedLegacyImportLoans($allLoans);
 
         return [
             'loans' => count($touchedLoanIds),
@@ -355,6 +363,10 @@ final class LegacyImportedLoanScheduleSyncService
      */
     private function resetInstallmentPaymentState(Collection $loanIds): void
     {
+        if ($loanIds->isEmpty()) {
+            return;
+        }
+
         LoanInstallment::query()
             ->whereIn('loan_id', $loanIds)
             ->where('status', 'paid')
@@ -374,6 +386,24 @@ final class LegacyImportedLoanScheduleSyncService
                 'status' => 'active',
                 'settled_at' => null,
             ]);
+    }
+
+    /**
+     * @param  Collection<int, Loan>  $loans
+     */
+    private function completeFullyMemberFundedLegacyImportLoans(Collection $loans): void
+    {
+        foreach ($loans as $loan) {
+            if (! $loan->isFullyMemberFundedAtDisbursement() || ! $loan->hasNoRepaymentScheduleObligation()) {
+                continue;
+            }
+
+            if (! in_array($loan->status, ['active', 'transferred'], true)) {
+                continue;
+            }
+
+            $loan->completeAsFullyMemberFundedLegacyImport($loan->disbursed_at);
+        }
     }
 
     private function paymentAppliesToLoan(Loan $loan, CarbonInterface $paidAt): bool

@@ -21,7 +21,7 @@ final class LegacyMigrationDatabaseLoanResolver
         }
 
         $loanId = Loan::query()
-            ->whereHas('member', fn($query) => $query->where('member_number', $memberNumber))
+            ->whereHas('member', fn ($query) => $query->where('member_number', $memberNumber))
             ->whereDate('disbursed_at', $disbursedAt->toDateString())
             ->orderBy('id')
             ->value('id');
@@ -51,6 +51,26 @@ final class LegacyMigrationDatabaseLoanResolver
             graceCycles: $window->graceCycles,
             memberNumber: $window->memberNumber ?? $memberNumber,
             installmentsCount: $window->installmentsCount,
+        );
+    }
+
+    public function enrichWindowLoanId(LegacyMemberLoanWindow $window, string $memberNumber): LegacyMemberLoanWindow
+    {
+        if ($window->loanId !== null && Loan::query()->whereKey($window->loanId)->exists()) {
+            return $window;
+        }
+
+        $loanId = $this->findLoanId($memberNumber, $window->disbursedAt);
+
+        if ($loanId === null) {
+            return $window;
+        }
+
+        return new LegacyMemberLoanWindow(
+            loanKey: $window->loanKey,
+            disbursedAt: $window->disbursedAt,
+            fundPortionTarget: $window->fundPortionTarget,
+            loanId: $loanId,
         );
     }
 }

@@ -420,7 +420,7 @@ class AccountingService
     /**
      * Set {@see Account::$balance} from transaction lines plus any cut-off baseline not yet posted as lines.
      */
-    public function rebuildAccountBalanceFromTransactionLines(Account $account): float
+    public function rebuildAccountBalanceFromTransactionLines(Account $account, bool $reconcileLineBalances = true): float
     {
         $account->refresh();
 
@@ -431,7 +431,9 @@ class AccountingService
             $account->refresh();
         }
 
-        $this->reconcileAccountLedgerBalances($account);
+        if ($reconcileLineBalances) {
+            $this->reconcileAccountLedgerBalances($account);
+        }
 
         return $expected;
     }
@@ -441,16 +443,16 @@ class AccountingService
      *
      * @return int Number of accounts whose stored balance changed
      */
-    public function rebuildAllLedgerAccountBalancesFromTransactionLines(): int
+    public function rebuildAllLedgerAccountBalancesFromTransactionLines(bool $reconcileLineBalances = true): int
     {
         $corrected = 0;
 
         Account::query()
             ->whereHas('transactions')
             ->orderBy('id')
-            ->eachById(function (Account $account) use (&$corrected): void {
+            ->eachById(function (Account $account) use (&$corrected, $reconcileLineBalances): void {
                 $before = round((float) $account->balance, 2);
-                $after = $this->rebuildAccountBalanceFromTransactionLines($account);
+                $after = $this->rebuildAccountBalanceFromTransactionLines($account, $reconcileLineBalances);
 
                 if (abs($before - $after) > 0.004) {
                     $corrected++;
