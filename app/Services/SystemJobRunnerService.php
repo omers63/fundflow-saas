@@ -54,6 +54,7 @@ class SystemJobRunnerService
         $started = microtime(true);
 
         try {
+            @set_time_limit(0);
             $exitCode = Artisan::call($definition['command'], [], $output);
         } catch (\Throwable $exception) {
             $exitCode = 1;

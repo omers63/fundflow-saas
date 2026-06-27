@@ -4,9 +4,15 @@ declare(strict_types=1);
 
 use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Models\Tenant\Account;
+use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\LoanRepayment;
+use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
+use App\Services\AccountingService;
+use App\Services\Loans\LoanLedgerService;
 use App\Services\ReconciliationReportService;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Artisan;
@@ -53,6 +59,68 @@ test('reconciliation report includes legacy check keys and control layer', funct
         ->and($report['checks']['sms_transaction_posting_integrity']['severity'])->toBe('skipped')
         ->and($report)->toHaveKeys(['coverage_matrix', 'control_layer', 'pipeline', 'verdict'])
         ->and($report['verdict'])->toHaveKeys(['pass', 'critical_issues', 'warnings']);
+});
+
+test('reconciliation report skips per-installment ledger checks for legacy imported loans', function () {
+    $member = Member::create([
+        'member_number' => 'RECON-LEGACY',
+        'name' => 'Legacy Recon Member',
+        'email' => 'legacy-recon@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYears(3),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 10_000,
+        'amount_requested' => 10_000,
+        'amount_approved' => 10_000,
+        'amount_disbursed' => 10_000,
+        'member_portion' => 4_000,
+        'master_portion' => 6_000,
+        'interest_rate' => 0,
+        'term_months' => 2,
+        'monthly_repayment' => 3000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'disbursed_at' => now()->subYear(),
+        'approved_at' => now()->subYear(),
+        'applied_at' => now()->subYear(),
+        'installments_count' => 2,
+    ]);
+
+    $installment = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 3000,
+        'due_date' => now()->subMonths(6)->toDateString(),
+        'status' => 'paid',
+        'paid_at' => now()->subMonths(6),
+    ]);
+
+    $repayment = LoanRepayment::create([
+        'loan_id' => $loan->id,
+        'amount' => 3000,
+        'paid_at' => now()->subMonths(6),
+        'notes' => 'legacy-import:test|legacy-recon@fund.test|2025-01-01|3000|loan_repayment|2025-01',
+    ]);
+
+    app(LoanLedgerService::class)->postImportedLoanRepaymentWithCashFlow(
+        $loan->fresh(),
+        $repayment,
+        3000,
+        now()->subMonths(6),
+    );
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    expect($report['checks']['loan_installment_flow_integrity']['severity'])->toBe('ok')
+        ->and($report['checks']['loan_installment_flow_integrity']['legacy_import_loan_count'])->toBe(1);
 });
 
 test('reconciliation snapshot persists report payload', function () {

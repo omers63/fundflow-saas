@@ -11,6 +11,7 @@ use App\Models\Tenant\FeeDeduction;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\ReconciliationException;
@@ -55,6 +56,8 @@ class ReconciliationReportService
         ?CarbonInterface $periodEnd = null,
         array $options = [],
     ): array {
+        @set_time_limit(0);
+
         $asOf = $asOf ? Carbon::parse($asOf) : now();
 
         $declaredBank = isset($options['declared_bank_balance']) && $options['declared_bank_balance'] !== null && $options['declared_bank_balance'] !== ''
@@ -73,7 +76,7 @@ class ReconciliationReportService
                 'declared_bank_balance' => $declaredBank,
                 'declared_bank_date' => $declaredBankDate,
                 'bank_mismatch_treat_as_critical' => $bankMismatchCritical,
-            ], fn($v) => $v !== null && $v !== '' && $v !== false),
+            ], fn ($v) => $v !== null && $v !== '' && $v !== false),
         ];
 
         $checks = [];
@@ -95,7 +98,7 @@ class ReconciliationReportService
         $computedByAccount = DB::query()
             ->fromSub($ledgerRows, 't')
             ->pluck('computed', 'account_id')
-            ->map(fn($v) => (float) $v)
+            ->map(fn ($v) => (float) $v)
             ->all();
 
         $ledgerMismatches = [];
@@ -143,7 +146,7 @@ class ReconciliationReportService
         $sumDebits = (float) ($totals->debits ?? 0);
         $trialDelta = abs($sumCredits - $sumDebits);
         $trialOk = $trialDelta <= self::AMOUNT_TOLERANCE;
-        if (!$trialOk) {
+        if (! $trialOk) {
             $incrementWarning();
         }
 
@@ -207,7 +210,7 @@ class ReconciliationReportService
             $stated = round($declaredBank, 2);
             $variance = round($book - $stated, 2);
             $match = abs($variance) <= self::AMOUNT_TOLERANCE;
-            if (!$match) {
+            if (! $match) {
                 if ($bankMismatchCritical) {
                     $incrementCritical();
                 } else {
@@ -240,14 +243,14 @@ class ReconciliationReportService
                 ->orderBy('id')
                 ->chunkById(200, function ($rows) use ($contribMorph, &$missingLedgerContributions): void {
                     foreach ($rows as $row) {
-                        if (!$row instanceof Contribution) {
+                        if (! $row instanceof Contribution) {
                             continue;
                         }
                         $exists = Transaction::query()
                             ->where('reference_type', $contribMorph)
                             ->where('reference_id', $row->id)
                             ->exists();
-                        if (!$exists) {
+                        if (! $exists) {
                             $missingLedgerContributions[] = [
                                 'contribution_id' => $row->id,
                                 'member_id' => $row->member_id,
@@ -271,7 +274,7 @@ class ReconciliationReportService
             if ($missingLedgerContributions !== []) {
                 $incrementCritical();
             }
-            if (!$masterMatch) {
+            if (! $masterMatch) {
                 $incrementWarning();
             }
 
@@ -304,7 +307,7 @@ class ReconciliationReportService
             ->orderBy('id')
             ->chunkById(200, function ($rows) use (&$memberPortalPostingIssues, &$memberPortalPostedCount, $fundPostingMorph, $masterCashId): void {
                 foreach ($rows as $posting) {
-                    if (!$posting instanceof FundPosting) {
+                    if (! $posting instanceof FundPosting) {
                         continue;
                     }
 
@@ -325,7 +328,7 @@ class ReconciliationReportService
                         ->get();
 
                     $masterLine = $masterCashId
-                        ? $lines->first(fn(Transaction $line) => (int) $line->account_id === (int) $masterCashId)
+                        ? $lines->first(fn (Transaction $line) => (int) $line->account_id === (int) $masterCashId)
                         : null;
 
                     if ($masterLine === null) {
@@ -348,10 +351,10 @@ class ReconciliationReportService
                         ->where('reference_id', $posting->id)
                         ->where('type', 'credit')
                         ->where('member_id', $posting->member_id)
-                        ->whereHas('account', fn($query) => $query->where('type', 'cash')->where('is_master', false)->where('member_id', $posting->member_id))
+                        ->whereHas('account', fn ($query) => $query->where('type', 'cash')->where('is_master', false)->where('member_id', $posting->member_id))
                         ->exists();
 
-                    if (!$memberCashLineExists) {
+                    if (! $memberCashLineExists) {
                         $memberPortalPostingIssues[] = [
                             'fund_posting_id' => $posting->id,
                             'issue' => 'missing member cash mirror line for accepted fund posting',
@@ -383,7 +386,7 @@ class ReconciliationReportService
             ->orderBy('id')
             ->chunkById(200, function ($rows) use (&$bankPostingIssues, &$bankPostedCount): void {
                 foreach ($rows as $tx) {
-                    if (!$tx instanceof BankTransaction) {
+                    if (! $tx instanceof BankTransaction) {
                         continue;
                     }
 
@@ -417,7 +420,7 @@ class ReconciliationReportService
                             ->where('reference_type', FundPosting::class)
                             ->where('reference_id', $tx->fund_posting_id)
                             ->where('member_id', $tx->member_id)
-                            ->whereHas('account', fn($query) => $query->where('type', 'cash')->where('is_master', false)->where('member_id', $tx->member_id))
+                            ->whereHas('account', fn ($query) => $query->where('type', 'cash')->where('is_master', false)->where('member_id', $tx->member_id))
                             ->first();
 
                         if ($memberCashLine === null) {
@@ -458,11 +461,11 @@ class ReconciliationReportService
             ->with(['member.user', 'installments'])
             ->chunkById(100, function ($loans) use (&$activeLoanMismatches): void {
                 foreach ($loans as $loan) {
-                    if (!$loan instanceof Loan) {
+                    if (! $loan instanceof Loan) {
                         continue;
                     }
                     $acc = $loan->account();
-                    if (!$acc) {
+                    if (! $acc) {
                         continue;
                     }
                     $ledgerOutstanding = max(0.0, -(float) $acc->balance);
@@ -500,11 +503,11 @@ class ReconciliationReportService
             ->with(['member.user', 'installments'])
             ->chunkById(100, function ($loans) use (&$approvedLoanMismatches): void {
                 foreach ($loans as $loan) {
-                    if (!$loan instanceof Loan) {
+                    if (! $loan instanceof Loan) {
                         continue;
                     }
                     $acc = $loan->account();
-                    if (!$acc) {
+                    if (! $acc) {
                         continue;
                     }
                     $ledgerOutstanding = max(0.0, -(float) $acc->balance);
@@ -550,7 +553,7 @@ class ReconciliationReportService
             ->with(['member.user'])
             ->chunkById(100, function ($loans) use (&$loanCashPayoutMismatches): void {
                 foreach ($loans as $loan) {
-                    if (!$loan instanceof Loan || !$loan->member_id) {
+                    if (! $loan instanceof Loan || ! $loan->member_id) {
                         continue;
                     }
 
@@ -559,7 +562,7 @@ class ReconciliationReportService
                         ->where('reference_id', $loan->id)
                         ->where('type', 'credit')
                         ->where('member_id', $loan->member_id)
-                        ->whereHas('account', fn($q) => $q
+                        ->whereHas('account', fn ($q) => $q
                             ->where('type', 'cash')
                             ->where('member_id', $loan->member_id))
                         ->sum('amount');
@@ -599,7 +602,7 @@ class ReconciliationReportService
             ->orderBy('id')
             ->chunkById(200, function ($rows) use (&$contributionFlowIssues, $masterFund, $masterCash): void {
                 foreach ($rows as $contribution) {
-                    if (!$contribution instanceof Contribution) {
+                    if (! $contribution instanceof Contribution) {
                         continue;
                     }
 
@@ -629,7 +632,7 @@ class ReconciliationReportService
                         ->where('reference_id', $contribution->id)
                         ->where('type', 'credit')
                         ->where('member_id', $memberId)
-                        ->whereHas('account', fn($q) => $q
+                        ->whereHas('account', fn ($q) => $q
                             ->where('type', 'fund')
                             ->where('member_id', $memberId))
                         ->sum('amount');
@@ -651,7 +654,7 @@ class ReconciliationReportService
                             ->where('reference_id', $contribution->id)
                             ->where('type', 'debit')
                             ->where('member_id', $memberId)
-                            ->whereHas('account', fn($q) => $q
+                            ->whereHas('account', fn ($q) => $q
                                 ->where('type', 'cash')
                                 ->where('member_id', $memberId))
                             ->sum('amount');
@@ -712,7 +715,7 @@ class ReconciliationReportService
             ->orderBy('id')
             ->chunkById(200, function ($rows) use (&$membershipFeeIssues, $masterCash, $masterFees): void {
                 foreach ($rows as $application) {
-                    if (!$application instanceof MembershipApplication) {
+                    if (! $application instanceof MembershipApplication) {
                         continue;
                     }
 
@@ -778,7 +781,7 @@ class ReconciliationReportService
             ->orderBy('id')
             ->chunkById(200, function ($rows) use (&$subscriptionFeeIssues, $masterFees): void {
                 foreach ($rows as $fee) {
-                    if (!$fee instanceof FeeDeduction) {
+                    if (! $fee instanceof FeeDeduction) {
                         continue;
                     }
 
@@ -817,6 +820,7 @@ class ReconciliationReportService
         $loanInstallmentFlowIssues = [];
         $masterFundId = $masterFund?->id;
         $masterCashId = $masterCash?->id;
+        $legacyImportedLoanIds = array_fill_keys($this->legacyImportedLoanIds(), true);
 
         LoanInstallment::query()
             ->whereNull('deleted_at')
@@ -825,9 +829,13 @@ class ReconciliationReportService
             })
             ->with('loan')
             ->orderBy('id')
-            ->chunkById(200, function ($rows) use (&$loanInstallmentFlowIssues, $masterFundId, $masterCashId): void {
+            ->chunkById(200, function ($rows) use (&$loanInstallmentFlowIssues, $masterFundId, $masterCashId, $legacyImportedLoanIds): void {
                 foreach ($rows as $installment) {
-                    if (!$installment instanceof LoanInstallment || !$installment->loan) {
+                    if (! $installment instanceof LoanInstallment || ! $installment->loan) {
+                        continue;
+                    }
+
+                    if (isset($legacyImportedLoanIds[(int) $installment->loan_id])) {
                         continue;
                     }
 
@@ -859,7 +867,7 @@ class ReconciliationReportService
                         ->where('reference_id', $sourceId)
                         ->where('type', 'credit')
                         ->where('member_id', $borrowerId)
-                        ->whereHas('account', fn($q) => $q
+                        ->whereHas('account', fn ($q) => $q
                             ->where('type', 'fund')
                             ->where('member_id', $borrowerId))
                         ->sum('amount');
@@ -878,7 +886,7 @@ class ReconciliationReportService
                         ->where('reference_type', $sourceType)
                         ->where('reference_id', $sourceId)
                         ->where('type', 'credit')
-                        ->whereHas('account', fn($q) => $q
+                        ->whereHas('account', fn ($q) => $q
                             ->where('type', 'loan')
                             ->where('loan_id', $installment->loan_id))
                         ->sum('amount');
@@ -917,7 +925,7 @@ class ReconciliationReportService
                             ->where('reference_id', $sourceId)
                             ->where('type', 'debit')
                             ->where('member_id', $guarantorId)
-                            ->whereHas('account', fn($q) => $q
+                            ->whereHas('account', fn ($q) => $q
                                 ->where('type', 'fund')
                                 ->where('member_id', $guarantorId))
                             ->sum('amount');
@@ -939,7 +947,7 @@ class ReconciliationReportService
                             ->where('reference_id', $sourceId)
                             ->where('type', 'debit')
                             ->where('member_id', $borrowerId)
-                            ->whereHas('account', fn($q) => $q
+                            ->whereHas('account', fn ($q) => $q
                                 ->where('type', 'cash')
                                 ->where('member_id', $borrowerId))
                             ->sum('amount');
@@ -958,6 +966,12 @@ class ReconciliationReportService
                 }
             });
 
+        $legacyImportedLoanIssues = $this->legacyImportedLoanRepaymentFlowIssues(
+            array_keys($legacyImportedLoanIds),
+            $masterFundId,
+        );
+        $loanInstallmentFlowIssues = array_merge($loanInstallmentFlowIssues, $legacyImportedLoanIssues);
+
         if ($loanInstallmentFlowIssues !== []) {
             $incrementCritical();
         }
@@ -968,13 +982,17 @@ class ReconciliationReportService
             'issue_count' => count($loanInstallmentFlowIssues),
             'issues' => array_slice($loanInstallmentFlowIssues, 0, 120),
             'issues_truncated' => count($loanInstallmentFlowIssues) > 120,
+            'legacy_import_loan_count' => count($legacyImportedLoanIds),
+            'note' => count($legacyImportedLoanIds) > 0
+                ? __('Legacy-imported loans validate repayment totals at loan level (LoanRepayment references) rather than per-installment ledger legs.')
+                : null,
         ];
 
         // --- 4h) Member cash transfer integrity (member-sourced transfer rows) ---
         $memberTransferIssues = [];
         $memberTransferGroupRows = Transaction::query()
             ->where('reference_type', Member::class)
-            ->whereHas('account', fn($query) => $query->where('type', 'cash')->where('is_master', false))
+            ->whereHas('account', fn ($query) => $query->where('type', 'cash')->where('is_master', false))
             ->where(function ($q): void {
                 $q->where('description', 'like', 'Transfer to % cash account%')
                     ->orWhere('description', 'like', 'Transfer from % cash account%');
@@ -984,7 +1002,7 @@ class ReconciliationReportService
         $groupedTransfers = $memberTransferGroupRows->groupBy(function ($row): string {
             $ts = optional($row->transacted_at)?->format('Y-m-d H:i:s') ?? 'na';
 
-            return $ts . '|' . number_format((float) $row->amount, 2, '.', '');
+            return $ts.'|'.number_format((float) $row->amount, 2, '.', '');
         });
 
         foreach ($groupedTransfers as $groupKey => $rows) {
@@ -1031,7 +1049,7 @@ class ReconciliationReportService
                     ->whereColumn('loans.id', 'accounts.loan_id');
             })
             ->get(['id', 'loan_id', 'name', 'balance'])
-            ->map(fn(Account $a) => [
+            ->map(fn (Account $a) => [
                 'account_id' => $a->id,
                 'loan_id' => $a->loan_id,
                 'name' => $a->name,
@@ -1143,7 +1161,7 @@ class ReconciliationReportService
             return [
                 'flow' => $flow,
                 'checks' => array_map(
-                    fn(string $k): array => ['key' => $k, 'severity' => $checkSeverity($k)],
+                    fn (string $k): array => ['key' => $k, 'severity' => $checkSeverity($k)],
                     $keys,
                 ),
             ];
@@ -1176,6 +1194,133 @@ class ReconciliationReportService
             'period_metrics' => $periodMetrics,
             'summary' => $summary,
         ];
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function legacyImportedLoanIds(): array
+    {
+        return LoanRepayment::query()
+            ->where(function ($query): void {
+                $query->where('notes', 'like', '%legacy-import:%')
+                    ->orWhere('notes', 'like', '%Legacy migration%')
+                    ->orWhere('notes', 'like', '%ترحيل البيانات التاريخية%');
+            })
+            ->distinct()
+            ->pluck('loan_id')
+            ->map(fn (mixed $loanId): int => (int) $loanId)
+            ->filter(fn (int $loanId): bool => $loanId > 0)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Legacy migration posts repayments on {@see LoanRepayment} and marks installments paid via schedule sync.
+     *
+     * @param  list<int>  $loanIds
+     * @return list<array<string, mixed>>
+     */
+    private function legacyImportedLoanRepaymentFlowIssues(array $loanIds, ?int $masterFundId): array
+    {
+        if ($loanIds === []) {
+            return [];
+        }
+
+        $issues = [];
+        $repaymentMorph = LoanRepayment::class;
+
+        foreach (array_chunk($loanIds, 50) as $chunk) {
+            $loans = Loan::query()
+                ->with('member')
+                ->whereIn('id', $chunk)
+                ->get();
+
+            foreach ($loans as $loan) {
+                $paidInstallmentSum = (float) $loan->installments()
+                    ->where(function ($query): void {
+                        $query->where('status', 'paid')->orWhere('paid_by_guarantor', true);
+                    })
+                    ->sum('amount');
+                $repaymentSum = (float) $loan->repayments()->sum('amount');
+
+                if (abs($paidInstallmentSum - $repaymentSum) > self::AMOUNT_TOLERANCE) {
+                    $issues[] = [
+                        'loan_id' => $loan->id,
+                        'issue' => 'legacy imported paid installments vs repayment records mismatch',
+                        'expected' => round($paidInstallmentSum, 2),
+                        'actual' => round($repaymentSum, 2),
+                    ];
+
+                    continue;
+                }
+
+                $repaymentIds = $loan->repayments()->pluck('id');
+
+                if ($repaymentIds->isEmpty()) {
+                    continue;
+                }
+
+                $borrowerId = (int) ($loan->member_id ?? 0);
+                $memberFundCredits = (float) Transaction::query()
+                    ->where('reference_type', $repaymentMorph)
+                    ->whereIn('reference_id', $repaymentIds)
+                    ->where('type', 'credit')
+                    ->where('member_id', $borrowerId)
+                    ->whereHas('account', fn ($query) => $query
+                        ->where('type', 'fund')
+                        ->where('member_id', $borrowerId))
+                    ->sum('amount');
+
+                if (abs($memberFundCredits - $repaymentSum) > self::AMOUNT_TOLERANCE) {
+                    $issues[] = [
+                        'loan_id' => $loan->id,
+                        'issue' => 'legacy imported borrower member fund credit missing/mismatch',
+                        'expected' => round($repaymentSum, 2),
+                        'actual' => round($memberFundCredits, 2),
+                        'member_id' => $borrowerId,
+                    ];
+                }
+
+                $loanAccountCredits = (float) Transaction::query()
+                    ->where('reference_type', $repaymentMorph)
+                    ->whereIn('reference_id', $repaymentIds)
+                    ->where('type', 'credit')
+                    ->whereHas('account', fn ($query) => $query
+                        ->where('type', 'loan')
+                        ->where('loan_id', $loan->id))
+                    ->sum('amount');
+
+                if (abs($loanAccountCredits - $repaymentSum) > self::AMOUNT_TOLERANCE) {
+                    $issues[] = [
+                        'loan_id' => $loan->id,
+                        'issue' => 'legacy imported loan account credit missing/mismatch',
+                        'expected' => round($repaymentSum, 2),
+                        'actual' => round($loanAccountCredits, 2),
+                    ];
+                }
+
+                if ($masterFundId !== null) {
+                    $masterFundCredits = (float) Transaction::query()
+                        ->where('reference_type', $repaymentMorph)
+                        ->whereIn('reference_id', $repaymentIds)
+                        ->where('type', 'credit')
+                        ->where('account_id', $masterFundId)
+                        ->sum('amount');
+
+                    if (abs($masterFundCredits - $repaymentSum) > self::AMOUNT_TOLERANCE) {
+                        $issues[] = [
+                            'loan_id' => $loan->id,
+                            'issue' => 'legacy imported master fund credit missing/mismatch',
+                            'expected' => round($repaymentSum, 2),
+                            'actual' => round($masterFundCredits, 2),
+                        ];
+                    }
+                }
+            }
+        }
+
+        return $issues;
     }
 
     /**

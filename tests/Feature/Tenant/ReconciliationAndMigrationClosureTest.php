@@ -865,6 +865,107 @@ test('pending past window close is not raised for contribution-exempt members', 
         ->exists())->toBeFalse();
 });
 
+test('reconciliation does not flag legacy imported contributions collected during loan exempt cycles', function () {
+    $member = Member::create([
+        'member_number' => 'LEG-EXEMPT',
+        'name' => 'Legacy Exempt Cycle',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYears(2),
+        'status' => 'active',
+    ]);
+
+    $loanPeriod = now()->subMonths(6)->startOfMonth();
+
+    $loan = Loan::factory()->for($member)->create([
+        'status' => 'completed',
+        'amount_disbursed' => 10_000,
+        'member_portion' => 10_000,
+        'master_portion' => 0,
+        'disbursed_at' => $loanPeriod->copy()->subMonth(),
+        'completed_at' => $loanPeriod->copy()->addMonths(3),
+    ]);
+
+    Contribution::create([
+        'member_id' => $member->id,
+        'period' => $loanPeriod,
+        'amount' => 500,
+        'amount_collected' => 500,
+        'status' => 'posted',
+        'collection_status' => ContributionCollectionStatus::COLLECTED,
+        'posted_at' => $loanPeriod,
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+        'notes' => 'Legacy migration contribution [legacy-import:LEG-EXEMPT||' . $loanPeriod->format('Y-m-d') . '|500|contribution|' . $loanPeriod->format('Y-m') . ']',
+    ]);
+
+    expect($member->isExemptFromContributions(
+        (int) $loanPeriod->month,
+        (int) $loanPeriod->year,
+    ))->toBeTrue();
+
+    ReconciliationException::query()->where('exception_code', 'CONTRIBUTION_EXEMPT_COLLECTED')->delete();
+
+    $recon = app(ReconciliationService::class);
+    $method = new ReflectionMethod($recon, 'reconcileContributions');
+    $method->setAccessible(true);
+    $method->invoke($recon);
+
+    expect(ReconciliationException::query()
+        ->where('exception_code', 'CONTRIBUTION_EXEMPT_COLLECTED')
+        ->where('affected_entities->member_id', $member->id)
+        ->open()
+        ->exists())->toBeFalse();
+});
+
+test('reconciliation still flags live contributions collected during loan exempt cycles', function () {
+    $member = Member::create([
+        'member_number' => 'LIVE-EXEMPT',
+        'name' => 'Live Exempt Cycle',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYears(2),
+        'status' => 'active',
+    ]);
+
+    $loanPeriod = now()->subMonths(4)->startOfMonth();
+
+    Loan::factory()->for($member)->create([
+        'status' => 'active',
+        'amount_disbursed' => 10_000,
+        'member_portion' => 10_000,
+        'master_portion' => 0,
+        'disbursed_at' => $loanPeriod->copy()->subMonth(),
+    ]);
+
+    $contribution = Contribution::create([
+        'member_id' => $member->id,
+        'period' => $loanPeriod,
+        'amount' => 500,
+        'amount_collected' => 500,
+        'status' => 'posted',
+        'collection_status' => ContributionCollectionStatus::COLLECTED,
+        'posted_at' => $loanPeriod,
+        'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
+        'notes' => 'Manual correction',
+    ]);
+
+    expect($member->isExemptFromContributions(
+        (int) $loanPeriod->month,
+        (int) $loanPeriod->year,
+    ))->toBeTrue();
+
+    ReconciliationException::query()->where('exception_code', 'CONTRIBUTION_EXEMPT_COLLECTED')->delete();
+
+    $recon = app(ReconciliationService::class);
+    $method = new ReflectionMethod($recon, 'reconcileContributions');
+    $method->setAccessible(true);
+    $method->invoke($recon);
+
+    expect(ReconciliationException::query()
+        ->where('exception_code', 'CONTRIBUTION_EXEMPT_COLLECTED')
+        ->where('affected_entities->contribution_id', $contribution->id)
+        ->open()
+        ->exists())->toBeTrue();
+});
+
 test('loan disbursement reconciliation accepts mirrored member cash credits without cash payout suffix', function () {
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 200_000, 'is_master' => true]);
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 200_000, 'is_master' => true]);

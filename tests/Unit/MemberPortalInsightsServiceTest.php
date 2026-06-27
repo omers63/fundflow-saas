@@ -107,21 +107,56 @@ test('member portal insights snapshot includes greeting and kpis', function () {
         ->and($snapshot['loan_panel'])->toBeNull()
         ->and($snapshot['expandable'])->toHaveKeys(['insights', 'household', 'guarantor'])
         ->and($snapshot['greeting'])->toHaveKeys([
-                'period_label',
-                'first_name',
-                'name',
-                'fund_name',
-                'date',
-                'subtitle',
-                'avatar_url',
-                'initials',
-                'profile_url',
-                'balances',
-                'pills',
-            ])
+            'period_label',
+            'first_name',
+            'name',
+            'fund_name',
+            'date',
+            'subtitle',
+            'avatar_url',
+            'initials',
+            'profile_url',
+            'balances',
+            'pills',
+        ])
         ->and($snapshot['greeting']['balances'])->toHaveCount(2)
         ->and($snapshot['steps'])->not->toBeEmpty()
         ->and($snapshot['trend'])->toHaveCount(6);
+});
+
+test('member portal insights show loan eligibility only in eligibility panel', function () {
+    app()->setLocale('en');
+
+    $memberUser = User::create([
+        'name' => 'Ineligible Member',
+        'email' => 'ineligible-insights@test.com',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => false,
+    ]);
+
+    $member = Member::create([
+        'user_id' => $memberUser->id,
+        'member_number' => 'MEM-INEL-INS',
+        'name' => 'Ineligible Member',
+        'email' => 'ineligible-insights@test.com',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subMonths(6),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+    $member->fundAccount()->update(['balance' => 25_000]);
+
+    auth('tenant')->login($memberUser);
+
+    $snapshot = app(MemberPortalInsightsService::class)->snapshot(CurrentMember::get());
+
+    expect($snapshot['notice']['title'] ?? null)->not->toBe(__('Not eligible for a loan'))
+        ->and($snapshot['notice']['title'] ?? null)->not->toBe(__('You are eligible to apply for a loan'))
+        ->and($snapshot['eligibility_panel'])->not->toBeNull()
+        ->and($snapshot['eligibility_panel']['eligible'])->toBeFalse()
+        ->and($snapshot['eligibility_panel']['can_request_override'])->toBeTrue();
 });
 
 test('member portal insights show lifetime contribution and repayment totals in money format', function () {

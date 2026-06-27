@@ -24,6 +24,8 @@ class FundReconcileCommand extends Command
 
     public function handle(ReconciliationReportService $service): int
     {
+        @set_time_limit(0);
+
         $tz = config('app.timezone');
         $now = Carbon::now($tz);
 

@@ -1,6 +1,6 @@
 @php
-    $d = $d ?? [];
-    $currency = $currency ?? null;
+$d = $d ?? [];
+$currency = $currency ?? null;
 @endphp
 
 @if (empty($d))
@@ -9,11 +9,11 @@
     </div>
 @else
     <div class="ff-member-dashboard-overview w-full max-w-none space-y-3.5">
-        @if (! empty($d['notice']))
+        @if (!empty($d['notice']))
             @php $notice = $d['notice']; @endphp
             <x-member::notice :tone="$notice['tone']" :title="$notice['title'] ?? null">
                 <p class="m-0">{!! $notice['body'] ?? '' !!}</p>
-                @if (! empty($notice['action']['url'] ?? null))
+                @if (!empty($notice['action']['url'] ?? null))
                     <p class="m-0 mt-1">
                         <a href="{{ $notice['action']['url'] }}" wire:navigate class="font-semibold underline">
                             {{ $notice['action']['label'] }} →
@@ -23,7 +23,7 @@
             </x-member::notice>
         @endif
 
-        @if (! empty($d['pending_actions']))
+        @if (!empty($d['pending_actions']))
             <div class="space-y-2">
                 @foreach ($d['pending_actions'] as $pending)
                     <x-member::notice :tone="$pending['tone'] ?? 'amber'">
@@ -38,7 +38,7 @@
         @endif
 
         <div class="ff-member-dashboard-account-grid grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-            @if (! empty($d['cash_card']))
+            @if (!empty($d['cash_card']))
                 @php $cash = $d['cash_card']; @endphp
                 <x-member::panel :title="__('Cash account')" :link="$cash['details_url'] ?? null" :link-label="__('Details')"
                     class="ff-member-cash-hero">
@@ -69,7 +69,7 @@
                 </x-member::panel>
             @endif
 
-            @if (! empty($d['fund_card']))
+            @if (!empty($d['fund_card']))
                 @php $fund = $d['fund_card']; @endphp
                 <x-member::panel :title="__('Fund account')" :link="$fund['details_url'] ?? null" :link-label="__('Details')"
                     class="ff-member-fund-hero">
@@ -97,16 +97,16 @@
         </div>
 
         @php
-            $hasLoanPanel = ! empty($d['loan_panel']);
-            $hasEligibilityPanel = ! empty($d['eligibility_panel']);
-            $hasQuickActions = ! empty($d['quick_actions']);
-            $hasLoanColumn = $hasLoanPanel || $hasEligibilityPanel;
+    $hasLoanPanel = !empty($d['loan_panel']);
+    $hasEligibilityPanel = !empty($d['eligibility_panel']);
+    $hasQuickActions = !empty($d['quick_actions']);
+    $hasLoanColumn = $hasLoanPanel || $hasEligibilityPanel;
         @endphp
 
         @if ($hasLoanColumn || $hasQuickActions)
             <div class="grid grid-cols-1 gap-3.5 lg:grid-cols-5 lg:items-start">
                 @if ($hasLoanColumn)
-                    <div @class(['lg:col-span-3' => $hasQuickActions, 'col-span-full' => ! $hasQuickActions])>
+                    <div @class(['lg:col-span-3' => $hasQuickActions, 'col-span-full' => !$hasQuickActions])>
                         @if ($hasLoanPanel)
                             @php $loan = $d['loan_panel']; @endphp
                             <x-member::panel :title="$loan['label'] ?? __('Active loan')" :link="$loan['view_url'] ?? null"
@@ -127,7 +127,7 @@
                                         {{ $loan['repaid_label'] ?? '' }}
                                     @endif
                                 </p>
-                                @if (! empty($loan['next_emi']))
+                                @if (!empty($loan['next_emi']))
                                     <div class="ff-member-dashboard-emi-row mb-3">
                                         <div>
                                             <p class="ff-member-dashboard-meta m-0">{{ __('Next EMI due') }}</p>
@@ -179,7 +179,26 @@
                                             @if (filled($eligibility['reason'] ?? null))
                                                 <p class="ff-member-dashboard-meta m-0">{{ $eligibility['reason'] }}</p>
                                             @endif
-                                        </div>
+                                            @if ($eligibility['has_pending_override_request'] ?? false)
+                                                <p class="ff-member-dashboard-meta m-0">
+                                                    {{ __('An administrator is reviewing your loan eligibility request.') }}
+                                                </p>
+                                            @endif
+                                            </div>
+                                            @if (($eligibility['has_pending_override_request'] ?? false) || ($eligibility['can_request_override'] ?? false))
+                                                <div class="ff-member-dashboard-actions ff-member-dashboard-eligibility__actions">
+                                                    @if ($eligibility['has_pending_override_request'] ?? false)
+                                                        <x-member::chip variant="amber">{{ __('Review pending') }}</x-member::chip>
+                                                        <a href="{{ $eligibility['loans_url'] }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-primary">
+                                                            {{ __('My loans') }}
+                                                        </a>
+                                                    @elseif ($eligibility['can_request_override'] ?? false)
+                                                        <a href="{{ $eligibility['request_url'] }}" wire:navigate class="fi-btn fi-btn-size-sm fi-color-warning">
+                                                            {{ __('Request eligibility review') }}
+                                                        </a>
+                                                    @endif
+                                                </div>
+                                            @endif
                                     @endif
                                 </div>
                             </x-member::panel>
@@ -188,19 +207,19 @@
                 @endif
 
                 @if ($hasQuickActions)
-                    <div @class(['lg:col-span-2' => $hasLoanColumn, 'col-span-full' => ! $hasLoanColumn])>
+                    <div @class(['lg:col-span-2' => $hasLoanColumn, 'col-span-full' => !$hasLoanColumn])>
                         <x-member::panel :title="__('Quick actions')">
                             <div class="ff-member-dashboard-quick-actions space-y-1">
                                 @php
-                                    $quickIcons = [
-                                        'deposit' => '⬇',
-                                        'loan' => '📄',
-                                        'statements' => '📥',
-                                        'messages' => '💬',
-                                        'accounts' => '👜',
-                                        'fund' => '🏦',
-                                        'guaranteed' => '🛡',
-                                    ];
+            $quickIcons = [
+                'deposit' => '⬇',
+                'loan' => '📄',
+                'statements' => '📥',
+                'messages' => '💬',
+                'accounts' => '👜',
+                'fund' => '🏦',
+                'guaranteed' => '🛡',
+            ];
                                 @endphp
                                 @foreach ($d['quick_actions'] as $action)
                                     @if ($action['visible'] ?? false)
@@ -219,7 +238,7 @@
             </div>
         @endif
 
-        @if (! empty($d['recent_activity']))
+        @if (!empty($d['recent_activity']))
             <x-member::panel :title="__('Recent transactions')" :link="$d['activity_url'] ?? null"
                 :link-label="__('All')">
                 <div class="overflow-x-auto">
@@ -267,11 +286,11 @@
             </x-member::panel>
         @endif
 
-        @if (! empty($d['expandable']['insights']) || ! empty($d['expandable']['household']['dependents_count']) || ! empty($d['expandable']['guarantor']))
+        @if (!empty($d['expandable']['insights']) || !empty($d['expandable']['household']['dependents_count']) || !empty($d['expandable']['guarantor']))
             <details class="ff-member-dashboard-expandable">
                 <summary>{{ __('More details') }}</summary>
                 <div class="mt-3 space-y-3">
-                    @if (! empty($d['expandable']['insights']['stats']))
+                    @if (!empty($d['expandable']['insights']['stats']))
                         <x-member::panel :title="__('My insights')">
                             <div class="ff-member-dashboard-insights-stats grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                                 @foreach ($d['expandable']['insights']['stats'] as $stat)
@@ -288,7 +307,7 @@
                                 <p class="ff-member-dashboard-meta">{{ __('Parent') }}:
                                     {{ $d['expandable']['household']['parent_name'] }}</p>
                             @endif
-                            @if (! empty($d['expandable']['household']['dependents']))
+                            @if (!empty($d['expandable']['household']['dependents']))
                                 <ul class="mt-2 space-y-2 text-sm">
                                     @foreach ($d['expandable']['household']['dependents'] as $dependent)
                                         <li class="flex flex-wrap items-center justify-between gap-2">
@@ -314,7 +333,7 @@
                         </x-member::panel>
                     @endif
 
-                    @if (! empty($d['expandable']['guarantor']))
+                    @if (!empty($d['expandable']['guarantor']))
                         @php $guarantor = $d['expandable']['guarantor']; @endphp
                         <x-member::panel :title="__('Guaranteed loans')">
                             <p class="ff-member-dashboard-meta mb-3">

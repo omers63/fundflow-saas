@@ -21,6 +21,7 @@ use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
 use App\Support\ContributionPolicySettings;
 use App\Support\InstallmentCollectionStatus;
+use App\Support\LegacyImportedContribution;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -64,8 +65,7 @@ class ReconciliationService
         protected LoanLedgerService $loanLedger,
         protected LateFeeService $lateFees,
         protected ContributionCollectionCycleService $contributionCollection,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array{halted: bool, raised: int, resolved: int, critical: int}
@@ -303,6 +303,10 @@ class ReconciliationService
             ->where('collection_status', ContributionCollectionStatus::COLLECTED)
             ->with('member')
             ->each(function (Contribution $contribution) use (&$count): void {
+                if (LegacyImportedContribution::isContribution($contribution)) {
+                    return;
+                }
+
                 if (
                     $contribution->member?->isExemptFromContributions(
                         (int) $contribution->period?->month,

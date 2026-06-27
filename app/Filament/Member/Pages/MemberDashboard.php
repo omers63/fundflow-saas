@@ -6,7 +6,6 @@ namespace App\Filament\Member\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Support\ReturnToParentPortalAction;
-use App\Filament\Member\Widgets\MemberLoanEligibilityWidget;
 use App\Filament\Member\Widgets\MemberPortalDashboardWidget;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -43,7 +42,6 @@ class MemberDashboard extends BaseDashboard
     public function getWidgets(): array
     {
         return [
-            MemberLoanEligibilityWidget::class,
             MemberPortalDashboardWidget::class,
         ];
     }

@@ -470,6 +470,8 @@ class ReconciliationOverviewPage extends Page implements HasTable
      */
     protected function executeRun(string $mode, array $options = []): void
     {
+        @set_time_limit(0);
+
         $tz = config('app.timezone');
         $now = Carbon::now($tz);
         $service = app(ReconciliationReportService::class);

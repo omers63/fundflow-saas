@@ -1035,45 +1035,7 @@ final class MemberPortalInsightsService
             ];
         }
 
-        if ($eligibility['eligible']) {
-            return [
-                'tone' => 'green',
-                'title' => __('You are eligible to apply for a loan'),
-                'body' => new HtmlString(__(
-                    'Maximum amount :amount',
-                    ['amount' => InsightFormatter::moneyHtml(LoanSettings::maxLoanAmountForMember($member->getFundBalance()))],
-                )),
-                'action' => [
-                    'label' => __('Apply now'),
-                    'url' => ApplyForLoan::getUrl(),
-                ],
-            ];
-        }
-
-        if ($hasPendingOverrideRequest) {
-            return [
-                'tone' => 'amber',
-                'title' => __('Eligibility review pending'),
-                'body' => __('An administrator is reviewing your loan eligibility request.'),
-                'action' => [
-                    'label' => __('My loans'),
-                    'url' => MyLoanResource::getUrl('index'),
-                ],
-            ];
-        }
-
-        if ($canRequestOverride) {
-            return [
-                'tone' => 'amber',
-                'title' => __('Not eligible for a loan'),
-                'body' => $eligibility['reasons'][0] ?? __('Requirements not met'),
-                'action' => [
-                    'label' => __('Request review'),
-                    'url' => MyLoanResource::getUrl('index', ['requestOverride' => 1]),
-                ],
-            ];
-        }
-
+        // Loan eligibility messaging is rendered in the dashboard eligibility panel.
         return null;
     }
 

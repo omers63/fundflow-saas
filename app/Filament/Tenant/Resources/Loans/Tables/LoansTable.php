@@ -28,6 +28,9 @@ class LoansTable
                 ->headerActions(LoanListTableHeaderActions::portfolio())
                 ->columnManager(true)
                 ->columns([
+                    TextColumn::make('id')
+                        ->label(__('Loan #'))
+                        ->sortable(),
                     TextColumn::make('member.name')
                         ->searchable()
                         ->sortable(),
