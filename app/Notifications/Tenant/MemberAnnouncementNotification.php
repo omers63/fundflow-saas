@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace App\Notifications\Tenant;
 
+use App\Filament\Member\Pages\CommunicationsPage;
 use App\Notifications\Channels\SmsChannel;
 use App\Notifications\Concerns\DeliversToMemberChannels;
+use App\Support\TenantAbsoluteUrl;
+use App\Support\WebPushNotification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushChannel;
 
 class MemberAnnouncementNotification extends Notification
 {
@@ -37,6 +41,10 @@ class MemberAnnouncementNotification extends Notification
             $channels[] = SmsChannel::class;
         }
 
+        if (WebPushNotification::enabled()) {
+            $channels[] = WebPushChannel::class;
+        }
+
         return $channels;
     }
 
@@ -48,6 +56,9 @@ class MemberAnnouncementNotification extends Notification
         return [
             'title' => $this->title,
             'body' => $this->body,
+            'url' => TenantAbsoluteUrl::resolve(
+                CommunicationsPage::getUrl(['tab' => 'messages'], panel: 'member'),
+            ),
         ];
     }
 

@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services\Tenant;
 
-use App\Filament\Support\MemberDatabaseNotification;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
+use App\Notifications\Tenant\AdminDirectMessageNotification;
+use App\Notifications\Tenant\MemberDirectMessageNotification;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -175,13 +176,13 @@ final class DirectMessagingService
         $recipient = $member->user;
 
         if ($recipient !== null) {
-            MemberDatabaseNotification::send($recipient, function (Notification $notification) use ($admin, $body): void {
-                $notification
-                    ->title(__('Message from Administration'))
-                    ->body($admin->name.': '.mb_strimwidth(trim($body), 0, 100, '…'))
-                    ->icon('heroicon-o-chat-bubble-left-right')
-                    ->iconColor('info');
-            });
+            $preview = mb_strimwidth(trim($body), 0, 100, '…');
+
+            $recipient->notify(new MemberDirectMessageNotification(
+                $admin->name,
+                $preview,
+                $subject,
+            ));
         }
 
         if (! $suppressAdminToast) {
@@ -229,32 +230,32 @@ final class DirectMessagingService
 
     public function notifyAdminsOfMemberMessage(User $memberUser, string $subject, string $body): void
     {
-        $title = __('New message from :name', ['name' => $memberUser->name]);
         $preview = mb_strimwidth($body, 0, 100, '…');
 
         User::query()
             ->where('is_admin', true)
-            ->each(function (User $admin) use ($title, $subject, $preview): void {
-                Notification::make()
-                    ->title($title)
-                    ->body($subject.': '.$preview)
-                    ->icon('heroicon-o-chat-bubble-left-right')
-                    ->iconColor('info')
-                    ->sendToDatabase($admin);
+            ->each(function (User $admin) use ($memberUser, $subject, $preview): void {
+                $admin->notify(new AdminDirectMessageNotification(
+                    $memberUser->name,
+                    $subject,
+                    $preview,
+                ));
             });
     }
 
     public function notifyAdminsOfMemberReply(User $memberUser, string $subject, string $body): void
     {
+        $preview = mb_strimwidth($body, 0, 100, '…');
+
         User::query()
             ->where('is_admin', true)
-            ->each(function (User $admin) use ($memberUser, $subject, $body): void {
-                Notification::make()
-                    ->title(__('Reply from :name', ['name' => $memberUser->name]))
-                    ->body($subject.': '.mb_strimwidth($body, 0, 100, '…'))
-                    ->icon('heroicon-o-chat-bubble-left-right')
-                    ->iconColor('info')
-                    ->sendToDatabase($admin);
+            ->each(function (User $admin) use ($memberUser, $subject, $preview): void {
+                $admin->notify(new AdminDirectMessageNotification(
+                    $memberUser->name,
+                    $subject,
+                    $preview,
+                    isReply: true,
+                ));
             });
     }
 

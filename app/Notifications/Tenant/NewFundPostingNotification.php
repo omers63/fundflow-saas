@@ -6,28 +6,34 @@ namespace App\Notifications\Tenant;
 
 use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
 use App\Models\Tenant\FundPosting;
+use App\Notifications\Concerns\DeliversToAdminChannels;
 use App\Notifications\Tenant\Concerns\BuildsFundPostingDatabaseMessage;
 use App\Support\Notifications\FundPostingNotificationFormatter;
 use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushMessage;
 
 class NewFundPostingNotification extends Notification
 {
     use BuildsFundPostingDatabaseMessage;
+    use DeliversToAdminChannels;
 
     public function __construct(
         public FundPosting $fundPosting,
-    ) {
-    }
+    ) {}
 
-    /**
-     * @return array<int, string>
-     */
-    public function via(object $notifiable): array
+    public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        return ['database'];
+        $this->fundPosting->loadMissing('member');
+
+        return $this->buildAdminWebPush(
+            __('New deposit request'),
+            FundPostingNotificationFormatter::adminNewRequestPlainText($this->fundPosting),
+            $this->reviewUrl(),
+            'fund-posting-' . $this->fundPosting->getKey(),
+        );
     }
 
     /**

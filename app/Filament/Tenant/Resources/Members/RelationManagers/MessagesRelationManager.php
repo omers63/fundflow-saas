@@ -6,13 +6,13 @@ namespace App\Filament\Tenant\Resources\Members\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
-use App\Filament\Support\MemberDatabaseNotification;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
+use App\Notifications\Tenant\MemberDirectMessageNotification;
 use App\Services\Tenant\DirectMessagingService;
 use Carbon\Carbon;
 use Filament\Actions\Action;
@@ -214,13 +214,12 @@ class MessagesRelationManager extends RelationManager
                         $recipient = $member->user;
 
                         if ($recipient !== null) {
-                            MemberDatabaseNotification::send($recipient, function (Notification $notification) use ($admin, $root, $data): void {
-                                $notification
-                                    ->title(__('Reply: :subject', ['subject' => $root->subject ?: __('Message')]))
-                                    ->body($admin->name.': '.mb_strimwidth($data['body'], 0, 100, '…'))
-                                    ->icon('heroicon-o-chat-bubble-left-right')
-                                    ->iconColor('info');
-                            });
+                            $recipient->notify(new MemberDirectMessageNotification(
+                                $admin->name,
+                                mb_strimwidth($data['body'], 0, 100, '…'),
+                                $root->subject ?: $record->subject,
+                                __('Reply: :subject', ['subject' => $root->subject ?: __('Message')]),
+                            ));
                         }
 
                         Notification::make()

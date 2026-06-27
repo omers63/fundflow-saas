@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'fundflow-v4';
+const CACHE_VERSION = 'fundflow-v5';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 
@@ -93,7 +93,7 @@ self.addEventListener('push', (event) => {
         }
     }
 
-    const title = data.title || 'FundFlow';
+    const title = stripHtmlForNotification(data.title || 'FundFlow');
     const options = {
         body: data.body || '',
         icon: data.icon || '/icons/icon-192x192.png',
@@ -103,8 +103,27 @@ self.addEventListener('push', (event) => {
         actions: data.actions || [],
     };
 
-    event.waitUntil(self.registration.showNotification(title, options));
+    event.waitUntil(
+        self.registration.showNotification(title, {
+            ...options,
+            body: stripHtmlForNotification(options.body || ''),
+        }),
+    );
 });
+
+function stripHtmlForNotification(value) {
+    if (!value) {
+        return '';
+    }
+
+    return value
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|div|section|li|dt|dd|h[1-6])>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
 
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();

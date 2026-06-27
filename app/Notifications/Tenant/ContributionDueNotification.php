@@ -24,8 +24,7 @@ class ContributionDueNotification extends Notification
         public float $amount,
         public Carbon $deadline,
         public float $cashBalance,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -35,6 +34,7 @@ class ContributionDueNotification extends Notification
         return [
             'title' => __('Contribution due'),
             'body' => $this->bodyMessage(),
+            'url' => $this->contributionsUrl(),
         ];
     }
 

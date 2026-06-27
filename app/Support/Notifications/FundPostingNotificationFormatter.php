@@ -28,10 +28,8 @@ final class FundPostingNotificationFormatter
                 (bool) ($row['emphasis'] ?? false),
             );
 
-            $items .= '<div class="ff-notification-details__row">'
-                .'<dt class="ff-notification-details__label">'.e($row['label']).'</dt>'
-                .'<dd class="ff-notification-details__value">'.$value.'</dd>'
-                .'</div>';
+            $items .= '<dt class="ff-notification-details__label">' . e($row['label']) . '</dt>'
+                . '<dd class="ff-notification-details__value">' . $value . '</dd>';
         }
 
         return '<dl class="ff-notification-details">'.$items.'</dl>';
@@ -52,6 +50,47 @@ final class FundPostingNotificationFormatter
     public static function renderLead(string $text): string
     {
         return '<p class="ff-notification-lead">'.e($text).'</p>';
+    }
+
+    public static function adminNewRequestPlainText(FundPosting $posting): string
+    {
+        return trim(__('A new deposit request was submitted.') . "\n" . self::plainTextDepositDetails($posting, includeMember: true));
+    }
+
+    public static function memberAcceptedPlainText(
+        FundPosting $posting,
+        ?FundPostingSettlementSummary $settlement,
+    ): string {
+        $lines = self::depositDetailRows($posting);
+
+        if ($settlement !== null) {
+            $lines = [
+                ...$lines,
+                ...self::settlementRows($settlement),
+            ];
+        }
+
+        if (filled($posting->admin_remarks)) {
+            $lines[] = [
+                'label' => __('Admin note'),
+                'value' => (string) $posting->admin_remarks,
+            ];
+        }
+
+        return self::plainTextFromRows($lines);
+    }
+
+    public static function memberRejectedPlainText(FundPosting $posting): string
+    {
+        $lines = self::depositDetailRows($posting);
+        $lines[] = [
+            'label' => __('Reason'),
+            'value' => filled($posting->admin_remarks)
+                ? (string) $posting->admin_remarks
+                : __('No reason was provided.'),
+        ];
+
+        return self::plainTextFromRows($lines);
     }
 
     public static function adminNewRequestBody(FundPosting $posting): string

@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Notifications\Concerns;
 
+use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Models\Tenant\User;
 use App\Support\MemberLocale;
 use App\Support\MemberNotificationChannels;
+use App\Support\NotificationPlainText;
 use App\Support\TenantAbsoluteUrl;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -56,8 +58,8 @@ trait DeliversToMemberChannels
     {
         return $this->withMemberLocale($notifiable, function () use ($notifiable): WebPushMessage {
             $payload = $this->toArray($notifiable);
-            $title = (string) ($payload['title'] ?? '');
-            $body = (string) ($payload['body'] ?? '');
+            $title = NotificationPlainText::from((string) ($payload['title'] ?? ''));
+            $body = NotificationPlainText::from((string) ($payload['body'] ?? ''));
 
             $message = (new WebPushMessage)
                 ->title($title)
@@ -70,6 +72,12 @@ trait DeliversToMemberChannels
                 $message
                     ->tag('member-loan-' . $payload['loan_id'])
                     ->data(['url' => $this->memberLoanUrl((int) $payload['loan_id'])]);
+            } elseif (isset($payload['fund_posting_id'])) {
+                $message
+                    ->tag('member-fund-posting-' . $payload['fund_posting_id'])
+                    ->data(['url' => $this->memberFundPostingsUrl()]);
+            } elseif (isset($payload['url'])) {
+                $message->data(['url' => (string) $payload['url']]);
             }
 
             return $message;
@@ -83,6 +91,13 @@ trait DeliversToMemberChannels
             ['record' => $loanId],
             panel: 'member',
         );
+
+        return TenantAbsoluteUrl::resolve($url);
+    }
+
+    protected function memberFundPostingsUrl(): string
+    {
+        $url = MyFundPostingResource::getUrl('index', panel: 'member');
 
         return TenantAbsoluteUrl::resolve($url);
     }
