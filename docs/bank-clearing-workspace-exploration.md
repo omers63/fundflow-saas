@@ -54,10 +54,10 @@ flowchart TB
 
     subgraph page [ListBankAccounts]
         INS[BankAccountsInsightsWidget]
-        W[bank-workspace.blade.php<br/>Channel: Bank | SMS]
+        W[bank-workspace.blade.php<br/>Channel Bank or SMS]
         subgraph bankChannel [channel=bank]
             FT[Filament tabs x4]
-            IP[imports-section-pills<br/>Unmatched | Matched]
+            IP[imports-section-pills<br/>Unmatched or Matched]
             T[EmbeddedTable]
         end
         subgraph smsChannel [channel=sms]
