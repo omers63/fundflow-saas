@@ -17,17 +17,31 @@ final class MemberStatusService
         private readonly FundAuditLogService $audit,
         private readonly LoanDelinquencyService $delinquency,
         private readonly AccountingService $accounting,
+        private readonly MemberFundCashTransferService $fundCashTransfer,
+        private readonly MemberCashOutService $cashOuts,
+        private readonly MemberAccountBalanceService $ledgerBalances,
         private readonly MemberMembershipPolicy $policy,
     ) {}
 
-    public function freeze(Member $member, string $reason = ''): void
-    {
+    public function freeze(
+        Member $member,
+        string $reason = '',
+        ?CarbonInterface $freezeDate = null,
+        bool $cashOutBalances = false,
+    ): void {
         if (! in_array($member->status, ['active', 'delinquent'], true)) {
             throw new InvalidArgumentException(__('Only active or delinquent members can be frozen.'));
         }
 
+        $normalizedFreezeDate = $this->normalizeFreezeDate($freezeDate);
+
+        if ($cashOutBalances) {
+            $this->settleBalancesBeforeFreeze($member, $reason, $normalizedFreezeDate);
+        }
+
         $this->transition($member, 'inactive', [
             'contribution_cycles_active' => false,
+            'frozen_at' => $normalizedFreezeDate,
         ], 'MEMBER_FROZEN', $reason, $member->status);
     }
 
@@ -43,6 +57,7 @@ final class MemberStatusService
 
         $this->transition($member, $targetStatus, [
             'contribution_cycles_active' => true,
+            'frozen_at' => null,
         ], 'MEMBER_UNFROZEN', '', 'inactive');
     }
 
@@ -150,6 +165,77 @@ final class MemberStatusService
         $this->audit->log('MEMBER_PAYOUT_RELEASED', 'member', $member, $member, [
             'reason' => trim($reason),
         ]);
+    }
+
+    private function settleBalancesBeforeFreeze(Member $member, string $reason, CarbonInterface $freezeDate): void
+    {
+        $this->accounting->createMemberAccounts($member);
+        $member->load(['cashAccount', 'fundAccount']);
+
+        $balances = $this->ledgerBalances->positiveFreezeCashOutBalances($member, $freezeDate);
+        $fundEligible = $balances['fund'];
+        $cashEligible = $balances['cash'];
+        $cashOutAmount = $balances['total'];
+
+        if ($cashOutAmount <= 0.00001) {
+            return;
+        }
+
+        $this->assertFreezeCashOutSettleable($member, $fundEligible, $cashEligible, $freezeDate);
+
+        if ($fundEligible > 0.00001) {
+            $this->fundCashTransfer->transferAmount(
+                $member,
+                $fundEligible,
+                $member,
+                __('Membership freeze — fund to cash'),
+                BusinessDay::now(),
+            );
+        }
+
+        $note = trim($reason) !== ''
+            ? __('Auto cash-out from membership freeze: :reason', ['reason' => trim($reason)])
+            : __('Auto cash-out from membership freeze');
+
+        $this->cashOuts->submit(
+            $member->fresh(),
+            $cashOutAmount,
+            $note,
+            bypassAvailabilityGuard: true,
+        );
+    }
+
+    private function assertFreezeCashOutSettleable(
+        Member $member,
+        float $fundEligible,
+        float $cashEligible,
+        CarbonInterface $freezeDate,
+    ): void {
+        $currentFund = round(max(0.0, $member->getFundBalance()), 2);
+        $currentCash = round(max(0.0, $member->getCashBalance()), 2);
+
+        if ($currentFund + 0.01 < $fundEligible) {
+            throw new InvalidArgumentException(__('Fund balance is below the amount eligible as of :date.', [
+                'date' => $freezeDate->toDateString(),
+            ]));
+        }
+
+        if ($currentCash + 0.01 < $cashEligible) {
+            throw new InvalidArgumentException(__('Cash balance is below the amount eligible as of :date.', [
+                'date' => $freezeDate->toDateString(),
+            ]));
+        }
+    }
+
+    private function normalizeFreezeDate(?CarbonInterface $freezeDate): CarbonInterface
+    {
+        $date = $freezeDate ?? BusinessDay::today();
+
+        if ($date->copy()->startOfDay()->gt(BusinessDay::today())) {
+            throw new InvalidArgumentException(__('Freeze date cannot be in the future.'));
+        }
+
+        return $date->copy()->endOfDay();
     }
 
     private function transition(

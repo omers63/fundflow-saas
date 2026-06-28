@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Tenant;
 
 use App\Filament\Support\MemberDatabaseNotification;
+use App\Filament\Support\MemberFilamentActions;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\User;
@@ -192,7 +193,7 @@ class MemberRequestService
         }
     }
 
-    public function approve(MemberRequest $request, User $admin): void
+    public function approve(MemberRequest $request, User $admin, array $options = []): void
     {
         if (! $request->isPending()) {
             throw ValidationException::withMessages([
@@ -203,14 +204,14 @@ class MemberRequestService
         $requester = $request->requester()->with('user')->firstOrFail();
         $payload = $request->payload ?? [];
 
-        DB::transaction(function () use ($request, $requester, $payload, $admin): void {
+        DB::transaction(function () use ($request, $requester, $payload, $admin, $options): void {
             match ($request->type) {
                 MemberRequest::TYPE_ADD_DEPENDENT => null,
                 MemberRequest::TYPE_REMOVE_DEPENDENT => $this->applyRemoveDependent($requester, $payload),
                 MemberRequest::TYPE_OWN_ALLOCATION => $this->applyOwnAllocation($requester, $payload),
                 MemberRequest::TYPE_DEPENDENT_ALLOCATION => $this->applyDependentAllocation($requester, $payload, $admin),
                 MemberRequest::TYPE_REQUEST_INDEPENDENCE => $this->applyIndependence($requester),
-                MemberRequest::TYPE_FREEZE_MEMBERSHIP => $this->applyFreezeMembership($requester, $payload),
+                MemberRequest::TYPE_FREEZE_MEMBERSHIP => $this->applyFreezeMembership($requester, $payload, $options),
                 MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => $this->applyUnfreezeMembership($requester),
                 MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => $this->applyWithdrawMembership($requester, $payload),
                 default => throw ValidationException::withMessages(['type' => __('Unknown request type.')]),
@@ -322,9 +323,18 @@ class MemberRequestService
         $this->householdMembers->removeFromHousehold($member);
     }
 
-    protected function applyFreezeMembership(Member $member, array $payload): void
+    protected function applyFreezeMembership(Member $member, array $payload, array $options = []): void
     {
-        $this->statuses->freeze($member, (string) ($payload['reason'] ?? ''));
+        $freezeDate = isset($options['freeze_date'])
+            ? MemberFilamentActions::resolveFreezeDate($options['freeze_date'])
+            : null;
+
+        $this->statuses->freeze(
+            $member,
+            (string) ($payload['reason'] ?? ''),
+            $freezeDate,
+            (bool) ($options['cash_out_fund_balance'] ?? false),
+        );
     }
 
     protected function applyUnfreezeMembership(Member $member): void

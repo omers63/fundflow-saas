@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\MemberRequests\Pages;
 
+use App\Filament\Support\MemberFilamentActions;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Tenant\Resources\MemberRequests\MemberRequestResource;
 use App\Filament\Tenant\Resources\MemberRequests\Schemas\MemberRequestViewInfolist;
@@ -101,11 +102,29 @@ class ViewMemberRequest extends ViewRecord
                     MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => __('The member will be restored to active or delinquent depending on arrears.'),
                     default => __('The change will be applied immediately for supported request types.'),
                 })
-                ->action(function (): void {
+                ->schema(function (): array {
+                    if ($this->record->type !== MemberRequest::TYPE_FREEZE_MEMBERSHIP) {
+                        return [];
+                    }
+
+                    $requester = $this->record->requester;
+
+                    if ($requester === null) {
+                        return [];
+                    }
+
+                    return [
+                        MemberFilamentActions::freezeDateField(),
+                        MemberFilamentActions::freezeCashOutSummaryPlaceholder($requester),
+                        MemberFilamentActions::freezeFundCashOutToggle($requester),
+                    ];
+                })
+                ->action(function (array $data): void {
                     try {
                         app(MemberRequestService::class)->approve(
                             $this->record,
                             auth('tenant')->user(),
+                            $data,
                         );
                         Notification::make()->title(__('Request approved'))->success()->send();
                         $this->refreshResolvedRecord();

@@ -36,6 +36,8 @@ test('consolidated sidebar label catalogue matches plan in english locale', func
         'Loans',
         'Collections',
         'Disbursements',
+        'Deposits',
+        'Cash Outs',
         'Bank Clearing',
         'Reconciliation',
         'Reports',

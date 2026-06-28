@@ -4,7 +4,6 @@ namespace App\Filament\Tenant\Resources\CashOutRequests;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Support\DatabaseNotificationsRefresh;
-use App\Filament\Tenant\Concerns\HidesFromTenantSidebar;
 use App\Filament\Tenant\Resources\CashOutRequests\Pages\CreateCashOutRequest;
 use App\Filament\Tenant\Resources\CashOutRequests\Pages\ListCashOutRequests;
 use App\Filament\Tenant\Resources\CashOutRequests\Schemas\CashOutRequestForm;
@@ -23,7 +22,6 @@ use UnitEnum;
 
 class CashOutRequestResource extends Resource
 {
-    use HidesFromTenantSidebar;
     use TranslatesFilamentNavigationLabels;
 
     protected static ?string $model = CashOutRequest::class;

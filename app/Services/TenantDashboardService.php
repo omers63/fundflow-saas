@@ -9,6 +9,7 @@ use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Filament\Tenant\Pages\Settings;
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
+use App\Filament\Tenant\Resources\CashOutRequests\CashOutRequestResource;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
 use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
@@ -916,6 +917,7 @@ final class TenantDashboardService
                     ['label' => Lang::ui('Master accounts'), 'icon' => 'heroicon-o-building-library', 'url' => MasterAccountResource::getUrl('index')],
                     ['label' => Lang::ui('Bank workspace'), 'icon' => 'heroicon-o-building-office-2', 'url' => BankAccountsResource::getUrl('index')],
                     ['label' => Lang::ui('Deposits'), 'icon' => 'heroicon-o-inbox-arrow-down', 'url' => FundPostingResource::getUrl('index')],
+                    ['label' => Lang::ui('Cash outs'), 'icon' => 'heroicon-o-arrow-up-tray', 'url' => CashOutRequestResource::getUrl('index')],
                 ],
             ],
             [

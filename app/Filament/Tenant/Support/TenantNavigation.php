@@ -28,6 +28,10 @@ final class TenantNavigation
 
     public const SORT_DISBURSEMENTS = 40;
 
+    public const SORT_DEPOSITS = 42;
+
+    public const SORT_CASH_OUTS = 45;
+
     /** Consolidated sidebar — Finance */
     public const SORT_BANK_CLEARING = 10;
 
@@ -50,10 +54,6 @@ final class TenantNavigation
     public const SORT_MEMBER_REQUESTS = 902;
 
     public const SORT_SUPPORT_REQUESTS = 903;
-
-    public const SORT_DEPOSITS = 904;
-
-    public const SORT_CASH_OUTS = 905;
 
     public const SORT_STATEMENTS = 906;
 

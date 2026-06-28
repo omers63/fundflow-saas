@@ -15,6 +15,7 @@ use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanEligibilityOverrideService;
 use App\Services\Loans\LoanEligibilityService;
 use App\Services\Loans\LoanRepaymentService;
+use App\Services\MemberAccountBalanceService;
 use App\Services\MemberAnnualSubscriptionFeeService;
 use App\Services\MemberStatusService;
 use App\Services\Tenant\DirectMessagingService;
@@ -31,13 +32,18 @@ use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Utilities\Get;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use Livewire\Component;
 
@@ -405,17 +411,17 @@ final class MemberFilamentActions
             ->visible(fn (Member $record): bool => in_array($record->status, ['active', 'delinquent'], true))
             ->requiresConfirmation()
             ->modalDescription(__('Pauses membership. Portal access and contribution cycles stop until unfrozen.'))
-            ->schema([
-                Textarea::make('reason')
-                    ->label(__('Reason'))
-                    ->rows(3)
-                    ->maxLength(500),
-            ])
+            ->schema(fn(Member $record): array => self::freezeFormSchema($record))
             ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
                 if (
                     ! ActionModalFailure::attemptThrowable(
                         $action,
-                        fn () => $statuses->freeze($record, (string) ($data['reason'] ?? '')),
+                        fn() => $statuses->freeze(
+                            $record,
+                            (string) ($data['reason'] ?? ''),
+                            self::resolveFreezeDate($data['freeze_date'] ?? null),
+                            (bool) ($data['cash_out_fund_balance'] ?? false),
+                        ),
                         __('Cannot freeze'),
                     )
                 ) {
@@ -425,6 +431,100 @@ final class MemberFilamentActions
                 Notification::make()->title(__('Member frozen'))->success()->send();
                 self::refreshMembersList($livewire);
             });
+    }
+
+    /**
+     * @return list<Textarea|DatePicker|Placeholder|Toggle>
+     */
+    public static function freezeFormSchema(Member $member): array
+    {
+        return [
+            Textarea::make('reason')
+                ->label(__('Reason'))
+                ->rows(3)
+                ->maxLength(500),
+            self::freezeDateField(),
+            self::freezeCashOutSummaryPlaceholder($member),
+            self::freezeFundCashOutToggle($member),
+        ];
+    }
+
+    public static function freezeDateField(): DatePicker
+    {
+        return DatePicker::make('freeze_date')
+            ->label(__('Freeze date'))
+            ->helperText(__('Cash and fund balances eligible for cash-out are calculated through this date.'))
+            ->required()
+            ->native(false)
+            ->default(fn(): string => BusinessDay::today()->toDateString())
+            ->maxDate(fn(): string => BusinessDay::today()->toDateString())
+            ->live(debounce: 250);
+    }
+
+    public static function freezeCashOutSummaryPlaceholder(Member $member): Placeholder
+    {
+        return Placeholder::make('freeze_cash_out_summary')
+            ->label(__('Eligible cash-out balances'))
+            ->content(function (Get $get) use ($member): HtmlString {
+                return new HtmlString(
+                    '<p class="text-sm text-gray-600 dark:text-gray-300">'
+                    . e(self::freezeFundCashOutHelperText($member, $get('freeze_date')))
+                    . '</p>'
+                );
+            })
+            ->columnSpanFull();
+    }
+
+    public static function freezeFundCashOutToggle(Member $member): Toggle
+    {
+        return Toggle::make('cash_out_fund_balance')
+            ->label(__('Cash out balances'))
+            ->helperText(__('Create a pending cash-out request for the eligible amounts above.'))
+            ->default(false)
+            ->disabled(fn(Get $get): bool => !self::memberHasBalancesForFreezeCashOut($member, $get('freeze_date')));
+    }
+
+    public static function freezeFundCashOutHelperText(Member $member, mixed $freezeDate = null): string
+    {
+        $asOf = self::resolveFreezeDate($freezeDate);
+        $balances = app(MemberAccountBalanceService::class)->positiveFreezeCashOutBalances($member, $asOf);
+        $fundBalance = $balances['fund'];
+        $cashBalance = $balances['cash'];
+        $total = $balances['total'];
+
+        if ($total <= 0.00001) {
+            return __('No fund or cash balance eligible for cash-out as of :date.', [
+                'date' => $asOf->toDateString(),
+            ]);
+        }
+
+        return __('As of :date, creates a pending cash-out request for :total (:fund from fund, :cash in cash). Fund balance is transferred to cash first.', [
+            'date' => $asOf->toDateString(),
+            'total' => MoneyDisplay::format($total) ?? (string) $total,
+            'fund' => MoneyDisplay::format($fundBalance) ?? (string) $fundBalance,
+            'cash' => MoneyDisplay::format($cashBalance) ?? (string) $cashBalance,
+        ]);
+    }
+
+    public static function memberHasBalancesForFreezeCashOut(Member $member, mixed $freezeDate = null): bool
+    {
+        $asOf = self::resolveFreezeDate($freezeDate);
+        $balances = app(MemberAccountBalanceService::class)->positiveFreezeCashOutBalances($member, $asOf);
+
+        return $balances['total'] > 0.00001;
+    }
+
+    public static function resolveFreezeDate(mixed $freezeDate): Carbon
+    {
+        if ($freezeDate === null || $freezeDate === '') {
+            return BusinessDay::today()->endOfDay();
+        }
+
+        if ($freezeDate instanceof Carbon) {
+            return $freezeDate->copy()->endOfDay();
+        }
+
+        return Carbon::parse((string) $freezeDate)->endOfDay();
     }
 
     public static function unfreeze(): Action

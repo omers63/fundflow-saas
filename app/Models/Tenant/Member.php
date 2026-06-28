@@ -50,6 +50,7 @@ class Member extends Model
         'payout_frozen_at',
         'status_reason',
         'status_changed_at',
+        'frozen_at',
     ];
 
     protected function casts(): array
@@ -64,6 +65,7 @@ class Member extends Model
             'contribution_cycles_active' => 'boolean',
             'payout_frozen_at' => 'datetime',
             'status_changed_at' => 'datetime',
+            'frozen_at' => 'datetime',
             'is_separated' => 'boolean',
             'direct_login_enabled' => 'boolean',
         ];

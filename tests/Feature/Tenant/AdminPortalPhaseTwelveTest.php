@@ -221,7 +221,7 @@ test('consolidated sidebar registry matches live navigation labels in english', 
         ->values()
         ->all();
 
-    expect($labels)->toHaveCount(10);
+    expect($labels)->toHaveCount(13);
 
     foreach (TenantSidebarRegistry::consolidatedNavigationLabels() as $label) {
         expect($labels)->toContain($label);

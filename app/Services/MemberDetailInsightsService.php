@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
+use App\Filament\Tenant\Resources\CashOutRequests\CashOutRequestResource;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
@@ -270,6 +271,11 @@ final class MemberDetailInsightsService
                     'label' => __('Postings'),
                     'url' => FundPostingResource::indexUrlForMember($member),
                     'icon' => 'heroicon-o-inbox-arrow-down',
+                ],
+                [
+                    'label' => __('Cash outs'),
+                    'url' => CashOutRequestResource::indexUrlForMember($member),
+                    'icon' => 'heroicon-o-arrow-up-tray',
                 ],
                 [
                     'label' => __('Loans'),

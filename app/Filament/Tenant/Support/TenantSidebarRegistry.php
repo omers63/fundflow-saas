@@ -37,8 +37,6 @@ final class TenantSidebarRegistry
     {
         return [
             AccountResource::class,
-            CashOutRequestResource::class,
-            FundPostingResource::class,
             MasterAccountResource::class,
             MemberRequestResource::class,
             MembershipApplicationResource::class,
@@ -60,6 +58,8 @@ final class TenantSidebarRegistry
             LoansCluster::class,
             ContributionResource::class,
             DisbursementsPage::class,
+            FundPostingResource::class,
+            CashOutRequestResource::class,
             BankAccountsResource::class,
             ReconciliationOverviewPage::class,
             ReportsPage::class,
@@ -78,6 +78,8 @@ final class TenantSidebarRegistry
             Lang::formatUiLabel(__('Loans')),
             Lang::formatUiLabel(__('Collections')),
             Lang::formatUiLabel(__('Disbursements')),
+            Lang::formatUiLabel(__('Deposits')),
+            Lang::formatUiLabel(__('Cash outs')),
             Lang::formatUiLabel(__('Bank clearing')),
             Lang::formatUiLabel(__('Reconciliation')),
             Lang::formatUiLabel(__('Reports')),

@@ -4,7 +4,6 @@ namespace App\Filament\Tenant\Resources\FundPostings;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Support\DatabaseNotificationsRefresh;
-use App\Filament\Tenant\Concerns\HidesFromTenantSidebar;
 use App\Filament\Tenant\Resources\FundPostings\Pages\CreateFundPosting;
 use App\Filament\Tenant\Resources\FundPostings\Pages\ListFundPostings;
 use App\Filament\Tenant\Resources\FundPostings\Schemas\FundPostingForm;
@@ -23,7 +22,6 @@ use UnitEnum;
 
 class FundPostingResource extends Resource
 {
-    use HidesFromTenantSidebar;
     use TranslatesFilamentNavigationLabels;
 
     protected static ?string $model = FundPosting::class;
