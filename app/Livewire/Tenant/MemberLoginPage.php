@@ -4,8 +4,10 @@ namespace App\Livewire\Tenant;
 
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
+use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Tenant\HouseholdProfileVerificationService;
 use App\Services\Tenant\MemberHouseholdLoginService;
+use App\Support\MemberMembershipPolicy;
 use App\Support\MemberPortalMaintenance;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Auth;
@@ -317,37 +319,8 @@ class MemberLoginPage extends Component
                 return;
             }
 
-            if ($member->status === 'suspended') {
-                $this->statusType = 'suspended';
-                $this->statusMessage = __('Your member portal access is currently suspended. Please contact fund administration for support.');
-
-                return;
-            }
-
-            if ($member->status === 'inactive') {
-                $this->statusType = 'inactive';
-                $this->statusMessage = __('Your membership is inactive (frozen). Member portal access is paused until fund administration unfreezes your account.');
-
-                return;
-            }
-
-            if ($member->status === 'withdrawn') {
-                $this->statusType = 'withdrawn';
-                $this->statusMessage = __('Your membership has been withdrawn. Member portal access is no longer available. Please contact fund administration for support.');
-
-                return;
-            }
-
-            if ($member->status === 'delinquent') {
-                $this->statusType = 'delinquent';
-                $this->statusMessage = __('Your membership is marked delinquent. Member portal access is restricted until fund administration resolves outstanding items.');
-
-                return;
-            }
-
-            if ($member->status === 'terminated') {
-                $this->statusType = 'terminated';
-                $this->statusMessage = __('Your membership has been terminated. Member portal access is no longer available. Please contact fund administration for support.');
+            if (! app(MemberMembershipPolicy::class)->canAccessPortal($member)) {
+                $this->applyPortalBlockedStatus($member);
 
                 return;
             }
@@ -376,6 +349,42 @@ class MemberLoginPage extends Component
         throw ValidationException::withMessages([
             'email' => __('No member account is linked to this login. If you applied for membership, check your application status.'),
         ]);
+    }
+
+    protected function applyPortalBlockedStatus(Member $member): void
+    {
+        if ($member->status === 'inactive') {
+            if ($member->frozen_at !== null) {
+                $this->statusType = 'inactive';
+                $this->statusMessage = __('Your membership is inactive (frozen). Member portal access is paused until fund administration unfreezes your account.');
+
+                return;
+            }
+
+            $this->statusType = 'suspended';
+            $this->statusMessage = __('Your member portal access is currently suspended. Please contact fund administration for support.');
+
+            return;
+        }
+
+        if ($member->status === 'withdrawn') {
+            if ($member->payout_frozen_at !== null) {
+                $this->statusType = 'terminated';
+                $this->statusMessage = __('Your membership has been terminated. Member portal access is no longer available. Please contact fund administration for support.');
+
+                return;
+            }
+
+            $this->statusType = 'withdrawn';
+            $this->statusMessage = __('Your membership has been withdrawn. Member portal access is no longer available. Please contact fund administration for support.');
+
+            return;
+        }
+
+        if (app(LoanDelinquencyService::class)->isDelinquent($member)) {
+            $this->statusType = 'delinquent';
+            $this->statusMessage = __('Your membership is marked delinquent. Member portal access is restricted until fund administration resolves outstanding items.');
+        }
     }
 
     protected function applyMaintenanceStatus(): void

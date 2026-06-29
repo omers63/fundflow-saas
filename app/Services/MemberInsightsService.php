@@ -10,6 +10,7 @@ use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationRe
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Services\Loans\LoanDelinquencyService;
 use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use Carbon\Carbon;
@@ -26,12 +27,10 @@ final class MemberInsightsService
 
         $total = Member::query()->count();
         $active = Member::query()->active()->count();
-        $delinquent = Member::query()->where('status', 'delinquent')->count();
+        $delinquency = app(LoanDelinquencyService::class);
+        $delinquent = count($delinquency->delinquentMemberIds());
         $inactive = Member::query()->where('status', 'inactive')->count();
-        $suspended = Member::query()->where('status', 'suspended')->count();
         $withdrawn = Member::query()->where('status', 'withdrawn')->count();
-        $terminated = Member::query()->where('status', 'terminated')->count();
-        $inactiveAggregate = $inactive + $suspended + $withdrawn + $terminated;
 
         $newThisMonth = Member::query()
             ->whereMonth('joined_at', $now->month)
@@ -76,23 +75,30 @@ final class MemberInsightsService
             ->values()
             ->all();
 
+        $delinquentMemberIds = $delinquency->delinquentMemberIds();
+
         $attentionQueue = Member::query()
-            ->whereIn('status', ['delinquent', 'suspended'])
-            ->orderByRaw("CASE WHEN status = 'delinquent' THEN 0 ELSE 1 END")
+            ->where(function ($query) use ($delinquentMemberIds): void {
+                $query->whereIn('id', $delinquentMemberIds)
+                    ->orWhere('status', 'inactive')
+                    ->orWhere('status', 'withdrawn');
+            })
+            ->orderByRaw('CASE WHEN status = ? THEN 0 WHEN status = ? THEN 1 ELSE 2 END', ['active', 'inactive'])
             ->orderBy('name')
             ->limit(6)
             ->get()
             ->map(fn (Member $member): array => [
                 'id' => $member->id,
                 'name' => $member->name,
-                'status' => Member::statusOptions()[$member->status] ?? $member->status,
+                'status' => $member->adminStatusLabel(),
                 'status_key' => $member->status,
+                'has_arrears' => $delinquency->isDelinquent($member),
                 'contribution_amount' => (float) $member->monthly_contribution_amount,
                 'view_url' => MemberResource::getUrl('view', ['record' => $member]),
             ])
             ->all();
 
-        $needsAttention = $delinquent + $suspended + $zeroCashMembers;
+        $needsAttention = $delinquent + $inactive + $zeroCashMembers;
 
         $currency = Setting::get('general', 'currency', 'USD');
 
@@ -100,8 +106,8 @@ final class MemberInsightsService
             'total' => $total,
             'active' => $active,
             'delinquent' => $delinquent,
-            'suspended' => $suspended,
             'inactive' => $inactive,
+            'withdrawn' => $withdrawn,
             'needs_attention' => $needsAttention,
             'new_this_month' => $newThisMonth,
             'new_last_month' => $newLastMonth,
@@ -129,7 +135,9 @@ final class MemberInsightsService
                 'dependents' => $dependents,
                 'members_url' => $membersUrl,
                 'members_active_url' => MemberResource::listUrl('all', ['status' => ['value' => 'active']]),
-                'members_delinquent_url' => MemberResource::listTabUrl('delinquent'),
+                'members_inactive_url' => MemberResource::listTabUrl('inactive'),
+                'members_withdrawn_url' => MemberResource::listTabUrl('withdrawn'),
+                'members_arrears_url' => MemberResource::listTabUrl('delinquent'),
                 'applications_url' => MembershipApplicationResource::getUrl('index'),
                 'applications_pending_url' => MembershipApplicationResource::listTabUrl('pending'),
                 'applications_approved_url' => MembershipApplicationResource::listTabUrl('approved'),

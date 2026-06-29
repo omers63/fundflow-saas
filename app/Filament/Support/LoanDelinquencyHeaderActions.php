@@ -33,16 +33,16 @@ final class LoanDelinquencyHeaderActions
             ->color('warning')
             ->requiresConfirmation()
             ->modalHeading(__('Run delinquency check'))
-            ->modalDescription(__('Marks overdue installments, updates member delinquency status, and processes default warnings or guarantor debits per fund rules.'))
+            ->modalDescription(__('Marks overdue installments, refreshes arrears signals, and processes default warnings or guarantor debits per fund rules.'))
             ->action(function (LoanDelinquencyService $delinquency, Component $livewire): void {
                 $result = $delinquency->runDailyMaintenance();
 
                 Notification::make()
                     ->title(__('Delinquency check complete'))
-                    ->body(__('Overdue: :overdue · Delinquent: :delinquent · Restored: :restored · Warnings: :warned · Guarantor debits: :debited', [
+                    ->body(__('Overdue: :overdue · Arrears: :arrears · Clear: :cleared · Warnings: :warned · Guarantor debits: :debited', [
                         'overdue' => $result['marked_overdue'],
-                        'delinquent' => $result['marked_delinquent'],
-                        'restored' => $result['restored_active'],
+                        'arrears' => $result['delinquent_count'],
+                        'cleared' => $result['cleared_count'],
                         'warned' => $result['warned'],
                         'debited' => $result['debited_from_guarantor'],
                     ]))

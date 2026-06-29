@@ -44,8 +44,8 @@ class DependentsRelationManager extends RelationManager
                     ->sortable(),
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
-                    ->color(fn (string $state): string => Member::statusBadgeColor($state)),
+                    ->formatStateUsing(fn(string $state, Member $record): string => $record->adminStatusLabel())
+                    ->color(fn(Member $record): string => $record->adminStatusBadgeColor()),
                 TextColumn::make('joined_at')
                     ->label('Joined')
                     ->date()

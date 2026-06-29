@@ -20,10 +20,10 @@ class LoansCheckDefaultsCommand extends Command
     {
         $result = $delinquency->runDailyMaintenance();
 
-        $this->info(__('Overdue marked: :overdue, delinquent members: :delinquent, restored: :restored, warnings: :warned, guarantor debits: :debited, auto-transfers: :transferred', [
+        $this->info(__('Overdue marked: :overdue, delinquent members: :delinquent, cleared: :cleared, warnings: :warned, guarantor debits: :debited, auto-transfers: :transferred', [
             'overdue' => $result['marked_overdue'],
-            'delinquent' => $result['marked_delinquent'],
-            'restored' => $result['restored_active'],
+            'delinquent' => $result['delinquent_count'],
+            'cleared' => $result['cleared_count'],
             'warned' => $result['warned'],
             'debited' => $result['debited_from_guarantor'],
             'transferred' => $result['transferred_to_guarantor'] ?? 0,

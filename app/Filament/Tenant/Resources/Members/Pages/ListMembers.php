@@ -24,10 +24,10 @@ class ListMembers extends ListRecords
     public function getSubheading(): string|Htmlable|null
     {
         return match (MemberResource::resolveListTab()) {
-            'inactive' => __('Members with a paused (frozen) membership.'),
-            'delinquent' => __('Members blocked from portal access and new loans until arrears are cleared and status is restored.'),
+            'inactive' => __('Members with inactive status — frozen or on administrative hold.'),
+            'delinquent' => __('Active members with arrears. Status stays active; portal access is blocked until obligations are cleared.'),
+            'withdrawn' => __('Members with withdrawn status.'),
             'migration_pending' => __('Imported members awaiting contribution cycle clearance before full go-live.'),
-            'suspended' => __('Members temporarily blocked from portal access and new loans.'),
             default => __('Manage the member roster, household structure, status, and contribution commitments.'),
         };
     }

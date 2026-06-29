@@ -94,7 +94,7 @@ test('suspended member is not eligible', function () {
         'name' => 'Suspended Member',
         'monthly_contribution_amount' => 5000,
         'joined_at' => now()->subMonths(18),
-        'status' => 'suspended',
+        'status' => 'inactive',
     ]);
 
     $result = $this->service->checkEligibility($member);

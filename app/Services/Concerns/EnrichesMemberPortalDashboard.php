@@ -122,7 +122,7 @@ trait EnrichesMemberPortalDashboard
             [
                 'key' => 'active',
                 'label' => __('Active'),
-                'state' => $member->status === 'active' ? 'complete' : ($member->status === 'delinquent' ? 'warning' : 'upcoming'),
+                'state' => $member->status === 'active' && ! $arrears['is_delinquent'] ? 'complete' : ($arrears['is_delinquent'] ? 'warning' : 'upcoming'),
             ],
             [
                 'key' => 'cycle',

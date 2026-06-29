@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Models\Tenant\Member;
 use App\Services\LegacyMigration\LegacyMisclassifiedContributionRepairService;
+use App\Services\Loans\LoanDelinquencyService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Stancl\Tenancy\Concerns\HasATenantsOption;
@@ -55,7 +56,12 @@ class LegacyRepairMisclassifiedContributionsCommand extends Command
     private function resolveMembers(): Collection
     {
         if ($this->option('delinquent')) {
-            return Member::query()->where('status', 'delinquent')->orderBy('member_number')->get();
+            $ids = app(LoanDelinquencyService::class)->delinquentMemberIds();
+
+            return Member::query()
+                ->whereIn('id', $ids)
+                ->orderBy('member_number')
+                ->get();
         }
 
         $memberOption = (string) ($this->option('member') ?? '');

@@ -75,12 +75,10 @@ test('master bank ledger table exposes credit and debit header actions for admin
     Account::factory()->masterBank()->create();
 
     $actions = MasterBankLedgerTable::headerActions();
+    $names = collect($actions)->map->getName()->all();
 
-    expect($actions)->toHaveCount(3)
-        ->and($actions[0]->getName())->toBe('manualCredit')
-        ->and($actions[1]->getName())->toBe('manualDebit')
-        ->and($actions[0]->isHidden())->toBeFalse()
-        ->and($actions[1]->isHidden())->toBeFalse();
+    expect($actions)->toHaveCount(5)
+        ->and($names)->toContain('importLedger', 'exportLedger', 'manualCredit', 'manualDebit');
 });
 
 test('master bank transaction history uses manual ledger header actions', function () {

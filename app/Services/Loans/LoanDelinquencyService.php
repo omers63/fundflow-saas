@@ -42,13 +42,12 @@ class LoanDelinquencyService
         protected LateFeeService $lateFees,
         protected LoanDefaultService $defaults,
         protected MemberDelinquencyEvaluator $delinquencyEvaluator,
-    ) {
-    }
+    ) {}
 
     /**
      * Daily pipeline: mark overdue → sync member status → process defaults (warnings / guarantor debits).
      *
-     * @return array{marked_overdue: int, marked_delinquent: int, restored_active: int, warned: int, debited_from_guarantor: int}
+     * @return array{marked_overdue: int, delinquent_count: int, cleared_count: int, warned: int, debited_from_guarantor: int}
      */
     public function runDailyMaintenance(): array
     {
@@ -59,8 +58,8 @@ class LoanDelinquencyService
 
         return [
             'marked_overdue' => $markedOverdue,
-            'marked_delinquent' => $memberSync['marked_delinquent'],
-            'restored_active' => $memberSync['restored_active'],
+            'delinquent_count' => $memberSync['delinquent_count'],
+            'cleared_count' => $memberSync['cleared_count'],
             'warned' => $defaults['warned'] ?? 0,
             'debited_from_guarantor' => $defaults['debited_from_guarantor'] ?? 0,
             'transferred_to_guarantor' => $transferred,
@@ -80,7 +79,7 @@ class LoanDelinquencyService
             ->whereNotNull('guarantor_member_id')
             ->whereNull('transferred_to_guarantor_at')
             ->where('late_repayment_count', '>=', $threshold)
-            ->whereHas('installments', fn($q) => $q->where('status', 'overdue'))
+            ->whereHas('installments', fn ($q) => $q->where('status', 'overdue'))
             ->each(function (Loan $loan) use (&$transferred): void {
                 try {
                     app(LoanGuarantorTransferService::class)->transferToGuarantor($loan);
@@ -107,7 +106,7 @@ class LoanDelinquencyService
             throw new InvalidArgumentException(__('Original borrower member not found.'));
         }
 
-        if ($borrower->status !== 'suspended') {
+        if ($borrower->status !== 'inactive' || $borrower->frozen_at !== null) {
             throw new InvalidArgumentException(__('Borrower is not suspended.'));
         }
 
@@ -136,11 +135,11 @@ class LoanDelinquencyService
         return [
             'overdue_installments' => (int) LoanInstallment::query()
                 ->where('status', 'overdue')
-                ->whereHas('loan', fn($q) => $q->where('status', 'active'))
+                ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
                 ->count(),
             'contribution_arrears_periods' => $arrears['periods'],
             'contribution_arrears_members' => $arrears['members'],
-            'delinquent_members' => (int) Member::query()->where('status', 'delinquent')->count(),
+            'delinquent_members' => count($this->delinquentMemberIds()),
             'guarantor_at_risk' => $this->loansAtGuarantorRiskCount(),
             'guarantor_transferred' => (int) Loan::query()
                 ->where('status', 'active')
@@ -163,12 +162,12 @@ class LoanDelinquencyService
         $periods = $this->unpaidContributionPeriods($member);
         $overdueCount = (int) LoanInstallment::query()
             ->where('status', 'overdue')
-            ->whereHas('loan', fn($q) => $q->where('member_id', $member->id)->where('status', 'active'))
+            ->whereHas('loan', fn ($q) => $q->where('member_id', $member->id)->where('status', 'active'))
             ->count();
 
         return [
             'has_arrears' => $overdueCount > 0 || $periods !== [],
-            'is_delinquent' => $member->status === 'delinquent',
+            'is_delinquent' => $this->isDelinquent($member),
             'overdue_installment_count' => $overdueCount,
             'unpaid_contribution_periods' => array_column($periods, 'period_label'),
             'unpaid_contribution_details' => $periods,
@@ -206,10 +205,10 @@ class LoanDelinquencyService
 
         LoanInstallment::query()
             ->where('status', 'pending')
-            ->whereHas('loan', fn($q) => $q->where('status', 'active'))
+            ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
             ->with('loan')
             ->each(function (LoanInstallment $installment) use (&$marked): void {
-                if (!$this->installmentIsPastDeadline($installment)) {
+                if (! $this->installmentIsPastDeadline($installment)) {
                     return;
                 }
 
@@ -237,55 +236,74 @@ class LoanDelinquencyService
     }
 
     /**
-     * @return array{marked_delinquent: int, restored_active: int}
+     * @return array{delinquent_count: int, cleared_count: int}
      */
     public function syncMemberDelinquencyStatus(): array
     {
-        $markedDelinquent = 0;
-        $restoredActive = 0;
+        $delinquentCount = 0;
+        $clearedCount = 0;
 
         Member::query()
-            ->whereIn('status', ['active', 'delinquent'])
-            ->each(function (Member $member) use (&$markedDelinquent, &$restoredActive): void {
-                $breach = $this->memberBreachesDelinquencyPolicy($member);
-
-                if ($member->status === 'active' && $breach) {
-                    $member->update(['status' => 'delinquent']);
-                    $markedDelinquent++;
+            ->where('status', 'active')
+            ->each(function (Member $member) use (&$delinquentCount, &$clearedCount): void {
+                if ($this->memberBreachesDelinquencyPolicy($member)) {
+                    $delinquentCount++;
 
                     return;
                 }
 
-                if ($member->status === 'delinquent' && !$breach) {
-                    $member->update(['status' => 'active']);
-                    $restoredActive++;
-                }
+                $clearedCount++;
             });
 
         return [
-            'marked_delinquent' => $markedDelinquent,
-            'restored_active' => $restoredActive,
+            'delinquent_count' => $delinquentCount,
+            'cleared_count' => $clearedCount,
         ];
     }
 
     /**
-     * @return array{marked_delinquent: int, restored_active: int}
+     * @return array{delinquent_count: int, cleared_count: int}
      */
     public function syncMemberDelinquencyStatusForMember(Member $member): array
     {
         $member->refresh();
-        $breach = $this->memberBreachesDelinquencyPolicy($member);
-        $result = ['marked_delinquent' => 0, 'restored_active' => 0];
 
-        if ($member->status === 'active' && $breach) {
-            $member->update(['status' => 'delinquent']);
-            $result['marked_delinquent'] = 1;
-        } elseif ($member->status === 'delinquent' && !$breach) {
-            $member->update(['status' => 'active']);
-            $result['restored_active'] = 1;
+        if ($member->status !== 'active') {
+            return ['delinquent_count' => 0, 'cleared_count' => 0];
         }
 
-        return $result;
+        $breach = $this->memberBreachesDelinquencyPolicy($member);
+
+        return [
+            'delinquent_count' => $breach ? 1 : 0,
+            'cleared_count' => $breach ? 0 : 1,
+        ];
+    }
+
+    public function isDelinquent(Member $member): bool
+    {
+        return $member->status === 'active'
+            && $this->memberBreachesDelinquencyPolicy($member);
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function delinquentMemberIds(): array
+    {
+        $ids = [];
+
+        Member::query()
+            ->where('status', 'active')
+            ->select(['id'])
+            ->orderBy('id')
+            ->each(function (Member $member) use (&$ids): void {
+                if ($this->memberBreachesDelinquencyPolicy($member)) {
+                    $ids[] = (int) $member->id;
+                }
+            });
+
+        return $ids;
     }
 
     public function memberBreachesDelinquencyPolicy(Member $member): bool
@@ -300,28 +318,43 @@ class LoanDelinquencyService
 
     public function markMemberDelinquent(Member $member): void
     {
-        if ($member->status === 'delinquent') {
-            throw new InvalidArgumentException(__('Member is already delinquent.'));
+        if ($member->status === 'inactive' && $member->frozen_at === null) {
+            throw new InvalidArgumentException(__('Member is already on administrative hold.'));
         }
 
-        if (!in_array($member->status, ['active', 'delinquent'], true)) {
-            throw new InvalidArgumentException(__('Only active members can be marked delinquent.'));
+        if ($member->status !== 'active') {
+            throw new InvalidArgumentException(__('Only active members can be placed on administrative hold.'));
         }
 
-        $member->update(['status' => 'delinquent']);
+        $member->update([
+            'status' => 'inactive',
+            'contribution_cycles_active' => false,
+            'frozen_at' => null,
+            'status_changed_at' => BusinessDay::now(),
+        ]);
+
+        app(FundAuditLogService::class)->log('MEMBER_MARKED_DELINQUENT_HOLD', 'member', $member, $member);
     }
 
     public function restoreMemberActive(Member $member, bool $force = false): void
     {
-        if ($member->status !== 'delinquent') {
-            throw new InvalidArgumentException(__('Member is not delinquent.'));
+        if ($member->status !== 'inactive' || $member->frozen_at !== null) {
+            throw new InvalidArgumentException(__('Member is not on an administrative delinquency hold.'));
         }
 
-        if (!$force && $this->memberHasArrears($member)) {
+        if (! $force && $this->memberBreachesDelinquencyPolicy($member)) {
             throw new InvalidArgumentException(__('Clear outstanding installments and contribution arrears before restoring active status, or use force restore.'));
         }
 
-        $member->update(['status' => 'active']);
+        $member->update([
+            'status' => 'active',
+            'contribution_cycles_active' => true,
+            'status_changed_at' => BusinessDay::now(),
+        ]);
+
+        app(FundAuditLogService::class)->log('MEMBER_RESTORED_ACTIVE', 'member', $member, $member, [
+            'force' => $force,
+        ]);
     }
 
     public function memberHasArrears(Member $member): bool
@@ -355,7 +388,7 @@ class LoanDelinquencyService
             ->where('status', 'overdue')
             ->whereHas(
                 'loan',
-                fn($q) => $q->where('member_id', $member->id)->where('status', 'active')
+                fn ($q) => $q->where('member_id', $member->id)->where('status', 'active')
             )
             ->exists();
     }
@@ -379,7 +412,7 @@ class LoanDelinquencyService
         return $this->contributionArrearsTableRecords()
             ->pluck('member_id')
             ->unique()
-            ->map(fn($id): int => (int) $id)
+            ->map(fn ($id): int => (int) $id)
             ->values()
             ->all();
     }
@@ -396,7 +429,7 @@ class LoanDelinquencyService
      */
     public function unpaidContributionPeriods(Member $member): array
     {
-        if (!$this->memberCanOweContributions($member)) {
+        if (! $this->memberCanOweContributions($member)) {
             return [];
         }
 
@@ -410,7 +443,7 @@ class LoanDelinquencyService
     public function contributionArrearsTableRecords(?int $memberId = null): Collection
     {
         if ($memberId !== null) {
-            if (!array_key_exists($memberId, $this->contributionArrearsRecordsByMemberCache)) {
+            if (! array_key_exists($memberId, $this->contributionArrearsRecordsByMemberCache)) {
                 $this->contributionArrearsRecordsByMemberCache[$memberId] = $this->buildContributionArrearsTableRecords($memberId);
             }
 
@@ -451,12 +484,12 @@ class LoanDelinquencyService
 
         $members = Member::query()
             ->select(['id', 'monthly_contribution_amount', 'joined_at', 'contribution_arrears_cutoff_date'])
-            ->whereIn('status', ['active', 'delinquent'])
+            ->where('status', 'active')
             ->where('monthly_contribution_amount', '>', 0)
             ->orderBy('name')
             ->get();
 
-        $memberIds = $members->pluck('id')->map(fn($id): int => (int) $id)->all();
+        $memberIds = $members->pluck('id')->map(fn ($id): int => (int) $id)->all();
         $globalExemptions = $this->preloadGlobalContributionExemptions($memberIds);
         $preloadedContributions = $this->memberContributionsByPeriodForMembers($memberIds);
         $now = BusinessDay::now();
@@ -498,7 +531,7 @@ class LoanDelinquencyService
 
         $membersQuery = Member::query()
             ->select(['id', 'name', 'member_number', 'status', 'monthly_contribution_amount', 'joined_at', 'contribution_arrears_cutoff_date'])
-            ->whereIn('status', ['active', 'delinquent'])
+            ->where('status', 'active')
             ->where('monthly_contribution_amount', '>', 0)
             ->orderBy('name');
 
@@ -507,7 +540,7 @@ class LoanDelinquencyService
         }
 
         $members = $membersQuery->get();
-        $memberIds = $members->pluck('id')->map(fn($id): int => (int) $id)->all();
+        $memberIds = $members->pluck('id')->map(fn ($id): int => (int) $id)->all();
         $globalExemptions = $this->preloadGlobalContributionExemptions($memberIds);
         $preloadedContributions = $this->memberContributionsByPeriodForMembers($memberIds);
 
@@ -564,7 +597,7 @@ class LoanDelinquencyService
         Loan::query()
             ->whereIn('member_id', $memberIds)
             ->whereIn('status', ['active', 'transferred'])
-            ->whereHas('installments', fn($query) => $query->whereIn('status', ['pending', 'overdue']))
+            ->whereHas('installments', fn ($query) => $query->whereIn('status', ['pending', 'overdue']))
             ->pluck('member_id')
             ->each(function (int|string $memberId) use (&$exempt): void {
                 $exempt[(int) $memberId] = true;
@@ -656,7 +689,7 @@ class LoanDelinquencyService
     {
         $records = $this->contributionArrearsTableRecords();
         $members = Member::query()
-            ->whereIn('id', $records->pluck('member_id')->unique()->map(fn($id): int => (int) $id)->all())
+            ->whereIn('id', $records->pluck('member_id')->unique()->map(fn ($id): int => (int) $id)->all())
             ->get()
             ->keyBy('id');
 
@@ -668,7 +701,7 @@ class LoanDelinquencyService
                     'periods' => $memberRecords->pluck('period_label')->values()->all(),
                 ];
             })
-            ->filter(fn(array $row): bool => $row['member'] instanceof Member)
+            ->filter(fn (array $row): bool => $row['member'] instanceof Member)
             ->values();
     }
 
@@ -688,14 +721,14 @@ class LoanDelinquencyService
             ->where('status', 'active')
             ->whereNotNull('guarantor_member_id')
             ->whereNull('guarantor_liability_transferred_at')
-            ->whereHas('installments', fn($q) => $q->where('status', 'overdue'))
+            ->whereHas('installments', fn ($q) => $q->where('status', 'overdue'))
             ->where('late_repayment_count', '>=', $grace)
             ->count();
     }
 
     private function memberCanOweContributions(Member $member): bool
     {
-        return !$member->isExemptFromContributions()
+        return ! $member->isExemptFromContributions()
             && (float) $member->monthly_contribution_amount > 0;
     }
 
@@ -721,9 +754,9 @@ class LoanDelinquencyService
             ->where('period', '>=', $this->contributionArrearsEarliestPeriodDate())
             ->orderBy('id')
             ->get(['id', 'member_id', 'period', 'status', 'is_late'])
-            ->groupBy(fn(Contribution $contribution): string => $this->contributionPeriodKey($contribution))
-            ->map(fn(Collection $records): ?Contribution => $records->first())
-            ->filter(fn(?Contribution $contribution, string $key): bool => $contribution !== null && $key !== '')
+            ->groupBy(fn (Contribution $contribution): string => $this->contributionPeriodKey($contribution))
+            ->map(fn (Collection $records): ?Contribution => $records->first())
+            ->filter(fn (?Contribution $contribution, string $key): bool => $contribution !== null && $key !== '')
             ->all();
     }
 
@@ -788,7 +821,7 @@ class LoanDelinquencyService
                 continue;
             }
 
-            if (!$this->memberJoinedBeforeOrDuringPeriod($member, $month, $year)) {
+            if (! $this->memberJoinedBeforeOrDuringPeriod($member, $month, $year)) {
                 $cursor->subMonthNoOverflow();
 
                 continue;
@@ -811,7 +844,7 @@ class LoanDelinquencyService
                 'period_label' => $this->cycles->periodLabel($month, $year),
                 'contribution_status' => $contribution?->status ?? 'missing',
                 'late_fee' => $this->lateFees->contributionLateFeeForDays($days),
-                'record_key' => "{$member->id}-{$year}-" . sprintf('%02d', $month),
+                'record_key' => "{$member->id}-{$year}-".sprintf('%02d', $month),
             ];
 
             $cursor->subMonthNoOverflow();

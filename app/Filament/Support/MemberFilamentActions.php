@@ -408,7 +408,7 @@ final class MemberFilamentActions
             ->label(__('Freeze'))
             ->icon('heroicon-o-pause-circle')
             ->color('warning')
-            ->visible(fn (Member $record): bool => in_array($record->status, ['active', 'delinquent'], true))
+            ->visible(fn(Member $record): bool => $record->status === 'active')
             ->requiresConfirmation()
             ->modalDescription(__('Pauses membership. Portal access and contribution cycles stop until unfrozen.'))
             ->schema(fn(Member $record): array => self::freezeFormSchema($record))
@@ -533,9 +533,9 @@ final class MemberFilamentActions
             ->label(__('Unfreeze'))
             ->icon('heroicon-o-play-circle')
             ->color('success')
-            ->visible(fn (Member $record): bool => $record->status === 'inactive')
+            ->visible(fn(Member $record): bool => $record->status === 'inactive' && $record->frozen_at !== null)
             ->requiresConfirmation()
-            ->modalDescription(__('Restores membership. Status becomes active or delinquent depending on arrears.'))
+            ->modalDescription(__('Restores membership to active status.'))
             ->action(function (Member $record, Action $action, MemberStatusService $statuses, Component $livewire): void {
                 if (
                     ! ActionModalFailure::attemptThrowable(
@@ -555,12 +555,12 @@ final class MemberFilamentActions
     public static function suspend(): Action
     {
         return Action::make('suspendMember')
-            ->label(__('Suspend'))
+            ->label(__('Inactive'))
             ->icon('heroicon-o-no-symbol')
             ->color('danger')
-            ->visible(fn (Member $record): bool => ! in_array($record->status, ['suspended', 'inactive', 'withdrawn', 'terminated'], true))
+            ->visible(fn(Member $record): bool => $record->status === 'active')
             ->requiresConfirmation()
-            ->modalDescription(__('Blocks portal access and admin-approved transactions until suspension is lifted.'))
+            ->modalDescription(__('Sets membership to inactive. Portal access and contribution cycles stop until reactivated.'))
             ->schema([
                 Textarea::make('reason')
                     ->label(__('Reason'))
@@ -573,13 +573,13 @@ final class MemberFilamentActions
                     ! ActionModalFailure::attemptThrowable(
                         $action,
                         fn () => $statuses->suspend($record, (string) ($data['reason'] ?? '')),
-                        __('Cannot suspend'),
+                        __('Cannot set inactive'),
                     )
                 ) {
                     return;
                 }
 
-                Notification::make()->title(__('Member suspended'))->success()->send();
+                Notification::make()->title(__('Member inactive'))->success()->send();
                 self::refreshMembersList($livewire);
             });
     }
@@ -587,24 +587,24 @@ final class MemberFilamentActions
     public static function restoreSuspended(): Action
     {
         return Action::make('restoreSuspendedMember')
-            ->label(__('Restore suspended'))
+            ->label(__('Active'))
             ->icon('heroicon-o-arrow-uturn-left')
             ->color('success')
-            ->visible(fn (Member $record): bool => $record->status === 'suspended')
+            ->visible(fn(Member $record): bool => $record->status === 'inactive' && $record->frozen_at === null)
             ->requiresConfirmation()
-            ->modalDescription(__('Restores active membership and portal access.'))
+            ->modalDescription(__('Sets membership back to active.'))
             ->action(function (Member $record, Action $action, MemberStatusService $statuses, Component $livewire): void {
                 if (
                     ! ActionModalFailure::attemptThrowable(
                         $action,
-                        fn () => $statuses->restoreSuspended($record),
+                        fn() => $statuses->restoreInactive($record),
                         __('Cannot restore'),
                     )
                 ) {
                     return;
                 }
 
-                Notification::make()->title(__('Member restored to active'))->success()->send();
+                Notification::make()->title(__('Member active'))->success()->send();
                 self::refreshMembersList($livewire);
             });
     }
@@ -612,13 +612,13 @@ final class MemberFilamentActions
     public static function terminate(): Action
     {
         return Action::make('terminateMember')
-            ->label(__('Terminate'))
+            ->label(__('End membership'))
             ->icon('heroicon-o-x-circle')
             ->color('danger')
             ->visible(fn (Member $record): bool => self::isTenantAdmin()
-                && ! in_array($record->status, ['withdrawn', 'terminated'], true))
+                && $record->status !== 'withdrawn')
             ->requiresConfirmation()
-            ->modalDescription(__('Permanently ends membership and blocks portal access. This is recorded in the audit log.'))
+            ->modalDescription(__('Sets membership to withdrawn and blocks portal access. Payout is held until released or the member is reinstated.'))
             ->schema([
                 Textarea::make('reason')
                     ->label(__('Reason'))
@@ -637,7 +637,7 @@ final class MemberFilamentActions
                     return;
                 }
 
-                Notification::make()->title(__('Member terminated'))->success()->send();
+                Notification::make()->title(__('Member withdrawn'))->success()->send();
                 self::refreshMembersList($livewire);
             });
     }
@@ -649,7 +649,7 @@ final class MemberFilamentActions
             ->icon('heroicon-o-arrow-right-on-rectangle')
             ->color('danger')
             ->visible(fn (Member $record): bool => self::isTenantAdmin()
-                && ! in_array($record->status, ['withdrawn', 'terminated'], true))
+                && $record->status !== 'withdrawn')
             ->requiresConfirmation()
             ->modalDescription(__('Records voluntary departure. Member portal access ends. Settlement may proceed.'))
             ->schema([
@@ -681,7 +681,7 @@ final class MemberFilamentActions
             ->icon('heroicon-o-arrow-path')
             ->color('success')
             ->visible(fn (Member $record): bool => self::isTenantAdmin()
-                && in_array($record->status, ['withdrawn', 'terminated'], true))
+                && $record->status === 'withdrawn')
             ->requiresConfirmation()
             ->modalDescription(__('Returns member to active status and resets cash and fund balances to zero.'))
             ->schema([
@@ -715,10 +715,10 @@ final class MemberFilamentActions
             ->icon('heroicon-o-lock-open')
             ->color('warning')
             ->visible(fn (Member $record): bool => self::isTenantAdmin()
-                && $record->status === 'terminated'
+                && $record->status === 'withdrawn'
                 && $record->payout_frozen_at !== null)
             ->requiresConfirmation()
-            ->modalDescription(__('Allows settlement payouts for this terminated member after admin review.'))
+            ->modalDescription(__('Allows settlement payouts for this member after admin review.'))
             ->schema([
                 Textarea::make('reason')
                     ->label(__('Reason'))
@@ -750,7 +750,7 @@ final class MemberFilamentActions
             ->icon('heroicon-o-receipt-percent')
             ->color('warning')
             ->visible(fn (Member $record): bool => self::isTenantAdmin()
-                && ! in_array($record->status, ['withdrawn', 'terminated'], true))
+                && $record->status !== 'withdrawn')
             ->modalHeading(__('Charge annual subscription fee'))
             ->modalDescription(function (Member $record): string {
                 $amount = ContributionPolicySettings::annualSubscriptionFee();
@@ -855,32 +855,32 @@ final class MemberFilamentActions
     public static function suspendBulk(): BulkAction
     {
         return BulkAction::make('suspendSelectedMembers')
-            ->label(__('Suspend'))
+            ->label(__('Inactive'))
             ->icon('heroicon-o-no-symbol')
             ->color('danger')
             ->requiresConfirmation()
-            ->modalDescription(__('Blocks portal access for selected members until suspension is lifted.'))
+            ->modalDescription(__('Sets selected active members to inactive.'))
             ->action(function (Collection $records, MemberStatusService $statuses, Component $livewire): void {
-                $suspended = 0;
+                $inactivated = 0;
                 $failed = 0;
 
                 foreach ($records as $record) {
-                    if (! $record instanceof Member || in_array($record->status, ['suspended', 'withdrawn', 'terminated'], true)) {
+                    if (!$record instanceof Member || $record->status !== 'active') {
                         continue;
                     }
 
                     try {
                         $statuses->suspend($record);
-                        $suspended++;
+                        $inactivated++;
                     } catch (\Throwable) {
                         $failed++;
                     }
                 }
 
                 Notification::make()
-                    ->title(__('Suspend complete'))
-                    ->body(__(':suspended suspended · :failed could not be suspended', [
-                        'suspended' => $suspended,
+                    ->title(__('Inactive complete'))
+                    ->body(__(':count set inactive · :failed could not be updated', [
+                        'count' => $inactivated,
                         'failed' => $failed,
                     ]))
                     ->color($failed > 0 ? 'warning' : 'success')
@@ -1132,29 +1132,29 @@ final class MemberFilamentActions
     public static function restoreSuspendedBulk(): BulkAction
     {
         return BulkAction::make('restoreSuspendedSelectedMembers')
-            ->label(__('Restore suspended'))
+            ->label(__('Active'))
             ->icon('heroicon-o-arrow-uturn-left')
             ->color('success')
             ->requiresConfirmation()
-            ->modalDescription(__('Restores active membership and portal access for selected suspended members.'))
+            ->modalDescription(__('Sets selected inactive members back to active.'))
             ->action(function (Collection $records, MemberStatusService $statuses, Component $livewire): void {
                 $restored = 0;
                 $failed = 0;
 
                 foreach ($records as $record) {
-                    if (! $record instanceof Member || $record->status !== 'suspended') {
+                    if (!$record instanceof Member || $record->status !== 'inactive' || $record->frozen_at !== null) {
                         continue;
                     }
 
                     try {
-                        $statuses->restoreSuspended($record);
+                        $statuses->restoreInactive($record);
                         $restored++;
                     } catch (\Throwable) {
                         $failed++;
                     }
                 }
 
-                self::notifyBulkOutcome(__('Restore suspended complete'), $restored, $failed);
+                self::notifyBulkOutcome(__('Active complete'), $restored, $failed);
                 self::refreshMembersList($livewire);
             });
     }
@@ -1162,12 +1162,12 @@ final class MemberFilamentActions
     public static function terminateBulk(): BulkAction
     {
         return BulkAction::make('terminateSelectedMembers')
-            ->label(__('Terminate'))
+            ->label(__('End membership'))
             ->icon('heroicon-o-x-circle')
             ->color('danger')
             ->visible(fn (): bool => self::isTenantAdmin())
             ->requiresConfirmation()
-            ->modalDescription(__('Permanently ends membership for selected members. This is recorded in the audit log.'))
+            ->modalDescription(__('Sets selected members to withdrawn. Payout is held until released or they are reinstated.'))
             ->schema([
                 Textarea::make('reason')
                     ->label(__('Reason'))
@@ -1177,23 +1177,23 @@ final class MemberFilamentActions
             ])
             ->action(function (Collection $records, array $data, MemberStatusService $statuses, Component $livewire): void {
                 $reason = (string) ($data['reason'] ?? '');
-                $terminated = 0;
+                $withdrawn = 0;
                 $failed = 0;
 
                 foreach ($records as $record) {
-                    if (! $record instanceof Member || in_array($record->status, ['withdrawn', 'terminated'], true)) {
+                    if (!$record instanceof Member || $record->status === 'withdrawn') {
                         continue;
                     }
 
                     try {
                         $statuses->terminate($record, $reason);
-                        $terminated++;
+                        $withdrawn++;
                     } catch (\Throwable) {
                         $failed++;
                     }
                 }
 
-                self::notifyBulkOutcome(__('Terminate complete'), $terminated, $failed);
+                self::notifyBulkOutcome(__('Withdrawn complete'), $withdrawn, $failed);
                 self::refreshMembersList($livewire);
             });
     }
@@ -1220,7 +1220,7 @@ final class MemberFilamentActions
                 $failed = 0;
 
                 foreach ($records as $record) {
-                    if (! $record instanceof Member || in_array($record->status, ['withdrawn', 'terminated'], true)) {
+                    if (!$record instanceof Member || $record->status === 'withdrawn') {
                         continue;
                     }
 
@@ -1269,7 +1269,7 @@ final class MemberFilamentActions
                 $failed = 0;
 
                 foreach ($records as $record) {
-                    if (! $record instanceof Member || in_array($record->status, ['withdrawn', 'terminated'], true)) {
+                    if (!$record instanceof Member || $record->status === 'withdrawn') {
                         continue;
                     }
 

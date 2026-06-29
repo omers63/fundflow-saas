@@ -21,6 +21,7 @@ use App\Filament\Tenant\Support\TenantNavigation;
 use App\Filament\Tenant\Widgets\MemberDetailInsightsWidget;
 use App\Filament\Tenant\Widgets\MemberInsightsWidget;
 use App\Models\Tenant\Member;
+use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Tenant\MemberListTabService;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -51,7 +52,7 @@ class MemberResource extends Resource
 
     public static function getNavigationBadge(): ?string
     {
-        $count = Member::query()->where('status', 'delinquent')->count();
+        $count = count(app(LoanDelinquencyService::class)->delinquentMemberIds());
 
         return $count > 0 ? (string) $count : null;
     }

@@ -428,10 +428,10 @@ final class MemberDetailInsightsService
         if ($arrears['is_delinquent']) {
             return [
                 'tone' => 'danger',
-                'title' => __('Member is delinquent'),
-                'subtitle' => __('Restore active after arrears are cleared, or use force restore on the member record.'),
-                'cta_label' => __('Member record'),
-                'cta_url' => MemberResource::getUrl('view', ['record' => $member]),
+                'title' => __('Active with arrears'),
+                'subtitle' => __('Status remains active. Clear obligations to restore portal access.'),
+                'cta_label' => __('Arrears'),
+                'cta_url' => MemberResource::listTabUrl('delinquent'),
             ];
         }
 
@@ -760,7 +760,7 @@ final class MemberDetailInsightsService
             [
                 'key' => 'active',
                 'label' => __('Active'),
-                'state' => $member->status === 'active' ? 'complete' : ($member->status === 'delinquent' ? 'warning' : 'upcoming'),
+                'state' => $member->status === 'active' && !$arrears['is_delinquent'] ? 'complete' : ($arrears['is_delinquent'] ? 'warning' : 'upcoming'),
             ],
             [
                 'key' => 'cycle',
@@ -809,9 +809,9 @@ final class MemberDetailInsightsService
             'joined' => $member->joined_at !== null
             ? __('Joined :date', ['date' => Carbon::parse((string) $member->joined_at)->format('d M Y')])
             : null,
-            'active' => match ($member->status) {
-                'active' => __('Membership is active'),
-                'delinquent' => __('Member is delinquent — clear arrears to restore'),
+            'active' => match (true) {
+                    $member->status === 'active' && $arrears['is_delinquent'] => __('Active with arrears — clear obligations to restore portal access'),
+                    $member->status === 'active' => __('Membership is active'),
                 default => Member::statusOptions()[$member->status] ?? ucfirst($member->status),
             },
             'cycle' => $postedThisPeriod
@@ -821,7 +821,7 @@ final class MemberDetailInsightsService
             ? __(':status — repayment in progress', ['status' => Loan::statusOptions()[$activeLoan->status] ?? $activeLoan->status])
             : null,
             'arrears' => $arrears['is_delinquent']
-            ? __('Delinquent status — review obligations')
+            ? __('Arrears breach — review obligations while status remains active')
             : __('Outstanding contributions or installments need attention'),
             default => null,
         };

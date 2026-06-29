@@ -22,7 +22,7 @@ beforeEach(function () {
 
     $tenant = Tenant::find('testing');
 
-    if ($tenant !== null && !$tenant->domains()->where('domain', 'testing.localhost')->exists()) {
+    if ($tenant !== null && ! $tenant->domains()->where('domain', 'testing.localhost')->exists()) {
         $tenant->domains()->create(['domain' => 'testing.localhost']);
     }
 
@@ -38,7 +38,7 @@ beforeEach(function () {
 test('member list tab service includes migration pending in pill tabs', function () {
     $tabs = app(MemberListTabService::class)->pillTabs()->pluck('key')->all();
 
-    expect($tabs)->toBe(['all', 'active', 'migration_pending', 'delinquent', 'suspended']);
+    expect($tabs)->toBe(['all', 'active', 'inactive', 'withdrawn', 'delinquent', 'migration_pending']);
 });
 
 test('migration pending tab matches imported members with contribution arrears', function () {

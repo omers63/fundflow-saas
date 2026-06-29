@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Tenant\Member;
-use App\Services\Loans\LoanDelinquencyService;
 use App\Support\BusinessDay;
 use App\Support\MemberMembershipPolicy;
 use Carbon\CarbonInterface;
@@ -15,7 +14,6 @@ final class MemberStatusService
 {
     public function __construct(
         private readonly FundAuditLogService $audit,
-        private readonly LoanDelinquencyService $delinquency,
         private readonly AccountingService $accounting,
         private readonly MemberFundCashTransferService $fundCashTransfer,
         private readonly MemberCashOutService $cashOuts,
@@ -29,8 +27,8 @@ final class MemberStatusService
         ?CarbonInterface $freezeDate = null,
         bool $cashOutBalances = false,
     ): void {
-        if (! in_array($member->status, ['active', 'delinquent'], true)) {
-            throw new InvalidArgumentException(__('Only active or delinquent members can be frozen.'));
+        if ($member->status !== 'active') {
+            throw new InvalidArgumentException(__('Only active members can be frozen.'));
         }
 
         $normalizedFreezeDate = $this->normalizeFreezeDate($freezeDate);
@@ -47,15 +45,11 @@ final class MemberStatusService
 
     public function unfreeze(Member $member): void
     {
-        if ($member->status !== 'inactive') {
-            throw new InvalidArgumentException(__('Member is not inactive.'));
+        if ($member->status !== 'inactive' || $member->frozen_at === null) {
+            throw new InvalidArgumentException(__('Member is not frozen.'));
         }
 
-        $targetStatus = $this->delinquency->memberHasArrearsExcludingOpenCycle($member)
-            ? 'delinquent'
-            : 'active';
-
-        $this->transition($member, $targetStatus, [
+        $this->transition($member, 'active', [
             'contribution_cycles_active' => true,
             'frozen_at' => null,
         ], 'MEMBER_UNFROZEN', '', 'inactive');
@@ -63,16 +57,21 @@ final class MemberStatusService
 
     public function suspend(Member $member, string $reason = ''): void
     {
-        if ($member->status === 'suspended') {
+        if ($member->status === 'inactive' && $member->frozen_at === null) {
             throw new InvalidArgumentException(__('Member is already suspended.'));
         }
 
-        if (in_array($member->status, ['withdrawn', 'terminated'], true)) {
-            throw new InvalidArgumentException(__('Cannot suspend a withdrawn or terminated member.'));
+        if ($this->policy->isExitStatus($member->status)) {
+            throw new InvalidArgumentException(__('Cannot suspend a withdrawn member.'));
         }
 
-        $this->transition($member, 'suspended', [
+        if ($member->status === 'inactive' && $member->frozen_at !== null) {
+            throw new InvalidArgumentException(__('Cannot suspend a frozen member. Unfreeze first.'));
+        }
+
+        $this->transition($member, 'inactive', [
             'contribution_cycles_active' => false,
+            'frozen_at' => null,
         ], 'MEMBER_SUSPENDED', $reason, $member->status);
     }
 
@@ -82,34 +81,28 @@ final class MemberStatusService
             throw new InvalidArgumentException(__('Cannot suspend a member who has exited the fund.'));
         }
 
-        $this->transition($member, 'suspended', [
+        $this->transition($member, 'inactive', [
             'contribution_cycles_active' => true,
+            'frozen_at' => null,
         ], 'MEMBER_SUSPENDED_GUARANTOR_TRANSFER', '', $member->status);
     }
 
-    public function restoreSuspended(Member $member): void
+    public function restoreInactive(Member $member): void
     {
-        if ($member->status !== 'suspended') {
+        if ($member->status !== 'inactive' || $member->frozen_at !== null) {
             throw new InvalidArgumentException(__('Member is not suspended.'));
         }
 
-        $targetStatus = $this->delinquency->memberHasArrearsExcludingOpenCycle($member)
-            ? 'delinquent'
-            : 'active';
-
-        $this->transition($member, $targetStatus, [
+        $this->transition($member, 'active', [
             'contribution_cycles_active' => true,
-        ], 'MEMBER_RESTORED', '', 'suspended');
+            'frozen_at' => null,
+        ], 'MEMBER_RESTORED', '', 'inactive');
     }
 
     public function withdraw(Member $member, string $reason = ''): void
     {
         if ($member->status === 'withdrawn') {
             throw new InvalidArgumentException(__('Member has already withdrawn.'));
-        }
-
-        if ($member->status === 'terminated') {
-            throw new InvalidArgumentException(__('Cannot withdraw a terminated member.'));
         }
 
         $this->transition($member, 'withdrawn', [
@@ -120,11 +113,15 @@ final class MemberStatusService
 
     public function terminate(Member $member, string $reason = ''): void
     {
-        if ($member->status === 'terminated') {
+        if ($member->status === 'withdrawn' && $member->payout_frozen_at !== null) {
             throw new InvalidArgumentException(__('Member is already terminated.'));
         }
 
-        $this->transition($member, 'terminated', [
+        if ($member->status === 'withdrawn' && $member->payout_frozen_at === null) {
+            throw new InvalidArgumentException(__('Cannot terminate a voluntarily withdrawn member.'));
+        }
+
+        $this->transition($member, 'withdrawn', [
             'contribution_cycles_active' => false,
             'payout_frozen_at' => BusinessDay::now(),
         ], 'MEMBER_TERMINATED', $reason, $member->status);
@@ -132,8 +129,8 @@ final class MemberStatusService
 
     public function reinstate(Member $member, string $reason = ''): void
     {
-        if (! in_array($member->status, ['withdrawn', 'terminated'], true)) {
-            throw new InvalidArgumentException(__('Only withdrawn or terminated members can be reinstated.'));
+        if ($member->status !== 'withdrawn') {
+            throw new InvalidArgumentException(__('Only withdrawn members can be reinstated.'));
         }
 
         $previousStatus = $member->status;
@@ -148,8 +145,8 @@ final class MemberStatusService
 
     public function releasePayoutReview(Member $member, string $reason = ''): void
     {
-        if ($member->status !== 'terminated') {
-            throw new InvalidArgumentException(__('Payout review release applies only to terminated members.'));
+        if ($member->status !== 'withdrawn') {
+            throw new InvalidArgumentException(__('Payout review release applies only to withdrawn members.'));
         }
 
         if ($member->payout_frozen_at === null) {

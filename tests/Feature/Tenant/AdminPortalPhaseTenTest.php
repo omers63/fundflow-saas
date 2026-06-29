@@ -194,7 +194,7 @@ test('member announcement service resolves active audience', function () {
         ])->id,
     ]);
 
-    Member::factory()->create(['status' => 'suspended']);
+    Member::factory()->create(['status' => 'inactive']);
 
     expect(app(MemberAnnouncementService::class)->previewCount(MemberAnnouncement::AUDIENCE_ALL_ACTIVE))
         ->toBe($before + 2);

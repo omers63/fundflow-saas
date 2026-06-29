@@ -548,7 +548,7 @@ class Settings extends Page implements HasForms
                             ->helperText(__('Day of month when the contribution cycle starts (1-28). Default: 6th.')),
                     ]),
                 Section::make(__('Delinquency policy'))
-                    ->description(__('Daily delinquency sync marks members delinquent when consecutive or rolling miss thresholds are breached.'))
+                    ->description(__('Daily arrears check flags active members who breach consecutive or rolling miss thresholds. Status is not changed.'))
                     ->columns(3)
                     ->schema([
                         TextInput::make('delinquency_consecutive')

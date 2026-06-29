@@ -17,6 +17,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\HtmlString;
 
@@ -34,7 +35,7 @@ final class AccountTransactionManualAdjustmentHeaderActions
     {
         $credit = Action::make('manualCredit')
             ->label(__('Credit'))
-            ->icon('heroicon-o-arrow-trending-up')
+            ->icon(Heroicon::OutlinedArrowTrendingUp)
             ->color('success')
             ->visible(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
             ->modalHeading(__('Manual credit'))
@@ -68,7 +69,7 @@ final class AccountTransactionManualAdjustmentHeaderActions
 
         $debit = Action::make('manualDebit')
             ->label(__('Debit'))
-            ->icon('heroicon-o-arrow-trending-down')
+            ->icon(Heroicon::OutlinedArrowTrendingDown)
             ->color('danger')
             ->visible(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
             ->modalHeading(__('Manual debit'))
@@ -102,7 +103,7 @@ final class AccountTransactionManualAdjustmentHeaderActions
 
         $refund = Action::make('refundMemberCash')
             ->label(__('Refund'))
-            ->icon('heroicon-o-arrow-uturn-left')
+            ->icon(Heroicon::OutlinedArrowUturnLeft)
             ->color('warning')
             ->visible(function () use ($resolveAccount): bool {
                 if (! (bool) Auth::guard('tenant')->user()?->is_admin) {

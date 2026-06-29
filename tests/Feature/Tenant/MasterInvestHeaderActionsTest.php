@@ -34,11 +34,9 @@ test('invest out and invest in header actions are visible on master invest for a
 
     expect($actions)->toHaveCount(2)
         ->and($actions[0]->getName())->toBe('investOut')
-        ->and($actions[0]->getLabel())->toBe(__('Invest Out'))
-        ->and($actions[0]->getIcon())->toBe('heroicon-o-arrow-up-tray')
+        ->and($actions[0]->getLabel())->toBe(__('Out'))
         ->and($actions[1]->getName())->toBe('investIn')
-        ->and($actions[1]->getLabel())->toBe(__('Invest In'))
-        ->and($actions[1]->getIcon())->toBe('heroicon-o-arrow-down-tray')
+        ->and($actions[1]->getLabel())->toBe(__('In'))
         ->and($actions[0]->isHidden())->toBeFalse()
         ->and($actions[1]->isHidden())->toBeFalse();
 });

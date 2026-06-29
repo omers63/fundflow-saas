@@ -216,15 +216,16 @@ test('freeze and unfreeze membership', function () {
         ->and($member->fresh()->frozen_at)->toBeNull();
 });
 
-test('restore suspended returns active when no arrears', function () {
+test('restore inactive returns active when no arrears', function () {
     $member = Member::factory()->create([
-        'status' => 'suspended',
+        'status' => 'inactive',
+        'frozen_at' => null,
         'contribution_cycles_active' => false,
         'joined_at' => now(),
         'monthly_contribution_amount' => 0,
     ]);
 
-    $this->statuses->restoreSuspended($member);
+    $this->statuses->restoreInactive($member);
 
     expect($member->fresh()->status)->toBe('active')
         ->and($member->fresh()->contribution_cycles_active)->toBeTrue();
@@ -235,7 +236,8 @@ test('guarantor transfer suspend keeps contribution cycles active', function () 
 
     $this->statuses->suspendForGuarantorTransfer($member);
 
-    expect($member->fresh()->status)->toBe('suspended')
+    expect($member->fresh()->status)->toBe('inactive')
+        ->and($member->fresh()->frozen_at)->toBeNull()
         ->and($member->fresh()->contribution_cycles_active)->toBeTrue();
 });
 
@@ -267,7 +269,7 @@ test('terminate freezes payout and reinstate clears balances', function () {
     $this->statuses->terminate($member, 'Policy violation');
 
     $member->refresh();
-    expect($member->status)->toBe('terminated')
+    expect($member->status)->toBe('withdrawn')
         ->and($member->payout_frozen_at)->not->toBeNull();
 
     $this->statuses->reinstate($member, 'Board approved return');
@@ -285,9 +287,16 @@ test('admin can withdraw member directly', function () {
     $this->statuses->withdraw($member, 'Voluntary exit');
 
     expect($member->fresh()->status)->toBe('withdrawn')
-        ->and($member->fresh()->contribution_cycles_active)->toBeFalse();
+        ->and($member->fresh()->contribution_cycles_active)->toBeFalse()
+        ->and($member->fresh()->payout_frozen_at)->toBeNull();
 });
 
 test('legacy inactive import maps to inactive status', function () {
     expect(LegacyMemberStatusMapper::normalize('inactive'))->toBe('inactive');
+});
+
+test('legacy delinquent import maps to active status', function () {
+    expect(LegacyMemberStatusMapper::normalize('delinquent'))->toBe('active')
+        ->and(LegacyMemberStatusMapper::normalize('suspended'))->toBe('inactive')
+        ->and(LegacyMemberStatusMapper::normalize('terminated'))->toBe('withdrawn');
 });

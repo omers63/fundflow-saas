@@ -11,7 +11,7 @@ test('contribution amount steps are five-hundred increments up to three thousand
         ->and(Member::isValidContributionAmount(3500))->toBeFalse();
 });
 
-test('member statuses include inactive delinquent and terminated', function () {
-    expect(Member::STATUSES)->toContain('inactive', 'delinquent', 'terminated')
-        ->and(Member::PORTAL_BLOCKED_STATUSES)->toContain('inactive', 'delinquent', 'terminated');
+test('member statuses are simplified to active inactive withdrawn', function () {
+    expect(Member::STATUSES)->toBe(['active', 'inactive', 'withdrawn'])
+        ->and(Member::PORTAL_BLOCKED_STATUSES)->toContain('inactive', 'withdrawn');
 });

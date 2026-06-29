@@ -390,7 +390,7 @@ final class LoanFilamentActions
     public static function reinstateSuspendedBorrower(): Action
     {
         return Action::make('reinstateSuspendedBorrower')
-            ->label(__('Reinstate suspended borrower'))
+            ->label(__('Reinstate borrower'))
             ->icon('heroicon-o-user-plus')
             ->color('success')
             ->visible(fn (Loan $record): bool => $record->transferred_to_guarantor_at !== null

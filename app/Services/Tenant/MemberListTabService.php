@@ -23,11 +23,9 @@ final class MemberListTabService
             'all',
             'active',
             'inactive',
-            'migration_pending',
-            'delinquent',
-            'suspended',
             'withdrawn',
-            'terminated',
+            'delinquent',
+            'migration_pending',
         ];
     }
 
@@ -37,10 +35,8 @@ final class MemberListTabService
             'active' => __('Active'),
             'inactive' => __('Inactive'),
             'migration_pending' => __('Migration pending'),
-            'delinquent' => __('Delinquent'),
-            'suspended' => __('Suspended'),
+            'delinquent' => __('Arrears'),
             'withdrawn' => __('Withdrawn'),
-            'terminated' => __('Terminated'),
             default => __('All'),
         };
     }
@@ -52,16 +48,15 @@ final class MemberListTabService
     {
         return once(function (): array {
             $migrationPendingIds = $this->migrationPendingMemberIds();
+            $delinquentIds = $this->delinquentMemberIds();
 
             return [
                 'all' => Member::query()->count(),
                 'active' => Member::query()->where('status', 'active')->count(),
                 'inactive' => Member::query()->where('status', 'inactive')->count(),
-                'migration_pending' => count($migrationPendingIds),
-                'delinquent' => Member::query()->where('status', 'delinquent')->count(),
-                'suspended' => Member::query()->where('status', 'suspended')->count(),
                 'withdrawn' => Member::query()->where('status', 'withdrawn')->count(),
-                'terminated' => Member::query()->where('status', 'terminated')->count(),
+                'delinquent' => count($delinquentIds),
+                'migration_pending' => count($migrationPendingIds),
             ];
         });
     }
@@ -71,11 +66,11 @@ final class MemberListTabService
         return match ($tab) {
             'active' => $query->where('members.status', 'active'),
             'inactive' => $query->where('members.status', 'inactive'),
-            'migration_pending' => $query->whereIn('members.id', $this->migrationPendingMemberIds()),
-            'delinquent' => $query->where('members.status', 'delinquent'),
-            'suspended' => $query->where('members.status', 'suspended'),
             'withdrawn' => $query->where('members.status', 'withdrawn'),
-            'terminated' => $query->where('members.status', 'terminated'),
+            'migration_pending' => $query->whereIn('members.id', $this->migrationPendingMemberIds()),
+            'delinquent' => $query
+                ->where('members.status', 'active')
+                ->whereIn('members.id', $this->delinquentMemberIds()),
             default => $query,
         };
     }
@@ -89,7 +84,7 @@ final class MemberListTabService
             $delinquency = app(LoanDelinquencyService::class);
 
             return Member::query()
-                ->whereIn('status', ['active', 'delinquent'])
+                ->where('status', 'active')
                 ->whereNotNull('opening_balances_posted_at')
                 ->orderBy('name')
                 ->pluck('id')
@@ -98,6 +93,14 @@ final class MemberListTabService
                 ->values()
                 ->all();
         });
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function delinquentMemberIds(): array
+    {
+        return once(fn(): array => app(LoanDelinquencyService::class)->delinquentMemberIds());
     }
 
     /**
@@ -115,8 +118,7 @@ final class MemberListTabService
                 'migration_pending' => 'violet',
                 'inactive' => 'gray',
                 'delinquent' => 'danger',
-                'suspended' => 'warning',
-                'withdrawn', 'terminated' => 'danger',
+                'withdrawn' => 'danger',
                 default => 'neutral',
             },
         ]);

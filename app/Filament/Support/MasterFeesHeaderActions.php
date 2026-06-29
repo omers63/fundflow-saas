@@ -21,6 +21,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Auth;
 
 /**
@@ -36,11 +37,11 @@ final class MasterFeesHeaderActions
     public static function make(Closure $resolveAccount, ?Closure $after = null): array
     {
         $deductFee = Action::make('deductFee')
-            ->label(__('Deduct Fee'))
-            ->icon('heroicon-o-arrow-down-tray')
+            ->label(__('Deduct'))
+            ->icon(Heroicon::OutlinedArrowDownTray)
             ->color('success')
             ->visible(fn (): bool => self::isMasterFeesAdmin($resolveAccount))
-            ->modalHeading(__('Deduct Fee'))
+            ->modalHeading(__('Deduct'))
             ->modalDescription(__('Debits member cash (and master cash), credits master fees, and applies the payment to subscription or late-fee arrears when fully covered.'))
             ->modalWidth('md')
             ->schema([
@@ -124,11 +125,11 @@ final class MasterFeesHeaderActions
             });
 
         $disburseFee = Action::make('disburseFee')
-            ->label(__('Disburse Fee'))
-            ->icon('heroicon-o-arrow-up-circle')
+            ->label(__('Disburse'))
+            ->icon(Heroicon::OutlinedArrowUpCircle)
             ->color('warning')
             ->visible(fn (): bool => self::isMasterFeesAdmin($resolveAccount))
-            ->modalHeading(__('Disburse Fee'))
+            ->modalHeading(__('Disburse'))
             ->modalDescription(__('Debits master fees only, then creates a pending bank line to match when the payment appears on an imported statement.'))
             ->modalWidth('md')
             ->schema(self::disburseFormSchema())

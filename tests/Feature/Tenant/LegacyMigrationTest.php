@@ -540,7 +540,7 @@ test('legacy migration orchestrator imports payments without contribution notifi
 
     app(AccountingService::class)->createMemberAccounts($member);
     AccountingService::withoutMemberCashCollection(
-        fn() => app(AccountingService::class)->creditMemberCashWithMasterMirror(
+        fn () => app(AccountingService::class)->creditMemberCashWithMasterMirror(
             $member->cashAccount,
             5000,
             'Seed',
@@ -551,7 +551,7 @@ test('legacy migration orchestrator imports payments without contribution notifi
         ),
     );
     AccountingService::withoutMemberCashCollection(
-        fn() => app(AccountingService::class)->creditMemberFundWithMasterMirror(
+        fn () => app(AccountingService::class)->creditMemberFundWithMasterMirror(
             $member->fundAccount,
             100_000,
             'Seed fund',
@@ -1878,7 +1878,7 @@ test('legacy misclassified contribution repair converts monthly payments inside 
         'email' => 'repair-31@fund.test',
         'monthly_contribution_amount' => 500,
         'joined_at' => now()->subYears(10),
-        'status' => 'delinquent',
+        'status' => 'active',
     ]);
 
     $loanTier = LoanTier::query()->where('min_monthly_installment', 1000)->first()
@@ -3497,7 +3497,7 @@ test('legacy cash supplement repair merges orphan credits into contribution peri
         ->and((float) $contribution->amount)->toBe(1000.0);
 
     $orphanDescription = __('Legacy migration cash — :period', ['period' => 'Jan 2024'])
-        . ' [legacy-import:LEG-CASH-REPAIR||2024-01-20|500|contribution|2024-01]';
+        .' [legacy-import:LEG-CASH-REPAIR||2024-01-20|500|contribution|2024-01]';
 
     AccountingService::withoutMemberCashCollection(function () use ($member, $orphanDescription): void {
         app(AccountingService::class)->creditMemberCashWithMasterMirror(
@@ -4453,7 +4453,7 @@ test('legacy payment import posts full loan repayment amounts from classified bl
     $result = app(LegacyPaymentImportService::class)->import($classifiedPath);
 
     $repaymentSum = (float) LoanRepayment::query()->where('loan_id', $loan->id)->sum('amount');
-    $expectedSum = collect($paymentDates)->sum(fn(string $date): float => $date === '2016-02-10' ? 4500.0 : 3000.0);
+    $expectedSum = collect($paymentDates)->sum(fn (string $date): float => $date === '2016-02-10' ? 4500.0 : 3000.0);
 
     expect($result['failed'])->toBe(0)
         ->and($repaymentSum)->toBe($expectedSum)

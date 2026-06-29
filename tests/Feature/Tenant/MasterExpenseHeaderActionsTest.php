@@ -32,9 +32,9 @@ test('fund expense and disburse expense header actions are visible on master exp
 
     expect($actions)->toHaveCount(2)
         ->and($actions[0]->getName())->toBe('fundExpense')
-        ->and($actions[0]->getLabel())->toBe(__('Fund Expense'))
+        ->and($actions[0]->getLabel())->toBe(__('Fund'))
         ->and($actions[1]->getName())->toBe('disburseExpense')
-        ->and($actions[1]->getLabel())->toBe(__('Disburse Expense'))
+        ->and($actions[1]->getLabel())->toBe(__('Disburse'))
         ->and($actions[0]->isHidden())->toBeFalse()
         ->and($actions[1]->isHidden())->toBeFalse();
 });

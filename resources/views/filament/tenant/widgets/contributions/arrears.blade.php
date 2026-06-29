@@ -1,5 +1,5 @@
 @php
-    $pipeline = $d['pipeline'];
+$pipeline = $d['pipeline'];
 @endphp
 
 @include('filament.tenant.widgets.partials.insights-head', [
@@ -17,9 +17,9 @@
     <div class="grid grid-cols-2 divide-x divide-gray-100 dark:divide-white/10 sm:grid-cols-4">
         <a href="{{ $pipeline['arrears_url'] }}"
             @class([
-                'flex flex-col items-center px-2 py-3 text-center transition hover:bg-rose-50/60 dark:hover:bg-rose-950/20',
-                'bg-rose-50 dark:bg-rose-950/20' => ($pipeline['arrears_periods'] ?? 0) > 0,
-            ])>
+    'flex flex-col items-center px-2 py-3 text-center transition hover:bg-rose-50/60 dark:hover:bg-rose-950/20',
+    'bg-rose-50 dark:bg-rose-950/20' => ($pipeline['arrears_periods'] ?? 0) > 0,
+])>
             <span class="text-xl font-bold tabular-nums text-rose-600 dark:text-rose-400">{{ $pipeline['arrears_periods'] }}</span>
             <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Arrears') }}</span>
         </a>
@@ -31,7 +31,7 @@
         <a href="{{ $pipeline['delinquent_url'] }}"
             class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-violet-50/60 dark:hover:bg-violet-950/20">
             <span class="text-xl font-bold tabular-nums text-violet-600 dark:text-violet-400">{{ $pipeline['delinquent_members'] }}</span>
-            <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Delinquent') }}</span>
+            <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Arrears') }}</span>
         </a>
         <a href="{{ $pipeline['collect_url'] }}"
             class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-sky-50/60 dark:hover:bg-sky-950/20">

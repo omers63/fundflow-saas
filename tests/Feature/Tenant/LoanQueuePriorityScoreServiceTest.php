@@ -44,9 +44,9 @@ test('delinquent member loses standing bonus points', function () {
         'status' => 'active',
     ]);
 
-    $delinquentMember = Member::factory()->create([
+    $inactiveMember = Member::factory()->create([
         'joined_at' => now()->subYear(),
-        'status' => 'delinquent',
+        'status' => 'inactive',
     ]);
 
     $cleanLoan = Loan::factory()->create([
@@ -56,8 +56,8 @@ test('delinquent member loses standing bonus points', function () {
         'status' => 'pending',
     ]);
 
-    $delinquentLoan = Loan::factory()->create([
-        'member_id' => $delinquentMember->id,
+    $inactiveLoan = Loan::factory()->create([
+        'member_id' => $inactiveMember->id,
         'is_emergency' => false,
         'applied_at' => now()->subDay(),
         'status' => 'pending',
@@ -65,7 +65,7 @@ test('delinquent member loses standing bonus points', function () {
 
     $service = app(LoanQueuePriorityScoreService::class);
 
-    expect($service->calculate($cleanLoan))->toBe($service->calculate($delinquentLoan) + 10);
+    expect($service->calculate($cleanLoan))->toBe($service->calculate($inactiveLoan) + 10);
 });
 
 test('priority sort orders higher scores first for pending loans', function () {

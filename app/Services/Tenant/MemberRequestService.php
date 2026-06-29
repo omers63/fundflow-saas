@@ -171,7 +171,7 @@ class MemberRequestService
 
     protected function validateWithdrawMembership(Member $requester, array $payload): void
     {
-        if (in_array($requester->status, ['withdrawn', 'terminated'], true)) {
+        if (in_array($requester->status, ['withdrawn'], true)) {
             throw ValidationException::withMessages([
                 'member' => __('Your membership has already ended.'),
             ]);

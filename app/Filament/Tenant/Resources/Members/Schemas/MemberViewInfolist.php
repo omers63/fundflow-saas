@@ -37,8 +37,8 @@ final class MemberViewInfolist
                             ->date(),
                         TextEntry::make('status')
                             ->badge()
-                            ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
-                            ->color(fn (string $state): string => Member::statusBadgeColor($state)),
+                            ->formatStateUsing(fn(string $state, Member $record): string => $record->adminStatusLabel())
+                            ->color(fn(Member $record): string => $record->adminStatusBadgeColor()),
                         TextEntry::make('parent.name')
                             ->label(__('Parent member'))
                             ->placeholder(__('Independent')),

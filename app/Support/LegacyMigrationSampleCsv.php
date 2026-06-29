@@ -119,7 +119,7 @@ final class LegacyMigrationSampleCsv
             ['phone', false, __('Contact phone')],
             ['monthly_contribution_amount', false, __('500–3000 in steps of 500 (default 500)')],
             ['joined_at', false, __('YYYY-MM-DD')],
-            ['status', false, __('active, delinquent, suspended, withdrawn, terminated — Arabic legacy labels such as مستمر (active) and منسحب (withdrawn) are also accepted')],
+            ['status', false, __('active, inactive, withdrawn — legacy labels (delinquent, suspended, terminated, Arabic equivalents) are mapped on import')],
             ['parent_member_number', false, __('Household parent member number (parent row may appear anywhere in the file)')],
             ['contribution_arrears_cutoff_date', false, __('Same as migration cut-off (per row or modal default); required when posting cut-off balances')],
             ['cutoff_cash_balance', false, __('Member cash wallet at cut-off (alias: opening_cash_balance)')],

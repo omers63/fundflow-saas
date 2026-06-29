@@ -99,7 +99,7 @@ class ViewMemberRequest extends ViewRecord
                 ->modalDescription(fn (): string => match ($this->record->type) {
                     MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => __('The member will be marked withdrawn and portal access will end.'),
                     MemberRequest::TYPE_FREEZE_MEMBERSHIP => __('The member will be marked inactive until unfrozen.'),
-                    MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => __('The member will be restored to active or delinquent depending on arrears.'),
+                    MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => __('The member will be set to active. Portal access stays blocked while arrears remain.'),
                     default => __('The change will be applied immediately for supported request types.'),
                 })
                 ->schema(function (): array {

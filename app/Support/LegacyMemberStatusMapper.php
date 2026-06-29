@@ -18,14 +18,17 @@ final class LegacyMemberStatusMapper
         // Arabic (legacy samman export)
         'مستمر' => 'active',
         'منسحب' => 'withdrawn',
-        'معلق' => 'suspended',
-        'متأخر' => 'delinquent',
-        'منتهي' => 'terminated',
+        'معلق' => 'inactive',
+        'متأخر' => 'active',
+        'منتهي' => 'withdrawn',
         // English synonyms
         'continuing' => 'active',
         'ongoing' => 'active',
         'inactive' => 'inactive',
         'resigned' => 'withdrawn',
+        'delinquent' => 'active',
+        'suspended' => 'inactive',
+        'terminated' => 'withdrawn',
     ];
 
     public static function normalize(string $value): string

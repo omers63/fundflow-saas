@@ -15,14 +15,11 @@ final class MemberMembershipPolicy
     /** @var list<string> */
     public const PORTAL_BLOCKED_STATUSES = [
         'inactive',
-        'delinquent',
-        'suspended',
         'withdrawn',
-        'terminated',
     ];
 
     /** @var list<string> */
-    public const EXIT_STATUSES = ['withdrawn', 'terminated'];
+    public const EXIT_STATUSES = ['withdrawn'];
 
     public function __construct(
         private readonly LoanDelinquencyService $delinquency,
@@ -30,12 +27,14 @@ final class MemberMembershipPolicy
 
     public function canAccessPortal(Member $member): bool
     {
-        return $member->status === 'active';
+        return $member->status === 'active'
+            && ! $this->delinquency->isDelinquent($member);
     }
 
     public function canApplyForLoan(Member $member): bool
     {
-        return $member->status === 'active';
+        return $member->status === 'active'
+            && ! $this->delinquency->isDelinquent($member);
     }
 
     public function canParticipateInContributionCycles(Member $member): bool
@@ -44,11 +43,11 @@ final class MemberMembershipPolicy
             return false;
         }
 
-        if (in_array($member->status, ['active', 'delinquent'], true)) {
+        if ($member->status === 'active') {
             return true;
         }
 
-        return $member->status === 'suspended'
+        return $member->status === 'inactive'
             && (bool) $member->contribution_cycles_active;
     }
 
@@ -97,6 +96,6 @@ final class MemberMembershipPolicy
 
     public function blocksHouseholdDependents(string $parentStatus): bool
     {
-        return in_array($parentStatus, ['inactive', 'withdrawn', 'terminated'], true);
+        return in_array($parentStatus, ['inactive', 'withdrawn'], true);
     }
 }

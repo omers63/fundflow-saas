@@ -25,7 +25,7 @@
                         'phone' => [false, __('Contact phone')],
                         'monthly_contribution_amount' => [false, __('500–3000 in steps of 500 (default 500)')],
                         'joined_at' => [false, __('YYYY-MM-DD (default today)')],
-                        'status' => [false, __('active, delinquent, suspended, withdrawn, terminated')],
+                        'status' => [false, __('active, inactive, withdrawn — legacy labels mapped on import')],
                         'password' => [false, __('Portal password (≥8 chars; otherwise uses default from modal)')],
                         'parent_member_number' => [false, __('Household parent member number (parent row may appear anywhere in the file)')],
                         'parent_member_email' => [false, __('Household parent email (alternative to number; parent row may appear anywhere in the file)')],

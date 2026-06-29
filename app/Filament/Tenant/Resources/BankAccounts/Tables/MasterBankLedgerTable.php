@@ -9,6 +9,7 @@ use App\Filament\Support\AccountTransactionManualAdjustmentHeaderActions;
 use App\Filament\Support\AccountTransactionTypeColumn;
 use App\Filament\Support\AccountTransactionTypeFilter;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MasterAccountLedgerHeaderActions;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\ViewActions\ViewAccountTransactionAction;
 use App\Models\Tenant\Account;
@@ -35,10 +36,18 @@ class MasterBankLedgerTable
             return [];
         }
 
-        return AccountTransactionManualAdjustmentHeaderActions::make(
-            fn (): Account => $masterBank,
-            $after,
-        );
+        return [
+            ...MasterAccountLedgerHeaderActions::importExport(
+                fn (): Account => $masterBank,
+                $after,
+            ),
+            ...MasterAccountLedgerHeaderActions::wrap(
+                AccountTransactionManualAdjustmentHeaderActions::make(
+                    fn (): Account => $masterBank,
+                    $after,
+                ),
+            ),
+        ];
     }
 
     public static function configure(Table $table, ?Closure $afterLedgerMutation = null): Table

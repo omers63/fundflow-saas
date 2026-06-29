@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
+use App\Services\Loans\LoanDelinquencyService;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
 use Illuminate\Support\Collection;
@@ -14,6 +15,7 @@ final class MemberDependentsInsightsService
 {
     public function __construct(
         protected ContributionCycleService $cycles,
+        protected LoanDelinquencyService $delinquency,
     ) {}
 
     /**
@@ -56,7 +58,7 @@ final class MemberDependentsInsightsService
             ->pending()
             ->count();
 
-        $delinquentCount = $dependents->where('status', 'delinquent')->count();
+        $delinquentCount = $dependents->filter(fn (Member $member): bool => $this->delinquency->isDelinquent($member))->count();
 
         $hero = $this->buildHero(
             $dependents,

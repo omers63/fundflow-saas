@@ -15,6 +15,7 @@ use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Auth;
 
 /**
@@ -30,8 +31,8 @@ final class MasterExpenseHeaderActions
     public static function make(Closure $resolveAccount, ?Closure $after = null): array
     {
         $fundExpense = Action::make('fundExpense')
-            ->label(__('Fund Expense'))
-            ->icon('heroicon-o-arrow-down-circle')
+            ->label(__('Fund'))
+            ->icon(Heroicon::OutlinedArrowDownCircle)
             ->color('success')
             ->visible(function () use ($resolveAccount): bool {
                 if (! (bool) Auth::guard('tenant')->user()?->is_admin) {
@@ -42,7 +43,7 @@ final class MasterExpenseHeaderActions
 
                 return $account->is_master && $account->type === 'expense';
             })
-            ->modalHeading(__('Fund Expense'))
+            ->modalHeading(__('Fund'))
             ->modalDescription(__('Transfer funds from Master Fund into the Master Expense account.'))
             ->modalWidth('md')
             ->schema(self::formSchema(__('Expense funding from master fund')))
@@ -69,8 +70,8 @@ final class MasterExpenseHeaderActions
             });
 
         $disburseExpense = Action::make('disburseExpense')
-            ->label(__('Disburse Expense'))
-            ->icon('heroicon-o-arrow-up-circle')
+            ->label(__('Disburse'))
+            ->icon(Heroicon::OutlinedArrowUpCircle)
             ->color('warning')
             ->visible(function () use ($resolveAccount): bool {
                 if (! (bool) Auth::guard('tenant')->user()?->is_admin) {
@@ -81,7 +82,7 @@ final class MasterExpenseHeaderActions
 
                 return $account->is_master && $account->type === 'expense';
             })
-            ->modalHeading(__('Disburse Expense'))
+            ->modalHeading(__('Disburse'))
             ->modalDescription(__('Debits master expense only, then creates a pending bank line to match when the payment appears on an imported statement.'))
             ->modalWidth('md')
             ->schema(self::formSchema())

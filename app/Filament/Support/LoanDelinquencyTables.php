@@ -293,7 +293,7 @@ final class LoanDelinquencyTables
                             }
 
                             return Member::query()
-                                ->whereIn('status', ['active', 'delinquent'])
+                                ->where('status', 'active')
                                 ->where(function ($query) use ($needle): void {
                                     $query->where('name', 'like', "%{$needle}%")
                                         ->orWhere('member_number', 'like', "%{$needle}%");

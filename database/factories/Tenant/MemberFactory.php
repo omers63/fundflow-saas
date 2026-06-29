@@ -27,7 +27,9 @@ class MemberFactory extends Factory
     public function suspended(): static
     {
         return $this->state(fn (array $attributes) => [
-            'status' => 'suspended',
+            'status' => 'inactive',
+            'frozen_at' => null,
+            'contribution_cycles_active' => false,
         ]);
     }
 
@@ -35,13 +37,14 @@ class MemberFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'status' => 'withdrawn',
+            'payout_frozen_at' => null,
         ]);
     }
 
     public function delinquent(): static
     {
         return $this->state(fn (array $attributes) => [
-            'status' => 'delinquent',
+            'status' => 'active',
         ]);
     }
 
@@ -49,6 +52,16 @@ class MemberFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'status' => 'inactive',
+            'frozen_at' => null,
+            'contribution_cycles_active' => false,
+        ]);
+    }
+
+    public function frozen(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => 'inactive',
+            'frozen_at' => now(),
             'contribution_cycles_active' => false,
         ]);
     }
@@ -56,7 +69,9 @@ class MemberFactory extends Factory
     public function terminated(): static
     {
         return $this->state(fn (array $attributes) => [
-            'status' => 'terminated',
+            'status' => 'withdrawn',
+            'payout_frozen_at' => now(),
+            'contribution_cycles_active' => false,
         ]);
     }
 

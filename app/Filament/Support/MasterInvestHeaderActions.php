@@ -15,6 +15,7 @@ use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Auth;
 
 /**
@@ -30,11 +31,11 @@ final class MasterInvestHeaderActions
     public static function make(Closure $resolveAccount, ?Closure $after = null): array
     {
         $investOut = Action::make('investOut')
-            ->label(__('Invest Out'))
-            ->icon('heroicon-o-arrow-up-tray')
+            ->label(__('Out'))
+            ->icon(Heroicon::OutlinedArrowUpTray)
             ->color('warning')
             ->visible(fn (): bool => self::isMasterInvestAdmin($resolveAccount))
-            ->modalHeading(__('Invest Out'))
+            ->modalHeading(__('Out'))
             ->modalDescription(__('Transfers funds from Master Fund into Master Invest, then debits Master Invest and creates a pending bank line to match when the payment appears on an imported statement.'))
             ->modalWidth('md')
             ->schema(self::formSchema())
@@ -63,11 +64,11 @@ final class MasterInvestHeaderActions
             });
 
         $investIn = Action::make('investIn')
-            ->label(__('Invest In'))
-            ->icon('heroicon-o-arrow-down-tray')
+            ->label(__('In'))
+            ->icon(Heroicon::OutlinedArrowDownTray)
             ->color('success')
             ->visible(fn (): bool => self::isMasterInvestAdmin($resolveAccount))
-            ->modalHeading(__('Invest In'))
+            ->modalHeading(__('In'))
             ->modalDescription(__('Credits master invest, transfers the return to master fund, then creates a pending bank line to match when the receipt appears on an imported statement.'))
             ->modalWidth('md')
             ->schema(self::formSchema(__('Investment return')))

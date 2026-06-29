@@ -121,8 +121,9 @@ test('member with overdue installments is marked delinquent', function () {
     $result = $this->delinquency->syncMemberDelinquencyStatus();
 
     $member->refresh();
-    expect($result['marked_delinquent'])->toBe(1)
-        ->and($member->status)->toBe('delinquent');
+    expect($result['delinquent_count'])->toBe(1)
+        ->and($member->status)->toBe('active')
+        ->and($this->delinquency->isDelinquent($member))->toBeTrue();
 
     BusinessDaySettings::saveFromForm(null);
 });

@@ -9,7 +9,7 @@ use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Loans\Pages\ListLoanQueue;
 use App\Filament\Tenant\Resources\Loans\Pages\ListLoans;
 use App\Filament\Tenant\Resources\Members\MemberResource;
-use App\Filament\Tenant\Resources\Members\Pages\ListMembers;
+use App\Filament\Tenant\Resources\Members\Pages\ViewMember;
 use App\Models\Central\Tenant;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
@@ -337,23 +337,34 @@ test('delinquent members tab loads on members list', function () {
 
     $this->get('http://'.$this->domain.$path)
         ->assertSuccessful()
-        ->assertSee(__('Delinquent'), false);
+        ->assertSee(__('Arrears'), false);
 
     expect(LoanResource::listTabUrl('overdue_installments'))->toContain('tab=overdue_installments');
 });
 
-test('members list exposes delinquency row actions', function () {
-    $member = Member::create([
+test('member workspace exposes arrears header actions', function () {
+    $active = Member::create([
         'member_number' => 'DLQ-'.uniqid(),
-        'name' => 'Delinquent Row Member',
+        'name' => 'Active Arrears Member',
         'monthly_contribution_amount' => 100,
         'joined_at' => now()->subYear(),
-        'status' => 'delinquent',
+        'status' => 'active',
     ]);
 
-    Livewire::test(ListMembers::class)
-        ->assertTableActionVisible('syncMemberDelinquency', $member)
-        ->assertTableActionVisible('restoreMemberActive', $member)
-        ->callTableAction('syncMemberDelinquency', $member)
+    $held = Member::create([
+        'member_number' => 'HLD-' . uniqid(),
+        'name' => 'Held Row Member',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => now()->subYear(),
+        'status' => 'inactive',
+        'frozen_at' => null,
+    ]);
+
+    Livewire::test(ViewMember::class, ['record' => $active->getRouteKey()])
+        ->assertActionVisible('checkMemberArrears')
+        ->callAction('checkMemberArrears')
         ->assertNotified();
+
+    Livewire::test(ViewMember::class, ['record' => $held->getRouteKey()])
+        ->assertActionVisible('restoreSuspendedMember');
 });

@@ -47,7 +47,7 @@ class ViewMember extends ViewRecord
     {
         assert($this->record instanceof Member);
 
-        $status = Member::statusOptions()[$this->record->status] ?? $this->record->status;
+        $status = $this->record->adminStatusLabel();
 
         return __(':number · :status', [
             'number' => $this->record->member_number,

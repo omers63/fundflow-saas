@@ -140,7 +140,7 @@ it('ignores closed periods before the legacy migration contribution cut-off', fu
         'joined_at' => Carbon::create(2014, 10, 29),
         'contribution_arrears_cutoff_date' => Carbon::create(2026, 6, 1),
         'monthly_contribution_amount' => 500,
-        'status' => 'delinquent',
+        'status' => 'active',
     ]);
 
     $stats = app(MemberDelinquencyEvaluator::class)->evaluate($member->fresh());

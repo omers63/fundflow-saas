@@ -121,7 +121,7 @@ class MyMemberRequestsTableWidget extends TableWidget
                             ->label(__('Withdraw from fund'))
                             ->icon('heroicon-o-arrow-right-on-rectangle')
                             ->color('danger')
-                            ->visible(fn (): bool => in_array(CurrentMember::get()?->status, ['active', 'inactive', 'delinquent', 'suspended'], true))
+                            ->visible(fn (): bool => in_array(CurrentMember::get()?->status, ['active', 'inactive'], true))
                             ->schema([
                                 Textarea::make('reason')
                                     ->label(__('Reason (optional)'))

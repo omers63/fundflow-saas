@@ -12,17 +12,12 @@ use App\Services\Loans\LoanDelinquencyService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
-use Filament\Forms\Components\Checkbox;
 use Filament\Notifications\Notification;
-use Illuminate\Database\Eloquent\Collection;
 use Livewire\Component;
-use Throwable;
 
 final class MemberDelinquencyActions
 {
     /**
-     * Delinquency actions are on the member edit header (Compliance group), not the list grid.
-     *
      * @return list<Action>
      */
     public static function forMemberListRow(): array
@@ -31,17 +26,13 @@ final class MemberDelinquencyActions
     }
 
     /**
-     * Nested actions inside {@see MemberFilamentActions::delinquencyAndAdminActionGroup()}.
-     *
      * @return list<Action>
      */
     public static function forMemberEditHeaderNested(): array
     {
         return [
-            self::syncDelinquency(),
-            self::markDelinquent(),
-            self::restoreActive(),
-            self::openDelinquencyWorkspace(),
+            self::checkArrears(),
+            self::openArrearsWorkspace(),
         ];
     }
 
@@ -52,10 +43,8 @@ final class MemberDelinquencyActions
     {
         return [
             BulkActionGroup::make([
-                self::syncDelinquencyBulk(),
-                self::markDelinquentBulk(),
-                self::restoreActiveBulk(),
-            ])->label(__('Delinquency')),
+                self::checkArrearsBulk(),
+            ])->label(__('Arrears')),
         ];
     }
 
@@ -65,28 +54,24 @@ final class MemberDelinquencyActions
     public static function forMemberListBulk(): array
     {
         return [
-            self::syncDelinquencyBulk(),
-            self::markDelinquentBulk(),
-            self::restoreActiveBulk(),
+            self::checkArrearsBulk(),
         ];
     }
 
-    public static function syncDelinquency(): Action
+    public static function checkArrears(): Action
     {
-        return Action::make('syncMemberDelinquency')
-            ->label(__('Sync delinquency status'))
+        return Action::make('checkMemberArrears')
+            ->label(__('Check arrears'))
             ->icon('heroicon-o-arrow-path')
             ->color('warning')
-            ->visible(fn (Member $record): bool => in_array($record->status, ['active', 'delinquent'], true))
+            ->visible(fn(Member $record): bool => $record->status === 'active')
             ->action(function (Member $record, LoanDelinquencyService $delinquency, Component $livewire): void {
                 $result = $delinquency->syncMemberDelinquencyStatusForMember($record);
 
-                if ($result['marked_delinquent'] === 0 && $result['restored_active'] === 0) {
+                if ($result['delinquent_count'] === 0 && $result['cleared_count'] === 0) {
                     Notification::make()
-                        ->title(__('No status change'))
-                        ->body($delinquency->memberHasArrears($record->fresh())
-                            ? __('Member still has arrears and remains delinquent.')
-                            : __('Member has no arrears and remains active.'))
+                        ->title(__('No result'))
+                        ->body(__('Arrears check applies only to active members.'))
                         ->info()
                         ->send();
 
@@ -94,7 +79,10 @@ final class MemberDelinquencyActions
                 }
 
                 Notification::make()
-                    ->title($result['marked_delinquent'] ? __('Marked delinquent') : __('Restored to active'))
+                    ->title($delinquency->isDelinquent($record->fresh()) ? __('Arrears') : __('Clear'))
+                    ->body($delinquency->isDelinquent($record->fresh())
+                        ? __('Member breaches the delinquency policy while status remains active.')
+                        : __('Member does not breach the delinquency policy.'))
                     ->success()
                     ->send();
 
@@ -102,38 +90,13 @@ final class MemberDelinquencyActions
             });
     }
 
-    public static function markDelinquent(): Action
+    public static function openArrearsWorkspace(): Action
     {
-        return Action::make('markMemberDelinquent')
-            ->label(__('Mark delinquent'))
-            ->icon('heroicon-o-exclamation-circle')
-            ->color('danger')
-            ->visible(fn (Member $record): bool => $record->status === 'active')
-            ->requiresConfirmation()
-            ->modalDescription(__('Blocks portal access and new loans until status is restored.'))
-            ->action(function (Member $record, Action $action, LoanDelinquencyService $delinquency, Component $livewire): void {
-                if (
-                    ! ActionModalFailure::attemptThrowable(
-                        $action,
-                        fn () => $delinquency->markMemberDelinquent($record),
-                        __('Cannot mark delinquent'),
-                    )
-                ) {
-                    return;
-                }
-
-                Notification::make()->title(__('Marked delinquent'))->success()->send();
-                self::refreshMembersList($livewire);
-            });
-    }
-
-    public static function openDelinquencyWorkspace(): Action
-    {
-        return Action::make('openDelinquencyWorkspace')
-            ->label(__('Open delinquency workspace'))
+        return Action::make('openArrearsWorkspace')
+            ->label(__('Open arrears'))
             ->icon('heroicon-o-arrow-top-right-on-square')
             ->color('gray')
-            ->visible(fn (Member $record, LoanDelinquencyService $delinquency): bool => $record->status === 'delinquent'
+            ->visible(fn(Member $record, LoanDelinquencyService $delinquency): bool => $delinquency->isDelinquent($record)
                 || $delinquency->memberHasArrears($record))
             ->url(function (Member $record, LoanDelinquencyService $delinquency): string {
                 $summary = $delinquency->memberArrearsSummary($record);
@@ -150,142 +113,34 @@ final class MemberDelinquencyActions
             });
     }
 
-    public static function restoreActive(): Action
+    public static function checkArrearsBulk(): BulkAction
     {
-        return Action::make('restoreMemberActive')
-            ->label(__('Restore active'))
-            ->icon('heroicon-o-user-plus')
-            ->color('success')
-            ->visible(fn (Member $record): bool => $record->status === 'delinquent')
-            ->schema([
-                Checkbox::make('force')
-                    ->label(__('Force restore (ignore outstanding arrears)'))
-                    ->helperText(__('Use only when arrears are being handled outside the system.')),
-            ])
-            ->action(function (Member $record, array $data, Action $action, LoanDelinquencyService $delinquency, Component $livewire): void {
-                if (
-                    ! ActionModalFailure::attemptThrowable(
-                        $action,
-                        fn () => $delinquency->restoreMemberActive($record, (bool) ($data['force'] ?? false)),
-                        __('Cannot restore'),
-                    )
-                ) {
-                    return;
-                }
-
-                Notification::make()->title(__('Member restored to active'))->success()->send();
-                self::refreshMembersList($livewire);
-            });
-    }
-
-    public static function syncDelinquencyBulk(): BulkAction
-    {
-        return BulkAction::make('syncDelinquencySelected')
-            ->label(__('Sync delinquency status'))
+        return BulkAction::make('checkArrearsSelected')
+            ->label(__('Check arrears'))
             ->icon('heroicon-o-arrow-path')
             ->color('warning')
             ->requiresConfirmation()
-            ->action(function (Collection $records, LoanDelinquencyService $delinquency, Component $livewire): void {
-                $markedDelinquent = 0;
-                $restoredActive = 0;
+            ->action(function ($records, LoanDelinquencyService $delinquency, Component $livewire): void {
+                $withArrears = 0;
+                $clear = 0;
 
                 foreach ($records as $record) {
-                    if (! $record instanceof Member || ! in_array($record->status, ['active', 'delinquent'], true)) {
+                    if (!$record instanceof Member || $record->status !== 'active') {
                         continue;
                     }
 
                     $result = $delinquency->syncMemberDelinquencyStatusForMember($record);
-                    $markedDelinquent += $result['marked_delinquent'];
-                    $restoredActive += $result['restored_active'];
+                    $withArrears += $result['delinquent_count'];
+                    $clear += $result['cleared_count'];
                 }
 
                 Notification::make()
-                    ->title(__('Delinquency sync complete'))
-                    ->body(__('Marked delinquent: :delinquent · Restored active: :restored', [
-                        'delinquent' => $markedDelinquent,
-                        'restored' => $restoredActive,
+                    ->title(__('Arrears check complete'))
+                    ->body(__('With arrears: :with · Clear: :clear', [
+                        'with' => $withArrears,
+                        'clear' => $clear,
                     ]))
                     ->success()
-                    ->send();
-
-                self::refreshMembersList($livewire);
-            });
-    }
-
-    public static function markDelinquentBulk(): BulkAction
-    {
-        return BulkAction::make('markDelinquentSelected')
-            ->label(__('Mark delinquent'))
-            ->icon('heroicon-o-exclamation-circle')
-            ->color('danger')
-            ->requiresConfirmation()
-            ->modalDescription(__('Blocks portal access and new loans until status is restored.'))
-            ->action(function (Collection $records, LoanDelinquencyService $delinquency, Component $livewire): void {
-                $marked = 0;
-                $failed = 0;
-
-                foreach ($records as $record) {
-                    if (! $record instanceof Member || $record->status !== 'active') {
-                        continue;
-                    }
-
-                    try {
-                        $delinquency->markMemberDelinquent($record);
-                        $marked++;
-                    } catch (Throwable) {
-                        $failed++;
-                    }
-                }
-
-                Notification::make()
-                    ->title(__('Mark delinquent complete'))
-                    ->body(__(':marked marked · :failed could not be marked', [
-                        'marked' => $marked,
-                        'failed' => $failed,
-                    ]))
-                    ->color($failed > 0 ? 'warning' : 'success')
-                    ->send();
-
-                self::refreshMembersList($livewire);
-            });
-    }
-
-    public static function restoreActiveBulk(): BulkAction
-    {
-        return BulkAction::make('restoreActiveSelected')
-            ->label(__('Restore active'))
-            ->icon('heroicon-o-user-plus')
-            ->color('success')
-            ->schema([
-                Checkbox::make('force')
-                    ->label(__('Force restore (ignore outstanding arrears)'))
-                    ->helperText(__('Use only when arrears are being handled outside the system.')),
-            ])
-            ->action(function (Collection $records, array $data, LoanDelinquencyService $delinquency, Component $livewire): void {
-                $force = (bool) ($data['force'] ?? false);
-                $restored = 0;
-                $failed = 0;
-
-                foreach ($records as $record) {
-                    if (! $record instanceof Member || $record->status !== 'delinquent') {
-                        continue;
-                    }
-
-                    try {
-                        $delinquency->restoreMemberActive($record, $force);
-                        $restored++;
-                    } catch (Throwable) {
-                        $failed++;
-                    }
-                }
-
-                Notification::make()
-                    ->title(__('Restore complete'))
-                    ->body(__(':restored restored · :failed could not be restored', [
-                        'restored' => $restored,
-                        'failed' => $failed,
-                    ]))
-                    ->color($failed > 0 ? 'warning' : 'success')
                     ->send();
 
                 self::refreshMembersList($livewire);

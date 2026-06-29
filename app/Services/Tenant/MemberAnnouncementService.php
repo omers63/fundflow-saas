@@ -8,6 +8,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberAnnouncement;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\MemberAnnouncementNotification;
+use App\Services\Loans\LoanDelinquencyService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Notification;
@@ -119,7 +120,7 @@ final class MemberAnnouncementService
                 ->whereHas('contributions', fn (Builder $q): Builder => $q->where('status', 'overdue'))
                 ->get(),
             MemberAnnouncement::AUDIENCE_DELINQUENT => $query
-                ->where('status', 'delinquent')
+                ->whereIn('id', app(LoanDelinquencyService::class)->delinquentMemberIds())
                 ->get(),
             MemberAnnouncement::AUDIENCE_WITH_ACTIVE_LOANS => $query
                 ->whereHas('loans', fn (Builder $q): Builder => $q->whereIn('status', ['active', 'transferred', 'repaying', 'disbursed']))

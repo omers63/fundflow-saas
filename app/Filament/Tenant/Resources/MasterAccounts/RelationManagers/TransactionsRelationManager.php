@@ -10,6 +10,7 @@ use App\Filament\Support\AccountTransactionManualAdjustmentHeaderActions;
 use App\Filament\Support\AccountTransactionTypeColumn;
 use App\Filament\Support\AccountTransactionTypeFilter;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MasterAccountLedgerHeaderActions;
 use App\Filament\Support\MasterExpenseHeaderActions;
 use App\Filament\Support\MasterFeesHeaderActions;
 use App\Filament\Support\MasterInvestHeaderActions;
@@ -79,22 +80,28 @@ class TransactionsRelationManager extends RelationManager
             ->defaultSort('transacted_at', 'desc'))
             ->toolbarActions(ViewAccountTransactionAction::tenantToolbarActions())
             ->headerActions([
-                ...AccountTransactionManualAdjustmentHeaderActions::make(
+                ...MasterAccountLedgerHeaderActions::importExport(
                     fn (): Account => $this->getOwnerRecord(),
                     $this->ledgerMutationAfter(),
                 ),
-                ...MasterExpenseHeaderActions::make(
-                    fn (): Account => $this->getOwnerRecord(),
-                    $this->ledgerMutationAfter(),
-                ),
-                ...MasterInvestHeaderActions::make(
-                    fn (): Account => $this->getOwnerRecord(),
-                    $this->ledgerMutationAfter(),
-                ),
-                ...MasterFeesHeaderActions::make(
-                    fn (): Account => $this->getOwnerRecord(),
-                    $this->ledgerMutationAfter(),
-                ),
+                ...MasterAccountLedgerHeaderActions::wrap([
+                    ...AccountTransactionManualAdjustmentHeaderActions::make(
+                        fn (): Account => $this->getOwnerRecord(),
+                        $this->ledgerMutationAfter(),
+                    ),
+                    ...MasterExpenseHeaderActions::make(
+                        fn (): Account => $this->getOwnerRecord(),
+                        $this->ledgerMutationAfter(),
+                    ),
+                    ...MasterInvestHeaderActions::make(
+                        fn (): Account => $this->getOwnerRecord(),
+                        $this->ledgerMutationAfter(),
+                    ),
+                    ...MasterFeesHeaderActions::make(
+                        fn (): Account => $this->getOwnerRecord(),
+                        $this->ledgerMutationAfter(),
+                    ),
+                ]),
             ]);
     }
 

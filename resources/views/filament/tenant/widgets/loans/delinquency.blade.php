@@ -1,5 +1,5 @@
 @php
-    $pipeline = $d['pipeline'];
+$pipeline = $d['pipeline'];
 @endphp
 
 @include('filament.tenant.widgets.partials.insights-head', [
@@ -40,7 +40,7 @@
             class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-violet-50/70 dark:hover:bg-violet-950/20">
             <span
                 class="text-xl font-bold tabular-nums text-violet-600 dark:text-violet-400">{{ $pipeline['delinquent_members'] }}</span>
-            <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Delinquent') }}</span>
+            <span class="mt-0.5 text-[10px] text-gray-500">{{ __('Arrears') }}</span>
         </a>
     </div>
 </div>

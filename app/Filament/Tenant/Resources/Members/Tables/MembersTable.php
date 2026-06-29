@@ -38,8 +38,8 @@ class MembersTable
                     ->sortable(),
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
-                    ->color(fn (string $state): string => Member::statusBadgeColor($state)),
+                    ->formatStateUsing(fn(string $state, Member $record): string => $record->adminStatusLabel())
+                    ->color(fn(Member $record): string => $record->adminStatusBadgeColor()),
                 TextColumn::make('cash_balance')
                     ->label(__('Cash'))
                     ->state(fn (Member $record): float => $record->getCashBalance())

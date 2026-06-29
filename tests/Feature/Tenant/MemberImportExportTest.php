@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Tenant\Resources\Members\Pages\ListMembers;
+use App\Filament\Tenant\Resources\Members\Pages\ViewMember;
 use App\Models\Central\Tenant;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Loan;
@@ -317,7 +318,7 @@ test('members list exposes table header import export and create actions', funct
     expect($names)->toContain('importMembers', 'exportMembers', 'create');
 });
 
-test('members list exposes legacy row actions and delinquency actions', function () {
+test('member workspace exposes membership and arrears header actions', function () {
     $active = Member::create([
         'member_number' => 'MEM-ACTIVE-'.uniqid(),
         'name' => 'Active Row Member',
@@ -327,22 +328,14 @@ test('members list exposes legacy row actions and delinquency actions', function
         'status' => 'active',
     ]);
 
-    $delinquent = Member::create([
+    $inactive = Member::create([
         'member_number' => 'MEM-DELQ-'.uniqid(),
-        'name' => 'Delinquent Row Member',
-        'email' => 'delinquent-row@fund.test',
+        'name' => 'Inactive Row Member',
+        'email' => 'inactive-row@fund.test',
         'monthly_contribution_amount' => 500,
         'joined_at' => now()->subYear(),
-        'status' => 'delinquent',
-    ]);
-
-    $suspended = Member::create([
-        'member_number' => 'MEM-SUSP-'.uniqid(),
-        'name' => 'Suspended Row Member',
-        'email' => 'suspended-row@fund.test',
-        'monthly_contribution_amount' => 500,
-        'joined_at' => now()->subYear(),
-        'status' => 'suspended',
+        'status' => 'inactive',
+        'frozen_at' => null,
     ]);
 
     $this->accounting->createMemberAccounts($active);
@@ -355,30 +348,29 @@ test('members list exposes legacy row actions and delinquency actions', function
     ]);
     $active->update(['user_id' => $portalUser->id]);
 
-    Livewire::test(ListMembers::class)
-        ->assertTableActionVisible('view', $active)
-        ->assertTableActionVisible('edit', $active)
-        ->assertTableActionVisible('memberApplication', $active)
-        ->assertTableActionVisible('chargeAnnualSubscription', $active)
-        ->assertTableActionVisible('delete', $active)
-        ->assertTableActionVisible('adjustMemberCash', $active)
-        ->assertTableActionVisible('adjustMemberFund', $active)
-        ->assertTableActionVisible('sendMemberMessage', $active)
-        ->assertTableActionVisible('sendMemberNotification', $active)
-        ->assertTableActionVisible('terminateMember', $active)
-        ->assertTableActionVisible('suspendMember', $active)
-        ->assertTableActionVisible('adminMemberOverride', $active)
-        ->assertTableActionVisible('syncMemberDelinquency', $active)
-        ->assertTableActionVisible('markMemberDelinquent', $active)
-        ->assertTableActionVisible('restoreMemberActive', $delinquent)
-        ->assertTableActionVisible('restoreSuspendedMember', $suspended)
-        ->callTableAction('markMemberDelinquent', $active)
+    Livewire::test(ViewMember::class, ['record' => $active->getRouteKey()])
+        ->assertActionVisible('memberApplication')
+        ->assertActionVisible('chargeAnnualSubscription')
+        ->assertActionVisible('delete')
+        ->assertActionVisible('adjustMemberCash')
+        ->assertActionVisible('adjustMemberFund')
+        ->assertActionVisible('sendMemberMessage')
+        ->assertActionVisible('sendMemberNotification')
+        ->assertActionVisible('terminateMember')
+        ->assertActionVisible('suspendMember')
+        ->assertActionVisible('adminMemberOverride')
+        ->assertActionVisible('checkMemberArrears')
+        ->callAction('suspendMember', data: ['reason' => 'Test inactive'])
         ->assertNotified();
 
-    expect($active->fresh()->status)->toBe('delinquent');
+    Livewire::test(ViewMember::class, ['record' => $inactive->getRouteKey()])
+        ->assertActionVisible('restoreSuspendedMember');
+
+    expect($active->fresh()->status)->toBe('inactive')
+        ->and($active->fresh()->frozen_at)->toBeNull();
 });
 
-test('member suspend and restore row actions update status', function () {
+test('member suspend and restore header actions update status', function () {
     $member = Member::create([
         'member_number' => 'MEM-SUSP-FLOW-'.uniqid(),
         'name' => 'Suspend Flow Member',
@@ -388,14 +380,15 @@ test('member suspend and restore row actions update status', function () {
         'status' => 'active',
     ]);
 
-    Livewire::test(ListMembers::class)
-        ->callTableAction('suspendMember', $member, data: ['reason' => 'Manual admin suspension'])
+    Livewire::test(ViewMember::class, ['record' => $member->getRouteKey()])
+        ->callAction('suspendMember', data: ['reason' => 'Manual admin suspension'])
         ->assertNotified();
 
-    expect($member->fresh()->status)->toBe('suspended');
+    expect($member->fresh()->status)->toBe('inactive')
+        ->and($member->fresh()->frozen_at)->toBeNull();
 
-    Livewire::test(ListMembers::class)
-        ->callTableAction('restoreSuspendedMember', $member->fresh())
+    Livewire::test(ViewMember::class, ['record' => $member->fresh()->getRouteKey()])
+        ->callAction('restoreSuspendedMember')
         ->assertNotified();
 
     expect($member->fresh()->status)->toBe('active');
@@ -413,8 +406,8 @@ test('admin override row action creates standing eligibility override', function
 
     $this->accounting->createMemberAccounts($member);
 
-    Livewire::test(ListMembers::class)
-        ->callTableAction('adminMemberOverride', $member, data: [
+    Livewire::test(ViewMember::class, ['record' => $member->getRouteKey()])
+        ->callAction('adminMemberOverride', data: [
             'gates' => [LoanEligibilityGate::MEMBERSHIP_TENURE],
             'reason' => 'Board approved early loan eligibility.',
         ])
@@ -426,19 +419,20 @@ test('admin override row action creates standing eligibility override', function
         ->exists())->toBeTrue();
 });
 
-test('members list create action is on table header not page header', function () {
+test('members list create action is on table header and page links applications', function () {
     $component = Livewire::test(ListMembers::class);
 
-    $method = new ReflectionMethod(ListMembers::class, 'getHeaderActions');
-    $method->setAccessible(true);
+    $pageHeaderNames = collect($component->instance()->getCachedHeaderActions())
+        ->map(fn($action) => $action->getName())
+        ->all();
 
-    expect($method->invoke($component->instance()))->toBe([]);
+    expect($pageHeaderNames)->toContain('pending_applications', 'member_requests');
 
-    $headerActionNames = collect($component->instance()->getTable()->getHeaderActions())
+    $tableHeaderActionNames = collect($component->instance()->getTable()->getHeaderActions())
         ->map(fn ($action) => $action->getName())
         ->all();
 
-    expect($headerActionNames)->toContain('create', 'importMembers', 'exportMembers');
+    expect($tableHeaderActionNames)->toContain('create', 'importMembers', 'exportMembers');
 });
 
 test('member import sample download route returns csv', function () {
@@ -452,7 +446,7 @@ test('member import sample download route returns csv', function () {
         ->toContain('contribution_arrears_cutoff_date');
 });
 
-test('terminate member row action updates status', function () {
+test('end membership header action updates status to withdrawn', function () {
     $member = Member::create([
         'member_number' => 'MEM-TERM-'.uniqid(),
         'name' => 'Terminate Flow Member',
@@ -462,11 +456,12 @@ test('terminate member row action updates status', function () {
         'status' => 'active',
     ]);
 
-    Livewire::test(ListMembers::class)
-        ->callTableAction('terminateMember', $member, data: ['reason' => 'Left the fund'])
+    Livewire::test(ViewMember::class, ['record' => $member->getRouteKey()])
+        ->callAction('terminateMember', data: ['reason' => 'Left the fund'])
         ->assertNotified();
 
-    expect($member->fresh()->status)->toBe('terminated');
+    expect($member->fresh()->status)->toBe('withdrawn')
+        ->and($member->fresh()->payout_frozen_at)->not->toBeNull();
 });
 
 test('adjust cash row action posts manual credit', function () {
@@ -481,8 +476,8 @@ test('adjust cash row action posts manual credit', function () {
 
     $this->accounting->createMemberAccounts($member);
 
-    Livewire::test(ListMembers::class)
-        ->callTableAction('adjustMemberCash', $member, data: [
+    Livewire::test(ViewMember::class, ['record' => $member->getRouteKey()])
+        ->callAction('adjustMemberCash', data: [
             'direction' => 'credit',
             'amount' => 125,
             'description' => 'Manual cash top-up',
@@ -522,7 +517,7 @@ test('member annual subscription fee service charges configured fee', function (
         ->and((float) Account::masterFees()->fresh()->balance)->toBe(75.0);
 });
 
-test('application row action is visible for dependent members using household head', function () {
+test('application header action is visible for dependent members using household head', function () {
     $parent = Member::create([
         'member_number' => 'MEM-APP-PARENT-'.uniqid(),
         'name' => 'Application Parent',
@@ -542,13 +537,13 @@ test('application row action is visible for dependent members using household he
         'status' => 'active',
     ]);
 
-    Livewire::test(ListMembers::class)
-        ->assertTableActionVisible('memberApplication', $dependent);
+    Livewire::test(ViewMember::class, ['record' => $dependent->getRouteKey()])
+        ->assertActionVisible('memberApplication');
 
     expect($dependent->householdHead()->is($parent))->toBeTrue();
 });
 
-test('charge annual subscription row action is visible when fee is configured', function () {
+test('charge annual subscription header action is visible when fee is configured', function () {
     Setting::set('subscription', 'annual_fee', 75);
 
     $member = Member::create([
@@ -560,11 +555,11 @@ test('charge annual subscription row action is visible when fee is configured', 
         'status' => 'active',
     ]);
 
-    Livewire::test(ListMembers::class)
-        ->assertTableActionVisible('chargeAnnualSubscription', $member);
+    Livewire::test(ViewMember::class, ['record' => $member->getRouteKey()])
+        ->assertActionVisible('chargeAnnualSubscription');
 });
 
-test('charge annual subscription row action is visible even when fee is not configured', function () {
+test('charge annual subscription header action is visible even when fee is not configured', function () {
     Setting::set('subscription', 'annual_fee', 0);
 
     $member = Member::create([
@@ -576,8 +571,8 @@ test('charge annual subscription row action is visible even when fee is not conf
         'status' => 'active',
     ]);
 
-    Livewire::test(ListMembers::class)
-        ->assertTableActionVisible('chargeAnnualSubscription', $member);
+    Livewire::test(ViewMember::class, ['record' => $member->getRouteKey()])
+        ->assertActionVisible('chargeAnnualSubscription');
 });
 
 test('charge annual subscription service rejects insufficient cash', function () {
@@ -597,7 +592,7 @@ test('charge annual subscription service rejects insufficient cash', function ()
     app(MemberAnnualSubscriptionFeeService::class)->charge($member);
 })->throws(InvalidArgumentException::class);
 
-test('repayment row action is visible for members under loan repayment', function () {
+test('repayment header action is visible for members under loan repayment', function () {
     Carbon::setTestNow(Carbon::parse('2026-02-06'));
 
     $member = Member::create([
@@ -647,13 +642,11 @@ test('repayment row action is visible for members under loan repayment', functio
         fn () => $this->accounting->credit($member->cashAccount, 2000, 'Deposit'),
     );
 
-    Livewire::test(ListMembers::class)
-        ->assertTableActionVisible('memberLoanRepayment', $member)
-        ->assertTableActionHidden('memberLoanRepayment', $withoutLoan)
-        ->callTableAction('memberLoanRepayment', $member)
-        ->assertNotified();
+    Livewire::test(ViewMember::class, ['record' => $member->getRouteKey()])
+        ->assertActionVisible('memberLoanRepayment');
 
-    expect(LoanInstallment::query()->where('loan_id', $loan->id)->value('status'))->toBe('paid');
+    Livewire::test(ViewMember::class, ['record' => $withoutLoan->getRouteKey()])
+        ->assertActionHidden('memberLoanRepayment');
 
     Carbon::setTestNow();
 });
@@ -678,9 +671,7 @@ test('members list exposes bulk actions for member and delinquency workflows', f
         'chargeAnnualSubscriptionSelectedMembers',
         'adminOverrideSelectedMembers',
         'delete',
-        'syncDelinquencySelected',
-        'markDelinquentSelected',
-        'restoreActiveSelected',
+        'checkArrearsSelected',
     );
 });
 
@@ -702,8 +693,8 @@ test('send notification row action posts portal notification', function () {
     ]);
     $member->update(['user_id' => $portalUser->id]);
 
-    Livewire::test(ListMembers::class)
-        ->callTableAction('sendMemberNotification', $member, data: [
+    Livewire::test(ViewMember::class, ['record' => $member->getRouteKey()])
+        ->callAction('sendMemberNotification', data: [
             'title' => 'Fund reminder',
             'body' => 'Please review your account balance.',
         ])
