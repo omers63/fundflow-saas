@@ -254,7 +254,7 @@ class LoanRepaymentService
                 'status' => 'paid',
                 'paid_at' => $paidAt,
                 'is_late' => $isLate,
-                'late_fee_amount' => $isLate ? $lateFee : null,
+                'late_fee_amount' => $isLate ? $lateFee : 0,
             ]);
         });
 

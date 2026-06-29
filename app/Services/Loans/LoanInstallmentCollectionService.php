@@ -24,8 +24,7 @@ class LoanInstallmentCollectionService
         protected LoanLedgerService $ledger,
         protected LateFeeService $lateFees,
         protected ContributionCycleService $cycles,
-    ) {
-    }
+    ) {}
 
     public function onMemberCashIncreased(Member $member): void
     {
@@ -211,7 +210,7 @@ class LoanInstallmentCollectionService
             'status' => 'paid',
             'paid_at' => BusinessDay::now(),
             'is_late' => $isLate,
-            'late_fee_amount' => $lateFee > 0.00001 ? $lateFee : ($installment->late_fee_amount ?? null),
+            'late_fee_amount' => $lateFee > 0.00001 ? $lateFee : (float) ($installment->late_fee_amount ?? 0),
             'amount_collected' => (float) $installment->amount,
             'collection_status' => InstallmentCollectionStatus::COLLECTED,
         ]);

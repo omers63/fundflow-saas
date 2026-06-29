@@ -149,7 +149,7 @@ class LoanDefaultService
                     'paid_at' => BusinessDay::now(),
                     'paid_by_guarantor' => true,
                     'is_late' => $days >= 1,
-                    'late_fee_amount' => $feeAmount > 0.00001 ? $feeAmount : null,
+                    'late_fee_amount' => $feeAmount > 0.00001 ? $feeAmount : 0,
                 ]);
 
                 $loan->releaseGuarantorIfDue();

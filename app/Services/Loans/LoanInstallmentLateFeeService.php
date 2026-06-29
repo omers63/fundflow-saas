@@ -24,8 +24,7 @@ class LoanInstallmentLateFeeService
         protected LateFeeService $lateFees,
         protected ContributionCycleService $cycles,
         protected AccountingService $accounting,
-    ) {
-    }
+    ) {}
 
     public function applyNightlyLateFees(): int
     {
@@ -86,7 +85,7 @@ class LoanInstallmentLateFeeService
 
             $installment->update([
                 'late_fee_tier' => $newTier,
-                'late_fee_amount' => $newFee > 0 ? $newFee : null,
+                'late_fee_amount' => $newFee > 0.00001 ? $newFee : 0,
                 'collection_status' => ContributionCollectionStatus::labelForTier($newTier)
                     ?? InstallmentCollectionStatus::OVERDUE,
                 'is_late' => $days > ContributionPolicySettings::lateFeeReminderDays(),
