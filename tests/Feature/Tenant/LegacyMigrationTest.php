@@ -776,6 +776,77 @@ test('legacy payment import resolves member by member_number when household emai
     @unlink($classifiedPath);
 });
 
+test('legacy payment import posts split classified rows that share the same source note', function () {
+    Notification::fake();
+
+    $member = Member::create([
+        'member_number' => 'SPLIT-NOTE',
+        'name' => 'Split Note Member',
+        'email' => 'split-note@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYears(10),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+    Account::masterCash()->update(['balance' => 100_000]);
+    Account::masterFund()->update(['balance' => 100_000]);
+    AccountingService::withoutMemberCashCollection(
+        fn() => app(AccountingService::class)->credit($member->cashAccount, 10_000, 'Seed'),
+    );
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 0,
+        'term_months' => 12,
+        'monthly_repayment' => 1500,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'disbursed_at' => '2023-01-01',
+        'purpose' => 'Legacy loan',
+    ]);
+
+    $sharedNotes = 'Legacy source payment row 5071';
+
+    $classifiedPath = storage_path('app/legacy-payment-split-note-test.csv');
+    AssociativeCsv::write($classifiedPath, [
+        'member_email',
+        'member_number',
+        'payment_date',
+        'amount',
+        'payment_type',
+        'loan_number',
+        'period',
+        'notes',
+    ], [
+        ['', 'SPLIT-NOTE', '2023-07-01', '1500', 'loan_repayment', (string) $loan->id, '', $sharedNotes],
+        ['', 'SPLIT-NOTE', '2023-07-01', '1000', 'contribution', '', '2023-06', $sharedNotes],
+    ]);
+
+    $result = ContributionService::withoutPostedNotifications(
+        fn(): array => app(LegacyPaymentImportService::class)->import($classifiedPath),
+    );
+
+    expect($result['loan_repayments'])->toBe(1)
+        ->and($result['contributions'])->toBe(1)
+        ->and($result['failed'])->toBe(0)
+        ->and(LoanRepayment::query()->where('loan_id', $loan->id)->count())->toBe(1)
+        ->and(Contribution::query()->where('member_id', $member->id)->posted()->count())->toBe(1);
+
+    $contribution = Contribution::query()
+        ->where('member_id', $member->id)
+        ->where('period', Contribution::periodDate(6, 2023))
+        ->firstOrFail();
+
+    expect((float) $contribution->amount)->toBe(1000.0);
+
+    @unlink($classifiedPath);
+});
+
 test('legacy migration classify payments writes downloadable classified csv', function () {
     Filament::setCurrentPanel('tenant');
 

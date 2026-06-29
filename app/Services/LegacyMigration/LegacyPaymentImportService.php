@@ -950,19 +950,24 @@ final class LegacyPaymentImportService
         $sourceNotes = $this->cell($row, 'notes');
 
         if ($sourceNotes !== '') {
-            return $this->ledgerContainsSourceNotes($member, $sourceNotes);
+            return $this->ledgerContainsSourceNotes($member, $sourceNotes, $row);
         }
 
         return $this->ledgerContainsImportFingerprint($member, $this->legacyImportFingerprint($row, legacy: true));
     }
 
-    private function ledgerContainsSourceNotes(Member $member, string $sourceNotes): bool
+    /**
+     * @param  array<string, string>  $row
+     */
+    private function ledgerContainsSourceNotes(Member $member, string $sourceNotes, array $row): bool
     {
+        $fingerprint = $this->legacyImportFingerprint($row);
+
         if (
             Contribution::query()
                 ->where('member_id', $member->id)
                 ->where('notes', 'like', '%' . $sourceNotes . '%')
-                ->where('notes', 'like', '%legacy-import:%')
+                ->where('notes', 'like', '%' . $fingerprint . '%')
                 ->exists()
         ) {
             return true;
@@ -972,7 +977,7 @@ final class LegacyPaymentImportService
             Transaction::query()
                 ->where('member_id', $member->id)
                 ->where('description', 'like', '%' . $sourceNotes . '%')
-                ->where('description', 'like', '%legacy-import:%')
+                ->where('description', 'like', '%' . $fingerprint . '%')
                 ->exists()
         ) {
             return true;
@@ -981,7 +986,7 @@ final class LegacyPaymentImportService
         return LoanRepayment::query()
             ->whereHas('loan', fn($query) => $query->where('member_id', $member->id))
             ->where('notes', 'like', '%' . $sourceNotes . '%')
-            ->where('notes', 'like', '%legacy-import:%')
+            ->where('notes', 'like', '%' . $fingerprint . '%')
             ->exists();
     }
 
