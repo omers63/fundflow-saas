@@ -2,6 +2,8 @@
 
 Where to post or apply loan repayments for one member, and how to run repayment collection for all members in the tenant admin panel and scheduled jobs.
 
+For the data model (EMI installments vs repayment events vs legacy `loan_repayments` rows), see [emi-installments-vs-repayments.md](./emi-installments-vs-repayments.md).
+
 ## One member (admin)
 
 ### Primary action: Apply open-period repayment
