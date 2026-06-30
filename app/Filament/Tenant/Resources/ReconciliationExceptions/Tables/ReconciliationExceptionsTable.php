@@ -70,7 +70,7 @@ class ReconciliationExceptionsTable
 
         if ($workspacePanel) {
             $table = $table
-                ->recordAction('focusException')
+                ->recordAction('selectException')
                 ->recordClasses(function (ReconciliationException $record) use ($selectedExceptionId): array {
                     if ($selectedExceptionId === null) {
                         return [];
@@ -80,12 +80,9 @@ class ReconciliationExceptionsTable
                         ? ['ff-recon-exception-row--selected']
                         : [];
                 })
-                ->recordActions([
-                    ReconciliationExceptionActions::focusExceptionAction(),
-                    ...TableRecordActionGroups::wrap(
-                        ReconciliationExceptionActions::recordActionsForMode($advancedUi),
-                    ),
-                ]);
+                ->recordActions(TableRecordActionGroups::wrap(
+                    ReconciliationExceptionActions::recordActionsForMode($advancedUi),
+                ));
         } else {
             $table = $table
                 ->recordAction('viewException')

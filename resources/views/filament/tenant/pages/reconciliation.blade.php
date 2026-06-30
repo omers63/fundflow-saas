@@ -82,23 +82,23 @@
                     {{ $this->table }}
 
                     @php($selectedException = $this->getSelectedException())
-                    @if ($selectedException)
-                        <div class="mt-5 border-t border-gray-100 pt-5 dark:border-white/10">
-                            <div class="mb-4">
-                                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('Issue analysis') }}</h3>
-                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                    {{ __('Review summary, related records, and run fix actions without leaving the queue.') }}
-                                </p>
-                            </div>
-                            @include('filament.tenant.partials.reconciliation.exception-detail', ['exception' => $selectedException])
+                            @if ($selectedException)
+                                <div class="mt-5 border-t border-gray-100 pt-5 dark:border-white/10" wire:key="recon-exception-analysis-{{ $selectedException->id }}">
+                                    <div class="mb-4">
+                                        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('Issue analysis') }}</h3>
+                                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                            {{ __('Review summary, related records, and run fix actions without leaving the queue.') }}
+                                        </p>
+                                    </div>
+                                    @include('filament.tenant.partials.reconciliation.exception-detail', ['exception' => $selectedException])
+                                </div>
+                            @elseif ($this->getOpenExceptionQueueStats()['total'] === 0)
+                                <div class="mt-4 rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-4 py-6 text-center text-sm text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
+                                    {{ __('No open reconciliation exceptions. Run a check or wait for the nightly batch to refresh the queue.') }}
+                                </div>
+                            @endif
                         </div>
-                    @elseif ($this->getOpenExceptionQueueStats()['total'] === 0)
-                        <div class="mt-4 rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-4 py-6 text-center text-sm text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
-                            {{ __('No open reconciliation exceptions. Run a check or wait for the nightly batch to refresh the queue.') }}
-                        </div>
-                    @endif
-                </div>
-            @elseif ($this->sideTab === 'snapshots' && $this->advancedUi)
+                    @elseif ($this->sideTab === 'snapshots' && $this->advancedUi)
             <div class="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900/60">
                 <div class="border-b border-gray-100 px-5 py-4 dark:border-white/10">
                     <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('Stored snapshots') }}</h3>

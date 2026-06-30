@@ -558,9 +558,9 @@ class ReconciliationOverviewPage extends Page implements HasTable
         $this->selectedSnapshotId = $id;
     }
 
-    public function selectException(?int $id): void
+    public function selectException(int|string|null $id): void
     {
-        $this->selectedExceptionId = $id;
+        $this->selectedExceptionId = $id === null || $id === '' ? null : (int) $id;
     }
 
     public function setQueueDomainFilter(?string $domain): void
