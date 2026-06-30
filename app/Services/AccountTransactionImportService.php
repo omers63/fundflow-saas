@@ -6,6 +6,8 @@ namespace App\Services;
 
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
+use App\Support\MasterInvestLedgerImport;
+use App\Support\MasterReserveLedgerDirection;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
 use InvalidArgumentException;
@@ -15,18 +17,27 @@ final class AccountTransactionImportService
 {
     public function __construct(
         private readonly AccountingService $accounting,
+        private readonly MasterInvestInService $investIn,
+        private readonly MasterInvestOutService $investOut,
+        private readonly MasterExpenseDisbursementService $expenseDisbursements,
+        private readonly MasterFeeDeductionService $feeDeductions,
+        private readonly MasterFeeDisbursementService $feeDisbursements,
     ) {}
 
     /**
-     * Import manual ledger credits and debits for a master account.
+     * Import manual ledger movements for a master account.
      *
-     * @return array{created: int, failed: int, errors: array<int, string>}
+     * Reserve ledgers (invest, expense, fees) accept credit / debit and run the same workflows as the ledger actions.
+     * Other master ledgers accept credit / debit manual postings.
+     *
+     * @return array{created: int, skipped: int, failed: int, errors: array<int, string>}
      */
     public function import(Account $account, string $absolutePath): array
     {
         $this->authorizeImport($account);
 
         $created = 0;
+        $skipped = 0;
         $failed = 0;
         $errors = [];
 
@@ -35,6 +46,7 @@ final class AccountTransactionImportService
         if ($rows === []) {
             return [
                 'created' => 0,
+                'skipped' => 0,
                 'failed' => 0,
                 'errors' => [__('The file is empty or has no data rows after the header.')],
             ];
@@ -46,6 +58,12 @@ final class AccountTransactionImportService
             $lineNumber = $lineBase + $index;
 
             try {
+                if (MasterInvestLedgerImport::shouldSkipImportRow($account, $row)) {
+                    $skipped++;
+
+                    continue;
+                }
+
                 $this->importRow($account, $row);
                 $created++;
             } catch (Throwable $e) {
@@ -56,6 +74,7 @@ final class AccountTransactionImportService
 
         return [
             'created' => $created,
+            'skipped' => $skipped,
             'failed' => $failed,
             'errors' => $errors,
         ];
@@ -86,12 +105,6 @@ final class AccountTransactionImportService
      */
     private function importRow(Account $account, array $row): void
     {
-        $type = strtolower($this->cell($row, 'type'));
-
-        if (! in_array($type, ['credit', 'debit'], true)) {
-            throw new InvalidArgumentException(__('Type must be credit or debit.'));
-        }
-
         $amount = $this->parseAmount($this->cell($row, 'amount'));
         $description = trim($this->cell($row, 'description'));
 
@@ -99,8 +112,38 @@ final class AccountTransactionImportService
             throw new InvalidArgumentException(__('Description is required.'));
         }
 
-        $transactedAt = $this->parseDateTime($this->cell($row, 'transacted_at'));
-        $memberId = $this->resolveMemberId($this->cell($row, 'member_number'));
+        if (MasterInvestLedgerImport::isInvestAccount($account)) {
+            $description = MasterInvestLedgerImport::sanitizeInvestImportDescription($description);
+
+            if ($description === '') {
+                throw new InvalidArgumentException(__('Description is required.'));
+            }
+        }
+
+        $transactedAt = $this->parseDateTime($this->resolveDateCell($row));
+        $memberNumber = $this->cell($row, 'member_number');
+        $type = MasterReserveLedgerDirection::normalizeImportType($this->cell($row, 'type'));
+
+        if (MasterReserveLedgerDirection::isReserveLedger($account)) {
+            $workflow = MasterReserveLedgerDirection::workflowFromLedgerType($type);
+
+            if ($workflow === null) {
+                throw new InvalidArgumentException(__('Type must be credit or debit.'));
+            }
+
+            $this->importReserveRow(
+                $account,
+                $workflow,
+                $amount,
+                $description,
+                $transactedAt,
+                $memberNumber,
+            );
+
+            return;
+        }
+
+        $memberId = $this->resolveMemberId($memberNumber);
 
         AccountingService::withoutMemberCashCollection(function () use ($account, $type, $amount, $description, $transactedAt, $memberId): void {
             if ($type === 'credit') {
@@ -111,6 +154,61 @@ final class AccountTransactionImportService
 
             $this->accounting->postManualDebit($account, $amount, $description, $transactedAt, $memberId);
         });
+    }
+
+    private function importReserveRow(
+        Account $account,
+        string $direction,
+        float $amount,
+        string $description,
+        Carbon $transactedAt,
+        string $memberNumber,
+    ): void {
+        match ([$account->type, $direction]) {
+            ['invest', 'in'] => $this->investIn->investIn($account, $amount, $description, $transactedAt),
+            ['invest', 'out'] => $this->investOut->investOut($account, $amount, $description, $transactedAt),
+            ['expense', 'in'] => $this->accounting->fundReserveAccountFromMasterFund(
+                $account,
+                $amount,
+                $description,
+                $transactedAt,
+            ),
+            ['expense', 'out'] => $this->expenseDisbursements->disburse(
+                $account,
+                $amount,
+                $description,
+                $transactedAt,
+            ),
+            ['fees', 'in'] => $this->importFeesIn($memberNumber, $amount, $description, $transactedAt),
+            ['fees', 'out'] => $this->feeDisbursements->disburse(
+                $account,
+                $amount,
+                $description,
+                $transactedAt,
+            ),
+            default => throw new InvalidArgumentException(__('Unsupported reserve ledger movement.')),
+        };
+    }
+
+    private function importFeesIn(
+        string $memberNumber,
+        float $amount,
+        string $description,
+        Carbon $transactedAt,
+    ): void {
+        if ($memberNumber === '') {
+            throw new InvalidArgumentException(__('member_number is required for fee credits (deduction).'));
+        }
+
+        $member = Member::query()
+            ->where('member_number', $memberNumber)
+            ->first();
+
+        if ($member === null) {
+            throw new InvalidArgumentException(__('Member :number was not found.', ['number' => $memberNumber]));
+        }
+
+        $this->feeDeductions->deduct($member, $amount, $description, $transactedAt);
     }
 
     private function resolveMemberId(string $memberNumber): ?int
@@ -156,6 +254,22 @@ final class AccountTransactionImportService
         } catch (Throwable) {
             throw new InvalidArgumentException(__('Transaction date is invalid.'));
         }
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     */
+    private function resolveDateCell(array $row): string
+    {
+        foreach (['transacted_at', 'transaction_date', 'date'] as $column) {
+            $value = $this->cell($row, $column);
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
     }
 
     /**

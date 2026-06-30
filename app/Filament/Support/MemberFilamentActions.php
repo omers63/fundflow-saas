@@ -15,9 +15,9 @@ use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanEligibilityOverrideService;
 use App\Services\Loans\LoanEligibilityService;
 use App\Services\Loans\LoanRepaymentService;
-use App\Services\MemberAccountBalanceService;
 use App\Services\MemberAnnualSubscriptionFeeService;
 use App\Services\MemberStatusService;
+use App\Services\MemberWithdrawalSettlementService;
 use App\Services\Tenant\DirectMessagingService;
 use App\Services\Tenant\MemberPortalNotificationService;
 use App\Support\BusinessDay;
@@ -41,7 +41,6 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
-use Filament\Schemas\Components\Utilities\Get;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
@@ -85,12 +84,12 @@ final class MemberFilamentActions
             self::treasuryActionGroup(),
             self::communicationsActionGroup(),
             ActionGroup::make([
-                self::suspend(),
+                self::freeze(),
+                self::unfreeze(),
                 self::restoreSuspended(),
                 self::withdraw(),
-                self::terminate(),
-                self::adminOverride(),
-                self::delete(),
+                self::reinstate(),
+                self::releasePayoutReview(),
             ])
                 ->label(__('More'))
                 ->icon('heroicon-o-ellipsis-horizontal')
@@ -115,10 +114,9 @@ final class MemberFilamentActions
                 self::sendNotificationBulk(),
             ])->label(__('Communicate')),
             BulkActionGroup::make([
-                self::suspendBulk(),
+                self::freezeBulk(),
                 self::restoreSuspendedBulk(),
                 self::withdrawBulk(),
-                self::terminateBulk(),
             ])->label(__('Status')),
             BulkActionGroup::make([
                 self::chargeAnnualSubscriptionBulk(),
@@ -142,10 +140,9 @@ final class MemberFilamentActions
             self::adjustFundBulk(),
             self::sendMessageBulk(),
             self::sendNotificationBulk(),
-            self::suspendBulk(),
+            self::freezeBulk(),
             self::restoreSuspendedBulk(),
             self::withdrawBulk(),
-            self::terminateBulk(),
             self::chargeAnnualSubscriptionBulk(),
             self::adminOverrideBulk(),
             self::deleteBulk(),
@@ -182,10 +179,8 @@ final class MemberFilamentActions
             self::application(),
             self::freeze(),
             self::unfreeze(),
-            self::suspend(),
             self::restoreSuspended(),
             self::withdraw(),
-            self::terminate(),
             self::reinstate(),
             self::releasePayoutReview(),
         ])
@@ -408,19 +403,18 @@ final class MemberFilamentActions
             ->label(__('Freeze'))
             ->icon('heroicon-o-pause-circle')
             ->color('warning')
-            ->visible(fn(Member $record): bool => $record->status === 'active')
+            ->visible(fn (Member $record): bool => $record->status === 'active')
             ->requiresConfirmation()
-            ->modalDescription(__('Pauses membership. Portal access and contribution cycles stop until unfrozen.'))
-            ->schema(fn(Member $record): array => self::freezeFormSchema($record))
+            ->modalDescription(__('Pauses membership. Portal access and contribution cycles stop. Loan repayments continue until unfrozen.'))
+            ->schema(fn (Member $record): array => self::freezeFormSchema())
             ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
                 if (
                     ! ActionModalFailure::attemptThrowable(
                         $action,
-                        fn() => $statuses->freeze(
+                        fn () => $statuses->freeze(
                             $record,
                             (string) ($data['reason'] ?? ''),
                             self::resolveFreezeDate($data['freeze_date'] ?? null),
-                            (bool) ($data['cash_out_fund_balance'] ?? false),
                         ),
                         __('Cannot freeze'),
                     )
@@ -434,9 +428,9 @@ final class MemberFilamentActions
     }
 
     /**
-     * @return list<Textarea|DatePicker|Placeholder|Toggle>
+     * @return list<Textarea|DatePicker>
      */
-    public static function freezeFormSchema(Member $member): array
+    public static function freezeFormSchema(): array
     {
         return [
             Textarea::make('reason')
@@ -444,8 +438,6 @@ final class MemberFilamentActions
                 ->rows(3)
                 ->maxLength(500),
             self::freezeDateField(),
-            self::freezeCashOutSummaryPlaceholder($member),
-            self::freezeFundCashOutToggle($member),
         ];
     }
 
@@ -453,65 +445,11 @@ final class MemberFilamentActions
     {
         return DatePicker::make('freeze_date')
             ->label(__('Freeze date'))
-            ->helperText(__('Cash and fund balances eligible for cash-out are calculated through this date.'))
+            ->helperText(__('Recorded as the date membership was frozen.'))
             ->required()
             ->native(false)
-            ->default(fn(): string => BusinessDay::today()->toDateString())
-            ->maxDate(fn(): string => BusinessDay::today()->toDateString())
-            ->live(debounce: 250);
-    }
-
-    public static function freezeCashOutSummaryPlaceholder(Member $member): Placeholder
-    {
-        return Placeholder::make('freeze_cash_out_summary')
-            ->label(__('Eligible cash-out balances'))
-            ->content(function (Get $get) use ($member): HtmlString {
-                return new HtmlString(
-                    '<p class="text-sm text-gray-600 dark:text-gray-300">'
-                    . e(self::freezeFundCashOutHelperText($member, $get('freeze_date')))
-                    . '</p>'
-                );
-            })
-            ->columnSpanFull();
-    }
-
-    public static function freezeFundCashOutToggle(Member $member): Toggle
-    {
-        return Toggle::make('cash_out_fund_balance')
-            ->label(__('Cash out balances'))
-            ->helperText(__('Create a pending cash-out request for the eligible amounts above.'))
-            ->default(false)
-            ->disabled(fn(Get $get): bool => !self::memberHasBalancesForFreezeCashOut($member, $get('freeze_date')));
-    }
-
-    public static function freezeFundCashOutHelperText(Member $member, mixed $freezeDate = null): string
-    {
-        $asOf = self::resolveFreezeDate($freezeDate);
-        $balances = app(MemberAccountBalanceService::class)->positiveFreezeCashOutBalances($member, $asOf);
-        $fundBalance = $balances['fund'];
-        $cashBalance = $balances['cash'];
-        $total = $balances['total'];
-
-        if ($total <= 0.00001) {
-            return __('No fund or cash balance eligible for cash-out as of :date.', [
-                'date' => $asOf->toDateString(),
-            ]);
-        }
-
-        return __('As of :date, creates a pending cash-out request for :total (:fund from fund, :cash in cash). Fund balance is transferred to cash first.', [
-            'date' => $asOf->toDateString(),
-            'total' => MoneyDisplay::format($total) ?? (string) $total,
-            'fund' => MoneyDisplay::format($fundBalance) ?? (string) $fundBalance,
-            'cash' => MoneyDisplay::format($cashBalance) ?? (string) $cashBalance,
-        ]);
-    }
-
-    public static function memberHasBalancesForFreezeCashOut(Member $member, mixed $freezeDate = null): bool
-    {
-        $asOf = self::resolveFreezeDate($freezeDate);
-        $balances = app(MemberAccountBalanceService::class)->positiveFreezeCashOutBalances($member, $asOf);
-
-        return $balances['total'] > 0.00001;
+            ->default(fn (): string => BusinessDay::today()->toDateString())
+            ->maxDate(fn (): string => BusinessDay::today()->toDateString());
     }
 
     public static function resolveFreezeDate(mixed $freezeDate): Carbon
@@ -533,7 +471,7 @@ final class MemberFilamentActions
             ->label(__('Unfreeze'))
             ->icon('heroicon-o-play-circle')
             ->color('success')
-            ->visible(fn(Member $record): bool => $record->status === 'inactive' && $record->frozen_at !== null)
+            ->visible(fn (Member $record): bool => $record->status === 'inactive' && $record->frozen_at !== null)
             ->requiresConfirmation()
             ->modalDescription(__('Restores membership to active status.'))
             ->action(function (Member $record, Action $action, MemberStatusService $statuses, Component $livewire): void {
@@ -552,52 +490,20 @@ final class MemberFilamentActions
             });
     }
 
-    public static function suspend(): Action
-    {
-        return Action::make('suspendMember')
-            ->label(__('Inactive'))
-            ->icon('heroicon-o-no-symbol')
-            ->color('danger')
-            ->visible(fn(Member $record): bool => $record->status === 'active')
-            ->requiresConfirmation()
-            ->modalDescription(__('Sets membership to inactive. Portal access and contribution cycles stop until reactivated.'))
-            ->schema([
-                Textarea::make('reason')
-                    ->label(__('Reason'))
-                    ->rows(3)
-                    ->maxLength(500)
-                    ->helperText(__('Optional note stored in the audit log.')),
-            ])
-            ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
-                if (
-                    ! ActionModalFailure::attemptThrowable(
-                        $action,
-                        fn () => $statuses->suspend($record, (string) ($data['reason'] ?? '')),
-                        __('Cannot set inactive'),
-                    )
-                ) {
-                    return;
-                }
-
-                Notification::make()->title(__('Member inactive'))->success()->send();
-                self::refreshMembersList($livewire);
-            });
-    }
-
     public static function restoreSuspended(): Action
     {
         return Action::make('restoreSuspendedMember')
-            ->label(__('Active'))
+            ->label(__('Restore active'))
             ->icon('heroicon-o-arrow-uturn-left')
             ->color('success')
-            ->visible(fn(Member $record): bool => $record->status === 'inactive' && $record->frozen_at === null)
+            ->visible(fn (Member $record): bool => $record->status === 'inactive' && $record->frozen_at === null)
             ->requiresConfirmation()
-            ->modalDescription(__('Sets membership back to active.'))
+            ->modalDescription(__('Restores membership for members on administrative or guarantor-transfer hold (not frozen).'))
             ->action(function (Member $record, Action $action, MemberStatusService $statuses, Component $livewire): void {
                 if (
                     ! ActionModalFailure::attemptThrowable(
                         $action,
-                        fn() => $statuses->restoreInactive($record),
+                        fn () => $statuses->restoreInactive($record),
                         __('Cannot restore'),
                     )
                 ) {
@@ -605,39 +511,6 @@ final class MemberFilamentActions
                 }
 
                 Notification::make()->title(__('Member active'))->success()->send();
-                self::refreshMembersList($livewire);
-            });
-    }
-
-    public static function terminate(): Action
-    {
-        return Action::make('terminateMember')
-            ->label(__('End membership'))
-            ->icon('heroicon-o-x-circle')
-            ->color('danger')
-            ->visible(fn (Member $record): bool => self::isTenantAdmin()
-                && $record->status !== 'withdrawn')
-            ->requiresConfirmation()
-            ->modalDescription(__('Sets membership to withdrawn and blocks portal access. Payout is held until released or the member is reinstated.'))
-            ->schema([
-                Textarea::make('reason')
-                    ->label(__('Reason'))
-                    ->rows(3)
-                    ->maxLength(500)
-                    ->helperText(__('Optional note stored in the audit log.')),
-            ])
-            ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
-                if (
-                    ! ActionModalFailure::attemptThrowable(
-                        $action,
-                        fn () => $statuses->terminate($record, (string) ($data['reason'] ?? '')),
-                        __('Cannot terminate'),
-                    )
-                ) {
-                    return;
-                }
-
-                Notification::make()->title(__('Member withdrawn'))->success()->send();
                 self::refreshMembersList($livewire);
             });
     }
@@ -650,19 +523,169 @@ final class MemberFilamentActions
             ->color('danger')
             ->visible(fn (Member $record): bool => self::isTenantAdmin()
                 && $record->status !== 'withdrawn')
-            ->requiresConfirmation()
-            ->modalDescription(__('Records voluntary departure. Member portal access ends. Settlement may proceed.'))
-            ->schema([
-                Textarea::make('reason')
-                    ->label(__('Reason'))
-                    ->rows(3)
-                    ->maxLength(500),
+            ->modalHeading(__('Withdraw member'))
+            ->modalDescription(__('Ends membership. Active loans are early-settled from cash and fund, then remaining balances are submitted as a pending cash-out unless payout is held for review.'))
+            ->schema(fn (Member $record): array => self::withdrawFormSchema($record))
+            ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $statuses->withdraw(
+                            $record,
+                            (string) ($data['reason'] ?? ''),
+                            (bool) ($data['hold_payout'] ?? false),
+                            self::resolveWithdrawDate($data['withdraw_date'] ?? null),
+                        ),
+                        __('Cannot withdraw'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()->title(__('Member withdrawn'))->success()->send();
+                self::refreshMembersList($livewire);
+            });
+    }
+
+    /**
+     * @return list<Placeholder|Textarea|Toggle>
+     */
+    public static function withdrawFormSchema(Member $member): array
+    {
+        return [
+            Placeholder::make('withdrawal_summary')
+                ->label(__('Withdrawal summary'))
+                ->content(function () use ($member): HtmlString {
+                    $assessment = app(MemberWithdrawalSettlementService::class)->assess($member);
+
+                    $lines = [
+                        __('Active loans to settle: :count', ['count' => $assessment['active_loan_count']]),
+                        __('Settlement cash required: :amount', ['amount' => number_format($assessment['settlement_required_cash'], 2)]),
+                        __('Member cash balance: :amount', ['amount' => number_format($assessment['member_cash_balance'], 2)]),
+                        __('Member fund balance: :amount', ['amount' => number_format($assessment['member_fund_balance'], 2)]),
+                        __('Projected cash-out: :amount', ['amount' => number_format($assessment['projected_cash_out'], 2)]),
+                    ];
+
+                    if ($assessment['pipeline_loan_count'] > 0) {
+                        $lines[] = __('Open loan applications: :count', ['count' => $assessment['pipeline_loan_count']]);
+                    }
+
+                    if ($assessment['guarantor_obligation_count'] > 0) {
+                        $lines[] = __('Active guarantor obligations: :count', ['count' => $assessment['guarantor_obligation_count']]);
+                    }
+
+                    $html = '<ul class="list-disc space-y-1 ps-4 text-sm">';
+
+                    foreach ($lines as $line) {
+                        $html .= '<li>'.e($line).'</li>';
+                    }
+
+                    if ($assessment['blockers'] !== []) {
+                        $html .= '</ul><ul class="mt-2 list-disc space-y-1 ps-4 text-sm text-danger-600 dark:text-danger-400">';
+
+                        foreach ($assessment['blockers'] as $blocker) {
+                            $html .= '<li>'.e($blocker).'</li>';
+                        }
+                    }
+
+                    $html .= '</ul>';
+
+                    return new HtmlString($html);
+                })
+                ->columnSpanFull(),
+            Textarea::make('reason')
+                ->label(__('Reason'))
+                ->rows(3)
+                ->maxLength(500),
+            self::withdrawDateField(),
+            Toggle::make('hold_payout')
+                ->label(__('Hold payout for admin review'))
+                ->helperText(__('Settles loans but keeps balances in the member account until payout is released.'))
+                ->default(false),
+        ];
+    }
+
+    public static function withdrawDateField(): DatePicker
+    {
+        return DatePicker::make('withdraw_date')
+            ->label(__('Withdrawal date'))
+            ->helperText(__('Settlement and membership status are recorded as of this date.'))
+            ->required()
+            ->native(false)
+            ->default(fn (): string => BusinessDay::today()->toDateString())
+            ->maxDate(fn (): string => BusinessDay::today()->toDateString());
+    }
+
+    public static function resolveWithdrawDate(mixed $withdrawDate): Carbon
+    {
+        if ($withdrawDate === null || $withdrawDate === '') {
+            return BusinessDay::today()->endOfDay();
+        }
+
+        if ($withdrawDate instanceof Carbon) {
+            return $withdrawDate->copy()->endOfDay();
+        }
+
+        return Carbon::parse((string) $withdrawDate)->endOfDay();
+    }
+
+    /** @deprecated Use {@see freeze()} */
+    public static function suspend(): Action
+    {
+        return Action::make('suspendMember')
+            ->label(__('Freeze'))
+            ->icon('heroicon-o-pause-circle')
+            ->color('warning')
+            ->visible(fn (Member $record): bool => $record->status === 'active')
+            ->modalHeading(__('Freeze member'))
+            ->modalDescription(__('Pauses membership. Portal access and contribution cycles stop. Loan repayments continue until unfrozen.'))
+            ->schema(fn (): array => self::freezeFormSchema())
+            ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $statuses->freeze(
+                            $record,
+                            (string) ($data['reason'] ?? ''),
+                            self::resolveFreezeDate($data['freeze_date'] ?? null),
+                        ),
+                        __('Cannot freeze'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()->title(__('Member frozen'))->success()->send();
+                self::refreshMembersList($livewire);
+            });
+    }
+
+    /** @deprecated Use {@see withdraw()} with hold payout */
+    public static function terminate(): Action
+    {
+        return Action::make('terminateMember')
+            ->label(__('Withdraw'))
+            ->icon('heroicon-o-arrow-right-on-rectangle')
+            ->color('danger')
+            ->visible(fn (Member $record): bool => self::isTenantAdmin()
+                && $record->status !== 'withdrawn')
+            ->modalHeading(__('Withdraw member'))
+            ->modalDescription(__('Ends membership and holds payout for admin review after loan settlement.'))
+            ->schema(fn (Member $record): array => self::withdrawFormSchema($record))
+            ->fillForm(fn (): array => [
+                'hold_payout' => true,
+                'withdraw_date' => BusinessDay::today()->toDateString(),
             ])
             ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
                 if (
                     ! ActionModalFailure::attemptThrowable(
                         $action,
-                        fn () => $statuses->withdraw($record, (string) ($data['reason'] ?? '')),
+                        fn () => $statuses->withdraw(
+                            $record,
+                            (string) ($data['reason'] ?? ''),
+                            true,
+                            self::resolveWithdrawDate($data['withdraw_date'] ?? null),
+                        ),
                         __('Cannot withdraw'),
                     )
                 ) {
@@ -852,35 +875,35 @@ final class MemberFilamentActions
             });
     }
 
-    public static function suspendBulk(): BulkAction
+    public static function freezeBulk(): BulkAction
     {
-        return BulkAction::make('suspendSelectedMembers')
-            ->label(__('Inactive'))
-            ->icon('heroicon-o-no-symbol')
-            ->color('danger')
+        return BulkAction::make('freezeSelectedMembers')
+            ->label(__('Freeze'))
+            ->icon('heroicon-o-pause-circle')
+            ->color('warning')
             ->requiresConfirmation()
-            ->modalDescription(__('Sets selected active members to inactive.'))
+            ->modalDescription(__('Pauses selected active members. Portal access and contribution cycles stop.'))
             ->action(function (Collection $records, MemberStatusService $statuses, Component $livewire): void {
-                $inactivated = 0;
+                $frozen = 0;
                 $failed = 0;
 
                 foreach ($records as $record) {
-                    if (!$record instanceof Member || $record->status !== 'active') {
+                    if (! $record instanceof Member || $record->status !== 'active') {
                         continue;
                     }
 
                     try {
-                        $statuses->suspend($record);
-                        $inactivated++;
+                        $statuses->freeze($record);
+                        $frozen++;
                     } catch (\Throwable) {
                         $failed++;
                     }
                 }
 
                 Notification::make()
-                    ->title(__('Inactive complete'))
-                    ->body(__(':count set inactive · :failed could not be updated', [
-                        'count' => $inactivated,
+                    ->title(__('Freeze complete'))
+                    ->body(__(':count frozen · :failed could not be updated', [
+                        'count' => $frozen,
                         'failed' => $failed,
                     ]))
                     ->color($failed > 0 ? 'warning' : 'success')
@@ -888,6 +911,12 @@ final class MemberFilamentActions
 
                 self::refreshMembersList($livewire);
             });
+    }
+
+    /** @deprecated Use {@see freezeBulk()} */
+    public static function suspendBulk(): BulkAction
+    {
+        return self::freezeBulk();
     }
 
     public static function contributeBulk(): BulkAction
@@ -1142,7 +1171,7 @@ final class MemberFilamentActions
                 $failed = 0;
 
                 foreach ($records as $record) {
-                    if (!$record instanceof Member || $record->status !== 'inactive' || $record->frozen_at !== null) {
+                    if (! $record instanceof Member || $record->status !== 'inactive' || $record->frozen_at !== null) {
                         continue;
                     }
 
@@ -1159,43 +1188,10 @@ final class MemberFilamentActions
             });
     }
 
+    /** @deprecated Use {@see withdrawBulk()} */
     public static function terminateBulk(): BulkAction
     {
-        return BulkAction::make('terminateSelectedMembers')
-            ->label(__('End membership'))
-            ->icon('heroicon-o-x-circle')
-            ->color('danger')
-            ->visible(fn (): bool => self::isTenantAdmin())
-            ->requiresConfirmation()
-            ->modalDescription(__('Sets selected members to withdrawn. Payout is held until released or they are reinstated.'))
-            ->schema([
-                Textarea::make('reason')
-                    ->label(__('Reason'))
-                    ->rows(3)
-                    ->maxLength(500)
-                    ->helperText(__('Optional note stored in the audit log for each member.')),
-            ])
-            ->action(function (Collection $records, array $data, MemberStatusService $statuses, Component $livewire): void {
-                $reason = (string) ($data['reason'] ?? '');
-                $withdrawn = 0;
-                $failed = 0;
-
-                foreach ($records as $record) {
-                    if (!$record instanceof Member || $record->status === 'withdrawn') {
-                        continue;
-                    }
-
-                    try {
-                        $statuses->terminate($record, $reason);
-                        $withdrawn++;
-                    } catch (\Throwable) {
-                        $failed++;
-                    }
-                }
-
-                self::notifyBulkOutcome(__('Withdrawn complete'), $withdrawn, $failed);
-                self::refreshMembersList($livewire);
-            });
+        return self::withdrawBulk();
     }
 
     public static function withdrawBulk(): BulkAction
@@ -1205,27 +1201,33 @@ final class MemberFilamentActions
             ->icon('heroicon-o-arrow-right-on-rectangle')
             ->color('danger')
             ->visible(fn (): bool => self::isTenantAdmin())
-            ->requiresConfirmation()
-            ->modalDescription(__('Records voluntary departure for selected members. Portal access ends. Settlement may proceed.'))
+            ->modalHeading(__('Withdraw selected members'))
+            ->modalDescription(__('Early-settles active loans and submits pending cash-out requests for remaining balances.'))
             ->schema([
                 Textarea::make('reason')
                     ->label(__('Reason'))
                     ->rows(3)
                     ->maxLength(500)
                     ->helperText(__('Optional note stored in the audit log for each member.')),
+                Toggle::make('hold_payout')
+                    ->label(__('Hold payout for admin review'))
+                    ->default(false),
+                self::withdrawDateField(),
             ])
             ->action(function (Collection $records, array $data, MemberStatusService $statuses, Component $livewire): void {
                 $reason = (string) ($data['reason'] ?? '');
+                $holdPayout = (bool) ($data['hold_payout'] ?? false);
+                $withdrawAt = self::resolveWithdrawDate($data['withdraw_date'] ?? null);
                 $withdrawn = 0;
                 $failed = 0;
 
                 foreach ($records as $record) {
-                    if (!$record instanceof Member || $record->status === 'withdrawn') {
+                    if (! $record instanceof Member || $record->status === 'withdrawn') {
                         continue;
                     }
 
                     try {
-                        $statuses->withdraw($record, $reason);
+                        $statuses->withdraw($record, $reason, $holdPayout, $withdrawAt);
                         $withdrawn++;
                     } catch (\Throwable) {
                         $failed++;
@@ -1269,7 +1271,7 @@ final class MemberFilamentActions
                 $failed = 0;
 
                 foreach ($records as $record) {
-                    if (!$record instanceof Member || $record->status === 'withdrawn') {
+                    if (! $record instanceof Member || $record->status === 'withdrawn') {
                         continue;
                     }
 

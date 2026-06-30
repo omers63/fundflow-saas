@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\Loans\Pages;
 
+use App\Filament\Concerns\RefreshesResourceRecord;
 use App\Filament\Support\LoanFilamentActions;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Loans\Schemas\LoanForm;
@@ -19,6 +20,8 @@ use Illuminate\Contracts\Support\Htmlable;
 
 class EditLoan extends EditRecord
 {
+    use RefreshesResourceRecord;
+
     protected static string $resource = LoanResource::class;
 
     public function getTitle(): string|Htmlable
@@ -158,6 +161,7 @@ class EditLoan extends EditRecord
         }
 
         return [
+            LoanFilamentActions::cashOutSplitExcessFund(),
             DeleteAction::make()
                 ->visible(fn (): bool => $this->record->status === 'pending'),
         ];

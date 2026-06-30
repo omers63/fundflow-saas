@@ -8,6 +8,7 @@ use App\Models\Tenant\Account;
 use App\Services\AccountTransactionExportService;
 use App\Services\AccountTransactionImportService;
 use App\Support\FilamentStoredUploadPath;
+use App\Support\MasterReserveLedgerDirection;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
@@ -56,9 +57,13 @@ final class MasterAccountLedgerHeaderActions
             ->color('success')
             ->visible(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
             ->modalHeading(__('Import ledger from CSV'))
-            ->modalDescription(fn (): HtmlString => new HtmlString(
-                view('filament.tenant.master-ledger-import-csv-help')->render()
-            ))
+            ->modalDescription(function () use ($resolveAccount): HtmlString {
+                return new HtmlString(
+                    view('filament.tenant.master-ledger-import-csv-help', [
+                        'account' => $resolveAccount(),
+                    ])->render()
+                );
+            })
             ->modalWidth('2xl')
             ->schema([
                 FileUpload::make('csv_file')
@@ -67,7 +72,11 @@ final class MasterAccountLedgerHeaderActions
                     ->directory('master-ledger-imports')
                     ->maxFiles(1)
                     ->acceptedFileTypes(['text/csv', 'text/plain', 'application/csv', 'application/vnd.ms-excel'])
-                    ->helperText(__('Each row posts a manual credit or debit on this master account only.'))
+                    ->helperText(function () use ($resolveAccount): string {
+                        return MasterReserveLedgerDirection::isReserveLedger($resolveAccount())
+                            ? __('Each row posts a credit or debit using the same workflows as the ledger actions. Transaction date is applied from transacted_at (or transaction_date / date).')
+                            : __('Each row posts a manual credit or debit on this master account only. Transaction date is applied from transacted_at (or transaction_date / date).');
+                    })
                     ->required(),
             ])
             ->action(function (array $data, Component $livewire) use ($resolveAccount, $after): void {
@@ -104,8 +113,9 @@ final class MasterAccountLedgerHeaderActions
                         }
                     }
 
-                    $body = __('Created: :created · Failed: :failed', [
+                    $body = __('Created: :created · Skipped: :skipped · Failed: :failed', [
                         'created' => $result['created'],
+                        'skipped' => $result['skipped'] ?? 0,
                         'failed' => $result['failed'],
                     ]);
 

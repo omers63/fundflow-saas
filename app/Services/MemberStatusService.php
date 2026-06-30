@@ -8,6 +8,7 @@ use App\Models\Tenant\Member;
 use App\Support\BusinessDay;
 use App\Support\MemberMembershipPolicy;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 final class MemberStatusService
@@ -15,31 +16,22 @@ final class MemberStatusService
     public function __construct(
         private readonly FundAuditLogService $audit,
         private readonly AccountingService $accounting,
-        private readonly MemberFundCashTransferService $fundCashTransfer,
-        private readonly MemberCashOutService $cashOuts,
-        private readonly MemberAccountBalanceService $ledgerBalances,
         private readonly MemberMembershipPolicy $policy,
+        private readonly MemberWithdrawalSettlementService $withdrawalSettlement,
     ) {}
 
     public function freeze(
         Member $member,
         string $reason = '',
         ?CarbonInterface $freezeDate = null,
-        bool $cashOutBalances = false,
     ): void {
         if ($member->status !== 'active') {
             throw new InvalidArgumentException(__('Only active members can be frozen.'));
         }
 
-        $normalizedFreezeDate = $this->normalizeFreezeDate($freezeDate);
-
-        if ($cashOutBalances) {
-            $this->settleBalancesBeforeFreeze($member, $reason, $normalizedFreezeDate);
-        }
-
         $this->transition($member, 'inactive', [
             'contribution_cycles_active' => false,
-            'frozen_at' => $normalizedFreezeDate,
+            'frozen_at' => $this->normalizeFreezeDate($freezeDate),
         ], 'MEMBER_FROZEN', $reason, $member->status);
     }
 
@@ -55,24 +47,12 @@ final class MemberStatusService
         ], 'MEMBER_UNFROZEN', '', 'inactive');
     }
 
+    /**
+     * @deprecated Use {@see freeze()} — voluntary admin hold is now expressed as freeze.
+     */
     public function suspend(Member $member, string $reason = ''): void
     {
-        if ($member->status === 'inactive' && $member->frozen_at === null) {
-            throw new InvalidArgumentException(__('Member is already suspended.'));
-        }
-
-        if ($this->policy->isExitStatus($member->status)) {
-            throw new InvalidArgumentException(__('Cannot suspend a withdrawn member.'));
-        }
-
-        if ($member->status === 'inactive' && $member->frozen_at !== null) {
-            throw new InvalidArgumentException(__('Cannot suspend a frozen member. Unfreeze first.'));
-        }
-
-        $this->transition($member, 'inactive', [
-            'contribution_cycles_active' => false,
-            'frozen_at' => null,
-        ], 'MEMBER_SUSPENDED', $reason, $member->status);
+        $this->freeze($member, $reason, BusinessDay::today());
     }
 
     public function suspendForGuarantorTransfer(Member $member): void
@@ -90,7 +70,7 @@ final class MemberStatusService
     public function restoreInactive(Member $member): void
     {
         if ($member->status !== 'inactive' || $member->frozen_at !== null) {
-            throw new InvalidArgumentException(__('Member is not suspended.'));
+            throw new InvalidArgumentException(__('Member is not on administrative hold.'));
         }
 
         $this->transition($member, 'active', [
@@ -99,32 +79,33 @@ final class MemberStatusService
         ], 'MEMBER_RESTORED', '', 'inactive');
     }
 
-    public function withdraw(Member $member, string $reason = ''): void
-    {
+    public function withdraw(
+        Member $member,
+        string $reason = '',
+        bool $holdPayout = false,
+        ?CarbonInterface $withdrawDate = null,
+    ): void {
         if ($member->status === 'withdrawn') {
             throw new InvalidArgumentException(__('Member has already withdrawn.'));
         }
 
-        $this->transition($member, 'withdrawn', [
-            'contribution_cycles_active' => false,
-            'payout_frozen_at' => null,
-        ], 'MEMBER_WITHDRAWN', $reason, $member->status);
+        $previousStatus = $member->status;
+        $withdrawnAt = $this->normalizeWithdrawDate($withdrawDate);
+
+        DB::transaction(function () use ($member, $reason, $holdPayout, $previousStatus, $withdrawnAt): void {
+            $this->withdrawalSettlement->executeSettlement($member, $reason, $holdPayout, $withdrawnAt);
+
+            $this->transition($member, 'withdrawn', [
+                'contribution_cycles_active' => false,
+                'frozen_at' => null,
+                'payout_frozen_at' => $holdPayout ? $withdrawnAt : null,
+            ], 'MEMBER_WITHDRAWN', $reason, $previousStatus, $withdrawnAt);
+        });
     }
 
-    public function terminate(Member $member, string $reason = ''): void
+    public function terminate(Member $member, string $reason = '', ?CarbonInterface $withdrawDate = null): void
     {
-        if ($member->status === 'withdrawn' && $member->payout_frozen_at !== null) {
-            throw new InvalidArgumentException(__('Member is already terminated.'));
-        }
-
-        if ($member->status === 'withdrawn' && $member->payout_frozen_at === null) {
-            throw new InvalidArgumentException(__('Cannot terminate a voluntarily withdrawn member.'));
-        }
-
-        $this->transition($member, 'withdrawn', [
-            'contribution_cycles_active' => false,
-            'payout_frozen_at' => BusinessDay::now(),
-        ], 'MEMBER_TERMINATED', $reason, $member->status);
+        $this->withdraw($member, $reason, holdPayout: true, withdrawDate: $withdrawDate);
     }
 
     public function reinstate(Member $member, string $reason = ''): void
@@ -164,64 +145,15 @@ final class MemberStatusService
         ]);
     }
 
-    private function settleBalancesBeforeFreeze(Member $member, string $reason, CarbonInterface $freezeDate): void
+    private function normalizeWithdrawDate(?CarbonInterface $withdrawDate): CarbonInterface
     {
-        $this->accounting->createMemberAccounts($member);
-        $member->load(['cashAccount', 'fundAccount']);
+        $date = $withdrawDate ?? BusinessDay::today();
 
-        $balances = $this->ledgerBalances->positiveFreezeCashOutBalances($member, $freezeDate);
-        $fundEligible = $balances['fund'];
-        $cashEligible = $balances['cash'];
-        $cashOutAmount = $balances['total'];
-
-        if ($cashOutAmount <= 0.00001) {
-            return;
+        if ($date->copy()->startOfDay()->gt(BusinessDay::today())) {
+            throw new InvalidArgumentException(__('Withdrawal date cannot be in the future.'));
         }
 
-        $this->assertFreezeCashOutSettleable($member, $fundEligible, $cashEligible, $freezeDate);
-
-        if ($fundEligible > 0.00001) {
-            $this->fundCashTransfer->transferAmount(
-                $member,
-                $fundEligible,
-                $member,
-                __('Membership freeze — fund to cash'),
-                BusinessDay::now(),
-            );
-        }
-
-        $note = trim($reason) !== ''
-            ? __('Auto cash-out from membership freeze: :reason', ['reason' => trim($reason)])
-            : __('Auto cash-out from membership freeze');
-
-        $this->cashOuts->submit(
-            $member->fresh(),
-            $cashOutAmount,
-            $note,
-            bypassAvailabilityGuard: true,
-        );
-    }
-
-    private function assertFreezeCashOutSettleable(
-        Member $member,
-        float $fundEligible,
-        float $cashEligible,
-        CarbonInterface $freezeDate,
-    ): void {
-        $currentFund = round(max(0.0, $member->getFundBalance()), 2);
-        $currentCash = round(max(0.0, $member->getCashBalance()), 2);
-
-        if ($currentFund + 0.01 < $fundEligible) {
-            throw new InvalidArgumentException(__('Fund balance is below the amount eligible as of :date.', [
-                'date' => $freezeDate->toDateString(),
-            ]));
-        }
-
-        if ($currentCash + 0.01 < $cashEligible) {
-            throw new InvalidArgumentException(__('Cash balance is below the amount eligible as of :date.', [
-                'date' => $freezeDate->toDateString(),
-            ]));
-        }
+        return $date->copy()->endOfDay();
     }
 
     private function normalizeFreezeDate(?CarbonInterface $freezeDate): CarbonInterface
@@ -242,11 +174,12 @@ final class MemberStatusService
         string $auditEvent,
         string $reason,
         string $previousStatus,
+        ?CarbonInterface $statusChangedAt = null,
     ): void {
         $member->update(array_merge($extraAttributes, [
             'status' => $status,
             'status_reason' => trim($reason) !== '' ? trim($reason) : null,
-            'status_changed_at' => BusinessDay::now(),
+            'status_changed_at' => $statusChangedAt ?? BusinessDay::now(),
         ]));
 
         $this->audit->log($auditEvent, 'member', $member, $member, [

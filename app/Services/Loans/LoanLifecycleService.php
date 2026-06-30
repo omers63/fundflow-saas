@@ -394,6 +394,7 @@ final class LoanLifecycleService
                 'due_date' => Carbon::parse($disbursedAt)->addMonths($count)->toDateString(),
                 'member_portion' => $memberPortion,
                 'master_portion' => $masterPortion,
+                'member_fund_balance_at_disbursement' => round($memberFundBalanceBefore, 2),
             ] + $exemption);
 
             try {

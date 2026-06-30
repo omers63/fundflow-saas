@@ -103,21 +103,15 @@ class ViewMemberRequest extends ViewRecord
                     default => __('The change will be applied immediately for supported request types.'),
                 })
                 ->schema(function (): array {
-                    if ($this->record->type !== MemberRequest::TYPE_FREEZE_MEMBERSHIP) {
-                        return [];
-                    }
-
-                    $requester = $this->record->requester;
-
-                    if ($requester === null) {
-                        return [];
-                    }
-
-                    return [
-                        MemberFilamentActions::freezeDateField(),
-                        MemberFilamentActions::freezeCashOutSummaryPlaceholder($requester),
-                        MemberFilamentActions::freezeFundCashOutToggle($requester),
-                    ];
+                    return match ($this->record->type) {
+                        MemberRequest::TYPE_FREEZE_MEMBERSHIP => [
+                            MemberFilamentActions::freezeDateField(),
+                        ],
+                        MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => [
+                            MemberFilamentActions::withdrawDateField(),
+                        ],
+                        default => [],
+                    };
                 })
                 ->action(function (array $data): void {
                     try {

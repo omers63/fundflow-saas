@@ -11,6 +11,7 @@ use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\User;
 use App\Services\DependentAllocationService;
 use App\Services\MemberStatusService;
+use App\Services\MemberWithdrawalSettlementService;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -176,6 +177,14 @@ class MemberRequestService
                 'member' => __('Your membership has already ended.'),
             ]);
         }
+
+        try {
+            app(MemberWithdrawalSettlementService::class)->assertWithdrawable($requester);
+        } catch (\InvalidArgumentException $exception) {
+            throw ValidationException::withMessages([
+                'member' => $exception->getMessage(),
+            ]);
+        }
     }
 
     protected function assertNoPendingDuplicate(Member $requester, string $type): void
@@ -213,7 +222,7 @@ class MemberRequestService
                 MemberRequest::TYPE_REQUEST_INDEPENDENCE => $this->applyIndependence($requester),
                 MemberRequest::TYPE_FREEZE_MEMBERSHIP => $this->applyFreezeMembership($requester, $payload, $options),
                 MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => $this->applyUnfreezeMembership($requester),
-                MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => $this->applyWithdrawMembership($requester, $payload),
+                MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => $this->applyWithdrawMembership($requester, $payload, $options),
                 default => throw ValidationException::withMessages(['type' => __('Unknown request type.')]),
             };
 
@@ -333,7 +342,6 @@ class MemberRequestService
             $member,
             (string) ($payload['reason'] ?? ''),
             $freezeDate,
-            (bool) ($options['cash_out_fund_balance'] ?? false),
         );
     }
 
@@ -342,9 +350,18 @@ class MemberRequestService
         $this->statuses->unfreeze($member);
     }
 
-    protected function applyWithdrawMembership(Member $member, array $payload): void
+    protected function applyWithdrawMembership(Member $member, array $payload, array $options = []): void
     {
-        $this->statuses->withdraw($member, (string) ($payload['reason'] ?? ''));
+        $withdrawDate = isset($options['withdraw_date'])
+            ? MemberFilamentActions::resolveWithdrawDate($options['withdraw_date'])
+            : null;
+
+        $this->statuses->withdraw(
+            $member,
+            (string) ($payload['reason'] ?? ''),
+            holdPayout: false,
+            withdrawDate: $withdrawDate,
+        );
     }
 
     protected function notifyRequester(Member $requester, MemberRequest $request, string $outcome): void

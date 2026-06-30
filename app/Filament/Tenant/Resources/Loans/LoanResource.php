@@ -274,8 +274,8 @@ class LoanResource extends Resource
 
         $record->refresh();
 
-        if (method_exists($livewire, 'fillForm')) {
-            $livewire->fillForm();
+        if (method_exists($livewire, 'refreshRecordAndForm')) {
+            $livewire->refreshRecordAndForm();
         }
     }
 }

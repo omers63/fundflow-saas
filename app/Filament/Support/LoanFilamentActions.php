@@ -13,6 +13,7 @@ use App\Services\Loans\LoanEarlySettlementService;
 use App\Services\Loans\LoanLifecycleService;
 use App\Services\Loans\LoanQueueOrderingService;
 use App\Services\Loans\LoanRepaymentService;
+use App\Services\Loans\LoanSplitExcessFundCashOutService;
 use App\Services\LoanService;
 use App\Support\BusinessDay;
 use Carbon\Carbon;
@@ -236,6 +237,93 @@ final class LoanFilamentActions
                     ->success()
                     ->send();
             });
+    }
+
+    public static function cashOutSplitExcessFund(): Action
+    {
+        return Action::make('cashOutSplitExcessFund')
+            ->label(__('Cash out split excess fund'))
+            ->icon('heroicon-o-arrow-up-tray')
+            ->color('warning')
+            ->visible(function (Loan $record): bool {
+                return app(LoanSplitExcessFundCashOutService::class)->offersCashOut($record);
+            })
+            ->modalWidth('lg')
+            ->fillForm(function (Loan $record): array {
+                $summary = app(LoanSplitExcessFundCashOutService::class)->summary($record);
+
+                return [
+                    'amount' => $summary['max_transferable'] > 0.00001 ? $summary['max_transferable'] : null,
+                    'cashed_out_at' => BusinessDay::now(),
+                ];
+            })
+            ->schema(function (Loan $record): array {
+                $summary = app(LoanSplitExcessFundCashOutService::class)->summary($record);
+                $cashOutService = app(LoanSplitExcessFundCashOutService::class);
+                $disbursedAt = $cashOutService->disbursementAt($record);
+
+                return [
+                    Placeholder::make('split_excess_summary')
+                        ->label(__('Split excess fund summary'))
+                        ->content(new HtmlString(
+                            '<ul class="list-disc space-y-1 ps-4 text-sm">'
+                            .'<li>'.e(__('Fund balance at disbursement: :amount', ['amount' => number_format((float) ($summary['fund_balance_at_disbursement'] ?? 0), 2)])).'</li>'
+                            .'<li>'.e(__('Member share at disbursement: :amount', ['amount' => number_format((float) $record->member_portion, 2)])).'</li>'
+                            .'<li>'.e(__('Excess at disbursement: :amount', ['amount' => number_format($summary['disbursement_excess'], 2)])).'</li>'
+                            .'<li>'.e(__('Already moved to cash: :amount', ['amount' => number_format($summary['already_transferred'], 2)])).'</li>'
+                            .'<li>'.e(__('Remaining eligible: :amount', ['amount' => number_format($summary['remaining_eligible'], 2)])).'</li>'
+                            .'<li>'.e(__('Member fund balance: :amount', ['amount' => number_format($summary['member_fund_balance'], 2)])).'</li>'
+                            .($summary['fund_shortfall'] > 0.00001
+                                ? '<li class="text-warning-600 dark:text-warning-400">'.e(__('Fund shortfall for full payout: :amount (fund may go negative).', ['amount' => number_format($summary['fund_shortfall'], 2)])).'</li>'
+                                : '')
+                            .'</ul>'
+                        ))
+                        ->columnSpanFull(),
+                    TextInput::make('amount')
+                        ->label(__('Amount to cash out'))
+                        ->numeric()
+                        ->required()
+                        ->minValue(0.01)
+                        ->maxValue(max(0.01, $summary['max_transferable']))
+                        ->default($summary['max_transferable'] > 0.00001 ? $summary['max_transferable'] : null)
+                        ->helperText(__('Transfers fund to member cash (even if the current fund balance is insufficient), then creates an approved cash-out request for bank payout.')),
+                    DateTimePicker::make('cashed_out_at')
+                        ->label(__('Cash-out date'))
+                        ->seconds(false)
+                        ->native(false)
+                        ->required()
+                        ->default(BusinessDay::now())
+                        ->minDate($disbursedAt)
+                        ->helperText(__('Must be on or after the loan disbursement date.')),
+                    Textarea::make('notes')
+                        ->label(__('Notes'))
+                        ->rows(2)
+                        ->maxLength(500),
+                ];
+            })
+            ->action(function (Loan $record, array $data, Action $action, LoanSplitExcessFundCashOutService $cashOutService): void {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $cashOutService->cashOut(
+                            $record,
+                            (float) $data['amount'],
+                            filled($data['notes'] ?? null) ? (string) $data['notes'] : null,
+                            auth('tenant')->id(),
+                            isset($data['cashed_out_at']) ? Carbon::parse((string) $data['cashed_out_at']) : BusinessDay::now(),
+                        ),
+                        __('Cash-out failed'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__('Split excess fund cash-out recorded'))
+                    ->success()
+                    ->send();
+            })
+            ->after(fn (Component $livewire): mixed => LoanResource::dispatchInsightsRefresh($livewire));
     }
 
     public static function earlySettle(): Action
@@ -508,6 +596,7 @@ final class LoanFilamentActions
                 self::approve(),
                 self::reject(),
                 self::disburse(),
+                self::cashOutSplitExcessFund(),
                 self::earlySettle(),
                 self::applyOpenRepayment(),
                 self::transferGuarantorLiability(),

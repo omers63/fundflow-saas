@@ -16,6 +16,7 @@ use App\Services\AccountingService;
 use App\Services\MemberAnnualSubscriptionFeeService;
 use App\Services\MemberExportService;
 use App\Services\MemberImportService;
+use App\Support\BusinessDay;
 use App\Support\LoanEligibilityGate;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
@@ -356,39 +357,45 @@ test('member workspace exposes membership and arrears header actions', function 
         ->assertActionVisible('adjustMemberFund')
         ->assertActionVisible('sendMemberMessage')
         ->assertActionVisible('sendMemberNotification')
-        ->assertActionVisible('terminateMember')
-        ->assertActionVisible('suspendMember')
+        ->assertActionVisible('withdrawMember')
+        ->assertActionVisible('freezeMember')
         ->assertActionVisible('adminMemberOverride')
         ->assertActionVisible('checkMemberArrears')
-        ->callAction('suspendMember', data: ['reason' => 'Test inactive'])
+        ->callAction('freezeMember', data: [
+            'reason' => 'Test freeze',
+            'freeze_date' => BusinessDay::today()->toDateString(),
+        ])
         ->assertNotified();
 
     Livewire::test(ViewMember::class, ['record' => $inactive->getRouteKey()])
         ->assertActionVisible('restoreSuspendedMember');
 
     expect($active->fresh()->status)->toBe('inactive')
-        ->and($active->fresh()->frozen_at)->toBeNull();
+        ->and($active->fresh()->frozen_at)->not->toBeNull();
 });
 
-test('member suspend and restore header actions update status', function () {
+test('member freeze and unfreeze header actions update status', function () {
     $member = Member::create([
-        'member_number' => 'MEM-SUSP-FLOW-'.uniqid(),
-        'name' => 'Suspend Flow Member',
-        'email' => 'suspend-flow@fund.test',
+        'member_number' => 'MEM-FREEZE-FLOW-'.uniqid(),
+        'name' => 'Freeze Flow Member',
+        'email' => 'freeze-flow@fund.test',
         'monthly_contribution_amount' => 500,
         'joined_at' => now()->subYear(),
         'status' => 'active',
     ]);
 
     Livewire::test(ViewMember::class, ['record' => $member->getRouteKey()])
-        ->callAction('suspendMember', data: ['reason' => 'Manual admin suspension'])
+        ->callAction('freezeMember', data: [
+            'reason' => 'Manual admin freeze',
+            'freeze_date' => BusinessDay::today()->toDateString(),
+        ])
         ->assertNotified();
 
     expect($member->fresh()->status)->toBe('inactive')
-        ->and($member->fresh()->frozen_at)->toBeNull();
+        ->and($member->fresh()->frozen_at)->not->toBeNull();
 
     Livewire::test(ViewMember::class, ['record' => $member->fresh()->getRouteKey()])
-        ->callAction('restoreSuspendedMember')
+        ->callAction('unfreezeMember')
         ->assertNotified();
 
     expect($member->fresh()->status)->toBe('active');
@@ -423,7 +430,7 @@ test('members list create action is on table header and page links applications'
     $component = Livewire::test(ListMembers::class);
 
     $pageHeaderNames = collect($component->instance()->getCachedHeaderActions())
-        ->map(fn($action) => $action->getName())
+        ->map(fn ($action) => $action->getName())
         ->all();
 
     expect($pageHeaderNames)->toContain('pending_applications', 'member_requests');
@@ -446,18 +453,23 @@ test('member import sample download route returns csv', function () {
         ->toContain('contribution_arrears_cutoff_date');
 });
 
-test('end membership header action updates status to withdrawn', function () {
+test('withdraw header action updates status to withdrawn', function () {
     $member = Member::create([
-        'member_number' => 'MEM-TERM-'.uniqid(),
-        'name' => 'Terminate Flow Member',
-        'email' => 'terminate-flow@fund.test',
+        'member_number' => 'MEM-WD-'.uniqid(),
+        'name' => 'Withdraw Flow Member',
+        'email' => 'withdraw-flow@fund.test',
         'monthly_contribution_amount' => 500,
         'joined_at' => now()->subYear(),
         'status' => 'active',
     ]);
+    $this->accounting->createMemberAccounts($member);
 
     Livewire::test(ViewMember::class, ['record' => $member->getRouteKey()])
-        ->callAction('terminateMember', data: ['reason' => 'Left the fund'])
+        ->callAction('withdrawMember', data: [
+            'reason' => 'Left the fund',
+            'hold_payout' => true,
+            'withdraw_date' => now()->toDateString(),
+        ])
         ->assertNotified();
 
     expect($member->fresh()->status)->toBe('withdrawn')
@@ -665,9 +677,9 @@ test('members list exposes bulk actions for member and delinquency workflows', f
         'adjustFundSelectedMembers',
         'sendMessageSelectedMembers',
         'sendNotificationSelectedMembers',
-        'suspendSelectedMembers',
+        'freezeSelectedMembers',
         'restoreSuspendedSelectedMembers',
-        'terminateSelectedMembers',
+        'withdrawSelectedMembers',
         'chargeAnnualSubscriptionSelectedMembers',
         'adminOverrideSelectedMembers',
         'delete',

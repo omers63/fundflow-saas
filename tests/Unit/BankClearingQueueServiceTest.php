@@ -111,6 +111,61 @@ it('scopes open items by queue filter', function () {
         ->and($operationsIds)->toBe([$operationalId]);
 });
 
+it('filters open queue items by kind', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-Q-03',
+        'name' => 'Kind Filter Member',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $posting = app(FundPostingService::class)->submit($member, 500, now()->toDateString());
+    app(FundPostingService::class)->accept($posting);
+    $depositId = $posting->fresh()->bankTransaction->id;
+
+    $statement = BankStatement::create([
+        'filename' => 'queue-kind.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    $bankFile = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => now()->toDateString(),
+        'description' => 'Kind filter import',
+        'amount' => 1_200,
+        'status' => 'imported',
+        'hash' => md5('queue-kind-import'),
+    ]);
+
+    app(AccountingService::class)->fundReserveAccountFromMasterFund(
+        Account::masterExpense(),
+        1_000,
+        'Kind filter reserve',
+    );
+
+    app(MasterExpenseDisbursementService::class)->disburse(
+        Account::masterExpense(),
+        250,
+        'Kind filter expense',
+    );
+
+    $expenseId = BankTransaction::query()->whereNotNull('expense_disbursement_id')->value('id');
+
+    $open = $this->queue->openItemsQuery(BankClearingQueueFilter::All);
+
+    expect($this->queue->applyKindFilter(clone $open, 'bank_import')->pluck('id')->all())->toBe([$bankFile->id])
+        ->and($this->queue->applyKindFilter(clone $open, 'deposit')->pluck('id')->all())->toBe([$depositId])
+        ->and($this->queue->applyKindFilter(clone $open, 'expense')->pluck('id')->all())->toBe([$expenseId])
+        ->and($this->queue->applySliceFilter(clone $open, 'operations')->pluck('id')->all())->toContain($depositId, $expenseId)
+        ->and($this->queue->applySliceFilter(clone $open, 'bank_file')->pluck('id')->all())->toBe([$bankFile->id]);
+});
+
 it('classifies queue slices for records', function () {
     app(AccountingService::class)->fundReserveAccountFromMasterFund(
         Account::masterExpense(),

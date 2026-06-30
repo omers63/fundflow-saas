@@ -177,10 +177,69 @@ test('reconciliation page workspace tabs switch via livewire', function () {
 
     Livewire::test(ReconciliationOverviewPage::class)
         ->assertSet('sideTab', 'overview')
-        ->set('sideTab', 'snapshots')
+        ->call('setSideTab', 'exceptions')
+        ->assertSet('sideTab', 'exceptions')
+        ->call('setSideTab', 'history')
+        ->assertSet('sideTab', 'history')
+        ->call('setSideTab', 'overview')
+        ->assertSet('sideTab', 'overview')
+        ->call('setAdvancedUi', true)
+        ->call('setSideTab', 'snapshots')
         ->assertSet('sideTab', 'snapshots')
-        ->set('sideTab', 'methodology')
-        ->assertSet('sideTab', 'methodology')
-        ->set('sideTab', 'exceptions')
+        ->call('setSideTab', 'methodology')
+        ->assertSet('sideTab', 'methodology');
+});
+
+test('run check now action completes in simple mode', function () {
+    $admin = User::create([
+        'name' => 'Recon Simple Run Admin',
+        'email' => 'recon-simple-run-' . uniqid('', true) . '@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+    $this->actingAs($admin, 'tenant');
+
+    $before = ReconciliationSnapshot::query()->count();
+
+    Livewire::test(ReconciliationOverviewPage::class)
+        ->assertSet('advancedUi', false)
+        ->mountAction('run_realtime')
+        ->callMountedAction()
+        ->assertNotified()
+        ->assertSet('mountedActions', [])
+        ->call('setSideTab', 'exceptions')
         ->assertSet('sideTab', 'exceptions');
+
+    expect(ReconciliationSnapshot::query()->count())->toBe($before + 1);
+});
+
+test('real-time snapshot action completes and tabs remain switchable', function () {
+    $admin = User::create([
+        'name' => 'Recon Run Admin',
+        'email' => 'recon-run-' . uniqid('', true) . '@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+    $this->actingAs($admin, 'tenant');
+
+    $before = ReconciliationSnapshot::query()->count();
+
+    Livewire::test(ReconciliationOverviewPage::class)
+        ->call('setAdvancedUi', true)
+        ->mountAction('run_realtime')
+        ->callMountedAction()
+        ->assertNotified()
+        ->assertSet('mountedActions', [])
+        ->call('setSideTab', 'exceptions')
+        ->assertSet('sideTab', 'exceptions')
+        ->call('setSideTab', 'overview')
+        ->assertSet('sideTab', 'overview');
+
+    expect(ReconciliationSnapshot::query()->count())->toBe($before + 1);
 });

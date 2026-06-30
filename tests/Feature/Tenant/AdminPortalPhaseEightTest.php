@@ -291,8 +291,13 @@ test('reconciliation page switches workspace tabs via livewire method', function
         ->assertSet('sideTab', 'methodology')
         ->assertSee(__('Reconciliation approach'))
         ->assertDontSee(__('Fund status'))
+        ->call('setSideTab', 'exceptions')
+        ->assertSet('sideTab', 'exceptions')
+        ->call('setSideTab', 'overview')
+        ->assertSet('sideTab', 'overview')
+        ->assertSee(__('Fund status'))
         ->call('setSideTab', 'invalid')
-        ->assertSet('sideTab', 'methodology');
+        ->assertSet('sideTab', 'overview');
 });
 
 test('reconciliation page falls back to overview tab for invalid query tab', function () {

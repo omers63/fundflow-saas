@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Support\Action;
 use App\Filament\Tenant\Concerns\EmbedsAsAuditWorkspacePanel;
 use App\Filament\Tenant\Concerns\InteractsWithAdvancedUi;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
@@ -22,7 +23,6 @@ use App\Services\ReconciliationService;
 use App\Support\Reconciliation\ReconciliationHealthSummary;
 use BackedEnum;
 use Carbon\Carbon;
-use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\TextInput;
@@ -124,11 +124,13 @@ class ReconciliationOverviewPage extends Page implements HasTable
     {
         $this->mountAdvancedUi();
         $this->normalizeSideTab();
+        $this->refreshWorkspacePanelActions();
     }
 
     protected function onAdvancedUiToggled(): void
     {
         $this->normalizeSideTab();
+        $this->refreshWorkspacePanelActions();
     }
 
     protected function normalizeSideTab(): void
@@ -149,17 +151,34 @@ class ReconciliationOverviewPage extends Page implements HasTable
         }
 
         $this->sideTab = $tab;
-
-        if (in_array($tab, ['exceptions', 'history'], true)) {
-            $this->resetTable();
-        }
     }
 
-    public function updatedSideTab(?string $value): void
+    public function updatedSideTab(): void
     {
-        if (in_array($value, ['exceptions', 'history'], true)) {
-            $this->resetTable();
-        }
+        $this->normalizeSideTab();
+        $this->tableSort = null;
+        $this->reconfigureTableForSideTab();
+        $this->resetTable();
+    }
+
+    protected function reconfigureTableForSideTab(): void
+    {
+        $this->table = $this->table($this->makeTable());
+
+        $this->cacheSchema('tableFiltersForm', $this->getTableFiltersForm(...));
+
+        $this->initTableColumnManager();
+
+        $this->tableColumns = [];
+        $this->cachedDefaultTableColumnState = null;
+
+        $this->tableFilters = [];
+        $this->getTableFiltersForm()->fill([]);
+    }
+
+    protected function getTableQueryStringIdentifier(): ?string
+    {
+        return 'reconciliation_' . $this->sideTab;
     }
 
     public function table(Table $table): Table
@@ -324,53 +343,67 @@ class ReconciliationOverviewPage extends Page implements HasTable
     protected function workspacePanelActions(): array
     {
         $canRun = fn (): bool => auth('tenant')->user()?->is_admin === true;
+
+        if (!$canRun()) {
+            return [];
+        }
+
         $bankSchema = $this->reconciliationBankSchema();
 
-        $runCheckNow = Action::make('run_realtime')
-            ->label(__('Run check now'))
+        $runRealtime = Action::make('run_realtime')
+            ->label(fn(): string => $this->advancedUi
+                ? (string) __('Real-time snapshot')
+                : (string) __('Run check now'))
             ->icon('heroicon-o-play')
             ->color('primary')
-            ->visible(fn (): bool => $canRun() && ! $this->advancedUi)
+            ->button()
             ->longRunning()
-            ->longRunningMessage(__('Running reconciliation checks and saving a snapshot.'))
+            ->longRunningMessage(fn(): string => $this->advancedUi
+                ? (string) __('Running real-time reconciliation checks and saving a snapshot.')
+                : (string) __('Running reconciliation checks and saving a snapshot.'))
             ->schema($bankSchema)
-            ->modalHeading(__('Run reconciliation check'))
-            ->modalDescription(__('Recomputes all checks as of this moment and stores a snapshot.'))
+            ->modalHeading(fn(): string => $this->advancedUi
+                ? (string) __('Run real-time reconciliation')
+                : (string) __('Run reconciliation check'))
+            ->modalDescription(fn(): string => $this->advancedUi
+                ? (string) __('Recomputes all checks as of this moment and stores a snapshot tagged realtime.')
+                : (string) __('Recomputes all checks as of this moment and stores a snapshot.'))
             ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_REALTIME, $this->optionsFromActionData($data)));
 
-        $advancedRuns = [
-            Action::make('run_realtime_advanced')
-                ->label(__('Real-time snapshot'))
-                ->icon('heroicon-o-play')
-                ->longRunning()
-                ->longRunningMessage(__('Running real-time reconciliation checks and saving a snapshot.'))
-                ->schema($bankSchema)
-                ->modalHeading(__('Run real-time reconciliation'))
-                ->modalDescription(__('Recomputes all checks as of this moment and stores a snapshot tagged realtime.'))
-                ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_REALTIME, $this->optionsFromActionData($data))),
+        if (!$this->advancedUi) {
+            return [$runRealtime];
+        }
+
+        $moreRuns = [
             Action::make('run_nightly')
                 ->label(__('Nightly batch'))
                 ->icon('heroicon-o-arrow-path')
                 ->requiresConfirmation()
+                ->longRunning()
                 ->longRunningMessage(__('Running the nightly reconciliation batch. This can take a minute on large tenants.'))
                 ->modalHeading(__('Run reconciliation batch'))
                 ->modalDescription(__('Runs the nightly reconciliation scan, auto-resolves eligible issues, and refreshes the exception queue.'))
                 ->action(function (): void {
-                    $result = app(ReconciliationService::class)->runNightlyBatch();
+                    try {
+                        $result = app(ReconciliationService::class)->runNightlyBatch();
 
-                    Notification::make()
-                        ->title($result['halted']
-                            ? __('Reconciliation halted')
-                            : __('Reconciliation complete'))
-                        ->body(__('Raised: :raised | Resolved: :resolved', [
-                            'raised' => $result['raised'],
-                            'resolved' => $result['resolved'],
-                        ]))
-                        ->color($result['halted'] ? 'danger' : 'success')
-                        ->send();
+                        Notification::make()
+                            ->title($result['halted']
+                                ? __('Reconciliation halted')
+                                : __('Reconciliation complete'))
+                            ->body(__('Raised: :raised | Resolved: :resolved', [
+                                'raised' => $result['raised'],
+                                'resolved' => $result['resolved'],
+                            ]))
+                            ->color($result['halted'] ? 'danger' : 'success')
+                            ->send();
+                    } catch (\Throwable $exception) {
+                        $this->notifyReconciliationRunFailed($exception);
 
-                    $this->resetTable();
-                    $this->dispatch('$refresh');
+                        return;
+                    } finally {
+                        $this->finishWorkspaceReconciliationRun();
+                    }
                 }),
             Action::make('run_daily')
                 ->label(__('Daily snapshot'))
@@ -393,14 +426,13 @@ class ReconciliationOverviewPage extends Page implements HasTable
         ];
 
         return [
-            $runCheckNow,
-            ActionGroup::make($advancedRuns)
-                ->label(__('Run reconciliation'))
-                ->icon('heroicon-o-play')
-                ->color('primary')
+            $runRealtime,
+            ActionGroup::make($moreRuns)
+                ->label(__('More reconciliation runs'))
+                ->icon('heroicon-o-ellipsis-horizontal')
+                ->color('gray')
                 ->button()
-                ->dropdownPlacement('bottom-end')
-                ->visible(fn (): bool => $canRun() && $this->advancedUi),
+                ->dropdownPlacement('bottom-end'),
         ];
     }
 
@@ -516,41 +548,63 @@ class ReconciliationOverviewPage extends Page implements HasTable
      */
     protected function executeRun(string $mode, array $options = []): void
     {
-        @set_time_limit(0);
+        try {
+            @set_time_limit(0);
 
-        $tz = config('app.timezone');
-        $now = Carbon::now($tz);
-        $service = app(ReconciliationReportService::class);
+            $tz = config('app.timezone');
+            $now = Carbon::now($tz);
+            $service = app(ReconciliationReportService::class);
 
-        if ($mode === ReconciliationSnapshot::MODE_REALTIME) {
-            $report = $service->buildReport($mode, $now, null, null, $options);
-        } elseif ($mode === ReconciliationSnapshot::MODE_DAILY) {
-            $periodStart = $now->copy()->subDay()->startOfDay();
-            $periodEnd = $now->copy()->subDay()->endOfDay();
-            $report = $service->buildReport($mode, $now, $periodStart, $periodEnd, $options);
-        } else {
-            $anchor = $now->copy()->subMonthNoOverflow();
-            $periodStart = $anchor->copy()->startOfMonth();
-            $periodEnd = $anchor->copy()->endOfMonth();
-            $report = $service->buildReport($mode, $now, $periodStart, $periodEnd, $options);
+            if ($mode === ReconciliationSnapshot::MODE_REALTIME) {
+                $report = $service->buildReport($mode, $now, null, null, $options);
+            } elseif ($mode === ReconciliationSnapshot::MODE_DAILY) {
+                $periodStart = $now->copy()->subDay()->startOfDay();
+                $periodEnd = $now->copy()->subDay()->endOfDay();
+                $report = $service->buildReport($mode, $now, $periodStart, $periodEnd, $options);
+            } else {
+                $anchor = $now->copy()->subMonthNoOverflow();
+                $periodStart = $anchor->copy()->startOfMonth();
+                $periodEnd = $anchor->copy()->endOfMonth();
+                $report = $service->buildReport($mode, $now, $periodStart, $periodEnd, $options);
+            }
+
+            $userId = auth('tenant')->id();
+            $snapshot = $service->persistSnapshot($report, is_int($userId) ? $userId : null);
+            $this->selectedSnapshotId = $snapshot->id;
+
+            $pass = $report['verdict']['pass'] ?? false;
+            $notification = Notification::make()
+                ->title($pass ? __('Reconciliation passed') : __('Reconciliation found critical issues'))
+                ->body(__('Snapshot #:id — critical: :critical, warnings: :warnings', [
+                    'id' => $snapshot->id,
+                    'critical' => ($report['verdict']['critical_issues'] ?? 0),
+                    'warnings' => ($report['verdict']['warnings'] ?? 0),
+                ]));
+
+            $pass ? $notification->success()->send() : $notification->danger()->send();
+        } catch (\Throwable $exception) {
+            $this->notifyReconciliationRunFailed($exception);
+        } finally {
+            $this->finishWorkspaceReconciliationRun();
         }
+    }
 
-        $userId = auth('tenant')->id();
-        $snapshot = $service->persistSnapshot($report, is_int($userId) ? $userId : null);
-        $this->selectedSnapshotId = $snapshot->id;
+    protected function finishWorkspaceReconciliationRun(): void
+    {
+        $this->unmountAction(false);
+        $this->reconfigureTableForSideTab();
+        $this->resetTable();
+    }
 
-        $pass = $report['verdict']['pass'] ?? false;
-        $notification = Notification::make()
-            ->title($pass ? __('Reconciliation passed') : __('Reconciliation found critical issues'))
-            ->body(__('Snapshot #:id — critical: :critical, warnings: :warnings', [
-                'id' => $snapshot->id,
-                'critical' => ($report['verdict']['critical_issues'] ?? 0),
-                'warnings' => ($report['verdict']['warnings'] ?? 0),
-            ]));
+    protected function notifyReconciliationRunFailed(\Throwable $exception): void
+    {
+        report($exception);
 
-        $pass ? $notification->success()->send() : $notification->danger()->send();
-
-        $this->dispatch('$refresh');
+        Notification::make()
+            ->title(__('Reconciliation run failed'))
+            ->body($exception->getMessage())
+            ->danger()
+            ->send();
     }
 
     protected function authorizeExport(): void

@@ -25,6 +25,11 @@ trait EmbedsAsAuditWorkspacePanel
 
     public function bootEmbedsAsAuditWorkspacePanel(): void
     {
+        $this->refreshWorkspacePanelActions();
+    }
+
+    public function refreshWorkspacePanelActions(): void
+    {
         if (!method_exists($this, 'workspacePanelActions')) {
             return;
         }
@@ -64,6 +69,18 @@ trait EmbedsAsAuditWorkspacePanel
      */
     protected function cacheWorkspacePanelActions(array $actions): void
     {
+        foreach ($this->cachedWorkspacePanelActions as $previous) {
+            if ($previous instanceof Action) {
+                unset($this->cachedActions[$previous->getName()]);
+            }
+
+            if ($previous instanceof ActionGroup) {
+                foreach ($previous->getFlatActions() as $flatAction) {
+                    unset($this->cachedActions[$flatAction->getName()]);
+                }
+            }
+        }
+
         $this->cachedWorkspacePanelActions = [];
 
         foreach ($actions as $action) {

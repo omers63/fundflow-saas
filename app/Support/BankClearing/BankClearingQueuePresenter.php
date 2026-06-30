@@ -31,18 +31,9 @@ final class BankClearingQueuePresenter
 
     public static function kindLabel(BankTransaction $record): string
     {
-        if (app(BankClearingQueueService::class)->isBankFileItem($record)) {
-            return __('Bank import');
-        }
+        $queue = app(BankClearingQueueService::class);
 
-        return match (true) {
-            $record->invest_return_id !== null => __('Return in'),
-            $record->invest_disbursement_id !== null => __('Invest out'),
-            $record->fee_disbursement_id !== null => __('Fee'),
-            $record->expense_disbursement_id !== null => __('Expense'),
-            $record->cash_out_request_id !== null => __('Cash out'),
-            default => __('Deposit'),
-        };
+        return BankClearingQueueKind::forRecord($record, $queue->isBankFileItem($record))->label();
     }
 
     public static function kindColor(BankTransaction $record): string
@@ -51,13 +42,14 @@ final class BankClearingQueuePresenter
             return 'sky';
         }
 
-        return match (true) {
-            $record->invest_return_id !== null => 'success',
-            $record->invest_disbursement_id !== null => 'warning',
-            $record->fee_disbursement_id !== null => 'info',
-            $record->expense_disbursement_id !== null => 'danger',
-            $record->cash_out_request_id !== null => 'warning',
-            default => 'success',
+        return match (BankClearingQueueKind::forRecord($record, false)) {
+            BankClearingQueueKind::ReturnIn => 'success',
+            BankClearingQueueKind::InvestOut => 'warning',
+            BankClearingQueueKind::Fee => 'info',
+            BankClearingQueueKind::Expense => 'danger',
+            BankClearingQueueKind::CashOut => 'warning',
+            BankClearingQueueKind::Deposit => 'success',
+            BankClearingQueueKind::BankImport => 'sky',
         };
     }
 

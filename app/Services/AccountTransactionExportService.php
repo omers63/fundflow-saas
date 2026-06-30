@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Transaction;
 use App\Support\BusinessDay;
+use App\Support\MasterInvestLedgerImport;
 use Illuminate\Database\Eloquent\Builder;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -61,9 +62,15 @@ final class AccountTransactionExportService
      */
     private function query(Account $account): Builder
     {
-        return Transaction::query()
+        $query = Transaction::query()
             ->where('account_id', $account->id)
-            ->with('member');
+            ->with(['member', 'account']);
+
+        if (MasterInvestLedgerImport::isInvestAccount($account)) {
+            MasterInvestLedgerImport::applyExportableScope($query);
+        }
+
+        return $query;
     }
 
     /**

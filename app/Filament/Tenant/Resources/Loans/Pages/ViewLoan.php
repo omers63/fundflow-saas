@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\Loans\Pages;
 
+use App\Filament\Concerns\RefreshesResourceRecord;
 use App\Filament\Support\LoanFilamentActions;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Loans\Schemas\LoanViewInfolist;
@@ -18,6 +19,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class ViewLoan extends ViewRecord
 {
+    use RefreshesResourceRecord;
+
     protected static string $resource = LoanResource::class;
 
     public function getHeading(): string

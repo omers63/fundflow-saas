@@ -78,15 +78,21 @@ Delinquency does **not** change `status`; it is computed from arrears on `active
 
 | Method | To | Side effects |
 |--------|-----|--------------|
-| `freeze(Member, reason, freezeDate?, cashOutBalances?)` | `inactive` | `frozen_at`, `contribution_cycles_active=false` |
+| `freeze(Member, reason, freezeDate?)` | `inactive` | `frozen_at`, `contribution_cycles_active=false`; no cash-out |
 | `unfreeze(Member)` | `active` | Clears `frozen_at` (frozen inactive only) |
-| `suspend(Member, reason)` | `inactive` | No `frozen_at`; cycles off |
-| `suspendForGuarantorTransfer(Member)` | `inactive` | No `frozen_at`; cycles on |
-| `restoreInactive(Member)` | `active` | Suspended inactive only (no `frozen_at`) |
-| `withdraw(Member, reason)` | `withdrawn` | Clears `payout_frozen_at` |
-| `terminate(Member, reason)` | `withdrawn` | Sets `payout_frozen_at` |
+| `suspendForGuarantorTransfer(Member)` | `inactive` | Internal: no `frozen_at`; cycles on |
+| `restoreInactive(Member)` | `active` | Administrative / guarantor hold only (no `frozen_at`) |
+| `withdraw(Member, reason, holdPayout?, withdrawDate?)` | `withdrawn` | Early-settles active loans; optional pending cash-out; clears `frozen_at`; optional backdated `status_changed_at` / ledger `transacted_at` |
+| `terminate(Member, reason, withdrawDate?)` | `withdrawn` | Alias for `withdraw(..., holdPayout: true)` |
 | `reinstate(Member, reason)` | `active` | Zeros cash/fund; clears payout freeze |
 | `releasePayoutReview(Member, reason)` | `withdrawn` | Clears `payout_frozen_at` only |
+
+### Withdrawal settlement (`MemberWithdrawalSettlementService`)
+
+1. Block if pipeline loans (`pending`, `approved`, `partially_disbursed`) exist.
+2. Block if member is an unreleased guarantor on an active loan.
+3. Early-settle all `active` loans (fund→cash top-up when cash is short).
+4. Transfer remaining positive fund to cash; submit pending cash-out (unless `holdPayout`).
 
 ---
 

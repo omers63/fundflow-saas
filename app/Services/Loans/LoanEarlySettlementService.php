@@ -9,6 +9,7 @@ use App\Models\Tenant\Setting;
 use App\Notifications\Tenant\LoanEarlySettledNotification;
 use App\Services\ContributionCycleService;
 use App\Support\BusinessDay;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -96,11 +97,13 @@ class LoanEarlySettlementService
      *
      * @throws \InvalidArgumentException|\RuntimeException
      */
-    public function earlySettle(Loan $loan, bool $sendNotification = true): void
+    public function earlySettle(Loan $loan, bool $sendNotification = true, ?CarbonInterface $transactedAt = null): void
     {
         if ($loan->status !== 'active') {
             throw new \InvalidArgumentException('Only active loans can be early settled.');
         }
+
+        $at = $transactedAt ?? BusinessDay::now();
 
         $loan->loadMissing(['member.user', 'installments']);
 
@@ -125,7 +128,7 @@ class LoanEarlySettlementService
             );
         }
 
-        DB::transaction(function () use ($loan, $pending, $member) {
+        DB::transaction(function () use ($loan, $pending, $member, $at): void {
             foreach ($pending as $installment) {
                 $due = $installment->due_date;
                 $m = (int) $due->month;
@@ -133,11 +136,11 @@ class LoanEarlySettlementService
                 $isLate = $this->cycle->isLate($m, $y);
                 $lateFee = $this->lateFeeForInstallment($installment);
 
-                $this->ledger->debitCashForRepayment($member, $installment, $lateFee);
+                $this->ledger->debitCashForRepayment($member, $installment, $lateFee, $at);
 
                 $installment->update([
                     'status' => 'paid',
-                    'paid_at' => BusinessDay::now(),
+                    'paid_at' => $at,
                     'is_late' => $isLate,
                     'late_fee_amount' => $lateFee > 0 ? $lateFee : 0,
                 ]);
@@ -154,7 +157,7 @@ class LoanEarlySettlementService
             $loan->refresh();
             $loan->update([
                 'status' => 'early_settled',
-                'settled_at' => BusinessDay::now(),
+                'settled_at' => $at,
             ]);
         });
 

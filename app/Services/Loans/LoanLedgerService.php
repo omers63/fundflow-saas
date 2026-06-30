@@ -28,6 +28,11 @@ final class LoanLedgerService
         private AccountingService $accounting,
     ) {}
 
+    public static function excessFundToCashDescriptionMarker(): string
+    {
+        return 'excess fund to cash';
+    }
+
     public function ensureMemberAccounts(Member $member): void
     {
         $this->accounting->createMemberAccounts($member);
@@ -193,6 +198,7 @@ final class LoanLedgerService
         Loan $loan,
         float $amount,
         ?CarbonInterface $transactedAt = null,
+        bool $allowNegativeMemberFundBalance = false,
     ): void {
         if ($amount <= 0.00001) {
             return;
@@ -209,7 +215,10 @@ final class LoanLedgerService
             throw new RuntimeException(__('Member fund and cash accounts are required.'));
         }
 
-        if ($member->getFundBalance() < $amount - 0.00001) {
+        if (
+            ! $allowNegativeMemberFundBalance
+            && $member->getFundBalance() < $amount - 0.00001
+        ) {
             throw new RuntimeException(__('Insufficient fund balance for the requested transfer.'));
         }
 

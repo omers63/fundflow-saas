@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Tenant\BankTransaction;
 use App\Support\BankClearing\BankClearingQueueFilter;
+use App\Support\BankClearing\BankClearingQueueKind;
 use App\Support\BankTransactionWorkflow;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -115,5 +116,44 @@ final class BankClearingQueueService
         }
 
         return null;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function sliceFilterOptions(): array
+    {
+        return [
+            'bank_file' => __('From bank file'),
+            'operations' => __('From operations'),
+        ];
+    }
+
+    /**
+     * @param  Builder<BankTransaction>  $query
+     * @return Builder<BankTransaction>
+     */
+    public function applySliceFilter(Builder $query, string $slice): Builder
+    {
+        return match ($slice) {
+            'bank_file' => $this->matching->applyBankLinesAwaitingPostingScope($query),
+            'operations' => $this->matching->applyPendingOperationalClearanceScope($query),
+            default => $query,
+        };
+    }
+
+    /**
+     * @param  Builder<BankTransaction>  $query
+     * @return Builder<BankTransaction>
+     */
+    public function applyKindFilter(Builder $query, string $kind): Builder
+    {
+        $resolved = BankClearingQueueKind::tryFrom($kind);
+
+        if ($resolved === null) {
+            return $query;
+        }
+
+        return $resolved->applyScope($query, $this->matching);
     }
 }

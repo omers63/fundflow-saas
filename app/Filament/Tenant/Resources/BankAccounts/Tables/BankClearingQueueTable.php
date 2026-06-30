@@ -12,12 +12,15 @@ use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
+use App\Services\BankClearingQueueService;
+use App\Support\BankClearing\BankClearingQueueKind;
 use App\Support\BankClearing\BankClearingQueuePresenter;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 final class BankClearingQueueTable
 {
@@ -77,6 +80,26 @@ final class BankClearingQueueTable
                         ->toggleable(isToggledHiddenByDefault: true),
                 ])
                 ->filters([
+                    SelectFilter::make('queue_slice')
+                        ->label(__('Source'))
+                        ->options(BankClearingQueueService::sliceFilterOptions())
+                        ->query(function (Builder $query, array $data): Builder {
+                            if (blank($data['value'] ?? null)) {
+                                return $query;
+                            }
+
+                            return app(BankClearingQueueService::class)->applySliceFilter($query, (string) $data['value']);
+                        }),
+                    SelectFilter::make('queue_kind')
+                        ->label(__('Kind'))
+                        ->options(BankClearingQueueKind::filterOptions())
+                        ->query(function (Builder $query, array $data): Builder {
+                            if (blank($data['value'] ?? null)) {
+                                return $query;
+                            }
+
+                            return app(BankClearingQueueService::class)->applyKindFilter($query, (string) $data['value']);
+                        }),
                     SelectFilter::make('member_id')
                         ->label(__('Member'))
                         ->relationship('member', 'name')
