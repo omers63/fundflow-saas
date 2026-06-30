@@ -23,10 +23,12 @@
                 </p>
             </div>
             <div class="flex flex-wrap gap-2">
-                <span class="inline-flex items-center rounded-full bg-white/80 px-2.5 py-1 text-xs font-semibold text-gray-800 ring-1 ring-gray-200 dark:bg-gray-900/50 dark:text-gray-100 dark:ring-white/10">
+                <span
+                    class="inline-flex items-center rounded-full bg-white/80 px-2.5 py-1 text-xs font-semibold text-gray-800 ring-1 ring-gray-200 dark:bg-gray-900/50 dark:text-gray-100 dark:ring-white/10">
                     {{ Presenter::statusLabel((string) $exception->status) }}
                 </span>
-                <span class="inline-flex items-center rounded-full bg-white/80 px-2.5 py-1 text-xs font-semibold capitalize ring-1 ring-gray-200 dark:bg-gray-900/50 dark:text-gray-100 dark:ring-white/10">
+                <span
+                    class="inline-flex items-center rounded-full bg-white/80 px-2.5 py-1 text-xs font-semibold capitalize ring-1 ring-gray-200 dark:bg-gray-900/50 dark:text-gray-100 dark:ring-white/10">
                     {{ ucfirst((string) $exception->severity) }}
                 </span>
             </div>
@@ -35,20 +37,24 @@
 
     <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ __('Amount delta') }}</p>
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                {{ __('Amount delta') }}</p>
             <p class="mt-1 text-lg font-semibold tabular-nums text-gray-900 dark:text-white">
                 {{ filled($exception->amount_delta) ? (MoneyDisplay::format((float) $exception->amount_delta) ?? '—') : '—' }}
             </p>
         </div>
         <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ __('Raised') }}</p>
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                {{ __('Raised') }}</p>
             <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
                 {{ $exception->raised_at?->format('d M Y H:i') ?? '—' }}
             </p>
-            <p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{{ $exception->raised_at?->diffForHumans() }}</p>
+            <p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{{ $exception->raised_at?->diffForHumans() }}
+            </p>
         </div>
         <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ __('Owner') }}</p>
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                {{ __('Owner') }}</p>
             <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
                 {{ $exception->assignee?->name ?? __('Unassigned') }}
             </p>
@@ -59,7 +65,8 @@
             @endif
         </div>
         <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ __('Discrepancy type') }}</p>
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                {{ __('Discrepancy type') }}</p>
             <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
                 {{ filled($exception->exception_type) ? ucfirst(str_replace('_', ' ', (string) $exception->exception_type)) : '—' }}
             </p>
@@ -69,8 +76,10 @@
         </div>
     </div>
 
-    <div class="rounded-xl border border-primary-200 bg-primary-50/70 px-4 py-3 dark:border-primary-500/30 dark:bg-primary-950/20">
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-primary-800 dark:text-primary-200">{{ __('Suggested next step') }}</p>
+    <div
+        class="rounded-xl border border-primary-200 bg-primary-50/70 px-4 py-3 dark:border-primary-500/30 dark:bg-primary-950/20">
+        <p class="text-[11px] font-semibold uppercase tracking-wide text-primary-800 dark:text-primary-200">
+            {{ __('Suggested next step') }}</p>
         <p class="mt-1 text-sm text-primary-900 dark:text-primary-100">
             {{ Presenter::recommendedAction($exception) }}
         </p>
@@ -89,7 +98,8 @@
                     <div class="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2 dark:border-white/10 dark:bg-white/5">
                         <p class="text-[11px] font-medium text-gray-500 dark:text-gray-400">{{ $item['label'] }}</p>
                         @if (filled($item['url'] ?? null))
-                            <a href="{{ $item['url'] }}" class="mt-0.5 block text-sm font-semibold text-primary-600 hover:underline dark:text-primary-400">
+                            <a href="{{ $item['url'] }}"
+                                class="mt-0.5 block text-sm font-semibold text-primary-600 hover:underline dark:text-primary-400">
                                 {{ $item['value'] }}
                             </a>
                         @else
@@ -138,9 +148,7 @@
                             {{ $action['label'] }}
                         </a>
                     @elseif (($action['type'] ?? '') === 'action' && filled($action['name'] ?? null))
-                        <button type="button"
-                            wire:click="runExceptionAction(@js($action['name']))"
-                            wire:loading.attr="disabled"
+                        <button type="button" wire:click="runExceptionAction(@js($action['name']))" wire:loading.attr="disabled"
                             wire:target="runExceptionAction"
                             class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold shadow-sm {{ $buttonClass }}">
                             @if (filled($action['icon'] ?? null))
@@ -155,8 +163,10 @@
     @endif
 
     @if (filled($exception->resolution_notes))
-        <section class="rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-950/20">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">{{ __('Resolution notes') }}</p>
+        <section
+            class="rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-950/20">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
+                {{ __('Resolution notes') }}</p>
             <p class="mt-1 text-sm text-emerald-900 dark:text-emerald-100">{{ $exception->resolution_notes }}</p>
         </section>
     @endif
