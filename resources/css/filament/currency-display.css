@@ -75,6 +75,85 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* Supplementary scheduled / partial-paid lines under loan outstanding */
+.ff-loan-outstanding-breakdown__chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    border-radius: 0.375rem;
+    border: 1px solid rgb(229 231 235 / 0.95);
+    background: rgb(249 250 251 / 0.95);
+    padding: 0.125rem 0.375rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.dark .ff-loan-outstanding-breakdown__chip {
+    border-color: rgb(255 255 255 / 0.1);
+    background: rgb(255 255 255 / 0.05);
+}
+
+.ff-loan-outstanding-breakdown__label {
+    font-size: 0.5625rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgb(107 114 128);
+}
+
+.dark .ff-loan-outstanding-breakdown__label {
+    color: rgb(156 163 175);
+}
+
+.ff-loan-outstanding-breakdown__value,
+.ff-loan-outstanding-breakdown__value.ff-member-amount {
+    font-size: 0.625rem;
+    font-weight: 500;
+}
+
+.ff-loan-outstanding-breakdown__chip--scheduled .ff-loan-outstanding-breakdown__value {
+    color: rgb(55 65 81);
+}
+
+.dark .ff-loan-outstanding-breakdown__chip--scheduled .ff-loan-outstanding-breakdown__value {
+    color: rgb(229 231 235);
+}
+
+.ff-loan-outstanding-breakdown__chip--partial .ff-loan-outstanding-breakdown__value {
+    color: rgb(4 120 87);
+}
+
+.dark .ff-loan-outstanding-breakdown__chip--partial .ff-loan-outstanding-breakdown__value {
+    color: rgb(110 231 183);
+}
+
+.ff-loan-outstanding-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+}
+
+.ff-loan-outstanding-cell__primary {
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: 1.25;
+}
+
+.ff-loan-outstanding-cell__meta {
+    margin-top: 0.0625rem;
+}
+
+.fi-body .ff-loan-outstanding-column .fi-ta-text-item {
+    line-clamp: unset;
+    -webkit-line-clamp: unset;
+}
+
+.fi-body .ff-loan-outstanding-column .ff-loan-outstanding-cell__primary .ff-member-amount {
+    font-size: inherit;
+    font-weight: inherit;
+}
+
 .ff-member-amount--danger {
     color: var(--ff-danger, #e24b4a);
 }

@@ -8,9 +8,9 @@
             </p>
         </header>
 
-        @include('filament.tenant.partials.audit-system.workspace-actions', [
-            'class' => 'ff-audit-workspace-actions ff-recon-workspace-actions mb-4',
-        ])
+        @include('filament.tenant.partials.reconciliation-workspace-actions', [
+    'class' => 'ff-audit-workspace-actions ff-recon-workspace-actions mb-4',
+])
 
         @include('filament.tenant.partials.reconciliation-tab-pills')
 
@@ -56,11 +56,11 @@
                         @if ($lastBatch)
                             <p class="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-200">
                                 {{ __('Last batch (:time): raised :raised, auto-resolved :resolved, critical :critical', [
-                                    'time' => $lastBatch->occurred_at?->format('d M Y H:i') ?? '—',
-                                    'raised' => $lastBatch->payload['raised'] ?? 0,
-                                    'resolved' => $lastBatch->payload['resolved'] ?? 0,
-                                    'critical' => $lastBatch->payload['critical'] ?? 0,
-                                ]) }}
+            'time' => $lastBatch->occurred_at?->format('d M Y H:i') ?? '—',
+            'raised' => $lastBatch->payload['raised'] ?? 0,
+            'resolved' => $lastBatch->payload['resolved'] ?? 0,
+            'critical' => $lastBatch->payload['critical'] ?? 0,
+        ]) }}
                             </p>
                         @endif
                     </div>
@@ -73,14 +73,30 @@
                         <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
                             {{ __('Open issues') }}</h3>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            {{ __('Open and escalated items only. Click a row for context and resolution actions.') }}
+                            {{ __('Select a row to analyze context, suggested fixes, and resolution actions.') }}
                         </p>
                     </div>
 
                     @include('filament.tenant.partials.reconciliation-queue-insights')
-                    @include('filament.tenant.partials.reconciliation-workspace-shortcuts')
 
                     {{ $this->table }}
+
+                    @php($selectedException = $this->getSelectedException())
+                    @if ($selectedException)
+                        <div class="mt-5 border-t border-gray-100 pt-5 dark:border-white/10">
+                            <div class="mb-4">
+                                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('Issue analysis') }}</h3>
+                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                    {{ __('Review summary, related records, and run fix actions without leaving the queue.') }}
+                                </p>
+                            </div>
+                            @include('filament.tenant.partials.reconciliation.exception-detail', ['exception' => $selectedException])
+                        </div>
+                    @elseif ($this->getOpenExceptionQueueStats()['total'] === 0)
+                        <div class="mt-4 rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-4 py-6 text-center text-sm text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
+                            {{ __('No open reconciliation exceptions. Run a check or wait for the nightly batch to refresh the queue.') }}
+                        </div>
+                    @endif
                 </div>
             @elseif ($this->sideTab === 'snapshots' && $this->advancedUi)
             <div class="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900/60">
@@ -108,15 +124,17 @@
                             @forelse ($this->getLatestSnapshots() as $snap)
                                 <tr @class(['bg-primary-50/50 dark:bg-primary-500/10' => (int) $selectedSnapshotId === (int) $snap->id])>
                                     <td class="px-4 py-3 font-medium text-gray-900 dark:text-white">{{ $snap->id }}</td>
-                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300">{{ $snap->mode }}</td>
+                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300">
+                                        {{ \App\Support\Reconciliation\ReconciliationSnapshotPresenter::modeLabel($snap->mode) }}
+                                    </td>
                                     <td class="px-4 py-3 tabular-nums text-gray-600 dark:text-gray-400">
                                         {{ $snap->as_of->format('Y-m-d H:i') }}</td>
                                     <td class="px-4 py-3">
                                         <span @class([
-                                            'inline-flex rounded-full px-2 py-0.5 text-xs font-semibold',
-                                            'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200' => $snap->is_passing,
-                                            'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-200' => !$snap->is_passing,
-                                        ])>{{ $snap->is_passing ? __('Pass') : __('Fail') }}</span>
+            'inline-flex rounded-full px-2 py-0.5 text-xs font-semibold',
+            'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200' => $snap->is_passing,
+            'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-200' => !$snap->is_passing,
+        ])>{{ $snap->is_passing ? __('Pass') : __('Fail') }}</span>
                                     </td>
                                     <td class="px-4 py-3 tabular-nums text-gray-700 dark:text-gray-300">
                                         {{ $snap->critical_issues }}</td>
@@ -148,104 +166,81 @@
 
             @php($sel = $this->getSelectedSnapshot())
                 @if ($sel)
-                    <div
-                        class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-                        <div class="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
-                                    {{ __('Snapshot #:id — summary', ['id' => $sel->id]) }}</h3>
-                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ __('Mode') }} {{ $sel->mode }} ·
-                                    {{ __('as of') }} {{ $sel->as_of->toIso8601String() }}</p>
-                            </div>
-                            <div class="flex flex-wrap gap-2">
-                                @if ($this->canExportDownloads())
-                                    <button type="button" wire:click="downloadReport({{ (int) $sel->id }})"
-                                        class="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:hover:bg-white/5">
-                                        <x-heroicon-o-arrow-down-tray class="h-4 w-4" />
-                                        {{ __('JSON') }}
-                                    </button>
-                                    <button type="button" wire:click="downloadPdf({{ (int) $sel->id }})"
-                                        class="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:hover:bg-white/5">
-                                        <x-heroicon-o-document-text class="h-4 w-4" />
-                                        {{ __('PDF') }}
-                                    </button>
-                                @endif
-                            </div>
+                                        <div
+                                            class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60 sm:p-5">
+                                            <div class="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-4 dark:border-white/10">
+                                                <div>
+                                                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                                                        {{ __('Snapshot analysis') }}</h3>
+                                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                                        {{ __('Review verdict, check details, and drill-down links. Export JSON or PDF for audit archives.') }}
+                                                    </p>
+                                                </div>
+                                                @if ($this->canExportDownloads())
+                                                    <div class="flex flex-wrap gap-2">
+                                                        <button type="button" wire:click="downloadReport({{ (int) $sel->id }})"
+                                                            class="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:hover:bg-white/5">
+                                                            <x-heroicon-o-arrow-down-tray class="h-4 w-4" />
+                                                            {{ __('JSON') }}
+                                                        </button>
+                                                        <button type="button" wire:click="downloadPdf({{ (int) $sel->id }})"
+                                                            class="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:hover:bg-white/5">
+                                                            <x-heroicon-o-document-text class="h-4 w-4" />
+                                                            {{ __('PDF') }}
+                                                        </button>
+                                                    </div>
+                                                @endif
+                                            </div>
+
+                            @include('filament.tenant.partials.reconciliation.snapshot-detail', ['snapshot' => $sel])
                         </div>
-                        <dl class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                            @foreach (($sel->summary['headline_checks'] ?? []) as $key => $severity)
-                                <div class="rounded-lg border border-gray-100 px-3 py-2 dark:border-white/10">
-                                    <dt class="text-xs text-gray-500 dark:text-gray-400">{{ \App\Support\Lang::ui(str_replace('_', ' ', $key)) }}</dt>
-                                    <dd class="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">
-                                        {{ match (strtolower((string) $severity)) {
-                                            'critical' => __('Critical'),
-                                            'warning' => __('Warnings'),
-                                            'pass', 'ok', 'success' => __('Pass'),
-                                            'fail' => __('Fail'),
-                                            default => ucfirst((string) $severity),
-                                        } }}
-                                    </dd>
-                                </div>
-                            @endforeach
-                        </dl>
-                        @if (!empty($sel->report['checks']['ledger_balances']['mismatches']))
-                            <div
-                                class="mt-4 rounded-lg border border-red-200 bg-red-50/80 p-3 text-xs text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
-                                <p class="font-semibold">{{ __('Ledger mismatches (first rows)') }}</p>
-                                <ul class="mt-2 list-inside list-disc space-y-1">
-                                    @foreach (array_slice($sel->report['checks']['ledger_balances']['mismatches'], 0, 8) as $row)
-                                        <li>{{ $row['name'] ?? __('Account #:id', ['id' => ($row['account_id'] ?? '')]) }} — Δ
-                                            {!! \App\Filament\Support\MoneyDisplay::html($row['delta'] ?? 0)?->toHtml() ?? '—' !!}</li>
-                                    @endforeach
-                                </ul>
+                @elseif ($this->getLatestSnapshots()->isNotEmpty())
+                    <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-4 py-6 text-center text-sm text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
+                            {{ __('Select a snapshot row above to analyze check results and mismatches.') }}
                             </div>
-                        @endif
-                    </div>
                 @endif
             @elseif ($this->sideTab === 'methodology' && $this->advancedUi)
             <div class="prose prose-sm max-w-none dark:prose-invert">
-                <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ __('Reconciliation approach') }}
-                </h3>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ __('Reconciliation approach') }}</h3>
                 <p class="text-sm text-gray-600 dark:text-gray-400">
                     {{ __('The engine treats') }} <strong>{{ __('ledger roll-forward') }}</strong>
                     {{ __('as the source of truth: every account’s stored balance must equal the net of its') }}
                     <code>transactions</code>
                     {{ __('(credits minus debits). That catches partial reversals, manual edits, and import errors early.') }}
                 </p>
-                <h4 class="mt-6 text-sm font-semibold text-gray-900 dark:text-white">
-                    {{ __('Two complementary layers') }}</h4>
+
+                <h4 class="mt-6 text-sm font-semibold text-gray-900 dark:text-white">{{ __('Two complementary layers') }}</h4>
                 <ul class="text-sm text-gray-600 dark:text-gray-400">
                     <li><strong>{{ __('Audit snapshots') }}</strong> —
                         {{ __('this page stores historical reports (realtime / daily / monthly) with full check payloads for period close and external audit.') }}
                     </li>
                     <li><strong>{{ __('Exception queue') }}</strong> —
-                        {{ __('the Exceptions tab is refreshed nightly by') }} <code
-                            class="text-xs">fund:nightly-reconciliation</code>
+                        {{ __('the Exceptions tab is refreshed nightly by') }} <code class="text-xs">fund:nightly-reconciliation</code>
                         {{ __('with auto-resolve and admin actions.') }}</li>
                 </ul>
                 <h4 class="mt-6 text-sm font-semibold text-gray-900 dark:text-white">{{ __('Checks') }}</h4>
                 <ul class="text-sm text-gray-600 dark:text-gray-400">
                     <li><strong>{{ __('Stored balance vs ledger') }}</strong> —
                         {{ __('critical if any account drifts beyond tolerance.') }}</li>
-                    <li><strong>{{ __('Global trial') }}</strong> —
-                        {{ __('Σ credits vs Σ debits across all lines; warning if unequal (expected under some one-sided flows).') }}
-                    </li>
-                    <li><strong>{{ __('Master vs Σ(member) cash & fund') }}</strong> —
-                        {{ __('advisory; member-only cash debits (repayments) and guarantor fund debits break strict parity by design.') }}
-                    </li>
-                    <li><strong>{{ __('Bank statement vs book') }}</strong> — {{ __('optional: compare') }} <code
-                            class="text-xs">master_cash</code>
-                        {{ __('balance to a declared statement closing balance (UI or settings). Variance is warning by default, or critical if you toggle strict on the run.') }}
-                    </li>
+                                <li><strong>{{ __('Global trial') }}</strong> —
+                                    {{ __('Σ credits vs Σ debits across all lines; warning if unequal (expected under some one-sided flows).') }}
+                                </li>
+                                <li><strong>{{ __('Master vs Σ(member) cash & fund') }}</strong> —
+                                    {{ __('advisory; member-only cash debits (repayments) and guarantor fund debits break strict parity by design.') }}
+                                </li>
+                                <li><strong>{{ __('Bank statement vs book') }}</strong> — {{ __('optional: compare') }} <code
+                                        class="text-xs">master_cash</code>
+                                    {{ __('balance to a declared statement closing balance (UI or settings). Variance is warning by default, or critical if you toggle strict on the run.') }}
+                                </li>
                     <li><strong>{{ __('Contributions vs fund ledger') }}</strong> —
                         {{ __('critical if any non-deleted contribution has no ledger lines; warning if Σ contribution amounts ≠ Σ master-fund credits sourced from contributions.') }}
                     </li>
                     <li><strong>{{ __('Active loans') }}</strong> —
-                        {{ __('pending installment total vs loan account outstanding.') }}</li>
+                                    {{ __('loan account outstanding vs expected ledger (scheduled pending EMIs minus partial repayments posted ahead of the schedule).') }}</li>
                     <li><strong>{{ __('Approved loans (with disbursement)') }}</strong> —
                         {{ __('before installments exist, loan ledger should match') }} <code
                             class="text-xs">amount_disbursed</code>;
-                        {{ __('with installments, compared to remaining schedule.') }}</li>
+                        {{ __('with installments, compared to ledger expected outstanding (scheduled minus partial paid).') }}</li>
                     <li><strong>{{ __('Orphan loan accounts') }}</strong> —
                         {{ __('critical if a loan-type account exists without a loan row.') }}</li>
                     <li><strong>{{ __('Import pipeline') }}</strong> —

@@ -4,7 +4,7 @@ namespace App\Filament\Member\Resources\MyLoans\Tables;
 
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Support\DateColumnRangeFilter;
-use App\Filament\Support\LoanFilamentActions;
+use App\Filament\Support\LoanOutstandingColumn;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -16,7 +16,6 @@ use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class MyLoansTable
@@ -33,11 +32,7 @@ class MyLoansTable
                         ->label(__('Amount'))
                         ->money($currency)
                         ->sortable(),
-                    TextColumn::make('outstanding')
-                        ->label(__('Outstanding'))
-                        ->state(fn (Loan $record): float => $record->getOutstandingBalance())
-                        ->money($currency)
-                        ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByOutstanding($direction)),
+                    LoanOutstandingColumn::make($currency),
                     TextColumn::make('installments_count')
                         ->label(__('Installments'))
                         ->placeholder(__('—')),

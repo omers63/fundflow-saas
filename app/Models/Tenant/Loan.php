@@ -702,6 +702,14 @@ class Loan extends Model
 
     public function getOutstandingBalance(): float
     {
+        return $this->getLedgerOutstanding();
+    }
+
+    /**
+     * Sum of pending and overdue installment amounts on the EMI schedule.
+     */
+    public function getScheduledOutstanding(): float
+    {
         if ($this->relationLoaded('installments')) {
             return (float) $this->installments
                 ->whereIn('status', ['pending', 'overdue'])
@@ -710,6 +718,72 @@ class Loan extends Model
 
         return (float) $this->installments()
             ->whereIn('status', ['pending', 'overdue'])
+            ->sum('amount');
+    }
+
+    /**
+     * Master-slice repayments posted on the ledger but not matched to paid installment rows.
+     */
+    public function getPartialRepaymentAheadOfSchedule(): float
+    {
+        $masterPortion = (float) $this->master_portion;
+
+        if ($masterPortion <= 0.01) {
+            return 0.0;
+        }
+
+        $paidOnSchedule = $this->sumPaidInstallmentAmounts();
+        $repaidToMaster = (float) $this->repaid_to_master;
+
+        return max(0.0, round($repaidToMaster - $paidOnSchedule, 2));
+    }
+
+    /**
+     * Effective outstanding on the master / loan ledger (schedule minus partial prepayments).
+     */
+    public function getLedgerOutstanding(): float
+    {
+        $masterPortion = (float) $this->master_portion;
+
+        if ($masterPortion <= 0.01) {
+            return $this->getScheduledOutstanding();
+        }
+
+        return max(0.0, round($masterPortion - (float) $this->repaid_to_master, 2));
+    }
+
+    /**
+     * @return array{
+     *     scheduled: float,
+     *     partial_paid: float,
+     *     ledger: float,
+     *     has_split: bool,
+     * }
+     */
+    public function getOutstandingBreakdown(): array
+    {
+        $scheduled = $this->getScheduledOutstanding();
+        $partialPaid = $this->getPartialRepaymentAheadOfSchedule();
+        $ledger = $this->getLedgerOutstanding();
+
+        return [
+            'scheduled' => $scheduled,
+            'partial_paid' => $partialPaid,
+            'ledger' => $ledger,
+            'has_split' => $partialPaid > 0.009,
+        ];
+    }
+
+    protected function sumPaidInstallmentAmounts(): float
+    {
+        if ($this->relationLoaded('installments')) {
+            return (float) $this->installments
+                ->where('status', 'paid')
+                ->sum('amount');
+        }
+
+        return (float) $this->installments()
+            ->where('status', 'paid')
             ->sum('amount');
     }
 

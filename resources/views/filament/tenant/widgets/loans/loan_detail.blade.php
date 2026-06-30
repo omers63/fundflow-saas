@@ -49,7 +49,15 @@
                 <p class="mt-1 text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white sm:text-3xl">
                     <x-member::amount :value="$snapshot['outstanding'] ?? 0" :currency="$currency" />
                 </p>
-                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                @if ($snapshot['outstanding_breakdown']['has_split'] ?? false)
+                    <div class="mt-2">
+                        <x-loan-outstanding-breakdown
+                            :breakdown="$snapshot['outstanding_breakdown']"
+                            :currency="$currency"
+                        />
+                    </div>
+                @endif
+                <p @class(['mt-1 text-xs text-gray-500 dark:text-gray-400', 'mt-2' => $snapshot['outstanding_breakdown']['has_split'] ?? false])>
                     @if ($showRepayProgress)
                         {{ __(':paid of :total installments paid', [
                             'paid' => $snapshot['installments_paid'] ?? 0,

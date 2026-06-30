@@ -182,6 +182,8 @@ return [
     'on the 2nd at 06:30. Bank vs book settings are under System → Settings → General → Reconciliation.' => 'في اليوم 2 الساعة 06:30. إعدادات البنك مقابل الدفتر ضمن النظام ← الإعدادات ← عام ← المطابقة.',
     'optional: compare' => 'اختياري: قارن',
     'pending installment total vs loan account outstanding.' => 'إجمالي الأقساط المعلّقة مقابل مستحق حساب القرض.',
+    'loan account outstanding vs expected ledger (scheduled pending EMIs minus partial repayments posted ahead of the schedule).' => 'مستحق حساب القرض مقابل الدفتر المتوقع (الأقساط المعلّقة المجدولة ناقص السداد الجزئي المسجّل قبل الجدول).',
+    'with installments, compared to ledger expected outstanding (scheduled minus partial paid).' => 'مع وجود أقساط، تُقارن بمستحق الدفتر المتوقع (المجدول ناقص المدفوع جزئياً).',
     'snapshots tag the reporting window for audit; full ledger checks always use the current database state.' => 'اللقطات توسم نافذة التقرير للتدقيق؛ فحوصات الدفتر الكاملة تستخدم دائماً حالة قاعدة البيانات الحالية.',
     'statement balance' => 'رصيد الكشف',
     'the Exceptions tab is refreshed nightly by' => 'يُحدَّث تبويب الاستثناءات ليلياً بواسطة',

@@ -63,6 +63,11 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public ?int $selectedSnapshotId = null;
 
+    public ?int $selectedExceptionId = null;
+
+    #[Url(as: 'queueDomain')]
+    public ?string $queueDomainFilter = null;
+
     public static function canAccess(): bool
     {
         return auth('tenant')->check();
@@ -124,13 +129,39 @@ class ReconciliationOverviewPage extends Page implements HasTable
     {
         $this->mountAdvancedUi();
         $this->normalizeSideTab();
+        $this->ensureSnapshotSelected();
+        $this->ensureExceptionSelected();
         $this->refreshWorkspacePanelActions();
+    }
+
+    protected function ensureSnapshotSelected(): void
+    {
+        if ($this->sideTab !== 'snapshots' || $this->selectedSnapshotId !== null) {
+            return;
+        }
+
+        $latestId = ReconciliationSnapshot::query()->latest('as_of')->value('id');
+
+        if (is_numeric($latestId)) {
+            $this->selectedSnapshotId = (int) $latestId;
+        }
     }
 
     protected function onAdvancedUiToggled(): void
     {
         $this->normalizeSideTab();
         $this->refreshWorkspacePanelActions();
+        $this->resetStuckActionState();
+    }
+
+    public function runCheckNow(): void
+    {
+        abort_unless(auth('tenant')->user()?->is_admin === true, 403);
+
+        $this->executeRun(
+            ReconciliationSnapshot::MODE_REALTIME,
+            ReconciliationReportService::bankOptionsFromSettings(),
+        );
     }
 
     protected function normalizeSideTab(): void
@@ -139,6 +170,8 @@ class ReconciliationOverviewPage extends Page implements HasTable
             $this->sideTab = 'overview';
         }
     }
+
+    protected bool $applyingSideTabFromMethod = false;
 
     public function setSideTab(string $tab): void
     {
@@ -150,13 +183,57 @@ class ReconciliationOverviewPage extends Page implements HasTable
             return;
         }
 
-        $this->sideTab = $tab;
+        $previousTab = $this->sideTab;
+
+        $this->applyingSideTabFromMethod = true;
+
+        try {
+            $this->sideTab = $tab;
+            $this->syncSideTabTableState($previousTab, $tab);
+            $this->ensureSnapshotSelected();
+            $this->ensureExceptionSelected();
+        } finally {
+            $this->applyingSideTabFromMethod = false;
+        }
     }
 
     public function updatedSideTab(): void
     {
         $this->normalizeSideTab();
+
+        if ($this->applyingSideTabFromMethod) {
+            return;
+        }
+
+        if (in_array($this->sideTab, $this->tableSideTabs(), true)) {
+            $this->tableSort = null;
+            $this->reconfigureTableForSideTab();
+            $this->resetTable();
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function tableSideTabs(): array
+    {
+        return ['exceptions', 'history'];
+    }
+
+    protected function syncSideTabTableState(string $from, string $to): void
+    {
+        $tableTabs = $this->tableSideTabs();
+
+        if (! in_array($from, $tableTabs, true) && ! in_array($to, $tableTabs, true)) {
+            return;
+        }
+
         $this->tableSort = null;
+
+        if (in_array($from, $tableTabs, true)) {
+            $this->unmountTableAction(false);
+        }
+
         $this->reconfigureTableForSideTab();
         $this->resetTable();
     }
@@ -178,7 +255,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     protected function getTableQueryStringIdentifier(): ?string
     {
-        return 'reconciliation_' . $this->sideTab;
+        return 'reconciliation_'.$this->sideTab;
     }
 
     public function table(Table $table): Table
@@ -192,6 +269,10 @@ class ReconciliationOverviewPage extends Page implements HasTable
                     ReconciliationException::STATUS_OPEN,
                     ReconciliationException::STATUS_ESCALATED,
                 ])
+                ->when(
+                    filled($this->queueDomainFilter),
+                    fn ($query) => $query->where('domain', $this->queueDomainFilter),
+                )
                 ->orderByDesc('raised_at'),
             default => ReconciliationException::query(),
         };
@@ -200,6 +281,8 @@ class ReconciliationOverviewPage extends Page implements HasTable
             $table->query($query),
             queueOnly: $this->sideTab === 'exceptions',
             advancedUi: $this->advancedUi,
+            workspacePanel: $this->sideTab === 'exceptions',
+            selectedExceptionId: $this->selectedExceptionId,
         );
     }
 
@@ -344,34 +427,26 @@ class ReconciliationOverviewPage extends Page implements HasTable
     {
         $canRun = fn (): bool => auth('tenant')->user()?->is_admin === true;
 
-        if (!$canRun()) {
+        if (! $canRun()) {
             return [];
         }
 
         $bankSchema = $this->reconciliationBankSchema();
 
         $runRealtime = Action::make('run_realtime')
-            ->label(fn(): string => $this->advancedUi
-                ? (string) __('Real-time snapshot')
-                : (string) __('Run check now'))
+            ->label(__('Real-time snapshot'))
             ->icon('heroicon-o-play')
             ->color('primary')
             ->button()
             ->longRunning()
-            ->longRunningMessage(fn(): string => $this->advancedUi
-                ? (string) __('Running real-time reconciliation checks and saving a snapshot.')
-                : (string) __('Running reconciliation checks and saving a snapshot.'))
+            ->longRunningMessage(__('Running real-time reconciliation checks and saving a snapshot.'))
             ->schema($bankSchema)
-            ->modalHeading(fn(): string => $this->advancedUi
-                ? (string) __('Run real-time reconciliation')
-                : (string) __('Run reconciliation check'))
-            ->modalDescription(fn(): string => $this->advancedUi
-                ? (string) __('Recomputes all checks as of this moment and stores a snapshot tagged realtime.')
-                : (string) __('Recomputes all checks as of this moment and stores a snapshot.'))
+            ->modalHeading(__('Run real-time reconciliation'))
+            ->modalDescription(__('Recomputes all checks as of this moment and stores a snapshot tagged realtime.'))
             ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_REALTIME, $this->optionsFromActionData($data)));
 
-        if (!$this->advancedUi) {
-            return [$runRealtime];
+        if (! $this->advancedUi) {
+            return [];
         }
 
         $moreRuns = [
@@ -483,6 +558,106 @@ class ReconciliationOverviewPage extends Page implements HasTable
         $this->selectedSnapshotId = $id;
     }
 
+    public function selectException(?int $id): void
+    {
+        $this->selectedExceptionId = $id;
+    }
+
+    public function setQueueDomainFilter(?string $domain): void
+    {
+        $this->queueDomainFilter = $this->queueDomainFilter === $domain ? null : $domain;
+        $this->ensureExceptionSelected();
+        $this->resetTable();
+    }
+
+    public function runExceptionAction(string $actionName): void
+    {
+        if ($this->selectedExceptionId === null) {
+            return;
+        }
+
+        $this->mountTableAction($actionName, (string) $this->selectedExceptionId);
+    }
+
+    protected function ensureExceptionSelected(): void
+    {
+        if ($this->sideTab !== 'exceptions') {
+            return;
+        }
+
+        $query = ReconciliationException::query()
+            ->whereIn('status', [
+                ReconciliationException::STATUS_OPEN,
+                ReconciliationException::STATUS_ESCALATED,
+            ])
+            ->when(
+                filled($this->queueDomainFilter),
+                fn ($builder) => $builder->where('domain', $this->queueDomainFilter),
+            );
+
+        if ($this->selectedExceptionId !== null) {
+            $exists = (clone $query)->whereKey($this->selectedExceptionId)->exists();
+
+            if ($exists) {
+                return;
+            }
+        }
+
+        $firstId = (clone $query)->orderByDesc('raised_at')->value('id');
+        $this->selectedExceptionId = is_numeric($firstId) ? (int) $firstId : null;
+    }
+
+    public function getSelectedException(): ?ReconciliationException
+    {
+        if ($this->selectedExceptionId === null) {
+            return null;
+        }
+
+        return ReconciliationException::query()
+            ->with('assignee')
+            ->find($this->selectedExceptionId);
+    }
+
+    /**
+     * @return array{total: int, critical: int, high: int, escalated: int, unassigned: int}
+     */
+    public function getOpenExceptionQueueStats(): array
+    {
+        if (! Schema::hasTable('reconciliation_exceptions')) {
+            return [
+                'total' => 0,
+                'critical' => 0,
+                'high' => 0,
+                'escalated' => 0,
+                'unassigned' => 0,
+            ];
+        }
+
+        try {
+            $base = ReconciliationException::query()
+                ->whereIn('status', [
+                    ReconciliationException::STATUS_OPEN,
+                    ReconciliationException::STATUS_ESCALATED,
+                ]);
+
+            return [
+                'total' => (int) (clone $base)->count(),
+                'critical' => (int) (clone $base)->where('severity', 'critical')->count(),
+                'high' => (int) (clone $base)->where('severity', 'high')->count(),
+                'escalated' => (int) (clone $base)->where('status', ReconciliationException::STATUS_ESCALATED)->count(),
+                'unassigned' => (int) (clone $base)->whereNull('assigned_to')->count(),
+            ];
+        } catch (\Throwable) {
+            return [
+                'total' => 0,
+                'critical' => 0,
+                'high' => 0,
+                'escalated' => 0,
+                'unassigned' => 0,
+            ];
+        }
+    }
+
     public function canExportDownloads(): bool
     {
         return auth('tenant')->user()?->is_admin === true;
@@ -540,7 +715,9 @@ class ReconciliationOverviewPage extends Page implements HasTable
             return null;
         }
 
-        return ReconciliationSnapshot::query()->find($this->selectedSnapshotId);
+        return ReconciliationSnapshot::query()
+            ->with('createdBy')
+            ->find($this->selectedSnapshotId);
     }
 
     /**
@@ -572,6 +749,10 @@ class ReconciliationOverviewPage extends Page implements HasTable
             $snapshot = $service->persistSnapshot($report, is_int($userId) ? $userId : null);
             $this->selectedSnapshotId = $snapshot->id;
 
+            if ($this->advancedUi) {
+                $this->sideTab = 'snapshots';
+            }
+
             $pass = $report['verdict']['pass'] ?? false;
             $notification = Notification::make()
                 ->title($pass ? __('Reconciliation passed') : __('Reconciliation found critical issues'))
@@ -591,9 +772,34 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     protected function finishWorkspaceReconciliationRun(): void
     {
-        $this->unmountAction(false);
-        $this->reconfigureTableForSideTab();
-        $this->resetTable();
+        $this->resetStuckActionState();
+
+        if (in_array($this->sideTab, $this->tableSideTabs(), true)) {
+            $this->reconfigureTableForSideTab();
+            $this->resetTable();
+            $this->ensureExceptionSelected();
+        }
+
+        $this->refreshWorkspacePanelActions();
+    }
+
+    protected function resetStuckActionState(): void
+    {
+        if (method_exists($this, 'unmountAction')) {
+            $this->unmountAction(false);
+        }
+
+        if (property_exists($this, 'mountedActions')) {
+            $this->mountedActions = [];
+        }
+
+        if (property_exists($this, 'cachedMountedActions')) {
+            $this->cachedMountedActions = null;
+        }
+
+        if (in_array($this->sideTab, $this->tableSideTabs(), true)) {
+            $this->unmountTableAction(false);
+        }
     }
 
     protected function notifyReconciliationRunFailed(\Throwable $exception): void

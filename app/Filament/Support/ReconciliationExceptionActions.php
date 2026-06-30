@@ -154,6 +154,18 @@ final class ReconciliationExceptionActions
             ->modalDescription(__('This removes the selected exception records only. It does not reverse ledger entries or undo resolutions already applied.'));
     }
 
+    public static function focusExceptionAction(): Action
+    {
+        return Action::make('focusException')
+            ->label(__('Analyze'))
+            ->hidden()
+            ->action(function (ReconciliationException $record, $livewire): void {
+                if (is_object($livewire) && method_exists($livewire, 'selectException')) {
+                    $livewire->selectException((int) $record->getKey());
+                }
+            });
+    }
+
     public static function viewAction(): Action
     {
         return Action::make('viewException')

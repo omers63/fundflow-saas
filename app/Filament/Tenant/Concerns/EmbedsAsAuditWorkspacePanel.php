@@ -25,12 +25,16 @@ trait EmbedsAsAuditWorkspacePanel
 
     public function bootEmbedsAsAuditWorkspacePanel(): void
     {
+        if ($this->cachedWorkspacePanelActions !== []) {
+            return;
+        }
+
         $this->refreshWorkspacePanelActions();
     }
 
     public function refreshWorkspacePanelActions(): void
     {
-        if (!method_exists($this, 'workspacePanelActions')) {
+        if (! method_exists($this, 'workspacePanelActions')) {
             return;
         }
 
@@ -87,7 +91,7 @@ trait EmbedsAsAuditWorkspacePanel
             if ($action instanceof ActionGroup) {
                 $action->livewire($this);
 
-                if (!$action->getDropdownPlacement()) {
+                if (! $action->getDropdownPlacement()) {
                     $action->dropdownPlacement('bottom-end');
                 }
 

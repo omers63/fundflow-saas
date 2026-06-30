@@ -469,15 +469,18 @@ class ReconciliationReportService
                         continue;
                     }
                     $ledgerOutstanding = max(0.0, -(float) $acc->balance);
-                    $scheduleOutstanding = (float) $loan->remaining_amount;
-                    if (abs($ledgerOutstanding - $scheduleOutstanding) > self::LOAN_SCHEDULE_TOLERANCE) {
+                    $metrics = $this->loanOutstandingReconciliationMetrics($loan, $ledgerOutstanding);
+                    if (abs($metrics['delta']) > self::LOAN_SCHEDULE_TOLERANCE) {
                         $activeLoanMismatches[] = [
                             'loan_id' => $loan->id,
                             'phase' => 'active',
                             'member' => $loan->member?->user?->name,
-                            'ledger_outstanding' => round($ledgerOutstanding, 2),
-                            'schedule_remaining' => round($scheduleOutstanding, 2),
-                            'delta' => round($ledgerOutstanding - $scheduleOutstanding, 2),
+                            'ledger_outstanding' => $metrics['ledger_account_outstanding'],
+                            'ledger_expected' => $metrics['ledger_expected'],
+                            'scheduled_outstanding' => $metrics['scheduled_outstanding'],
+                            'partial_paid_ahead' => $metrics['partial_paid_ahead'],
+                            'schedule_remaining' => $metrics['scheduled_outstanding'],
+                            'delta' => $metrics['delta'],
                         ];
                     }
                 }
@@ -488,11 +491,12 @@ class ReconciliationReportService
         }
 
         $checks['active_loans_schedule_vs_ledger'] = [
-            'label' => 'Active loans — pending installment total vs loan account',
+            'label' => 'Active loans — loan ledger vs expected outstanding (scheduled − partial paid)',
             'severity' => $activeLoanMismatches === [] ? 'ok' : 'warning',
             'mismatch_count' => count($activeLoanMismatches),
             'mismatches' => array_slice($activeLoanMismatches, 0, 100),
             'mismatches_truncated' => count($activeLoanMismatches) > 100,
+            'note' => 'Loan account outstanding is compared to the master-slice ledger (scheduled pending EMIs minus partial repayments posted ahead of the schedule).',
         ];
 
         // --- 4b) Approved loans with disbursement(s): ledger vs disbursed / schedule ---
@@ -513,21 +517,25 @@ class ReconciliationReportService
                     $ledgerOutstanding = max(0.0, -(float) $acc->balance);
                     $hasInstallments = $loan->installments()->exists();
                     if ($hasInstallments) {
-                        $expected = (float) $loan->remaining_amount;
+                        $metrics = $this->loanOutstandingReconciliationMetrics($loan, $ledgerOutstanding);
+                        $expected = $metrics['ledger_expected'];
                     } else {
                         $expected = (float) $loan->amount_disbursed;
+                        $metrics = null;
                     }
                     if (abs($ledgerOutstanding - $expected) > self::LOAN_SCHEDULE_TOLERANCE) {
-                        $approvedLoanMismatches[] = [
+                        $approvedLoanMismatches[] = array_filter([
                             'loan_id' => $loan->id,
                             'phase' => 'approved',
                             'member' => $loan->member?->user?->name,
-                            'ledger_outstanding' => round($ledgerOutstanding, 2),
+                            'ledger_outstanding' => $metrics['ledger_account_outstanding'] ?? round($ledgerOutstanding, 2),
                             'expected_outstanding' => round($expected, 2),
-                            'expected_basis' => $hasInstallments ? 'remaining_installments' : 'amount_disbursed',
+                            'expected_basis' => $hasInstallments ? 'ledger_outstanding' : 'amount_disbursed',
+                            'scheduled_outstanding' => $metrics['scheduled_outstanding'] ?? null,
+                            'partial_paid_ahead' => $metrics['partial_paid_ahead'] ?? null,
                             'amount_disbursed' => round((float) $loan->amount_disbursed, 2),
                             'delta' => round($ledgerOutstanding - $expected, 2),
-                        ];
+                        ], fn (mixed $value): bool => $value !== null);
                     }
                 }
             });
@@ -542,7 +550,7 @@ class ReconciliationReportService
             'mismatch_count' => count($approvedLoanMismatches),
             'mismatches' => array_slice($approvedLoanMismatches, 0, 100),
             'mismatches_truncated' => count($approvedLoanMismatches) > 100,
-            'note' => 'Before installments exist, loan account outstanding should match amount_disbursed; once installments exist, compare to remaining installment total.',
+            'note' => 'Before installments exist, loan account outstanding should match amount_disbursed; once installments exist, compare to ledger expected outstanding (scheduled pending EMIs minus partial repayments ahead of the schedule).',
         ];
 
         // --- 4c) Loan disbursement cash payout leg integrity ---
@@ -1197,6 +1205,28 @@ class ReconciliationReportService
     }
 
     /**
+     * @return array{
+     *     ledger_account_outstanding: float,
+     *     ledger_expected: float,
+     *     scheduled_outstanding: float,
+     *     partial_paid_ahead: float,
+     *     delta: float,
+     * }
+     */
+    private function loanOutstandingReconciliationMetrics(Loan $loan, float $ledgerAccountOutstanding): array
+    {
+        $breakdown = $loan->getOutstandingBreakdown();
+
+        return [
+            'ledger_account_outstanding' => round($ledgerAccountOutstanding, 2),
+            'ledger_expected' => round($breakdown['ledger'], 2),
+            'scheduled_outstanding' => round($breakdown['scheduled'], 2),
+            'partial_paid_ahead' => round($breakdown['partial_paid'], 2),
+            'delta' => round($ledgerAccountOutstanding - $breakdown['ledger'], 2),
+        ];
+    }
+
+    /**
      * @return list<int>
      */
     private function legacyImportedLoanIds(): array
@@ -1245,12 +1275,17 @@ class ReconciliationReportService
                 $repaymentSum = (float) $loan->repayments()->sum('amount');
 
                 if (abs($paidInstallmentSum - $repaymentSum) > self::AMOUNT_TOLERANCE) {
-                    $issues[] = [
-                        'loan_id' => $loan->id,
-                        'issue' => 'legacy imported paid installments vs repayment records mismatch',
-                        'expected' => round($paidInstallmentSum, 2),
-                        'actual' => round($repaymentSum, 2),
-                    ];
+                    $partialAhead = $loan->getPartialRepaymentAheadOfSchedule();
+                    if (abs($repaymentSum - $paidInstallmentSum - $partialAhead) > self::AMOUNT_TOLERANCE) {
+                        $issues[] = [
+                            'loan_id' => $loan->id,
+                            'issue' => 'legacy imported paid installments vs repayment records mismatch',
+                            'expected' => round($paidInstallmentSum + $partialAhead, 2),
+                            'actual' => round($repaymentSum, 2),
+                            'scheduled_outstanding' => round($loan->getScheduledOutstanding(), 2),
+                            'partial_paid_ahead' => round($partialAhead, 2),
+                        ];
+                    }
 
                     continue;
                 }

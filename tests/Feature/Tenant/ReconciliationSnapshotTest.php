@@ -8,6 +8,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
@@ -123,6 +124,73 @@ test('reconciliation report skips per-installment ledger checks for legacy impor
         ->and($report['checks']['loan_installment_flow_integrity']['legacy_import_loan_count'])->toBe(1);
 });
 
+test('reconciliation active loan check uses scheduled minus partial paid for ledger comparison', function () {
+    $member = Member::create([
+        'member_number' => 'RECON-PARTIAL',
+        'name' => 'Partial Ahead Recon Member',
+        'email' => 'partial-recon@fund.test',
+        'monthly_contribution_amount' => 3000,
+        'joined_at' => now()->subYears(2),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 75_000,
+        'amount_requested' => 75_000,
+        'amount_approved' => 150_000,
+        'amount_disbursed' => 150_000,
+        'member_portion' => 75_000,
+        'master_portion' => 75_000,
+        'repaid_to_master' => 40_000,
+        'interest_rate' => 0,
+        'term_months' => 25,
+        'status' => 'active',
+        'applied_at' => now()->subYear(),
+    ]);
+
+    app(LoanLedgerService::class)->ensureLoanAccount($loan);
+    Account::query()->where('loan_id', $loan->id)->update(['balance' => -35_000]);
+
+    foreach (range(1, 13) as $number) {
+        LoanInstallment::create([
+            'loan_id' => $loan->id,
+            'installment_number' => $number,
+            'amount' => 3000,
+            'due_date' => now()->subMonths(14 - $number),
+            'status' => 'paid',
+            'paid_at' => now()->subMonths(14 - $number),
+        ]);
+    }
+
+    foreach (range(14, 25) as $number) {
+        LoanInstallment::create([
+            'loan_id' => $loan->id,
+            'installment_number' => $number,
+            'amount' => 3000,
+            'due_date' => now()->addMonths($number - 13),
+            'status' => 'pending',
+        ]);
+    }
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['active_loans_schedule_vs_ledger'];
+
+    expect($check['severity'])->toBe('ok')
+        ->and($check['mismatch_count'])->toBe(0)
+        ->and($loan->fresh(['installments'])->getOutstandingBreakdown())->toMatchArray([
+            'scheduled' => 36_000.0,
+            'partial_paid' => 1_000.0,
+            'ledger' => 35_000.0,
+            'has_split' => true,
+        ]);
+});
+
 test('reconciliation snapshot persists report payload', function () {
     $service = app(ReconciliationReportService::class);
     $report = $service->buildReport(ReconciliationSnapshot::MODE_DAILY);
@@ -190,10 +258,10 @@ test('reconciliation page workspace tabs switch via livewire', function () {
         ->assertSet('sideTab', 'methodology');
 });
 
-test('run check now action completes in simple mode', function () {
+test('run check now completes in simple mode', function () {
     $admin = User::create([
         'name' => 'Recon Simple Run Admin',
-        'email' => 'recon-simple-run-' . uniqid('', true) . '@fund.test',
+        'email' => 'recon-simple-run-'.uniqid('', true).'@fund.test',
         'password' => bcrypt('password'),
         'email_verified_at' => now(),
         'is_admin' => true,
@@ -206,12 +274,14 @@ test('run check now action completes in simple mode', function () {
 
     Livewire::test(ReconciliationOverviewPage::class)
         ->assertSet('advancedUi', false)
-        ->mountAction('run_realtime')
-        ->callMountedAction()
+        ->assertSee(__('Run check now'))
+        ->call('runCheckNow')
         ->assertNotified()
         ->assertSet('mountedActions', [])
         ->call('setSideTab', 'exceptions')
-        ->assertSet('sideTab', 'exceptions');
+        ->assertSet('sideTab', 'exceptions')
+        ->call('setSideTab', 'overview')
+        ->assertSet('sideTab', 'overview');
 
     expect(ReconciliationSnapshot::query()->count())->toBe($before + 1);
 });
@@ -219,7 +289,7 @@ test('run check now action completes in simple mode', function () {
 test('real-time snapshot action completes and tabs remain switchable', function () {
     $admin = User::create([
         'name' => 'Recon Run Admin',
-        'email' => 'recon-run-' . uniqid('', true) . '@fund.test',
+        'email' => 'recon-run-'.uniqid('', true).'@fund.test',
         'password' => bcrypt('password'),
         'email_verified_at' => now(),
         'is_admin' => true,
@@ -232,14 +302,76 @@ test('real-time snapshot action completes and tabs remain switchable', function 
 
     Livewire::test(ReconciliationOverviewPage::class)
         ->call('setAdvancedUi', true)
+        ->call('setSideTab', 'exceptions')
+        ->assertSet('sideTab', 'exceptions')
+        ->call('setSideTab', 'overview')
+        ->assertSet('sideTab', 'overview')
+        ->call('setSideTab', 'history')
+        ->assertSet('sideTab', 'history')
         ->mountAction('run_realtime')
         ->callMountedAction()
         ->assertNotified()
         ->assertSet('mountedActions', [])
+        ->assertSet('sideTab', 'snapshots')
+        ->assertSee(__('Snapshot analysis'))
+        ->assertSee(__('Check results'))
         ->call('setSideTab', 'exceptions')
         ->assertSet('sideTab', 'exceptions')
         ->call('setSideTab', 'overview')
-        ->assertSet('sideTab', 'overview');
+        ->assertSet('sideTab', 'overview')
+        ->call('setSideTab', 'methodology')
+        ->assertSet('sideTab', 'methodology');
 
     expect(ReconciliationSnapshot::query()->count())->toBe($before + 1);
+});
+
+test('reconciliation exceptions tab selects issue and shows analysis panel', function () {
+    ReconciliationException::query()->delete();
+
+    $admin = User::create([
+        'name' => 'Recon Exception Admin',
+        'email' => 'recon-exception-'.uniqid('', true).'@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $first = ReconciliationException::create([
+        'exception_code' => 'RECON_AMBIGUOUS_MATCH',
+        'domain' => 'bank_clearing',
+        'severity' => 'high',
+        'status' => ReconciliationException::STATUS_OPEN,
+        'raised_at' => now()->subHour(),
+        'affected_entities' => [
+            'imported_bank_transaction_id' => 99,
+            'candidate_ids' => [1, 2],
+        ],
+    ]);
+
+    $second = ReconciliationException::create([
+        'exception_code' => 'MEMBER_CASH_DRIFT',
+        'domain' => 'master_account',
+        'severity' => 'critical',
+        'status' => ReconciliationException::STATUS_OPEN,
+        'raised_at' => now(),
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+    $this->actingAs($admin, 'tenant');
+
+    Livewire::test(ReconciliationOverviewPage::class)
+        ->call('setSideTab', 'exceptions')
+        ->assertSet('sideTab', 'exceptions')
+        ->assertSet('selectedExceptionId', $second->id)
+        ->assertSee(__('Issue analysis'))
+        ->assertSee(__('Suggested next step'))
+        ->assertSee(__('Fix actions'))
+        ->call('selectException', $first->id)
+        ->assertSet('selectedExceptionId', $first->id)
+        ->assertSee(__('Ambiguous bank match'))
+        ->call('setQueueDomainFilter', 'bank_clearing')
+        ->assertSet('queueDomainFilter', 'bank_clearing')
+        ->assertSet('selectedExceptionId', $first->id)
+        ->call('setQueueDomainFilter', 'bank_clearing')
+        ->assertSet('queueDomainFilter', null);
 });

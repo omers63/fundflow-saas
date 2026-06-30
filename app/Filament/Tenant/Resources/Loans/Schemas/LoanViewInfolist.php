@@ -156,6 +156,21 @@ final class LoanViewInfolist
                         TextEntry::make('total_repaid')
                             ->label(__('Total repaid'))
                             ->money($currency),
+                        TextEntry::make('scheduled_outstanding')
+                            ->label(__('Scheduled outstanding'))
+                            ->state(fn (Loan $record): float => $record->getScheduledOutstanding())
+                            ->money($currency)
+                            ->visible(fn (Loan $record): bool => $record->getOutstandingBreakdown()['has_split']),
+                        TextEntry::make('partial_repaid_ahead')
+                            ->label(__('Partial paid'))
+                            ->state(fn (Loan $record): float => $record->getPartialRepaymentAheadOfSchedule())
+                            ->money($currency)
+                            ->visible(fn (Loan $record): bool => $record->getOutstandingBreakdown()['has_split']),
+                        TextEntry::make('ledger_outstanding')
+                            ->label(__('Ledger outstanding'))
+                            ->state(fn (Loan $record): float => $record->getLedgerOutstanding())
+                            ->money($currency)
+                            ->visible(fn (Loan $record): bool => $record->getOutstandingBreakdown()['has_split']),
                         TextEntry::make('repaid_to_master')
                             ->label(__('Repaid to master fund'))
                             ->money($currency),

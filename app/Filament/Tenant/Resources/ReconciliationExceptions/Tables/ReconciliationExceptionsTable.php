@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\ReconciliationExceptions\Tables;
 
+use App\Filament\Support\MoneyDisplay;
 use App\Filament\Support\ReconciliationExceptionActions;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -18,8 +19,13 @@ use Filament\Tables\Table;
 
 class ReconciliationExceptionsTable
 {
-    public static function configure(Table $table, bool $queueOnly = false, bool $advancedUi = false): Table
-    {
+    public static function configure(
+        Table $table,
+        bool $queueOnly = false,
+        bool $advancedUi = false,
+        bool $workspacePanel = false,
+        ?int $selectedExceptionId = null,
+    ): Table {
         $table = $table
             ->modifyQueryUsing(function ($query) use ($queueOnly) {
                 $query->with('assignee');
@@ -32,74 +38,7 @@ class ReconciliationExceptionsTable
                 }
             })
             ->defaultSort('raised_at', 'desc')
-            ->columns([
-                TextColumn::make('exception_code')
-                    ->label(__('Issue'))
-                    ->searchable()
-                    ->wrap()
-                    ->description(fn (ReconciliationException $record): ?string => $advancedUi ? $record->exception_code : null)
-                    ->formatStateUsing(fn (string $state, ReconciliationException $record): string => ReconciliationExceptionPresenter::title($record)),
-                TextColumn::make('domain')
-                    ->label(__('Area'))
-                    ->badge()
-                    ->formatStateUsing(fn (string $state): string => ReconciliationExceptionPresenter::domainLabel($state)),
-                TextColumn::make('severity')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'critical' => 'danger',
-                        'high' => 'warning',
-                        'medium' => 'info',
-                        'low' => 'gray',
-                        default => 'gray',
-                    }),
-                TextColumn::make('amount_delta')
-                    ->label(__('Delta'))
-                    ->numeric(decimalPlaces: 2)
-                    ->placeholder(__('—'))
-                    ->toggleable(isToggledHiddenByDefault: ! $advancedUi),
-                TextColumn::make('status')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        ReconciliationException::STATUS_OPEN => 'danger',
-                        ReconciliationException::STATUS_ESCALATED => 'warning',
-                        ReconciliationException::STATUS_RESOLVED => 'success',
-                        default => 'gray',
-                    }),
-                TextColumn::make('assignee.name')
-                    ->label(__('Owner'))
-                    ->placeholder(__('Unassigned'))
-                    ->toggleable(isToggledHiddenByDefault: ! $advancedUi),
-                TextColumn::make('sla_deadline')
-                    ->label(__('SLA'))
-                    ->since()
-                    ->dateTimeTooltip()
-                    ->placeholder(__('—'))
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->visible($advancedUi),
-                TextColumn::make('raised_at')
-                    ->label(__('Raised'))
-                    ->since()
-                    ->dateTimeTooltip()
-                    ->sortable(),
-                TextColumn::make('exception_type')
-                    ->label(__('Type'))
-                    ->placeholder(__('—'))
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->visible($advancedUi),
-                TextColumn::make('resolved_at')
-                    ->label(__('Resolved at'))
-                    ->dateTime()
-                    ->placeholder(__('—'))
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->visible($advancedUi),
-                TextColumn::make('resolution_notes')
-                    ->label(__('Resolution notes'))
-                    ->placeholder(__('—'))
-                    ->wrap()
-                    ->limit(80)
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->visible($advancedUi),
-            ])
+            ->columns(self::columns($advancedUi, $workspacePanel))
             ->filters([
                 SelectFilter::make('status')
                     ->options([
@@ -129,16 +68,136 @@ class ReconciliationExceptionsTable
                     ),
             ]);
 
+        if ($workspacePanel) {
+            $table = $table
+                ->recordAction('focusException')
+                ->recordClasses(function (ReconciliationException $record) use ($selectedExceptionId): array {
+                    if ($selectedExceptionId === null) {
+                        return [];
+                    }
+
+                    return (int) $record->getKey() === $selectedExceptionId
+                        ? ['ff-recon-exception-row--selected']
+                        : [];
+                })
+                ->recordActions([
+                    ReconciliationExceptionActions::focusExceptionAction(),
+                    ...TableRecordActionGroups::wrap(
+                        ReconciliationExceptionActions::recordActionsForMode($advancedUi),
+                    ),
+                ]);
+        } else {
+            $table = $table
+                ->recordAction('viewException')
+                ->recordActions(TableRecordActionGroups::wrap(
+                    ReconciliationExceptionActions::recordActionsForMode($advancedUi),
+                ));
+        }
+
         return TableGrouping::apply($table
-            ->recordAction('viewException')
-            ->recordActions(TableRecordActionGroups::wrap(
-                ReconciliationExceptionActions::recordActionsForMode($advancedUi),
-            ))
             ->toolbarActions([
                 BulkActionGroup::make([
                     ReconciliationExceptionActions::deleteBulkAction(),
                     TableToolbar::refreshBulkAction(),
                 ]),
             ]), TableGrouping::reconciliationExceptions());
+    }
+
+    /**
+     * @return array<int, TextColumn>
+     */
+    private static function columns(bool $advancedUi, bool $workspacePanel): array
+    {
+        $columns = [
+            TextColumn::make('exception_code')
+                ->label(__('Issue'))
+                ->searchable()
+                ->wrap()
+                ->description(function (ReconciliationException $record) use ($advancedUi, $workspacePanel): ?string {
+                    if ($workspacePanel) {
+                        return ReconciliationExceptionPresenter::summary($record);
+                    }
+
+                    return $advancedUi ? $record->exception_code : null;
+                })
+                ->formatStateUsing(fn (string $state, ReconciliationException $record): string => ReconciliationExceptionPresenter::title($record)),
+            TextColumn::make('domain')
+                ->label(__('Area'))
+                ->badge()
+                ->formatStateUsing(fn (string $state): string => ReconciliationExceptionPresenter::domainLabel($state)),
+            TextColumn::make('severity')
+                ->badge()
+                ->color(fn (string $state): string => ReconciliationExceptionPresenter::severityStyle($state)['badge']),
+        ];
+
+        if ($workspacePanel) {
+            $columns[] = TextColumn::make('recommended_step')
+                ->label(__('Next step'))
+                ->state(fn (ReconciliationException $record): string => ReconciliationExceptionPresenter::recommendedAction($record))
+                ->wrap()
+                ->limit(90)
+                ->toggleable();
+            $columns[] = TextColumn::make('context_preview')
+                ->label(__('Context'))
+                ->state(fn (ReconciliationException $record): string => implode(' · ', ReconciliationExceptionPresenter::contextPreview($record)))
+                ->placeholder(__('—'))
+                ->wrap()
+                ->toggleable(isToggledHiddenByDefault: true);
+        }
+
+        $columns = array_merge($columns, [
+            TextColumn::make('amount_delta')
+                ->label(__('Delta'))
+                ->formatStateUsing(fn (?string $state): string => filled($state)
+                    ? (MoneyDisplay::format((float) $state) ?? '—')
+                    : '—')
+                ->placeholder(__('—'))
+                ->toggleable(isToggledHiddenByDefault: ! $advancedUi && ! $workspacePanel),
+            TextColumn::make('status')
+                ->badge()
+                ->formatStateUsing(fn (string $state): string => ReconciliationExceptionPresenter::statusLabel($state))
+                ->color(fn (string $state): string => match ($state) {
+                    ReconciliationException::STATUS_OPEN => 'danger',
+                    ReconciliationException::STATUS_ESCALATED => 'warning',
+                    ReconciliationException::STATUS_RESOLVED => 'success',
+                    default => 'gray',
+                }),
+            TextColumn::make('assignee.name')
+                ->label(__('Owner'))
+                ->placeholder(__('Unassigned'))
+                ->toggleable(isToggledHiddenByDefault: ! $advancedUi && ! $workspacePanel),
+            TextColumn::make('sla_deadline')
+                ->label(__('SLA'))
+                ->since()
+                ->dateTimeTooltip()
+                ->placeholder(__('—'))
+                ->toggleable(isToggledHiddenByDefault: true)
+                ->visible($advancedUi),
+            TextColumn::make('raised_at')
+                ->label(__('Raised'))
+                ->since()
+                ->dateTimeTooltip()
+                ->sortable(),
+            TextColumn::make('exception_type')
+                ->label(__('Type'))
+                ->placeholder(__('—'))
+                ->toggleable(isToggledHiddenByDefault: true)
+                ->visible($advancedUi),
+            TextColumn::make('resolved_at')
+                ->label(__('Resolved at'))
+                ->dateTime()
+                ->placeholder(__('—'))
+                ->toggleable(isToggledHiddenByDefault: true)
+                ->visible($advancedUi),
+            TextColumn::make('resolution_notes')
+                ->label(__('Resolution notes'))
+                ->placeholder(__('—'))
+                ->wrap()
+                ->limit(80)
+                ->toggleable(isToggledHiddenByDefault: true)
+                ->visible($advancedUi),
+        ]);
+
+        return $columns;
     }
 }

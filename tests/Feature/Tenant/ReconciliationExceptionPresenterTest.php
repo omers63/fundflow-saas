@@ -51,3 +51,22 @@ test('reconciliation exception presenter includes member link when member id is 
     expect(collect($items)->firstWhere('label', __('Member'))['value'] ?? null)->toBe($member->name)
         ->and(collect($items)->firstWhere('label', __('Member'))['url'] ?? null)->not->toBeNull();
 });
+
+test('reconciliation exception presenter recommends actionable fix buttons for bank clearing issues', function (): void {
+    $exception = new ReconciliationException([
+        'exception_code' => 'RECON_AMBIGUOUS_MATCH',
+        'domain' => 'bank_clearing',
+        'severity' => 'high',
+        'status' => ReconciliationException::STATUS_OPEN,
+        'affected_entities' => [
+            'imported_bank_transaction_id' => 42,
+            'candidate_ids' => [10, 11],
+        ],
+    ]);
+
+    $actions = ReconciliationExceptionPresenter::recommendedFixActions($exception);
+
+    expect($actions)->not->toBeEmpty()
+        ->and(collect($actions)->pluck('name')->filter()->all())->toContain('resolveAmbiguousBankMatch')
+        ->and(collect($actions)->firstWhere('type', 'link')['url'] ?? null)->not->toBeNull();
+});

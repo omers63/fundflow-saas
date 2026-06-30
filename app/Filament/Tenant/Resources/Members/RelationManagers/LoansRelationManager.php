@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Resources\Members\RelationManagers;
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\LoanOutstandingColumn;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -19,7 +20,6 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
 
 class LoansRelationManager extends RelationManager
 {
@@ -36,6 +36,8 @@ class LoansRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
+        $currency = Setting::get('general', 'currency', 'USD');
+
         return TableGrouping::apply(
             $table
                 ->columnManager(true)
@@ -64,11 +66,7 @@ class LoansRelationManager extends RelationManager
                             'defaulted' => 'danger',
                             default => 'gray',
                         }),
-                    TextColumn::make('outstanding')
-                        ->label(__('Outstanding'))
-                        ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
-                        ->getStateUsing(fn (Loan $record): float => $record->getOutstandingBalance())
-                        ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByOutstanding($direction)),
+                    LoanOutstandingColumn::make($currency),
                     TextColumn::make('applied_at')
                         ->label(__('Applied'))
                         ->dateTime()

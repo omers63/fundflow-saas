@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Resources\Loans\Tables;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\LoanFilamentActions;
 use App\Filament\Support\LoanListTableHeaderActions;
+use App\Filament\Support\LoanOutstandingColumn;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Models\Tenant\Loan;
@@ -15,7 +16,6 @@ use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
 
 class LoansTable
 {
@@ -45,11 +45,7 @@ class LoansTable
                 TextColumn::make('loanTier.label')
                     ->label(__('Tier'))
                     ->placeholder(__('—')),
-                TextColumn::make('outstanding')
-                    ->label(__('Outstanding'))
-                    ->state(fn (Loan $record): float => $record->getOutstandingBalance())
-                    ->money($currency)
-                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByOutstanding($direction)),
+                LoanOutstandingColumn::make($currency),
                 TextColumn::make('status')
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => Loan::statusOptions()[$state] ?? $state)

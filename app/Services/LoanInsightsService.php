@@ -751,6 +751,7 @@ final class LoanInsightsService
 
         $currency = Setting::get('general', 'currency', 'USD');
         $outstanding = $loan->getOutstandingBalance();
+        $outstandingBreakdown = $loan->getOutstandingBreakdown();
         $approved = (float) ($loan->amount_approved ?? 0);
         $disbursed = (float) $loan->amount_disbursed;
         $disbursePercent = $approved > 0 ? min(100, (int) round(($disbursed / $approved) * 100)) : 0;
@@ -790,6 +791,7 @@ final class LoanInsightsService
                 'approved' => $loan->amount_approved !== null ? (float) $loan->amount_approved : null,
                 'disbursed' => $disbursed,
                 'outstanding' => $outstanding,
+                'outstanding_breakdown' => $outstandingBreakdown,
                 'remaining_to_disburse' => $remainingToDisburse,
                 'disbursed_formatted' => $this->formatMoneyCompact($disbursed, $currency),
                 'remaining_formatted' => $this->formatMoneyCompact($remainingToDisburse, $currency),

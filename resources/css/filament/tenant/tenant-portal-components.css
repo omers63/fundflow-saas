@@ -1102,6 +1102,18 @@ html[dir='rtl'] .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-he
     gap: 0.5rem;
 }
 
+.fi-page-reconciliation .ff-recon-exception-row--selected > td {
+    background-color: rgb(14 165 233 / 0.08);
+}
+
+.dark .fi-body.fi-panel-tenant.fi-page-reconciliation .ff-recon-exception-row--selected > td {
+    background-color: rgb(14 165 233 / 0.12);
+}
+
+.fi-page-reconciliation .ff-recon-queue-summary {
+    margin-bottom: 1rem;
+}
+
 .fi-page-reconciliation .ff-recon-workspace-actions .fi-ac {
     flex-wrap: wrap;
     gap: 0.5rem;

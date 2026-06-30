@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Support\Reconciliation;
 
 use App\Filament\Support\MoneyDisplay;
+use App\Filament\Tenant\Resources\Accounts\AccountResource;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
-use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Models\Tenant\Member;
@@ -84,7 +84,7 @@ final class ReconciliationExceptionPresenter
         $queueFilter = BankClearingTabRegistry::FILTER_OPERATIONS;
 
         if (
-            $record !== null && in_array($record->code, [
+            $record !== null && in_array($record->exception_code, [
                 'RECON_UNMATCHED_BANK_LINE',
                 'STALE_PENDING',
             ], true)
@@ -139,7 +139,7 @@ final class ReconciliationExceptionPresenter
             $items[] = [
                 'label' => __('Account'),
                 'value' => __('Account #:id', ['id' => $accountId]),
-                'url' => MasterAccountResource::getUrl('view', ['record' => $accountId]),
+                'url' => AccountResource::getUrl('view', ['record' => $accountId]),
             ];
         }
 
@@ -256,6 +256,164 @@ final class ReconciliationExceptionPresenter
             ReconciliationException::STATUS_OPEN,
             ReconciliationException::STATUS_ESCALATED,
         ], true);
+    }
+
+    public static function statusLabel(string $status): string
+    {
+        return match ($status) {
+            ReconciliationException::STATUS_OPEN => __('Open'),
+            ReconciliationException::STATUS_ESCALATED => __('Escalated'),
+            ReconciliationException::STATUS_RESOLVED => __('Resolved'),
+            default => ucfirst(str_replace('_', ' ', $status)),
+        };
+    }
+
+    /**
+     * @return array{badge: string, banner: string, text: string}
+     */
+    public static function severityStyle(string $severity): array
+    {
+        return match ($severity) {
+            'critical' => [
+                'badge' => 'danger',
+                'banner' => 'border-red-200 bg-red-50/90 dark:border-red-500/30 dark:bg-red-950/30',
+                'text' => 'text-red-800 dark:text-red-200',
+            ],
+            'high' => [
+                'badge' => 'warning',
+                'banner' => 'border-amber-200 bg-amber-50/90 dark:border-amber-500/30 dark:bg-amber-950/30',
+                'text' => 'text-amber-900 dark:text-amber-200',
+            ],
+            'medium' => [
+                'badge' => 'info',
+                'banner' => 'border-sky-200 bg-sky-50/90 dark:border-sky-500/30 dark:bg-sky-950/30',
+                'text' => 'text-sky-900 dark:text-sky-200',
+            ],
+            default => [
+                'badge' => 'gray',
+                'banner' => 'border-gray-200 bg-gray-50/90 dark:border-white/10 dark:bg-white/5',
+                'text' => 'text-gray-800 dark:text-gray-200',
+            ],
+        };
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function contextPreview(ReconciliationException $record, int $limit = 2): array
+    {
+        return collect(self::contextItems($record))
+            ->take($limit)
+            ->map(fn (array $item): string => $item['label'].': '.$item['value'])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<array{type: string, name?: string, label: string, icon: string, color: string, url?: string}>
+     */
+    public static function recommendedFixActions(ReconciliationException $record, bool $advancedUi = false): array
+    {
+        if (! self::isActionable($record)) {
+            return [];
+        }
+
+        $actions = [];
+
+        if (self::isBankClearingRelated($record)) {
+            $actions[] = [
+                'type' => 'link',
+                'label' => __('Open bank clearing'),
+                'icon' => 'heroicon-o-building-library',
+                'color' => 'primary',
+                'url' => self::bankClearingUrl($record),
+            ];
+        }
+
+        $action = match ($record->exception_code) {
+            'RECON_AMBIGUOUS_MATCH' => [
+                'type' => 'action',
+                'name' => 'resolveAmbiguousBankMatch',
+                'label' => __('Resolve bank match'),
+                'icon' => 'heroicon-o-link',
+                'color' => 'primary',
+            ],
+            'EMI_OVER_COLLECTION' => [
+                'type' => 'action',
+                'name' => 'postEmiOverpaymentRefund',
+                'label' => __('Refund EMI overpayment'),
+                'icon' => 'heroicon-o-arrow-uturn-left',
+                'color' => 'warning',
+            ],
+            'FEE_WRONG_TIER', 'REPLACEMENT_PRIOR_TIER_NOT_REVERSED' => [
+                'type' => 'action',
+                'name' => 'postCorrectionEntry',
+                'label' => __('Post correction entry'),
+                'icon' => 'heroicon-o-document-plus',
+                'color' => 'primary',
+            ],
+            'MASTER_CASH_POOL_DRIFT', 'MASTER_FUND_POOL_DRIFT', 'MEMBER_CASH_DRIFT', 'MEMBER_FUND_DRIFT' => [
+                'type' => 'action',
+                'name' => 'postCashCorrection',
+                'label' => __('Post cash correction'),
+                'icon' => 'heroicon-o-banknotes',
+                'color' => 'primary',
+            ],
+            default => null,
+        };
+
+        if (is_array($action)) {
+            $actions[] = $action;
+        }
+
+        if ($record->exception_code === 'EMI_OVER_COLLECTION') {
+            $actions[] = [
+                'type' => 'action',
+                'name' => 'acceptOverride',
+                'label' => __('Accept without correction'),
+                'icon' => 'heroicon-o-hand-thumb-up',
+                'color' => 'warning',
+            ];
+        }
+
+        if (in_array($record->exception_code, ['FEE_WRONG_TIER', 'REPLACEMENT_PRIOR_TIER_NOT_REVERSED'], true)) {
+            $actions[] = [
+                'type' => 'action',
+                'name' => 'acceptOverride',
+                'label' => __('Accept tier judgment'),
+                'icon' => 'heroicon-o-hand-thumb-up',
+                'color' => 'warning',
+            ];
+        }
+
+        $actions[] = [
+            'type' => 'action',
+            'name' => 'retryAutoResolve',
+            'label' => __('Retry auto-resolve'),
+            'icon' => 'heroicon-o-arrow-path',
+            'color' => 'info',
+        ];
+
+        $resolveName = $advancedUi ? 'resolve' : 'primaryResolve';
+        if (! self::isBankClearingRelated($record) || $advancedUi) {
+            $actions[] = [
+                'type' => 'action',
+                'name' => $resolveName,
+                'label' => $advancedUi ? __('Resolve') : __('Resolve with notes'),
+                'icon' => 'heroicon-o-check',
+                'color' => 'success',
+            ];
+        }
+
+        $actions[] = [
+            'type' => 'action',
+            'name' => 'viewException',
+            'label' => __('Full details'),
+            'icon' => 'heroicon-o-document-magnifying-glass',
+            'color' => 'gray',
+        ];
+
+        return $actions;
     }
 
     /**
