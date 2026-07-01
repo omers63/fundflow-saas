@@ -5,11 +5,13 @@ namespace App\Services\Loans;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Setting;
+use App\Models\Tenant\User;
 use App\Notifications\Tenant\LoanDefaultGuarantorNotification;
 use App\Notifications\Tenant\LoanDefaultWarningNotification;
 use App\Notifications\Tenant\LoanSettledNotification;
 use App\Services\ContributionCycleService;
 use App\Support\BusinessDay;
+use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 
 class LoanDefaultService
@@ -96,20 +98,14 @@ class LoanDefaultService
     {
         $settled = 0;
 
-        Loan::active()->with('member.accounts')->each(function (Loan $loan) use (&$settled) {
+        Loan::active()->with(['member.user', 'member.accounts'])->each(function (Loan $loan) use (&$settled) {
             if ($loan->isReadyToSettle()) {
                 $loan->update([
                     'status' => 'completed',
                     'settled_at' => BusinessDay::now(),
                 ]);
 
-                try {
-                    $loan->member->user->notify(
-                        new LoanSettledNotification($loan)
-                    );
-                } catch (\Throwable $e) {
-                    // best-effort
-                }
+                $this->notifyUserIfPresent($loan->member->user, new LoanSettledNotification($loan));
 
                 $settled++;
             }
@@ -120,8 +116,14 @@ class LoanDefaultService
 
     private function warnBorrower(Loan $loan, LoanInstallment $installment, int $totalDefaults, int $grace): bool
     {
+        $user = $loan->member->user;
+
+        if ($user === null) {
+            return false;
+        }
+
         try {
-            $loan->member->user->notify(
+            $user->notify(
                 new LoanDefaultWarningNotification($loan, $installment, $totalDefaults, $grace)
             );
 
@@ -154,12 +156,6 @@ class LoanDefaultService
 
                 $loan->releaseGuarantorIfDue();
             });
-
-            $loan->guarantor->user->notify(
-                new LoanDefaultGuarantorNotification($loan, $installment)
-            );
-
-            return true;
         } catch (\Throwable $e) {
             logger()->error($errorMessage, [
                 'loan_id' => $loan->id,
@@ -168,6 +164,26 @@ class LoanDefaultService
             ]);
 
             return false;
+        }
+
+        $this->notifyUserIfPresent(
+            $loan->guarantor?->user,
+            new LoanDefaultGuarantorNotification($loan, $installment)
+        );
+
+        return true;
+    }
+
+    private function notifyUserIfPresent(?User $user, Notification $notification): void
+    {
+        if ($user === null) {
+            return;
+        }
+
+        try {
+            $user->notify($notification);
+        } catch (\Throwable) {
+            // best-effort
         }
     }
 }

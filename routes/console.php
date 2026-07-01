@@ -28,3 +28,7 @@ Schedule::command('announcements:dispatch-scheduled')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground();
+Schedule::command('queue:ensure-worker')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground();

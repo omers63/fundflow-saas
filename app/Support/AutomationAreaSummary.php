@@ -21,6 +21,7 @@ final class AutomationAreaSummary
             'bank' => __('Bank'),
             'reconciliation' => __('Reconciliation'),
             'statements' => __('Statements & messaging'),
+            'system' => __('System'),
         ];
     }
 
@@ -35,6 +36,7 @@ final class AutomationAreaSummary
             'bank' => ['bank'],
             'reconciliation' => ['reconciliation', 'fund'],
             'statements' => ['statements', 'messaging'],
+            'system' => ['system'],
             default => [],
         };
     }

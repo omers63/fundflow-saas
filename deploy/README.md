@@ -67,3 +67,11 @@ cd /var/www/fundflow-saas && php artisan schedule:list
 # After ~1 minute:
 tail -n 20 storage/logs/scheduler.log
 ```
+
+## Queue worker watchdog
+
+`queue:ensure-worker` runs **every minute** via the Laravel scheduler. It uses `pgrep` to detect a `queue:work` process for this app; if none is found, it runs `queue:restart` and starts `queue:work` in the background.
+
+- Listed in **Automation → Scheduled jobs** as **Ensure queue worker**
+- Config: `config/queue.php` → `worker_watchdog` (env: `QUEUE_WORKER_WATCHDOG_ENABLED`, `QUEUE_WORKER_CONNECTION`, etc.)
+- **Disable** (`QUEUE_WORKER_WATCHDOG_ENABLED=false`) when Supervisor already manages `queue:work`, to avoid duplicate workers

@@ -126,4 +126,24 @@ return [
         'table' => 'failed_jobs',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Queue Worker Watchdog
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, queue:ensure-worker checks every minute for a running
+    | queue:work process for this application and starts one if missing.
+    | Disable when Supervisor or another process manager owns the worker.
+    |
+    */
+
+    'worker_watchdog' => [
+        'enabled' => env('QUEUE_WORKER_WATCHDOG_ENABLED', true),
+        'connection' => env('QUEUE_WORKER_CONNECTION'),
+        'sleep' => (int) env('QUEUE_WORKER_SLEEP', 3),
+        'tries' => (int) env('QUEUE_WORKER_TRIES', 3),
+        'max_time' => (int) env('QUEUE_WORKER_MAX_TIME', 3600),
+        'backoff' => (int) env('QUEUE_WORKER_BACKOFF', 10),
+    ],
+
 ];

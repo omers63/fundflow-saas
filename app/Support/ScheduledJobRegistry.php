@@ -42,6 +42,7 @@ final class ScheduledJobRegistry
             self::job('loans:check-defaults', __('Loan delinquency check'), __('Overdue, delinquency, guarantor defaults, auto-transfer'), __('Daily at 07:00'), 'loans', false),
             self::job('delinquency:send-digest', __('Delinquency digest'), __('Email/database digest to admins'), __('Daily at 07:30'), 'loans', false),
             self::job('announcements:dispatch-scheduled', __('Dispatch scheduled announcements'), __('Send bulk member announcements when their scheduled time arrives'), __('Every minute'), 'messaging', false),
+            self::job('queue:ensure-worker', __('Ensure queue worker'), __('Restart and start queue:work when no worker process is detected'), __('Every minute'), 'system', false),
         ];
     }
 

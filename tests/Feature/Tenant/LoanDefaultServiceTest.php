@@ -221,3 +221,78 @@ test('check settlements skips loan that is not ready to settle', function () {
 
     Notification::assertNothingSent();
 });
+
+test('process defaults skips warning notification when borrower has no linked user', function () {
+    Notification::fake();
+    Setting::set('loan', 'default_grace_cycles', 2);
+
+    $accounting = app(AccountingService::class);
+    $borrower = createUserAndMemberForDefaults($accounting);
+    $borrower->update(['user_id' => null]);
+
+    $loan = Loan::query()->create([
+        'member_id' => $borrower->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 2000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'late_repayment_count' => 0,
+        'applied_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    LoanInstallment::query()->create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 2000,
+        'due_date' => Carbon::now()->subMonth(),
+        'status' => 'overdue',
+        'paid_by_guarantor' => false,
+    ]);
+
+    $result = app(LoanDefaultService::class)->processDefaults();
+
+    expect($result['warned'])->toBe(0)
+        ->and($result['debited_from_guarantor'])->toBe(0);
+
+    Notification::assertNothingSent();
+});
+
+test('check settlements completes loan without notification when borrower has no linked user', function () {
+    Notification::fake();
+
+    $accounting = app(AccountingService::class);
+    $borrower = createUserAndMemberForDefaults($accounting);
+    $borrower->fundAccount()->update(['balance' => 3000]);
+    $borrower->update(['user_id' => null]);
+
+    $loan = Loan::query()->create([
+        'member_id' => $borrower->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 2000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'master_portion' => 7000,
+        'repaid_to_master' => 7000,
+        'settlement_threshold' => 0.25,
+        'applied_at' => now()->subMonths(3),
+        'disbursed_at' => now()->subMonths(3),
+    ]);
+
+    $result = app(LoanDefaultService::class)->checkSettlements();
+
+    expect($result)->toBe(1)
+        ->and($loan->fresh()->status)->toBe('completed');
+
+    Notification::assertNothingSent();
+});
