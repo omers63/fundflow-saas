@@ -82,8 +82,19 @@ final class QueueWorkerSupervisor
     protected function startWorkerInBackground(): void
     {
         $phpBinary = (new PhpExecutableFinder)->find(false) ?: PHP_BINARY;
+        $arguments = array_merge([$phpBinary, base_path('artisan')], $this->workerCommandArguments());
+        $logPath = storage_path('logs/queue-worker.log');
 
-        Process::path(base_path())
-            ->start(array_merge([$phpBinary, 'artisan'], $this->workerCommandArguments()));
+        $escaped = array_map(
+            static fn (string $argument): string => escapeshellarg($argument),
+            $arguments,
+        );
+
+        // Detach from the scheduler/cron parent so the worker survives after ensure-worker exits.
+        Process::run(sprintf(
+            'nohup %s >> %s 2>&1 &',
+            implode(' ', $escaped),
+            escapeshellarg($logPath),
+        ));
     }
 }

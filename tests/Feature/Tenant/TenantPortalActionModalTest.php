@@ -82,6 +82,7 @@ it('adds progress to confirmations that declare long-running copy', function ():
 it('renders confirmation modal view data from the action at runtime', function (): void {
     $action = Action::make('runMigration')
         ->label(__('Run migration'))
+        ->icon('heroicon-o-play')
         ->requiresConfirmation()
         ->modalHeading(__('Run migration now?'))
         ->modalDescription(__('This writes members, loans, and optional payments to the database.'));
@@ -92,5 +93,7 @@ it('renders confirmation modal view data from the action at runtime', function (
     expect($view)->not->toBeNull()
         ->and($view->name())->toBe('filament.tenant.partials.action-confirm-modal')
         ->and($view->getData()['heading'])->toBe(__('Run migration now?'))
-        ->and($view->getData()['description'])->toBe(__('This writes members, loans, and optional payments to the database.'));
+        ->and($view->getData()['description'])->toBe(__('This writes members, loans, and optional payments to the database.'))
+        ->and($view->getData()['icon'])->not->toBeNull()
+        ->and($view->getData()['tone'])->toBe('primary');
 });

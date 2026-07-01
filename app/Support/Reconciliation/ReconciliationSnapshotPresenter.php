@@ -126,9 +126,9 @@ final class ReconciliationSnapshotPresenter
                 'debits' => MoneyDisplay::format((float) ($check['sum_debits'] ?? 0), $currency) ?? '—',
                 'delta' => MoneyDisplay::format((float) ($check['delta'] ?? 0), $currency) ?? '—',
             ]),
-            'paired_control_totals' => __('Cash Δ :cash · Fund Δ :fund', [
-                'cash' => MoneyDisplay::format((float) ($check['cash_delta'] ?? 0), $currency) ?? '—',
-                'fund' => MoneyDisplay::format((float) ($check['fund_delta'] ?? 0), $currency) ?? '—',
+            'paired_control_totals' => __('Cash Δ :cash · Fund pool Δ :fund', [
+                'cash' => MoneyDisplay::format((float) ($check['cash_delta_abs'] ?? abs((float) ($check['cash_delta'] ?? 0))), $currency) ?? '—',
+                'fund' => MoneyDisplay::format((float) ($check['fund_delta_abs'] ?? abs((float) ($check['fund_delta'] ?? 0))), $currency) ?? '—',
             ]),
             'bank_statement_vs_book' => isset($check['declared_balance'])
                 ? __('Book :book vs stated :stated · variance :variance', [

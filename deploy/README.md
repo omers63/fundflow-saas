@@ -28,6 +28,15 @@ sudo supervisorctl start fundflow-reverb
 sudo supervisorctl status fundflow-reverb
 ```
 
+### Quick Queue/Reverb/PHP re-deployment
+
+```bash
+# One-time: Supervisor + Redis (if not already installed)
+sudo supervisorctl restart fundflow-queue
+sudo supervisorctl restart fundflow-reverb
+sudo systemctl reload php8.4-fpm
+```
+
 ### Quick operations
 
 ```bash

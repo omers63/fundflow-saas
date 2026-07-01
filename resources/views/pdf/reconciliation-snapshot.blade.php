@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 @php
-    $isArabic = app()->getLocale() === 'ar';
+$isArabic = app()->getLocale() === 'ar';
 @endphp
 <html lang="{{ app()->getLocale() }}" dir="{{ $isArabic ? 'rtl' : 'ltr' }}">
 
@@ -82,14 +82,14 @@
                         <td>
                             @foreach ($row['checks'] ?? [] as $c)
                                 @php
-                                    $ck = $c['key'] ?? '';
-                                    $severity = $c['severity'] ?? '—';
-                                    $sevClass = $severity === 'ok'
-                                        ? 'pass'
-                                        : ($severity === 'critical' ? 'fail' : ($severity === 'warning' ? 'warn' : ''));
-                                    $lbl = ($ck !== '' && isset($snapshot->report['checks'][$ck]))
-                                        ? ($snapshot->report['checks'][$ck]['label'] ?? $ck)
-                                        : $ck;
+            $ck = $c['key'] ?? '';
+            $severity = $c['severity'] ?? '—';
+            $sevClass = $severity === 'ok'
+                ? 'pass'
+                : ($severity === 'critical' ? 'fail' : ($severity === 'warning' ? 'warn' : ''));
+            $lbl = ($ck !== '' && isset($snapshot->report['checks'][$ck]))
+                ? ($snapshot->report['checks'][$ck]['label'] ?? $ck)
+                : $ck;
                                 @endphp
                                 @if ($sevClass)<span class="{{ $sevClass }}">@endif{{ $lbl }} —
                                     {{ $severity }}@if ($sevClass)</span>@endif@if (!$loop->last)<br>@endif
@@ -121,8 +121,9 @@
                         @elseif ($key === 'global_trial')
                             Δ {{ __('credits−debits') }}: {{ number_format($check['delta'] ?? 0, 2) }}
                         @elseif ($key === 'paired_control_totals')
-                            {{ __('Cash') }} Δ {{ number_format($check['cash_delta'] ?? 0, 2) }} · {{ __('Fund') }} Δ
-                            {{ number_format($check['fund_delta'] ?? 0, 2) }}
+                            {{ __('Cash') }} Δ {{ number_format($check['cash_delta_abs'] ?? abs((float) ($check['cash_delta'] ?? 0)), 2) }} ·
+                            {{ __('Fund pool') }} Δ
+                            {{ number_format($check['fund_delta_abs'] ?? abs((float) ($check['fund_delta'] ?? 0)), 2) }}
                         @elseif (str_starts_with((string) $key, 'loans_') || str_contains((string) $key, 'loan'))
                             @if (isset($check['mismatch_count']))
                                 {{ __('Mismatches') }}: {{ $check['mismatch_count'] }}
@@ -163,11 +164,11 @@
     <h2>{{ __('Report payload (truncated)') }}</h2>
     <p class="muted">{{ __('Use the JSON download in the admin UI for the complete machine-readable snapshot.') }}</p>
     <pre>@php
-        $json = json_encode(
-            $snapshot->report,
-            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
-        );
-        echo e(\Illuminate\Support\Str::limit($json, 12000, "\n… [truncated]"));
+$json = json_encode(
+    $snapshot->report,
+    JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+);
+echo e(\Illuminate\Support\Str::limit($json, 12000, "\n… [truncated]"));
     @endphp</pre>
 </body>
 

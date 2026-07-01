@@ -99,17 +99,49 @@ final class TenantPortalActionModal
      *     heading: string|Htmlable,
      *     description: string|Htmlable|null,
      *     icon: mixed,
-     *     iconColor: string|array<string>
+     *     iconColor: string|array<string>,
+     *     tone: string
      * }
      */
     private static function confirmModalViewData(Action $action): array
     {
+        $tone = self::confirmationTone($action);
+
         return [
             'heading' => self::confirmationHeading($action),
             'description' => $action->getModalDescription(),
-            'icon' => $action->getModalIcon(),
-            'iconColor' => self::confirmationIconColor($action),
+            'icon' => self::confirmationIcon($action),
+            'iconColor' => $action->getModalIconColor() ?? $tone,
+            'tone' => $tone,
         ];
+    }
+
+    private static function confirmationIcon(Action $action): mixed
+    {
+        if (self::confirmationTone($action) === 'danger') {
+            return 'heroicon-o-exclamation-triangle';
+        }
+
+        $icon = $action->getIcon();
+
+        if (filled($icon)) {
+            return $icon;
+        }
+
+        return match (self::confirmationTone($action)) {
+            'warning' => 'heroicon-o-exclamation-circle',
+            default => 'heroicon-o-question-mark-circle',
+        };
+    }
+
+    private static function confirmationTone(Action $action): string
+    {
+        return match ($action->getColor()) {
+            'danger' => 'danger',
+            'warning' => 'warning',
+            'success' => 'success',
+            default => 'primary',
+        };
     }
 
     private static function confirmationHeading(Action $action): string|Htmlable
@@ -130,34 +162,30 @@ final class TenantPortalActionModal
         return __('This may take a moment. Please keep this window open.');
     }
 
-    /**
-     * @return string | array<string>
-     */
-    private static function confirmationIconColor(Action $action): string|array
-    {
-        return $action->getModalIconColor() ?? 'primary';
-    }
-
     private static function confirmationSubmitColor(Action $action): string
     {
         return match ($action->getColor()) {
             'danger' => 'danger',
             'warning' => 'warning',
+            'success' => 'success',
             default => 'primary',
         };
     }
 
     private static function isDangerConfirmation(Action $action): bool
     {
-        return $action->getColor() === 'danger';
+        return self::confirmationTone($action) === 'danger';
     }
 
     private static function confirmWindowClasses(Action $action): string
     {
-        $classes = ['ff-tenant-confirm-modal-window'];
+        $classes = [
+            'ff-tenant-confirm-modal-window',
+            'ff-tenant-confirm-modal-window--'.self::confirmationTone($action),
+        ];
 
-        if (self::isDangerConfirmation($action)) {
-            $classes[] = 'ff-tenant-confirm-modal-window--danger';
+        if (self::shouldShowProgress($action)) {
+            $classes[] = 'ff-tenant-confirm-modal-window--long-running';
         }
 
         return implode(' ', $classes);

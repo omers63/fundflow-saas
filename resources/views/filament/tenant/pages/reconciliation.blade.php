@@ -101,16 +101,41 @@
                     @elseif ($this->sideTab === 'snapshots' && $this->advancedUi)
             <div class="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900/60">
                 <div class="border-b border-gray-100 px-5 py-4 dark:border-white/10">
-                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('Stored snapshots') }}</h3>
-                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        {{ __('Newest first. Select a row to preview summary and download the complete machine-readable report.') }}
-                    </p>
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('Stored snapshots') }}</h3>
+                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                        {{ __('Newest first. Select a row to preview summary and download the complete machine-readable report.') }}
+                                    </p>
+                            </div>
+                        @if ($this->canManageSnapshots() && count($snapshotBulkSelection) > 0)
+                            <div class="flex shrink-0 flex-wrap items-center gap-2">
+                                <span class="text-xs font-medium text-gray-600 dark:text-gray-300">
+                                    {{ __(':count selected', ['count' => count($snapshotBulkSelection)]) }}
+                                </span>
+                                <x-filament::button color="danger" size="sm" outlined
+                                    wire:click="deleteSelectedSnapshots"
+                                    wire:confirm="{{ __('Delete the selected reconciliation snapshots? This cannot be undone.') }}">
+                                    {{ __('Delete selected') }}
+                                </x-filament::button>
+                            </div>
+                        @endif
+                    </div>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full min-w-[40rem] text-start text-sm">
                         <thead
                             class="border-b border-gray-100 bg-gray-50/80 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-gray-400">
                             <tr>
+                                @if ($this->canManageSnapshots())
+                                    <th class="w-10 px-4 py-3">
+                                        <input type="checkbox"
+                                            class="rounded border-gray-300 text-primary-600 shadow-sm focus:ring-primary-500 dark:border-white/20 dark:bg-gray-900"
+                                            wire:click="toggleAllSnapshotsForDeletion"
+                                            @checked(count($snapshotBulkSelection) > 0 && count($snapshotBulkSelection) === $this->getLatestSnapshots()->count())
+                                            aria-label="{{ __('Select all snapshots') }}" />
+                                    </th>
+                                @endif
                                 <th class="px-4 py-3">#</th>
                                 <th class="px-4 py-3">{{ __('Mode') }}</th>
                                 <th class="px-4 py-3">{{ __('As of') }}</th>
@@ -122,40 +147,58 @@
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-white/10">
                             @forelse ($this->getLatestSnapshots() as $snap)
-                                <tr @class(['bg-primary-50/50 dark:bg-primary-500/10' => (int) $selectedSnapshotId === (int) $snap->id])>
-                                    <td class="px-4 py-3 font-medium text-gray-900 dark:text-white">{{ $snap->id }}</td>
-                                    <td class="px-4 py-3 text-gray-700 dark:text-gray-300">
-                                        {{ \App\Support\Reconciliation\ReconciliationSnapshotPresenter::modeLabel($snap->mode) }}
-                                    </td>
-                                    <td class="px-4 py-3 tabular-nums text-gray-600 dark:text-gray-400">
-                                        {{ $snap->as_of->format('Y-m-d H:i') }}</td>
-                                    <td class="px-4 py-3">
-                                        <span @class([
-            'inline-flex rounded-full px-2 py-0.5 text-xs font-semibold',
-            'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200' => $snap->is_passing,
-            'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-200' => !$snap->is_passing,
-        ])>{{ $snap->is_passing ? __('Pass') : __('Fail') }}</span>
-                                    </td>
-                                    <td class="px-4 py-3 tabular-nums text-gray-700 dark:text-gray-300">
-                                        {{ $snap->critical_issues }}</td>
-                                    <td class="px-4 py-3 tabular-nums text-gray-700 dark:text-gray-300">
-                                        {{ $snap->warnings }}</td>
-                                    <td class="px-4 py-3 text-end whitespace-nowrap">
-                                        <button type="button" wire:click="selectSnapshot({{ (int) $snap->id }})"
-                                            class="text-sky-600 text-xs font-semibold hover:underline dark:text-sky-400">{{ __('View') }}</button>
-                                        @if ($this->canExportDownloads())
-                                            <span class="text-gray-300 dark:text-gray-600">|</span>
-                                            <button type="button" wire:click="downloadReport({{ (int) $snap->id }})"
-                                                class="text-sky-600 text-xs font-semibold hover:underline dark:text-sky-400">{{ __('JSON') }}</button>
-                                            <span class="text-gray-300 dark:text-gray-600">|</span>
-                                            <button type="button" wire:click="downloadPdf({{ (int) $snap->id }})"
-                                                class="text-sky-600 text-xs font-semibold hover:underline dark:text-sky-400">{{ __('PDF') }}</button>
+                                    <tr @class(['bg-primary-50/50 dark:bg-primary-500/10' => (int) $selectedSnapshotId === (int) $snap->id])>
+                                        @if ($this->canManageSnapshots())
+                                                                                    <td class="px-4 py-3">
+                                                                                        <input type="checkbox"
+                                             class="rounded border-gray-300 text-primary-600 shadow-sm focus:ring-primary-500 dark:border-white/20 dark:bg-gray-900"
+                                                                                            wire:model.live="snapshotBulkSelection"
+                                                                                                value="{{ (int) $snap->id }}"
+                                                                                                    aria-label="{{ __('Select snapshot :id', ['id' => $snap->id]) }}" />
+                                                                                            </td>
                                         @endif
-                                    </td>
-                                </tr>
+                                        <td         class="px-4 py-3 font-medium text-gray-900 dark:text-white">{{ $snap->id }}</td>
+                                                <td class="px-4 py-3 text-gray-700 dark:text-gray-300">
+                                                    {{ \App\Support\Reconciliation\ReconciliationSnapshotPresenter::modeLabel($snap->mode) }}
+                                        </td        >
+
+                                                                                            <td class="px-4 py-3 tabular-nums text-gray-600 dark:text-gray-400">
+                                                    {{ $snap->as_of->format('Y-m-d H:i') }}</td>
+                                        <td class="px-4 py-3">
+                                 <spa
+                                                       n @class([
+                                                        'inline-flex rounded-full px-2 py-0.5 text-xs font-semibold',
+                                                        'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200' => $snap->is_passing,
+                                                        'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-200' => !$snap->is_passing,
+                                                    ])>{{ $snap->is_passing ? __('Pass') : __('Fail') }}</span>
+                                        </td        >
+
+                                                                                            <td class="px-4 py-3 tabular-nums text-gray-700 dark:text-gray-300">
+                                                    {{ $snap->critical_issues }}</td>
+                                                <td class="px-4 py-3 tabular-nums text-gray-700 dark:text-gray-300">
+                                                    {{ $snap->warnings }}</td>
+                                                <td class="px-4 py-3 text-end whitespace-nowrap">
+                                                    <button type="button" wire:click="selectSnapshot({{ (int) $snap->id }})"
+                                                    class="text-sky-600 text-xs font-semibold hover:underline dark:text-sky-400">{{ __('View') }}</button>
+                                                @if ($this->canExportDownloads())
+                                                    <span class="text-gray-300 dark:text-gray-600">|</span>
+                                                    <button type="button" wire:click="downloadReport({{ (int) $snap->id }})"
+                                                        class="text-sky-600 text-xs font-semibold hover:underline dark:text-sky-400">{{ __('JSON') }}</button>
+                                                    <span class="text-gray-300 dark:text-gray-600">|</span>
+                                                        <button type="button" wire:click="downloadPdf({{ (int) $snap->id }})"
+                                                            class="text-sky-600 text-xs font-semibold hover:underline dark:text-sky-400">{{ __('PDF') }}</button>
+                                                @endif
+                                                @if ($this->canManageSnapshots())
+                                                    <span class="text-gray-300 dark:text-gray-600">|</span>
+                                                    <button type="button" wire:click="deleteSnapshot({{ (int) $snap->id }})"
+                                                            wire:confirm="{{ __('Delete this reconciliation snapshot? This cannot be undone.') }}"
+                                                            class="text-red-600 text-xs font-semibold hover:underline dark:text-red-400">{{ __('Delete') }}</button>
+                                                @endif
+                                        </td>
+                                    </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                                    <td colspan="{{ $this->canManageSnapshots() ? 8 : 7 }}" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                                         {{ __('No snapshots yet. Run reconciliation from the header.') }}</td>
                                 </tr>
                             @endforelse
@@ -166,18 +209,19 @@
 
             @php($sel = $this->getSelectedSnapshot())
                 @if ($sel)
-                                        <div
-                                            class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60 sm:p-5">
-                                            <div class="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-4 dark:border-white/10">
-                                                <div>
-                                                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
-                                                        {{ __('Snapshot analysis') }}</h3>
-                                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                                        {{ __('Review verdict, check details, and drill-down links. Export JSON or PDF for audit archives.') }}
-                                                    </p>
-                                                </div>
-                                                @if ($this->canExportDownloads())
-                                                    <div class="flex flex-wrap gap-2">
+                                    <div
+                                        class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60 sm:p-5">
+                                        <div class="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-4 dark:border-white/10">
+                                            <div>
+                                                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                                                    {{ __('Snapshot analysis') }}</h3>
+                                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                                    {{ __('Review verdict, check details, and drill-down links. Export JSON or PDF for audit archives.') }}
+                                                </p>
+                                            </div>
+                                            @if ($this->canExportDownloads() || $this->canManageSnapshots())
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    @if ($this->canExportDownloads())
                                                         <button type="button" wire:click="downloadReport({{ (int) $sel->id }})"
                                                             class="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900 dark:text-white dark:hover:bg-white/5">
                                                             <x-heroicon-o-arrow-down-tray class="h-4 w-4" />
@@ -188,12 +232,20 @@
                                                             <x-heroicon-o-document-text class="h-4 w-4" />
                                                             {{ __('PDF') }}
                                                         </button>
-                                                    </div>
-                                                @endif
-                                            </div>
+                                                    @endif
+                                                    @if ($this->canManageSnapshots())
+                                                        <x-filament::button color="danger" size="sm" outlined
+                                                            wire:click="deleteSnapshot({{ (int) $sel->id }})"
+                                                            wire:confirm="{{ __('Delete this reconciliation snapshot? This cannot be undone.') }}">
+                                                            {{ __('Delete snapshot') }}
+                                                        </x-filament::button>
+                                                    @endif
+                                                </div>
+                                            @endif
+                                        </div>
 
-                            @include('filament.tenant.partials.reconciliation.snapshot-detail', ['snapshot' => $sel])
-                        </div>
+                        @include('filament.tenant.partials.reconciliation.snapshot-detail', ['snapshot' => $sel])
+                    </div>
                 @elseif ($this->getLatestSnapshots()->isNotEmpty())
                     <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-4 py-6 text-center text-sm text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
                             {{ __('Select a snapshot row above to analyze check results and mismatches.') }}
@@ -266,4 +318,6 @@
             @endif
         </div>
     </section>
+
+    @include('filament.tenant.partials.page-workspace-action-modals')
 </x-filament-panels::page>

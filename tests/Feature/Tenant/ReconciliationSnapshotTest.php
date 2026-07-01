@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Models\Tenant\Account;
+use App\Models\Tenant\BankStatement;
+use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
@@ -60,6 +62,52 @@ test('reconciliation report includes legacy check keys and control layer', funct
         ->and($report['checks']['sms_transaction_posting_integrity']['severity'])->toBe('skipped')
         ->and($report)->toHaveKeys(['coverage_matrix', 'control_layer', 'pipeline', 'verdict'])
         ->and($report['verdict'])->toHaveKeys(['pass', 'critical_issues', 'warnings']);
+});
+
+test('paired control totals use pool-adjusted fund mirror with reserve accounts', function () {
+    Account::masterFund()?->update(['balance' => 1800]);
+    $masterInvest = Account::create(['type' => 'invest', 'name' => 'Master Invest', 'balance' => 0, 'is_master' => true]);
+    Account::create(['type' => 'expense', 'name' => 'Master Expense', 'balance' => 0, 'is_master' => true]);
+    Account::create(['type' => 'suspense', 'name' => 'Master Suspense', 'balance' => 0, 'is_master' => true]);
+
+    app(AccountingService::class)->fundReserveAccountFromMasterFund(
+        $masterInvest,
+        500,
+        'Capital allocation',
+    );
+    app(AccountingService::class)->recordInvestmentReturn(300, 'Q1 return');
+    app(AccountingService::class)->fundReserveAccountFromMasterFund(
+        Account::masterExpense(),
+        300,
+        'Operations float',
+    );
+
+    $member = Member::create([
+        'member_number' => 'RECON-POOL-001',
+        'name' => 'Pool Mirror Member',
+        'email' => 'recon-pool@fund.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+    app(AccountingService::class)->credit($member->fundAccount, 1800, 'Seed fund');
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['paired_control_totals'];
+
+    expect($check['severity'])->toBe('ok')
+        ->and($check['master_fund_balance'])->toBe(1300.0)
+        ->and($check['master_fund_pool'])->toBe(1800.0)
+        ->and($check['sum_member_fund'])->toBe(1800.0)
+        ->and($check['fund_delta_abs'])->toBe(0.0)
+        ->and($check['master_invest_balance'])->toBe(500.0)
+        ->and($check['master_expense_balance'])->toBe(300.0)
+        ->and($check['master_invest_return_to_fund_credits'])->toBe(300.0);
 });
 
 test('reconciliation report skips per-installment ledger checks for legacy imported loans', function () {
@@ -286,6 +334,24 @@ test('run check now completes in simple mode', function () {
     expect(ReconciliationSnapshot::query()->count())->toBe($before + 1);
 });
 
+test('reconciliation overview renders page action modals in advanced mode', function () {
+    $admin = User::create([
+        'name' => 'Recon Modal Admin',
+        'email' => 'recon-modal-' . uniqid('', true) . '@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+    $this->actingAs($admin, 'tenant');
+
+    Livewire::test(ReconciliationOverviewPage::class)
+        ->call('setAdvancedUi', true)
+        ->assertSet('sideTab', 'overview')
+        ->assertSeeHtml('wire:partial="action-modals"');
+});
+
 test('real-time snapshot action completes and tabs remain switchable', function () {
     $admin = User::create([
         'name' => 'Recon Run Admin',
@@ -377,4 +443,177 @@ test('reconciliation exceptions tab selects issue and shows analysis panel', fun
         ->assertSet('selectedExceptionId', $first->id)
         ->call('setQueueDomainFilter', 'bank_clearing')
         ->assertSet('queueDomainFilter', null);
+});
+
+test('admin can delete a reconciliation snapshot from snapshots tab', function () {
+    $admin = User::create([
+        'name' => 'Recon Delete Admin',
+        'email' => 'recon-delete-' . uniqid('', true) . '@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $older = ReconciliationSnapshot::create([
+        'mode' => ReconciliationSnapshot::MODE_DAILY,
+        'as_of' => now()->subDay(),
+        'is_passing' => true,
+        'critical_issues' => 0,
+        'warnings' => 0,
+        'summary' => [],
+        'report' => ['verdict' => ['pass' => true]],
+    ]);
+
+    $newer = ReconciliationSnapshot::create([
+        'mode' => ReconciliationSnapshot::MODE_REALTIME,
+        'as_of' => now(),
+        'is_passing' => false,
+        'critical_issues' => 1,
+        'warnings' => 0,
+        'summary' => [],
+        'report' => ['verdict' => ['pass' => false]],
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+    $this->actingAs($admin, 'tenant');
+
+    Livewire::test(ReconciliationOverviewPage::class)
+        ->call('setAdvancedUi', true)
+        ->call('setSideTab', 'snapshots')
+        ->assertSet('selectedSnapshotId', $newer->id)
+        ->call('deleteSnapshot', $newer->id)
+        ->assertNotified()
+        ->assertSet('selectedSnapshotId', $older->id);
+
+    expect(ReconciliationSnapshot::query()->pluck('id')->all())->toBe([$older->id]);
+});
+
+test('admin can bulk delete reconciliation snapshots', function () {
+    $admin = User::create([
+        'name' => 'Recon Bulk Delete Admin',
+        'email' => 'recon-bulk-delete-' . uniqid('', true) . '@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $keep = ReconciliationSnapshot::create([
+        'mode' => ReconciliationSnapshot::MODE_DAILY,
+        'as_of' => now()->subDays(2),
+        'is_passing' => true,
+        'critical_issues' => 0,
+        'warnings' => 0,
+        'summary' => [],
+        'report' => ['verdict' => ['pass' => true]],
+    ]);
+
+    $deleteOne = ReconciliationSnapshot::create([
+        'mode' => ReconciliationSnapshot::MODE_REALTIME,
+        'as_of' => now()->subDay(),
+        'is_passing' => true,
+        'critical_issues' => 0,
+        'warnings' => 0,
+        'summary' => [],
+        'report' => ['verdict' => ['pass' => true]],
+    ]);
+
+    $deleteTwo = ReconciliationSnapshot::create([
+        'mode' => ReconciliationSnapshot::MODE_MONTHLY,
+        'as_of' => now(),
+        'is_passing' => false,
+        'critical_issues' => 2,
+        'warnings' => 1,
+        'summary' => [],
+        'report' => ['verdict' => ['pass' => false]],
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+    $this->actingAs($admin, 'tenant');
+
+    Livewire::test(ReconciliationOverviewPage::class)
+        ->call('setAdvancedUi', true)
+        ->call('setSideTab', 'snapshots')
+        ->set('snapshotBulkSelection', [$deleteOne->id, $deleteTwo->id])
+        ->call('deleteSelectedSnapshots')
+        ->assertNotified()
+        ->assertSet('snapshotBulkSelection', [])
+        ->assertSet('selectedSnapshotId', $keep->id);
+
+    expect(ReconciliationSnapshot::query()->pluck('id')->all())->toBe([$keep->id]);
+});
+
+test('non-admin cannot delete reconciliation snapshots', function () {
+    $memberUser = User::create([
+        'name' => 'Recon Member',
+        'email' => 'recon-member-' . uniqid('', true) . '@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => false,
+    ]);
+
+    $snapshot = ReconciliationSnapshot::create([
+        'mode' => ReconciliationSnapshot::MODE_REALTIME,
+        'as_of' => now(),
+        'is_passing' => true,
+        'critical_issues' => 0,
+        'warnings' => 0,
+        'summary' => [],
+        'report' => ['verdict' => ['pass' => true]],
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+    $this->actingAs($memberUser, 'tenant');
+
+    Livewire::test(ReconciliationOverviewPage::class)
+        ->call('deleteSnapshot', $snapshot->id)
+        ->assertForbidden();
+
+    expect(ReconciliationSnapshot::query()->whereKey($snapshot->id)->exists())->toBeTrue();
+});
+
+test('bank pipeline unposted excludes synthetic operational clearance rows', function () {
+    $syntheticStatement = BankStatement::create([
+        'filename' => 'member-cash-outs',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    BankTransaction::create([
+        'bank_statement_id' => $syntheticStatement->id,
+        'transaction_date' => now()->toDateString(),
+        'description' => 'Synthetic cash-out clearance row',
+        'amount' => -30000,
+        'status' => 'imported',
+        'hash' => md5('synthetic-cash-out-unposted'),
+        'is_cleared' => false,
+    ]);
+
+    $realStatement = BankStatement::create([
+        'filename' => 'bank-export-may.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    BankTransaction::create([
+        'bank_statement_id' => $realStatement->id,
+        'transaction_date' => now()->toDateString(),
+        'description' => 'Real CSV import awaiting mirror',
+        'amount' => 4500,
+        'status' => 'imported',
+        'hash' => md5('real-csv-unposted'),
+        'is_cleared' => true,
+        'cleared_at' => now(),
+    ]);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    expect($report['pipeline']['bank_unposted_count'])->toBe(1)
+        ->and($report['pipeline']['bank_unposted_amount'])->toBe(4500.0);
 });

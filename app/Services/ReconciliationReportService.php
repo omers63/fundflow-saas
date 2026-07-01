@@ -18,6 +18,7 @@ use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
+use App\Support\ContributionPolicySettings;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -159,7 +160,7 @@ class ReconciliationReportService
             'note' => 'In a strictly paired ledger these should match. Drift may indicate one-sided manual entries, imports, or reversals.',
         ];
 
-        // --- 3) Master vs Σ(member) — advisory ---
+        // --- 3) Master vs Σ(member) pool mirrors (same formula as MasterAccountInvariantService) ---
         $masterCash = Account::masterCash();
         $masterFund = Account::masterFund();
 
@@ -170,38 +171,42 @@ class ReconciliationReportService
             $incrementCritical();
         }
 
-        $sumMemberCash = (float) Account::query()
-            ->where('type', 'cash')
-            ->where('is_master', false)
-            ->sum('balance');
+        $pool = app(MasterAccountInvariantService::class)->check();
+        $tolerance = ContributionPolicySettings::reconTolerance();
+        $cashDeltaAbs = $pool['cash_delta'];
+        $fundDeltaAbs = $pool['fund_delta'];
+        $suspenseBalance = abs($pool['master_suspense_balance']);
 
-        $sumMemberFund = (float) Account::query()
-            ->where('type', 'fund')
-            ->where('is_master', false)
-            ->sum('balance');
+        $balanced = $cashDeltaAbs <= $tolerance
+            && $fundDeltaAbs <= $tolerance
+            && $suspenseBalance <= $tolerance;
 
-        $cashDelta = $masterCash !== null ? abs((float) $masterCash->balance - $sumMemberCash) : null;
-        $fundDelta = $masterFund !== null ? abs((float) $masterFund->balance - $sumMemberFund) : null;
-
-        if ($cashDelta !== null && $cashDelta > self::AMOUNT_TOLERANCE) {
-            $incrementWarning();
-        }
-        if ($fundDelta !== null && $fundDelta > self::AMOUNT_TOLERANCE) {
+        if (!$balanced) {
             $incrementWarning();
         }
 
         $checks['paired_control_totals'] = [
             'label' => 'Master control vs aggregate member mirrors',
-            'severity' => (
-                ($cashDelta ?? 0) <= self::AMOUNT_TOLERANCE && ($fundDelta ?? 0) <= self::AMOUNT_TOLERANCE
-            ) ? 'ok' : 'warning',
-            'master_cash_balance' => $masterCash ? round((float) $masterCash->balance, 2) : null,
-            'sum_member_cash' => round($sumMemberCash, 2),
-            'cash_delta' => $cashDelta !== null ? round((float) $masterCash->balance - $sumMemberCash, 2) : null,
-            'master_fund_balance' => $masterFund ? round((float) $masterFund->balance, 2) : null,
-            'sum_member_fund' => round($sumMemberFund, 2),
-            'fund_delta' => $fundDelta !== null ? round((float) $masterFund->balance - $sumMemberFund, 2) : null,
-            'note' => 'Member cash debits (repayments / transfers), guarantor fund debits, and loan disbursement cash credits can break strict parity; treat as hygiene, not hard failure.',
+            'severity' => $balanced ? 'ok' : 'warning',
+            'master_cash_balance' => round($pool['master_cash'], 2),
+            'sum_member_cash' => round($pool['member_cash_sum'], 2),
+            'cash_delta' => round($pool['master_cash'] - $pool['member_cash_sum'], 2),
+            'cash_delta_abs' => $cashDeltaAbs,
+            'master_fund_balance' => round($pool['master_fund'], 2),
+            'master_fund_pool' => round($pool['master_fund_pool'], 2),
+            'sum_member_fund' => round($pool['member_fund_sum'], 2),
+            'fund_delta' => round($pool['master_fund_pool'] - $pool['member_fund_sum'], 2),
+            'fund_delta_abs' => $fundDeltaAbs,
+            'master_invest_balance' => round($pool['master_invest_balance'], 2),
+            'master_expense_balance' => round($pool['master_expense_balance'], 2),
+            'master_fees_balance' => round($pool['master_fees_balance'], 2),
+            'master_suspense_balance' => round($pool['master_suspense_balance'], 2),
+            'master_bank_balance' => round($pool['master_bank_balance'], 2),
+            'master_invest_from_fund_credits' => round($pool['master_invest_from_fund_credits'], 2),
+            'master_expense_from_fund_credits' => round($pool['master_expense_from_fund_credits'], 2),
+            'master_invest_return_to_fund_credits' => round($pool['master_invest_return_to_fund_credits'], 2),
+            'tolerance' => $tolerance,
+            'note' => __('Fund comparison uses pool-adjusted master fund: ledger fund balance minus invest returns credited to fund, plus invest/expense reserve funding from fund. Fees, bank, and suspense are control/reserve accounts (not member mirrors); suspense should be near zero after rounding.'),
         ];
 
         // --- 3b) Bank statement vs master_cash book (optional) ---
@@ -1077,7 +1082,10 @@ class ReconciliationReportService
         ];
 
         // --- 6) Pipeline ---
-        $bankImported = BankTransaction::query()
+        $bankClearing = app(BankClearingMatchService::class);
+
+        $bankImported = $bankClearing
+            ->applyRealBankStatementLinesScope(BankTransaction::query())
             ->where('status', 'imported')
             ->selectRaw('COUNT(*) as c, COALESCE(SUM(amount), 0) as amt')
             ->first();
@@ -1095,7 +1103,7 @@ class ReconciliationReportService
             'bank_uncleared_amount' => round((float) ($bankUncleared->amt ?? 0), 2),
             'sms_unposted_count' => 0,
             'sms_unposted_amount' => 0.0,
-            'note' => 'SaaS uses bank statement import (status=imported) and clearance workflow (is_cleared=false). SMS import is not available.',
+            'note' => 'Unposted counts real bank CSV imports (status=imported) excluding synthetic operational clearance statements. Uncleared uses is_cleared=false. SMS import is not available.',
         ];
 
         if ($pipeline['bank_unposted_count'] > 0 || $pipeline['bank_uncleared_count'] > 0) {

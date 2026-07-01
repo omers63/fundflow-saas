@@ -63,6 +63,9 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public ?int $selectedSnapshotId = null;
 
+    /** @var list<int> */
+    public array $snapshotBulkSelection = [];
+
     public ?int $selectedExceptionId = null;
 
     #[Url(as: 'queueDomain')]
@@ -663,6 +666,81 @@ class ReconciliationOverviewPage extends Page implements HasTable
         return auth('tenant')->user()?->is_admin === true;
     }
 
+    public function canManageSnapshots(): bool
+    {
+        return auth('tenant')->user()?->is_admin === true;
+    }
+
+    public function deleteSnapshot(int $id): void
+    {
+        $this->authorizeSnapshotManagement();
+
+        ReconciliationSnapshot::query()->whereKey($id)->delete();
+
+        $this->snapshotBulkSelection = array_values(array_diff(
+            $this->snapshotBulkSelection,
+            [$id],
+        ));
+
+        if ($this->selectedSnapshotId === $id) {
+            $this->selectedSnapshotId = null;
+            $this->ensureSnapshotSelected();
+        }
+
+        Notification::make()
+            ->title(__('Snapshot deleted'))
+            ->success()
+            ->send();
+    }
+
+    public function deleteSelectedSnapshots(): void
+    {
+        $this->authorizeSnapshotManagement();
+
+        $ids = array_values(array_unique(array_map(intval(...), $this->snapshotBulkSelection)));
+
+        if ($ids === []) {
+            return;
+        }
+
+        $deleted = ReconciliationSnapshot::query()->whereIn('id', $ids)->delete();
+
+        $this->snapshotBulkSelection = [];
+
+        if ($this->selectedSnapshotId !== null && ! ReconciliationSnapshot::query()->whereKey($this->selectedSnapshotId)->exists()) {
+            $this->selectedSnapshotId = null;
+            $this->ensureSnapshotSelected();
+        }
+
+        Notification::make()
+            ->title(__(':count snapshot(s) deleted', ['count' => $deleted]))
+            ->success()
+            ->send();
+    }
+
+    public function toggleAllSnapshotsForDeletion(): void
+    {
+        $this->authorizeSnapshotManagement();
+
+        $allIds = $this->getLatestSnapshots()
+            ->pluck('id')
+            ->map(fn (mixed $snapshotId): int => (int) $snapshotId)
+            ->all();
+
+        if ($allIds === []) {
+            $this->snapshotBulkSelection = [];
+
+            return;
+        }
+
+        $selected = array_map(intval(...), $this->snapshotBulkSelection);
+        sort($selected);
+        $sortedAll = $allIds;
+        sort($sortedAll);
+
+        $this->snapshotBulkSelection = $selected === $sortedAll ? [] : $allIds;
+    }
+
     public function downloadReport(?int $id = null): StreamedResponse
     {
         $this->authorizeExport();
@@ -816,6 +894,13 @@ class ReconciliationOverviewPage extends Page implements HasTable
     protected function authorizeExport(): void
     {
         if (! $this->canExportDownloads()) {
+            abort(403);
+        }
+    }
+
+    protected function authorizeSnapshotManagement(): void
+    {
+        if (! $this->canManageSnapshots()) {
             abort(403);
         }
     }
