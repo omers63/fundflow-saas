@@ -290,12 +290,22 @@ $currency = $currency ?? null;
             <details class="ff-member-dashboard-expandable">
                 <summary>{{ __('More details') }}</summary>
                 <div class="mt-3 space-y-3">
-                    @if (!empty($d['expandable']['insights']['stats']))
+                    @if (!empty($d['expandable']['insights']['stat_groups']))
                         <x-member::panel :title="__('My insights')">
-                            <div class="ff-member-dashboard-insights-stats grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                                @foreach ($d['expandable']['insights']['stats'] as $stat)
-                                    <x-member::stat-card :label="$stat['label']" :value="$stat['value'] ?? null"
-                                        :amount="$stat['amount'] ?? null" :currency="$currency" />
+                            <div class="ff-member-dashboard-insights space-y-3">
+                                @foreach ($d['expandable']['insights']['stat_groups'] as $group)
+                                    <div class="ff-member-dashboard-insights-group">
+                                        @if (filled($group['label'] ?? null))
+                                            <p class="ff-member-dashboard-insights-group__label">{{ $group['label'] }}</p>
+                                        @endif
+                                        <div
+                                            class="ff-member-dashboard-insights-stats grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                                            @foreach ($group['stats'] as $stat)
+                                                <x-member::stat-card :label="$stat['label']" :value="$stat['value'] ?? null"
+                                                    :amount="$stat['amount'] ?? null" :currency="$currency" />
+                                            @endforeach
+                                        </div>
+                                    </div>
                                 @endforeach
                             </div>
                         </x-member::panel>

@@ -76,6 +76,11 @@ final class LoanInsightsService
             ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
             ->sum('amount');
 
+        $activeAmountTotal = (float) Loan::query()
+            ->where('status', 'active')
+            ->selectRaw('COALESCE(SUM(COALESCE(amount_approved, amount_requested, amount, 0)), 0) as total')
+            ->value('total');
+
         $overdueCount = (int) LoanInstallment::query()
             ->where('status', 'overdue')
             ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
@@ -179,6 +184,9 @@ final class LoanInsightsService
                 'ready_to_disburse' => $readyToDisburse,
                 'active' => $active,
                 'completed' => $completed,
+                'active_amount_total' => $activeAmountTotal,
+                'outstanding_total' => $outstanding,
+                'overdue_installments' => $overdueCount,
                 'approved_month' => $approvedThisMonth,
                 'queue_url' => LoanResource::getUrl('queue'),
                 'queue_needs_decision_url' => LoanResource::queueUrl('needs_decision'),

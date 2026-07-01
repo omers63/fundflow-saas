@@ -1,11 +1,12 @@
 @php
-    $d = $this->getData();
-    $breakdown = $d['collection_breakdown'];
-    $loanQueue = $d['loan_queue_preview'];
-    $activity = $d['recent_activity'];
-    $pipeline = $d['loan_pipeline'];
-    $greeting = $d['greeting'];
-    $pool = $d['pool_health'];
+$d = $this->getData();
+$breakdown = $d['collection_breakdown'];
+$loanQueue = $d['loan_queue_preview'];
+$activity = $d['recent_activity'];
+$pipeline = $d['loan_pipeline'];
+$loanPortfolio = $d['loan_portfolio'];
+$greeting = $d['greeting'];
+$pool = $d['pool_health'];
 @endphp
 
 <div class="w-full max-w-none space-y-3 pb-6">
@@ -67,12 +68,12 @@
     <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
         @foreach ($d['kpi_stats'] as $stat)
             @php
-                $subColor = match ($stat['sub_tone'] ?? '') {
-                    'success', 'emerald' => 'text-emerald-600 dark:text-emerald-400',
-                    'amber', 'warning'   => 'text-amber-600 dark:text-amber-400',
-                    'danger', 'rose'     => 'text-red-600 dark:text-red-400',
-                    default              => 'text-gray-400',
-                };
+    $subColor = match ($stat['sub_tone'] ?? '') {
+        'success', 'emerald' => 'text-emerald-600 dark:text-emerald-400',
+        'amber', 'warning' => 'text-amber-600 dark:text-amber-400',
+        'danger', 'rose' => 'text-red-600 dark:text-red-400',
+        default => 'text-gray-400',
+    };
             @endphp
             <a href="{{ $stat['url'] }}"
                 class="ff-tenant-dashboard-kpi group flex min-w-0 flex-col gap-1 overflow-hidden rounded-xl border border-gray-200 bg-white px-4 py-3.5 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900">
@@ -83,53 +84,123 @@
         @endforeach
     </div>
 
+    {{-- ── Active loan portfolio ── --}}
+    <div
+        class="ff-tenant-loan-portfolio rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+        <div
+            class="flex flex-col gap-2 border-b border-gray-100 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between dark:border-gray-700">
+            <div class="flex min-w-0 items-center gap-2">
+                <x-heroicon-o-banknotes class="h-4 w-4 shrink-0 text-emerald-500" />
+                <span
+                    class="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Active loan portfolio') }}</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                @if (($loanPortfolio['queue_count'] ?? 0) > 0)
+                    <a href="{{ $loanPortfolio['queue_url'] }}"
+                        class="text-xs font-semibold text-amber-600 hover:underline dark:text-amber-400">
+                        {{ trans_choice(':count in queue →|:count in queue →', $loanPortfolio['queue_count'], ['count' => $loanPortfolio['queue_count']]) }}
+                    </a>
+                @endif
+                <a href="{{ $loanPortfolio['loans_url'] }}"
+                    class="text-xs font-semibold text-sky-600 hover:underline dark:text-sky-400">{{ __('View loans →') }}</a>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+            <a href="{{ $loanPortfolio['active_loans_url'] }}"
+                class="ff-tenant-loan-portfolio__stat group min-w-0 rounded-lg border border-transparent px-3 py-2.5 transition hover:border-emerald-200 hover:bg-emerald-50/60 dark:hover:border-emerald-900/40 dark:hover:bg-emerald-950/20">
+                <p class="text-xs uppercase tracking-wide text-gray-400">{{ __('Active loans') }}</p>
+                <p
+                    class="mt-0.5 text-2xl font-bold tabular-nums leading-none text-gray-900 group-hover:text-emerald-700 dark:text-white dark:group-hover:text-emerald-300">
+                    {{ number_format($loanPortfolio['active_count']) }}
+                </p>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ __('Currently repaying') }}</p>
+            </a>
+            <a href="{{ $loanPortfolio['active_loans_url'] }}"
+                class="ff-tenant-loan-portfolio__stat group min-w-0 rounded-lg border border-transparent px-3 py-2.5 transition hover:border-sky-200 hover:bg-sky-50/60 dark:hover:border-sky-900/40 dark:hover:bg-sky-950/20">
+                <p class="text-xs uppercase tracking-wide text-gray-400">{{ __('Portfolio value') }}</p>
+                <p
+                    class="mt-0.5 break-words text-xl font-bold tabular-nums leading-tight text-gray-900 group-hover:text-sky-700 dark:text-white dark:group-hover:text-sky-300">
+                    {!! \App\Support\Insights\InsightFormatter::moneyMarkup($loanPortfolio['active_amount_total']) !!}
+                </p>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ __('Total approved on active loans') }}</p>
+            </a>
+            <a href="{{ ($loanPortfolio['overdue_installments'] ?? 0) > 0 ? $loanPortfolio['overdue_url'] : $loanPortfolio['outstanding_url'] }}"
+                class="ff-tenant-loan-portfolio__stat group min-w-0 rounded-lg border border-transparent px-3 py-2.5 transition hover:border-violet-200 hover:bg-violet-50/60 dark:hover:border-violet-900/40 dark:hover:bg-violet-950/20">
+                <p class="text-xs uppercase tracking-wide text-gray-400">{{ __('Outstanding') }}</p>
+                <p @class([
+                    'mt-0.5 break-words text-xl font-bold tabular-nums leading-tight',
+                    'text-red-600 group-hover:text-red-700 dark:text-red-400 dark:group-hover:text-red-300' => ($loanPortfolio['overdue_installments'] ?? 0) > 0,
+                    'text-gray-900 group-hover:text-violet-700 dark:text-white dark:group-hover:text-violet-300' => ($loanPortfolio['overdue_installments'] ?? 0) === 0,
+                ])>
+                    {!! \App\Support\Insights\InsightFormatter::moneyMarkup($loanPortfolio['outstanding_total']) !!}
+                </p>
+                <p @class([
+                    'mt-1 text-xs',
+                    'text-red-600 dark:text-red-400' => ($loanPortfolio['overdue_installments'] ?? 0) > 0,
+                    'text-gray-500 dark:text-gray-400' => ($loanPortfolio['overdue_installments'] ?? 0) === 0,
+                ])>
+                    @if (($loanPortfolio['overdue_installments'] ?? 0) > 0)
+                        {{ trans_choice(':count overdue installment|:count overdue installments', $loanPortfolio['overdue_installments'], ['count' => $loanPortfolio['overdue_installments']]) }}
+                    @else
+                        {{ __('Pending and overdue EMIs') }}
+                    @endif
+                </p>
+            </a>
+        </div>
+    </div>
+
     {{-- ── Fund pool health ── --}}
     <div @class([
-        'overflow-hidden rounded-xl border bg-white shadow-sm dark:bg-gray-900',
+        'ff-tenant-pool-health rounded-xl border bg-white shadow-sm dark:bg-gray-900',
         'border-red-300 dark:border-red-800/50' => $pool['has_drift'],
-        'border-gray-200 dark:border-gray-700' => ! $pool['has_drift'],
+        'border-gray-200 dark:border-gray-700' => !$pool['has_drift'],
     ])>
-        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
-            <div class="flex items-center gap-2">
-                <x-heroicon-o-beaker class="h-4 w-4 text-sky-500" />
-                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Fund pool health') }}</span>
+        <div
+            class="flex flex-col gap-2 border-b border-gray-100 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between dark:border-gray-700">
+            <div class="flex min-w-0 items-center gap-2">
+                <x-heroicon-o-beaker class="h-4 w-4 shrink-0 text-sky-500" />
+                <span
+                    class="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Fund pool health') }}</span>
             </div>
             @if ($pool['has_drift'])
                 <a href="{{ $pool['reconciliation_url'] }}"
-                    class="text-[11px] font-semibold text-red-600 hover:underline dark:text-red-400">{{ __('Review reconciliation →') }}</a>
+                    class="shrink-0 text-xs font-semibold text-red-600 hover:underline sm:text-sm dark:text-red-400">{{ __('Review reconciliation →') }}</a>
             @endif
         </div>
-        <div class="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
+        <div class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
             <div class="min-w-0">
-                <p class="truncate text-[10px] uppercase text-gray-400">{{ __('Master cash') }}</p>
-                <p class="truncate text-sm font-bold tabular-nums text-gray-900 dark:text-white">{!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['master_cash']) !!}</p>
-                <p class="truncate text-[10px] text-gray-500">{{ __('Members') }}: {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['member_cash']) !!}</p>
+                <p class="text-xs uppercase tracking-wide text-gray-400">{{ __('Master cash') }}</p>
+                <p class="mt-0.5 break-words text-sm font-bold tabular-nums text-gray-900 dark:text-white">{!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['master_cash']) !!}</p>
+                <p class="mt-0.5 break-words text-xs text-gray-500">{{ __('Members') }}: {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['member_cash']) !!}</p>
             </div>
             <div class="min-w-0">
-                <p class="truncate text-[10px] uppercase text-gray-400">{{ __('Master fund') }}</p>
-                <p class="truncate text-sm font-bold tabular-nums text-gray-900 dark:text-white">{!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['master_fund']) !!}</p>
-                <p class="truncate text-[10px] text-gray-500">{{ __('Members') }}: {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['member_fund']) !!}</p>
+                <p class="text-xs uppercase tracking-wide text-gray-400">{{ __('Master fund') }}</p>
+                <p class="mt-0.5 break-words text-sm font-bold tabular-nums text-gray-900 dark:text-white">{!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['master_fund']) !!}</p>
+                <p class="mt-0.5 break-words text-xs text-gray-500">{{ __('Members') }}: {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['member_fund']) !!}</p>
             </div>
             <div class="min-w-0">
-                <p class="truncate text-[10px] uppercase text-gray-400">{{ __('Pool solvency') }}</p>
-                <p class="truncate text-sm font-bold tabular-nums text-gray-900 dark:text-white">
-                    {{ $pool['solvency_ratio'] !== null ? $pool['solvency_ratio'].'×' : '—' }}
+                <p class="text-xs uppercase tracking-wide text-gray-400">{{ __('Pool solvency') }}</p>
+                <p class="mt-0.5 break-words text-sm font-bold tabular-nums text-gray-900 dark:text-white">
+                    {{ $pool['solvency_ratio'] !== null ? $pool['solvency_ratio'] . '×' : '—' }}
                 </p>
-                <p class="truncate text-[10px] text-gray-500">{{ __('vs loan exposure') }}</p>
+                <p class="mt-0.5 text-xs text-gray-500">{{ __('vs loan exposure') }}</p>
             </div>
             <div class="min-w-0">
-                <p class="truncate text-[10px] uppercase text-gray-400">{{ __('Pool drift') }}</p>
+                <p class="text-xs uppercase tracking-wide text-gray-400">{{ __('Pool drift') }}</p>
                 <p @class([
-                    'text-sm font-bold tabular-nums',
+                    'ff-tenant-pool-health__status mt-0.5 text-base font-bold leading-snug break-words sm:text-lg',
                     'text-red-600 dark:text-red-400' => $pool['has_drift'],
-                    'text-emerald-600 dark:text-emerald-400' => ! $pool['has_drift'],
+                    'text-emerald-600 dark:text-emerald-400' => !$pool['has_drift'],
                 ])>
                     {{ $pool['has_drift'] ? __('Variance detected') : __('Balanced') }}
                 </p>
-                <p class="truncate text-[10px] text-gray-500">{{ __('Cash drift') }} {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['cash_drift']) !!} · {{ __('Fund drift') }} {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['fund_drift']) !!}</p>
+                <div class="mt-1 space-y-0.5 text-xs leading-snug text-gray-500 dark:text-gray-400">
+                    <p class="break-words">{{ __('Cash drift') }}: {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['cash_drift']) !!}</p>
+                    <p class="break-words">{{ __('Fund drift') }}: {!! \App\Support\Insights\InsightFormatter::moneyMarkup($pool['fund_drift']) !!}</p>
+                </div>
             </div>
         </div>
-        @if (! empty($pool['sparkline']))
+        @if (!empty($pool['sparkline']))
             <div class="border-t border-gray-100 px-4 py-3 dark:border-gray-700">
                 <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
@@ -143,16 +214,16 @@
                 </div>
                 <div class="flex h-8 items-end gap-px sm:h-10">
                     @php
-                        $sparklineMax = max(1, (float) ($pool['sparkline_max'] ?? 1));
+    $sparklineMax = max(1, (float) ($pool['sparkline_max'] ?? 1));
                     @endphp
                     @foreach ($pool['sparkline'] as $point)
                         @php $h = max(12, (int) round(((float) $point / $sparklineMax) * 100)); @endphp
                         <div
                             @class([
-                                'flex-1 rounded-sm',
-                                'bg-red-400/70 dark:bg-red-500/60' => ($pool['has_drift'] ?? false),
-                                'bg-sky-400/70 dark:bg-sky-500/60' => ! ($pool['has_drift'] ?? false),
-                            ])
+            'flex-1 rounded-sm',
+            'bg-red-400/70 dark:bg-red-500/60' => ($pool['has_drift'] ?? false),
+            'bg-sky-400/70 dark:bg-sky-500/60' => !($pool['has_drift'] ?? false),
+        ])
                             style="height: {{ $h }}%"
                             title="{{ \App\Support\Insights\InsightFormatter::money($point) }}"
                         ></div>
@@ -242,12 +313,12 @@
             <div class="space-y-2 p-3">
                 @foreach ($d['attention_cards'] as $card)
                     @php
-                        $noticeClass = match ($card['tone'] ?? '') {
-                            'rose'            => 'border-red-200 bg-red-50 text-red-800 dark:border-red-800/40 dark:bg-red-950/30 dark:text-red-300',
-                            'amber', 'warning'=> 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-300',
-                            'emerald','success'=> 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-300',
-                            default           => 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-300',
-                        };
+    $noticeClass = match ($card['tone'] ?? '') {
+        'rose' => 'border-red-200 bg-red-50 text-red-800 dark:border-red-800/40 dark:bg-red-950/30 dark:text-red-300',
+        'amber', 'warning' => 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-300',
+        'emerald', 'success' => 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-300',
+        default => 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-300',
+    };
                     @endphp
                     <a href="{{ $card['url'] }}"
                         class="flex items-start gap-2.5 rounded-lg border px-3 py-2 transition hover:opacity-80 {{ $noticeClass }}">
@@ -273,17 +344,17 @@
             </div>
             <div class="space-y-2.5 p-4">
                 @php
-                    $bars = [
-                        ['label' => __('Collected'), 'pct' => $breakdown['posted_pct'], 'color' => '#1D9E75', 'count' => $breakdown['posted']],
-                        ['label' => __('Pending'),   'pct' => $breakdown['pending_pct'], 'color' => '#EF9F27', 'count' => $breakdown['pending']],
-                        ['label' => __('Failed'),    'pct' => $breakdown['failed_pct'],  'color' => '#E24B4A', 'count' => $breakdown['failed']],
-                        ['label' => __('Waived'),    'pct' => $breakdown['waived_pct'],  'color' => '#9ca3af', 'count' => $breakdown['waived']],
-                    ];
-                    $lateFeeTiers = [
-                        ['label' => __('Tier 1 (day 3+)'),  'count' => $breakdown['tier1'], 'class' => 'text-amber-600 dark:text-amber-400'],
-                        ['label' => __('Tier 2 (day 10+)'), 'count' => $breakdown['tier2'], 'class' => 'text-orange-600 dark:text-orange-400'],
-                        ['label' => __('Tier 3 (day 20+)'), 'count' => $breakdown['tier3'], 'class' => 'text-red-600 dark:text-red-400'],
-                    ];
+$bars = [
+    ['label' => __('Collected'), 'pct' => $breakdown['posted_pct'], 'color' => '#1D9E75', 'count' => $breakdown['posted']],
+    ['label' => __('Pending'), 'pct' => $breakdown['pending_pct'], 'color' => '#EF9F27', 'count' => $breakdown['pending']],
+    ['label' => __('Failed'), 'pct' => $breakdown['failed_pct'], 'color' => '#E24B4A', 'count' => $breakdown['failed']],
+    ['label' => __('Waived'), 'pct' => $breakdown['waived_pct'], 'color' => '#9ca3af', 'count' => $breakdown['waived']],
+];
+$lateFeeTiers = [
+    ['label' => __('Tier 1 (day 3+)'), 'count' => $breakdown['tier1'], 'class' => 'text-amber-600 dark:text-amber-400'],
+    ['label' => __('Tier 2 (day 10+)'), 'count' => $breakdown['tier2'], 'class' => 'text-orange-600 dark:text-orange-400'],
+    ['label' => __('Tier 3 (day 20+)'), 'count' => $breakdown['tier3'], 'class' => 'text-red-600 dark:text-red-400'],
+];
                 @endphp
                 @foreach ($bars as $bar)
                     <div class="flex items-center gap-2">
@@ -322,20 +393,20 @@
             <div class="divide-y divide-gray-50 px-1 dark:divide-gray-800">
                 @forelse ($activity as $event)
                     @php
-                        $chipClass = match ($event['chip']['class']) {
-                            'ff-chip-green'  => 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
-                            'ff-chip-amber'  => 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
-                            'ff-chip-blue'   => 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-400',
-                            'ff-chip-purple' => 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400',
-                            default          => 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
-                        };
-                        $avatarClass = match ($event['chip']['class']) {
-                            'ff-chip-green'  => 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-                            'ff-chip-blue'   => 'bg-sky-50 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
-                            'ff-chip-amber'  => 'bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-                            'ff-chip-purple' => 'bg-violet-50 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
-                            default          => 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
-                        };
+    $chipClass = match ($event['chip']['class']) {
+        'ff-chip-green' => 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
+        'ff-chip-amber' => 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+        'ff-chip-blue' => 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-400',
+        'ff-chip-purple' => 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400',
+        default => 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
+    };
+    $avatarClass = match ($event['chip']['class']) {
+        'ff-chip-green' => 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+        'ff-chip-blue' => 'bg-sky-50 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+        'ff-chip-amber' => 'bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+        'ff-chip-purple' => 'bg-violet-50 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+        default => 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
+    };
                     @endphp
                     <div class="flex items-center gap-2.5 px-3 py-2.5">
                         <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[9px] font-bold {{ $avatarClass }}">
@@ -366,11 +437,11 @@
             <div class="space-y-3 p-4">
                 @forelse ($d['fund_tier_utilisation'] as $tier)
                     @php
-                        $tierColor = match ($tier['tone']) {
-                            'danger'  => 'text-red-600 dark:text-red-400',
-                            'warning' => 'text-amber-600 dark:text-amber-400',
-                            default   => 'text-emerald-600 dark:text-emerald-400',
-                        };
+    $tierColor = match ($tier['tone']) {
+        'danger' => 'text-red-600 dark:text-red-400',
+        'warning' => 'text-amber-600 dark:text-amber-400',
+        default => 'text-emerald-600 dark:text-emerald-400',
+    };
                     @endphp
                     <div>
                         <div class="mb-1 flex items-center justify-between">
@@ -401,15 +472,15 @@
             <div class="grid grid-cols-4 divide-x divide-gray-100 dark:divide-gray-700">
                 @foreach ($d['gauges'] as $gauge)
                     @php
-                        $gt = match ($gauge['tone']) {
-                            'emerald' => ['ring' => '#1d9e75', 'text' => 'text-emerald-600 dark:text-emerald-400'],
-                            'amber'   => ['ring' => '#ef9f27', 'text' => 'text-amber-600 dark:text-amber-400'],
-                            'rose'    => ['ring' => '#e24b4a', 'text' => 'text-red-600 dark:text-red-400'],
-                            'sky'     => ['ring' => '#0284c7', 'text' => 'text-sky-600 dark:text-sky-400'],
-                            default   => ['ring' => '#6b7280', 'text' => 'text-gray-500 dark:text-gray-400'],
-                        };
-                        $circumference = 2 * M_PI * 24;
-                        $dashOffset = $circumference - ($gauge['percent'] / 100) * $circumference;
+    $gt = match ($gauge['tone']) {
+        'emerald' => ['ring' => '#1d9e75', 'text' => 'text-emerald-600 dark:text-emerald-400'],
+        'amber' => ['ring' => '#ef9f27', 'text' => 'text-amber-600 dark:text-amber-400'],
+        'rose' => ['ring' => '#e24b4a', 'text' => 'text-red-600 dark:text-red-400'],
+        'sky' => ['ring' => '#0284c7', 'text' => 'text-sky-600 dark:text-sky-400'],
+        default => ['ring' => '#6b7280', 'text' => 'text-gray-500 dark:text-gray-400'],
+    };
+    $circumference = 2 * M_PI * 24;
+    $dashOffset = $circumference - ($gauge['percent'] / 100) * $circumference;
                     @endphp
                     <a href="{{ $gauge['url'] }}"
                         class="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-gray-50 dark:hover:bg-gray-800">

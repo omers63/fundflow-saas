@@ -15,6 +15,7 @@ use App\Models\Tenant\FundAuditLog;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
@@ -287,6 +288,58 @@ test('loan full repayment threshold matches master portion plus settlement slice
     ]);
 
     expect($loan->fullRepaymentThreshold())->toBe(9600.0);
+});
+
+test('loan schedule last installment absorbs repayment remainder below min emi', function () {
+    expect(Loan::scheduleInstallmentAmount(10, 10, 1000, 9600))->toBe(600.0)
+        ->and(Loan::scheduleInstallmentAmount(9, 10, 1000, 9600))->toBe(1000.0)
+        ->and(Loan::scheduleInstallmentAmount(1, 1, 1000, 750))->toBe(750.0)
+        ->and(Loan::scheduleInstallmentAmount(5, 5, 2000, 10000))->toBe(2000.0);
+
+    $loan = new Loan([
+        'master_portion' => 8000,
+        'amount_approved' => 10000,
+        'settlement_threshold' => 0.16,
+        'installments_count' => 10,
+        'monthly_repayment' => 1000,
+    ]);
+
+    expect($loan->scheduleInstallmentAmountFor(10))->toBe(600.0)
+        ->and($loan->scheduleInstallmentAmountFor(3))->toBe(1000.0);
+});
+
+test('ensure schedule installment amount updates legacy last installment to closing remainder', function () {
+    $loan = Loan::create([
+        'member_id' => Member::create([
+            'member_number' => 'LOAN-LAST-EMI',
+            'name' => 'Last EMI Member',
+            'monthly_contribution_amount' => 500,
+            'joined_at' => now()->subYear(),
+            'status' => 'active',
+        ])->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'master_portion' => 8000,
+        'member_portion' => 2000,
+        'settlement_threshold' => 0.16,
+        'installments_count' => 10,
+        'term_months' => 10,
+        'monthly_repayment' => 1000,
+        'status' => 'active',
+    ]);
+
+    $last = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 10,
+        'amount' => 1000,
+        'due_date' => now()->addMonths(10)->toDateString(),
+        'status' => 'pending',
+    ]);
+
+    $loan->ensureScheduleInstallmentAmount($last);
+
+    expect((float) $last->fresh()->amount)->toBe(600.0);
 });
 
 test('nightly reconciliation raises fund tier over committed', function () {
@@ -894,7 +947,7 @@ test('reconciliation does not flag legacy imported contributions collected durin
         'collection_status' => ContributionCollectionStatus::COLLECTED,
         'posted_at' => $loanPeriod,
         'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
-        'notes' => 'Legacy migration contribution [legacy-import:LEG-EXEMPT||' . $loanPeriod->format('Y-m-d') . '|500|contribution|' . $loanPeriod->format('Y-m') . ']',
+        'notes' => 'Legacy migration contribution [legacy-import:LEG-EXEMPT||'.$loanPeriod->format('Y-m-d').'|500|contribution|'.$loanPeriod->format('Y-m').']',
     ]);
 
     expect($member->isExemptFromContributions(

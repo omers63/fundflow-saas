@@ -190,6 +190,7 @@ test('member portal component css clips stat card overflow', function () {
         ->toContain('text-overflow: ellipsis')
         ->toContain('ff-member-fund-account-stats')
         ->toContain('ff-member-dashboard-insights-stats')
+        ->toContain('ff-member-dashboard-insights-group__label')
         ->toContain('ff-member-contribution-option')
         ->toContain('ff-member-panel-actions');
 

@@ -169,8 +169,12 @@ final class LoanRepaymentImportService
             throw new InvalidArgumentException(__('Installment :num is already paid.', ['num' => $installmentNumber]));
         }
 
+        $loan->ensureScheduleInstallmentAmount($installment);
+        $installment->refresh();
+
         $amountCell = $this->cell($row, 'amount');
-        if ($amountCell !== '' && abs($this->parseMoney($amountCell, 'amount') - (float) $installment->amount) > 0.02) {
+        $expectedAmount = $loan->scheduleInstallmentAmountFor($installmentNumber);
+        if ($amountCell !== '' && abs($this->parseMoney($amountCell, 'amount') - $expectedAmount) > 0.02) {
             throw new InvalidArgumentException(__('amount must match the installment amount for historical import rows.'));
         }
 

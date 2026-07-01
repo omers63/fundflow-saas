@@ -197,10 +197,11 @@ final class MemberPortalInsightsService
                 'insights' => [
                     'sparkline' => $sparkline,
                     'sparkline_max' => max(1, max($sparkline)),
-                    'stats' => $this->buildInsightStats(
+                    'stat_groups' => $this->buildInsightStatGroups(
                         $contributionsPosted,
                         $contributionsPostedTotal,
                         $lifetimeRepaidTotal,
+                        $this->memberLoanInsightMetrics($member),
                         $pendingDeposits,
                         $unreadMessages,
                     ),
@@ -1235,12 +1236,38 @@ final class MemberPortalInsightsService
     }
 
     /**
-     * @return list<array{label: string, value?: string, amount?: float}>
+     * @return array{count: int, total_value: float, total_outstanding: float}
      */
-    private function buildInsightStats(
+    private function memberLoanInsightMetrics(Member $member): array
+    {
+        $loanStats = Loan::query()
+            ->where('member_id', $member->id)
+            ->selectRaw('COUNT(*) as loans_count')
+            ->selectRaw('COALESCE(SUM(COALESCE(amount_approved, amount_requested, amount, 0)), 0) as total_value')
+            ->first();
+
+        $totalOutstanding = (float) $member->loans()
+            ->inRepayment()
+            ->with('installments')
+            ->get()
+            ->sum(fn (Loan $loan): float => $loan->getOutstandingBalance());
+
+        return [
+            'count' => (int) ($loanStats?->loans_count ?? 0),
+            'total_value' => (float) ($loanStats?->total_value ?? 0.0),
+            'total_outstanding' => $totalOutstanding,
+        ];
+    }
+
+    /**
+     * @param  array{count: int, total_value: float, total_outstanding: float}  $loanMetrics
+     * @return list<array{label: string, stats: list<array{label: string, value?: string, amount?: float}>}>
+     */
+    private function buildInsightStatGroups(
         int $contributionsPosted,
         float $contributionsPostedTotal,
         float $lifetimeRepaidTotal,
+        array $loanMetrics,
         int $pendingDeposits,
         int $unreadMessages,
     ): array {
@@ -1248,28 +1275,55 @@ final class MemberPortalInsightsService
 
         return [
             [
-                'label' => __('Contributions posted'),
-                'value' => (string) $contributionsPosted,
+                'label' => __('Contributions'),
+                'stats' => [
+                    [
+                        'label' => __('Contributions posted'),
+                        'value' => (string) $contributionsPosted,
+                    ],
+                    [
+                        'label' => __('Contribution total'),
+                        'amount' => $contributionsPostedTotal,
+                    ],
+                ],
             ],
             [
-                'label' => __('Contribution total'),
-                'amount' => $contributionsPostedTotal,
+                'label' => __('Loans'),
+                'stats' => [
+                    [
+                        'label' => __('Total loans'),
+                        'value' => (string) $loanMetrics['count'],
+                    ],
+                    [
+                        'label' => __('Total loans value'),
+                        'amount' => $loanMetrics['total_value'],
+                    ],
+                    [
+                        'label' => __('Total outstanding'),
+                        'amount' => $loanMetrics['total_outstanding'],
+                    ],
+                    [
+                        'label' => __('Loan Repayments Total'),
+                        'amount' => $lifetimeRepaidTotal,
+                    ],
+                ],
             ],
             [
-                'label' => __('Loan Repayments Total'),
-                'amount' => $lifetimeRepaidTotal,
-            ],
-            [
-                'label' => __('Collection Total'),
-                'amount' => $collectionTotal,
-            ],
-            [
-                'label' => __('Pending deposits'),
-                'value' => (string) $pendingDeposits,
-            ],
-            [
-                'label' => __('Unread messages'),
-                'value' => (string) $unreadMessages,
+                'label' => __('Summary'),
+                'stats' => [
+                    [
+                        'label' => __('Collection Total'),
+                        'amount' => $collectionTotal,
+                    ],
+                    [
+                        'label' => __('Pending deposits'),
+                        'value' => (string) $pendingDeposits,
+                    ],
+                    [
+                        'label' => __('Unread messages'),
+                        'value' => (string) $unreadMessages,
+                    ],
+                ],
             ],
         ];
     }

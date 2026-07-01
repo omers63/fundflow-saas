@@ -4,6 +4,7 @@ namespace App\Filament\Member\Resources\MyLoans\Tables;
 
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\LoanFilamentActions;
 use App\Filament\Support\LoanOutstandingColumn;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;

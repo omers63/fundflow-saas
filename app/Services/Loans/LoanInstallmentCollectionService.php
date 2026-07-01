@@ -85,9 +85,12 @@ class LoanInstallmentCollectionService
         $member = $member?->fresh() ?? $loan->member;
         $member->unsetRelation('accounts');
 
-        if (!$loan instanceof Loan || !in_array($loan->status, ['active', 'transferred'], true)) {
+        if (! $loan instanceof Loan || ! in_array($loan->status, ['active', 'transferred'], true)) {
             return 'inactive';
         }
+
+        $loan->ensureScheduleInstallmentAmount($installment);
+        $installment->refresh();
 
         $due = $installment->due_date;
         [$cycleMonth, $cycleYear] = $this->cycles->cyclePeriodForDueDate($due);

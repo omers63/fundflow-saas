@@ -463,6 +463,68 @@ class Loan extends Model
     }
 
     /**
+     * Principal due for one position on the EMI schedule.
+     * Regular installments use the tier minimum; the final installment absorbs the repayment remainder.
+     */
+    public static function scheduleInstallmentAmount(
+        int $installmentNumber,
+        int $installmentsCount,
+        float $minMonthlyInstallment,
+        float $totalRepaymentTarget,
+    ): float {
+        if ($installmentsCount <= 0 || $installmentNumber < 1 || $installmentNumber > $installmentsCount) {
+            return 0.0;
+        }
+
+        if ($installmentNumber < $installmentsCount) {
+            return round($minMonthlyInstallment, 2);
+        }
+
+        $regularTotal = round($minMonthlyInstallment * ($installmentsCount - 1), 2);
+
+        return round(max(0.0, $totalRepaymentTarget - $regularTotal), 2);
+    }
+
+    public function scheduleInstallmentAmountFor(int $installmentNumber): float
+    {
+        $count = (int) ($this->installments_count ?? 0);
+        if ($count <= 0) {
+            $count = (int) $this->installments()->count();
+        }
+
+        $minInstall = (float) ($this->loanTier?->min_monthly_installment ?? $this->monthly_repayment ?? 0);
+        if ($minInstall <= 0) {
+            $minInstall = 1000;
+        }
+
+        return self::scheduleInstallmentAmount(
+            $installmentNumber,
+            $count,
+            $minInstall,
+            $this->fullRepaymentThreshold(),
+        );
+    }
+
+    public function ensureScheduleInstallmentAmount(LoanInstallment $installment): void
+    {
+        $expected = $this->scheduleInstallmentAmountFor((int) $installment->installment_number);
+
+        if (abs((float) $installment->amount - $expected) > 0.02) {
+            $installment->update(['amount' => $expected]);
+            $installment->refresh();
+        }
+    }
+
+    public function syncPendingScheduleInstallmentAmounts(): void
+    {
+        $this->loadMissing('loanTier');
+
+        foreach ($this->installments()->whereIn('status', ['pending', 'overdue'])->orderBy('installment_number')->get() as $installment) {
+            $this->ensureScheduleInstallmentAmount($installment);
+        }
+    }
+
+    /**
      * Determine which contribution cycle is exempted and when repayments start
      * based on the disbursement date.
      *

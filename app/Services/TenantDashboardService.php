@@ -128,6 +128,7 @@ final class TenantDashboardService
             'contribution_trend' => $this->contributionTrend($now),
             'loan_trend' => $this->loanInsights->sixMonthLoanVolumeTrend(),
             'loan_pipeline' => $loanPortfolio['pipeline'] ?? [],
+            'loan_portfolio' => $this->loanPortfolioSummary($loanPortfolio),
             'workspace_sections' => $this->workspaceSections(),
             'sparkline' => $masterSnapshot['sparkline'] ?? [],
             'sparkline_max' => $masterSnapshot['sparkline_max'] ?? 1,
@@ -137,6 +138,29 @@ final class TenantDashboardService
             'collection_breakdown' => $this->collectionBreakdown($openMonth, $openYear, $activeMembers, $delinquencyCounts),
             'fund_tier_utilisation' => $this->fundTierUtilisation(),
             'pool_health' => $this->poolHealth($masterBalance),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $loanPortfolio
+     * @return array<string, mixed>
+     */
+    private function loanPortfolioSummary(array $loanPortfolio): array
+    {
+        $pipeline = $loanPortfolio['pipeline'] ?? [];
+        $queueCount = (int) ($pipeline['needs_decision'] ?? 0) + (int) ($pipeline['ready_to_disburse'] ?? 0);
+
+        return [
+            'active_count' => (int) ($pipeline['active'] ?? 0),
+            'active_amount_total' => (float) ($pipeline['active_amount_total'] ?? 0),
+            'outstanding_total' => (float) ($pipeline['outstanding_total'] ?? 0),
+            'overdue_installments' => (int) ($pipeline['overdue_installments'] ?? 0),
+            'queue_count' => $queueCount,
+            'loans_url' => $pipeline['loans_url'] ?? LoanResource::getUrl('index'),
+            'active_loans_url' => $pipeline['loans_active_url'] ?? LoanResource::listUrl('portfolio', ['status' => ['value' => 'active']]),
+            'outstanding_url' => LoanResource::listUrl(),
+            'overdue_url' => LoanResource::listTabUrl('overdue_installments'),
+            'queue_url' => $pipeline['queue_url'] ?? LoanResource::getUrl('queue'),
         ];
     }
 

@@ -98,13 +98,14 @@ final class LegacyImportedLoanInstallmentRebuildService
     private function rebuildLoanSchedule(Loan $loan, int $count): int
     {
         $minInstall = (float) ($loan->loanTier?->min_monthly_installment ?? 1000);
+        $totalToRepay = $loan->fresh()->fullRepaymentThreshold();
         $disbursedAt = Carbon::parse((string) $loan->disbursed_at);
         $policy = app(LoanRepaymentWindowPolicy::class);
         $firstPeriod = $loan->first_repayment_year !== null && $loan->first_repayment_month !== null
             ? Carbon::create((int) $loan->first_repayment_year, (int) $loan->first_repayment_month, 1)
             : $disbursedAt->copy()->addMonthNoOverflow()->startOfMonth();
 
-        DB::transaction(function () use ($loan, $count, $minInstall, $disbursedAt, $firstPeriod, $policy): void {
+        DB::transaction(function () use ($loan, $count, $minInstall, $disbursedAt, $firstPeriod, $policy, $totalToRepay): void {
             $loan->installments()->forceDelete();
 
             for ($i = 1; $i <= $count; $i++) {
@@ -113,7 +114,7 @@ final class LegacyImportedLoanInstallmentRebuildService
                 LoanInstallment::create([
                     'loan_id' => $loan->id,
                     'installment_number' => $i,
-                    'amount' => $minInstall,
+                    'amount' => Loan::scheduleInstallmentAmount($i, $count, $minInstall, $totalToRepay),
                     'due_date' => $policy->installmentDueDateForCycle(
                         (int) $period->month,
                         (int) $period->year,

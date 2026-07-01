@@ -3,15 +3,18 @@
 use App\Models\Tenant\Account;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Services\LoanInsightsService;
+use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
+    Filament::setCurrentPanel('tenant');
     $this->service = app(LoanInsightsService::class);
 
     Loan::query()->delete();
@@ -21,6 +24,38 @@ beforeEach(function () {
 
     Account::query()->delete();
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 100_000, 'is_master' => true]);
+});
+
+test('portfolio snapshot aggregates active loan amount and outstanding totals', function () {
+    $member = Member::factory()->create(['status' => 'active']);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 0,
+        'term_months' => 12,
+        'status' => 'active',
+        'applied_at' => now()->subMonth(),
+        'approved_at' => now()->subMonth(),
+        'disbursed_at' => now()->subMonth(),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 2000,
+        'due_date' => now()->addDays(10),
+        'status' => 'pending',
+    ]);
+
+    $snapshot = $this->service->portfolioSnapshot();
+
+    expect($snapshot['pipeline']['active'])->toBe(1)
+        ->and($snapshot['pipeline']['active_amount_total'])->toBe(12_000.0)
+        ->and($snapshot['pipeline']['outstanding_total'])->toBe(2_000.0);
 });
 
 test('portfolio snapshot returns pipeline counts and hero', function () {

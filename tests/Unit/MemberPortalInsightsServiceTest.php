@@ -16,9 +16,8 @@ use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
@@ -106,6 +105,8 @@ test('member portal insights snapshot includes greeting and kpis', function () {
         ->and($snapshot['eligibility_panel'])->not->toBeNull()
         ->and($snapshot['loan_panel'])->toBeNull()
         ->and($snapshot['expandable'])->toHaveKeys(['insights', 'household', 'guarantor'])
+        ->and($snapshot['expandable']['insights'])->toHaveKeys(['sparkline', 'sparkline_max', 'stat_groups'])
+        ->and($snapshot['expandable']['insights']['stat_groups'])->toHaveCount(3)
         ->and($snapshot['greeting'])->toHaveKeys([
             'period_label',
             'first_name',
@@ -201,14 +202,80 @@ test('member portal insights show lifetime contribution and repayment totals in 
         ->and($inflowKpi)->not->toBeNull()
         ->and($inflowKpi['sub'])->toBe(InsightFormatter::money(4_500.0));
 
-    $stats = collect($snapshot['expandable']['insights']['stats']);
+    $stats = collect($snapshot['expandable']['insights']['stat_groups'])
+        ->flatMap(fn (array $group): array => $group['stats']);
     $contributionTotalStat = $stats->firstWhere('label', __('Contribution total'));
     $loanRepaymentsStat = $stats->firstWhere('label', __('Loan Repayments Total'));
     $collectionTotalStat = $stats->firstWhere('label', __('Collection Total'));
+    $totalLoansStat = $stats->firstWhere('label', __('Total loans'));
+    $totalLoansValueStat = $stats->firstWhere('label', __('Total loans value'));
+    $totalOutstandingStat = $stats->firstWhere('label', __('Total outstanding'));
 
     expect($contributionTotalStat['amount'] ?? null)->toBe(500.0)
         ->and($loanRepaymentsStat['amount'] ?? null)->toBe(4_000.0)
-        ->and($collectionTotalStat['amount'] ?? null)->toBe(4_500.0);
+        ->and($collectionTotalStat['amount'] ?? null)->toBe(4_500.0)
+        ->and($totalLoansStat['value'] ?? null)->toBe('1')
+        ->and($totalLoansValueStat['amount'] ?? null)->toBe(10_000.0)
+        ->and($totalOutstandingStat['amount'] ?? null)->toBe(0.0);
+});
+
+test('member portal insights include lifetime loan count value and outstanding totals', function () {
+    $activeLoan = Loan::query()->create([
+        'member_id' => $this->member->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 0,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(2),
+        'approved_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    LoanInstallment::query()->create([
+        'loan_id' => $activeLoan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => now()->subDays(5),
+        'status' => 'overdue',
+    ]);
+
+    LoanInstallment::query()->create([
+        'loan_id' => $activeLoan->id,
+        'installment_number' => 2,
+        'amount' => 1000,
+        'due_date' => now()->addDays(20),
+        'status' => 'pending',
+    ]);
+
+    Loan::query()->create([
+        'member_id' => $this->member->id,
+        'amount' => 5_000,
+        'amount_requested' => 5_000,
+        'amount_approved' => 5_000,
+        'amount_disbursed' => 5_000,
+        'interest_rate' => 0,
+        'term_months' => 5,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 5_000,
+        'status' => 'completed',
+        'applied_at' => now()->subYear(),
+        'approved_at' => now()->subYear(),
+        'disbursed_at' => now()->subYear(),
+    ]);
+
+    auth('tenant')->login($this->memberUser);
+
+    $stats = collect(app(MemberPortalInsightsService::class)->snapshot()['expandable']['insights']['stat_groups'])
+        ->flatMap(fn (array $group): array => $group['stats']);
+
+    expect($stats->firstWhere('label', __('Total loans'))['value'] ?? null)->toBe('2')
+        ->and($stats->firstWhere('label', __('Total loans value'))['amount'] ?? null)->toBe(17_000.0)
+        ->and($stats->firstWhere('label', __('Total outstanding'))['amount'] ?? null)->toBe(2_000.0);
 });
 
 test('member portal emi due notice embeds amount with symbol before digits', function () {

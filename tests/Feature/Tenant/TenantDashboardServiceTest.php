@@ -7,13 +7,17 @@ use App\Filament\Tenant\Pages\JobsPage;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
+use App\Filament\Tenant\Widgets\TenantDashboardWidget;
 use App\Models\Tenant\Account;
+use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\TenantDashboardService;
 use App\Support\BusinessDay;
 use Filament\Facades\Filament;
+use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -91,6 +95,18 @@ test('tenant dashboard snapshot includes greeting and workspace links', function
         ->and($snapshot['contribution_trend'])->toHaveCount(6)
         ->and($snapshot['loan_trend'])->toHaveCount(6)
         ->and($snapshot['loan_trend'][0])->toHaveKeys(['label', 'total', 'active', 'pending', 'completed'])
+        ->and($snapshot['loan_portfolio'])->toHaveKeys([
+            'active_count',
+            'active_amount_total',
+            'outstanding_total',
+            'overdue_installments',
+            'queue_count',
+            'loans_url',
+            'active_loans_url',
+            'outstanding_url',
+            'overdue_url',
+            'queue_url',
+        ])
         ->and(
             collect($snapshot['workspace_sections'])
                 ->flatMap(fn (array $s): array => $s['links'])
@@ -154,4 +170,100 @@ test('tenant dashboard pool health includes thirty day sparkline', function () {
         ->and($pool['sparkline_max'])->toBeGreaterThan(0)
         ->and($pool['sparkline_end'])->toBe(6000.0)
         ->and($pool['sparkline_start'])->toBe(5800.0);
+});
+
+test('tenant dashboard pool health renders readable variance status markup', function () {
+    $user = User::create([
+        'name' => 'Drift Admin',
+        'email' => 'drift-admin@fund.test',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 1500, 'is_master' => true]);
+    Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 5000, 'is_master' => true]);
+
+    $this->actingAs($user, 'tenant');
+
+    $html = Livewire::test(TenantDashboardWidget::class)
+        ->assertSuccessful()
+        ->html();
+
+    expect($html)
+        ->toContain('ff-tenant-pool-health')
+        ->toContain('ff-tenant-pool-health__status')
+        ->toContain(__('Variance detected'))
+        ->toContain(__('Cash drift').':')
+        ->toContain(__('Fund drift').':');
+});
+
+test('tenant dashboard loan portfolio summarizes active loan count value and outstanding', function () {
+    $user = User::create([
+        'name' => 'Loan Portfolio Admin',
+        'email' => 'loan-portfolio-admin@fund.test',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    $member = Member::create([
+        'member_number' => 'MEM-LOAN-PORT',
+        'name' => 'Borrower',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $loan = Loan::query()->create([
+        'member_id' => $member->id,
+        'amount' => 15_000,
+        'amount_requested' => 15_000,
+        'amount_approved' => 15_000,
+        'amount_disbursed' => 15_000,
+        'interest_rate' => 0,
+        'term_months' => 10,
+        'monthly_repayment' => 1500,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(2),
+        'approved_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    LoanInstallment::query()->create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 2500,
+        'due_date' => now()->subDays(3),
+        'status' => 'overdue',
+    ]);
+
+    LoanInstallment::query()->create([
+        'loan_id' => $loan->id,
+        'installment_number' => 2,
+        'amount' => 1500,
+        'due_date' => now()->addDays(20),
+        'status' => 'pending',
+    ]);
+
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 1000, 'is_master' => true]);
+    Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 5000, 'is_master' => true]);
+
+    $this->actingAs($user, 'tenant');
+
+    $portfolio = $this->service->snapshot()['loan_portfolio'];
+
+    expect($portfolio['active_count'])->toBe(1)
+        ->and($portfolio['active_amount_total'])->toBe(15_000.0)
+        ->and($portfolio['outstanding_total'])->toBe(4_000.0)
+        ->and($portfolio['overdue_installments'])->toBe(1);
+
+    $html = Livewire::test(TenantDashboardWidget::class)
+        ->assertSuccessful()
+        ->html();
+
+    expect($html)
+        ->toContain('ff-tenant-loan-portfolio')
+        ->toContain(__('Active loan portfolio'))
+        ->toContain(__('Portfolio value'))
+        ->toContain(__('Outstanding'));
 });

@@ -92,7 +92,11 @@ class LoanService
             throw new InvalidArgumentException(__('No unpaid installments found.'));
         }
 
-        if (abs($amount - (float) $installment->amount) > 0.02) {
+        $loan->ensureScheduleInstallmentAmount($installment);
+        $installment->refresh();
+
+        $expectedAmount = (float) $installment->amount;
+        if (abs($amount - $expectedAmount) > 0.02) {
             throw new InvalidArgumentException(__('Use early settlement for partial or lump-sum payoffs.'));
         }
 

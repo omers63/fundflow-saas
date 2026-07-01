@@ -375,7 +375,9 @@ final class LoanLifecycleService
         $exemption = Loan::computeExemptionAndFirstRepayment(Carbon::parse($disbursedAt), (int) $graceCycles);
         $exemption = Loan::finalizeExemptionForDisbursement($loan->member, $exemption, Carbon::parse($disbursedAt));
 
-        DB::transaction(function () use ($loan, $disbursedAt, $exemption, $count, $minInstall, $memberPortion, $masterPortion, $memberFundBalanceBefore): void {
+        $totalToRepay = round($masterPortion + ($amountApproved * $threshold), 2);
+
+        DB::transaction(function () use ($loan, $disbursedAt, $exemption, $count, $minInstall, $memberPortion, $masterPortion, $memberFundBalanceBefore, $totalToRepay): void {
             if ($memberPortion > $memberFundBalanceBefore + 0.01) {
                 throw new InvalidArgumentException(__(
                     'Member fund balance (:balance) is insufficient for the member portion (:portion).',
@@ -415,7 +417,7 @@ final class LoanLifecycleService
                 LoanInstallment::create([
                     'loan_id' => $loan->id,
                     'installment_number' => $i,
-                    'amount' => $minInstall,
+                    'amount' => Loan::scheduleInstallmentAmount($i, $count, $minInstall, $totalToRepay),
                     'due_date' => $policy->installmentDueDateForCycle(
                         (int) $period->month,
                         (int) $period->year,

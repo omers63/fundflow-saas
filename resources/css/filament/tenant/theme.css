@@ -616,6 +616,30 @@ html.fi.fi-panel-tenant #nprogress .peg {
     animation-delay: 0.12s;
 }
 
+.fi-body.fi-panel-tenant .ff-tenant-pool-health__status {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-pool-health .ff-member-amount {
+    display: inline;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-pool-health .ff-member-amount__digits {
+    white-space: normal;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-loan-portfolio .ff-member-amount,
+.fi-body.fi-panel-tenant .ff-tenant-loan-portfolio .ff-member-amount__digits {
+    display: inline;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
 .fi-body.fi-panel-tenant .ff-dashboard-hero {
   animation: ff-dashboard-glow 8s ease-in-out infinite alternate;
 }

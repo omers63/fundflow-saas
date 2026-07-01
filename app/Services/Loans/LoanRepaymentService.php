@@ -124,6 +124,9 @@ class LoanRepaymentService
             return 'skipped';
         }
 
+        $loan->ensureScheduleInstallmentAmount($installment);
+        $installment->refresh();
+
         $cycles = app(ContributionCycleService::class);
         $periodStart = $cycles->cycleStartAt($month, $year);
 
@@ -231,6 +234,9 @@ class LoanRepaymentService
         if (! $loan instanceof Loan || $installment->isPaid()) {
             return 'skipped';
         }
+
+        $loan->ensureScheduleInstallmentAmount($installment);
+        $installment->refresh();
 
         $member = $loan->member;
         if (! $member instanceof Member) {

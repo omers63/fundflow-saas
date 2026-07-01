@@ -317,6 +317,8 @@ class LoanImportService
         $legacyLoanId = $this->parseOptionalLegacyLoanId($row);
 
         DB::transaction(function () use ($member, $loanTier, $fundTier, $amount, $amountRequested, $purpose, $count, $disbursedAt, $exemption, $threshold, $isEmergency, $memberPortion, $masterPortion, $paidCount, $minInstall, $totalRepaid, $terminalStatus, $settledAt, $appliedAt, $approvedAt, $guarantorMemberId, $graceCycles, $fundingStrategy, $legacyLoanId): void {
+            $totalToRepay = round($masterPortion + ($amount * $threshold), 2);
+
             $loan = $this->createLoanRecord([
                 'member_id' => $member->id,
                 'loan_tier_id' => $loanTier?->id,
@@ -383,7 +385,7 @@ class LoanImportService
                 LoanInstallment::create([
                     'loan_id' => $loan->id,
                     'installment_number' => $i,
-                    'amount' => $minInstall,
+                    'amount' => Loan::scheduleInstallmentAmount($i, $count, $minInstall, $totalToRepay),
                     'due_date' => $dueDate->toDateString(),
                     'paid_at' => $isPaid ? $dueDate->copy()->startOfDay() : null,
                     'status' => $isPaid ? 'paid' : 'pending',
