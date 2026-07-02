@@ -11,6 +11,7 @@ use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\Transaction;
@@ -105,7 +106,7 @@ class ReconciliationService
         $open = ReconciliationException::query()->open()->get();
 
         foreach ($open as $exception) {
-            if ($this->attemptAutoResolve($exception)) {
+            if ($this->attemptAutoResolve($exception, allowLedgerMutations: false)) {
                 $resolved++;
             }
         }
@@ -139,7 +140,7 @@ class ReconciliationService
 
     public function attemptAutoResolveForAdmin(ReconciliationException $exception): bool
     {
-        return $this->attemptAutoResolve($exception);
+        return $this->attemptAutoResolve($exception, allowLedgerMutations: true);
     }
 
     public function onTransactionPosted(Transaction $transaction): void
@@ -615,14 +616,7 @@ class ReconciliationService
                     return;
                 }
 
-                $hasRepaymentCredit = Transaction::query()
-                    ->where('account_id', $loanAccount->id)
-                    ->where('type', 'credit')
-                    ->where('reference_type', $installment->getMorphClass())
-                    ->where('reference_id', $installment->id)
-                    ->exists();
-
-                if (!$hasRepaymentCredit) {
+                if (!$this->installmentRepaymentLedgerIsPresent($installment, $loanAccount)) {
                     $this->raiseOnce('EMI_COLLECTED_LEDGER_MISSING', 'emi', 'medium', (float) $installment->amount, [
                         'installment_id' => $installment->id,
                         'loan_id' => $loan->id,
@@ -974,26 +968,16 @@ class ReconciliationService
     protected function assertMasterBalancedOrRound(): void
     {
         $result = $this->masterInvariants->check();
+        $tolerance = ContributionPolicySettings::reconTolerance();
 
-        if ($result['balanced']) {
+        if (
+            $result['balanced']
+            || ($result['fund_delta'] <= $tolerance && $result['cash_delta'] <= $tolerance)
+        ) {
             return;
         }
 
-        $tolerance = ContributionPolicySettings::reconTolerance();
-
-        if ($result['fund_delta'] > 0.00001 && $result['fund_delta'] <= $tolerance) {
-            $this->suspense->postRoundingAdjustment(
-                round($result['member_fund_sum'] - $result['master_fund_pool'], 2),
-                'fund',
-            );
-        } elseif ($result['cash_delta'] > 0.00001 && $result['cash_delta'] <= $tolerance) {
-            $this->suspense->postRoundingAdjustment(
-                round($result['member_cash_sum'] - $result['master_cash'], 2),
-                'cash',
-            );
-        }
-
-        $final = $this->masterInvariants->check();
+        $final = $result;
 
         if (!$final['balanced']) {
             if ($final['cash_delta'] > $tolerance) {
@@ -1014,7 +998,7 @@ class ReconciliationService
         $this->masterInvariants->assert();
     }
 
-    protected function attemptAutoResolve(ReconciliationException $exception): bool
+    protected function attemptAutoResolve(ReconciliationException $exception, bool $allowLedgerMutations = false): bool
     {
         if ($this->suspense->isDeferred($exception)) {
             return false;
@@ -1022,15 +1006,17 @@ class ReconciliationService
 
         $tolerance = ContributionPolicySettings::reconTolerance();
 
-        if (
-            $exception->amount_delta !== null
-            && abs((float) $exception->amount_delta) <= $tolerance
-            && $exception->severity !== 'critical'
-        ) {
-            $this->suspense->postRoundingAdjustment((float) $exception->amount_delta);
-            $this->resolveException($exception, __('Rounding adjustment posted'), true);
+        if ($allowLedgerMutations) {
+            if (
+                $exception->amount_delta !== null
+                && abs((float) $exception->amount_delta) <= $tolerance
+                && $exception->severity !== 'critical'
+            ) {
+                $this->suspense->postRoundingAdjustment((float) $exception->amount_delta);
+                $this->resolveException($exception, __('Rounding adjustment posted'), true);
 
-            return true;
+                return true;
+            }
         }
 
         if ($exception->exception_code === 'STALE_PENDING') {
@@ -1039,11 +1025,11 @@ class ReconciliationService
             return false;
         }
 
-        if ($exception->exception_code === 'CONTRIBUTION_EXEMPT_COLLECTED') {
+        if ($allowLedgerMutations && $exception->exception_code === 'CONTRIBUTION_EXEMPT_COLLECTED') {
             return $this->autoReverseExemptContribution($exception);
         }
 
-        if ($exception->exception_code === 'PENDING_PAST_WINDOW_CLOSE') {
+        if ($allowLedgerMutations && $exception->exception_code === 'PENDING_PAST_WINDOW_CLOSE') {
             $contributionId = (int) ($exception->affected_entities['contribution_id'] ?? 0);
             $contribution = Contribution::query()->find($contributionId);
 
@@ -1082,11 +1068,11 @@ class ReconciliationService
             return $this->autoSetEmiOverdueClock($exception);
         }
 
-        if ($exception->exception_code === 'RECON_AUTO_FEE_EXEMPTION_REVERSAL') {
+        if ($allowLedgerMutations && $exception->exception_code === 'RECON_AUTO_FEE_EXEMPTION_REVERSAL') {
             return $this->autoReverseFeeExemptionTransaction($exception);
         }
 
-        if ($exception->exception_code === 'CONTRIBUTION_AMOUNT_MISMATCH') {
+        if ($allowLedgerMutations && $exception->exception_code === 'CONTRIBUTION_AMOUNT_MISMATCH') {
             $delta = abs((float) ($exception->amount_delta ?? 0));
 
             if ($delta <= $tolerance) {
@@ -1097,31 +1083,88 @@ class ReconciliationService
             }
         }
 
-        if ($exception->exception_code === 'CONTRIBUTION_MISSING_MASTER_CREDIT') {
+        if ($allowLedgerMutations && $exception->exception_code === 'CONTRIBUTION_MISSING_MASTER_CREDIT') {
             return $this->autoPostMissingContributionMasterCredit($exception);
         }
 
-        if ($exception->exception_code === 'EMI_COLLECTED_LEDGER_MISSING') {
+        if ($allowLedgerMutations && $exception->exception_code === 'EMI_COLLECTED_LEDGER_MISSING') {
             return $this->autoPostMissingEmiRepaymentLedger($exception);
         }
 
-        if ($exception->exception_code === 'EMI_OVER_COLLECTION') {
+        if ($allowLedgerMutations && $exception->exception_code === 'EMI_OVER_COLLECTION') {
             return $this->autoRefundEmiOverCollection($exception);
         }
 
-        if ($exception->exception_code === 'CONTRIBUTION_MEMBER_FUND_MISSING') {
+        if ($allowLedgerMutations && $exception->exception_code === 'CONTRIBUTION_MEMBER_FUND_MISSING') {
             return $this->autoPostMissingContributionMemberFund($exception);
         }
 
-        if ($exception->exception_code === 'FEE_WRONG_TIER') {
+        if ($allowLedgerMutations && $exception->exception_code === 'FEE_WRONG_TIER') {
             return $this->autoCorrectFeeTier($exception);
         }
 
-        if ($exception->exception_code === 'REPLACEMENT_PRIOR_TIER_NOT_REVERSED') {
+        if ($allowLedgerMutations && $exception->exception_code === 'REPLACEMENT_PRIOR_TIER_NOT_REVERSED') {
             return $this->autoCorrectFeeTier($exception);
         }
 
         return false;
+    }
+
+    protected function installmentRepaymentLedgerIsPresent(LoanInstallment $installment, Account $loanAccount): bool
+    {
+        $hasLoanAccountCredit = Transaction::query()
+            ->where('account_id', $loanAccount->id)
+            ->where('type', 'credit')
+            ->where('reference_type', $installment->getMorphClass())
+            ->where('reference_id', $installment->id)
+            ->exists();
+
+        if ($hasLoanAccountCredit) {
+            return true;
+        }
+
+        $memberFund = $installment->loan?->member?->fundAccount;
+
+        if ($memberFund !== null) {
+            $hasMemberFundCredit = Transaction::query()
+                ->where('account_id', $memberFund->id)
+                ->where('type', 'credit')
+                ->where('reference_type', $installment->getMorphClass())
+                ->where('reference_id', $installment->id)
+                ->exists();
+
+            if ($hasMemberFundCredit) {
+                return true;
+            }
+        }
+
+        return $this->loanRepaymentLedgerCoversPaidInstallments($installment->loan, $loanAccount);
+    }
+
+    protected function loanRepaymentLedgerCoversPaidInstallments(?Loan $loan, Account $loanAccount): bool
+    {
+        if ($loan === null) {
+            return false;
+        }
+
+        $paidPrincipal = (float) $loan->installments()
+            ->where('status', 'paid')
+            ->sum('amount');
+
+        if ($paidPrincipal <= 0.00001) {
+            return true;
+        }
+
+        $repaymentCredits = (float) Transaction::query()
+            ->where('account_id', $loanAccount->id)
+            ->where('type', 'credit')
+            ->whereIn('reference_type', [
+                LoanInstallment::class,
+                LoanRepayment::class,
+            ])
+            ->sum('amount');
+
+        return $repaymentCredits >= $paidPrincipal - ContributionPolicySettings::reconTolerance();
     }
 
     protected function autoPostMissingContributionMemberFund(ReconciliationException $exception): bool

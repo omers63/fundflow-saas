@@ -7,6 +7,7 @@ namespace App\Filament\Support;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\User;
+use App\Services\MemberInvariantDiagnosticsService;
 use App\Services\ReconciliationResolutionService;
 use App\Support\Lang;
 use App\Support\Reconciliation\ReconciliationExceptionPresenter;
@@ -525,12 +526,28 @@ final class ReconciliationExceptionActions
                         'credit' => __('Credit member cash'),
                         'debit' => __('Debit member cash'),
                     ]))
-                    ->required(),
+                    ->required()
+                    ->default(function (ReconciliationException $record): ?string {
+                        $diagnostics = app(MemberInvariantDiagnosticsService::class)->forException($record);
+                        $correction = $diagnostics['suggested_correction'] ?? [];
+
+                        return ($correction['action'] ?? '') === 'post_correction'
+                            ? (string) ($correction['direction'] ?? null)
+                            : null;
+                    }),
                 TextInput::make('amount')
                     ->label(__('Amount'))
                     ->numeric()
                     ->required()
-                    ->minValue(0.01),
+                    ->minValue(0.01)
+                    ->default(function (ReconciliationException $record): ?float {
+                        $diagnostics = app(MemberInvariantDiagnosticsService::class)->forException($record);
+                        $correction = $diagnostics['suggested_correction'] ?? [];
+
+                        return ($correction['action'] ?? '') === 'post_correction'
+                            ? (float) ($correction['amount'] ?? 0)
+                            : null;
+                    }),
                 Textarea::make('reason')
                     ->label(__('Reason'))
                     ->required()

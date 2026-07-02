@@ -28,6 +28,7 @@ use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\ReconciliationException;
@@ -129,6 +130,7 @@ final class TenantDashboardService
             'loan_trend' => $this->loanInsights->sixMonthLoanVolumeTrend(),
             'loan_pipeline' => $loanPortfolio['pipeline'] ?? [],
             'loan_portfolio' => $this->loanPortfolioSummary($loanPortfolio),
+            'lifetime_fund_activity' => $this->lifetimeFundActivity(),
             'workspace_sections' => $this->workspaceSections(),
             'sparkline' => $masterSnapshot['sparkline'] ?? [],
             'sparkline_max' => $masterSnapshot['sparkline_max'] ?? 1,
@@ -138,6 +140,40 @@ final class TenantDashboardService
             'collection_breakdown' => $this->collectionBreakdown($openMonth, $openYear, $activeMembers, $delinquencyCounts),
             'fund_tier_utilisation' => $this->fundTierUtilisation(),
             'pool_health' => $this->poolHealth($masterBalance),
+        ];
+    }
+
+    /**
+     * Lifetime disbursed loans, contributions, and member collections (contributions + repayments).
+     *
+     * @return array<string, mixed>
+     */
+    private function lifetimeFundActivity(): array
+    {
+        $loanCount = (int) Loan::query()
+            ->where('amount_disbursed', '>', 0)
+            ->count();
+
+        $loanAmountTotal = (float) Loan::query()
+            ->where('amount_disbursed', '>', 0)
+            ->sum('amount_disbursed');
+
+        $contributionsTotal = (float) Contribution::query()
+            ->posted()
+            ->sum('amount');
+
+        $repaymentsTotal = (float) LoanRepayment::query()->sum('amount');
+        $collectionsTotal = $contributionsTotal + $repaymentsTotal;
+
+        return [
+            'loan_count' => $loanCount,
+            'loan_amount_total' => $loanAmountTotal,
+            'contributions_total' => $contributionsTotal,
+            'repayments_total' => $repaymentsTotal,
+            'collections_total' => $collectionsTotal,
+            'loans_url' => LoanResource::getUrl('index'),
+            'contributions_url' => ContributionResource::getUrl('index'),
+            'collections_url' => ContributionResource::getUrl('index'),
         ];
     }
 

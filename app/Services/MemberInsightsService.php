@@ -78,10 +78,10 @@ final class MemberInsightsService
         $delinquentMemberIds = $delinquency->delinquentMemberIds();
 
         $attentionQueue = Member::query()
+            ->whereNot('status', 'withdrawn')
             ->where(function ($query) use ($delinquentMemberIds): void {
                 $query->whereIn('id', $delinquentMemberIds)
-                    ->orWhere('status', 'inactive')
-                    ->orWhere('status', 'withdrawn');
+                    ->orWhere('status', 'inactive');
             })
             ->orderByRaw('CASE WHEN status = ? THEN 0 WHEN status = ? THEN 1 ELSE 2 END', ['active', 'inactive'])
             ->orderBy('name')

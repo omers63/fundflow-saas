@@ -1,12 +1,13 @@
 @php
-$d = $this->getData();
-$breakdown = $d['collection_breakdown'];
-$loanQueue = $d['loan_queue_preview'];
-$activity = $d['recent_activity'];
-$pipeline = $d['loan_pipeline'];
-$loanPortfolio = $d['loan_portfolio'];
-$greeting = $d['greeting'];
-$pool = $d['pool_health'];
+    $d = $this->getData();
+    $breakdown = $d['collection_breakdown'];
+    $loanQueue = $d['loan_queue_preview'];
+    $activity = $d['recent_activity'];
+    $pipeline = $d['loan_pipeline'];
+    $loanPortfolio = $d['loan_portfolio'];
+    $lifetime = $d['lifetime_fund_activity'];
+    $greeting = $d['greeting'];
+    $pool = $d['pool_health'];
 @endphp
 
 <div class="w-full max-w-none space-y-3 pb-6">
@@ -128,17 +129,17 @@ $pool = $d['pool_health'];
                 class="ff-tenant-loan-portfolio__stat group min-w-0 rounded-lg border border-transparent px-3 py-2.5 transition hover:border-violet-200 hover:bg-violet-50/60 dark:hover:border-violet-900/40 dark:hover:bg-violet-950/20">
                 <p class="text-xs uppercase tracking-wide text-gray-400">{{ __('Outstanding') }}</p>
                 <p @class([
-                    'mt-0.5 break-words text-xl font-bold tabular-nums leading-tight',
-                    'text-red-600 group-hover:text-red-700 dark:text-red-400 dark:group-hover:text-red-300' => ($loanPortfolio['overdue_installments'] ?? 0) > 0,
-                    'text-gray-900 group-hover:text-violet-700 dark:text-white dark:group-hover:text-violet-300' => ($loanPortfolio['overdue_installments'] ?? 0) === 0,
-                ])>
+    'mt-0.5 break-words text-xl font-bold tabular-nums leading-tight',
+    'text-red-600 group-hover:text-red-700 dark:text-red-400 dark:group-hover:text-red-300' => ($loanPortfolio['overdue_installments'] ?? 0) > 0,
+    'text-gray-900 group-hover:text-violet-700 dark:text-white dark:group-hover:text-violet-300' => ($loanPortfolio['overdue_installments'] ?? 0) === 0,
+])>
                     {!! \App\Support\Insights\InsightFormatter::moneyMarkup($loanPortfolio['outstanding_total']) !!}
                 </p>
                 <p @class([
-                    'mt-1 text-xs',
-                    'text-red-600 dark:text-red-400' => ($loanPortfolio['overdue_installments'] ?? 0) > 0,
-                    'text-gray-500 dark:text-gray-400' => ($loanPortfolio['overdue_installments'] ?? 0) === 0,
-                ])>
+    'mt-1 text-xs',
+    'text-red-600 dark:text-red-400' => ($loanPortfolio['overdue_installments'] ?? 0) > 0,
+    'text-gray-500 dark:text-gray-400' => ($loanPortfolio['overdue_installments'] ?? 0) === 0,
+])>
                     @if (($loanPortfolio['overdue_installments'] ?? 0) > 0)
                         {{ trans_choice(':count overdue installment|:count overdue installments', $loanPortfolio['overdue_installments'], ['count' => $loanPortfolio['overdue_installments']]) }}
                     @else
@@ -149,12 +150,69 @@ $pool = $d['pool_health'];
         </div>
     </div>
 
+    {{-- ── Lifetime fund activity ── --}}
+    <div
+        class="ff-tenant-lifetime-activity rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+        <div
+            class="flex flex-col gap-2 border-b border-gray-100 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between dark:border-gray-700">
+            <div class="flex min-w-0 items-center gap-2">
+                <x-heroicon-o-chart-bar class="h-4 w-4 shrink-0 text-indigo-500" />
+                <span
+                    class="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Lifetime fund activity') }}</span>
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('All-time disbursed loans and member collections') }}
+            </p>
+        </div>
+        <div class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
+            <a href="{{ $lifetime['loans_url'] }}"
+                class="ff-tenant-lifetime-activity__stat group min-w-0 rounded-lg border border-transparent px-3 py-2.5 transition hover:border-indigo-200 hover:bg-indigo-50/60 dark:hover:border-indigo-900/40 dark:hover:bg-indigo-950/20">
+                <p class="text-xs uppercase tracking-wide text-gray-400">{{ __('Loans issued') }}</p>
+                <p
+                    class="mt-0.5 text-2xl font-bold tabular-nums leading-none text-gray-900 group-hover:text-indigo-700 dark:text-white dark:group-hover:text-indigo-300">
+                    {{ number_format($lifetime['loan_count']) }}
+                </p>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ __('Disbursed to members') }}</p>
+            </a>
+            <a href="{{ $lifetime['loans_url'] }}"
+                class="ff-tenant-lifetime-activity__stat group min-w-0 rounded-lg border border-transparent px-3 py-2.5 transition hover:border-violet-200 hover:bg-violet-50/60 dark:hover:border-violet-900/40 dark:hover:bg-violet-950/20">
+                <p class="text-xs uppercase tracking-wide text-gray-400">{{ __('Loan volume') }}</p>
+                <p
+                    class="mt-0.5 break-words text-xl font-bold tabular-nums leading-tight text-gray-900 group-hover:text-violet-700 dark:text-white dark:group-hover:text-violet-300">
+                    {!! \App\Support\Insights\InsightFormatter::moneyMarkup($lifetime['loan_amount_total']) !!}
+                </p>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ __('Total disbursed principal') }}</p>
+            </a>
+            <a href="{{ $lifetime['contributions_url'] }}"
+                class="ff-tenant-lifetime-activity__stat group min-w-0 rounded-lg border border-transparent px-3 py-2.5 transition hover:border-emerald-200 hover:bg-emerald-50/60 dark:hover:border-emerald-900/40 dark:hover:bg-emerald-950/20">
+                <p class="text-xs uppercase tracking-wide text-gray-400">{{ __('Contributions') }}</p>
+                <p
+                    class="mt-0.5 break-words text-xl font-bold tabular-nums leading-tight text-gray-900 group-hover:text-emerald-700 dark:text-white dark:group-hover:text-emerald-300">
+                    {!! \App\Support\Insights\InsightFormatter::moneyMarkup($lifetime['contributions_total']) !!}
+                </p>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ __('Posted contribution principal') }}</p>
+            </a>
+            <a href="{{ $lifetime['collections_url'] }}"
+                class="ff-tenant-lifetime-activity__stat group min-w-0 rounded-lg border border-transparent px-3 py-2.5 transition hover:border-sky-200 hover:bg-sky-50/60 dark:hover:border-sky-900/40 dark:hover:bg-sky-950/20">
+                <p class="text-xs uppercase tracking-wide text-gray-400">{{ __('Total collections') }}</p>
+                <p
+                    class="mt-0.5 break-words text-xl font-bold tabular-nums leading-tight text-gray-900 group-hover:text-sky-700 dark:text-white dark:group-hover:text-sky-300">
+                    {!! \App\Support\Insights\InsightFormatter::moneyMarkup($lifetime['collections_total']) !!}
+                </p>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ __('Contributions + repayments') }} ·
+                    {!! \App\Support\Insights\InsightFormatter::moneyMarkup($lifetime['repayments_total']) !!}
+                    {{ __('repaid') }}
+                </p>
+            </a>
+        </div>
+    </div>
+
     {{-- ── Fund pool health ── --}}
     <div @class([
-        'ff-tenant-pool-health rounded-xl border bg-white shadow-sm dark:bg-gray-900',
-        'border-red-300 dark:border-red-800/50' => $pool['has_drift'],
-        'border-gray-200 dark:border-gray-700' => !$pool['has_drift'],
-    ])>
+    'ff-tenant-pool-health rounded-xl border bg-white shadow-sm dark:bg-gray-900',
+    'border-red-300 dark:border-red-800/50' => $pool['has_drift'],
+    'border-gray-200 dark:border-gray-700' => !$pool['has_drift'],
+])>
         <div
             class="flex flex-col gap-2 border-b border-gray-100 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between dark:border-gray-700">
             <div class="flex min-w-0 items-center gap-2">
@@ -188,10 +246,10 @@ $pool = $d['pool_health'];
             <div class="min-w-0">
                 <p class="text-xs uppercase tracking-wide text-gray-400">{{ __('Pool drift') }}</p>
                 <p @class([
-                    'ff-tenant-pool-health__status mt-0.5 text-base font-bold leading-snug break-words sm:text-lg',
-                    'text-red-600 dark:text-red-400' => $pool['has_drift'],
-                    'text-emerald-600 dark:text-emerald-400' => !$pool['has_drift'],
-                ])>
+    'ff-tenant-pool-health__status mt-0.5 text-base font-bold leading-snug break-words sm:text-lg',
+    'text-red-600 dark:text-red-400' => $pool['has_drift'],
+    'text-emerald-600 dark:text-emerald-400' => !$pool['has_drift'],
+])>
                     {{ $pool['has_drift'] ? __('Variance detected') : __('Balanced') }}
                 </p>
                 <div class="mt-1 space-y-0.5 text-xs leading-snug text-gray-500 dark:text-gray-400">

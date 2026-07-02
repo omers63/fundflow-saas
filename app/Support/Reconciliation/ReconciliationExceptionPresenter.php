@@ -13,6 +13,8 @@ use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
+use App\Services\MemberInvariantDiagnosticsService;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\HtmlString;
 
 final class ReconciliationExceptionPresenter
@@ -248,6 +250,26 @@ final class ReconciliationExceptionPresenter
         return new HtmlString(
             '<dl class="ff-recon-context space-y-3">'.$rows.'</dl>'.$bankLink
         );
+    }
+
+    public static function memberDriftDiagnosticsHtml(ReconciliationException $record): ?HtmlString
+    {
+        $diagnostics = app(MemberInvariantDiagnosticsService::class)->forException($record);
+
+        if ($diagnostics === null) {
+            return null;
+        }
+
+        return new HtmlString(
+            View::make('filament.tenant.partials.reconciliation.member-drift-diagnostics', [
+                'diagnostics' => $diagnostics,
+            ])->render()
+        );
+    }
+
+    public static function hasMemberDriftDiagnostics(ReconciliationException $record): bool
+    {
+        return app(MemberInvariantDiagnosticsService::class)->supports($record);
     }
 
     public static function isActionable(ReconciliationException $record): bool

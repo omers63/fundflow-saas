@@ -454,13 +454,13 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
         $moreRuns = [
             Action::make('run_nightly')
-                ->label(__('Nightly batch'))
+                ->label(__('Exception queue re-check'))
                 ->icon('heroicon-o-arrow-path')
                 ->requiresConfirmation()
                 ->longRunning()
-                ->longRunningMessage(__('Running the nightly reconciliation batch. This can take a minute on large tenants.'))
-                ->modalHeading(__('Run reconciliation batch'))
-                ->modalDescription(__('Runs the nightly reconciliation scan, auto-resolves eligible issues, and refreshes the exception queue.'))
+                ->longRunningMessage(__('Re-running all reconciliation checks and refreshing the exception queue. This can take a minute on large tenants.'))
+                ->modalHeading(__('Re-run exception checks now'))
+                ->modalDescription(__('Runs the full reconciliation scan immediately — including member cash/fund invariants — auto-resolves eligible issues, and refreshes the exception queue in real time.'))
                 ->action(function (): void {
                     try {
                         $result = app(ReconciliationService::class)->runNightlyBatch();

@@ -9,6 +9,7 @@ use App\Services\AccountingService;
 use App\Services\LoanService;
 use App\Services\MemberCashOutService;
 use App\Services\MemberInvariantService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Notification;
 use Tests\Concerns\InitializesTenancy;
 
@@ -141,4 +142,73 @@ test('pending cash-out requests reduce available withdrawal balance', function (
     $this->service->submit($this->member, 2000);
 
     expect($this->service->availableCashForWithdrawal($this->member))->toBe(12000.0);
+});
+
+test('inactive member fund balance cash-out transfers fund to cash and accepts on the chosen date', function () {
+    $this->member->update([
+        'status' => 'inactive',
+        'contribution_cycles_active' => false,
+    ]);
+    $this->accounting->creditMemberFundWithMasterMirror(
+        $this->member->fundAccount,
+        3500,
+        'Seed fund',
+        '(mirror)',
+        $this->member,
+        now(),
+        $this->member->id,
+    );
+    $this->member->refresh();
+
+    $cashOutAt = Carbon::parse('2025-03-10')->endOfDay();
+    $request = $this->service->submitFundBalanceCashOut(
+        $this->member,
+        'Exit payout',
+        $cashOutAt,
+        $this->admin->id,
+    );
+
+    $this->member->refresh();
+
+    expect($request->status)->toBe('accepted')
+        ->and((float) $request->amount)->toBe(3500.0)
+        ->and($request->notes)->toBe('Exit payout')
+        ->and($request->reviewed_at?->toDateString())->toBe('2025-03-10')
+        ->and($this->member->getFundBalance())->toBe(0.0)
+        ->and($this->member->getCashBalance())->toBe(0.0)
+        ->and($request->bankTransaction)->not->toBeNull();
+});
+
+test('fund cash-out rejects active members', function () {
+    $this->accounting->creditMemberFundWithMasterMirror(
+        $this->member->fundAccount,
+        1000,
+        'Seed fund',
+        '(mirror)',
+        $this->member,
+        now(),
+        $this->member->id,
+    );
+
+    expect(fn () => $this->service->submitFundBalanceCashOut($this->member->fresh()))
+        ->toThrow(InvalidArgumentException::class);
+});
+
+test('fund cash-out rejects payout frozen members', function () {
+    $this->member->update([
+        'status' => 'withdrawn',
+        'payout_frozen_at' => now(),
+    ]);
+    $this->accounting->creditMemberFundWithMasterMirror(
+        $this->member->fundAccount,
+        1000,
+        'Seed fund',
+        '(mirror)',
+        $this->member,
+        now(),
+        $this->member->id,
+    );
+
+    expect(fn () => $this->service->submitFundBalanceCashOut($this->member->fresh()))
+        ->toThrow(InvalidArgumentException::class);
 });

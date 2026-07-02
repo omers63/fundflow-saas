@@ -168,6 +168,60 @@ final class MemberCashOutService
         });
     }
 
+    /**
+     * Move a non-active member's fund balance to cash and accept a cash-out for that amount on the given date.
+     */
+    public function submitFundBalanceCashOut(
+        Member $member,
+        ?string $notes = null,
+        ?CarbonInterface $cashOutAt = null,
+        ?int $reviewedBy = null,
+    ): CashOutRequest {
+        if ($member->status === 'active') {
+            throw new InvalidArgumentException(__('Fund cash-out is only available for non-active members.'));
+        }
+
+        if (! app(MemberMembershipPolicy::class)->canReceivePayout($member)) {
+            throw new InvalidArgumentException(__('Payout is held for admin review.'));
+        }
+
+        $cashOutAt = $cashOutAt ?? BusinessDay::now();
+        $description = __('Fund balance cash-out');
+        $note = filled($notes) ? trim((string) $notes) : $description;
+
+        return DB::transaction(function () use ($member, $note, $description, $cashOutAt, $reviewedBy): CashOutRequest {
+            $amount = AccountingService::withoutMemberCashCollection(
+                fn (): float => app(MemberFundCashTransferService::class)->transferPositiveFundBalanceToCash(
+                    $member->fresh(),
+                    $member,
+                    $description,
+                    $cashOutAt,
+                ),
+            );
+
+            if ($amount <= 0.00001) {
+                throw new InvalidArgumentException(__('Member fund account has no balance to cash out.'));
+            }
+
+            $request = $this->submit(
+                $member->fresh(),
+                $amount,
+                $note,
+                bypassAvailabilityGuard: true,
+            );
+
+            $this->accept(
+                $request->fresh(),
+                $reviewedBy,
+                null,
+                $cashOutAt,
+                bypassAvailabilityGuard: true,
+            );
+
+            return $request->fresh();
+        });
+    }
+
     public function accept(
         CashOutRequest $request,
         ?int $reviewedBy = null,

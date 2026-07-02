@@ -25,6 +25,8 @@ class CashOutRequestForm
         return $schema
             ->components([
                 Section::make(__('Cash-out details'))
+                    ->columnSpanFull()
+                    ->columns(2)
                     ->schema([
                         Select::make('member_id')
                             ->label(__('Member'))
@@ -73,7 +75,8 @@ class CashOutRequestForm
                             ->label(__('Notes'))
                             ->rows(3)
                             ->maxLength(1000)
-                            ->placeholder(__('Optional instructions for the record...')),
+                            ->placeholder(__('Optional instructions for the record...'))
+                            ->columnSpanFull(),
                     ]),
             ]);
     }

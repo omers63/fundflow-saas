@@ -9,11 +9,14 @@ use App\Models\Tenant\Member;
 use App\Services\MemberCashOutService;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
+use Filament\Support\Enums\Width;
 use Illuminate\Database\Eloquent\Model;
 
 class CreateCashOutRequest extends CreateRecord
 {
     protected static string $resource = CashOutRequestResource::class;
+
+    protected Width|string|null $maxContentWidth = Width::Full;
 
     public function mount(): void
     {

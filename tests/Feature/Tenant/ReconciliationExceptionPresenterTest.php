@@ -52,6 +52,28 @@ test('reconciliation exception presenter includes member link when member id is 
         ->and(collect($items)->firstWhere('label', __('Member'))['url'] ?? null)->not->toBeNull();
 });
 
+test('reconciliation exception presenter renders member drift diagnostics html', function (): void {
+    $member = Member::factory()->create();
+
+    $exception = new ReconciliationException([
+        'exception_code' => 'MEMBER_CASH_DRIFT',
+        'domain' => 'master_account',
+        'severity' => 'medium',
+        'status' => ReconciliationException::STATUS_OPEN,
+        'affected_entities' => [
+            'member_id' => $member->id,
+        ],
+    ]);
+
+    expect(ReconciliationExceptionPresenter::hasMemberDriftDiagnostics($exception))->toBeTrue();
+
+    $html = ReconciliationExceptionPresenter::memberDriftDiagnosticsHtml($exception);
+
+    expect($html)->not->toBeNull()
+        ->and((string) $html)->toContain('ff-member-drift-diagnostics')
+        ->and((string) $html)->toContain(__('Suggested correction'));
+});
+
 test('reconciliation exception presenter recommends actionable fix buttons for bank clearing issues', function (): void {
     $exception = new ReconciliationException([
         'exception_code' => 'RECON_AMBIGUOUS_MATCH',

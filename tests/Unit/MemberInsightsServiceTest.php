@@ -5,9 +5,8 @@ use App\Services\MemberInsightsService;
 use App\Support\BusinessDay;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
@@ -47,4 +46,24 @@ test('insights snapshot aggregates member roster metrics', function () {
         ->and($snapshot['status_breakdown'])->toHaveCount(3)
         ->and($snapshot['trend'])->toHaveCount(6)
         ->and($snapshot['sparkline'])->toHaveCount(8);
+});
+
+test('insights attention queue excludes withdrawn members', function () {
+    Member::factory()->create([
+        'name' => 'Withdrawn Member',
+        'status' => 'withdrawn',
+        'monthly_contribution_amount' => 500,
+    ]);
+
+    Member::factory()->create([
+        'name' => 'Inactive Member',
+        'status' => 'inactive',
+        'monthly_contribution_amount' => 750,
+    ]);
+
+    $snapshot = app(MemberInsightsService::class)->snapshot();
+    $queueNames = collect($snapshot['attention_queue'])->pluck('name')->all();
+
+    expect($queueNames)->toContain('Inactive Member')
+        ->and($queueNames)->not->toContain('Withdrawn Member');
 });

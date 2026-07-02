@@ -9,8 +9,10 @@ use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Widgets\TenantDashboardWidget;
 use App\Models\Tenant\Account;
+use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
@@ -106,6 +108,16 @@ test('tenant dashboard snapshot includes greeting and workspace links', function
             'outstanding_url',
             'overdue_url',
             'queue_url',
+        ])
+        ->and($snapshot['lifetime_fund_activity'])->toHaveKeys([
+            'loan_count',
+            'loan_amount_total',
+            'contributions_total',
+            'repayments_total',
+            'collections_total',
+            'loans_url',
+            'contributions_url',
+            'collections_url',
         ])
         ->and(
             collect($snapshot['workspace_sections'])
@@ -266,4 +278,92 @@ test('tenant dashboard loan portfolio summarizes active loan count value and out
         ->toContain(__('Active loan portfolio'))
         ->toContain(__('Portfolio value'))
         ->toContain(__('Outstanding'));
+});
+
+test('tenant dashboard lifetime fund activity summarizes loans contributions and collections', function () {
+    $user = User::create([
+        'name' => 'Lifetime Admin',
+        'email' => 'lifetime-admin@fund.test',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    $member = Member::create([
+        'member_number' => 'MEM-LIFE',
+        'name' => 'Lifetime Member',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $loan = Loan::query()->create([
+        'member_id' => $member->id,
+        'amount' => 10_000,
+        'amount_requested' => 10_000,
+        'amount_approved' => 10_000,
+        'amount_disbursed' => 10_000,
+        'interest_rate' => 0,
+        'term_months' => 10,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(3),
+        'approved_at' => now()->subMonths(3),
+        'disbursed_at' => now()->subMonths(3),
+    ]);
+
+    Loan::query()->create([
+        'member_id' => $member->id,
+        'amount' => 5_000,
+        'amount_requested' => 5_000,
+        'amount_approved' => 5_000,
+        'amount_disbursed' => 0,
+        'interest_rate' => 0,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'pending',
+        'applied_at' => now(),
+    ]);
+
+    Contribution::factory()->posted()->create([
+        'member_id' => $member->id,
+        'amount' => 3_000,
+    ]);
+
+    Contribution::factory()->create([
+        'member_id' => $member->id,
+        'amount' => 999,
+        'status' => 'pending',
+    ]);
+
+    LoanRepayment::factory()->create([
+        'loan_id' => $loan->id,
+        'amount' => 1_500,
+    ]);
+
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 1000, 'is_master' => true]);
+    Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 5000, 'is_master' => true]);
+
+    $this->actingAs($user, 'tenant');
+
+    $lifetime = $this->service->snapshot()['lifetime_fund_activity'];
+
+    expect($lifetime['loan_count'])->toBe(1)
+        ->and($lifetime['loan_amount_total'])->toBe(10_000.0)
+        ->and($lifetime['contributions_total'])->toBe(3_000.0)
+        ->and($lifetime['repayments_total'])->toBe(1_500.0)
+        ->and($lifetime['collections_total'])->toBe(4_500.0)
+        ->and($lifetime['loans_url'])->toBe(LoanResource::getUrl('index'))
+        ->and($lifetime['contributions_url'])->toBe(ContributionResource::getUrl('index'));
+
+    $html = Livewire::test(TenantDashboardWidget::class)
+        ->assertSuccessful()
+        ->html();
+
+    expect($html)
+        ->toContain('ff-tenant-lifetime-activity')
+        ->toContain(__('Lifetime fund activity'))
+        ->toContain(__('Total collections'))
+        ->toContain(__('Contributions + repayments'));
 });
