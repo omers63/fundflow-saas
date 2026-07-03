@@ -93,6 +93,41 @@ function membershipTestActiveLoan(LoanService $service, AccountingService $accou
     return $loan->fresh(['member', 'installments']);
 }
 
+test('freeze with fund cash-out transfers fund balance and accepts cash-out on freeze date', function () {
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'joined_at' => now(),
+        'monthly_contribution_amount' => 0,
+    ]);
+    $this->accounting->createMemberAccounts($member);
+    $this->accounting->creditMemberFundWithMasterMirror(
+        $member->fundAccount,
+        2_500,
+        'Seed fund',
+        '(test)',
+        $member,
+        now(),
+        $member->id,
+    );
+
+    $freezeDate = Carbon::parse('2025-04-20')->endOfDay();
+
+    $this->statuses->freeze($member, 'Travel abroad', $freezeDate, cashOutFund: true);
+
+    $member = $member->fresh();
+    $cashOut = CashOutRequest::query()->where('member_id', $member->id)->first();
+
+    expect($member->status)->toBe('inactive')
+        ->and($member->frozen_at?->toDateString())->toBe('2025-04-20')
+        ->and($member->getFundBalance())->toBe(0.0)
+        ->and($member->getCashBalance())->toBe(0.0)
+        ->and($cashOut)->not->toBeNull()
+        ->and($cashOut->status)->toBe('accepted')
+        ->and((float) $cashOut->amount)->toBe(2500.0)
+        ->and($cashOut->notes)->toBe('Travel abroad')
+        ->and($cashOut->reviewed_at?->toDateString())->toBe('2025-04-20');
+});
+
 test('freeze and unfreeze membership without cash-out', function () {
     $member = Member::factory()->create([
         'status' => 'active',

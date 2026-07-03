@@ -458,8 +458,10 @@ final class MemberFilamentActions
             ->visible(fn (Member $record): bool => $record->status === 'active')
             ->requiresConfirmation()
             ->modalDescription(__('Pauses membership. Portal access and contribution cycles stop. Loan repayments continue until unfrozen.'))
-            ->schema(fn (Member $record): array => self::freezeFormSchema())
+            ->schema(fn (Member $record): array => self::freezeFormSchema($record))
             ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
+                $cashOutFund = (bool) ($data['cash_out_fund'] ?? false);
+
                 if (
                     ! ActionModalFailure::attemptThrowable(
                         $action,
@@ -467,6 +469,8 @@ final class MemberFilamentActions
                             $record,
                             (string) ($data['reason'] ?? ''),
                             self::resolveFreezeDate($data['freeze_date'] ?? null),
+                            $cashOutFund,
+                            auth('tenant')->id(),
                         ),
                         __('Cannot freeze'),
                     )
@@ -474,23 +478,46 @@ final class MemberFilamentActions
                     return;
                 }
 
-                Notification::make()->title(__('Member frozen'))->success()->send();
+                $notification = Notification::make()
+                    ->title(__('Member frozen'))
+                    ->success();
+
+                if ($cashOutFund) {
+                    $notification->body(__('Fund balance was moved to cash and the cash-out was posted on the freeze date.'));
+                }
+
+                $notification->send();
                 self::refreshMembersList($livewire);
             });
     }
 
     /**
-     * @return list<Textarea|DatePicker>
+     * @return list<Textarea|DatePicker|Placeholder|Toggle>
      */
-    public static function freezeFormSchema(): array
+    public static function freezeFormSchema(Member $record): array
     {
-        return [
+        $fields = [
             Textarea::make('reason')
                 ->label(__('Reason'))
                 ->rows(3)
                 ->maxLength(500),
             self::freezeDateField(),
         ];
+
+        if (self::canOfferFundCashOutOnFreeze($record)) {
+            $fields[] = Placeholder::make('fund_balance')
+                ->label(__('Fund balance'))
+                ->content(fn (): string => MoneyDisplay::format(
+                    $record->getFundBalance(),
+                    Setting::get('general', 'currency', 'USD'),
+                ) ?? '—');
+            $fields[] = Toggle::make('cash_out_fund')
+                ->label(__('Cash out fund balance'))
+                ->helperText(__('Moves the member\'s fund balance to cash and records the cash-out on the freeze date. Match the bank line when the transfer clears.'))
+                ->default(false);
+        }
+
+        return $fields;
     }
 
     public static function freezeDateField(): DatePicker
@@ -715,8 +742,10 @@ final class MemberFilamentActions
             ->visible(fn (Member $record): bool => $record->status === 'active')
             ->modalHeading(__('Freeze member'))
             ->modalDescription(__('Pauses membership. Portal access and contribution cycles stop. Loan repayments continue until unfrozen.'))
-            ->schema(fn (): array => self::freezeFormSchema())
+            ->schema(fn (Member $record): array => self::freezeFormSchema($record))
             ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
+                $cashOutFund = (bool) ($data['cash_out_fund'] ?? false);
+
                 if (
                     ! ActionModalFailure::attemptThrowable(
                         $action,
@@ -724,6 +753,8 @@ final class MemberFilamentActions
                             $record,
                             (string) ($data['reason'] ?? ''),
                             self::resolveFreezeDate($data['freeze_date'] ?? null),
+                            $cashOutFund,
+                            auth('tenant')->id(),
                         ),
                         __('Cannot freeze'),
                     )
@@ -731,7 +762,15 @@ final class MemberFilamentActions
                     return;
                 }
 
-                Notification::make()->title(__('Member frozen'))->success()->send();
+                $notification = Notification::make()
+                    ->title(__('Member frozen'))
+                    ->success();
+
+                if ($cashOutFund) {
+                    $notification->body(__('Fund balance was moved to cash and the cash-out was posted on the freeze date.'));
+                }
+
+                $notification->send();
                 self::refreshMembersList($livewire);
             });
     }
@@ -1639,6 +1678,21 @@ final class MemberFilamentActions
     private static function canCashOutFundAccount(Member $record): bool
     {
         if (! self::isTenantAdmin() || $record->status === 'active') {
+            return false;
+        }
+
+        if (! app(MemberMembershipPolicy::class)->canReceivePayout($record)) {
+            return false;
+        }
+
+        $record->loadMissing('fundAccount');
+
+        return $record->getFundBalance() > 0.01;
+    }
+
+    private static function canOfferFundCashOutOnFreeze(Member $record): bool
+    {
+        if (! self::isTenantAdmin() || $record->status !== 'active') {
             return false;
         }
 

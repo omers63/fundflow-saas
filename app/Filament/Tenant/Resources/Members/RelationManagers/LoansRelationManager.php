@@ -15,7 +15,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -39,69 +39,71 @@ class LoansRelationManager extends RelationManager
         $currency = Setting::get('general', 'currency', 'USD');
 
         return TableGrouping::apply(
-            $table
-                ->columnManager(true)
-                ->recordTitleAttribute('id')
-                ->defaultSort('applied_at', 'desc')
-                ->columns([
-                    TextColumn::make('id')
-                        ->label(__('Loan #')),
-                    TextColumn::make('amount')
-                        ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
-                        ->sortable(),
-                    TextColumn::make('interest_rate')
-                        ->label(__('Interest'))
-                        ->suffix('%'),
-                    TextColumn::make('term_months')
-                        ->label(__('Term'))
-                        ->suffix(' '.__('mo')),
-                    TextColumn::make('status')
-                        ->badge()
-                        ->formatStateUsing(fn (string $state): string => __(ucfirst($state)))
-                        ->color(fn (string $state): string => match ($state) {
-                            'pending' => 'warning',
-                            'approved' => 'info',
-                            'disbursed', 'repaying' => 'primary',
-                            'completed' => 'success',
-                            'defaulted' => 'danger',
-                            default => 'gray',
-                        }),
-                    LoanOutstandingColumn::make($currency),
-                    TextColumn::make('applied_at')
-                        ->label(__('Applied'))
-                        ->dateTime()
-                        ->sortable(),
-                ])
-                ->filters([
-                    SelectFilter::make('status')
-                        ->options([
-                            'pending' => __('Pending'),
-                            'approved' => __('Approved'),
-                            'disbursed' => __('Disbursed'),
-                            'repaying' => __('Repaying'),
-                            'completed' => __('Completed'),
-                            'defaulted' => __('Defaulted'),
+            TableRecordActionGroups::apply(
+                $table
+                    ->columnManager(true)
+                    ->recordTitleAttribute('id')
+                    ->defaultSort('applied_at', 'desc')
+                    ->columns([
+                        TextColumn::make('id')
+                            ->label(__('Loan #')),
+                        TextColumn::make('amount')
+                            ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
+                            ->sortable(),
+                        TextColumn::make('interest_rate')
+                            ->label(__('Interest'))
+                            ->suffix('%'),
+                        TextColumn::make('term_months')
+                            ->label(__('Term'))
+                            ->suffix(' '.__('mo')),
+                        TextColumn::make('status')
+                            ->badge()
+                            ->formatStateUsing(fn (string $state): string => __(ucfirst($state)))
+                            ->color(fn (string $state): string => match ($state) {
+                                'pending' => 'warning',
+                                'approved' => 'info',
+                                'disbursed', 'repaying' => 'primary',
+                                'completed' => 'success',
+                                'defaulted' => 'danger',
+                                default => 'gray',
+                            }),
+                        LoanOutstandingColumn::make($currency),
+                        TextColumn::make('applied_at')
+                            ->label(__('Applied'))
+                            ->dateTime()
+                            ->sortable(),
+                    ])
+                    ->filters([
+                        SelectFilter::make('status')
+                            ->options([
+                                'pending' => __('Pending'),
+                                'approved' => __('Approved'),
+                                'disbursed' => __('Disbursed'),
+                                'repaying' => __('Repaying'),
+                                'completed' => __('Completed'),
+                                'defaulted' => __('Defaulted'),
+                            ]),
+                        DateColumnRangeFilter::make('applied_at', __('Applied')),
+                    ])
+                    ->headerActions([
+                        Action::make('new_loan')
+                            ->label(__('New loan'))
+                            ->icon('heroicon-o-plus-circle')
+                            ->url(fn (): string => LoanResource::getUrl('create').'?member_id='.$this->getOwnerRecord()->getKey())
+                            ->visible(fn (): bool => LoanResource::canCreate()
+                                && $this->getOwnerRecord() instanceof Member
+                                && $this->getOwnerRecord()->isEligibleForLoan()),
+                    ])
+                    ->toolbarActions([
+                        BulkActionGroup::make([
+                            TableToolbar::refreshBulkAction(),
                         ]),
-                    DateColumnRangeFilter::make('applied_at', __('Applied')),
-                ])
-                ->headerActions([
-                    Action::make('new_loan')
-                        ->label(__('New loan'))
-                        ->icon('heroicon-o-plus-circle')
-                        ->url(fn (): string => LoanResource::getUrl('create').'?member_id='.$this->getOwnerRecord()->getKey())
-                        ->visible(fn (): bool => LoanResource::canCreate()
-                            && $this->getOwnerRecord() instanceof Member
-                            && $this->getOwnerRecord()->isEligibleForLoan()),
-                ])
-                ->recordActions(TableRecordActionGroups::wrap([
-                    EditAction::make()
-                        ->url(fn (Loan $record): string => LoanResource::getUrl('edit', ['record' => $record])),
-                ]))
-                ->toolbarActions([
-                    BulkActionGroup::make([
-                        TableToolbar::refreshBulkAction(),
                     ]),
-                ]),
+                [
+                    ViewAction::make(),
+                ],
+                recordUrl: fn (Loan $record): string => LoanResource::getUrl('view', ['record' => $record]),
+            ),
             TableGrouping::loans(includeMember: false)
         );
     }

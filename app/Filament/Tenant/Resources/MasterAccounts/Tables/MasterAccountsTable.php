@@ -6,6 +6,7 @@ use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Support\UiLabelIcons;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Setting;
@@ -14,23 +15,25 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
 
 class MasterAccountsTable
 {
-    public static function configure(Table $table, bool $showTypeColumn = false, string $activeTab = 'all'): Table
+    public static function configure(Table $table): Table
     {
         $columns = [
             TextColumn::make('name')
                 ->label(__('Account'))
-                ->formatStateUsing(fn (string $state, Account $record): string => $record->displayLabel())
+                ->html()
+                ->formatStateUsing(fn (string $state, Account $record): Htmlable => UiLabelIcons::labeledHtml(
+                    $record->displayLabel(),
+                    UiLabelIcons::forKey($record->type),
+                ))
                 ->sortable(query: function ($query, string $direction): void {
                     $query->orderBy('name', $direction);
                 }),
-        ];
-
-        if ($showTypeColumn) {
-            $columns[] = TextColumn::make('type')
+            TextColumn::make('type')
                 ->badge()
                 ->color(fn (string $state): string => match ($state) {
                     'cash' => 'info',
@@ -42,23 +45,21 @@ class MasterAccountsTable
                     'suspense' => 'gray',
                     default => 'gray',
                 })
-                ->formatStateUsing(fn (string $state): string => MasterAccountResource::tabLabel($state));
-        }
-
-        $showsInvestNetReturn = $activeTab === 'invest' || $showTypeColumn;
+                ->formatStateUsing(fn (string $state): string => MasterAccountResource::tabLabel($state)),
+        ];
 
         $balanceColumn = TextColumn::make('balance')
-            ->label($activeTab === 'invest' ? __('Net return') : __('Balance'))
-            ->state(function (Account $record) use ($showsInvestNetReturn): float {
-                if ($showsInvestNetReturn && $record->type === 'invest') {
+            ->label(__('Balance'))
+            ->state(function (Account $record): float {
+                if ($record->type === 'invest') {
                     return MasterInvestNetReturn::netReturn($record);
                 }
 
                 return (float) $record->balance;
             })
             ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
-            ->color(function (Account $record) use ($showsInvestNetReturn): ?string {
-                if (! $showsInvestNetReturn || $record->type !== 'invest') {
+            ->color(function (Account $record): ?string {
+                if ($record->type !== 'invest') {
                     return null;
                 }
 
@@ -70,11 +71,8 @@ class MasterAccountsTable
                     default => null,
                 };
             })
-            ->sortable();
-
-        if ($showsInvestNetReturn) {
-            $balanceColumn->summarize([]);
-        }
+            ->sortable()
+            ->summarize([]);
 
         $columns[] = $balanceColumn;
 
@@ -99,7 +97,7 @@ class MasterAccountsTable
                     ]),
                 ])
                 ->defaultSort('name'),
-            TableGrouping::memberAccounts($showTypeColumn)
+            TableGrouping::memberAccounts(includeType: true)
         );
     }
 }

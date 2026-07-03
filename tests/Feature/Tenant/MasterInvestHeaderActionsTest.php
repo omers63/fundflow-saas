@@ -17,6 +17,7 @@ uses(InitializesTenancy::class);
 beforeEach(function () {
     $this->initializeTenancy();
     Account::query()->delete();
+    BankTransaction::query()->delete();
     ReconciliationException::query()->delete();
 });
 
@@ -55,6 +56,26 @@ test('master invest header actions are hidden on non-invest master accounts', fu
 
     expect($actions[0]->isHidden())->toBeTrue()
         ->and($actions[1]->isHidden())->toBeTrue();
+});
+
+test('invest out modal includes available master fund balance placeholder', function () {
+    $admin = User::create([
+        'name' => 'Admin',
+        'email' => 'admin-invest-out-balance-'.uniqid('', true).'@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+    $this->actingAs($admin, 'tenant');
+
+    $account = Account::factory()->masterInvest()->create();
+    $investOut = MasterInvestHeaderActions::make(fn () => $account)[0];
+
+    $schemaProperty = new ReflectionProperty($investOut, 'schema');
+    $schema = $schemaProperty->getValue($investOut);
+    $components = $schema instanceof Closure ? $schema() : $schema;
+
+    expect(collect($components)->map(fn ($component) => $component->getName())->all())
+        ->toContain('available_master_fund_balance');
 });
 
 test('invest out transfers from master fund through master invest and creates uncleared bank line', function () {

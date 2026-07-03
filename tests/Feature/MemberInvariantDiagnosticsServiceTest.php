@@ -9,6 +9,7 @@ use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
 use App\Services\AccountingService;
+use App\Services\Loans\LoanLedgerService;
 use App\Services\MemberInvariantDiagnosticsService;
 use App\Support\BusinessDay;
 use Filament\Facades\Filament;
@@ -71,14 +72,14 @@ test('member cash drift diagnostics explain legacy paired contribution cash legs
     expect($diagnostics)->not->toBeNull()
         ->and($diagnostics['pool'])->toBe('cash')
         ->and($diagnostics['actual'])->toBe(0.0)
-        ->and($diagnostics['expected'])->toBe(-500.0)
-        ->and($diagnostics['drift'])->toBe(500.0)
-        ->and($diagnostics['legacy_import_pattern'])->toBeTrue()
+        ->and($diagnostics['expected'])->toBe(0.0)
+        ->and($diagnostics['drift'])->toBe(0.0)
+        ->and($diagnostics['legacy_import_pattern'])->toBeFalse()
         ->and($diagnostics['adjusted_expected'])->toBe(0.0)
         ->and($diagnostics['adjusted_drift'])->toBe(0.0)
-        ->and($diagnostics['suggested_correction']['action'])->toBe('resolve')
-        ->and(collect($diagnostics['uncounted_flows'])->pluck('label'))->toContain(__('Contribution cash credits'))
-        ->and($diagnostics['mismatch_transactions'])->not->toBeEmpty();
+        ->and($diagnostics['suggested_correction']['action'])->toBe('none')
+        ->and(collect($diagnostics['formula_lines'])->pluck('label'))->toContain(__('Contributions credited'))
+        ->and($diagnostics['mismatch_transactions'])->toBeEmpty();
 });
 
 test('member cash drift diagnostics suggest mirror correction for genuine imbalance', function (): void {
@@ -128,7 +129,7 @@ test('member cash drift diagnostics suggest mirror correction for genuine imbala
         ->and($diagnostics['suggested_correction']['amount'])->toBe(250.0);
 });
 
-test('member cash drift diagnostics include uncounted loan repayment cash legs', function (): void {
+test('member cash drift diagnostics include loan repayment cash legs in formula', function (): void {
     $member = Member::create([
         'member_number' => 'DIAG-003',
         'name' => 'Repayment Member',
@@ -172,8 +173,71 @@ test('member cash drift diagnostics include uncounted loan repayment cash legs',
 
     $diagnostics = app(MemberInvariantDiagnosticsService::class)->forException($exception);
 
-    expect(collect($diagnostics['uncounted_flows'])->pluck('label'))
-        ->toContain(__('Loan repayment cash credits'))
-        ->and(collect($diagnostics['uncounted_flows'])->pluck('label'))
-        ->toContain(__('Loan repayment cash debits'));
+    expect($diagnostics['actual'])->toBe(0.0)
+        ->and($diagnostics['expected'])->toBe(0.0)
+        ->and($diagnostics['drift'])->toBe(0.0)
+        ->and($diagnostics['legacy_import_pattern'])->toBeFalse()
+        ->and(collect($diagnostics['formula_lines'])->pluck('label'))
+        ->toContain(__('Loan repayment cash credited'))
+        ->and(collect($diagnostics['formula_lines'])->pluck('label'))
+        ->toContain(__('Loan repayment cash debited'))
+        ->and($diagnostics['uncounted_flows'])->toBeEmpty();
+});
+
+test('member fund drift diagnostics include legacy loan repayment fund credits in formula', function (): void {
+    $member = Member::create([
+        'member_number' => 'DIAG-004',
+        'name' => 'Legacy Fund Member',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+    $member->refresh();
+
+    $loan = Loan::factory()->create([
+        'member_id' => $member->id,
+        'amount_disbursed' => 6000,
+        'member_portion' => 6000,
+        'master_portion' => 0,
+        'status' => 'active',
+    ]);
+
+    app(LoanLedgerService::class)->ensureLoanAccount($loan);
+    app(AccountingService::class)->debit($member->fundAccount, 6000, __('Loan disbursement'), $loan, BusinessDay::now(), $member->id);
+
+    $repayment = LoanRepayment::factory()->create([
+        'loan_id' => $loan->id,
+        'amount' => 1800,
+    ]);
+
+    app(LoanLedgerService::class)->postImportedLoanRepaymentWithCashFlow(
+        $loan->fresh(),
+        $repayment,
+        1800,
+        BusinessDay::now(),
+    );
+
+    $exception = ReconciliationException::create([
+        'exception_code' => 'MEMBER_FUND_DRIFT',
+        'domain' => 'master_account',
+        'severity' => 'medium',
+        'amount_delta' => 1800,
+        'status' => ReconciliationException::STATUS_OPEN,
+        'raised_at' => now(),
+        'affected_entities' => ['member_id' => $member->id],
+    ]);
+
+    $diagnostics = app(MemberInvariantDiagnosticsService::class)->forException($exception);
+
+    expect($diagnostics['pool'])->toBe('fund')
+        ->and($diagnostics['actual'])->toBe(-4200.0)
+        ->and($diagnostics['expected'])->toBe(-4200.0)
+        ->and($diagnostics['drift'])->toBe(0.0)
+        ->and($diagnostics['legacy_import_pattern'])->toBeFalse()
+        ->and(collect($diagnostics['formula_lines'])->pluck('label'))
+        ->toContain(__('EMI repayments (legacy import)'))
+        ->and($diagnostics['suggested_correction']['action'])->toBe('none')
+        ->and($diagnostics['uncounted_flows'])->toBeEmpty();
 });

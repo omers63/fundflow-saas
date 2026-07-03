@@ -22,6 +22,7 @@ use App\Support\ContributionPolicySettings;
 use App\Support\FiscalSettings;
 use App\Support\ImportDateFormats;
 use App\Support\Lang;
+use App\Support\LedgerSettings;
 use App\Support\LoanSettings;
 use App\Support\MemberNumberSettings;
 use App\Support\NotificationSettings;
@@ -189,6 +190,7 @@ class Settings extends Page implements HasForms
 
         return [
             'currency' => $general['currency'] ?? 'USD',
+            ...LedgerSettings::allForForm(),
             'business_day' => BusinessDaySettings::forForm(),
             'reconciliation_bank_statement_balance' => $reconciliation['bank_statement_balance'] ?? null,
             'reconciliation_bank_statement_date' => $reconciliation['bank_statement_date'] ?? null,
@@ -287,6 +289,22 @@ class Settings extends Page implements HasForms
                             ->searchable()
                             ->options(static::currencyOptions())
                             ->helperText(__('The primary currency used for all transactions.')),
+                    ]),
+                Section::make(__('Ledgers'))
+                    ->description(__('Controls optional admin tools on account transaction tables.'))
+                    ->schema([
+                        Toggle::make('ledger_show_manual_credit_debit')
+                            ->label(__('Show manual credit and debit'))
+                            ->helperText(__('When enabled, tenant admins see Credit and Debit header actions on master and member ledger tables.'))
+                            ->default(false),
+                        Toggle::make('ledger_show_split_reverse')
+                            ->label(__('Show split and reverse'))
+                            ->helperText(__('When enabled, tenant admins see Split and Reverse row actions on ledger transaction tables.'))
+                            ->default(false),
+                        Toggle::make('ledger_show_edit_delete')
+                            ->label(__('Show edit and delete'))
+                            ->helperText(__('When enabled, tenant admins see Edit and Delete row actions and bulk delete on ledger transaction tables.'))
+                            ->default(true),
                     ]),
                 Section::make(__('Business calendar'))
                     ->description(__('Set a custom date that the application treats as today. Useful for testing contribution cycles, loan eligibility, and delinquency in the future or past.'))
@@ -1205,6 +1223,7 @@ class Settings extends Page implements HasForms
         }
 
         Setting::set('general', 'currency', $state['currency']);
+        LedgerSettings::saveFromForm($state);
         Setting::set('reconciliation', 'bank_statement_balance', $state['reconciliation_bank_statement_balance'] ?? '');
         Setting::set('reconciliation', 'bank_statement_date', $state['reconciliation_bank_statement_date'] ?? '');
         Setting::set('reconciliation', 'bank_variance_critical', ($state['reconciliation_bank_variance_critical'] ?? false) ? '1' : '0');

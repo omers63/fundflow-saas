@@ -9,6 +9,7 @@ use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
 use App\Support\BusinessDay;
+use App\Support\LedgerSettings;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DateTimePicker;
@@ -30,7 +31,7 @@ final class ReverseAccountTransactionAction
             ->icon('heroicon-o-arrow-uturn-left')
             ->color('danger')
             ->authorize(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
-            ->visible(fn (Transaction $record): bool => self::canReverse($record))
+            ->visible(fn (Transaction $record): bool => LedgerSettings::showSplitReverse() && self::canReverse($record))
             ->modalHeading(__('Reverse'))
             ->modalDescription(fn (Transaction $record): Htmlable => self::modalDescription($record))
             ->modalSubmitActionLabel(__('Reverse'))

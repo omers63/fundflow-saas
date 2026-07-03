@@ -18,21 +18,41 @@ final class MemberStatusService
         private readonly AccountingService $accounting,
         private readonly MemberMembershipPolicy $policy,
         private readonly MemberWithdrawalSettlementService $withdrawalSettlement,
+        private readonly MemberCashOutService $cashOuts,
     ) {}
 
     public function freeze(
         Member $member,
         string $reason = '',
         ?CarbonInterface $freezeDate = null,
+        bool $cashOutFund = false,
+        ?int $reviewedBy = null,
     ): void {
         if ($member->status !== 'active') {
             throw new InvalidArgumentException(__('Only active members can be frozen.'));
         }
 
-        $this->transition($member, 'inactive', [
-            'contribution_cycles_active' => false,
-            'frozen_at' => $this->normalizeFreezeDate($freezeDate),
-        ], 'MEMBER_FROZEN', $reason, $member->status);
+        $frozenAt = $this->normalizeFreezeDate($freezeDate);
+
+        DB::transaction(function () use ($member, $reason, $frozenAt, $cashOutFund, $reviewedBy): void {
+            $this->transition($member, 'inactive', [
+                'contribution_cycles_active' => false,
+                'frozen_at' => $frozenAt,
+            ], 'MEMBER_FROZEN', $reason, $member->status, $frozenAt);
+
+            if (! $cashOutFund) {
+                return;
+            }
+
+            $note = trim($reason) !== '' ? trim($reason) : __('Fund balance cash-out on freeze');
+
+            $this->cashOuts->submitFundBalanceCashOut(
+                $member->fresh(),
+                $note,
+                $frozenAt,
+                $reviewedBy,
+            );
+        });
     }
 
     public function unfreeze(Member $member): void

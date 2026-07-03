@@ -1,6 +1,7 @@
 <?php
 
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
+use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\Members\Pages\EditMember;
 use App\Filament\Tenant\Resources\Members\Pages\ListMembers;
@@ -13,6 +14,7 @@ use App\Filament\Tenant\Resources\Members\RelationManagers\LoansRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\MemberTransactionsTabsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\MessagesRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\RepaymentsRelationManager;
+use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
@@ -231,6 +233,39 @@ test('household relation manager exposes dependent row and bulk actions', functi
 
     expect($component->instance()->getTable()->getRecordUrl($dependent))
         ->toBe(MemberResource::getUrl('view', ['record' => $dependent]));
+});
+
+test('member loans tab opens loan view page on row click', function () {
+    $admin = User::create([
+        'name' => 'Member Loans Tab Admin',
+        'email' => 'member-loans-tab-admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $member = Member::create([
+        'member_number' => 'MEM-LOAN-ROW',
+        'name' => 'Loan Row Member',
+        'email' => 'loan-row@fund.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $loan = Loan::factory()->for($member)->create();
+
+    Filament::setCurrentPanel('tenant');
+
+    $component = Livewire::actingAs($admin, 'tenant')
+        ->test(LoansRelationManager::class, [
+            'ownerRecord' => $member,
+            'pageClass' => ViewMember::class,
+        ])
+        ->assertSuccessful();
+
+    expect($component->instance()->getTable()->getRecordUrl($loan))
+        ->toBe(LoanResource::getUrl('view', ['record' => $loan]));
 });
 
 test('member resource relation tabs are ordered with loans before dependents and messages after', function () {

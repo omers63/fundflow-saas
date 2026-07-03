@@ -17,6 +17,7 @@ use App\Models\Tenant\NotificationLog;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Support\FiscalSettings;
+use App\Support\LedgerSettings;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\App;
 use Livewire\Livewire;
@@ -94,6 +95,66 @@ test('settings page falls back to general tab for invalid query tab', function (
     Livewire::actingAs($admin, 'tenant')
         ->test(Settings::class, ['settingsTab' => 'invalid-tab'])
         ->assertSet('settingsTab', 'general::tab');
+});
+
+test('settings save persists ledger manual credit debit toggle', function () {
+    Filament::setCurrentPanel('tenant');
+
+    $admin = User::create([
+        'name' => 'Ledger Settings Admin',
+        'email' => 'ledger-settings-admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(Settings::class, ['settingsTab' => 'general::tab'])
+        ->set('data.ledger_show_manual_credit_debit', true)
+        ->call('save')
+        ->assertNotified();
+
+    expect(LedgerSettings::showManualCreditDebit())->toBeTrue();
+});
+
+test('settings save persists ledger split reverse toggle', function () {
+    Filament::setCurrentPanel('tenant');
+
+    $admin = User::create([
+        'name' => 'Ledger Split Reverse Settings Admin',
+        'email' => 'ledger-split-reverse-settings@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(Settings::class, ['settingsTab' => 'general::tab'])
+        ->set('data.ledger_show_split_reverse', true)
+        ->call('save')
+        ->assertNotified();
+
+    expect(LedgerSettings::showSplitReverse())->toBeTrue();
+});
+
+test('settings save persists ledger edit delete toggle', function () {
+    Filament::setCurrentPanel('tenant');
+
+    $admin = User::create([
+        'name' => 'Ledger Edit Delete Settings Admin',
+        'email' => 'ledger-edit-delete-settings@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(Settings::class, ['settingsTab' => 'general::tab'])
+        ->set('data.ledger_show_edit_delete', false)
+        ->call('save')
+        ->assertNotified();
+
+    expect(LedgerSettings::showEditDelete())->toBeFalse();
 });
 
 test('settings save from general tab preserves fiscal year settings', function () {

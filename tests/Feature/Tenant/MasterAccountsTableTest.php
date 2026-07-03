@@ -28,7 +28,7 @@ beforeEach(function () {
     Transaction::query()->delete();
 });
 
-test('master accounts invest tab shows net return instead of balance', function () {
+test('master accounts list shows net return for invest accounts', function () {
     $invest = Account::factory()->masterInvest()->withBalance(250)->create();
 
     Transaction::factory()->for($invest)->create([
@@ -44,18 +44,26 @@ test('master accounts invest tab shows net return instead of balance', function 
     ]);
 
     Livewire::test(ListMasterAccounts::class)
-        ->set('activeTab', 'invest')
-        ->assertSee(__('Net return'))
+        ->assertSee(__('Balance'))
         ->assertSee('600.00');
 });
 
-test('master accounts cash tab still shows balance column label', function () {
+test('master accounts list shows balance for cash accounts', function () {
     Account::factory()->masterCash()->withBalance(5_000)->create();
 
     Livewire::test(ListMasterAccounts::class)
-        ->set('activeTab', 'cash')
         ->assertSee(__('Balance'))
         ->assertSee('5,000.00');
+});
+
+test('master accounts list shows type icons on account rows', function () {
+    Account::factory()->masterCash()->create(['name' => 'Master Cash']);
+    Account::factory()->masterFund()->create(['name' => 'Master Fund']);
+
+    Livewire::test(ListMasterAccounts::class)
+        ->assertSeeHtml('fi-ff-label-with-icon')
+        ->assertSee(__('Master Cash'))
+        ->assertSee(__('Master Fund'));
 });
 
 test('master accounts last activity uses latest ledger transaction date', function () {
@@ -71,7 +79,6 @@ test('master accounts last activity uses latest ledger transaction date', functi
     $cash->update(['updated_at' => '2020-01-01 00:00:00']);
 
     Livewire::test(ListMasterAccounts::class)
-        ->set('activeTab', 'cash')
         ->assertSee('2030')
         ->assertDontSee('2020');
 });

@@ -12,6 +12,12 @@ test('ui label icons resolve from labels and column names', function () {
         ->and(UiLabelIcons::forKey('contributions'))->toBe(Heroicon::OutlinedChartBar);
 });
 
+test('ui label icons resolve master account types', function () {
+    expect(UiLabelIcons::forKey('bank'))->toBe(Heroicon::OutlinedBuildingLibrary)
+        ->and(UiLabelIcons::forKey('expense'))->toBe(Heroicon::OutlinedReceiptPercent)
+        ->and(UiLabelIcons::forKey('invest'))->toBe(Heroicon::OutlinedChartBar);
+});
+
 test('labeled html wraps text with an icon span', function () {
     $html = UiLabelIcons::labeledHtml('Amount', UiLabelIcons::forKey('amount'))->toHtml();
 

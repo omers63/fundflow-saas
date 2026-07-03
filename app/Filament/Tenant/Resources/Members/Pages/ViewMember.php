@@ -111,7 +111,6 @@ class ViewMember extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            $this->buildMemberContributeAction(),
             $this->buildMemberAllocateDependentsAction(),
             ...MemberFilamentActions::forMemberEditHeader(),
             EditAction::make()

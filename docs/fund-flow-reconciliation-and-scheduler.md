@@ -256,7 +256,7 @@ flowchart TD
 | Late fees | `FEE_WRONG_TIER`, `FEE_INCOME_DRIFT` |
 | Member invariants | `MEMBER_CASH_DRIFT`, `MEMBER_FUND_DRIFT` |
 
-After domain sweeps, **auto-resolve** attempts fix simple cases. A **post-batch** master balance check may halt again if drift remains critical.
+After domain sweeps, **auto-resolve** runs only for **safe metadata fixes** (defer stale bank lines, reset collection status flags, set EMI overdue clocks, clear grace-period flags). **Ledger-posting corrections** (rounding adjustments, missing mirror legs, EMI reposts, fee tier fixes, etc.) require explicit admin action via **Retry auto-resolve** or manual correction on the exception row. A **post-batch** master balance check may halt again if drift remains critical.
 
 ---
 
@@ -264,13 +264,161 @@ After domain sweeps, **auto-resolve** attempts fix simple cases. A **post-batch*
 
 These are **different products** — do not confuse them.
 
-| Mechanism | Command | Output | Use |
-|-----------|---------|--------|-----|
-| **Exception queue** | `fund:nightly-reconciliation` | Live `reconciliation_exceptions` rows | Active remediation in admin UI |
-| **Audit snapshot** | `fund:reconcile --daily` / `--monthly` | `reconciliation_snapshots` + PDF metrics | Historical audit trail for accountants |
-| **Point-in-time audit** | `fund:reconcile --realtime` | Report only (`--no-store` skips save) | Ad-hoc investigation |
+| Mechanism | UI action | Command | Output | Use |
+|-----------|-----------|---------|--------|-----|
+| **Real-time snapshot** | **Run check now** (simple mode) or **Real-time snapshot** (advanced) | `fund:reconcile --realtime` | Saved `reconciliation_snapshots` row (`mode=realtime`) | Ad-hoc “what does the book look like right now?” |
+| **Daily snapshot** | **Daily snapshot** (advanced) | `fund:reconcile --daily` | Saved snapshot (`mode=daily`) | Routine daily audit record |
+| **Monthly snapshot** | **Monthly snapshot** (advanced) | `fund:reconcile --monthly` | Saved snapshot (`mode=monthly`) | Month-end / period-close evidence |
+| **Exception queue re-check** | **Exception queue re-check** (advanced) | `fund:nightly-reconciliation` | Live `reconciliation_exceptions` rows (queue replaced) | Refresh actionable remediation list |
 
-Snapshots include ledger mismatch counts, unposted bank rows, open exception counts, and coverage matrices — useful for month-end packs, not for replacing the live queue.
+**Scheduled runs:** daily snapshot at **06:20**, exception queue + monthly snapshot at **06:30** (monthly on the **2nd**).
+
+### 6.1 What each run covers
+
+#### Shared idea
+
+- **Snapshots** (real-time, daily, monthly) all call `ReconciliationReportService::buildReport()` with the **same ledger audit checks as of run time**.
+- **Exception queue re-check** calls `ReconciliationService::runNightlyBatch()` — a **different engine** that raises operational exceptions for admin workflow.
+
+```mermaid
+flowchart LR
+    subgraph snapshots["Audit snapshots (all three modes)"]
+        R["ReconciliationReportService::buildReport()"]
+        R --> STORE["reconciliation_snapshots table"]
+        R --> READ["Reads open exception count<br/>(does not refresh queue)"]
+    end
+
+    subgraph queue["Exception queue re-check"]
+        N["ReconciliationService::runNightlyBatch()"]
+        N --> EXC["reconciliation_exceptions table<br/>(cleared and rebuilt)"]
+        N --> GATE["BatchPostingGate<br/>(may halt batch jobs)"]
+    end
+```
+
+#### Real-time snapshot (`mode=realtime`)
+
+| Aspect | Detail |
+|--------|--------|
+| **When** | On demand (**Run check now**) or `fund:reconcile --realtime` |
+| **Time window** | **As of now** — no period filter |
+| **Period metrics** | None (`ledger_lines_in_period` and `bank_mirrored_in_period` are null) |
+| **Stores history?** | Yes (unless CLI `--no-store`) |
+| **Refreshes exception queue?** | **No** — only reports how many exceptions were open at snapshot time |
+| **Can halt batch jobs?** | No |
+
+**Use when:** investigating today, after imports/corrections, or before approving a manual journal.
+
+#### Daily snapshot (`mode=daily`)
+
+| Aspect | Detail |
+|--------|--------|
+| **When** | On demand or scheduled **06:20** |
+| **Time window** | Ledger checks **as of now**, plus **yesterday’s calendar day** (app timezone) for period metrics |
+| **Period metrics** | Count of ledger lines with `transacted_at` yesterday; count of bank lines mirrored/posted yesterday |
+| **Stores history?** | Yes |
+| **Refreshes exception queue?** | No |
+| **Can halt batch jobs?** | No |
+
+**Use when:** keeping a daily audit trail and day-level activity counts.
+
+#### Monthly snapshot (`mode=monthly`)
+
+| Aspect | Detail |
+|--------|--------|
+| **When** | On demand or scheduled **2nd at 06:30** |
+| **Time window** | Ledger checks **as of now**, plus **previous calendar month** for period metrics |
+| **Period metrics** | Same two counts as daily, but for the full prior month |
+| **Stores history?** | Yes |
+| **Refreshes exception queue?** | No |
+| **Can halt batch jobs?** | No |
+
+**Use when:** month-end packs, external audit, or comparing month-level posting volume.
+
+#### Exception queue re-check (`fund:nightly-reconciliation`)
+
+| Aspect | Detail |
+|--------|--------|
+| **When** | On demand or scheduled **06:30** |
+| **Time window** | As of now |
+| **Stores audit snapshot?** | **No** |
+| **Refreshes exception queue?** | **Yes** — deletes all existing exceptions, re-runs sweeps, raises fresh rows |
+| **Auto-fixes without admin?** | **Metadata only** (defer stale bank lines, reset collection status, EMI overdue clocks, grace flags). **No silent ledger posting.** |
+| **Can halt batch jobs?** | **Yes** — on critical `MASTER_IMBALANCE_UNRESOLVED` |
+
+**Use when:** you need an up-to-date **Exceptions** tab after formula fixes, data repairs, or before relying on the queue for remediation.
+
+### 6.2 Snapshot audit checks (all three snapshot modes)
+
+Every snapshot mode runs these **ledger integrity** checks (severity per check: ok / warning / critical / skipped):
+
+| Check key | What it verifies |
+|-----------|------------------|
+| `ledger_balances` | Stored account balance = net of that account’s transactions |
+| `global_trial` | Σ credits vs Σ debits across all ledger lines |
+| `paired_control_totals` | Master cash/fund pool vs Σ member mirrors (tolerance-aware) |
+| `bank_statement_vs_book` | Optional: `master_cash` vs declared statement balance (skipped if not configured) |
+| `contributions_ledger` | Contribution rows have ledger lines; master fund credits match contribution totals |
+| `member_portal_posting_integrity` | Accepted fund postings credited member + master cash correctly |
+| `bank_transaction_posting_integrity` | Imported bank lines posted to ledger with expected legs |
+| `sms_transaction_posting_integrity` | Skipped in SaaS (SMS import not used) |
+| `contribution_flow_integrity` | Contribution cycle paired fund/cash legs |
+| `membership_application_fee_integrity` | Enrollment fee → cash + master fees |
+| `subscription_fee_integrity` | Annual subscription fee → master fees |
+| `active_loans_schedule_vs_ledger` | Active loans: loan account outstanding vs expected (schedule − partial paid) |
+| `approved_loans_disbursement_vs_ledger` | Approved partial disbursements vs loan ledger |
+| `loan_disbursement_cash_payout_integrity` | Disbursement cash payout vs approved loan |
+| `loan_installment_flow_integrity` | Per-installment repayment legs (skipped for legacy-import loans; validated at loan level instead) |
+| `member_cash_transfer_integrity` | Dependent transfer debit/credit pairing |
+| `orphan_loan_accounts` | Loan-type accounts without a loan row |
+| `bank_pipeline` | Unposted bank imports and uncleared bank lines (warning if backlog) |
+
+Each snapshot also includes:
+
+- **Pipeline summary** — unposted / uncleared bank row counts and amounts
+- **Control layer summary** — open exception count **at snapshot time** (by domain/code)
+- **Coverage matrix** — which flows map to which checks
+- **Verdict** — pass if no critical issues; warning count = number of checks with `severity=warning`
+
+**Only difference between real-time / daily / monthly:** the `mode` tag, optional **period metrics** window (none / yesterday / previous month), and scheduling.
+
+### 6.3 Exception queue domains (re-check only)
+
+`runNightlyBatch()` sweeps raise **workflow exceptions** not fully represented as snapshot checks:
+
+| Domain sweep | Typical exception codes |
+|--------------|-------------------------|
+| Master pre/post check | `MASTER_IMBALANCE_UNRESOLVED`, `MASTER_CASH_POOL_DRIFT`, `MASTER_FUND_POOL_DRIFT` |
+| Contributions | `PENDING_PAST_WINDOW_CLOSE`, `COLLECTED_WITHOUT_POST`, `CONTRIBUTION_MISSING_MASTER_CREDIT`, `CONTRIBUTION_MEMBER_FUND_MISSING`, `CONTRIBUTION_AMOUNT_MISMATCH`, `DUPLICATE_CONTRIBUTION_DEBIT`, `ORPHAN_MASTER_FUND_CREDIT`, `CONTRIBUTION_EXEMPT_COLLECTED` |
+| Loans / EMI | `EMI_COLLECTED_LEDGER_MISSING`, `EMI_OVER_COLLECTION`, `EMI_MISSED_SUFFICIENT_CASH`, `ACTIVE_BEFORE_FULL_DISBURSE`, `SCHEDULE_BEFORE_FULL_DISBURSE`, `GRACE_CYCLE_EMI_DEBIT`, `EMI_OVERDUE_WITHOUT_CLOCK`, `GUARANTOR_BORROWER_DUPLICATE_DEBIT`, `DISBURSEMENT_MEMBER_CASH_MISSING` |
+| Fund tiers | `FUND_TIER_OVER_COMMITTED` |
+| Bank clearing | `RECON_UNMATCHED_BANK_LINE`, `RECON_AMBIGUOUS_MATCH`, `UNMATCHED_CASH_ENTRY`, `STALE_PENDING`, `CASH_DEPOSIT_UNBANKED`, `AMOUNT_MISMATCH` |
+| Late fees | `FEE_WRONG_TIER`, `FEE_INCOME_DRIFT`, `FEE_POSTED_WRONG_ACCOUNT`, `REPLACEMENT_PRIOR_TIER_NOT_REVERSED`, `RECON_AUTO_FEE_EXEMPTION_REVERSAL` |
+| Member invariants | `MEMBER_CASH_DRIFT`, `MEMBER_FUND_DRIFT` |
+
+Admin actions on the **Exceptions** tab (resolve, escalate, write-off, post correction, **Retry auto-resolve** for ledger fixes) apply to this queue only.
+
+### 6.4 Quick decision guide
+
+| Your goal | Run this |
+|-----------|----------|
+| “Is the ledger structurally sound right now?” | **Real-time snapshot** / **Run check now** |
+| “Save today’s audit card for the file” | **Daily snapshot** (or wait for 06:20) |
+| “Month-end evidence + monthly activity counts” | **Monthly snapshot** (or wait for 2nd 06:30) |
+| “Refresh the Exceptions tab after fixes” | **Exception queue re-check** |
+| “Fix a specific open exception” | Exceptions tab → row actions (not a snapshot run) |
+
+**Common mistake:** running **Run check now** and expecting stale exceptions to disappear. Snapshots **read** the queue count; only **Exception queue re-check** rebuilds it.
+
+### 6.5 UI locations
+
+| Action | Simple mode | Advanced mode |
+|--------|-------------|---------------|
+| Real-time snapshot | **Run check now** (header) | **Real-time snapshot** |
+| Exception queue re-check | — | **More reconciliation runs** → **Exception queue re-check** |
+| Daily snapshot | — | **More reconciliation runs** → **Daily snapshot** |
+| Monthly snapshot | — | **More reconciliation runs** → **Monthly snapshot** |
+
+All four require the tenant user **admin** flag.
 
 ---
 

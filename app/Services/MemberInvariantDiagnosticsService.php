@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Models\Tenant\Contribution;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
@@ -84,9 +83,11 @@ final class MemberInvariantDiagnosticsService
             'adjusted_expected' => $adjustedExpected,
             'adjusted_drift' => $adjustedDrift,
             'legacy_import_pattern' => $legacyPattern,
-            'mismatch_transactions' => $isCash
-                ? $this->mismatchCashTransactions($member, $uncounted)
-                : $this->mismatchFundTransactions($member),
+            'mismatch_transactions' => $uncounted === []
+                ? []
+                : ($isCash
+                    ? $this->mismatchCashTransactions($member)
+                    : $this->mismatchFundTransactions($member)),
             'suggested_correction' => $this->suggestedCorrection(
                 $pool,
                 $expected,
@@ -113,8 +114,11 @@ final class MemberInvariantDiagnosticsService
                 ['key' => 'direct_bank_imports_posted', 'label' => __('Direct bank imports posted'), 'sign' => '+'],
                 ['key' => 'dependent_transfers_in', 'label' => __('Dependent transfers in'), 'sign' => '+'],
                 ['key' => 'refunds_and_recon_credits', 'label' => __('Refunds and recon credits'), 'sign' => '+'],
+                ['key' => 'contributions_credited', 'label' => __('Contributions credited'), 'sign' => '+'],
                 ['key' => 'contributions_debited', 'label' => __('Contributions debited'), 'sign' => '−'],
+                ['key' => 'loan_repayment_cash_credited', 'label' => __('Loan repayment cash credited'), 'sign' => '+'],
                 ['key' => 'emi_debited', 'label' => __('EMI debited (installment ref.)'), 'sign' => '−'],
+                ['key' => 'loan_repayment_cash_debited', 'label' => __('Loan repayment cash debited'), 'sign' => '−'],
                 ['key' => 'subscription_fees_debited', 'label' => __('Subscription fees debited'), 'sign' => '−'],
                 ['key' => 'late_fees_net', 'label' => __('Late fees (net)'), 'sign' => '−'],
                 ['key' => 'cash_outs', 'label' => __('Cash outs'), 'sign' => '−'],
@@ -126,7 +130,9 @@ final class MemberInvariantDiagnosticsService
                 ['key' => 'contribution_fund_reversals', 'label' => __('Contribution fund reversals'), 'sign' => '−'],
                 ['key' => 'loan_disbursements_from_fund', 'label' => __('Loan disbursements from fund'), 'sign' => '−'],
                 ['key' => 'guarantor_fund_debits', 'label' => __('Guarantor fund debits'), 'sign' => '−'],
-                ['key' => 'emi_repayments', 'label' => __('EMI repayments (installment ref.)'), 'sign' => '+'],
+                ['key' => 'emi_repayments_installment', 'label' => __('EMI repayments (installment ref.)'), 'sign' => '+'],
+                ['key' => 'emi_repayments_legacy_credited', 'label' => __('EMI repayments (legacy import)'), 'sign' => '+'],
+                ['key' => 'emi_repayments_legacy_debited', 'label' => __('EMI repayment reversals (legacy import)'), 'sign' => '−'],
             ];
 
         $lines = [];
@@ -154,47 +160,7 @@ final class MemberInvariantDiagnosticsService
      */
     private function uncountedCashFlows(Member $member): array
     {
-        $accountId = $member->cashAccount?->id;
-
-        if ($accountId === null) {
-            return [];
-        }
-
-        $flows = [];
-
-        $contributionCredits = $this->sumByReference($accountId, (int) $member->id, Contribution::class, 'credit');
-
-        if ($contributionCredits > 0.00001) {
-            $flows[] = [
-                'label' => __('Contribution cash credits'),
-                'sign' => '+',
-                'amount' => $contributionCredits,
-                'detail' => __('Legacy import and some collection flows credit member cash before debiting for the contribution. The §5.13 formula counts only contribution debits.'),
-            ];
-        }
-
-        $repaymentCredits = $this->sumByReference($accountId, (int) $member->id, LoanRepayment::class, 'credit');
-        $repaymentDebits = $this->sumByReference($accountId, (int) $member->id, LoanRepayment::class, 'debit');
-
-        if ($repaymentCredits > 0.00001) {
-            $flows[] = [
-                'label' => __('Loan repayment cash credits'),
-                'sign' => '+',
-                'amount' => $repaymentCredits,
-                'detail' => __('Imported repayments credit member cash via LoanRepayment references. The formula counts EMI debits on LoanInstallment references only.'),
-            ];
-        }
-
-        if ($repaymentDebits > 0.00001) {
-            $flows[] = [
-                'label' => __('Loan repayment cash debits'),
-                'sign' => '−',
-                'amount' => $repaymentDebits,
-                'detail' => __('Paired repayment debits on LoanRepayment references are not included in the EMI debit component.'),
-            ];
-        }
-
-        return $flows;
+        return [];
     }
 
     /**
@@ -202,36 +168,7 @@ final class MemberInvariantDiagnosticsService
      */
     private function uncountedFundFlows(Member $member): array
     {
-        $accountId = $member->fundAccount?->id;
-
-        if ($accountId === null) {
-            return [];
-        }
-
-        $flows = [];
-
-        $repaymentCredits = $this->sumByReference($accountId, (int) $member->id, LoanRepayment::class, 'credit');
-        $repaymentDebits = $this->sumByReference($accountId, (int) $member->id, LoanRepayment::class, 'debit');
-
-        if ($repaymentCredits > 0.00001) {
-            $flows[] = [
-                'label' => __('Loan repayment fund credits'),
-                'sign' => '+',
-                'amount' => $repaymentCredits,
-                'detail' => __('Fund credits on LoanRepayment references are not counted in the installment repayment component.'),
-            ];
-        }
-
-        if ($repaymentDebits > 0.00001) {
-            $flows[] = [
-                'label' => __('Loan repayment fund debits'),
-                'sign' => '−',
-                'amount' => $repaymentDebits,
-                'detail' => __('Fund debits on LoanRepayment references are not counted in the installment repayment component.'),
-            ];
-        }
-
-        return $flows;
+        return [];
     }
 
     /**
@@ -251,51 +188,34 @@ final class MemberInvariantDiagnosticsService
     }
 
     /**
-     * @param  list<array{label: string, sign: string, amount: float, detail: string}>  $uncounted
      * @return list<array{id: int, date: string, type: string, amount: float, description: string, category: string}>
      */
-    private function mismatchCashTransactions(Member $member, array $uncounted): array
+    private function mismatchCashTransactions(Member $member): array
     {
-        if ($uncounted === []) {
-            return [];
-        }
-
         $accountId = $member->cashAccount?->id;
 
         if ($accountId === null) {
             return [];
         }
 
-        $contributionMorph = (new Contribution)->getMorphClass();
         $repaymentMorph = (new LoanRepayment)->getMorphClass();
 
         return Transaction::query()
             ->where('account_id', $accountId)
             ->where('member_id', $member->id)
-            ->where(function ($query) use ($contributionMorph, $repaymentMorph): void {
-                $query->where(function ($builder) use ($contributionMorph): void {
-                    $builder->where('reference_type', $contributionMorph)
-                        ->where('type', 'credit');
-                })->orWhere('reference_type', $repaymentMorph);
-            })
+            ->where('reference_type', $repaymentMorph)
             ->orderBy('transacted_at')
             ->orderBy('id')
             ->limit(20)
             ->get()
-            ->map(function (Transaction $transaction) use ($contributionMorph): array {
-                $category = $transaction->reference_type === $contributionMorph
-                    ? __('Contribution cash credit (uncounted)')
-                    : __('Loan repayment cash leg (uncounted)');
-
-                return [
-                    'id' => (int) $transaction->id,
-                    'date' => $transaction->transacted_at?->format('Y-m-d') ?? '—',
-                    'type' => (string) $transaction->type,
-                    'amount' => (float) $transaction->amount,
-                    'description' => (string) $transaction->description,
-                    'category' => $category,
-                ];
-            })
+            ->map(fn (Transaction $transaction): array => [
+                'id' => (int) $transaction->id,
+                'date' => $transaction->transacted_at?->format('Y-m-d') ?? '—',
+                'type' => (string) $transaction->type,
+                'amount' => (float) $transaction->amount,
+                'description' => (string) $transaction->description,
+                'category' => __('Loan repayment cash leg (uncounted)'),
+            ])
             ->all();
     }
 

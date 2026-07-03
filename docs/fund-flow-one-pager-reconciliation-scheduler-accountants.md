@@ -7,11 +7,13 @@ Full reference: [fund-flow-reconciliation-and-scheduler.md](fund-flow-reconcilia
 
 ### Slide 1 — Three mechanisms (do not confuse them)
 
-| Mechanism | Command | Output | Your use |
-|-----------|---------|--------|----------|
-| **Realtime** | (automatic on each `Transaction`) | Immediate exceptions | Catch drift at post time |
-| **Nightly batch** | `fund:nightly-reconciliation` | Live exception queue | Active remediation |
-| **Audit snapshot** | `fund:reconcile --daily` / `--monthly` | `reconciliation_snapshots` | Month-end audit PDF |
+| Mechanism | UI / command | Output | Your use |
+|-----------|--------------|--------|----------|
+| **Realtime snapshot** | **Run check now** / `fund:reconcile --realtime` | `reconciliation_snapshots` | Point-in-time ledger audit |
+| **Daily snapshot** | **Daily snapshot** / `fund:reconcile --daily` | Same checks + yesterday period metrics | Daily audit trail |
+| **Monthly snapshot** | **Monthly snapshot** / `fund:reconcile --monthly` | Same checks + prior month period metrics | Month-end pack |
+| **Exception queue** | **Exception queue re-check** / `fund:nightly-reconciliation` | Live `reconciliation_exceptions` | Active remediation (rebuilds queue) |
+| **Realtime guards** | (automatic on each `Transaction`) | Immediate exceptions | Catch drift at post time |
 
 **Posting ≠ clearance ≠ reconciliation.** Match/clear bank lines updates linkage — no extra cash journal when correct.
 
@@ -38,7 +40,7 @@ NIGHTLY_RECON_START
   → clear exception queue (fresh sweep)
   → master balanced? (tiny drift → rounding suspense)
   → domain sweeps: contributions · loans/EMI · fund tiers · bank · late fees · member formulas
-  → attemptAutoResolve on open exceptions
+  → attemptAutoResolve on open exceptions (metadata only; ledger fixes need admin Retry auto-resolve)
   → re-assert master balanced
 NIGHTLY_RECON_COMPLETE
 ```

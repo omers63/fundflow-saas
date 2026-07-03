@@ -8,6 +8,7 @@ use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
+use App\Support\LedgerSettings;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
@@ -28,7 +29,8 @@ final class SplitAccountTransactionAction
             ->icon('heroicon-o-scissors')
             ->color('info')
             ->authorize(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
-            ->visible(fn (Transaction $record): bool => app(AccountingService::class)->canSplitTransaction($record))
+            ->visible(fn (Transaction $record): bool => LedgerSettings::showSplitReverse()
+                && app(AccountingService::class)->canSplitTransaction($record))
             ->modalHeading(__('Split transaction'))
             ->modalDescription(fn (Transaction $record): string => self::modalDescription($record))
             ->modalSubmitActionLabel(__('Split into parts'))

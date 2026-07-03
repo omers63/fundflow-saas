@@ -10,6 +10,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\ReconciliationException;
@@ -59,9 +60,21 @@ class MemberInvariantService
             ? $this->sumByReference($fundAccountId, $member->id, LoanInstallment::class, 'debit')
             : 0.0;
 
-        $emiRepayments = $fundAccountId
+        $emiRepaymentsInstallment = $fundAccountId
             ? $this->sumByReference($fundAccountId, $member->id, LoanInstallment::class, 'credit')
             : 0.0;
+
+        $legacyEmiRepaymentsCredited = $fundAccountId
+            ? $this->sumByReference($fundAccountId, $member->id, LoanRepayment::class, 'credit')
+            : 0.0;
+
+        $legacyEmiRepaymentsDebited = $fundAccountId
+            ? $this->sumByReference($fundAccountId, $member->id, LoanRepayment::class, 'debit')
+            : 0.0;
+
+        $emiRepayments = $emiRepaymentsInstallment
+            + $legacyEmiRepaymentsCredited
+            - $legacyEmiRepaymentsDebited;
 
         $depositsReceived = $cashAccountId
             ? $this->sumByReference($cashAccountId, $member->id, FundPosting::class, 'credit')
@@ -83,8 +96,20 @@ class MemberInvariantService
             ? $this->sumContributionPrincipalDebited($cashAccountId, $member->id)
             : 0.0;
 
+        $contributionsCredited = $cashAccountId
+            ? $this->sumByReference($cashAccountId, $member->id, Contribution::class, 'credit')
+            : 0.0;
+
         $emiDebited = $cashAccountId
             ? $this->sumByReference($cashAccountId, $member->id, LoanInstallment::class, 'debit')
+            : 0.0;
+
+        $loanRepaymentCashCredited = $cashAccountId
+            ? $this->sumByReference($cashAccountId, $member->id, LoanRepayment::class, 'credit')
+            : 0.0;
+
+        $loanRepaymentCashDebited = $cashAccountId
+            ? $this->sumByReference($cashAccountId, $member->id, LoanRepayment::class, 'debit')
             : 0.0;
 
         $subscriptionFeesDebited = $cashAccountId
@@ -123,8 +148,11 @@ class MemberInvariantService
             + $directBankImportsPosted
             + $dependentTransfersIn
             + $refundsAndCorrections
+            + $contributionsCredited
+            + $loanRepaymentCashCredited
             - $contributionsDebited
             - $emiDebited
+            - $loanRepaymentCashDebited
             - $subscriptionFeesDebited
             - $lateFeesNet
             - $cashOuts
@@ -151,6 +179,9 @@ class MemberInvariantService
                 'contribution_fund_reversals' => $contributionFundReversals,
                 'loan_disbursements_from_fund' => $loanDisbursementsFromFund,
                 'guarantor_fund_debits' => $guarantorFundDebits,
+                'emi_repayments_installment' => $emiRepaymentsInstallment,
+                'emi_repayments_legacy_credited' => $legacyEmiRepaymentsCredited,
+                'emi_repayments_legacy_debited' => $legacyEmiRepaymentsDebited,
                 'emi_repayments' => $emiRepayments,
                 'opening_cash' => $openingCash,
                 'deposits_received' => $depositsReceived,
@@ -159,8 +190,11 @@ class MemberInvariantService
                 'direct_bank_imports_posted' => $directBankImportsPosted,
                 'dependent_transfers_in' => $dependentTransfersIn,
                 'refunds_and_recon_credits' => $refundsAndCorrections,
+                'contributions_credited' => $contributionsCredited,
                 'contributions_debited' => $contributionsDebited,
                 'emi_debited' => $emiDebited,
+                'loan_repayment_cash_credited' => $loanRepaymentCashCredited,
+                'loan_repayment_cash_debited' => $loanRepaymentCashDebited,
                 'subscription_fees_debited' => $subscriptionFeesDebited,
                 'late_fees_net' => $lateFeesNet,
                 'cash_outs' => $cashOuts,

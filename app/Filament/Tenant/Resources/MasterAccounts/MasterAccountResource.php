@@ -20,7 +20,6 @@ use Filament\Tables\Table;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Livewire\Livewire;
 use UnitEnum;
 
 class MasterAccountResource extends Resource
@@ -89,29 +88,14 @@ class MasterAccountResource extends Resource
 
     public static function table(Table $table): Table
     {
-        $tab = self::resolveListMasterAccountsTab();
-
         return MasterAccountsTable::configure(
-            $table->pluralModelLabel(UiLabelIcons::tableModelLabel(self::tabLabel($tab))),
-            showTypeColumn: $tab === 'all',
-            activeTab: $tab,
+            $table->pluralModelLabel(UiLabelIcons::tableModelLabel(self::tabLabel('all'))),
         );
     }
 
-    /**
-     * Must stay aligned with {@see ListMasterAccounts::getTabs()} keys and the `tab` URL query.
-     */
     public static function resolveListMasterAccountsTab(): string
     {
-        $livewire = Livewire::current();
-
-        if ($livewire instanceof ListMasterAccounts && filled($livewire->activeTab)) {
-            $tab = $livewire->activeTab;
-        } else {
-            $tab = request()->string('tab')->toString() ?: 'all';
-        }
-
-        return in_array($tab, self::tabKeys(), true) ? $tab : 'all';
+        return 'all';
     }
 
     public static function getRelations(): array

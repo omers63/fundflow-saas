@@ -8,6 +8,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Setting;
 use App\Services\AccountingService;
 use App\Support\BusinessDay;
+use App\Support\LedgerSettings;
 use Carbon\Carbon;
 use Closure;
 use Filament\Actions\Action;
@@ -37,7 +38,7 @@ final class AccountTransactionManualAdjustmentHeaderActions
             ->label(__('Credit'))
             ->icon(Heroicon::OutlinedArrowTrendingUp)
             ->color('success')
-            ->visible(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
+            ->visible(fn (): bool => self::manualCreditDebitVisible())
             ->modalHeading(__('Manual credit'))
             ->modalDescription(fn (): string => self::creditModalDescription($resolveAccount()))
             ->modalWidth('md')
@@ -71,7 +72,7 @@ final class AccountTransactionManualAdjustmentHeaderActions
             ->label(__('Debit'))
             ->icon(Heroicon::OutlinedArrowTrendingDown)
             ->color('danger')
-            ->visible(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
+            ->visible(fn (): bool => self::manualCreditDebitVisible())
             ->modalHeading(__('Manual debit'))
             ->modalDescription(fn (): string => self::debitModalDescription($resolveAccount()))
             ->modalWidth('md')
@@ -154,6 +155,15 @@ final class AccountTransactionManualAdjustmentHeaderActions
         }
 
         return [$credit, $debit, $refund];
+    }
+
+    private static function manualCreditDebitVisible(): bool
+    {
+        if (! (bool) Auth::guard('tenant')->user()?->is_admin) {
+            return false;
+        }
+
+        return LedgerSettings::showManualCreditDebit();
     }
 
     private static function creditModalDescription(Account $account): string

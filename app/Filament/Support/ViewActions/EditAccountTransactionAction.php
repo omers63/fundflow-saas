@@ -7,6 +7,7 @@ use App\Filament\Support\ActionModalFailure;
 use App\Filament\Support\MemberLedgerTagSelect;
 use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
+use App\Support\LedgerSettings;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DateTimePicker;
@@ -23,6 +24,7 @@ final class EditAccountTransactionAction
         return EditAction::make()
             ->modalWidth('lg')
             ->authorize(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
+            ->visible(fn (): bool => LedgerSettings::showEditDelete())
             ->modalHeading(fn (Transaction $record): string => filled($record->description)
                 ? $record->description
                 : __('Transaction #:id', ['id' => $record->id]))

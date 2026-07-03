@@ -141,12 +141,16 @@ final class ReconciliationSnapshotPresenter
                 'missing' => number_format((int) ($check['missing_ledger_count'] ?? 0)),
                 'delta' => MoneyDisplay::format((float) ($check['master_fund_delta'] ?? 0), $currency) ?? '—',
             ]),
+            'bank_pipeline' => __(':unposted unposted · :uncleared uncleared', [
+                'unposted' => number_format((int) ($check['bank_unposted_count'] ?? 0)),
+                'uncleared' => number_format((int) ($check['bank_uncleared_count'] ?? 0)),
+            ]),
             'active_loans_schedule_vs_ledger', 'approved_loans_disbursement_vs_ledger', 'loan_disbursement_cash_payout_integrity' => trans_choice(
                 ':count loan mismatch|:count loan mismatches',
                 (int) ($check['mismatch_count'] ?? $check['issue_count'] ?? 0),
                 ['count' => number_format((int) ($check['mismatch_count'] ?? $check['issue_count'] ?? 0))],
             ),
-            'bank_transaction_posting_integrity', 'member_portal_posting_integrity', 'contribution_flow_integrity',
+            'bank_transaction_posting_integrity', 'bank_pipeline', 'member_portal_posting_integrity', 'contribution_flow_integrity',
             'membership_application_fee_integrity', 'subscription_fee_integrity', 'loan_installment_flow_integrity',
             'member_cash_transfer_integrity', 'orphan_loan_accounts' => trans_choice(
                 ':count issue|:count issues',

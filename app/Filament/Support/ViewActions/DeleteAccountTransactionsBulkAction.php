@@ -5,6 +5,7 @@ namespace App\Filament\Support\ViewActions;
 use App\Filament\Support\AccountDetailInsightsRefresh;
 use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
+use App\Support\LedgerSettings;
 use Filament\Actions\DeleteBulkAction;
 use Illuminate\Support\Facades\Auth;
 use Throwable;
@@ -15,6 +16,7 @@ final class DeleteAccountTransactionsBulkAction
     {
         return DeleteBulkAction::make()
             ->authorize(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
+            ->visible(fn (): bool => LedgerSettings::showEditDelete())
             ->modalHeading(__('Delete selected transactions?'))
             ->modalDescription(__('Each selected line is reversed on its account balance, then removed.'))
             ->using(function (DeleteBulkAction $action, $records): void {

@@ -181,7 +181,7 @@ class ReconciliationReportService
             && $fundDeltaAbs <= $tolerance
             && $suspenseBalance <= $tolerance;
 
-        if (!$balanced) {
+        if (! $balanced) {
             $incrementWarning();
         }
 
@@ -1106,9 +1106,22 @@ class ReconciliationReportService
             'note' => 'Unposted counts real bank CSV imports (status=imported) excluding synthetic operational clearance statements. Uncleared uses is_cleared=false. SMS import is not available.',
         ];
 
-        if ($pipeline['bank_unposted_count'] > 0 || $pipeline['bank_uncleared_count'] > 0) {
+        $pipelineHasBacklog = $pipeline['bank_unposted_count'] > 0 || $pipeline['bank_uncleared_count'] > 0;
+
+        if ($pipelineHasBacklog) {
             $incrementWarning();
         }
+
+        $checks['bank_pipeline'] = [
+            'label' => 'Bank import & clearance pipeline',
+            'severity' => $pipelineHasBacklog ? 'warning' : 'ok',
+            'bank_unposted_count' => $pipeline['bank_unposted_count'],
+            'bank_unposted_amount' => $pipeline['bank_unposted_amount'],
+            'bank_uncleared_count' => $pipeline['bank_uncleared_count'],
+            'bank_uncleared_amount' => $pipeline['bank_uncleared_amount'],
+            'issue_count' => $pipeline['bank_unposted_count'] + $pipeline['bank_uncleared_count'],
+            'note' => $pipeline['note'],
+        ];
 
         // --- 7) Period metrics ---
         $periodMetrics = [
@@ -1156,6 +1169,7 @@ class ReconciliationReportService
                 'subscription_fee_integrity' => $checks['subscription_fee_integrity']['severity'],
                 'member_portal_posting_integrity' => $checks['member_portal_posting_integrity']['severity'],
                 'bank_transaction_posting_integrity' => $checks['bank_transaction_posting_integrity']['severity'],
+                'bank_pipeline' => $checks['bank_pipeline']['severity'],
                 'sms_transaction_posting_integrity' => $checks['sms_transaction_posting_integrity']['severity'],
                 'loan_installment_flow_integrity' => $checks['loan_installment_flow_integrity']['severity'],
                 'member_cash_transfer_integrity' => $checks['member_cash_transfer_integrity']['severity'],
@@ -1187,6 +1201,7 @@ class ReconciliationReportService
             $covRow('Book-wide: stored balance vs ledger; trial balance; paired control totals', ['ledger_balances', 'global_trial', 'paired_control_totals']),
             $covRow('Master cash vs declared bank / statement balance (optional)', ['bank_statement_vs_book']),
             $covRow('Bank import rows → ledger posting hygiene', ['bank_transaction_posting_integrity']),
+            $covRow('Bank pipeline: unposted imports / uncleared lines', ['bank_pipeline']),
             $covRow('SMS import rows → ledger posting hygiene', ['sms_transaction_posting_integrity']),
             $covRow('Member portal “post funds” → ledger', ['member_portal_posting_integrity']),
             $covRow('Contribution cycle: rows vs member fund + master fund legs', ['contribution_flow_integrity']),

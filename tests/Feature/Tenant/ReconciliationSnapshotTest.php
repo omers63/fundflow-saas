@@ -48,6 +48,7 @@ test('reconciliation report includes legacy check keys and control layer', funct
         'contributions_ledger',
         'member_portal_posting_integrity',
         'bank_transaction_posting_integrity',
+        'bank_pipeline',
         'sms_transaction_posting_integrity',
         'active_loans_schedule_vs_ledger',
         'approved_loans_disbursement_vs_ledger',
@@ -337,7 +338,7 @@ test('run check now completes in simple mode', function () {
 test('reconciliation overview renders page action modals in advanced mode', function () {
     $admin = User::create([
         'name' => 'Recon Modal Admin',
-        'email' => 'recon-modal-' . uniqid('', true) . '@fund.test',
+        'email' => 'recon-modal-'.uniqid('', true).'@fund.test',
         'password' => bcrypt('password'),
         'email_verified_at' => now(),
         'is_admin' => true,
@@ -448,7 +449,7 @@ test('reconciliation exceptions tab selects issue and shows analysis panel', fun
 test('admin can delete a reconciliation snapshot from snapshots tab', function () {
     $admin = User::create([
         'name' => 'Recon Delete Admin',
-        'email' => 'recon-delete-' . uniqid('', true) . '@fund.test',
+        'email' => 'recon-delete-'.uniqid('', true).'@fund.test',
         'password' => bcrypt('password'),
         'email_verified_at' => now(),
         'is_admin' => true,
@@ -491,7 +492,7 @@ test('admin can delete a reconciliation snapshot from snapshots tab', function (
 test('admin can bulk delete reconciliation snapshots', function () {
     $admin = User::create([
         'name' => 'Recon Bulk Delete Admin',
-        'email' => 'recon-bulk-delete-' . uniqid('', true) . '@fund.test',
+        'email' => 'recon-bulk-delete-'.uniqid('', true).'@fund.test',
         'password' => bcrypt('password'),
         'email_verified_at' => now(),
         'is_admin' => true,
@@ -545,7 +546,7 @@ test('admin can bulk delete reconciliation snapshots', function () {
 test('non-admin cannot delete reconciliation snapshots', function () {
     $memberUser = User::create([
         'name' => 'Recon Member',
-        'email' => 'recon-member-' . uniqid('', true) . '@fund.test',
+        'email' => 'recon-member-'.uniqid('', true).'@fund.test',
         'password' => bcrypt('password'),
         'email_verified_at' => now(),
         'is_admin' => false,
@@ -615,5 +616,9 @@ test('bank pipeline unposted excludes synthetic operational clearance rows', fun
     );
 
     expect($report['pipeline']['bank_unposted_count'])->toBe(1)
-        ->and($report['pipeline']['bank_unposted_amount'])->toBe(4500.0);
+        ->and($report['pipeline']['bank_unposted_amount'])->toBe(4500.0)
+        ->and($report['checks']['bank_pipeline']['severity'])->toBe('warning')
+        ->and($report['verdict']['warnings'])->toBe(
+            collect($report['checks'])->filter(fn (array $check): bool => ($check['severity'] ?? '') === 'warning')->count(),
+        );
 });

@@ -10,6 +10,7 @@ use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Support\ViewAccountTransactionAction as TenantViewAccountTransactionAction;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
+use App\Support\LedgerSettings;
 use App\Support\MemberDateDisplay;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\EditAction;
@@ -206,7 +207,7 @@ final class ViewAccountTransactionAction
                     return ViewAction::getDefaultName();
                 }
 
-                return Auth::guard('tenant')->user()?->is_admin
+                return Auth::guard('tenant')->user()?->is_admin && LedgerSettings::showEditDelete()
                     ? EditAction::getDefaultName()
                     : ViewAction::getDefaultName();
             });

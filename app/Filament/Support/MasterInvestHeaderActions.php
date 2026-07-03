@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Filament\Support;
 
 use App\Models\Tenant\Account;
+use App\Models\Tenant\Setting;
+use App\Services\AccountBalanceService;
 use App\Services\MasterInvestInService;
 use App\Services\MasterInvestOutService;
 use App\Support\BusinessDay;
@@ -12,11 +14,15 @@ use Carbon\Carbon;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\HtmlString;
 
 /**
  * Header actions for the master invest account transaction table.
@@ -38,7 +44,7 @@ final class MasterInvestHeaderActions
             ->modalHeading(__('Out'))
             ->modalDescription(__('Transfers funds from Master Fund into Master Invest, then debits Master Invest and creates a pending bank line to match when the payment appears on an imported statement.'))
             ->modalWidth('md')
-            ->schema(self::formSchema())
+            ->schema(self::investOutFormSchema())
             ->action(function (array $data, Action $action, MasterInvestOutService $investOutService) use ($resolveAccount): void {
                 $account = $resolveAccount();
 
@@ -116,6 +122,61 @@ final class MasterInvestHeaderActions
         $account = $resolveAccount();
 
         return $account->is_master && $account->type === 'invest';
+    }
+
+    /**
+     * @return array<int, DateTimePicker|Placeholder|TextInput|Textarea>
+     */
+    private static function investOutFormSchema(): array
+    {
+        $currency = fn(): string => Setting::get('general', 'currency', 'USD');
+
+        return [
+            DateTimePicker::make('transacted_at')
+                ->label(__('Transaction date & time'))
+                ->default(BusinessDay::now())
+                ->required()
+                ->native(false)
+                ->seconds(true)
+                ->live(),
+            Placeholder::make('available_master_fund_balance')
+                ->label(__('Available master fund balance'))
+                ->content(function (Get $get) use ($currency): Htmlable {
+                    $transactedAt = $get('transacted_at');
+
+                    if (blank($transactedAt)) {
+                        return new HtmlString(
+                            '<span class="text-sm text-gray-500 dark:text-gray-400">'
+                            . e(__('Select a transaction date.'))
+                            . '</span>'
+                        );
+                    }
+
+                    $at = Carbon::parse($transactedAt);
+                    $balance = app(AccountBalanceService::class)->masterFundBalanceAtDate($at);
+                    $formatted = MoneyDisplay::format($balance, $currency()) ?? '—';
+
+                    return new HtmlString(
+                        '<div class="flex flex-col gap-1.5">'
+                        . '<span class="text-base font-semibold tabular-nums break-words">' . e($formatted) . '</span>'
+                        . '<span class="text-sm text-gray-500 dark:text-gray-400">'
+                        . e(__('as of :date', ['date' => $at->format('M j, Y g:i A')]))
+                        . '</span>'
+                        . '</div>'
+                    );
+                }),
+            TextInput::make('amount')
+                ->label(__('Amount'))
+                ->numeric()
+                ->required()
+                ->minValue(0.01)
+                ->step(0.01),
+            Textarea::make('description')
+                ->label(__('Description'))
+                ->required()
+                ->rows(2)
+                ->maxLength(500),
+        ];
     }
 
     /**
