@@ -792,21 +792,14 @@
     color: #fcd34d;
 }
 
-/* Admin create loan wizard */
+/* Admin create loan wizard — full width, Filament arrow stepper */
 .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard {
+    width: 100%;
     gap: 0.75rem;
 }
 
 .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    overflow: visible;
-}
-
-.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header-step {
-    display: flex !important;
-    min-width: 0;
-    border-radius: 0.75rem;
+    overflow-x: auto;
 }
 
 .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header-step-btn {
@@ -814,7 +807,6 @@
     align-items: center;
     justify-content: flex-start;
     gap: 0.25rem;
-    width: 100%;
     padding: 0.5rem 0.25rem;
     text-align: center;
 }
@@ -833,10 +825,6 @@
 }
 
 .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header-step-description {
-    display: none;
-}
-
-.fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-header-step-separator {
     display: none;
 }
 

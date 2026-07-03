@@ -31,6 +31,7 @@ final class MasterInvestDisbursementService
         float $amount,
         string $description,
         ?DateTimeInterface $transactedAt = null,
+        ?InvestDisbursement $disbursement = null,
     ): InvestDisbursement {
         $this->assertMasterInvestAccount($masterInvest);
 
@@ -50,9 +51,9 @@ final class MasterInvestDisbursementService
 
         $transactedAt = $transactedAt ?? BusinessDay::now();
 
-        return ReconciliationService::withoutRealtimeChecks(function () use ($masterInvest, $amount, $description, $transactedAt): InvestDisbursement {
-            return DB::transaction(function () use ($masterInvest, $amount, $description, $transactedAt): InvestDisbursement {
-                $disbursement = InvestDisbursement::create([
+        return ReconciliationService::withoutRealtimeChecks(function () use ($masterInvest, $amount, $description, $transactedAt, $disbursement): InvestDisbursement {
+            return DB::transaction(function () use ($masterInvest, $amount, $description, $transactedAt, $disbursement): InvestDisbursement {
+                $disbursement ??= InvestDisbursement::create([
                     'amount' => $amount,
                     'description' => $description,
                     'transacted_at' => $transactedAt,

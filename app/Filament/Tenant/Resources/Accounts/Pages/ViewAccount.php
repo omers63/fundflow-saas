@@ -2,9 +2,11 @@
 
 namespace App\Filament\Tenant\Resources\Accounts\Pages;
 
+use App\Filament\Concerns\FocusesLedgerTransactionOnViewRecord;
 use App\Filament\Concerns\RefreshesResourceRecord;
 use App\Filament\Support\MemberAccountTableActions;
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
+use App\Filament\Tenant\Resources\Accounts\RelationManagers\TransactionsRelationManager;
 use App\Filament\Tenant\Widgets\AccountDetailInsightsWidget;
 use App\Models\Tenant\Setting;
 use Filament\Actions\Action;
@@ -16,9 +18,17 @@ use Livewire\Attributes\On;
 
 class ViewAccount extends ViewRecord
 {
+    use FocusesLedgerTransactionOnViewRecord;
     use RefreshesResourceRecord;
 
     protected static string $resource = AccountResource::class;
+
+    public function mount(int|string $record): void
+    {
+        parent::mount($record);
+
+        $this->bootstrapFocusedLedgerTransaction(TransactionsRelationManager::class);
+    }
 
     public function getHeading(): string
     {

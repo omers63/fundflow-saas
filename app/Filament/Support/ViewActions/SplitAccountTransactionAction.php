@@ -116,7 +116,7 @@ final class SplitAccountTransactionAction
                     .e(__($record->type === 'credit' ? 'Credit' : 'Debit'))
                     .')</span>'
                     .' — '
-                    .e($record->description ?? '—')
+                    .e($record->displayDescription())
                 )),
             Repeater::make('parts')
                 ->label(__('Split into parts'))

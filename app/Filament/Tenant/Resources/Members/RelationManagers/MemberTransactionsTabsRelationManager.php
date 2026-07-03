@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\Members\RelationManagers;
 
+use App\Filament\Concerns\OpensFocusedLedgerTransaction;
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\AccountDetailInsightsRefresh;
 use App\Filament\Support\AccountTransactionAmountColumn;
+use App\Filament\Support\AccountTransactionDescriptionColumn;
+use App\Filament\Support\AccountTransactionLinkedSourceColumn;
+use App\Filament\Support\AccountTransactionLinkedSourceFilter;
 use App\Filament\Support\AccountTransactionManualAdjustmentHeaderActions;
 use App\Filament\Support\AccountTransactionTypeFilter;
 use App\Filament\Support\DateColumnRangeFilter;
@@ -24,7 +28,10 @@ use Illuminate\Database\Eloquent\Builder;
 
 class MemberTransactionsTabsRelationManager extends RelationManager
 {
+    use OpensFocusedLedgerTransaction;
     use TranslatesRelationManagerTitle;
+
+    protected static bool $isLazy = false;
 
     protected string $view = 'filament.tenant.resources.members.relation-managers.member-transactions-tabs';
 
@@ -65,7 +72,12 @@ class MemberTransactionsTabsRelationManager extends RelationManager
             ->columns([
                 TextColumn::make('transacted_at')->dateTime()->sortable(),
                 AccountTransactionAmountColumn::make(),
-                TextColumn::make('description')->wrap(),
+                AccountTransactionDescriptionColumn::make(),
+                AccountTransactionLinkedSourceColumn::make(),
+                TextColumn::make('id')
+                    ->label(__('Txn #'))
+                    ->searchable()
+                    ->sortable(),
                 TextColumn::make('balance_after')
                     ->label(__('Balance after'))
                     ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
@@ -75,6 +87,7 @@ class MemberTransactionsTabsRelationManager extends RelationManager
                 SelectFilter::make('type')
                     ->options(AccountTransactionTypeFilter::options()),
                 DateColumnRangeFilter::make('transacted_at', __('Date')),
+                AccountTransactionLinkedSourceFilter::make(),
             ]);
 
         if (in_array($this->ledgerTab, ['cash', 'fund'], true)) {

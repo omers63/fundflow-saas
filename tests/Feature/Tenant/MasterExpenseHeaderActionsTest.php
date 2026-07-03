@@ -3,18 +3,24 @@
 declare(strict_types=1);
 
 use App\Filament\Support\MasterExpenseHeaderActions;
+use App\Filament\Tenant\Resources\MasterAccounts\Pages\ViewMasterAccount;
+use App\Filament\Tenant\Resources\MasterAccounts\RelationManagers\TransactionsRelationManager as MasterTransactionsRelationManager;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\ReconciliationException;
+use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\MasterExpenseDisbursementService;
+use Filament\Facades\Filament;
+use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
+    Filament::setCurrentPanel('tenant');
     Account::query()->delete();
 });
 
@@ -94,4 +100,49 @@ test('disburse expense debits master expense only and creates uncleared bank lin
         ->and($disbursement->bankTransaction->is_cleared)->toBeFalse()
         ->and((float) $disbursement->bankTransaction->amount)->toBe(-400.0)
         ->and(BankTransaction::query()->count())->toBe(1);
+});
+
+test('master expense ledger shows expense id column', function () {
+    $admin = User::create([
+        'name' => 'Admin',
+        'email' => 'admin-expense-column-'.uniqid('', true).'@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    $masterExpense = Account::factory()->masterExpense()->withBalance(1_000)->create();
+    Account::factory()->masterCash()->withBalance(10_000)->create();
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(MasterTransactionsRelationManager::class, [
+            'ownerRecord' => $masterExpense,
+            'pageClass' => ViewMasterAccount::class,
+        ])
+        ->assertTableColumnExists('expense_id');
+});
+
+test('master expense ledger search ignores virtual expense id column', function () {
+    $admin = User::create([
+        'name' => 'Admin',
+        'email' => 'admin-expense-search-'.uniqid('', true).'@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    $masterExpense = Account::factory()->masterExpense()->withBalance(1_000)->create();
+
+    Transaction::factory()->for($masterExpense)->create([
+        'type' => 'credit',
+        'amount' => 1,
+        'balance_after' => 1,
+        'description' => 'Office reserve funding',
+    ]);
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(MasterTransactionsRelationManager::class, [
+            'ownerRecord' => $masterExpense,
+            'pageClass' => ViewMasterAccount::class,
+        ])
+        ->searchTable('Office')
+        ->assertSuccessful();
 });

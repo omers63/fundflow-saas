@@ -213,7 +213,7 @@ final class MemberInvariantDiagnosticsService
                 'date' => $transaction->transacted_at?->format('Y-m-d') ?? '—',
                 'type' => (string) $transaction->type,
                 'amount' => (float) $transaction->amount,
-                'description' => (string) $transaction->description,
+                'description' => $transaction->displayDescription(),
                 'category' => __('Loan repayment cash leg (uncounted)'),
             ])
             ->all();
@@ -245,7 +245,7 @@ final class MemberInvariantDiagnosticsService
                 'date' => $transaction->transacted_at?->format('Y-m-d') ?? '—',
                 'type' => (string) $transaction->type,
                 'amount' => (float) $transaction->amount,
-                'description' => (string) $transaction->description,
+                'description' => $transaction->displayDescription(),
                 'category' => __('Loan repayment fund leg (uncounted)'),
             ])
             ->all();

@@ -84,7 +84,7 @@ final class AccountTransactionExportService
             $transaction->type,
             $transaction->amount,
             $transaction->balance_after,
-            $transaction->description,
+            $transaction->displayDescription(),
             $transaction->member?->member_number,
             $transaction->reference_type,
             $transaction->reference_id,

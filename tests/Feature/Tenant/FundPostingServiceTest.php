@@ -169,6 +169,17 @@ test('accept credits master cash and member cash', function () {
                 ->whereIn('reference_id', $postingLines->pluck('id'))
                 ->exists(),
         )->toBeFalse();
+
+    $masterMirror = Transaction::query()
+        ->where('account_id', Account::masterCash()->id)
+        ->where('type', 'credit')
+        ->latest('id')
+        ->first();
+
+    expect($masterMirror)->not->toBeNull()
+        ->and($masterMirror->description)->toContain('John Doe')
+        ->and($masterMirror->description)->not->toContain('John Doe (John Doe)')
+        ->and(substr_count((string) $masterMirror->description, 'John Doe'))->toBe(1);
 });
 
 test('accepting deposit triggers arrear settlement for the member', function () {

@@ -43,11 +43,18 @@ final class MasterInvestOutService
 
         return ReconciliationService::withoutRealtimeChecks(function () use ($masterInvest, $amount, $description, $transactedAt): InvestDisbursement {
             return DB::transaction(function () use ($masterInvest, $amount, $description, $transactedAt): InvestDisbursement {
+                $disbursement = InvestDisbursement::create([
+                    'amount' => $amount,
+                    'description' => $description,
+                    'transacted_at' => $transactedAt,
+                ]);
+
                 $this->accounting->fundReserveAccountFromMasterFund(
                     $masterInvest,
                     $amount,
                     $description,
                     $transactedAt,
+                    $disbursement,
                 );
 
                 return $this->disbursements->disburse(
@@ -55,6 +62,7 @@ final class MasterInvestOutService
                     $amount,
                     $description,
                     $transactedAt,
+                    $disbursement,
                 );
             });
         });

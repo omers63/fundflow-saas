@@ -30,7 +30,7 @@ final class ViewAccountTransactionAction
         return ViewAction::make()
             ->modalWidth('lg')
             ->modalHeading(fn (Transaction $record): string => filled($record->description)
-                ? $record->description
+                ? $record->displayDescription()
                 : __('Transaction #:id', ['id' => $record->id]))
             ->mutateRecordDataUsing(function (array $data, Transaction $record): array {
                 $record->loadMissing(['account', 'member', 'reference']);
@@ -45,9 +45,10 @@ final class ViewAccountTransactionAction
                     'signed_amount_display' => MoneyDisplay::format($record->getSignedAmount(), $currency),
                     'balance_after_display' => MoneyDisplay::format((float) $record->balance_after, $currency),
                     'type_display' => Transaction::typeLabel($record->type),
-                    'account_name' => $record->account?->displayLabel(),
+                    'account_name' => $record->ledgerAccountLabel(),
                     'member_tag' => $record->member?->name,
-                    'reference_summary' => $record->bankImportSummary() ?? $record->referenceSummary(),
+                    'description' => $record->displayDescription(),
+                    'reference_summary' => $record->linkedSourceDetail(),
                     'created_at_display' => $record->created_at?->format('M j, Y g:i A'),
                     'updated_at_display' => $record->updated_at?->format('M j, Y g:i A'),
                 ];
@@ -79,7 +80,6 @@ final class ViewAccountTransactionAction
         $transactedAt = MemberDateDisplay::format($record->transacted_at, 'M j, Y g:i A') ?? __('—');
         $signedAmount = MoneyDisplay::format($record->getSignedAmount(), $currency);
         $balanceAfter = MoneyDisplay::format((float) $record->balance_after, $currency);
-        $reference = $record->bankImportSummary();
 
         $sections = [
             [
@@ -89,6 +89,7 @@ final class ViewAccountTransactionAction
                     'type' => $record->type,
                     'chip' => $record->memberFacingTypeLabel(),
                     'chipVariant' => $record->type === 'credit' ? 'green' : 'gray',
+                    'subtitle' => $record->ledgerAccountLabel(memberFacing: true),
                 ],
             ],
             [
@@ -96,7 +97,7 @@ final class ViewAccountTransactionAction
                 'columns' => 3,
                 'items' => array_values(array_filter([
                     ['label' => __('Date'), 'value' => $transactedAt],
-                    ['label' => __('Account'), 'value' => self::memberPortalAccountLabel($record)],
+                    ['label' => __('Account'), 'value' => $record->ledgerAccountLabel(memberFacing: true)],
                     ['label' => __('Balance after'), 'value' => $balanceAfter],
                     filled($record->member?->name)
                     ? ['label' => __('Member tag'), 'value' => $record->member->name]
@@ -105,29 +106,39 @@ final class ViewAccountTransactionAction
             ],
         ];
 
-        if (filled($reference) && $reference !== $heading) {
-            $sections[] = [
-                'title' => __('Reference'),
-                'prose' => $reference,
-            ];
+        $referenceSection = self::referenceModalSection($record, memberFacing: true, heading: $heading);
+
+        if ($referenceSection !== null) {
+            $sections[] = $referenceSection;
         }
 
         return $sections;
     }
 
-    private static function memberPortalAccountLabel(Transaction $record): string
+    /**
+     * @return array{title: string, columns: int, items: array<int, array{label: string, value: string}>}|null
+     */
+    public static function referenceModalSection(Transaction $record, bool $memberFacing, ?string $heading): ?array
     {
-        $account = $record->account;
+        $items = $record->modalReferenceItems($memberFacing);
 
-        if ($account === null) {
-            return __('—');
+        if ($heading !== null) {
+            $items = array_values(array_filter(
+                $items,
+                fn (array $item): bool => ($item['label'] ?? '') !== __('Linked source')
+                || ($item['value'] ?? '') !== $heading,
+            ));
         }
 
-        return match ($account->type) {
-            'cash' => __('Cash account'),
-            'fund' => __('Fund account'),
-            default => $account->name,
-        };
+        if ($items === []) {
+            return null;
+        }
+
+        return [
+            'title' => __('Reference'),
+            'columns' => 2,
+            'items' => $items,
+        ];
     }
 
     /**
@@ -162,7 +173,7 @@ final class ViewAccountTransactionAction
                         ->rows(3)
                         ->columnSpanFull(),
                     Textarea::make('reference_summary')
-                        ->label(__('Reference'))
+                        ->label(__('Linked source'))
                         ->placeholder(__('—'))
                         ->rows(2)
                         ->columnSpanFull(),

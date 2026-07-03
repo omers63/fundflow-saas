@@ -760,7 +760,7 @@ final class MemberDetailInsightsService
             [
                 'key' => 'active',
                 'label' => __('Active'),
-                'state' => $member->status === 'active' && !$arrears['is_delinquent'] ? 'complete' : ($arrears['is_delinquent'] ? 'warning' : 'upcoming'),
+                'state' => $member->status === 'active' && ! $arrears['is_delinquent'] ? 'complete' : ($arrears['is_delinquent'] ? 'warning' : 'upcoming'),
             ],
             [
                 'key' => 'cycle',
@@ -810,8 +810,8 @@ final class MemberDetailInsightsService
             ? __('Joined :date', ['date' => Carbon::parse((string) $member->joined_at)->format('d M Y')])
             : null,
             'active' => match (true) {
-                    $member->status === 'active' && $arrears['is_delinquent'] => __('Active with arrears — clear obligations to restore portal access'),
-                    $member->status === 'active' => __('Membership is active'),
+                $member->status === 'active' && $arrears['is_delinquent'] => __('Active with arrears — clear obligations to restore portal access'),
+                $member->status === 'active' => __('Membership is active'),
                 default => Member::statusOptions()[$member->status] ?? ucfirst($member->status),
             },
             'cycle' => $postedThisPeriod
@@ -906,7 +906,7 @@ final class MemberDetailInsightsService
             ->limit(5)
             ->get()
             ->map(fn (Transaction $transaction): array => [
-                'description' => Str::limit($transaction->description ?? '—', 40),
+                'description' => Str::limit($transaction->displayDescription(), 40),
                 'transacted_at' => $transaction->transacted_at?->format('d M, H:i'),
                 'amount' => (float) $transaction->amount,
                 'signed_class' => $transaction->type === 'credit'

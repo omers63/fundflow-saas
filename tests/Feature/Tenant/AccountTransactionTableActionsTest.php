@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Filament\Support\ViewActions\ViewAccountTransactionAction;
 use App\Filament\Tenant\Resources\Accounts\Pages\ViewAccount;
 use App\Filament\Tenant\Resources\Accounts\RelationManagers\TransactionsRelationManager;
+use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Resources\MasterAccounts\Pages\ViewMasterAccount;
 use App\Filament\Tenant\Resources\MasterAccounts\RelationManagers\TransactionsRelationManager as MasterTransactionsRelationManager;
 use App\Models\Tenant\Account;
@@ -123,6 +124,75 @@ test('master cash transaction table search does not query virtual bank import co
         ])
         ->searchTable('extra cash')
         ->assertSuccessful();
+});
+
+test('master account transactions relation manager loads with transaction query param', function () {
+    $admin = User::create([
+        'name' => 'Admin',
+        'email' => 'admin-txn-focus-'.uniqid('', true).'@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    $account = Account::masterCash();
+    $account->update(['balance' => 250]);
+
+    $transaction = Transaction::factory()->for($account)->create([
+        'type' => 'credit',
+        'amount' => 250,
+        'balance_after' => 250,
+        'description' => 'Null-reference diagnostic row',
+        'transacted_at' => now(),
+        'reference_type' => null,
+        'reference_id' => null,
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+
+    $component = Livewire::actingAs($admin, 'tenant')
+        ->withQueryParams(['transaction' => $transaction->id])
+        ->test(MasterTransactionsRelationManager::class, [
+            'ownerRecord' => $account,
+            'pageClass' => ViewMasterAccount::class,
+        ])
+        ->assertSuccessful()
+        ->mountTableAction('edit', (string) $transaction->getKey());
+
+    expect($component->instance()->getMountedAction()?->getName())->toBe('edit');
+});
+
+test('view master account activates transaction history tab from transaction query param', function () {
+    $admin = User::create([
+        'name' => 'Admin',
+        'email' => 'admin-txn-tab-'.uniqid('', true).'@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    $account = Account::masterCash();
+    $account->update(['balance' => 100]);
+
+    $transaction = Transaction::factory()->for($account)->create([
+        'type' => 'credit',
+        'amount' => 100,
+        'balance_after' => 100,
+        'description' => 'Focus tab test',
+        'transacted_at' => now(),
+    ]);
+
+    $transactionsTabKey = (string) array_search(
+        MasterTransactionsRelationManager::class,
+        MasterAccountResource::getRelations(),
+        true,
+    );
+
+    Filament::setCurrentPanel('tenant');
+
+    Livewire::actingAs($admin, 'tenant')
+        ->withQueryParams(['transaction' => $transaction->id])
+        ->test(ViewMasterAccount::class, ['record' => $account->getKey()])
+        ->assertSuccessful()
+        ->assertSet('activeRelationManager', $transactionsTabKey);
 });
 
 test('delete transaction reverses balance and removes row', function () {

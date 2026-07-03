@@ -26,7 +26,7 @@ final class EditAccountTransactionAction
             ->authorize(fn (): bool => (bool) Auth::guard('tenant')->user()?->is_admin)
             ->visible(fn (): bool => LedgerSettings::showEditDelete())
             ->modalHeading(fn (Transaction $record): string => filled($record->description)
-                ? $record->description
+                ? $record->displayDescription()
                 : __('Transaction #:id', ['id' => $record->id]))
             ->modalDescription(__('Changes to amount or type adjust this account balance. Linked source records are not updated here.'))
             ->fillForm(fn (Transaction $record): array => self::formData($record))
@@ -55,7 +55,8 @@ final class EditAccountTransactionAction
             'description' => $record->description,
             'transacted_at' => $record->transacted_at,
             'member_id' => $record->member_id,
-            'reference_summary' => $record->bankImportSummary() ?? $record->referenceSummary(),
+            'account_name' => $record->ledgerAccountLabel(),
+            'reference_summary' => $record->linkedSourceDetail(),
         ];
     }
 
@@ -86,6 +87,11 @@ final class EditAccountTransactionAction
                         ->required()
                         ->native(false)
                         ->seconds(true),
+                    TextInput::make('account_name')
+                        ->label(__('Account'))
+                        ->disabled()
+                        ->dehydrated(false)
+                        ->placeholder(__('—')),
                     Textarea::make('description')
                         ->label(__('Description'))
                         ->required()
@@ -95,12 +101,11 @@ final class EditAccountTransactionAction
                         ->visible(fn (Transaction $record): bool => (bool) $record->account?->is_master)
                         ->columnSpanFull(),
                     TextInput::make('reference_summary')
-                        ->label(__('Reference'))
+                        ->label(__('Linked source'))
                         ->disabled()
                         ->dehydrated(false)
                         ->placeholder(__('—'))
-                        ->columnSpanFull()
-                        ->visible(fn (?string $state): bool => filled($state)),
+                        ->columnSpanFull(),
                 ]),
         ];
     }

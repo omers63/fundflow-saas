@@ -27,6 +27,7 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
@@ -162,6 +163,9 @@ class ApplyForLoan extends Page implements HasForms
                                 ->default(LoanSettings::defaultApplicationGraceCycles())
                                 ->required()
                                 ->native(false),
+                            Toggle::make('is_emergency')
+                                ->label(__('Emergency loan'))
+                                ->helperText(__('Bypasses standard queue and uses the emergency fund tier.')),
                             $strategyRadio,
                             $strategyFixed,
                             $excessDisposition,
@@ -254,6 +258,9 @@ class ApplyForLoan extends Page implements HasForms
                                 ->label(__('Guarantor name'))
                                 ->visible(fn (Get $get): bool => filled($get('guarantor_name')))
                                 ->content(fn (Get $get): string => (string) ($get('guarantor_name') ?? '—')),
+                            Placeholder::make('review_emergency')
+                                ->label(__('Emergency loan'))
+                                ->content(fn (Get $get): string => ($get('is_emergency') ?? false) ? __('Yes') : __('No')),
                             Placeholder::make('review_application_form')
                                 ->label(__('Signed application form'))
                                 ->content(fn (): string => __('Uploaded')),
@@ -304,7 +311,7 @@ class ApplyForLoan extends Page implements HasForms
                 (float) $data['amount'],
                 (string) $data['purpose'],
                 null,
-                false,
+                (bool) ($data['is_emergency'] ?? false),
                 ((int) ($data['grace_cycles'] ?? 1)) > 0,
                 (int) ($data['grace_cycles'] ?? 1),
                 filled($data['witness1_name'] ?? null) ? (string) $data['witness1_name'] : null,

@@ -103,7 +103,7 @@ final class ReverseAccountTransactionAction
             .' · '.e($typeLabel)
             .' · '.e($signedAmount ?? '—')
             .'</div>'
-            .'<div class="truncate text-gray-400 dark:text-gray-500">'.e($record->description ?? '—').'</div>'
+            .'<div class="truncate text-gray-400 dark:text-gray-500">'.e($record->displayDescription()).'</div>'
             .'</div>'
         );
     }

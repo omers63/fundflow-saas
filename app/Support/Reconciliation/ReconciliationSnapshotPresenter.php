@@ -7,12 +7,35 @@ namespace App\Support\Reconciliation;
 use App\Filament\Support\MoneyDisplay;
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
+use App\Filament\Tenant\Resources\CashOutRequests\CashOutRequestResource;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
+use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
+use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
+use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
+use App\Filament\Tenant\Resources\ReconciliationExceptions\ReconciliationExceptionResource;
+use App\Filament\Tenant\Resources\SmsTransactions\SmsTransactionResource;
 use App\Filament\Tenant\Support\BankClearingTabRegistry;
+use App\Models\Tenant\Account;
+use App\Models\Tenant\BankTransaction;
+use App\Models\Tenant\CashOutRequest;
+use App\Models\Tenant\Contribution;
+use App\Models\Tenant\ExpenseDisbursement;
+use App\Models\Tenant\FeeDeduction;
+use App\Models\Tenant\FundPosting;
+use App\Models\Tenant\InvestDisbursement;
+use App\Models\Tenant\InvestReturn;
+use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\LoanRepayment;
+use App\Models\Tenant\Member;
+use App\Models\Tenant\MembershipApplication;
+use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Models\Tenant\Setting;
+use App\Models\Tenant\SmsTransaction;
+use App\Models\Tenant\Transaction;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\HtmlString;
 
@@ -121,7 +144,14 @@ final class ReconciliationSnapshotPresenter
                 'count' => number_format((int) ($check['mismatch_count'] ?? 0)),
                 'checked' => number_format((int) ($check['accounts_checked'] ?? 0)),
             ]),
-            'global_trial' => __('Credits :credits · Debits :debits · Δ :delta', [
+            'global_trial' => isset($check['unbalanced_posting_group_count']) && (int) $check['unbalanced_posting_group_count'] > 0
+            ? __('Credits :credits · Debits :debits · Δ :delta · :count suspected posting group(s)', [
+                'credits' => MoneyDisplay::format((float) ($check['sum_credits'] ?? 0), $currency) ?? '—',
+                'debits' => MoneyDisplay::format((float) ($check['sum_debits'] ?? 0), $currency) ?? '—',
+                'delta' => MoneyDisplay::format((float) ($check['delta'] ?? 0), $currency) ?? '—',
+                'count' => number_format((int) $check['unbalanced_posting_group_count']),
+            ])
+            : __('Credits :credits · Debits :debits · Δ :delta', [
                 'credits' => MoneyDisplay::format((float) ($check['sum_credits'] ?? 0), $currency) ?? '—',
                 'debits' => MoneyDisplay::format((float) ($check['sum_debits'] ?? 0), $currency) ?? '—',
                 'delta' => MoneyDisplay::format((float) ($check['delta'] ?? 0), $currency) ?? '—',
@@ -169,26 +199,50 @@ final class ReconciliationSnapshotPresenter
     {
         $sections = [];
 
-        foreach (['mismatches', 'issues', 'missing_ledger_sample'] as $bucket) {
+        if (filled($check['resolution_hints'] ?? null) && is_array($check['resolution_hints'])) {
+            $sections[] = [
+                'title' => __('How to investigate'),
+                'format' => 'hints',
+                'rows' => array_map(
+                    fn (mixed $hint): array => ['hint' => (string) $hint],
+                    array_values($check['resolution_hints']),
+                ),
+                'truncated' => false,
+            ];
+        }
+
+        foreach (['mismatches', 'issues', 'missing_ledger_sample', 'suspected_postings', 'null_reference_lines', 'net_by_account_type'] as $bucket) {
             $rows = $check[$bucket] ?? null;
 
             if (! is_array($rows) || $rows === []) {
                 continue;
             }
 
+            $displayRows = match ($bucket) {
+                'suspected_postings' => self::enrichSuspectedPostingRows($rows),
+                'null_reference_lines' => self::enrichNullReferenceRows($rows),
+                default => array_map(
+                    fn (mixed $row): array => is_array($row) ? self::normalizeDetailRow($row) : ['value' => (string) $row],
+                    array_values($rows),
+                ),
+            };
+
             $sections[] = [
                 'title' => match ($bucket) {
                     'mismatches' => __('Mismatch details'),
                     'issues' => __('Issue details'),
                     'missing_ledger_sample' => __('Missing ledger rows (sample)'),
+                    'suspected_postings' => __('Suspected unbalanced postings'),
+                    'null_reference_lines' => __('Null-reference ledger lines'),
+                    'net_by_account_type' => __('Trial drift by account type'),
                     default => __('Details'),
                 },
                 'format' => 'table',
-                'rows' => array_map(
-                    fn (mixed $row): array => is_array($row) ? self::normalizeDetailRow($row) : ['value' => (string) $row],
-                    array_values($rows),
-                ),
+                'table_align' => $bucket === 'net_by_account_type' ? 'center' : 'start',
+                'rows' => $displayRows,
                 'truncated' => (bool) ($check[$bucket.'_truncated'] ?? false),
+                'collapsible' => in_array($bucket, ['suspected_postings', 'null_reference_lines'], true),
+                'default_open' => false,
             ];
         }
 
@@ -219,7 +273,14 @@ final class ReconciliationSnapshotPresenter
 
         $skip = [
             'label', 'severity', 'note', 'mismatches', 'issues', 'missing_ledger_sample',
-            'mismatches_truncated', 'issues_truncated',
+            'suspected_postings',
+            'null_reference_lines',
+            'net_by_account_type',
+            'resolution_hints',
+            'mismatches_truncated',
+            'issues_truncated',
+            'suspected_postings_truncated',
+            'null_reference_lines_truncated',
         ];
 
         $rows = [];
@@ -229,15 +290,16 @@ final class ReconciliationSnapshotPresenter
                 continue;
             }
 
-            $label = str((string) $field)->replace('_', ' ')->headline()->toString();
-            $formatted = is_numeric($value) && str_contains((string) $field, 'amount')
-                || str_contains((string) $field, 'balance')
-                || str_contains((string) $field, 'delta')
-                || str_contains((string) $field, 'credits')
-                || str_contains((string) $field, 'debits')
-                || str_ends_with((string) $field, '_sum')
+            $label = self::detailCellLabel($field);
+            if ($label === str($field)->replace('_', ' ')->headline()->toString() && str_ends_with((string) $field, '_count')) {
+                $label = str((string) $field)->beforeLast('_count')->replace('_', ' ')->headline()->append(' '.__('count'))->toString();
+            }
+
+            $formatted = is_numeric($value) && self::metricValueIsMoney((string) $field)
                 ? $money($value)
-                : (is_bool($value) ? ($value ? __('Yes') : __('No')) : (string) $value);
+                : (is_bool($value) ? ($value ? __('Yes') : __('No')) : (is_numeric($value) && str_ends_with((string) $field, '_count')
+                    ? number_format((int) $value)
+                    : (string) $value));
 
             $rows[] = [$label => $formatted];
         }
@@ -294,6 +356,23 @@ final class ReconciliationSnapshotPresenter
             'type' => __('Type'),
             'period' => __('Period'),
             'amount' => __('Amount'),
+            'posting' => __('Posting'),
+            'sum_credits' => __('Σ credits'),
+            'sum_debits' => __('Σ debits'),
+            'posting_delta' => __('Posting Δ'),
+            'line_count' => __('Lines'),
+            'sample_description' => __('Description'),
+            'first_transacted_at' => __('First posted'),
+            'account_type' => __('Account type'),
+            'scope' => __('Scope'),
+            'net_delta' => __('Net Δ'),
+            'null_reference_line_count' => __('Null-reference lines'),
+            'null_reference_credits' => __('Null-reference credits'),
+            'null_reference_debits' => __('Null-reference debits'),
+            'null_reference_delta' => __('Null-reference Δ'),
+            'unbalanced_posting_group_count' => __('Unbalanced posting groups'),
+            'transaction_id' => __('Transaction'),
+            'account_scope' => __('Scope'),
             default => str($field)->replace('_', ' ')->headline()->toString(),
         };
     }
@@ -314,9 +393,15 @@ final class ReconciliationSnapshotPresenter
             || str_contains($field, 'balance')
             || str_contains($field, 'outstanding')
             || str_contains($field, 'delta')
+                || str_contains($field, 'credits')
+                || str_contains($field, 'debits')
             || $field === 'delta'
         )) {
             return new HtmlString(MoneyDisplay::html((float) $value, $currency)?->toHtml() ?? (string) $value);
+        }
+
+        if ($field === 'posting' && $value instanceof Htmlable) {
+            return $value;
         }
 
         return match ($field) {
@@ -325,6 +410,12 @@ final class ReconciliationSnapshotPresenter
             'account_id' => self::accountLink((int) $value),
             'contribution_id' => self::contributionLink((int) $value),
             'bank_transaction_id' => self::bankLineLink((int) $value),
+            'transaction_id' => self::ledgerTransactionLink((int) $value),
+            'account_scope' => match ((string) $value) {
+                'master' => __('Master'),
+                'member' => __('Member'),
+                default => (string) $value,
+            },
             default => (string) $value,
         };
     }
@@ -381,8 +472,267 @@ final class ReconciliationSnapshotPresenter
         );
     }
 
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    public static function enrichSuspectedPostingRows(array $rows): array
+    {
+        return array_map(function (array $row): array {
+            $referenceType = (string) ($row['reference_type'] ?? '');
+            $referenceId = (int) ($row['reference_id'] ?? 0);
+
+            return [
+                'posting' => self::referenceLink($referenceType, $referenceId),
+                'sum_credits' => $row['sum_credits'] ?? null,
+                'sum_debits' => $row['sum_debits'] ?? null,
+                'posting_delta' => $row['posting_delta'] ?? null,
+                'line_count' => $row['line_count'] ?? null,
+                'sample_description' => $row['sample_description'] ?? null,
+                'first_transacted_at' => $row['first_transacted_at'] ?? null,
+            ];
+        }, $rows);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, scalar|null>>
+     */
+    public static function enrichNullReferenceRows(array $rows): array
+    {
+        return array_map(function (array $row): array {
+            $transactionId = (int) ($row['transaction_id'] ?? 0);
+            $type = (string) ($row['type'] ?? '');
+
+            return [
+                'transaction_id' => $transactionId,
+                'transacted_at' => $row['transacted_at'] ?? null,
+                'type' => Transaction::typeLabel($type !== '' ? $type : null),
+                'amount' => $row['amount'] ?? null,
+                'account_id' => $row['account_id'] ?? null,
+                'account_type' => $row['account_type'] ?? null,
+                'account_scope' => $row['account_scope'] ?? null,
+                'member' => $row['member'] ?? null,
+                'description' => $row['description'] ?? null,
+            ];
+        }, $rows);
+    }
+
+    public static function ledgerTransactionLink(int $transactionId): Htmlable|string
+    {
+        if ($transactionId <= 0) {
+            return '—';
+        }
+
+        $label = __('Transaction #:id', ['id' => $transactionId]);
+        $url = self::ledgerTransactionUrl($transactionId);
+
+        if ($url === null) {
+            return $label;
+        }
+
+        return self::linkHtml($label, $url);
+    }
+
+    public static function referenceLink(string $referenceType, int $referenceId): Htmlable|string
+    {
+        if ($referenceId <= 0 || blank($referenceType)) {
+            return '—';
+        }
+
+        $label = class_basename($referenceType).' #'.$referenceId;
+        $url = self::resolveReferenceUrl($referenceType, $referenceId);
+
+        if ($url === null) {
+            return $label;
+        }
+
+        return self::linkHtml($label, $url);
+    }
+
+    private static function resolveReferenceUrl(string $referenceType, int $referenceId): ?string
+    {
+        return match ($referenceType) {
+            Contribution::class => self::safeResourceUrl(
+                fn (): string => ContributionResource::getUrl('edit', ['record' => $referenceId]),
+            ),
+            Loan::class => self::safeResourceUrl(
+                fn (): string => LoanResource::getUrl('view', ['record' => $referenceId]),
+            ),
+            LoanInstallment::class => self::loanUrlForChildRecord(
+                LoanInstallment::query()->whereKey($referenceId)->value('loan_id'),
+            ),
+            LoanRepayment::class => self::loanUrlForChildRecord(
+                LoanRepayment::query()->whereKey($referenceId)->value('loan_id'),
+            ),
+            FundPosting::class => self::fundPostingUrl($referenceId),
+            Member::class => self::safeResourceUrl(
+                fn (): string => MemberResource::getUrl('view', ['record' => $referenceId]),
+            ),
+            BankTransaction::class => self::safeResourceUrl(
+                fn (): string => BankAccountsResource::getUrl('index', [
+                    'activeTab' => BankClearingTabRegistry::TAB_QUEUE,
+                ]),
+            ),
+            CashOutRequest::class => self::cashOutRequestUrl($referenceId),
+            FeeDeduction::class => self::feeDeductionUrl($referenceId),
+            InvestDisbursement::class, InvestReturn::class => self::masterAccountTypeUrl('invest'),
+            ExpenseDisbursement::class => self::masterAccountTypeUrl('expense'),
+            Transaction::class => self::ledgerTransactionUrl($referenceId),
+            ReconciliationException::class => self::safeResourceUrl(
+                fn (): string => ReconciliationExceptionResource::getUrl('index'),
+            ),
+            MembershipApplication::class => self::safeResourceUrl(
+                fn (): string => MembershipApplicationResource::getUrl('edit', ['record' => $referenceId]),
+            ),
+            SmsTransaction::class => self::safeResourceUrl(
+                fn (): string => SmsTransactionResource::getUrl('view', ['record' => $referenceId]),
+            ),
+            default => null,
+        };
+    }
+
+    private static function loanUrlForChildRecord(mixed $loanId): ?string
+    {
+        if (! is_numeric($loanId) || (int) $loanId <= 0) {
+            return null;
+        }
+
+        return self::safeResourceUrl(
+            fn (): string => LoanResource::getUrl('view', ['record' => (int) $loanId]),
+        );
+    }
+
+    private static function fundPostingUrl(int $postingId): ?string
+    {
+        $memberId = FundPosting::query()->whereKey($postingId)->value('member_id');
+
+        if ($memberId !== null) {
+            return self::safeResourceUrl(
+                fn (): string => FundPostingResource::indexUrlForMember((int) $memberId),
+            );
+        }
+
+        return self::safeResourceUrl(
+            fn (): string => FundPostingResource::getUrl('index'),
+        );
+    }
+
+    private static function cashOutRequestUrl(int $requestId): ?string
+    {
+        $memberId = CashOutRequest::query()->whereKey($requestId)->value('member_id');
+
+        if ($memberId !== null) {
+            return self::safeResourceUrl(
+                fn (): string => CashOutRequestResource::indexUrlForMember((int) $memberId),
+            );
+        }
+
+        return self::safeResourceUrl(
+            fn (): string => CashOutRequestResource::getUrl('index'),
+        );
+    }
+
+    private static function feeDeductionUrl(int $feeDeductionId): ?string
+    {
+        $memberId = FeeDeduction::query()->whereKey($feeDeductionId)->value('member_id');
+
+        if ($memberId === null) {
+            return null;
+        }
+
+        return self::safeResourceUrl(
+            fn (): string => MemberResource::getUrl('view', ['record' => (int) $memberId]),
+        );
+    }
+
+    private static function masterAccountTypeUrl(string $type): ?string
+    {
+        $accountId = Account::query()
+            ->where('is_master', true)
+            ->where('type', $type)
+            ->value('id');
+
+        if ($accountId !== null) {
+            return self::safeResourceUrl(
+                fn (): string => MasterAccountResource::getUrl('view', ['record' => (int) $accountId]),
+            );
+        }
+
+        return self::safeResourceUrl(
+            fn (): string => MasterAccountResource::listUrl($type),
+        );
+    }
+
+    private static function ledgerTransactionUrl(int $transactionId): ?string
+    {
+        $transaction = Transaction::query()
+            ->with('account')
+            ->find($transactionId);
+
+        $account = $transaction?->account;
+
+        if ($account === null) {
+            return null;
+        }
+
+        $transactionQuery = '?transaction='.$transactionId;
+
+        if ($account->is_master && $account->type === 'bank') {
+            return self::safeResourceUrl(
+                fn (): string => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_LEDGER).$transactionQuery,
+            );
+        }
+
+        if ($account->is_master) {
+            return self::safeResourceUrl(
+                fn (): string => MasterAccountResource::getUrl('view', ['record' => $account->id]).$transactionQuery,
+            );
+        }
+
+        return self::safeResourceUrl(
+            fn (): string => AccountResource::getUrl('view', ['record' => $account->id]).$transactionQuery,
+        );
+    }
+
+    private static function linkHtml(string $label, string $url): HtmlString
+    {
+        return new HtmlString(
+            '<a href="'.e($url).'" class="font-semibold text-sky-600 hover:underline dark:text-sky-400">'
+            .e($label).'</a>'
+        );
+    }
+
+    private static function safeResourceUrl(callable $resolver): ?string
+    {
+        try {
+            return $resolver();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     public static function currency(): string
     {
         return (string) Setting::get('general', 'currency', 'USD');
+    }
+
+    private static function metricValueIsMoney(string $field): bool
+    {
+        if (str_ends_with($field, '_count')) {
+            return false;
+        }
+
+        return str_contains($field, 'amount')
+            || str_contains($field, 'balance')
+            || str_contains($field, 'delta')
+            || str_contains($field, 'credits')
+            || str_contains($field, 'debits')
+            || str_ends_with($field, '_sum')
+            || in_array($field, [
+                'null_reference_credits',
+                'null_reference_debits',
+                'null_reference_delta',
+            ], true);
     }
 }

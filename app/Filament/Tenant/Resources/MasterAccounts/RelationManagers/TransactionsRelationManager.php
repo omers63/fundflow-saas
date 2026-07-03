@@ -2,10 +2,15 @@
 
 namespace App\Filament\Tenant\Resources\MasterAccounts\RelationManagers;
 
+use App\Filament\Concerns\OpensFocusedLedgerTransaction;
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\AccountDetailInsightsRefresh;
 use App\Filament\Support\AccountTransactionAmountColumn;
+use App\Filament\Support\AccountTransactionDescriptionColumn;
+use App\Filament\Support\AccountTransactionFlowReferenceColumn;
+use App\Filament\Support\AccountTransactionLinkedSourceColumn;
+use App\Filament\Support\AccountTransactionLinkedSourceFilter;
 use App\Filament\Support\AccountTransactionManualAdjustmentHeaderActions;
 use App\Filament\Support\AccountTransactionTypeColumn;
 use App\Filament\Support\AccountTransactionTypeFilter;
@@ -25,7 +30,10 @@ use Filament\Tables\Table;
 
 class TransactionsRelationManager extends RelationManager
 {
+    use OpensFocusedLedgerTransaction;
     use TranslatesRelationManagerTitle;
+
+    protected static bool $isLazy = false;
 
     protected static string $relationship = 'transactions';
 
@@ -42,15 +50,22 @@ class TransactionsRelationManager extends RelationManager
                     ->label(__('Date'))
                     ->dateTime()
                     ->sortable(),
+                AccountTransactionFlowReferenceColumn::invest()
+                    ->visible(fn (): bool => $this->getOwnerRecord()->is_master && $this->getOwnerRecord()->type === 'invest'),
+                AccountTransactionFlowReferenceColumn::expense()
+                    ->visible(fn (): bool => $this->getOwnerRecord()->is_master && $this->getOwnerRecord()->type === 'expense'),
                 AccountTransactionTypeColumn::make(),
                 AccountTransactionAmountColumn::make(),
                 TextColumn::make('balance_after')
                     ->label(__('Balance'))
                     ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
                     ->sortable(),
-                TextColumn::make('description')
+                AccountTransactionDescriptionColumn::make(),
+                AccountTransactionLinkedSourceColumn::make(),
+                TextColumn::make('id')
+                    ->label(__('Txn #'))
                     ->searchable()
-                    ->wrap(),
+                    ->sortable(),
                 TextColumn::make('member.name')
                     ->label(__('Member tag'))
                     ->placeholder(__('—'))
@@ -69,6 +84,7 @@ class TransactionsRelationManager extends RelationManager
                 SelectFilter::make('type')
                     ->options(AccountTransactionTypeFilter::options()),
                 DateColumnRangeFilter::make('transacted_at', __('Date')),
+                AccountTransactionLinkedSourceFilter::make(),
                 SelectFilter::make('member_id')
                     ->label(__('Member tag'))
                     ->options(fn (): array => Member::query()

@@ -2,10 +2,14 @@
 
 namespace App\Filament\Tenant\Resources\Accounts\RelationManagers;
 
+use App\Filament\Concerns\OpensFocusedLedgerTransaction;
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\AccountDetailInsightsRefresh;
 use App\Filament\Support\AccountTransactionAmountColumn;
+use App\Filament\Support\AccountTransactionDescriptionColumn;
+use App\Filament\Support\AccountTransactionLinkedSourceColumn;
+use App\Filament\Support\AccountTransactionLinkedSourceFilter;
 use App\Filament\Support\AccountTransactionManualAdjustmentHeaderActions;
 use App\Filament\Support\AccountTransactionTypeColumn;
 use App\Filament\Support\AccountTransactionTypeFilter;
@@ -19,7 +23,10 @@ use Filament\Tables\Table;
 
 class TransactionsRelationManager extends RelationManager
 {
+    use OpensFocusedLedgerTransaction;
     use TranslatesRelationManagerTitle;
+
+    protected static bool $isLazy = false;
 
     protected static string $relationship = 'transactions';
 
@@ -41,14 +48,18 @@ class TransactionsRelationManager extends RelationManager
                     ->label('Balance')
                     ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
                     ->sortable(),
-                TextColumn::make('description')
+                AccountTransactionDescriptionColumn::make(),
+                AccountTransactionLinkedSourceColumn::make(),
+                TextColumn::make('id')
+                    ->label(__('Txn #'))
                     ->searchable()
-                    ->wrap(),
+                    ->sortable(),
             ])
             ->filters([
                 SelectFilter::make('type')
                     ->options(AccountTransactionTypeFilter::options()),
                 DateColumnRangeFilter::make('transacted_at', 'Date'),
+                AccountTransactionLinkedSourceFilter::make(),
             ])
             ->defaultSort('transacted_at', 'desc'))
             ->toolbarActions(ViewAccountTransactionAction::tenantToolbarActions())

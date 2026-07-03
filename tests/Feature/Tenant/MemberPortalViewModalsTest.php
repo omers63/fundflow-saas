@@ -47,6 +47,7 @@ test('member portal transaction modal sections use compact prototype layout keys
     expect($sections)->toHaveCount(2)
         ->and($sections[0])->toHaveKey('hero')
         ->and($sections[0]['hero']['chip'])->toBe(__('Credit'))
+        ->and($sections[0]['hero']['subtitle'])->toBe(__('Cash account'))
         ->and($sections[1]['columns'])->toBe(3);
 
     $html = Blade::render(

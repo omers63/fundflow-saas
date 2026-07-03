@@ -64,7 +64,8 @@ test('cash outs list shows new cash out header action', function () {
     Livewire::actingAs($this->admin, 'tenant')
         ->test(ListCashOutRequests::class)
         ->assertSuccessful()
-        ->assertSee(__('New cash out'));
+        ->assertSee(__('New cash out'))
+        ->assertTableColumnExists('id');
 });
 
 test('admin can create and auto-approve a cash out for any member', function () {

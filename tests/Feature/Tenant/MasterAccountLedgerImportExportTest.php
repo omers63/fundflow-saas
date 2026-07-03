@@ -106,6 +106,7 @@ test('legacy full invest export imports only return and disbursement legs', func
 
     $disbursement = $sourceInvest->transactions()
         ->where('reference_type', InvestDisbursement::class)
+        ->where('type', 'debit')
         ->firstOrFail();
     $investReturn = $sourceInvest->transactions()
         ->where('reference_type', InvestReturn::class)
@@ -113,7 +114,7 @@ test('legacy full invest export imports only return and disbursement legs', func
         ->firstOrFail();
     $reserveFunding = $sourceInvest->transactions()
         ->where('type', 'credit')
-        ->whereNull('reference_type')
+        ->where('reference_type', InvestDisbursement::class)
         ->firstOrFail();
     $reserveReturn = $sourceInvest->transactions()
         ->where('reference_type', InvestReturn::class)

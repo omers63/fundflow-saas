@@ -28,6 +28,10 @@ class CashOutRequestsTable
         return TableGrouping::apply(
             $table
                 ->columns([
+                    TextColumn::make('id')
+                        ->label(__('Request #'))
+                        ->sortable()
+                        ->searchable(),
                     TextColumn::make('member.name')
                         ->searchable()
                         ->sortable(),

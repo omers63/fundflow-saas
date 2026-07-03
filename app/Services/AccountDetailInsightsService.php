@@ -90,7 +90,7 @@ final class AccountDetailInsightsService
                 'signed_class' => $transaction->type === 'credit'
                     ? 'text-emerald-600 dark:text-emerald-400'
                     : 'text-rose-600 dark:text-rose-400',
-                'description' => Str::limit($transaction->description ?? '—', 48),
+                'description' => Str::limit($transaction->displayDescription(), 48),
                 'member' => $transaction->member?->name,
                 'is_reversal' => $transaction->reference_type === Transaction::class,
             ])

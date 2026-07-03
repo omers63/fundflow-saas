@@ -5,9 +5,9 @@ declare(strict_types=1);
 use App\Models\Tenant\Transaction;
 use App\Support\MemberDateDisplay;
 use App\Support\MemberLedgerDescriptionTranslator;
-use Tests\TestCase;
+use Tests\Concerns\InitializesTenancy;
 
-uses(TestCase::class);
+uses(InitializesTenancy::class);
 
 test('localizes English contribution descriptions into Arabic', function () {
     app()->setLocale('ar');
@@ -36,6 +36,24 @@ test('localizes deposit by member descriptions into Arabic', function () {
     expect(MemberLedgerDescriptionTranslator::localize('Deposit by Ahmed Ali'))
         ->toContain('إيداع')
         ->toContain('Ahmed Ali');
+});
+
+test('strips redundant member parenthetical when name is already in description', function () {
+    app()->setLocale('ar');
+
+    $name = 'خديجة عبدالحكيم أميرشاه عصمت';
+    $duplicated = $name.' (عضو '.$name.')';
+
+    expect(MemberLedgerDescriptionTranslator::localize($duplicated))->toBe($name)
+        ->and(MemberLedgerDescriptionTranslator::localize('Deposit by Ahmed Ali (Ahmed Ali)'))
+        ->toBe(__('Deposit by :name', ['name' => 'Ahmed Ali']));
+});
+
+test('descriptionAlreadyContainsMemberName avoids false positives for short month names', function () {
+    expect(MemberLedgerDescriptionTranslator::descriptionAlreadyContainsMemberName('Contribution — May 2026', 'May'))
+        ->toBeFalse()
+        ->and(MemberLedgerDescriptionTranslator::descriptionAlreadyContainsMemberName('Deposit by Ahmed Ali', 'Ahmed Ali'))
+        ->toBeTrue();
 });
 
 test('member facing description uses localized fallback for stored English text', function () {
@@ -76,6 +94,30 @@ test('member facing description localizes parent dependent allocation debit', fu
     expect($transaction->memberFacingDescription())
         ->toContain('تحويل إلى')
         ->and($transaction->memberActivityCategoryLabel())->toBe(__('Allocation'));
+});
+
+test('displayDescription strips redundant member parenthetical for admin display', function () {
+    app()->setLocale('ar');
+
+    $name = 'خديجة عبدالحكيم أميرشاه عصمت';
+    $transaction = new Transaction([
+        'id' => 42,
+        'description' => $name.' (عضو '.$name.')',
+    ]);
+
+    expect($transaction->displayDescription())->toBe($name);
+});
+
+test('displayDescription localizes English stored descriptions', function () {
+    app()->setLocale('ar');
+
+    $transaction = new Transaction([
+        'description' => 'Contribution — Jan 2026',
+    ]);
+
+    expect($transaction->displayDescription())
+        ->toContain('مساهمة')
+        ->not->toBe('Contribution — Jan 2026');
 });
 
 test('member date display uses western digits in Arabic locale', function () {

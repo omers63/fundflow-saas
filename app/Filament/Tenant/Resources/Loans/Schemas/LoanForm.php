@@ -12,6 +12,7 @@ use App\Services\Loans\LoanEligibilityService;
 use App\Support\LoanEligibilityGate;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
+use App\Support\StorageFilename;
 use Closure;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
@@ -27,6 +28,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\HtmlString;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class LoanForm
 {
@@ -146,6 +148,30 @@ class LoanForm
                                 ->placeholder(__('Describe how the member plans to use the funds…')),
                         ])
                         ->columns(2),
+                    Step::make(__('Witnesses'))
+                        ->icon(Heroicon::OutlinedUserGroup)
+                        ->schema([
+                            TextInput::make('witness1_name')
+                                ->label(__('Witness 1 name'))
+                                ->maxLength(255),
+                            TextInput::make('witness1_phone')
+                                ->label(__('Witness 1 phone'))
+                                ->tel()
+                                ->maxLength(50),
+                            TextInput::make('witness2_name')
+                                ->label(__('Witness 2 name'))
+                                ->maxLength(255),
+                            TextInput::make('witness2_phone')
+                                ->label(__('Witness 2 phone'))
+                                ->tel()
+                                ->maxLength(50),
+                        ])
+                        ->columns(2),
+                    Step::make(__('Signed application'))
+                        ->icon(Heroicon::OutlinedDocumentArrowUp)
+                        ->schema([
+                            self::applicationFormUpload(),
+                        ]),
                     Step::make(__('Compliance'))
                         ->icon(Heroicon::OutlinedShieldCheck)
                         ->schema([
@@ -459,5 +485,33 @@ class LoanForm
         return '<div class="rounded-lg border border-gray-200/70 bg-white/80 px-3 py-2.5 dark:border-white/10 dark:bg-white/5">'
             .'<p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e($label).'</p>'
             .'<p class="mt-1 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">'.e($value).'</p></div>';
+    }
+
+    private static function applicationFormUpload(): FileUpload
+    {
+        return FileUpload::make('application_form_path')
+            ->label(__('Signed loan application form'))
+            ->disk('public')
+            ->directory('loan-applications')
+            ->getUploadedFileNameForStorageUsing(
+                fn (TemporaryUploadedFile $file, Get $get): string => StorageFilename::make(
+                    'loan-application',
+                    $file->getClientOriginalName(),
+                    [
+                        filled($get('member_id')) ? 'member-'.$get('member_id') : null,
+                    ],
+                ),
+            )
+            ->acceptedFileTypes([
+                'application/pdf',
+                'image/jpeg',
+                'image/png',
+                'image/webp',
+            ])
+            ->maxSize(10240)
+            ->downloadable()
+            ->openable()
+            ->helperText(__('Upload the signed loan request form (PDF or image, max 10 MB).'))
+            ->columnSpanFull();
     }
 }

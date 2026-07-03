@@ -123,8 +123,89 @@ class Transaction extends Model
             $reference instanceof Contribution => __('Contribution #:id', ['id' => $reference->id]),
             $reference instanceof Loan => __('Loan #:id', ['id' => $reference->id]),
             $reference instanceof LoanRepayment => __('Loan repayment #:id', ['id' => $reference->id]),
+            $reference instanceof InvestDisbursement => __('Investment #:id', ['id' => $reference->id]),
+            $reference instanceof InvestReturn => __('Investment return #:id', ['id' => $reference->id]),
+            $reference instanceof ExpenseDisbursement => __('Expense #:id', ['id' => $reference->id]),
+            $reference instanceof self => __('Transaction #:id', ['id' => $reference->id]),
             default => class_basename($reference).': #'.$reference->getKey(),
         };
+    }
+
+    public function ledgerAccountLabel(bool $memberFacing = false): string
+    {
+        $this->loadMissing('account');
+
+        $account = $this->account;
+
+        if ($account === null) {
+            return __('—');
+        }
+
+        return $memberFacing ? $account->memberFacingLabel() : $account->displayLabel();
+    }
+
+    /**
+     * Structured reference rows for transaction detail modals.
+     *
+     * @return array<int, array{label: string, value: string}>
+     */
+    public function modalReferenceItems(bool $memberFacing = false): array
+    {
+        $items = [];
+
+        if ($this->reference_type === InvestDisbursement::class && $this->reference_id !== null) {
+            $items[] = [
+                'label' => __('Investment #'),
+                'value' => (string) $this->reference_id,
+            ];
+        }
+
+        if ($this->reference_type === InvestReturn::class && $this->reference_id !== null) {
+            $items[] = [
+                'label' => __('Investment return #'),
+                'value' => (string) $this->reference_id,
+            ];
+        }
+
+        if ($this->reference_type === ExpenseDisbursement::class && $this->reference_id !== null) {
+            $items[] = [
+                'label' => __('Expense #'),
+                'value' => (string) $this->reference_id,
+            ];
+        }
+
+        if ($this->reference_type === self::class && $this->reference_id !== null) {
+            $referenced = self::query()->with('account')->find($this->reference_id);
+
+            if ($referenced?->account !== null) {
+                $items[] = [
+                    'label' => __('Referenced account'),
+                    'value' => __(':account — transaction #:id', [
+                        'account' => $referenced->ledgerAccountLabel($memberFacing),
+                        'id' => $referenced->id,
+                    ]),
+                ];
+            }
+        }
+
+        $linkedSource = $this->referenceSummary();
+        $bankImport = $this->bankImportSummary();
+
+        if (filled($linkedSource) && $linkedSource !== $bankImport) {
+            $items[] = [
+                'label' => __('Linked source'),
+                'value' => $linkedSource,
+            ];
+        }
+
+        if (filled($bankImport)) {
+            $items[] = [
+                'label' => __('Bank import'),
+                'value' => $bankImport,
+            ];
+        }
+
+        return $items;
     }
 
     public function memberFacingDescription(): string
@@ -167,6 +248,45 @@ class Transaction extends Model
         }
 
         return $this->fallbackDescription();
+    }
+
+    public function displayDescription(): string
+    {
+        if (filled($this->description)) {
+            return MemberLedgerDescriptionTranslator::localize((string) $this->description);
+        }
+
+        $summary = $this->referenceSummary();
+
+        if ($summary !== null) {
+            return MemberLedgerDescriptionTranslator::localize($summary);
+        }
+
+        return __('Transaction #:id', ['id' => $this->id]);
+    }
+
+    public function hasLinkedReference(): bool
+    {
+        return filled($this->reference_type) && filled($this->reference_id);
+    }
+
+    public function linkedSourceLabel(): string
+    {
+        if (! $this->hasLinkedReference()) {
+            return __('No linked source');
+        }
+
+        return $this->referenceSummary()
+            ?? class_basename((string) $this->reference_type).' #'.$this->reference_id;
+    }
+
+    public function linkedSourceDetail(): string
+    {
+        if (! $this->hasLinkedReference()) {
+            return __('Manual entry or missing reference — not tied to a contribution, loan, deposit, or other source record.');
+        }
+
+        return $this->linkedSourceLabel();
     }
 
     public function memberActivityCategoryLabel(): string

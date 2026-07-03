@@ -3,19 +3,26 @@
 declare(strict_types=1);
 
 use App\Filament\Support\MasterInvestHeaderActions;
+use App\Filament\Tenant\Resources\MasterAccounts\Pages\ViewMasterAccount;
+use App\Filament\Tenant\Resources\MasterAccounts\RelationManagers\TransactionsRelationManager as MasterTransactionsRelationManager;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTransaction;
+use App\Models\Tenant\InvestDisbursement;
 use App\Models\Tenant\ReconciliationException;
+use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\MasterInvestInService;
 use App\Services\MasterInvestOutService;
+use Filament\Facades\Filament;
+use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
+    Filament::setCurrentPanel('tenant');
     Account::query()->delete();
     BankTransaction::query()->delete();
     ReconciliationException::query()->delete();
@@ -83,7 +90,7 @@ test('invest out transfers from master fund through master invest and creates un
     Account::factory()->masterCash()->withBalance(10_000)->create();
     $masterInvest = Account::factory()->masterInvest()->withBalance(0)->create();
 
-    app(MasterInvestOutService::class)->investOut(
+    $disbursement = app(MasterInvestOutService::class)->investOut(
         $masterInvest,
         5_000,
         'External investment placement',
@@ -94,7 +101,9 @@ test('invest out transfers from master fund through master invest and creates un
         ->and((float) Account::masterCash()->fresh()->balance)->toBe(10_000.0)
         ->and($masterInvest->transactions()->count())->toBe(2)
         ->and(BankTransaction::query()->count())->toBe(1)
-        ->and((float) BankTransaction::query()->value('amount'))->toBe(-5_000.0);
+        ->and((float) BankTransaction::query()->value('amount'))->toBe(-5_000.0)
+        ->and($masterFund->transactions()->where('reference_type', InvestDisbursement::class)->where('reference_id', $disbursement->id)->count())->toBe(1)
+        ->and($masterInvest->transactions()->where('reference_type', InvestDisbursement::class)->where('reference_id', $disbursement->id)->count())->toBe(2);
 });
 
 test('fund invest transfers from master fund to master invest', function () {
@@ -134,4 +143,48 @@ test('invest in credits master invest transfers to master fund and leaves master
         ->and($masterInvest->transactions()->where('type', 'debit')->count())->toBe(1)
         ->and(Account::masterCash()->transactions()->count())->toBe(0)
         ->and(BankTransaction::query()->count())->toBe(1);
+});
+
+test('master invest ledger shows investment id column', function () {
+    $admin = User::create([
+        'name' => 'Admin',
+        'email' => 'admin-invest-column-'.uniqid('', true).'@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    $masterInvest = Account::factory()->masterInvest()->withBalance(1_000)->create();
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(MasterTransactionsRelationManager::class, [
+            'ownerRecord' => $masterInvest,
+            'pageClass' => ViewMasterAccount::class,
+        ])
+        ->assertTableColumnExists('investment_id');
+});
+
+test('master invest ledger search ignores virtual investment id column', function () {
+    $admin = User::create([
+        'name' => 'Admin',
+        'email' => 'admin-invest-search-'.uniqid('', true).'@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    $masterInvest = Account::factory()->masterInvest()->withBalance(1_000)->create();
+
+    Transaction::factory()->for($masterInvest)->create([
+        'type' => 'credit',
+        'amount' => 1,
+        'balance_after' => 1,
+        'description' => 'Omer (reserve funding)',
+    ]);
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(MasterTransactionsRelationManager::class, [
+            'ownerRecord' => $masterInvest,
+            'pageClass' => ViewMasterAccount::class,
+        ])
+        ->searchTable('Omer')
+        ->assertSuccessful();
 });

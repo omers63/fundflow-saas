@@ -86,17 +86,31 @@ function createEligibleMemberForAdminLoanCreate(AccountingService $accounting, f
 test('admin create loan form uses wizard with funding strategy fields', function () {
     $contents = file_get_contents(resource_path('views/filament/tenant/resources/loans/pages/create-loan.blade.php'));
     $form = file_get_contents(app_path('Filament/Tenant/Resources/Loans/Schemas/LoanForm.php'));
+    $createLoan = file_get_contents(app_path('Filament/Tenant/Resources/Loans/Pages/CreateLoan.php'));
     $fundingFields = file_get_contents(app_path('Filament/Support/LoanApplicationFundingFields.php'));
 
     expect($contents)->toContain('ff-tenant-create-loan')
+        ->and($contents)->not->toContain('max-w-4xl')
         ->and($form)
         ->toContain('configureCreateWizard')
         ->toContain('LoanApplicationFundingFields')
+        ->toContain('witness1_name')
+        ->toContain('application_form_path')
         ->toContain('wire:click="create"')
+        ->and($createLoan)
+        ->toContain('Width::Full')
         ->and($fundingFields)
         ->toContain('funding_strategy')
         ->toContain('excess_fund_disposition')
         ->toContain('funding_preview');
+});
+
+test('member apply for loan form includes emergency option', function () {
+    $applyForLoan = file_get_contents(app_path('Filament/Member/Pages/ApplyForLoan.php'));
+
+    expect($applyForLoan)
+        ->toContain("Toggle::make('is_emergency')")
+        ->toContain('$data[\'is_emergency\']');
 });
 
 test('admin can create loan with split funding and excess cash-out preference', function () {
@@ -130,4 +144,41 @@ test('admin can create loan with split funding and excess cash-out preference', 
         ->and($loan->funding_strategy)->toBe(LoanFundingStrategy::SPLIT_PERCENTAGE)
         ->and($loan->cash_out_excess_fund)->toBeTrue()
         ->and((float) $loan->amount_requested)->toBe(10_000.0);
+});
+
+test('admin can create loan with witnesses and emergency flag', function () {
+    $member = createEligibleMemberForAdminLoanCreate($this->accounting, fundBalance: 20_000);
+
+    $admin = User::create([
+        'name' => 'Loan Witness Admin',
+        'email' => 'loan-witness-admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(CreateLoan::class)
+        ->fillForm([
+            'member_id' => $member->id,
+            'amount_requested' => 5_000,
+            'funding_strategy' => LoanFundingStrategy::MEMBER_FUND_TOPUP,
+            'grace_cycles' => 1,
+            'purpose' => 'Medical',
+            'is_emergency' => true,
+            'witness1_name' => 'First Witness',
+            'witness1_phone' => '+966500000099',
+            'witness2_name' => 'Second Witness',
+        ])
+        ->call('create')
+        ->assertHasNoFormErrors()
+        ->assertNotified();
+
+    $loan = Loan::query()->where('member_id', $member->id)->latest('id')->first();
+
+    expect($loan)->not->toBeNull()
+        ->and($loan->is_emergency)->toBeTrue()
+        ->and($loan->witness1_name)->toBe('First Witness')
+        ->and($loan->witness1_phone)->toBe('+966500000099')
+        ->and($loan->witness2_name)->toBe('Second Witness');
 });

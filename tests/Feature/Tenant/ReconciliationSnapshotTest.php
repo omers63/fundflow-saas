@@ -6,6 +6,7 @@ use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
+use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
@@ -13,6 +14,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Models\Tenant\Setting;
+use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\Loans\LoanLedgerService;
@@ -63,6 +65,101 @@ test('reconciliation report includes legacy check keys and control layer', funct
         ->and($report['checks']['sms_transaction_posting_integrity']['severity'])->toBe('skipped')
         ->and($report)->toHaveKeys(['coverage_matrix', 'control_layer', 'pipeline', 'verdict'])
         ->and($report['verdict'])->toHaveKeys(['pass', 'critical_issues', 'warnings']);
+});
+
+test('global trial diagnostics surface suspected unbalanced posting groups', function () {
+    $masterCash = Account::masterCash();
+    expect($masterCash)->not->toBeNull();
+
+    Transaction::factory()->for($masterCash)->credit()->create([
+        'amount' => 500,
+        'reference_type' => Contribution::class,
+        'reference_id' => 9001,
+        'description' => 'One-sided reconciliation test credit',
+        'balance_after' => 500,
+    ]);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['global_trial'];
+
+    expect($check['severity'])->toBe('warning')
+        ->and($check['delta'])->toBe(500.0)
+        ->and($check['unbalanced_posting_group_count'])->toBe(1)
+        ->and($check['suspected_postings'])->toHaveCount(1)
+        ->and($check['suspected_postings'][0]['reference_type'])->toBe(Contribution::class)
+        ->and($check['suspected_postings'][0]['reference_id'])->toBe(9001)
+        ->and($check['suspected_postings'][0]['posting_delta'])->toBe(500.0)
+        ->and($check['resolution_hints'])->not->toBeEmpty();
+});
+
+test('global trial diagnostics list null-reference credit and debit lines', function () {
+    $masterCash = Account::masterCash();
+    expect($masterCash)->not->toBeNull();
+
+    Transaction::factory()->for($masterCash)->credit()->create([
+        'amount' => 300,
+        'reference_type' => null,
+        'reference_id' => null,
+        'description' => 'Null-reference manual credit',
+        'balance_after' => 300,
+    ]);
+    Transaction::factory()->for($masterCash)->debit()->create([
+        'amount' => 100,
+        'reference_type' => null,
+        'reference_id' => null,
+        'description' => 'Null-reference manual debit',
+        'balance_after' => 200,
+    ]);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['global_trial'];
+
+    expect($check['severity'])->toBe('warning')
+        ->and($check['delta'])->toBe(200.0)
+        ->and($check['null_reference_line_count'])->toBe(2)
+        ->and($check['null_reference_credits'])->toBe(300.0)
+        ->and($check['null_reference_debits'])->toBe(100.0)
+        ->and($check['null_reference_delta'])->toBe(200.0)
+        ->and($check['null_reference_lines'])->toHaveCount(2)
+        ->and(collect($check['null_reference_lines'])->pluck('type'))->toContain('credit', 'debit');
+});
+
+test('global trial omits diagnostics when credits and debits balance', function () {
+    $masterCash = Account::masterCash();
+    $masterFund = Account::masterFund();
+    expect($masterCash)->not->toBeNull()
+        ->and($masterFund)->not->toBeNull();
+
+    Transaction::factory()->for($masterCash)->credit()->create([
+        'amount' => 250,
+        'reference_type' => Contribution::class,
+        'reference_id' => 9002,
+        'description' => 'Balanced test credit',
+        'balance_after' => 250,
+    ]);
+    Transaction::factory()->for($masterFund)->debit()->create([
+        'amount' => 250,
+        'reference_type' => Contribution::class,
+        'reference_id' => 9002,
+        'description' => 'Balanced test debit',
+        'balance_after' => -250,
+    ]);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['global_trial'];
+
+    expect($check['severity'])->toBe('ok')
+        ->and($check)->not->toHaveKey('suspected_postings')
+        ->and($check)->not->toHaveKey('resolution_hints');
 });
 
 test('paired control totals use pool-adjusted fund mirror with reserve accounts', function () {

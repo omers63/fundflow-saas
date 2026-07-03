@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tenant\Resources\BankAccounts\Pages;
 
+use App\Filament\Concerns\OpensFocusedLedgerTransaction;
 use App\Filament\Support\BankWorkspaceImportTableHeaderActions;
 use App\Filament\Tenant\Concerns\EmbedsAsBankClearingWorkspacePanel;
 use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
@@ -30,6 +31,7 @@ use Livewire\Attributes\Url;
 class ListBankAccounts extends ListRecords
 {
     use EmbedsAsBankClearingWorkspacePanel;
+    use OpensFocusedLedgerTransaction;
 
     protected static string $resource = BankAccountsResource::class;
 
@@ -85,6 +87,23 @@ class ListBankAccounts extends ListRecords
         $this->showClosedHistoryLines = $this->historySection === BankClearingTabRegistry::HISTORY_CLOSED;
 
         unset($this->cachedTabs);
+    }
+
+    public function bootedOpensFocusedLedgerTransaction(): void
+    {
+        if ($this->resolveFocusTransactionId() === null || $this->hasAutoOpenedFocusedTransaction) {
+            return;
+        }
+
+        $this->activeTab = BankClearingTabRegistry::TAB_LEDGER;
+
+        $transactionId = $this->resolveFocusTransactionId();
+
+        if ($transactionId === null || ! $this->focusedLedgerTransactionMatchesContext($transactionId, Account::masterBank()?->id)) {
+            return;
+        }
+
+        $this->scheduleFocusedLedgerTransactionAction($transactionId);
     }
 
     public function getDefaultActiveTab(): string|int|null

@@ -12,6 +12,7 @@ use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Filament\Support\Exceptions\Halt;
 use Illuminate\Database\Eloquent\Model;
 use Throwable;
@@ -19,6 +20,8 @@ use Throwable;
 class CreateLoan extends CreateRecord
 {
     protected static string $resource = LoanResource::class;
+
+    protected Width|string|null $maxContentWidth = Width::Full;
 
     protected string $view = 'filament.tenant.resources.loans.pages.create-loan';
 
@@ -75,6 +78,10 @@ class CreateLoan extends CreateRecord
                 (bool) ($data['is_emergency'] ?? false),
                 $graceCycles > 0,
                 $graceCycles,
+                filled($data['witness1_name'] ?? null) ? (string) $data['witness1_name'] : null,
+                filled($data['witness1_phone'] ?? null) ? (string) $data['witness1_phone'] : null,
+                filled($data['witness2_name'] ?? null) ? (string) $data['witness2_name'] : null,
+                filled($data['witness2_phone'] ?? null) ? (string) $data['witness2_phone'] : null,
                 adminOverrideEligibility: (bool) ($data['override_eligibility'] ?? false),
                 eligibilityOverrideReason: filled($data['eligibility_override_reason'] ?? null)
                 ? (string) $data['eligibility_override_reason']
@@ -83,6 +90,9 @@ class CreateLoan extends CreateRecord
                 cashOutExcessFund: LoanFundExcessDisposition::toCashOutFlag(
                     (string) ($data['excess_fund_disposition'] ?? LoanFundExcessDisposition::defaultForApplication()),
                 ),
+                applicationFormPath: filled($data['application_form_path'] ?? null)
+                    ? (string) $data['application_form_path']
+                    : null,
             );
         } catch (Throwable $exception) {
             Notification::make()

@@ -13,7 +13,7 @@ final class MemberLedgerDescriptionTranslator
 {
     public static function localize(?string $description, int $depth = 0): string
     {
-        $description = trim((string) ($description ?? ''));
+        $description = self::stripRedundantMemberParenthetical(trim((string) ($description ?? '')));
 
         if ($description === '') {
             return '—';
@@ -59,6 +59,93 @@ final class MemberLedgerDescriptionTranslator
         }
 
         return $period;
+    }
+
+    public static function descriptionAlreadyContainsMemberName(string $description, string $memberName): bool
+    {
+        $description = trim($description);
+        $memberName = trim($memberName);
+
+        if ($memberName === '' || $description === '') {
+            return false;
+        }
+
+        if (mb_strtolower($description) === mb_strtolower($memberName)) {
+            return true;
+        }
+
+        if (preg_match('/\(\s*'.preg_quote($memberName, '/').'\s*\)\s*$/u', $description) === 1) {
+            return true;
+        }
+
+        if (preg_match('/\(عضو\s+'.preg_quote($memberName, '/').'\s*\)\s*$/u', $description) === 1) {
+            return true;
+        }
+
+        $escaped = preg_quote($memberName, '/');
+
+        foreach ([
+            '/^Refund — '.$escaped.' — /u',
+            '/^Deposit by '.$escaped.'$/u',
+            '/^Deposit #\d+ by '.$escaped.'$/u',
+            '/^Posted: Deposit #\d+ by '.$escaped.'$/u',
+            '/^Cash out #\d+ – '.$escaped.'$/u',
+            '/^Annual subscription fee — '.$escaped.'$/u',
+            '/ – '.$escaped.'$/u',
+            '/ — '.$escaped.'$/u',
+        ] as $pattern) {
+            if (preg_match($pattern, $description) === 1) {
+                return true;
+            }
+        }
+
+        return mb_strlen($memberName) >= 4 && mb_stripos($description, $memberName) !== false;
+    }
+
+    private static function stripRedundantMemberParenthetical(string $description): string
+    {
+        $previous = null;
+
+        while ($previous !== $description) {
+            $previous = $description;
+
+            if (preg_match('/^(.+) \(عضو (.+)\)$/u', $description, $matches) === 1) {
+                if (self::parentheticalMemberNameIsRedundant($matches[1], $matches[2])) {
+                    $description = $matches[1];
+
+                    continue;
+                }
+            }
+
+            if (preg_match('/^(.+) \((.+)\)$/u', $description, $matches) === 1) {
+                if (self::parentheticalMemberNameIsRedundant($matches[1], $matches[2])) {
+                    $description = $matches[1];
+                }
+            }
+        }
+
+        return $description;
+    }
+
+    private static function parentheticalMemberNameIsRedundant(string $base, string $parentheticalName): bool
+    {
+        if (self::descriptionAlreadyContainsMemberName($base, $parentheticalName)) {
+            return true;
+        }
+
+        $normalizedBase = self::normalizeMemberNameForComparison($base);
+        $normalizedParenthetical = self::normalizeMemberNameForComparison($parentheticalName);
+
+        return $normalizedParenthetical !== ''
+            && ($normalizedBase === $normalizedParenthetical
+                || str_ends_with($normalizedBase, $normalizedParenthetical));
+    }
+
+    private static function normalizeMemberNameForComparison(string $value): string
+    {
+        $value = trim(preg_replace('/\s+/u', ' ', $value) ?? $value);
+
+        return mb_strtolower($value);
     }
 
     /**

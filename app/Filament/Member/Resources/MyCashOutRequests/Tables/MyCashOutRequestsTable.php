@@ -17,6 +17,9 @@ class MyCashOutRequestsTable
         return TableGrouping::apply(
             $table
                 ->columns([
+                    TextColumn::make('id')
+                        ->label(__('Request #'))
+                        ->sortable(),
                     TextColumn::make('amount')
                         ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
                         ->sortable(),

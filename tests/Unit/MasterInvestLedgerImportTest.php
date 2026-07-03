@@ -34,8 +34,8 @@ test('invest export scope omits internal fund transfer legs', function () {
         'type' => 'credit',
         'amount' => 200,
         'description' => 'Placement (reserve funding)',
-        'reference_type' => null,
-        'reference_id' => null,
+        'reference_type' => InvestDisbursement::class,
+        'reference_id' => 1,
     ]);
 
     Transaction::factory()->for($invest)->create([
@@ -76,6 +76,8 @@ test('invest import skips existing ids and internal legs', function () {
         ->and(MasterInvestLedgerImport::shouldSkipImportRow($invest, [
             'type' => 'credit',
             'description' => 'Funding (reserve funding)',
+            'reference_type' => InvestDisbursement::class,
+            'reference_id' => '3',
         ]))->toBeTrue()
         ->and(MasterInvestLedgerImport::shouldSkipImportRow($invest, [
             'type' => 'debit',

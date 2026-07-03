@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\BankAccounts\Tables;
 
 use App\Filament\Support\AccountTransactionAmountColumn;
+use App\Filament\Support\AccountTransactionDescriptionColumn;
+use App\Filament\Support\AccountTransactionLinkedSourceColumn;
+use App\Filament\Support\AccountTransactionLinkedSourceFilter;
 use App\Filament\Support\AccountTransactionManualAdjustmentHeaderActions;
 use App\Filament\Support\AccountTransactionTypeColumn;
 use App\Filament\Support\AccountTransactionTypeFilter;
@@ -78,9 +81,12 @@ class MasterBankLedgerTable
                             ->label(__('Balance'))
                             ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
                             ->sortable(),
-                        TextColumn::make('description')
+                        AccountTransactionDescriptionColumn::make(),
+                        AccountTransactionLinkedSourceColumn::make(),
+                        TextColumn::make('id')
+                            ->label(__('Txn #'))
                             ->searchable()
-                            ->wrap(),
+                            ->sortable(),
                         TextColumn::make('member.name')
                             ->label(__('Member tag'))
                             ->placeholder(__('—'))
@@ -91,6 +97,7 @@ class MasterBankLedgerTable
                         SelectFilter::make('type')
                             ->options(AccountTransactionTypeFilter::options()),
                         DateColumnRangeFilter::make('transacted_at', __('Date')),
+                        AccountTransactionLinkedSourceFilter::make(),
                         SelectFilter::make('member_id')
                             ->label(__('Member tag'))
                             ->options(fn (): array => Member::query()

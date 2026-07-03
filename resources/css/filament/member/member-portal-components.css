@@ -1033,6 +1033,7 @@
     border-radius: 9999px;
 }
 
+.ff-member-apply-loan .fi-sc-wizard,
 .ff-member-apply-loan .fi-fo-wizard {
     width: 100%;
     border-radius: var(--ff-panel-radius, 14px);

@@ -152,14 +152,14 @@ class ReconciliationReportService
             $incrementWarning();
         }
 
-        $checks['global_trial'] = [
+        $checks['global_trial'] = array_merge([
             'label' => 'Global posting trial (Σ credits vs Σ debits)',
             'severity' => $trialOk ? 'ok' : 'warning',
             'sum_credits' => round($sumCredits, 2),
             'sum_debits' => round($sumDebits, 2),
             'delta' => round($sumCredits - $sumDebits, 2),
             'note' => 'In a strictly paired ledger these should match. Drift may indicate one-sided manual entries, imports, or reversals.',
-        ];
+        ], $trialOk ? [] : $this->buildGlobalTrialDiagnostics());
 
         // --- 3) Master vs Σ(member) pool mirrors (same formula as MasterAccountInvariantService) ---
         $masterCash = Account::masterCash();
@@ -1381,6 +1381,156 @@ class ReconciliationReportService
         }
 
         return $issues;
+    }
+
+    /**
+     * When the global trial fails, surface posting groups and account-type nets that explain the drift.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildGlobalTrialDiagnostics(): array
+    {
+        $tolerance = self::AMOUNT_TOLERANCE;
+        $groupCreditSumSql = "COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END), 0)";
+        $groupDebitSumSql = "COALESCE(SUM(CASE WHEN type = 'debit' THEN amount ELSE 0 END), 0)";
+        $groupPostingDeltaSql = 'ABS('.$groupCreditSumSql.' - '.$groupDebitSumSql.')';
+        $creditSumSql = "COALESCE(SUM(CASE WHEN t.type = 'credit' THEN t.amount ELSE 0 END), 0)";
+        $debitSumSql = "COALESCE(SUM(CASE WHEN t.type = 'debit' THEN t.amount ELSE 0 END), 0)";
+
+        $unbalancedGroupsQuery = DB::table('transactions')
+            ->selectRaw("
+                reference_type,
+                reference_id,
+                {$groupCreditSumSql} as sum_credits,
+                {$groupDebitSumSql} as sum_debits,
+                COUNT(*) as line_count,
+                MIN(description) as sample_description,
+                MIN(transacted_at) as first_transacted_at
+            ")
+            ->whereNotNull('reference_id')
+            ->whereNotNull('reference_type')
+            ->groupBy('reference_type', 'reference_id')
+            ->havingRaw("{$groupPostingDeltaSql} > ?", [$tolerance])
+            ->orderByRaw("{$groupPostingDeltaSql} DESC");
+
+        $unbalancedGroupCount = (int) DB::query()
+            ->fromSub($unbalancedGroupsQuery, 'unbalanced_postings')
+            ->count();
+
+        $suspectedPostings = [];
+        foreach ($unbalancedGroupsQuery->limit(75)->get() as $row) {
+            $sumCredits = round((float) $row->sum_credits, 2);
+            $sumDebits = round((float) $row->sum_debits, 2);
+
+            $suspectedPostings[] = [
+                'reference_type' => (string) $row->reference_type,
+                'reference_id' => (int) $row->reference_id,
+                'sum_credits' => $sumCredits,
+                'sum_debits' => $sumDebits,
+                'posting_delta' => round($sumCredits - $sumDebits, 2),
+                'line_count' => (int) $row->line_count,
+                'sample_description' => $row->sample_description !== null ? (string) $row->sample_description : null,
+                'first_transacted_at' => $row->first_transacted_at !== null ? (string) $row->first_transacted_at : null,
+            ];
+        }
+
+        $nullReference = Transaction::query()
+            ->where(function ($query): void {
+                $query->whereNull('reference_id')->orWhereNull('reference_type');
+            })
+            ->selectRaw("
+                COUNT(*) as line_count,
+                COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END), 0) as sum_credits,
+                COALESCE(SUM(CASE WHEN type = 'debit' THEN amount ELSE 0 END), 0) as sum_debits
+            ")
+            ->first();
+
+        $nullReferenceCredits = round((float) ($nullReference->sum_credits ?? 0), 2);
+        $nullReferenceDebits = round((float) ($nullReference->sum_debits ?? 0), 2);
+        $nullReferenceLineCount = (int) ($nullReference->line_count ?? 0);
+
+        $nullReferenceLines = [];
+        if ($nullReferenceLineCount > 0) {
+            foreach (
+                Transaction::query()
+                    ->where(function ($query): void {
+                        $query->whereNull('reference_id')->orWhereNull('reference_type');
+                    })
+                    ->with(['account', 'member'])
+                    ->orderByDesc('transacted_at')
+                    ->orderByDesc('id')
+                    ->limit(75)
+                    ->get() as $transaction
+            ) {
+                $nullReferenceLines[] = [
+                    'transaction_id' => (int) $transaction->id,
+                    'type' => (string) $transaction->type,
+                    'amount' => round((float) $transaction->amount, 2),
+                    'description' => $transaction->displayDescription(),
+                    'account_id' => (int) $transaction->account_id,
+                    'account_type' => (string) ($transaction->account?->type ?? ''),
+                    'account_scope' => $transaction->account?->is_master ? 'master' : 'member',
+                    'member' => $transaction->member?->name,
+                    'transacted_at' => $transaction->transacted_at?->toDateTimeString(),
+                ];
+            }
+        }
+
+        $netByAccountType = [];
+        foreach (
+            DB::table('transactions as t')
+                ->join('accounts as a', 'a.id', '=', 't.account_id')
+                ->selectRaw("
+                    a.type as account_type,
+                    a.is_master,
+                    {$creditSumSql} as sum_credits,
+                    {$debitSumSql} as sum_debits
+                ")
+                ->groupBy('a.type', 'a.is_master')
+                ->orderBy('a.type')
+                ->orderByDesc('a.is_master')
+                ->get() as $row
+        ) {
+            $credits = round((float) $row->sum_credits, 2);
+            $debits = round((float) $row->sum_debits, 2);
+            $netDelta = round($credits - $debits, 2);
+
+            if (abs($netDelta) <= $tolerance) {
+                continue;
+            }
+
+            $netByAccountType[] = [
+                'account_type' => (string) $row->account_type,
+                'scope' => ((bool) $row->is_master) ? 'master' : 'member',
+                'sum_credits' => $credits,
+                'sum_debits' => $debits,
+                'net_delta' => $netDelta,
+            ];
+        }
+
+        usort(
+            $netByAccountType,
+            fn (array $a, array $b): int => abs($b['net_delta']) <=> abs($a['net_delta']),
+        );
+
+        return [
+            'unbalanced_posting_group_count' => $unbalancedGroupCount,
+            'suspected_postings' => $suspectedPostings,
+            'suspected_postings_truncated' => $unbalancedGroupCount > count($suspectedPostings),
+            'null_reference_line_count' => $nullReferenceLineCount,
+            'null_reference_credits' => $nullReferenceCredits,
+            'null_reference_debits' => $nullReferenceDebits,
+            'null_reference_delta' => round($nullReferenceCredits - $nullReferenceDebits, 2),
+            'null_reference_lines' => $nullReferenceLines,
+            'null_reference_lines_truncated' => $nullReferenceLineCount > count($nullReferenceLines),
+            'net_by_account_type' => array_slice($netByAccountType, 0, 20),
+            'resolution_hints' => [
+                __('Each posting group (same reference type and ID) should have equal total credits and debits. Groups listed below are the most likely source of trial drift.'),
+                __('Lines without a reference often come from manual adjustments — open a row below, then use the Linked source column or filter on the account ledger to review or correct the entry.'),
+                __('Account-type nets show where credits and debits fail to cancel; member cash and fund accounts commonly carry net drift when only one pool leg was posted.'),
+                __('Cross-check related checks: stored balance vs ledger, paired control totals, and the flow-specific integrity checks for contributions, loans, and bank imports.'),
+            ],
+        ];
     }
 
     /**

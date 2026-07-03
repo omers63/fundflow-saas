@@ -14,6 +14,7 @@ use App\Models\Tenant\Transaction;
 use App\Services\FiscalClose\FiscalClosePeriodResolver;
 use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
+use App\Support\MemberLedgerDescriptionTranslator;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use DateTimeInterface;
@@ -964,6 +965,7 @@ class AccountingService
         float $amount,
         string $description,
         ?DateTimeInterface $transactedAt = null,
+        ?Model $reference = null,
     ): void {
         $this->assertMasterReserveAccount($reserveAccount);
 
@@ -990,10 +992,10 @@ class AccountingService
         $fundTransferDescription = __(':description (master fund transfer)', ['description' => $description]);
         $reserveFundingDescription = __(':description (reserve funding)', ['description' => $description]);
 
-        $postFunding = function () use ($masterFund, $reserveAccount, $amount, $fundTransferDescription, $reserveFundingDescription, $transactedAt): void {
-            DB::transaction(function () use ($masterFund, $reserveAccount, $amount, $fundTransferDescription, $reserveFundingDescription, $transactedAt): void {
-                $this->debit($masterFund, $amount, $fundTransferDescription, null, $transactedAt);
-                $this->credit($reserveAccount, $amount, $reserveFundingDescription, null, $transactedAt);
+        $postFunding = function () use ($masterFund, $reserveAccount, $amount, $fundTransferDescription, $reserveFundingDescription, $transactedAt, $reference): void {
+            DB::transaction(function () use ($masterFund, $reserveAccount, $amount, $fundTransferDescription, $reserveFundingDescription, $transactedAt, $reference): void {
+                $this->debit($masterFund, $amount, $fundTransferDescription, $reference, $transactedAt);
+                $this->credit($reserveAccount, $amount, $reserveFundingDescription, $reference, $transactedAt);
             });
         };
 
@@ -1330,14 +1332,14 @@ class AccountingService
 
         $memberName = Member::query()->whereKey($memberId)->value('name');
 
-        if (filled($memberName)) {
+        if (filled($memberName) && ! MemberLedgerDescriptionTranslator::descriptionAlreadyContainsMemberName($base, (string) $memberName)) {
             return __(':description (:member)', [
                 'description' => $base,
                 'member' => $memberName,
             ]);
         }
 
-        return $base === '' ? trim($mirrorSuffix) : $base.' '.trim($mirrorSuffix);
+        return $base === '' ? trim($mirrorSuffix) : $base;
     }
 
     private function assertMasterReserveAccount(Account $account): void
