@@ -18,6 +18,7 @@ class LoanInstallment extends Model
         'amount',
         'due_date',
         'paid_at',
+        'waived_at',
         'status',
         'is_late',
         'late_fee_amount',
@@ -35,6 +36,7 @@ class LoanInstallment extends Model
             'amount' => 'decimal:2',
             'due_date' => 'date',
             'paid_at' => 'datetime',
+            'waived_at' => 'datetime',
             'is_late' => 'boolean',
             'late_fee_amount' => 'decimal:2',
             'amount_collected' => 'decimal:2',
@@ -72,6 +74,11 @@ class LoanInstallment extends Model
     public function isPaid(): bool
     {
         return $this->status === 'paid';
+    }
+
+    public function isWaived(): bool
+    {
+        return $this->status === 'waived';
     }
 
     public function isOverdue(): bool

@@ -24,6 +24,7 @@ use App\Support\ImportDateFormats;
 use App\Support\Lang;
 use App\Support\LedgerSettings;
 use App\Support\LoanSettings;
+use App\Support\LocalizationSettings;
 use App\Support\MemberNumberSettings;
 use App\Support\NotificationSettings;
 use App\Support\PublicPageSettings;
@@ -190,6 +191,7 @@ class Settings extends Page implements HasForms
 
         return [
             'currency' => $general['currency'] ?? 'USD',
+            ...LocalizationSettings::allForForm(),
             ...LedgerSettings::allForForm(),
             'business_day' => BusinessDaySettings::forForm(),
             'reconciliation_bank_statement_balance' => $reconciliation['bank_statement_balance'] ?? null,
@@ -221,6 +223,7 @@ class Settings extends Page implements HasForms
             'loan_allow_excess_fund_cash_out' => (bool) ($loan['allow_excess_fund_cash_out'] ?? true),
             'loan_auto_allocate_repayment' => (bool) ($loan['auto_allocate_loan_repayment'] ?? false),
             'loan_default_grace_cycles' => $loan['default_grace_cycles'] ?? 2,
+            'loan_max_allowed_grace_cycles' => $loan['max_allowed_grace_cycles'] ?? 2,
             'loan_late_payment_consecutive' => $loan['late_payment_consecutive_threshold'] ?? 3,
             'loan_late_payment_rolling' => $loan['late_payment_rolling_threshold'] ?? 15,
             'loan_late_payment_lookback_months' => $loan['late_payment_lookback_months'] ?? 60,
@@ -289,6 +292,18 @@ class Settings extends Page implements HasForms
                             ->searchable()
                             ->options(static::currencyOptions())
                             ->helperText(__('The primary currency used for all transactions.')),
+                        Select::make('localization_default_admin_locale')
+                            ->label(__('Default admin language'))
+                            ->options(LocalizationSettings::localeOptions())
+                            ->required()
+                            ->native(false)
+                            ->helperText(__('Language for tenant admins who have not set a personal preference.')),
+                        Select::make('localization_default_member_locale')
+                            ->label(__('Default member language'))
+                            ->options(LocalizationSettings::localeOptions())
+                            ->required()
+                            ->native(false)
+                            ->helperText(__('Language for members and the public member portal when no personal preference is set.')),
                     ]),
                 Section::make(__('Ledgers'))
                     ->description(__('Controls optional admin tools on account transaction tables.'))
@@ -735,6 +750,13 @@ class Settings extends Page implements HasForms
                             ->step(0.1)
                             ->required()
                             ->helperText(__('Percentage of approved amount member must hold in fund for full settlement.')),
+                        TextInput::make('loan_max_allowed_grace_cycles')
+                            ->label(__('Maximum grace cycles on application'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(12)
+                            ->required()
+                            ->helperText(__('Members and admins may choose 0 up to this many grace cycles before the first EMI.')),
                     ]),
                 Section::make(__('Loan tiers'))
                     ->description(__('Interest rates are managed in the loan tiers resource.'))
@@ -1223,6 +1245,7 @@ class Settings extends Page implements HasForms
         }
 
         Setting::set('general', 'currency', $state['currency']);
+        LocalizationSettings::saveFromForm($state);
         LedgerSettings::saveFromForm($state);
         Setting::set('reconciliation', 'bank_statement_balance', $state['reconciliation_bank_statement_balance'] ?? '');
         Setting::set('reconciliation', 'bank_statement_date', $state['reconciliation_bank_statement_date'] ?? '');
@@ -1255,6 +1278,7 @@ class Settings extends Page implements HasForms
             'max_loan_amount' => (float) ($state['loan_max_loan_amount'] ?? 0),
             'settlement_threshold_pct' => ((float) ($state['loan_settlement_threshold_pct'] ?? 16)) / 100,
             'default_grace_cycles' => (int) ($state['loan_default_grace_cycles'] ?? 2),
+            'max_allowed_grace_cycles' => max(0, min(12, (int) ($state['loan_max_allowed_grace_cycles'] ?? 2))),
             'require_guarantor_above_fund_balance' => (bool) ($state['loan_require_guarantor_above_fund'] ?? true),
             'member_funding_split_pct' => max(0, min(100, (float) ($state['loan_member_funding_split_pct'] ?? 50))),
             'allow_funding_strategy_member_topup' => $allowMemberTopup,

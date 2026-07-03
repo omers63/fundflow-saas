@@ -25,11 +25,7 @@ final class LegacyMigrationGraceCycleSettings
      */
     public static function graceCycleOptions(): array
     {
-        return [
-            0 => __('None'),
-            1 => __('One cycle'),
-            2 => __('Two cycles'),
-        ];
+        return LoanSettings::graceCycleSelectOptions();
     }
 
     public static function graceCycles(): int
@@ -40,11 +36,11 @@ final class LegacyMigrationGraceCycleSettings
             return self::defaultGraceCycles();
         }
 
-        return max(0, min(2, (int) $stored));
+        return LoanSettings::clampGraceCycles((int) $stored);
     }
 
     public static function saveGraceCycles(int $graceCycles): void
     {
-        Setting::set(self::GROUP, self::KEY, (string) max(0, min(2, $graceCycles)));
+        Setting::set(self::GROUP, self::KEY, (string) LoanSettings::clampGraceCycles($graceCycles));
     }
 }

@@ -1034,6 +1034,7 @@
 }
 
 .ff-member-apply-loan .fi-fo-wizard {
+    width: 100%;
     border-radius: var(--ff-panel-radius, 14px);
 }
 

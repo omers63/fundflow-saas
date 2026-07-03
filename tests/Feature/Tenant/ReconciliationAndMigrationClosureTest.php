@@ -342,7 +342,7 @@ test('ensure schedule installment amount updates legacy last installment to clos
     expect((float) $last->fresh()->amount)->toBe(600.0);
 });
 
-test('nightly reconciliation raises fund tier over committed', function () {
+test('nightly reconciliation does not raise fund tier over committed', function () {
     $loanTier = LoanTier::query()->first() ?? LoanTier::create([
         'label' => 'Test tier',
         'min_amount' => 1000,
@@ -394,7 +394,7 @@ test('nightly reconciliation raises fund tier over committed', function () {
     expect(ReconciliationException::query()
         ->where('exception_code', 'FUND_TIER_OVER_COMMITTED')
         ->open()
-        ->exists())->toBeTrue();
+        ->exists())->toBeFalse();
 });
 
 test('jobs page registers in tenant panel navigation', function () {

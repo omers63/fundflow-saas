@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Middleware;
 
 use App\Support\AppLocale;
+use App\Support\LocalizationSettings;
 use BezhanSalleh\LanguageSwitch\LanguageSwitch;
 use Closure;
 use Illuminate\Http\Request;
@@ -17,7 +18,9 @@ class SetApplicationLocale
         $locale = LanguageSwitch::make()->getPreferredLocale();
 
         if (! AppLocale::isSupported($locale)) {
-            $locale = config('app.locale', AppLocale::DEFAULT);
+            $locale = tenancy()->initialized
+                ? LocalizationSettings::guestLocale($request)
+                : config('app.locale', AppLocale::DEFAULT);
         }
 
         app()->setLocale($locale);

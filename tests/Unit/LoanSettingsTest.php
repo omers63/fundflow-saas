@@ -5,9 +5,8 @@ use App\Models\Tenant\Setting;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
@@ -32,6 +31,24 @@ it('falls back guarantor transfer threshold to grace cycles plus one', function 
     LoanSettings::save(['default_grace_cycles' => 4]);
 
     expect(LoanSettings::guarantorTransferMissedThreshold())->toBe(5);
+});
+
+it('clamps application grace cycles to configured maximum', function () {
+    LoanSettings::save(['max_allowed_grace_cycles' => 4]);
+
+    expect(LoanSettings::maxAllowedGraceCycles())->toBe(4)
+        ->and(LoanSettings::clampGraceCycles(10))->toBe(4)
+        ->and(LoanSettings::clampGraceCycles(-1))->toBe(0)
+        ->and(LoanSettings::graceCycleSelectOptions())->toHaveKeys([0, 1, 2, 3, 4])
+        ->and(LoanSettings::defaultApplicationGraceCycles())->toBe(1);
+});
+
+it('defaults application grace cycles to zero when max allowed is zero', function () {
+    LoanSettings::save(['max_allowed_grace_cycles' => 0]);
+
+    expect(LoanSettings::defaultApplicationGraceCycles())->toBe(0)
+        ->and(LoanSettings::graceCycleSelectOptions())->toHaveKeys([0])
+        ->and(LoanSettings::graceCycleSelectOptions())->toHaveCount(1);
 });
 
 it('caps max loan amount by fund balance multiplier', function () {

@@ -62,7 +62,7 @@ class LoanEmiCollectionCalendarPage extends Page
 
     public function getSubheading(): ?string
     {
-        return __('Month view of EMI due dates — green collected, amber pending, red overdue.');
+        return __('Month view of EMI collections — green paid on, red to be collected.');
     }
 
     /**

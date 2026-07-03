@@ -749,3 +749,65 @@ test('loan repayment import sample download route returns csv', function () {
         ->assertSuccessful()
         ->assertDownload('loan-repayments-import-sample.csv');
 });
+
+test('portfolio loans table can filter by loan tier and fund tier', function () {
+    $memberA = createLoanImportMember($this->accounting, 'tier-filter-a@fund.test');
+    $memberB = createLoanImportMember($this->accounting, 'tier-filter-b@fund.test');
+
+    $otherLoanTier = LoanTier::create([
+        'tier_number' => $this->loanTier->tier_number + 50,
+        'label' => 'Filter tier B',
+        'min_amount' => 1_000,
+        'max_amount' => 50_000,
+        'min_monthly_installment' => 500,
+        'is_active' => true,
+    ]);
+
+    $otherFundTier = FundTier::create([
+        'tier_number' => $this->fundTier->tier_number + 50,
+        'label' => 'Filter pool B',
+        'loan_tier_id' => $otherLoanTier->id,
+        'percentage' => 25,
+        'is_active' => true,
+    ]);
+
+    $matchingLoan = Loan::create([
+        'member_id' => $memberA->id,
+        'loan_tier_id' => $this->loanTier->id,
+        'fund_tier_id' => $this->fundTier->id,
+        'amount' => 5_000,
+        'amount_requested' => 5_000,
+        'amount_approved' => 5_000,
+        'interest_rate' => 0,
+        'term_months' => 10,
+        'monthly_repayment' => 500,
+        'status' => 'active',
+        'applied_at' => now()->subMonth(),
+        'approved_at' => now()->subMonth(),
+    ]);
+
+    $otherLoan = Loan::create([
+        'member_id' => $memberB->id,
+        'loan_tier_id' => $otherLoanTier->id,
+        'fund_tier_id' => $otherFundTier->id,
+        'amount' => 8_000,
+        'amount_requested' => 8_000,
+        'amount_approved' => 8_000,
+        'interest_rate' => 0,
+        'term_months' => 10,
+        'monthly_repayment' => 800,
+        'status' => 'active',
+        'applied_at' => now()->subWeek(),
+        'approved_at' => now()->subWeek(),
+    ]);
+
+    Livewire::test(ListLoans::class)
+        ->assertSet('activeTab', 'portfolio')
+        ->filterTable('loan_tier_id', $this->loanTier->id)
+        ->assertCanSeeTableRecords([$matchingLoan])
+        ->assertCanNotSeeTableRecords([$otherLoan])
+        ->resetTableFilters()
+        ->filterTable('fund_tier_id', $this->fundTier->id)
+        ->assertCanSeeTableRecords([$matchingLoan])
+        ->assertCanNotSeeTableRecords([$otherLoan]);
+});

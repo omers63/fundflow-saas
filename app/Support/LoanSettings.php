@@ -25,6 +25,7 @@ final class LoanSettings
             'max_loan_amount' => 0,
             'settlement_threshold_pct' => 0.16,
             'default_grace_cycles' => 2,
+            'max_allowed_grace_cycles' => 2,
             'guarantor_transfer_missed_threshold' => 3,
             'max_active_loans' => 1,
             'require_guarantor_above_fund_balance' => true,
@@ -85,6 +86,45 @@ final class LoanSettings
     public static function defaultGraceCycles(): int
     {
         return (int) self::get('default_grace_cycles', 2);
+    }
+
+    public static function maxAllowedGraceCycles(): int
+    {
+        return max(0, min(12, (int) self::get('max_allowed_grace_cycles', 2)));
+    }
+
+    public static function clampGraceCycles(int $graceCycles): int
+    {
+        return max(0, min(self::maxAllowedGraceCycles(), $graceCycles));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function graceCycleSelectOptions(): array
+    {
+        $options = [0 => __('None')];
+
+        for ($cycles = 1; $cycles <= self::maxAllowedGraceCycles(); $cycles++) {
+            $options[$cycles] = self::graceCycleLabel($cycles);
+        }
+
+        return $options;
+    }
+
+    public static function graceCycleLabel(int $graceCycles): string
+    {
+        return match ($graceCycles) {
+            0 => __('None'),
+            1 => __('One cycle'),
+            2 => __('Two cycles'),
+            default => trans_choice(':count cycle|:count cycles', $graceCycles, ['count' => $graceCycles]),
+        };
+    }
+
+    public static function defaultApplicationGraceCycles(): int
+    {
+        return min(1, self::maxAllowedGraceCycles());
     }
 
     public static function guarantorTransferMissedThreshold(): int

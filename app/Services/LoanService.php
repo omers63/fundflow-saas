@@ -12,6 +12,7 @@ use App\Models\Tenant\Member;
 use App\Services\Loans\LoanEarlySettlementService;
 use App\Services\Loans\LoanLifecycleService;
 use App\Services\Loans\LoanRepaymentService;
+use App\Services\Loans\LoanThresholdInstallmentWaiverService;
 use App\Support\LoanSettings;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
@@ -118,6 +119,11 @@ class LoanService
     public function settleLoan(Loan $loan, float $amount, string $option = 'roll_up'): void
     {
         $this->earlySettlement->settle($loan, $amount, $option);
+    }
+
+    public function waiveRemainingThresholdInstallments(Loan $loan, string $reason, ?int $waivedById = null): Loan
+    {
+        return app(LoanThresholdInstallmentWaiverService::class)->waiveRemaining($loan, $reason, $waivedById);
     }
 
     public static function computeMonthlyRepayment(float $amount, float $interestRate, int $termMonths): float

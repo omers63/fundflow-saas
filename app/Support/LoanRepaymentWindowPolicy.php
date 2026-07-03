@@ -51,7 +51,7 @@ final class LoanRepaymentWindowPolicy
 
     public function firstRepaymentCycleStartForDisbursement(Carbon $disbursedAt, int $graceCycles): Carbon
     {
-        $exemption = Loan::computeExemptionAndFirstRepayment($disbursedAt, max(0, min(2, $graceCycles)));
+        $exemption = Loan::computeExemptionAndFirstRepayment($disbursedAt, LoanSettings::clampGraceCycles($graceCycles));
 
         return $this->normalLoanWindowOpensAt(
             $exemption['first_repayment_month'],

@@ -3,6 +3,7 @@
 namespace App\Models\Tenant;
 
 use App\Support\AppLocale;
+use App\Support\LocalizationSettings;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasAvatar;
 use Filament\Panel;
@@ -96,11 +97,13 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
 
     public function preferredLocale(): string
     {
-        $locale = (string) ($this->preferred_locale ?? config('app.locale', AppLocale::DEFAULT));
+        if (filled($this->preferred_locale) && AppLocale::isSupported((string) $this->preferred_locale)) {
+            return (string) $this->preferred_locale;
+        }
 
-        return in_array($locale, AppLocale::SUPPORTED, true)
-            ? $locale
-            : config('app.locale', AppLocale::DEFAULT);
+        return $this->is_admin
+            ? LocalizationSettings::adminLocale()
+            : LocalizationSettings::memberLocale();
     }
 
     public static function normalizePublicDiskRelativePath(?string $raw): ?string

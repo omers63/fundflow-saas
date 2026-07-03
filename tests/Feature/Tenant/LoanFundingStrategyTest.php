@@ -5,10 +5,12 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\ReconciliationSnapshot;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanLifecycleService;
 use App\Services\LoanService;
+use App\Services\ReconciliationReportService;
 use App\Support\ContributionCollectionStatus;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
@@ -236,4 +238,27 @@ test('split strategy without cash-out keeps excess in fund at disbursement', fun
 
     expect((float) $member->cashAccount->balance)->toBe(10_000.0)
         ->and((float) $member->fundAccount->balance)->toBe(5000.0);
+});
+
+test('split strategy excess fund cash-out passes loan disbursement cash payout reconciliation check', function () {
+    LoanSettings::save(['member_funding_split_pct' => 50]);
+
+    $member = createEligibleMemberForFundingTest($this->accounting, 15_000);
+
+    $loan = $this->lifecycle->applyForLoan(
+        $member,
+        10_000,
+        'Split recon',
+        fundingStrategy: LoanFundingStrategy::SPLIT_PERCENTAGE,
+        cashOutExcessFund: true,
+    );
+    $this->loanService->approveLoan($loan, 10_000);
+    $this->loanService->disburseLoan($loan);
+
+    $check = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    )['checks']['loan_disbursement_cash_payout_integrity'];
+
+    expect($check['severity'])->toBe('ok')
+        ->and($check['mismatch_count'])->toBe(0);
 });

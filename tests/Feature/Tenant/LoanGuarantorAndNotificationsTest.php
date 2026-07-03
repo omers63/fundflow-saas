@@ -105,7 +105,7 @@ function seedPostedContributionsForLoanEligibility(Member $member): void
         $month = (int) $cursor->month;
         $year = (int) $cursor->year;
 
-        if ((float) $member->monthly_contribution_amount > 0 && !$member->isExemptFromContributions($month, $year)) {
+        if ((float) $member->monthly_contribution_amount > 0 && ! $member->isExemptFromContributions($month, $year)) {
             Contribution::create([
                 'member_id' => $member->id,
                 'period' => Contribution::periodDate($month, $year),
@@ -124,31 +124,33 @@ function seedPostedContributionsForLoanEligibility(Member $member): void
     }
 }
 
-test('loan apply requires guarantor when amount exceeds fund balance', function () {
+test('loan apply requires guarantor name when amount exceeds fund balance', function () {
     LoanSettings::save(['require_guarantor_above_fund_balance' => true]);
 
     $lifecycle = app(LoanLifecycleService::class);
 
-    expect(fn() => $lifecycle->applyForLoan($this->borrower, 15000, 'Test purpose'))
+    expect(fn () => $lifecycle->applyForLoan($this->borrower, 15000, 'Test purpose'))
         ->toThrow(InvalidArgumentException::class);
 
     $loan = $lifecycle->applyForLoan(
         $this->borrower,
         15000,
         'Test purpose',
-        $this->guarantor->id,
+        null,
         false,
         true,
         1,
         'Witness One',
         '+966511111111',
+        guarantorName: 'External Guarantor Person',
     );
 
-    expect($loan->guarantor_member_id)->toBe($this->guarantor->id)
+    expect($loan->guarantor_member_id)->toBeNull()
+        ->and($loan->guarantor_name)->toBe('External Guarantor Person')
         ->and($loan->witness1_name)->toBe('Witness One');
 
     Notification::assertSentTo($this->borrowerUser, LoanSubmittedNotification::class);
-    Notification::assertSentTo($this->guarantorUser, GuarantorLoanApplicationNotification::class);
+    Notification::assertNotSentTo($this->guarantorUser, GuarantorLoanApplicationNotification::class);
     Notification::assertSentTo(
         $this->admin,
         NewLoanApplicationNotification::class,
@@ -163,9 +165,29 @@ test('loan apply requires guarantor when amount exceeds fund balance', function 
                 && ($payload['format'] ?? null) === 'filament'
                 && str_contains($actionUrl, (string) $loan->id)
                 && is_string($host)
-                && !in_array($host, $centralDomains, true);
+                && ! in_array($host, $centralDomains, true);
         },
     );
+});
+
+test('loan apply notifies matched guarantor member when admin assigns member id', function () {
+    LoanSettings::save(['require_guarantor_above_fund_balance' => true]);
+
+    $lifecycle = app(LoanLifecycleService::class);
+
+    $loan = $lifecycle->applyForLoan(
+        $this->borrower,
+        15000,
+        'Test purpose',
+        $this->guarantor->id,
+        false,
+        true,
+        1,
+    );
+
+    expect($loan->guarantor_member_id)->toBe($this->guarantor->id);
+
+    Notification::assertSentTo($this->guarantorUser, GuarantorLoanApplicationNotification::class);
 });
 
 test('member notification channels include sms when configured', function () {

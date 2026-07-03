@@ -18,6 +18,7 @@ use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
+use App\Services\Loans\LoanLedgerService;
 use App\Support\ContributionPolicySettings;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -578,6 +579,7 @@ class ReconciliationReportService
                         ->whereHas('account', fn ($q) => $q
                             ->where('type', 'cash')
                             ->where('member_id', $loan->member_id))
+                        ->tap(fn ($query) => LoanLedgerService::excludeExcessFundToCashCredits($query))
                         ->sum('amount');
 
                     $expected = (float) $loan->amount_disbursed;
@@ -604,7 +606,7 @@ class ReconciliationReportService
             'mismatch_count' => count($loanCashPayoutMismatches),
             'mismatches' => array_slice($loanCashPayoutMismatches, 0, 100),
             'mismatches_truncated' => count($loanCashPayoutMismatches) > 100,
-            'note' => 'Expected member cash credits sourced from Loan should equal loans.amount_disbursed.',
+            'note' => 'Expected member cash payout credits (disbursement legs) sourced from Loan should equal loans.amount_disbursed. Split-strategy excess fund-to-cash transfers are excluded.',
         ];
 
         // --- 4d) Contribution posting flow integrity (all expected legs by type) ---

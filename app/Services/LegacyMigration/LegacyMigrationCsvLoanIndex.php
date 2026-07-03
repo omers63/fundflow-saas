@@ -8,6 +8,7 @@ use App\Support\AssociativeCsv;
 use App\Support\LegacyLoanCsvIdentity;
 use App\Support\LegacyMigrationDateParser;
 use App\Support\LegacyMigrationGraceCycleSettings;
+use App\Support\LoanSettings;
 use Carbon\Carbon;
 
 final class LegacyMigrationCsvLoanIndex
@@ -31,7 +32,7 @@ final class LegacyMigrationCsvLoanIndex
     public static function fromPath(string $absolutePath, ?int $graceCycles = null): self
     {
         $index = new self(
-            max(0, min(2, $graceCycles ?? LegacyMigrationGraceCycleSettings::graceCycles())),
+            LoanSettings::clampGraceCycles($graceCycles ?? LegacyMigrationGraceCycleSettings::graceCycles()),
         );
 
         foreach (AssociativeCsv::read($absolutePath) as $rowIndex => $row) {

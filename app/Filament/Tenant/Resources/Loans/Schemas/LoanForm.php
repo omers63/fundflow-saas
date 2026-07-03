@@ -13,6 +13,7 @@ use App\Support\LoanEligibilityGate;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use Closure;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -130,12 +131,8 @@ class LoanForm
                                 ->nullable(fn (Get $get): bool => ! self::guarantorRequired($get)),
                             Select::make('grace_cycles')
                                 ->label(__('Grace cycles before first repayment'))
-                                ->options([
-                                    0 => __('None'),
-                                    1 => __('One cycle'),
-                                    2 => __('Two cycles'),
-                                ])
-                                ->default(1)
+                                ->options(LoanSettings::graceCycleSelectOptions())
+                                ->default(LoanSettings::defaultApplicationGraceCycles())
                                 ->required()
                                 ->native(false),
                             Toggle::make('is_emergency')
@@ -309,8 +306,14 @@ class LoanForm
                             ->required()
                             ->minValue(1)
                             ->live(onBlur: true),
+                        TextInput::make('guarantor_name')
+                            ->label(__('Guarantor name (from application)'))
+                            ->disabled()
+                            ->dehydrated()
+                            ->visible(fn (Get $get): bool => filled($get('guarantor_name'))),
                         Select::make('guarantor_member_id')
-                            ->label(__('Guarantor'))
+                            ->label(__('Match guarantor to member'))
+                            ->helperText(__('Link the named guarantor to a member record before approval when required.'))
                             ->options(fn (Get $get): array => Member::query()
                                 ->active()
                                 ->when(filled($get('member_id')), fn ($query) => $query->whereKeyNot($get('member_id')))
@@ -322,11 +325,8 @@ class LoanForm
                             ->nullable(fn (Get $get): bool => ! self::guarantorRequired($get)),
                         Select::make('grace_cycles')
                             ->label(__('Grace cycles before first repayment'))
-                            ->options([
-                                0 => __('None'),
-                                1 => __('One cycle'),
-                                2 => __('Two cycles'),
-                            ])
+                            ->options(LoanSettings::graceCycleSelectOptions())
+                            ->default(LoanSettings::defaultApplicationGraceCycles())
                             ->required()
                             ->native(false),
                         Toggle::make('is_emergency')
@@ -336,6 +336,13 @@ class LoanForm
                             ->label(__('Purpose'))
                             ->rows(3)
                             ->maxLength(2000)
+                            ->columnSpanFull(),
+                        FileUpload::make('application_form_path')
+                            ->label(__('Signed loan application form'))
+                            ->disk('public')
+                            ->directory('loan-applications')
+                            ->downloadable()
+                            ->openable()
                             ->columnSpanFull(),
                     ]),
                 self::loanSection(__('Witnesses'), __('Optional witnesses recorded with the application.'))
@@ -417,6 +424,10 @@ class LoanForm
 
     private static function guarantorRequired(Get $get): bool
     {
+        if (filled($get('guarantor_name')) || filled($get('guarantor_member_id'))) {
+            return false;
+        }
+
         $member = self::resolveMember($get);
 
         if ($member === null) {

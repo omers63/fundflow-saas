@@ -8,14 +8,17 @@ use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanEarlySettlementService;
 use App\Services\Loans\LoanLifecycleService;
 use App\Services\Loans\LoanQueueOrderingService;
 use App\Services\Loans\LoanRepaymentService;
 use App\Services\Loans\LoanSplitExcessFundCashOutService;
+use App\Services\Loans\LoanThresholdInstallmentWaiverService;
 use App\Services\LoanService;
 use App\Support\BusinessDay;
+use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
@@ -59,12 +62,8 @@ final class LoanFilamentActions
                     ->helperText(__('Bypasses standard queue; uses emergency fund tier.')),
                 Select::make('grace_cycles')
                     ->label(__('Grace cycles before first repayment'))
-                    ->options([
-                        0 => __('None'),
-                        1 => __('One cycle'),
-                        2 => __('Two cycles'),
-                    ])
-                    ->default(1)
+                    ->options(LoanSettings::graceCycleSelectOptions())
+                    ->default(LoanSettings::defaultApplicationGraceCycles())
                     ->required()
                     ->live()
                     ->afterStateUpdated(fn ($state, callable $set) => $set('has_grace_cycle', ((int) $state) > 0)),
@@ -403,6 +402,85 @@ final class LoanFilamentActions
             });
     }
 
+    public static function waiveThresholdInstallments(): Action
+    {
+        return Action::make('waiveThresholdInstallments')
+            ->label(__('Waive threshold installments'))
+            ->icon('heroicon-o-hand-raised')
+            ->color('warning')
+            ->requiresConfirmation()
+            ->modalHeading(__('Waive remaining threshold installments'))
+            ->modalDescription(__('Use only for exceptional cases after the master fund portion is fully repaid. Remaining settlement-threshold EMIs will be waived and the loan marked completed without further cash collection.'))
+            ->visible(fn (Loan $record): bool => $record->canWaiveRemainingThresholdInstallments())
+            ->schema(fn (Loan $record): array => self::thresholdWaiverFormSchema($record))
+            ->action(function (Loan $record, array $data, Action $action, LoanService $service): void {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $service->waiveRemainingThresholdInstallments(
+                            $record,
+                            (string) ($data['reason'] ?? ''),
+                            auth('tenant')->id(),
+                        ),
+                        __('Threshold waiver failed'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__('Threshold installments waived'))
+                    ->body(__('The loan repayment cycle is now complete.'))
+                    ->success()
+                    ->send();
+            });
+    }
+
+    /**
+     * @return array<int, \Filament\Forms\Components\Component|\Filament\Schemas\Components\Component>
+     */
+    public static function thresholdWaiverFormSchema(Loan $record): array
+    {
+        $waiver = app(LoanThresholdInstallmentWaiverService::class);
+        $currency = Setting::get('general', 'currency', 'USD');
+        $installments = $waiver->waivableInstallments($record);
+        $waiveAmount = round((float) $installments->sum('amount'), 2);
+        $masterPortion = (float) $record->master_portion;
+        $repaidToMaster = (float) $record->repaid_to_master;
+        $threshold = $record->fullRepaymentThreshold();
+        $collected = $record->totalPrincipalCollected();
+
+        return [
+            Placeholder::make('waiver_summary')
+                ->label(__('Summary'))
+                ->content(new HtmlString(
+                    '<ul class="list-disc space-y-1 ps-4 text-sm text-gray-600 dark:text-gray-300">'
+                    .'<li>'.e(__('Master fund repaid: :repaid / :total', [
+                        'repaid' => MoneyDisplay::format($repaidToMaster, $currency) ?? '—',
+                        'total' => MoneyDisplay::format($masterPortion, $currency) ?? '—',
+                    ])).'</li>'
+                    .'<li>'.e(__('Principal collected on schedule: :amount', [
+                        'amount' => MoneyDisplay::format($collected, $currency) ?? '—',
+                    ])).'</li>'
+                    .'<li>'.e(__('Full repayment threshold: :amount', [
+                        'amount' => MoneyDisplay::format($threshold, $currency) ?? '—',
+                    ])).'</li>'
+                    .'<li>'.e(trans_choice(
+                        ':count installment to waive|:count installments to waive',
+                        $installments->count(),
+                        ['count' => $installments->count()],
+                    )).' · '.e(MoneyDisplay::format($waiveAmount, $currency) ?? '—').'</li>'
+                    .'</ul>'
+                )),
+            Textarea::make('reason')
+                ->label(__('Waiver reason'))
+                ->required()
+                ->rows(4)
+                ->maxLength(2000)
+                ->placeholder(__('Document the board decision or exceptional circumstance…')),
+        ];
+    }
+
     /**
      * @return array<int, \Filament\Forms\Components\Component|\Filament\Schemas\Components\Component>
      */
@@ -598,6 +676,7 @@ final class LoanFilamentActions
                 self::disburse(),
                 self::cashOutSplitExcessFund(),
                 self::earlySettle(),
+                self::waiveThresholdInstallments(),
                 self::applyOpenRepayment(),
                 self::transferGuarantorLiability(),
                 self::restoreBorrowerLiability(),

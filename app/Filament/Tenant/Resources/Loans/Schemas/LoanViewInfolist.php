@@ -9,10 +9,12 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\Setting;
 use App\Support\LoanFundExcessDisposition;
 use App\Support\LoanFundingStrategy;
+use App\Support\LoanSettings;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 
 final class LoanViewInfolist
 {
@@ -75,6 +77,31 @@ final class LoanViewInfolist
                             ->label(__('Settled at'))
                             ->dateTime()
                             ->placeholder(__('—')),
+                        TextEntry::make('threshold_waived_at')
+                            ->label(__('Threshold installments waived at'))
+                            ->dateTime()
+                            ->placeholder(__('—'))
+                            ->visible(fn (Loan $record): bool => $record->threshold_waived_at !== null),
+                        TextEntry::make('thresholdWaivedBy.name')
+                            ->label(__('Threshold waiver by'))
+                            ->placeholder(__('—'))
+                            ->visible(fn (Loan $record): bool => $record->threshold_waived_at !== null),
+                        TextEntry::make('threshold_waiver_reason')
+                            ->label(__('Threshold waiver reason'))
+                            ->placeholder(__('—'))
+                            ->columnSpanFull()
+                            ->visible(fn (Loan $record): bool => filled($record->threshold_waiver_reason)),
+                    ]),
+                self::detailSection(__('Application documents'), __('Signed forms submitted with the request'))
+                    ->visible(fn (Loan $record): bool => filled($record->application_form_path))
+                    ->schema([
+                        TextEntry::make('application_form_path')
+                            ->label(__('Signed loan application form'))
+                            ->formatStateUsing(fn (?string $state): string => filled($state) ? __('Download') : __('—'))
+                            ->url(fn (Loan $record): ?string => filled($record->application_form_path)
+                                ? Storage::disk('public')->url((string) $record->application_form_path)
+                                : null)
+                            ->openUrlInNewTab(),
                     ]),
                 self::detailSection(__('Funding'), __('How approved funds are sourced from member and master pools'))
                     ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
@@ -128,9 +155,9 @@ final class LoanViewInfolist
                         TextEntry::make('grace_cycles')
                             ->label(__('Grace cycles before first EMI'))
                             ->formatStateUsing(fn (?int $state, Loan $record): string => match (true) {
-                                $state !== null => trans_choice(':count cycle|:count cycles', (int) $state, ['count' => (int) $state]),
-                                $record->has_grace_cycle => __('One cycle'),
-                                default => __('None'),
+                                $state !== null => LoanSettings::graceCycleLabel((int) $state),
+                                $record->has_grace_cycle => LoanSettings::graceCycleLabel(1),
+                                default => LoanSettings::graceCycleLabel(0),
                             }),
                         TextEntry::make('grace_period')
                             ->label(__('Contribution exemption period'))
@@ -189,16 +216,22 @@ final class LoanViewInfolist
                 self::detailSection(__('Parties'), __('Guarantor and witness information'))
                     ->columns(['default' => 1, 'md' => 2])
                     ->visible(fn (Loan $record): bool => $record->guarantor_member_id !== null
+                        || filled($record->guarantor_name)
                         || filled($record->witness1_name)
                         || filled($record->witness2_name))
                     ->schema([
                         TextEntry::make('guarantor.name')
-                            ->label(__('Guarantor'))
+                            ->label(__('Guarantor (matched member)'))
                             ->url(fn (Loan $record): ?string => $record->guarantor_member_id
                                 ? MemberResource::getUrl('view', ['record' => $record->guarantor_member_id])
                                 : null)
                             ->placeholder(__('—'))
                             ->visible(fn (Loan $record): bool => $record->guarantor_member_id !== null),
+                        TextEntry::make('guarantor_name')
+                            ->label(__('Guarantor name (from application)'))
+                            ->placeholder(__('—'))
+                            ->visible(fn (Loan $record): bool => filled($record->guarantor_name)
+                                && $record->guarantor_member_id === null),
                         TextEntry::make('guarantor.member_number')
                             ->label(__('Guarantor member number'))
                             ->placeholder(__('—'))

@@ -10,6 +10,7 @@ use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Widgets\TenantDashboardWidget;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
@@ -366,4 +367,31 @@ test('tenant dashboard lifetime fund activity summarizes loans contributions and
         ->toContain(__('Lifetime fund activity'))
         ->toContain(__('Total collections'))
         ->toContain(__('Contributions + repayments'));
+});
+
+test('tenant dashboard fund tier utilisation uses fund tier labels from database', function () {
+    $user = User::create([
+        'name' => 'Fund Tier Admin',
+        'email' => 'fund-tier-label@fund.test',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    $this->actingAs($user, 'tenant');
+
+    Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 100_000, 'is_master' => true]);
+
+    FundTier::query()->forceDelete();
+
+    FundTier::create([
+        'tier_number' => 2,
+        'label' => 'Growth pool',
+        'loan_tier_id' => null,
+        'percentage' => 50,
+        'is_active' => true,
+    ]);
+
+    $labels = collect($this->service->snapshot()['fund_tier_utilisation'])->pluck('label')->all();
+
+    expect($labels)->toBe(['Growth pool']);
 });

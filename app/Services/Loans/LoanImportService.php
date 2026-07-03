@@ -56,7 +56,7 @@ class LoanImportService
     ): array {
         $this->authorizeImport();
 
-        $graceCycles = max(0, min(2, $graceCycles ?? 1));
+        $graceCycles = LoanSettings::clampGraceCycles($graceCycles ?? 1);
         $this->fundingStrategyForImport = $fundingStrategy !== null
             ? LoanFundingStrategy::normalize($fundingStrategy)
             : null;

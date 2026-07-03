@@ -82,7 +82,7 @@ final class LoanExportService
             $loan->installments_paid,
             $loan->loanTier?->min_monthly_installment,
             $loan->guarantor?->member_number,
-            $loan->guarantor?->name,
+            $loan->guarantorDisplayName(),
         ];
     }
 }

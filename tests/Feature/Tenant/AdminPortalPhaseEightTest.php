@@ -18,6 +18,7 @@ use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Support\FiscalSettings;
 use App\Support\LedgerSettings;
+use App\Support\LocalizationSettings;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\App;
 use Livewire\Livewire;
@@ -135,6 +136,28 @@ test('settings save persists ledger split reverse toggle', function () {
         ->assertNotified();
 
     expect(LedgerSettings::showSplitReverse())->toBeTrue();
+});
+
+test('settings save persists default admin and member languages', function () {
+    Filament::setCurrentPanel('tenant');
+
+    $admin = User::create([
+        'name' => 'Localization Settings Admin',
+        'email' => 'localization-settings@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(Settings::class, ['settingsTab' => 'general::tab'])
+        ->set('data.localization_default_admin_locale', 'en')
+        ->set('data.localization_default_member_locale', 'en')
+        ->call('save')
+        ->assertNotified();
+
+    expect(LocalizationSettings::adminLocale())->toBe('en')
+        ->and(LocalizationSettings::memberLocale())->toBe('en');
 });
 
 test('settings save persists ledger edit delete toggle', function () {

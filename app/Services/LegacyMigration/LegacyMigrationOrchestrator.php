@@ -685,7 +685,7 @@ final class LegacyMigrationOrchestrator
     private function resolveGraceCycles(array $options): int
     {
         if (array_key_exists('grace_cycles', $options) && $options['grace_cycles'] !== null && $options['grace_cycles'] !== '') {
-            return max(0, min(2, (int) $options['grace_cycles']));
+            return LoanSettings::clampGraceCycles((int) $options['grace_cycles']);
         }
 
         return LegacyMigrationGraceCycleSettings::graceCycles();

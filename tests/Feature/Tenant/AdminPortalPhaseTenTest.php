@@ -151,7 +151,34 @@ test('emi collection calendar builds month grid', function () {
 
     $grid = app(LoanEmiCollectionCalendarService::class)->monthGrid((int) now()->year, (int) now()->month);
 
-    expect(collect($grid)->sum('total'))->toBeGreaterThan(0);
+    expect(collect($grid)->sum('to_collect'))->toBe(1)
+        ->and(collect($grid)->sum('to_collect_amount'))->toBe(250.0)
+        ->and(collect($grid)->sum('paid_on'))->toBe(0);
+});
+
+test('emi collection calendar sums paid on amounts by posting date', function () {
+    $member = Member::factory()->create();
+    $loan = Loan::factory()->create([
+        'member_id' => $member->id,
+        'status' => 'active',
+    ]);
+
+    $paidAt = now()->startOfMonth()->addDays(6);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'due_date' => $paidAt->copy()->subDays(2),
+        'paid_at' => $paidAt,
+        'status' => 'paid',
+        'amount' => 400,
+    ]);
+
+    $grid = app(LoanEmiCollectionCalendarService::class)->monthGrid((int) now()->year, (int) now()->month);
+
+    expect(collect($grid)->sum('paid_on'))->toBe(1)
+        ->and(collect($grid)->sum('paid_on_amount'))->toBe(400.0)
+        ->and(collect($grid)->sum('to_collect'))->toBe(0);
 });
 
 test('emi collection calendar page renders', function () {
@@ -168,7 +195,9 @@ test('emi collection calendar page renders', function () {
     Livewire::actingAs($admin, 'tenant')
         ->test(LoanEmiCollectionCalendarPage::class)
         ->assertSuccessful()
-        ->assertSee(__('EMI collection calendar'));
+        ->assertSee(__('EMI collection calendar'))
+        ->assertSee(__('Paid on'))
+        ->assertSee(__('To be collected'));
 });
 
 test('member announcement service resolves active audience', function () {

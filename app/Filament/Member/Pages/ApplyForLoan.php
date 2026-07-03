@@ -18,9 +18,11 @@ use App\Services\LoanService;
 use App\Support\LoanFundExcessDisposition;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
+use App\Support\StorageFilename;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -33,9 +35,11 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Wizard;
 use Filament\Schemas\Components\Wizard\Step;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\HtmlString;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Throwable;
 
 class ApplyForLoan extends Page implements HasForms
@@ -54,6 +58,8 @@ class ApplyForLoan extends Page implements HasForms
     protected static ?string $slug = 'apply-for-loan';
 
     protected string $view = 'filament.member.pages.apply-for-loan';
+
+    protected Width|string|null $maxContentWidth = Width::Full;
 
     /**
      * @var array<string, mixed>|null
@@ -103,7 +109,7 @@ class ApplyForLoan extends Page implements HasForms
 
     public function getSubheading(): ?string
     {
-        return __('Amount, purpose, and review — submit when you are ready.');
+        return __('Amount, purpose, signed form, and review — submit when you are ready.');
     }
 
     public function form(Schema $schema): Schema
@@ -136,16 +142,10 @@ class ApplyForLoan extends Page implements HasForms
                                 ->minValue(1)
                                 ->live(onBlur: true)
                                 ->suffix(MoneyDisplay::symbol($currency)),
-                            Select::make('guarantor_member_id')
-                                ->label(__('Guarantor'))
-                                ->helperText(__('Required when the amount exceeds your fund balance.'))
-                                ->options(
-                                    Member::query()
-                                        ->active()
-                                        ->when($member, fn ($q) => $q->whereKeyNot($member->id))
-                                        ->pluck('name', 'id')
-                                )
-                                ->searchable()
+                            TextInput::make('guarantor_name')
+                                ->label(__('Guarantor name'))
+                                ->helperText(__('Enter the full name of your guarantor. An administrator will match them to a member record.'))
+                                ->maxLength(150)
                                 ->required(fn (Get $get): bool => $member && LoanSettings::guarantorRequiredForAmount(
                                     $member,
                                     (float) ($get('amount') ?? 0),
@@ -158,12 +158,8 @@ class ApplyForLoan extends Page implements HasForms
                                 )),
                             Select::make('grace_cycles')
                                 ->label(__('Grace cycles before first repayment'))
-                                ->options([
-                                    0 => __('None'),
-                                    1 => __('One cycle'),
-                                    2 => __('Two cycles'),
-                                ])
-                                ->default(1)
+                                ->options(LoanSettings::graceCycleSelectOptions())
+                                ->default(LoanSettings::defaultApplicationGraceCycles())
                                 ->required()
                                 ->native(false),
                             $strategyRadio,
@@ -199,6 +195,32 @@ class ApplyForLoan extends Page implements HasForms
                                 ->maxLength(50),
                         ])
                         ->columns(2),
+                    Step::make(__('Signed application'))
+                        ->icon(Heroicon::OutlinedDocumentArrowUp)
+                        ->schema([
+                            FileUpload::make('application_form_path')
+                                ->label(__('Signed loan application form'))
+                                ->disk('public')
+                                ->directory('loan-applications')
+                                ->getUploadedFileNameForStorageUsing(
+                                    fn (TemporaryUploadedFile $file): string => StorageFilename::make(
+                                        'loan-application',
+                                        $file->getClientOriginalName(),
+                                        [
+                                            $member ? 'member-'.$member->id : null,
+                                        ],
+                                    ),
+                                )
+                                ->acceptedFileTypes([
+                                    'application/pdf',
+                                    'image/jpeg',
+                                    'image/png',
+                                    'image/webp',
+                                ])
+                                ->maxSize(10240)
+                                ->required()
+                                ->helperText(__('Upload the signed loan request form (PDF or image, max 10 MB).')),
+                        ]),
                     Step::make(__('Review'))
                         ->icon(Heroicon::OutlinedClipboardDocumentCheck)
                         ->schema([
@@ -228,6 +250,13 @@ class ApplyForLoan extends Page implements HasForms
                             Placeholder::make('review_purpose')
                                 ->label(__('Purpose'))
                                 ->content(fn (Get $get): HtmlString => new HtmlString(nl2br(e((string) ($get('purpose') ?? ''))))),
+                            Placeholder::make('review_guarantor')
+                                ->label(__('Guarantor name'))
+                                ->visible(fn (Get $get): bool => filled($get('guarantor_name')))
+                                ->content(fn (Get $get): string => (string) ($get('guarantor_name') ?? '—')),
+                            Placeholder::make('review_application_form')
+                                ->label(__('Signed application form'))
+                                ->content(fn (): string => __('Uploaded')),
                             Placeholder::make('review_funding')
                                 ->label(__('Funding'))
                                 ->content(function (Get $get): string {
@@ -274,7 +303,7 @@ class ApplyForLoan extends Page implements HasForms
                 $member,
                 (float) $data['amount'],
                 (string) $data['purpose'],
-                filled($data['guarantor_member_id'] ?? null) ? (int) $data['guarantor_member_id'] : null,
+                null,
                 false,
                 ((int) ($data['grace_cycles'] ?? 1)) > 0,
                 (int) ($data['grace_cycles'] ?? 1),
@@ -286,6 +315,8 @@ class ApplyForLoan extends Page implements HasForms
                 cashOutExcessFund: LoanFundExcessDisposition::toCashOutFlag(
                     (string) ($data['excess_fund_disposition'] ?? LoanFundExcessDisposition::defaultForApplication()),
                 ),
+                guarantorName: filled($data['guarantor_name'] ?? null) ? (string) $data['guarantor_name'] : null,
+                applicationFormPath: filled($data['application_form_path'] ?? null) ? (string) $data['application_form_path'] : null,
             );
 
             Notification::make()

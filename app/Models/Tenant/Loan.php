@@ -3,7 +3,7 @@
 namespace App\Models\Tenant;
 
 use App\Services\Loans\LoanEarlySettlementService;
-use App\Support\BusinessDay;
+use App\Services\Loans\LoanThresholdInstallmentWaiverService;
 use App\Support\LoanRepaymentWindowPolicy;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
@@ -39,6 +39,7 @@ class Loan extends Model
         'master_portion',
         'repaid_to_master',
         'purpose',
+        'application_form_path',
         'installments_count',
         'status',
         'applied_at',
@@ -50,8 +51,12 @@ class Loan extends Model
         'original_borrower_member_id',
         'transferred_to_guarantor_at',
         'settled_at',
+        'threshold_waived_at',
+        'threshold_waiver_reason',
+        'threshold_waived_by_id',
         'due_date',
         'guarantor_member_id',
+        'guarantor_name',
         'guarantor_released_at',
         'guarantor_liability_transferred_at',
         'witness1_name',
@@ -95,6 +100,7 @@ class Loan extends Model
             'disbursed_at' => 'datetime',
             'has_grace_cycle' => 'boolean',
             'settled_at' => 'datetime',
+            'threshold_waived_at' => 'datetime',
             'guarantor_released_at' => 'datetime',
             'guarantor_liability_transferred_at' => 'datetime',
             'transferred_to_guarantor_at' => 'datetime',
@@ -130,9 +136,33 @@ class Loan extends Model
         return $this->belongsTo(Member::class, 'guarantor_member_id');
     }
 
+    public function guarantorDisplayName(): ?string
+    {
+        if ($this->guarantor_member_id !== null) {
+            return $this->guarantor?->name ?? $this->guarantor_name;
+        }
+
+        return filled($this->guarantor_name) ? (string) $this->guarantor_name : null;
+    }
+
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by_id');
+    }
+
+    public function thresholdWaivedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'threshold_waived_by_id');
+    }
+
+    public function canWaiveRemainingThresholdInstallments(): bool
+    {
+        return app(LoanThresholdInstallmentWaiverService::class)->canWaive($this);
+    }
+
+    public function thresholdInstallmentWaiverBlockReason(): ?string
+    {
+        return app(LoanThresholdInstallmentWaiverService::class)->ineligibilityReason($this);
     }
 
     public function installments(): HasMany
@@ -540,13 +570,13 @@ class Loan extends Model
      * grace period shifts grace and first repayment together.
      */
     /**
-     * @param  bool|int  $grace  Legacy bool (true = 1 cycle) or explicit grace_cycles 0–2
+     * @param  bool|int  $grace  Legacy bool (true = 1 cycle) or explicit grace_cycles up to tenant max
      * @return array{exempted_month: int|null, exempted_year: int|null, first_repayment_month: int, first_repayment_year: int}
      */
     public static function computeExemptionAndFirstRepayment(Carbon $disbursedAt, bool|int $grace = true): array
     {
         $graceCycles = is_int($grace)
-            ? max(0, min(2, $grace))
+            ? LoanSettings::clampGraceCycles($grace)
             : ($grace ? 1 : 0);
         $hasGraceCycle = $graceCycles > 0;
 

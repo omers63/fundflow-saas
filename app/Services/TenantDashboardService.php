@@ -932,7 +932,7 @@ final class TenantDashboardService
             };
 
             return [
-                'label' => $tier->tier_label ?? ($tier->is_emergency ? __('Emergency') : __('Tier :n', ['n' => $tier->tier_number])),
+                'label' => $tier->label,
                 'pct' => $pct,
                 'bar_color' => $bar,
                 'tone' => $tone,

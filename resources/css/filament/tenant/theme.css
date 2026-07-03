@@ -632,10 +632,15 @@ html.fi.fi-panel-tenant #nprogress .peg {
     white-space: normal;
 }
 
-.fi-body.fi-panel-tenant .ff-tenant-loan-portfolio .ff-member-amount,
-.fi-body.fi-panel-tenant .ff-tenant-loan-portfolio .ff-member-amount__digits {
-    display: inline;
+.fi-body.fi-panel-tenant .ff-tenant-loan-portfolio .ff-member-amount {
+    display: inline-flex;
+    flex-wrap: wrap;
     max-width: 100%;
+    min-width: 0;
+}
+
+.fi-body.fi-panel-tenant .ff-tenant-loan-portfolio .ff-member-amount__digits {
+    min-width: 0;
     overflow-wrap: anywhere;
     white-space: normal;
 }

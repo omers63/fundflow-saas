@@ -93,6 +93,8 @@ final class LoanLifecycleService
         ?string $eligibilityOverrideReason = null,
         ?string $fundingStrategy = null,
         bool $cashOutExcessFund = false,
+        ?string $guarantorName = null,
+        ?string $applicationFormPath = null,
     ): Loan {
         $failedGates = $this->eligibility->getFailedGates($member);
 
@@ -123,8 +125,20 @@ final class LoanLifecycleService
             $cashOutExcessFund = false;
         }
 
-        if (LoanSettings::guarantorRequiredForAmount($member, $amountRequested, $fundingStrategy) && $guarantorMemberId === null) {
-            throw new InvalidArgumentException(__('A guarantor is required when the loan amount exceeds your fund balance.'));
+        if (LoanSettings::guarantorRequiredForAmount($member, $amountRequested, $fundingStrategy)) {
+            $normalizedGuarantorName = trim((string) ($guarantorName ?? ''));
+
+            if ($guarantorMemberId === null && $normalizedGuarantorName === '') {
+                throw new InvalidArgumentException(__('A guarantor name is required when the loan amount exceeds your fund balance.'));
+            }
+        }
+
+        $guarantorName = trim((string) ($guarantorName ?? ''));
+        $guarantorName = $guarantorName !== '' ? $guarantorName : null;
+
+        if ($applicationFormPath !== null) {
+            $applicationFormPath = trim($applicationFormPath);
+            $applicationFormPath = $applicationFormPath !== '' ? $applicationFormPath : null;
         }
 
         if ($guarantorMemberId !== null && (int) $guarantorMemberId === (int) $member->id) {
@@ -143,7 +157,9 @@ final class LoanLifecycleService
             'monthly_repayment' => 0,
             'total_repaid' => 0,
             'purpose' => $purpose,
+            'application_form_path' => $applicationFormPath,
             'guarantor_member_id' => $guarantorMemberId,
+            'guarantor_name' => $guarantorMemberId === null ? $guarantorName : null,
             'witness1_name' => $witness1Name,
             'witness1_phone' => $witness1Phone,
             'witness2_name' => $witness2Name,
@@ -152,7 +168,7 @@ final class LoanLifecycleService
             'funding_strategy' => $fundingStrategy,
             'cash_out_excess_fund' => $cashOutExcessFund,
             'has_grace_cycle' => $hasGraceCycle,
-            'grace_cycles' => max(0, min(2, $graceCycles ?? ($hasGraceCycle ? 1 : 0))),
+            'grace_cycles' => LoanSettings::clampGraceCycles($graceCycles ?? ($hasGraceCycle ? 1 : 0)),
             'status' => 'pending',
             'applied_at' => BusinessDay::now(),
         ]);
@@ -232,7 +248,7 @@ final class LoanLifecycleService
             'approved_by_id' => $approvedById ?? auth()->id(),
             'settlement_threshold' => $threshold,
             'has_grace_cycle' => $hasGraceCycle,
-            'grace_cycles' => max(0, min(2, $graceCycles ?? ($hasGraceCycle ? 1 : 0))),
+            'grace_cycles' => LoanSettings::clampGraceCycles($graceCycles ?? ($hasGraceCycle ? 1 : 0)),
         ]);
 
         LoanQueueOrderingService::resequenceFundTier($fundTier->id);

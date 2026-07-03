@@ -10,11 +10,13 @@ use App\Models\Tenant\LoanDisbursement;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
 use App\Support\BusinessDay;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -31,6 +33,27 @@ final class LoanLedgerService
     public static function excessFundToCashDescriptionMarker(): string
     {
         return 'excess fund to cash';
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function excessFundToCashDescriptionMarkers(): array
+    {
+        return array_values(array_unique([
+            self::excessFundToCashDescriptionMarker(),
+            'فائض الصندوق إلى النقد',
+        ]));
+    }
+
+    /**
+     * @param  Builder<Transaction>  $query
+     */
+    public static function excludeExcessFundToCashCredits($query): void
+    {
+        foreach (self::excessFundToCashDescriptionMarkers() as $marker) {
+            $query->where('description', 'not like', '%'.$marker.'%');
+        }
     }
 
     public function ensureMemberAccounts(Member $member): void

@@ -23,17 +23,17 @@ return new class extends Migration {
 
             $now = now();
             $rows = [
-                [0, 'Tier 0', 0, 5000, 500],
-                [1, 'Tier 1', 6000, 30000, 1000],
-                [2, 'Tier 2', 31000, 60000, 1500],
-                [3, 'Tier 3', 61000, 90000, 2000],
-                [4, 'Tier 4', 91000, 120000, 2500],
-                [5, 'Tier 5', 121000, 150000, 3000],
-                [6, 'Tier 6', 151000, 180000, 3500],
-                [7, 'Tier 7', 181000, 210000, 4000],
-                [8, 'Tier 8', 211000, 240000, 4500],
-                [9, 'Tier 9', 241000, 270000, 5000],
-                [10, 'Tier 10', 271000, 300000, 5500],
+                [0, 'Loan Tier 0 - (1->5K: 500)', 0, 5000, 500],
+                [1, 'Loan Tier 1 - (6K->30K: 1K)', 6000, 30000, 1000],
+                [2, 'Loan Tier 2 - (31K->60K: 1.5K)', 31000, 60000, 1500],
+                [3, 'Loan Tier 3 - (61K->90K: 2K)', 61000, 90000, 2000],
+                [4, 'Loan Tier 4 - (91K->120K: 2.5K)', 91000, 120000, 2500],
+                [5, 'Loan Tier 5 - (121K->150K: 3K)', 121000, 150000, 3000],
+                [6, 'Loan Tier 6 - (151K->180K: 3.5K)', 151000, 180000, 3500],
+                [7, 'Loan Tier 7 - (181K->210K: 4K)', 181000, 210000, 4000],
+                [8, 'Loan Tier 8 - (211K->240K: 4.5K)', 211000, 240000, 4500],
+                [9, 'Loan Tier 9 - (241K->270K: 5K)', 241000, 270000, 5000],
+                [10, 'Loan Tier 10 - (271K->300K: 5.5K)', 271000, 300000, 5500],
             ];
             foreach ($rows as [$num, $label, $min, $max, $installment]) {
                 DB::table('loan_tiers')->insert([
@@ -64,18 +64,19 @@ return new class extends Migration {
             $now = now();
             DB::table('fund_tiers')->insert([
                 'tier_number' => 0,
-                'label' => 'Emergency',
+                'label' => 'Fund Tier - Emergency',
                 'loan_tier_id' => null,
                 'percentage' => 100,
                 'is_active' => true,
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
-            for ($i = 1; $i <= 10; $i++) {
+            for ($i = 1; $i <= 11; $i++) {
+                $loanTierId = $i - 1;
                 DB::table('fund_tiers')->insert([
                     'tier_number' => $i,
-                    'label' => "Tier {$i}",
-                    'loan_tier_id' => $i,
+                    'label' => "Fund Tier {$i} - Loan Tier {$loanTierId}",
+                    'loan_tier_id' => $i - 1,
                     'percentage' => 100,
                     'is_active' => true,
                     'created_at' => $now,

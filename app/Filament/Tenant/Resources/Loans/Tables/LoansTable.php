@@ -57,6 +57,16 @@ class LoansTable
             ->filters([
                 SelectFilter::make('status')
                     ->options(Loan::statusOptions()),
+                SelectFilter::make('loan_tier_id')
+                    ->label(__('Loan tier'))
+                    ->relationship('loanTier', 'label')
+                    ->searchable()
+                    ->preload(),
+                SelectFilter::make('fund_tier_id')
+                    ->label(__('Fund tier'))
+                    ->relationship('fundTier', 'label')
+                    ->searchable()
+                    ->preload(),
                 SelectFilter::make('member_id')
                     ->label('Member')
                     ->relationship('member', 'name')
