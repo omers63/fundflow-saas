@@ -75,6 +75,16 @@ final class LoanInsightsService
             ->whereIn('status', ['pending', 'overdue'])
             ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
             ->sum('amount');
+        $next30DaysDue = (float) LoanInstallment::query()
+            ->whereIn('status', ['pending', 'overdue'])
+            ->whereBetween('due_date', [$now->copy()->startOfDay(), $now->copy()->addDays(30)->endOfDay()])
+            ->whereHas('loan', fn ($q) => $q->whereIn('status', ['active', 'transferred']))
+            ->sum('amount');
+        $next30DaysCount = (int) LoanInstallment::query()
+            ->whereIn('status', ['pending', 'overdue'])
+            ->whereBetween('due_date', [$now->copy()->startOfDay(), $now->copy()->addDays(30)->endOfDay()])
+            ->whereHas('loan', fn ($q) => $q->whereIn('status', ['active', 'transferred']))
+            ->count();
 
         $activeAmountTotal = (float) Loan::query()
             ->where('status', 'active')
@@ -113,6 +123,15 @@ final class LoanInsightsService
         $approvalRate = ($approvedDecisions + $rejectedDecisions) > 0
             ? round(($approvedDecisions / ($approvedDecisions + $rejectedDecisions)) * 100, 1)
             : null;
+        $readyToDisburseAmount = (float) Loan::query()
+            ->readyToDisburse()
+            ->selectRaw('COALESCE(SUM(COALESCE(amount_approved, amount_requested, amount, 0)), 0) as total')
+            ->value('total');
+        $availableFundHeadroom = (float) FundTier::query()
+            ->where('is_active', true)
+            ->get()
+            ->sum(fn (FundTier $tier): float => (float) $tier->available_amount);
+        $headroomDelta = round($availableFundHeadroom - $readyToDisburseAmount, 2);
 
         $emergencyInQueue = Loan::query()->inQueue()->where('is_emergency', true)->count();
         $pendingEligibilityReviews = LoanEligibilityOverrideRequest::isTableReady()
@@ -196,6 +215,14 @@ final class LoanInsightsService
                 'loans_completed_url' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'completed']]),
                 'pending_eligibility_reviews' => $pendingEligibilityReviews,
                 'eligibility_reviews_url' => $eligibilityReviewsUrl,
+            ],
+            'forecast' => [
+                'next_30_days_count' => $next30DaysCount,
+                'next_30_days_amount' => $next30DaysDue,
+                'ready_to_disburse_amount' => $readyToDisburseAmount,
+                'available_fund_headroom' => $availableFundHeadroom,
+                'headroom_delta' => $headroomDelta,
+                'tone' => $headroomDelta < 0 ? 'danger' : ($readyToDisburseAmount > 0 || $next30DaysCount > 0 ? 'warning' : 'success'),
             ],
             'status_breakdown' => $this->statusBreakdown(),
             'trend' => $this->sixMonthLoanTrend(),
@@ -405,10 +432,19 @@ final class LoanInsightsService
 
         $pendingMembers = $metrics['pending_members'];
         $collectedCount = $metrics['collected_count'];
+        $collectedAmount = $metrics['collected_amount'];
         $totalPendingEmis = $metrics['total_pending_emis'];
         $readyWithCash = $metrics['ready_with_cash'];
         $requiredCashTotal = $metrics['required_cash_total'];
         $collectionRate = $metrics['collection_rate'];
+        $cycleForecast = app(CycleForecastService::class)->project(
+            $month,
+            $year,
+            $collectedCount,
+            $collectedCount + $totalPendingEmis,
+            $collectedAmount,
+            $collectedAmount + $requiredCashTotal,
+        );
 
         $overdueInstallments = (int) LoanInstallment::query()
             ->where('status', 'overdue')
@@ -470,6 +506,10 @@ final class LoanInsightsService
                 'collected_url' => LoanResource::listTabUrl('emi_collected'),
                 'overdue_url' => LoanResource::listTabUrl('overdue_installments'),
             ],
+            'forecast' => $cycleForecast + [
+                'ready_cash_total' => $metrics['ready_cash_total'],
+                'uncovered_amount' => $metrics['uncovered_amount'],
+            ],
             'preview' => $preview,
         ];
     }
@@ -488,6 +528,15 @@ final class LoanInsightsService
         $collectedCount = $metrics['collected_count'];
         $collectedAmount = (float) $catalog->collectedInstallmentsQuery($month, $year)->sum('amount');
         $pendingMembers = $metrics['pending_members'];
+        $collectedAmount = $metrics['collected_amount'];
+        $cycleForecast = app(CycleForecastService::class)->project(
+            $month,
+            $year,
+            $collectedCount,
+            $collectedCount + $metrics['total_pending_emis'],
+            $collectedAmount,
+            $collectedAmount + $metrics['required_cash_total'],
+        );
 
         $collectedUrl = LoanResource::listTabUrl('emi_collected');
 
@@ -538,6 +587,10 @@ final class LoanInsightsService
                 'missing_open_period' => $pendingMembers,
                 'collected_url' => $collectedUrl,
                 'collect_url' => LoanResource::listTabUrl('emi_collect'),
+            ],
+            'forecast' => $cycleForecast + [
+                'ready_cash_total' => $metrics['ready_cash_total'],
+                'uncovered_amount' => $metrics['uncovered_amount'],
             ],
         ];
     }
@@ -864,6 +917,29 @@ final class LoanInsightsService
         $hasPendingOverrideRequest = $overrideRequests->pendingRequestFor($member) !== null;
 
         $activeLoan = (clone $base)->where('status', 'active')->latest('applied_at')->first();
+        $cashBalance = $member->getCashBalance();
+        $nextInstallment = $activeLoan?->installments()
+            ->whereIn('status', ['pending', 'overdue'])
+            ->orderBy('due_date')
+            ->first();
+        $nextEmiAmount = $nextInstallment !== null
+            ? round((float) $nextInstallment->amount + (float) ($nextInstallment->late_fee_amount ?? 0), 2)
+            : 0.0;
+        $cashGap = max(0.0, $nextEmiAmount - $cashBalance);
+        $next30DaysAmount = $activeLoan !== null
+            ? (float) LoanInstallment::query()
+                ->where('loan_id', $activeLoan->id)
+                ->whereIn('status', ['pending', 'overdue'])
+                ->whereBetween('due_date', [BusinessDay::now()->copy()->startOfDay(), BusinessDay::now()->copy()->addDays(30)->endOfDay()])
+                ->sum('amount')
+            : 0.0;
+        $next30DaysCount = $activeLoan !== null
+            ? (int) LoanInstallment::query()
+                ->where('loan_id', $activeLoan->id)
+                ->whereIn('status', ['pending', 'overdue'])
+                ->whereBetween('due_date', [BusinessDay::now()->copy()->startOfDay(), BusinessDay::now()->copy()->addDays(30)->endOfDay()])
+                ->count()
+            : 0;
 
         $heroSubtitle = $eligibility['eligible']
             ? __('You may apply for a new loan when eligible.')
@@ -923,6 +999,15 @@ final class LoanInsightsService
             ]),
             'active_loan_id' => $activeLoan?->id,
             'eligible' => $eligibility['eligible'],
+            'forecast' => [
+                'next_emi_amount' => $nextEmiAmount,
+                'next_emi_date' => $nextInstallment?->due_date?->format('d M Y'),
+                'cash_covers_next_emi' => $cashGap <= 0.0,
+                'cash_gap' => $cashGap,
+                'next_30_days_amount' => $next30DaysAmount,
+                'next_30_days_count' => $next30DaysCount,
+                'tone' => $cashGap > 0 ? 'danger' : ($next30DaysCount > 0 ? 'warning' : 'success'),
+            ],
             'eligibility' => [
                 'eligible' => $eligibility['eligible'],
                 'can_request_override' => $canRequestOverride,
@@ -959,9 +1044,12 @@ final class LoanInsightsService
      * @return array{
      *     pending_members: int,
      *     collected_count: int,
+     *     collected_amount: float,
      *     total_pending_emis: int,
      *     ready_with_cash: int,
+     *     ready_cash_total: float,
      *     required_cash_total: float,
+     *     uncovered_amount: float,
      *     collection_rate: int
      * }
      */
@@ -969,9 +1057,12 @@ final class LoanInsightsService
     {
         $pendingMembers = $catalog->pendingMemberCount($month, $year);
         $collectedCount = $catalog->collectedInstallmentsQuery($month, $year)->count();
+        $collectedAmount = (float) $catalog->collectedInstallmentsQuery($month, $year)->sum('amount');
         $totalPendingEmis = 0;
         $readyWithCash = 0;
+        $readyCashTotal = 0.0;
         $requiredCashTotal = 0.0;
+        $uncoveredAmount = 0.0;
 
         foreach ($catalog->membersWithCollectableEmisQuery($month, $year)->get() as $member) {
             $pending = $catalog->pendingInstallmentCountForMember($member, $month, $year);
@@ -981,10 +1072,16 @@ final class LoanInsightsService
             }
 
             $totalPendingEmis += $pending;
-            $requiredCashTotal += $catalog->requiredCashForMember($member, $month, $year);
+            $requiredCash = $catalog->requiredCashForMember($member, $month, $year);
+            $requiredCashTotal += $requiredCash;
+            $coveredCash = min(max(0.0, $member->getCashBalance()), $requiredCash);
 
             if ($catalog->memberHasSufficientCash($member, $month, $year)) {
                 $readyWithCash++;
+                $readyCashTotal += $requiredCash;
+            } else {
+                $readyCashTotal += $coveredCash;
+                $uncoveredAmount += max(0.0, $requiredCash - $coveredCash);
             }
         }
 
@@ -996,9 +1093,12 @@ final class LoanInsightsService
         return [
             'pending_members' => $pendingMembers,
             'collected_count' => $collectedCount,
+            'collected_amount' => $collectedAmount,
             'total_pending_emis' => $totalPendingEmis,
             'ready_with_cash' => $readyWithCash,
+            'ready_cash_total' => round($readyCashTotal, 2),
             'required_cash_total' => $requiredCashTotal,
+            'uncovered_amount' => round($uncoveredAmount, 2),
             'collection_rate' => $collectionRate,
         ];
     }

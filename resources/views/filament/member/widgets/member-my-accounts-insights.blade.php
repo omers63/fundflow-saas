@@ -1,5 +1,5 @@
 @php
-    $d = $this->getData();
+$d = $this->getData();
 @endphp
 
 @if (empty($d))
@@ -15,30 +15,30 @@
             <div class="grid grid-cols-2 gap-2 lg:col-span-2">
                 <a href="{{ $d['accounts']['cash']['url'] }}"
                     @class([
-                        'block overflow-hidden rounded-xl border px-3 py-2 shadow-sm transition hover:shadow-md',
-                        'border-rose-200/80 bg-gradient-to-br from-rose-50 to-orange-50/60 dark:border-rose-500/25 dark:from-rose-950/30 dark:to-orange-950/20' => $d['cash_negative'] ?? false,
-                        'border-amber-200/80 bg-gradient-to-br from-amber-50 to-orange-50/60 dark:border-amber-500/25 dark:from-amber-950/30 dark:to-orange-950/20' => ($d['cash_low'] ?? false) && ! ($d['cash_negative'] ?? false),
-                        'border-sky-200/80 bg-gradient-to-br from-sky-50 to-cyan-50/60 dark:border-sky-500/25 dark:from-sky-950/30 dark:to-cyan-950/20' => ! ($d['cash_low'] ?? false),
-                    ])>
+        'block overflow-hidden rounded-xl border px-3 py-2 shadow-sm transition hover:shadow-md',
+        'border-rose-200/80 bg-gradient-to-br from-rose-50 to-orange-50/60 dark:border-rose-500/25 dark:from-rose-950/30 dark:to-orange-950/20' => $d['cash_negative'] ?? false,
+        'border-amber-200/80 bg-gradient-to-br from-amber-50 to-orange-50/60 dark:border-amber-500/25 dark:from-amber-950/30 dark:to-orange-950/20' => ($d['cash_low'] ?? false) && !($d['cash_negative'] ?? false),
+        'border-sky-200/80 bg-gradient-to-br from-sky-50 to-cyan-50/60 dark:border-sky-500/25 dark:from-sky-950/30 dark:to-cyan-950/20' => !($d['cash_low'] ?? false),
+    ])>
                     <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{{ $d['accounts']['cash']['label'] }}</p>
                     <p @class([
-                        'min-w-0 truncate text-lg font-bold tabular-nums leading-tight',
-                        ($d['cash_negative'] ?? false) ? 'text-rose-700 dark:text-rose-300' : (($d['cash_low'] ?? false) ? 'text-amber-700 dark:text-amber-300' : 'text-sky-700 dark:text-sky-300'),
-                    ]) title="{{ \App\Filament\Support\MoneyDisplay::format($d['cash_balance'], $d['currency']) }}">
+        'min-w-0 truncate text-lg font-bold tabular-nums leading-tight',
+        ($d['cash_negative'] ?? false) ? 'text-rose-700 dark:text-rose-300' : (($d['cash_low'] ?? false) ? 'text-amber-700 dark:text-amber-300' : 'text-sky-700 dark:text-sky-300'),
+    ]) title="{{ \App\Filament\Support\MoneyDisplay::format($d['cash_balance'], $d['currency']) }}">
                         <x-member::amount :value="$d['cash_balance']" :currency="$d['currency']" />
                     </p>
                 </a>
                 <a href="{{ $d['accounts']['fund']['url'] }}"
                     @class([
-                        'block overflow-hidden rounded-xl border px-3 py-2 shadow-sm transition hover:shadow-md',
-                        'border-indigo-200/80 bg-gradient-to-br from-indigo-50 to-violet-50/60 dark:border-indigo-500/25 dark:from-indigo-950/30 dark:to-violet-950/20' => ! ($d['fund_negative'] ?? false),
-                        'border-rose-200/80 bg-gradient-to-br from-rose-50 to-orange-50/60 dark:border-rose-500/25 dark:from-rose-950/30 dark:to-orange-950/20' => $d['fund_negative'] ?? false,
-                    ])>
+        'block overflow-hidden rounded-xl border px-3 py-2 shadow-sm transition hover:shadow-md',
+        'border-indigo-200/80 bg-gradient-to-br from-indigo-50 to-violet-50/60 dark:border-indigo-500/25 dark:from-indigo-950/30 dark:to-violet-950/20' => !($d['fund_negative'] ?? false),
+        'border-rose-200/80 bg-gradient-to-br from-rose-50 to-orange-50/60 dark:border-rose-500/25 dark:from-rose-950/30 dark:to-orange-950/20' => $d['fund_negative'] ?? false,
+    ])>
                     <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{{ $d['accounts']['fund']['label'] }}</p>
                     <p @class([
-                        'min-w-0 truncate text-lg font-bold tabular-nums leading-tight',
-                        ($d['fund_negative'] ?? false) ? 'text-rose-700 dark:text-rose-300' : 'text-indigo-700 dark:text-indigo-300',
-                    ]) title="{{ \App\Filament\Support\MoneyDisplay::format($d['fund_balance'], $d['currency']) }}">
+        'min-w-0 truncate text-lg font-bold tabular-nums leading-tight',
+        ($d['fund_negative'] ?? false) ? 'text-rose-700 dark:text-rose-300' : 'text-indigo-700 dark:text-indigo-300',
+    ]) title="{{ \App\Filament\Support\MoneyDisplay::format($d['fund_balance'], $d['currency']) }}">
                         <x-member::amount :value="$d['fund_balance']" :currency="$d['currency']" />
                     </p>
                 </a>
@@ -46,10 +46,41 @@
         </div>
 
         @include('filament.member.widgets.partials.insights-kpi-strip', [
-            'kpis' => $d['kpis'],
-            'sparkline' => $d['sparkline'],
-            'sparklineMax' => $d['sparkline_max'],
-        ])
+        'kpis' => $d['kpis'],
+        'sparkline' => $d['sparkline'],
+        'sparklineMax' => $d['sparkline_max'],
+    ])
+
+        @if (!empty($d['forecast']))
+
+
+                                            <div class="grid grid-cols-1 gap-2.5 md:grid-cols-3">
+                            <div class="rounded-xl border border-sky-200/80 bg-sky-50/60 px-3 py-2.5 dark:border-sky-800/40 dark:bg-sky-950/20">
+                                <p class="text-[10px] font-semibold uppercase tracking-wider text-sky-600 dark:text-sky-300">{{ __('Cycle outlook') }}</p>
+                                    <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ trans_choice(':count day left|:count days left', $d['forecast']['days_remaining'], ['count' => $d['forecast']['days_remaining']]) }}</p>
+
+            <                       p class="mt-1 text-[11px] text-gray-600 dark:text-gray-300">
+                                        {{ ($d['forecast']['cycle_cash_gap'] ?? 0) > 0 ? __('Cash gap: :amount', ['amount' => \App\Support\Insights\InsightFormatter::money($d['forecast']['cycle_cash_gap'])]) : __('Cash is ready for this cycle') }}
+                                    </p>
+
+                                                               </div>
+
+                                                               <div class="rounded-xl border border-emerald-200/80 bg-emerald-50/60 px-3 py-2.5 dark:border-emerald-800/40 dark:bg-emerald-950/20">
+
+                                  < p class="text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-300">{{ __('Withdrawable cash') }}</p>
+                                    <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white"><x-member::amount :value="$d['forecast']['withdrawable_cash']" :currency="$d['currency']" class="inline" /></p>
+                                    <p class="mt-1 text-[11px] text-gray-600 dark:text-gray-300">{{ __('EMI reserve') }}:
+                                            <x-member::amount :value="$d['forecast']['emi_reserve']" :currency="$d['currency']" class="inline" /></p>
+                                </div>
+
+
+                                <div class="rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-2.5 dark:border-amber-800/40 dark:bg-amber-950/20">
+                                        <p class="text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-300">{{ __('Pending holds') }}</p>
+                                            <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white"><x-member::amount :value="$d['forecast']['pending_cash_out_amount']" :currency="$d['currency']" class="inline" /></p>
+                                                    <p class="mt-1 text-[11px] text-gray-600 dark:text-gray-300"><x-member::amount :value="$d['forecast']['required_cash_for_cycle']" :currency="$d['currency']" class="inline" /> {{ __('needed for this cycle') }}</p>
+                                        </div>
+                                    </div>
+        @endif
 
         <div class="grid grid-cols-1 gap-2.5 md:grid-cols-12">
             <div
@@ -86,10 +117,10 @@
 
             <div class="md:col-span-7">
                 @include('filament.partials.insights.six-month-volume-panel', [
-                    'title' => __('6-month ledger volume'),
-                    'trend' => $d['trend'],
-                    'compact' => true,
-                ])
+        'title' => __('6-month ledger volume'),
+        'trend' => $d['trend'],
+        'compact' => true,
+    ])
             </div>
         </div>
     </div>

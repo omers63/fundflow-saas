@@ -145,6 +145,7 @@ final class BankAccountsInsightsService
             'auto_matched' => $autoMatched,
             'unmatched' => $unmatched,
             'stale_pending' => $stalePending,
+            'treasury_forecast' => app(TreasuryForecastService::class)->snapshot(),
             'clearing_kpis' => [
                 [
                     'label' => __('Imported today'),

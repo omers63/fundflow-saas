@@ -61,6 +61,10 @@ final class ContributionInsightsService
             ->forPeriod($openMonth, $openYear)
             ->pending()
             ->count();
+        $postedAmountOpenPeriod = (float) Contribution::query()
+            ->forPeriod($openMonth, $openYear)
+            ->posted()
+            ->sum('amount');
         $lateOpenPeriod = Contribution::query()
             ->forPeriod($openMonth, $openYear)
             ->pending()
@@ -74,6 +78,15 @@ final class ContributionInsightsService
 
         $delinquency = app(LoanDelinquencyService::class);
         $arrearsPeriods = $delinquency->countContributionArrearsPeriods();
+        $targets = $this->cycles->expectedCollectionTargetsForPeriod($openMonth, $openYear);
+        $forecast = app(CycleForecastService::class)->project(
+            $openMonth,
+            $openYear,
+            $postedOpenPeriod,
+            (int) ($targets['expected_count'] ?? 0),
+            $postedAmountOpenPeriod,
+            (float) ($targets['expected_amount'] ?? 0.0),
+        );
 
         $collectUrl = ContributionResource::listTabUrl('collect');
 
@@ -123,6 +136,9 @@ final class ContributionInsightsService
                 'collected_url' => ContributionResource::listTabUrl('collected'),
                 'arrears_url' => ContributionResource::listTabUrl('arrears'),
                 'ledger_pending_url' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'pending']]),
+            ],
+            'forecast' => $forecast + [
+                'expected_amount_remaining' => max(0.0, round((float) ($targets['expected_amount'] ?? 0.0) - $postedAmountOpenPeriod, 2)),
             ],
         ];
     }
@@ -290,11 +306,24 @@ final class ContributionInsightsService
             ->forPeriod($openMonth, $openYear)
             ->pending()
             ->count();
+        $postedAmountOpenPeriod = (float) Contribution::query()
+            ->forPeriod($openMonth, $openYear)
+            ->posted()
+            ->sum('amount');
 
         $openDenominator = $postedOpenPeriod + $missingOpenPeriod;
         $collectionRate = $openDenominator > 0
             ? (int) round(($postedOpenPeriod / $openDenominator) * 100)
             : 0;
+        $targets = $this->cycles->expectedCollectionTargetsForPeriod($openMonth, $openYear);
+        $forecast = app(CycleForecastService::class)->project(
+            $openMonth,
+            $openYear,
+            $postedOpenPeriod,
+            (int) ($targets['expected_count'] ?? 0),
+            $postedAmountOpenPeriod,
+            (float) ($targets['expected_amount'] ?? 0.0),
+        );
 
         $newThisMonth = Contribution::query()
             ->whereMonth('created_at', $now->month)
@@ -381,6 +410,7 @@ final class ContributionInsightsService
                 'late_count' => $lateCount,
                 'collection_rate' => $collectionRate,
             ],
+            'forecast' => $forecast,
             'pipeline' => [
                 'pending_contributions' => $pending,
                 'posted_contributions' => $posted,

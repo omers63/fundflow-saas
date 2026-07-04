@@ -170,6 +170,7 @@ final class FundPostingInsightsService
                     queueFilter: BankClearingTabRegistry::FILTER_BANK_FILE,
                 ),
             ],
+            'treasury_forecast' => app(TreasuryForecastService::class)->snapshot(),
         ];
     }
 

@@ -18,6 +18,7 @@ use App\Filament\Member\Resources\MyGuaranteedLoans\MyGuaranteedLoanResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Member\Resources\MyMessages\MyMessageResource;
 use App\Filament\Member\Resources\MyStatements\MyStatementResource;
+use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\FundPosting;
@@ -153,6 +154,28 @@ final class MemberPortalInsightsService
         );
 
         $nextInstallment = $this->nextPendingInstallment($activeLoan);
+        $nextEmiAmount = $nextInstallment !== null
+            ? round((float) $nextInstallment->amount + (float) ($nextInstallment->late_fee_amount ?? 0), 2)
+            : 0.0;
+        $next30DaysEmiAmount = $activeLoan !== null
+            ? (float) LoanInstallment::query()
+                ->where('loan_id', $activeLoan->id)
+                ->whereIn('status', ['pending', 'overdue'])
+                ->whereBetween('due_date', [BusinessDay::now()->copy()->startOfDay(), BusinessDay::now()->copy()->addDays(30)->endOfDay()])
+                ->sum('amount')
+            : 0.0;
+        $next30DaysEmiCount = $activeLoan !== null
+            ? (int) LoanInstallment::query()
+                ->where('loan_id', $activeLoan->id)
+                ->whereIn('status', ['pending', 'overdue'])
+                ->whereBetween('due_date', [BusinessDay::now()->copy()->startOfDay(), BusinessDay::now()->copy()->addDays(30)->endOfDay()])
+                ->count()
+            : 0;
+        $withdrawableCash = app(MemberCashOutService::class)->availableCashForWithdrawal($member);
+        $pendingCashOutAmount = (float) CashOutRequest::query()
+            ->where('member_id', $member->id)
+            ->where('status', 'pending')
+            ->sum('amount');
 
         $notice = $this->buildPriorityNotice(
             $member,
@@ -234,6 +257,9 @@ final class MemberPortalInsightsService
                 $unreadMessages,
                 $pendingDeposits,
                 $arrears,
+                $nextInstallment,
+                $nextEmiAmount,
+                $latestStatement,
             ),
             'hero' => $hero,
             'kpis' => $this->buildKpis(
@@ -280,6 +306,35 @@ final class MemberPortalInsightsService
                     : null,
                 'required_cash' => InsightFormatter::money($requiredCash),
                 'contributions_url' => MyContributionResource::getUrl('index'),
+            ],
+            'forecasts' => [
+                'contribution' => [
+                    'period_label' => $cycles->periodLabel($curMonth, $curYear),
+                    'deadline_label' => $cycles->deadline($curMonth, $curYear)->locale(app()->getLocale())->translatedFormat('j M Y'),
+                    'days_remaining' => (int) max(0, BusinessDay::now()->diffInDays($cycles->deadline($curMonth, $curYear), false)),
+                    'posted' => $postedThisCycle,
+                    'required_cash' => $requiredCash,
+                    'cash_gap' => max(0.0, $requiredCash - $cashBalance),
+                    'cash_ready' => $requiredCash <= 0.0 || $cashBalance >= $requiredCash,
+                    'url' => MyContributionResource::getUrl('index'),
+                ],
+                'loan' => [
+                    'visible' => $activeLoan !== null,
+                    'next_emi_amount' => $nextEmiAmount,
+                    'next_emi_date' => $nextInstallment?->due_date?->format('d M Y'),
+                    'next_30_days_amount' => $next30DaysEmiAmount,
+                    'next_30_days_count' => $next30DaysEmiCount,
+                    'cash_gap' => max(0.0, $nextEmiAmount - $cashBalance),
+                    'cash_covers' => $nextEmiAmount <= 0.0 || $cashBalance >= $nextEmiAmount,
+                    'url' => $activeLoan ? MyLoanResource::getUrl('view', ['record' => $activeLoan]) : MyLoanResource::getUrl('index'),
+                ],
+                'cash' => [
+                    'withdrawable_cash' => $withdrawableCash,
+                    'pending_cash_out_amount' => $pendingCashOutAmount,
+                    'emi_reserve' => $nextEmiAmount,
+                    'url' => MyCashOutRequestResource::getUrl('index'),
+                ],
+                'statement' => $this->memberStatementForecast($latestStatement),
             ],
             'steps' => $this->memberLifecycleSteps($member, $postedThisCycle, $activeLoan, $arrears),
             'arrears' => [
@@ -386,6 +441,9 @@ final class MemberPortalInsightsService
         int $unreadMessages,
         int $pendingDeposits,
         array $arrears,
+        ?LoanInstallment $nextInstallment,
+        float $nextEmiAmount,
+        ?MonthlyStatement $latestStatement,
     ): array {
         $now = BusinessDay::now();
         $hour = (int) $now->format('G');
@@ -477,6 +535,40 @@ final class MemberPortalInsightsService
             ];
         }
 
+        $daysRemaining = (int) max(0, BusinessDay::now()->diffInDays($cycles->deadline($curMonth, $curYear), false));
+        $periodLabelShort = $cycles->periodLabel($curMonth, $curYear);
+
+        /** @var list<array{label: string, value: string, sub: ?string, url: string, icon: string}> $spotlights */
+        $spotlights = [];
+
+        $spotlights[] = [
+            'label' => __('Current cycle'),
+            'value' => $postedThisCycle ? __('Posted') : trans_choice(':count day left|:count days left', $daysRemaining, ['count' => $daysRemaining]),
+            'sub' => $periodLabelShort,
+            'url' => MyContributionResource::getUrl('index'),
+            'icon' => 'heroicon-o-calendar-days',
+        ];
+
+        if ($nextInstallment !== null && $nextEmiAmount > 0) {
+            $spotlights[] = [
+                'label' => __('Next EMI'),
+                'value' => InsightFormatter::money($nextEmiAmount),
+                'sub' => $nextInstallment->due_date?->locale(app()->getLocale())->translatedFormat('j M Y'),
+                'url' => MyLoanResource::getUrl('index'),
+                'icon' => 'heroicon-o-banknotes',
+            ];
+        }
+
+        if ($latestStatement !== null) {
+            $spotlights[] = [
+                'label' => __('Latest statement'),
+                'value' => $this->formatStatementPeriod($latestStatement->period),
+                'sub' => $latestStatement->generated_at?->locale(app()->getLocale())->translatedFormat('j M Y'),
+                'url' => MyStatementResource::getUrl('index'),
+                'icon' => 'heroicon-o-document-text',
+            ];
+        }
+
         return [
             'period_label' => $periodLabel,
             'name' => $member->name,
@@ -529,6 +621,52 @@ final class MemberPortalInsightsService
                 ],
             ],
             'pills' => $pills,
+            'spotlights' => $spotlights,
+        ];
+    }
+
+    private function formatStatementPeriod(string $period): string
+    {
+        if (preg_match('/^\d{4}-\d{2}$/', $period) !== 1) {
+            return $period;
+        }
+
+        [$year, $month] = array_map('intval', explode('-', $period));
+
+        return Carbon::create($year, $month, 1)
+            ->locale(app()->getLocale())
+            ->translatedFormat('F Y');
+    }
+
+    /**
+     * @return array{visible: bool, period: ?string, generated_label: ?string, url: string}
+     */
+    private function memberStatementForecast(?MonthlyStatement $statement): array
+    {
+        $url = MyStatementResource::getUrl('index');
+
+        if ($statement === null) {
+            return [
+                'visible' => false,
+                'period' => null,
+                'generated_label' => null,
+                'url' => $url,
+            ];
+        }
+
+        return [
+            'visible' => true,
+            'period' => filled($statement->period)
+                ? $this->formatStatementPeriod($statement->period)
+                : null,
+            'generated_label' => $statement->generated_at !== null
+                ? __('Generated on :date', [
+                    'date' => $statement->generated_at
+                        ->locale(app()->getLocale())
+                        ->translatedFormat('j M Y'),
+                ])
+                : null,
+            'url' => $url,
         ];
     }
 

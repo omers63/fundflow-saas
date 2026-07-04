@@ -149,6 +149,7 @@ final class CashOutRequestInsightsService
             'sparkline' => $this->weeklySparkline(),
             'amount_breakdown' => $this->pendingAmountBreakdown(),
             'currency' => $currency,
+            'treasury_forecast' => app(TreasuryForecastService::class)->snapshot(),
             'notes' => [
                 'pending_total' => $pendingAmountTotal,
                 'pending_with_notes' => $pendingWithNotes,

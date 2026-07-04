@@ -132,7 +132,14 @@
 
 .fi-body.fi-panel-member .ff-member-dashboard-hero,
 .fi-body.fi-panel-member .ff-member-greeting {
-    animation: ff-member-dashboard-glow 8s ease-in-out infinite alternate;
+    animation:
+        ff-member-greeting-enter 0.55s ease-out both,
+        ff-member-dashboard-glow 8s ease-in-out infinite alternate;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-greeting {
+    border-color: rgb(129 120 220 / 0.55);
+    background: linear-gradient(135deg, #3f388f 0%, #4f48a8 45%, #2d2868 100%);
 }
 
 @keyframes ff-member-dashboard-glow {

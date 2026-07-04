@@ -3,11 +3,12 @@
 use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Member;
 use App\Services\CashOutRequestInsightsService;
+use App\Support\BusinessDaySettings;
+use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
@@ -17,37 +18,40 @@ beforeEach(function () {
 });
 
 test('insights snapshot aggregates cash out pipeline metrics', function () {
+    BusinessDaySettings::saveFromForm('2026-06-15');
+
     $member = Member::factory()->create(['name' => 'Pending Member']);
 
-    CashOutRequest::create([
+    $recentPending = CashOutRequest::create([
         'member_id' => $member->id,
         'amount' => 500,
         'status' => 'pending',
         'notes' => 'Need funds for school fees',
     ]);
+    $recentPending->forceFill(['created_at' => Carbon::parse('2026-06-14 12:00:00')])->save();
 
     $pendingOverSla = CashOutRequest::create([
         'member_id' => $member->id,
         'amount' => 2500,
         'status' => 'pending',
     ]);
-    $pendingOverSla->forceFill(['created_at' => now()->subDays(5)])->save();
+    $pendingOverSla->forceFill(['created_at' => Carbon::parse('2026-06-09 12:00:00')])->save();
 
     $accepted = CashOutRequest::create([
         'member_id' => $member->id,
         'amount' => 1000,
         'status' => 'accepted',
-        'reviewed_at' => now()->subDay(),
+        'reviewed_at' => Carbon::parse('2026-06-14 12:00:00'),
     ]);
-    $accepted->forceFill(['created_at' => now()->subDays(2)])->save();
+    $accepted->forceFill(['created_at' => Carbon::parse('2026-06-13 12:00:00')])->save();
 
     $rejected = CashOutRequest::create([
         'member_id' => $member->id,
         'amount' => 750,
         'status' => 'rejected',
-        'reviewed_at' => now(),
+        'reviewed_at' => Carbon::parse('2026-06-15 12:00:00'),
     ]);
-    $rejected->forceFill(['created_at' => now()->subDays(1)])->save();
+    $rejected->forceFill(['created_at' => Carbon::parse('2026-06-14 12:00:00')])->save();
 
     $snapshot = app(CashOutRequestInsightsService::class)->snapshot();
 
@@ -65,4 +69,17 @@ test('insights snapshot aggregates cash out pipeline metrics', function () {
         ->and($snapshot['amount_breakdown'])->toHaveCount(3)
         ->and($snapshot['oldest_pending'])->not->toBeEmpty()
         ->and($snapshot['hero']['cta_url'])->toContain('cash-out-requests');
+
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('cash out insights include treasury forecast', function () {
+    $snapshot = app(CashOutRequestInsightsService::class)->snapshot();
+
+    expect($snapshot['treasury_forecast'])->toHaveKeys([
+        'pending_cash_out_amount',
+        'pending_deposit_amount',
+        'projected_available_cash',
+        'tone',
+    ]);
 });

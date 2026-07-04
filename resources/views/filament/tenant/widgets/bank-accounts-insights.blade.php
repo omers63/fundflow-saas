@@ -2,33 +2,36 @@
     $d = $this->getData();
     $pollingInterval = method_exists($this, 'getPollingInterval') ? $this->getPollingInterval() : null;
     $maxStatus = max(1, collect($d['status_breakdown'])->max('count'));
+    $forecast = $d['treasury_forecast'];
 @endphp
+    
+    <div class="ff-app-insights w-full max-w-none space-y-3 mb-1" @if (filled($pollingInterval)) wire:poll.{{ $pollingInterval }} @endif>
+        @if ($d['active_tab'] === 'queue')
+            <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                @foreach ($d['clearing_kpis'] as $kpi)
+                    <a href="{{ $kpi['url'] }}"
+                        class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition hover:border-sky-200 hover:bg-sky-50/40 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-sky-800/40 dark:hover:bg-sky-950/20">
+                        <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ $kpi['label'] }}</p>
+                        <p @class([
+                            'mt-1 text-xl font-bold tabular-nums leading-none',
+                            'text-amber-600 dark:text-amber-400' => ($kpi['accent'] ?? '') === 'amber',
+                            'text-emerald-600 dark:text-emerald-400' => ($kpi['accent'] ?? '') === 'emerald',
+                            'text-rose-600 dark:text-rose-400' => ($kpi['accent'] ?? '') === 'rose',
+                            'text-sky-600 dark:text-sky-400' => ($kpi['accent'] ?? '') === 'sky',
+                            'text-gray-900 dark:text-white' => !in_array($kpi['accent'] ?? '', ['amber', 'emerald', 'rose', 'sky'], true),
+                        ])>{{ $kpi['value'] }}</p>
+                        <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">{{ $kpi['sub'] }}</p>
+                    </a>
+                @endforeach
+            </div>
+        @endif
+    
+        @include('filament.tenant.widgets.partials.insights-head', [
+            'hero' => $d['hero'],
+            'kpis' => $d['kpis'],
+        ])
 
-<div class="ff-app-insights w-full max-w-none space-y-3 mb-1" @if (filled($pollingInterval)) wire:poll.{{ $pollingInterval }} @endif>
-    @if ($d['active_tab'] === 'queue')
-        <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
-            @foreach ($d['clearing_kpis'] as $kpi)
-                <a href="{{ $kpi['url'] }}"
-                    class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition hover:border-sky-200 hover:bg-sky-50/40 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-sky-800/40 dark:hover:bg-sky-950/20">
-                    <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ $kpi['label'] }}</p>
-                    <p @class([
-                        'mt-1 text-xl font-bold tabular-nums leading-none',
-                        'text-amber-600 dark:text-amber-400' => ($kpi['accent'] ?? '') === 'amber',
-                        'text-emerald-600 dark:text-emerald-400' => ($kpi['accent'] ?? '') === 'emerald',
-                        'text-rose-600 dark:text-rose-400' => ($kpi['accent'] ?? '') === 'rose',
-                        'text-sky-600 dark:text-sky-400' => ($kpi['accent'] ?? '') === 'sky',
-                        'text-gray-900 dark:text-white' => ! in_array($kpi['accent'] ?? '', ['amber', 'emerald', 'rose', 'sky'], true),
-                    ])>{{ $kpi['value'] }}</p>
-                    <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">{{ $kpi['sub'] }}</p>
-                </a>
-            @endforeach
-        </div>
-    @endif
-
-    @include('filament.tenant.widgets.partials.insights-head', [
-        'hero' => $d['hero'],
-        'kpis' => $d['kpis'],
-    ])
+        @include('filament.tenant.widgets.partials.treasury-forecast-grid', ['forecast' => $forecast])
 
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div
@@ -86,11 +89,11 @@
 
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         @include('filament.partials.insights.six-month-dual-progress-panel', [
-            'title' => __('Import volume'),
-            'trend' => $d['trend'],
-            'primaryLabel' => __('Imports'),
-            'secondaryLabel' => __('Peak'),
-        ])
+    'title' => __('Import volume'),
+    'trend' => $d['trend'],
+    'primaryLabel' => __('Imports'),
+    'secondaryLabel' => __('Peak'),
+])
 
         <div
             class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
@@ -119,12 +122,12 @@
                             </p>
                         </div>
                         <span @class([
-                            'shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase',
-                            'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40' => $statement['status'] === 'completed',
-                            'bg-amber-100 text-amber-800 dark:bg-amber-900/40' => $statement['status'] === 'pending',
-                            'bg-rose-100 text-rose-800 dark:bg-rose-900/40' => $statement['status'] === 'failed',
-                            'bg-sky-100 text-sky-800 dark:bg-sky-900/40' => $statement['status'] === 'processing',
-                        ])>{{ $statement['status_label'] }}</span>
+        'shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase',
+        'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40' => $statement['status'] === 'completed',
+        'bg-amber-100 text-amber-800 dark:bg-amber-900/40' => $statement['status'] === 'pending',
+        'bg-rose-100 text-rose-800 dark:bg-rose-900/40' => $statement['status'] === 'failed',
+        'bg-sky-100 text-sky-800 dark:bg-sky-900/40' => $statement['status'] === 'processing',
+    ])>{{ $statement['status_label'] }}</span>
                     </a>
                 @empty
                     <div class="px-3 py-6 text-center text-xs text-gray-500">{{ __('No imports yet') }}</div>

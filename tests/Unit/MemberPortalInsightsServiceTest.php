@@ -98,6 +98,7 @@ test('member portal insights snapshot includes greeting and kpis', function () {
         'relation_summaries',
         'household',
         'quick_links',
+        'forecasts',
     ])
         ->and($snapshot['member']['number'])->toBe('MEM-INS01')
         ->and($snapshot['cash_card'])->toHaveKeys(['balance', 'details_url', 'actions'])
@@ -121,6 +122,7 @@ test('member portal insights snapshot includes greeting and kpis', function () {
             'pills',
         ])
         ->and($snapshot['greeting']['balances'])->toHaveCount(2)
+        ->and($snapshot['greeting']['spotlights'])->not->toBeEmpty()
         ->and($snapshot['steps'])->not->toBeEmpty()
         ->and($snapshot['trend'])->toHaveCount(6);
 });
@@ -370,4 +372,9 @@ test('member portal insights formats latest statement period from Y-m string', f
     $snapshot = app(MemberPortalInsightsService::class)->snapshot();
 
     expect($snapshot['latest_statement']['period'] ?? null)->toBe('January 2026');
+    expect($snapshot['forecasts']['statement'])->toMatchArray([
+        'visible' => true,
+        'period' => 'January 2026',
+    ])
+        ->and($snapshot['forecasts']['statement']['generated_label'])->toBeString();
 });

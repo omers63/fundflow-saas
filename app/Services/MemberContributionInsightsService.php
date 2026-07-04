@@ -40,6 +40,7 @@ final class MemberContributionInsightsService
 
         [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
         $openPeriodLabel = $this->cycles->periodLabel($openMonth, $openYear);
+        $daysRemaining = (int) max(0, BusinessDay::now()->diffInDays($this->cycles->deadline($openMonth, $openYear), false));
 
         $query = Contribution::query()->where('member_id', $member->id);
         $totalPostedAmount = (float) (clone $query)->posted()->sum('amount');
@@ -64,6 +65,10 @@ final class MemberContributionInsightsService
         $thisCycleAmount = $postedThisCycle && $openPeriodRow !== null
             ? (float) $openPeriodRow->amount
             : null;
+        $requiredCash = $member->hasActiveLoanRepaymentObligation()
+            ? 0.0
+            : $this->cycles->requiredCashForMemberPeriod($member, $openMonth, $openYear);
+        $cashGap = max(0.0, $requiredCash - $member->getCashBalance());
 
         return [
             [
@@ -76,6 +81,18 @@ final class MemberContributionInsightsService
                 'value' => $postedThisCycle ? ($thisCycleAmount !== null ? null : __('Posted')) : $thisCycleValue,
                 'amount' => $thisCycleAmount,
                 'hint' => $openPeriodLabel,
+            ],
+            [
+                'label' => __('Days left'),
+                'value' => (string) $daysRemaining,
+                'hint' => __('Until :period closes', ['period' => $openPeriodLabel]),
+            ],
+            [
+                'label' => __('Cash gap'),
+                'amount' => $cashGap,
+                'hint' => $cashGap > 0
+                    ? __('Top up before cycle close')
+                    : __('Cash is ready for this cycle'),
             ],
             [
                 'label' => __('Cycles missed (12 mo)'),

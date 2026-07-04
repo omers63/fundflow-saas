@@ -9,6 +9,13 @@ $currency = $currency ?? null;
     </div>
 @else
     <div class="ff-member-dashboard-overview w-full max-w-none space-y-3.5">
+        @if (!empty($d['greeting']))
+            @include('filament.member.widgets.partials.portal-greeting-hero', [
+                'greeting' => $d['greeting'],
+                'currency' => $currency,
+            ])
+        @endif
+
         @if (!empty($d['notice']))
             @php $notice = $d['notice']; @endphp
             <x-member::notice :tone="$notice['tone']" :title="$notice['title'] ?? null">
@@ -95,6 +102,89 @@ $currency = $currency ?? null;
                 </x-member::panel>
             @endif
         </div>
+
+        @if (!empty($d['forecasts']))
+            @php $forecast = $d['forecasts']; @endphp
+            <x-member::panel :title="__('Forecasts')">
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div
+                        class="rounded-xl border border-sky-200/80 bg-sky-50/60 px-3 py-3 dark:border-sky-800/40 dark:bg-sky-950/20">
+                        <p class="text-[10px] font-semibold uppercase tracking-wide text-sky-600 dark:text-sky-300">
+                            {{ __('Contribution cycle') }}</p>
+                        <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                            {{ $forecast['contribution']['period_label'] }}</p>
+                        <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                            {{ $forecast['contribution']['posted'] ? __('Posted for this cycle') : trans_choice(':count day left|:count days left', $forecast['contribution']['days_remaining'], ['count' => $forecast['contribution']['days_remaining']]) }}
+                        </p>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {{ __('Due by :date', ['date' => $forecast['contribution']['deadline_label']]) }}</p>
+                        @if (!($forecast['contribution']['posted'] ?? false))
+                            <p
+                                class="mt-2 text-xs font-medium {{ ($forecast['contribution']['cash_ready'] ?? false) ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300' }}">
+                                {{ ($forecast['contribution']['cash_ready'] ?? false) ? __('Cash is ready') : __('Cash gap: :amount', ['amount' => \App\Support\Insights\InsightFormatter::money($forecast['contribution']['cash_gap'])]) }}
+                            </p>
+                        @endif
+                    </div>
+                    <div
+                        class="rounded-xl border border-violet-200/80 bg-violet-50/60 px-3 py-3 dark:border-violet-800/40 dark:bg-violet-950/20">
+                        <p class="text-[10px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-300">
+                            {{ __('Next EMI') }}</p>
+                        @if ($forecast['loan']['visible'] ?? false)
+                            <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                                {{ $forecast['loan']['next_emi_date'] ?? '—' }}</p>
+                            <p class="mt-1 text-xs text-gray-600 dark:text-gray-300"><x-member::amount
+                                    :value="$forecast['loan']['next_emi_amount']" :currency="$currency" class="inline" /> ·
+                                {{ trans_choice(':count EMI in next 30 days|:count EMIs in next 30 days', $forecast['loan']['next_30_days_count'], ['count' => $forecast['loan']['next_30_days_count']]) }}
+                            </p>
+                            <p
+                                class="mt-2 text-xs font-medium {{ ($forecast['loan']['cash_covers'] ?? false) ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300' }}">
+                                {{ ($forecast['loan']['cash_covers'] ?? false) ? __('Current cash covers the next EMI') : __('Cash gap: :amount', ['amount' => \App\Support\Insights\InsightFormatter::money($forecast['loan']['cash_gap'])]) }}
+                            </p>
+                        @else
+                            <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ __('No active loan') }}</p>
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ __('No EMI forecast is needed right now.') }}
+                            </p>
+                        @endif
+                    </div>
+                    <div
+                        class="rounded-xl border border-emerald-200/80 bg-emerald-50/60 px-3 py-3 dark:border-emerald-800/40 dark:bg-emerald-950/20">
+                        <p class="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-300">
+                            {{ __('Withdrawable cash') }}</p>
+                        <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white"><x-member::amount
+                                :value="$forecast['cash']['withdrawable_cash']" :currency="$currency" class="inline" /></p>
+                        <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">{{ __('EMI reserve') }}: <x-member::amount
+                                :value="$forecast['cash']['emi_reserve']" :currency="$currency" class="inline" /></p>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ __('Pending cash-outs') }}: <x-member::amount
+                                :value="$forecast['cash']['pending_cash_out_amount']" :currency="$currency" class="inline" /></p>
+                    </div>
+                    <div
+                        class="rounded-xl border border-indigo-200/80 bg-indigo-50/60 px-3 py-3 dark:border-indigo-800/40 dark:bg-indigo-950/20">
+                        <p class="text-[10px] font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-300">
+                            {{ __('Latest statement') }}</p>
+                        @if ($forecast['statement']['visible'] ?? false)
+                            <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                                {{ $forecast['statement']['period'] ?? '—' }}</p>
+                            @if (filled($forecast['statement']['generated_label'] ?? null))
+                                <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                                    {{ $forecast['statement']['generated_label'] }}</p>
+                            @endif
+                            <p class="mt-2 text-xs font-medium text-indigo-700 dark:text-indigo-300">
+                                <a href="{{ $forecast['statement']['url'] }}" wire:navigate class="underline">
+                                    {{ __('Statements') }} →
+                                </a>
+                            </p>
+                        @else
+                            <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ __('No statements yet') }}</p>
+                            <p class="mt-2 text-xs font-medium text-indigo-700 dark:text-indigo-300">
+                                <a href="{{ $forecast['statement']['url'] }}" wire:navigate class="underline">
+                                    {{ __('Statements') }} →
+                                </a>
+                            </p>
+                        @endif
+                    </div>
+                </div>
+            </x-member::panel>
+        @endif
 
         @php
     $hasLoanPanel = !empty($d['loan_panel']);

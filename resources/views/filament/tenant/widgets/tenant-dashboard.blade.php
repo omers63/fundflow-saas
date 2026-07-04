@@ -6,84 +6,134 @@
     $pipeline = $d['loan_pipeline'];
     $loanPortfolio = $d['loan_portfolio'];
     $lifetime = $d['lifetime_fund_activity'];
+    $forecast = $d['forecast_summary'];
     $greeting = $d['greeting'];
     $pool = $d['pool_health'];
 @endphp
-
-<div class="w-full max-w-none space-y-3 pb-6">
-
-    {{-- ── Fund overview hero ── --}}
-    <div class="ff-tenant-dashboard-hero overflow-hidden rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-emerald-50/50 shadow-md dark:border-sky-800/40 dark:from-sky-950/50 dark:via-gray-900 dark:to-emerald-950/25">
-        <div class="px-5 py-5 sm:px-6 sm:py-6">
-            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div class="flex min-w-0 items-start gap-4">
-                    <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-sky-200/80 bg-white shadow-sm dark:border-sky-700/50 dark:bg-sky-950/60">
-                        <x-heroicon-o-building-library class="h-7 w-7 text-sky-600 dark:text-sky-400" />
+    
+    <div class="w-full max-w-none space-y-3 pb-6">
+    
+        {{-- ── Fund overview hero ── --}}
+        <div
+            class="ff-tenant-dashboard-hero overflow-hidden rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-emerald-50/50 shadow-md dark:border-sky-800/40 dark:from-sky-950/50 dark:via-gray-900 dark:to-emerald-950/25">
+            <div class="px-5 py-5 sm:px-6 sm:py-6">
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div class="flex min-w-0 items-start gap-4">
+                        <div
+                            class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-sky-200/80 bg-white shadow-sm dark:border-sky-700/50 dark:bg-sky-950/60">
+                            <x-heroicon-o-building-library class="h-7 w-7 text-sky-600 dark:text-sky-400" />
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-xs font-semibold uppercase tracking-wider text-sky-600 dark:text-sky-400">
+                                {{ $greeting['period_label'] }}, {{ $greeting['name'] }}
+                            </p>
+                            <h2 class="mt-1 truncate text-xl font-bold text-gray-900 dark:text-white sm:text-2xl">
+                                {{ $greeting['fund_name'] }}
+                            </h2>
+                            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ $greeting['date'] }}</p>
+                            <p class="mt-2 max-w-2xl text-xs leading-relaxed text-gray-600 dark:text-gray-300">
+                                {{ $greeting['subtitle'] }}
+                            </p>
+                        </div>
                     </div>
-                    <div class="min-w-0">
-                        <p class="text-xs font-semibold uppercase tracking-wider text-sky-600 dark:text-sky-400">
-                            {{ $greeting['period_label'] }}, {{ $greeting['name'] }}
-                        </p>
-                        <h2 class="mt-1 truncate text-xl font-bold text-gray-900 dark:text-white sm:text-2xl">
-                            {{ $greeting['fund_name'] }}
-                        </h2>
-                        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ $greeting['date'] }}</p>
-                        <p class="mt-2 max-w-2xl text-xs leading-relaxed text-gray-600 dark:text-gray-300">
-                            {{ $greeting['subtitle'] }}
-                        </p>
+                    <div class="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
+                        <span
+                            class="inline-flex items-center gap-1.5 rounded-lg bg-sky-100/90 px-3 py-1.5 text-xs font-semibold text-sky-800 ring-1 ring-inset ring-sky-200/80 dark:bg-sky-900/50 dark:text-sky-200 dark:ring-sky-700/50">
+                            <x-heroicon-o-calendar-days class="h-4 w-4 shrink-0" />
+                            {{ __('Cycle: :label', ['label' => $d['open_period_label']]) }}
+                        </span>
                     </div>
                 </div>
-                <div class="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
-                    <span class="inline-flex items-center gap-1.5 rounded-lg bg-sky-100/90 px-3 py-1.5 text-xs font-semibold text-sky-800 ring-1 ring-inset ring-sky-200/80 dark:bg-sky-900/50 dark:text-sky-200 dark:ring-sky-700/50">
-                        <x-heroicon-o-calendar-days class="h-4 w-4 shrink-0" />
-                        {{ __('Cycle: :label', ['label' => $d['open_period_label']]) }}
-                    </span>
+    
+                <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    @foreach ($d['balances'] as $balance)
+                        <a href="{{ $balance['url'] }}"
+                            class="ff-tenant-dashboard-hero__balance group relative overflow-hidden rounded-xl border border-white/90 bg-white/95 p-4 shadow-sm ring-1 ring-gray-200/70 transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/5 dark:bg-gray-900/70 dark:ring-white/10">
+                            <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r {{ $balance['gradient'] }}"></div>
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-50 text-gray-600 ring-1 ring-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:ring-white/5">
+                                    <x-dynamic-component :component="$balance['icon']" class="h-5 w-5" />
+                                </div>
+                                <div class="min-w-0">
+                                    <p
+                                        class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                        {{ $balance['label'] }}
+                                    </p>
+                                    <p
+                                        class="mt-0.5 truncate text-lg font-bold leading-tight text-gray-900 dark:text-white sm:text-xl">
+                                        <x-member::amount :value="$balance['amount']" />
+                                    </p>
+                                </div>
+                            </div>
+                        </a>
+                    @endforeach
                 </div>
             </div>
-
-            <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                @foreach ($d['balances'] as $balance)
-                    <a href="{{ $balance['url'] }}"
-                        class="ff-tenant-dashboard-hero__balance group relative overflow-hidden rounded-xl border border-white/90 bg-white/95 p-4 shadow-sm ring-1 ring-gray-200/70 transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/5 dark:bg-gray-900/70 dark:ring-white/10">
-                        <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r {{ $balance['gradient'] }}"></div>
-                        <div class="flex items-center gap-3">
-                            <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-50 text-gray-600 ring-1 ring-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:ring-white/5">
-                                <x-dynamic-component :component="$balance['icon']" class="h-5 w-5" />
-                            </div>
-                            <div class="min-w-0">
-                                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                    {{ $balance['label'] }}
-                                </p>
-                                <p class="mt-0.5 truncate text-lg font-bold leading-tight text-gray-900 dark:text-white sm:text-xl">
-                                    <x-member::amount :value="$balance['amount']" />
-                                </p>
-                            </div>
+        </div>
+    
+        {{-- ── 4 KPI stat cards ── --}}
+        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            @foreach ($d['kpi_stats'] as $stat)
+                @php
+                    $subColor = match ($stat['sub_tone'] ?? '') {
+                        'success', 'emerald' => 'text-emerald-600 dark:text-emerald-400',
+                        'amber', 'warning' => 'text-amber-600 dark:text-amber-400',
+                        'danger', 'rose' => 'text-red-600 dark:text-red-400',
+                        default => 'text-gray-400',
+                    };
+                @endphp
+                <a href="{{ $stat['url'] }}"
+                    class="ff-tenant-dashboard-kpi group flex min-w-0 flex-col gap-1 overflow-hidden rounded-xl border border-gray-200 bg-white px-4 py-3.5 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900">
+                    <p class="truncate text-[10px] font-semibold uppercase tracking-wide text-gray-400"
+                        title="{{ $stat['label'] }}">{{ $stat['label'] }}</p>
+                    <p class="truncate text-[26px] font-bold tabular-nums leading-none text-gray-900 dark:text-white"
+                        title="{{ $stat['value'] }}">{{ $stat['value'] }}</p>
+                    <p class="{{ $subColor }} truncate text-[11px] font-medium" title="{{ $stat['sub'] }}">{{ $stat['sub'] }}
+                    </p>
+                </a>
+            @endforeach
+        </div>
+    
+        <div
+            class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+            <div
+                class="flex flex-col gap-2 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
+                <div class="flex items-center gap-2">
+                    <x-heroicon-o-sparkles class="h-4 w-4 text-violet-500" />
+                    <span
+                        class="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Forecast summary') }}</span>
+                </div>
+                <span @class([
+                    'inline-flex items-center rounded-lg px-2.5 py-1 text-[10px] font-semibold ring-1 ring-inset',
+                    'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/30 dark:text-red-300 dark:ring-red-800/40' => ($forecast['top_risk']['tone'] ?? '') === 'danger',
+                    'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-800/40' => ($forecast['top_risk']['tone'] ?? '') === 'warning',
+                    'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-800/40' => !in_array(($forecast['top_risk']['tone'] ?? ''), ['danger', 'warning'], true),
+                ])>
+                {{ $forecast['top_risk']['label'] }} · {{ $forecast['top_risk']['secondary'] }}
+                </span>
+            </div>
+            <div class="grid grid-cols-1 gap-3 p-4 lg:grid-cols-3">
+                @foreach ($forecast['cards'] as $card)
+                    <a href="{{ $card['url'] }}"
+                        class="group rounded-xl border border-gray-200/80 bg-gray-50/70 px-3 py-3 transition hover:-translate-y-0.5 hover:border-sky-200 hover:bg-white hover:shadow-sm dark:border-gray-700 dark:bg-gray-800/70 dark:hover:border-sky-800/50 dark:hover:bg-gray-800">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                {{ $card['label'] }}</p>
+                            <span @class([
+                                'rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase',
+                                'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' => ($card['tone'] ?? '') === 'danger',
+                                'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' => ($card['tone'] ?? '') === 'warning',
+                                'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' => !in_array(($card['tone'] ?? ''), ['danger', 'warning'], true),
+                            ])>{{ $card['secondary'] }}</span>
                         </div>
+                        <p class="mt-2 text-lg font-bold tabular-nums text-gray-900 dark:text-white">{{ $card['primary'] }}</p>
+                        <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">{{ $card['detail'] }}</p>
+                        <p class="mt-1 text-[11px] text-gray-400">{{ $card['meta'] }}</p>
                     </a>
                 @endforeach
             </div>
         </div>
-    </div>
-
-    {{-- ── 4 KPI stat cards ── --}}
-    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        @foreach ($d['kpi_stats'] as $stat)
-            @php
-    $subColor = match ($stat['sub_tone'] ?? '') {
-        'success', 'emerald' => 'text-emerald-600 dark:text-emerald-400',
-        'amber', 'warning' => 'text-amber-600 dark:text-amber-400',
-        'danger', 'rose' => 'text-red-600 dark:text-red-400',
-        default => 'text-gray-400',
-    };
-            @endphp
-            <a href="{{ $stat['url'] }}"
-                class="ff-tenant-dashboard-kpi group flex min-w-0 flex-col gap-1 overflow-hidden rounded-xl border border-gray-200 bg-white px-4 py-3.5 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900">
-                <p class="truncate text-[10px] font-semibold uppercase tracking-wide text-gray-400" title="{{ $stat['label'] }}">{{ $stat['label'] }}</p>
-                <p class="truncate text-[26px] font-bold tabular-nums leading-none text-gray-900 dark:text-white" title="{{ $stat['value'] }}">{{ $stat['value'] }}</p>
-                <p class="{{ $subColor }} truncate text-[11px] font-medium" title="{{ $stat['sub'] }}">{{ $stat['sub'] }}</p>
-            </a>
-        @endforeach
-    </div>
 
     {{-- ── Active loan portfolio ── --}}
     <div

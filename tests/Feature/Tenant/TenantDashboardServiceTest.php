@@ -110,6 +110,8 @@ test('tenant dashboard snapshot includes greeting and workspace links', function
             'overdue_url',
             'queue_url',
         ])
+        ->and($snapshot['forecast_summary'])->toHaveKeys(['cards', 'top_risk'])
+        ->and($snapshot['forecast_summary']['cards'])->toHaveCount(3)
         ->and($snapshot['lifetime_fund_activity'])->toHaveKeys([
             'loan_count',
             'loan_amount_total',

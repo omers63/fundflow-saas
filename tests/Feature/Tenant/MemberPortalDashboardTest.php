@@ -88,7 +88,10 @@ test('member dashboard renders redesigned zones with quick actions', function ()
         ->assertSee(__('Fund account'), false)
         ->assertSee(__('Loan eligibility'), false)
         ->assertSee(__('Quick actions'), false)
-        ->assertDontSee('ff-member-greeting', false)
+        ->assertSee(__('Forecasts'), false)
+        ->assertSee('ff-member-greeting', false)
+        ->assertSee('Dashboard Member', false)
+        ->assertSee('ff-member-greeting__spotlights', false)
         ->assertDontSee('ff-member-journey', false);
 });
 
@@ -163,15 +166,16 @@ test('member dashboard shows loan repayment notice instead of contribution not p
 
     $snapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
 
-    expect($snapshot['notice']['title'] ?? null)->toBe('Under loan repayment')
-        ->and($snapshot['pending_actions'][0]['label'] ?? null)->toBe('Loan repayment · '.$cycles->periodLabel($curMonth, $curYear));
+    expect($snapshot['notice']['title'] ?? null)->toBe(__('Active loan in progress'))
+        ->and($snapshot['cycle']['under_loan_repayment'] ?? false)->toBeTrue()
+        ->and($snapshot['loan_panel'])->not->toBeNull();
 
     $this->actingAs($this->memberUser, 'tenant');
 
     $this->get('http://'.$this->domain.'/member')
         ->assertSuccessful()
-        ->assertSee('Under loan repayment', false)
-        ->assertSee('Loan repayment · '.$cycles->periodLabel($curMonth, $curYear), false)
+        ->assertSee('ff-member-greeting', false)
+        ->assertSee(__('Active loan in progress'), false)
         ->assertDontSee('Contribution not posted', false);
 
     Carbon::setTestNow();

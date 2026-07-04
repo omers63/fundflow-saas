@@ -9,9 +9,8 @@ use App\Services\MemberPortalAccountsInsightsService;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
@@ -53,10 +52,16 @@ test('member portal accounts insights snapshot includes balances and kpis', func
 
     $snapshot = app(MemberPortalAccountsInsightsService::class)->snapshot($this->member);
 
-    expect($snapshot)->toHaveKeys(['hero', 'kpis', 'trend', 'accounts', 'sparkline'])
+    expect($snapshot)->toHaveKeys(['hero', 'kpis', 'trend', 'accounts', 'sparkline', 'forecast'])
         ->and($snapshot['kpis'])->toHaveCount(6)
         ->and($snapshot['accounts']['cash']['balance'])->not->toBeEmpty()
-        ->and($snapshot['trend'])->toHaveCount(6);
+        ->and($snapshot['trend'])->toHaveCount(6)
+        ->and($snapshot['forecast'])->toHaveKeys([
+            'days_remaining',
+            'withdrawable_cash',
+            'pending_cash_out_amount',
+            'emi_reserve',
+        ]);
 });
 
 test('member portal accounts insights flags negative cash and fund balances for styling', function () {

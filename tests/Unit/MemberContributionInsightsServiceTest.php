@@ -13,9 +13,8 @@ use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
@@ -48,6 +47,17 @@ beforeEach(function () {
     ]);
 
     app(AccountingService::class)->createMemberAccounts($this->member);
+});
+
+test('member contribution stat cards include cycle forecast fields', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $cards = app(MemberContributionInsightsService::class)->statCards($this->member);
+    $labels = collect($cards)->pluck('label');
+
+    expect($labels)->toContain(__('Days left'), __('Cash gap'));
+
+    Carbon::setTestNow();
 });
 
 test('member contribution insights snapshot includes cycle and trend data', function () {

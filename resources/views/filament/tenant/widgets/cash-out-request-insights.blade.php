@@ -4,6 +4,7 @@
     $notes = $d['notes'];
     $bank = $d['bank'];
     $hero = $d['hero'];
+    $forecast = $d['treasury_forecast'];
     $maxAmountTier = max(1, collect($d['amount_breakdown'])->max('count'));
     $sparkMax = max(1, max($d['sparkline']));
     $currency = $d['currency'];
@@ -24,16 +25,18 @@
         'review' => $pipeline['index_url'],
     ]);
 @endphp
+    
+    <div class="ff-app-insights w-full max-w-none space-y-3 mb-1">
+        @include('filament.tenant.widgets.partials.insights-head', [
+            'hero' => $hero,
+            'kpis' => $kpis,
+            'sparkline' => $d['pending'] > 0 ? $d['sparkline'] : null,
+            'sparklineMax' => $sparkMax,
+        ])
 
-<div class="ff-app-insights w-full max-w-none space-y-3 mb-1">
-    @include('filament.tenant.widgets.partials.insights-head', [
-        'hero' => $hero,
-        'kpis' => $kpis,
-        'sparkline' => $d['pending'] > 0 ? $d['sparkline'] : null,
-        'sparklineMax' => $sparkMax,
-    ])
+        @include('filament.tenant.widgets.partials.treasury-forecast-grid', ['forecast' => $forecast])
 
-    <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div
             class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div
@@ -160,10 +163,10 @@
                                 {{ $request['has_notes'] ? __('Has notes') : __('No notes') }}</p>
                         </div>
                         <span @class([
-                            'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
-                            'bg-amber-100 text-amber-800 dark:bg-amber-900/40' => $request['days_waiting'] <= 3,
-                            'bg-red-100 text-red-800 dark:bg-red-900/40' => $request['days_waiting'] > 3,
-                        ])>
+        'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
+        'bg-amber-100 text-amber-800 dark:bg-amber-900/40' => $request['days_waiting'] <= 3,
+        'bg-red-100 text-red-800 dark:bg-red-900/40' => $request['days_waiting'] > 3,
+    ])>
                             {{ $request['days_waiting'] }}d
                         </span>
                     </a>
@@ -177,10 +180,10 @@
         </div>
 
         @include('filament.partials.insights.six-month-workflow-panel', [
-            'title' => __('6-month volume & outcomes'),
-            'trend' => $d['trend'],
-            'primaryLabel' => __('Accepted'),
-            'secondaryLabel' => __('Decided'),
-        ])
+    'title' => __('6-month volume & outcomes'),
+    'trend' => $d['trend'],
+    'primaryLabel' => __('Accepted'),
+    'secondaryLabel' => __('Decided'),
+])
     </div>
 </div>

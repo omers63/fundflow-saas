@@ -48,6 +48,8 @@
         'sparklineMax' => $sparkMax,
     ])
 
+    @include('filament.tenant.widgets.partials.treasury-forecast-grid', ['forecast' => $d['treasury_forecast']])
+
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div
             class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">

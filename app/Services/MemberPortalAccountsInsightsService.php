@@ -9,6 +9,7 @@ use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Models\Tenant\Account;
+use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
@@ -72,13 +73,24 @@ final class MemberPortalAccountsInsightsService
             ->where('member_id', $member->id)
             ->where('status', 'pending')
             ->count();
+        $pendingCashOutAmount = (float) CashOutRequest::query()
+            ->where('member_id', $member->id)
+            ->where('status', 'pending')
+            ->sum('amount');
 
-        [$openMonth, $openYear] = app(ContributionCycleService::class)->currentOpenPeriod();
+        $cycles = app(ContributionCycleService::class);
+        [$openMonth, $openYear] = $cycles->currentOpenPeriod();
         $postedThisCycle = Contribution::query()
             ->where('member_id', $member->id)
             ->forPeriod($openMonth, $openYear)
             ->posted()
             ->exists();
+        $requiredCashForCycle = $member->hasActiveLoanRepaymentObligation()
+            ? 0.0
+            : $cycles->requiredCashForMemberPeriod($member, $openMonth, $openYear);
+        $emiReserve = app(MemberCashOutService::class)->reservedForNextEmi($member);
+        $withdrawableCash = app(MemberCashOutService::class)->availableCashForWithdrawal($member);
+        $daysRemaining = (int) max(0, BusinessDay::now()->diffInDays($cycles->deadline($openMonth, $openYear), false));
 
         $trend = $this->sixMonthTrend($accountIds);
 
@@ -143,6 +155,14 @@ final class MemberPortalAccountsInsightsService
             'active_loan_count' => $activeLoanCount,
             'pending_deposits' => $pendingDeposits,
             'posted_this_cycle' => $postedThisCycle,
+            'forecast' => [
+                'days_remaining' => $daysRemaining,
+                'required_cash_for_cycle' => $requiredCashForCycle,
+                'cycle_cash_gap' => max(0.0, $requiredCashForCycle - $cashBalance),
+                'withdrawable_cash' => $withdrawableCash,
+                'pending_cash_out_amount' => $pendingCashOutAmount,
+                'emi_reserve' => $emiReserve,
+            ],
             'trend' => $trend,
             'sparkline' => $sparkline,
             'sparkline_max' => max(1, max($sparkline)),

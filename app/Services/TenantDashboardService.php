@@ -48,10 +48,12 @@ final class TenantDashboardService
 {
     public function __construct(
         protected ContributionCycleService $cycles,
+        protected ContributionInsightsService $contributionInsights,
         protected LoanInsightsService $loanInsights,
         protected MasterAccountsInsightsService $masterAccounts,
         protected BankAccountsInsightsService $bankAccounts,
         protected LoanDelinquencyService $delinquency,
+        protected TreasuryForecastService $treasuryForecasts,
     ) {}
 
     /**
@@ -68,8 +70,11 @@ final class TenantDashboardService
         $masterBalance = fn (string $type): float => (float) ($masters->get($type)?->balance ?? 0);
 
         $loanPortfolio = $this->loanInsights->portfolioSnapshot();
+        $loanEmiForecast = $this->loanInsights->emiCollectSnapshot()['forecast'] ?? [];
         $masterSnapshot = $this->masterAccounts->snapshot();
         $bankSnapshot = $this->bankAccounts->snapshot();
+        $contributionForecast = $this->contributionInsights->collectSnapshot()['forecast'] ?? [];
+        $treasuryForecast = $this->treasuryForecasts->snapshot();
         $delinquencyCounts = $this->delinquency->digestCounts();
 
         $activeMembers = Member::active()->count();
@@ -130,6 +135,12 @@ final class TenantDashboardService
             'loan_trend' => $this->loanInsights->sixMonthLoanVolumeTrend(),
             'loan_pipeline' => $loanPortfolio['pipeline'] ?? [],
             'loan_portfolio' => $this->loanPortfolioSummary($loanPortfolio),
+            'forecast_summary' => $this->forecastSummary(
+                $contributionForecast,
+                $loanPortfolio['forecast'] ?? [],
+                $loanEmiForecast,
+                $treasuryForecast,
+            ),
             'lifetime_fund_activity' => $this->lifetimeFundActivity(),
             'workspace_sections' => $this->workspaceSections(),
             'sparkline' => $masterSnapshot['sparkline'] ?? [],
@@ -140,6 +151,85 @@ final class TenantDashboardService
             'collection_breakdown' => $this->collectionBreakdown($openMonth, $openYear, $activeMembers, $delinquencyCounts),
             'fund_tier_utilisation' => $this->fundTierUtilisation(),
             'pool_health' => $this->poolHealth($masterBalance),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $contributionForecast
+     * @param  array<string, mixed>  $loanPortfolioForecast
+     * @param  array<string, mixed>  $loanEmiForecast
+     * @param  array<string, mixed>  $treasuryForecast
+     * @return array<string, mixed>
+     */
+    private function forecastSummary(
+        array $contributionForecast,
+        array $loanPortfolioForecast,
+        array $loanEmiForecast,
+        array $treasuryForecast,
+    ): array {
+        $cards = [
+            [
+                'key' => 'contribution',
+                'label' => __('Contribution close'),
+                'tone' => $contributionForecast['tone'] ?? 'warning',
+                'primary' => (($contributionForecast['projected_close_percent'] ?? 0)).'%',
+                'secondary' => __('Projected close'),
+                'detail' => trans_choice(
+                    ':count day left|:count days left',
+                    (int) ($contributionForecast['days_remaining'] ?? 0),
+                    ['count' => (int) ($contributionForecast['days_remaining'] ?? 0)],
+                ),
+                'meta' => trans_choice(
+                    ':count member remaining|:count members remaining',
+                    (int) ($contributionForecast['remaining_count'] ?? 0),
+                    ['count' => (int) ($contributionForecast['remaining_count'] ?? 0)],
+                ),
+                'url' => ContributionResource::listTabUrl('collect'),
+            ],
+            [
+                'key' => 'loans',
+                'label' => __('Loan & EMI'),
+                'tone' => $loanEmiForecast['tone'] ?? ($loanPortfolioForecast['tone'] ?? 'warning'),
+                'primary' => (($loanEmiForecast['projected_close_percent'] ?? 0)).'%',
+                'secondary' => __('EMI collectability'),
+                'detail' => trans_choice(
+                    ':count EMI due next 30 days|:count EMIs due next 30 days',
+                    (int) ($loanPortfolioForecast['next_30_days_count'] ?? 0),
+                    ['count' => (int) ($loanPortfolioForecast['next_30_days_count'] ?? 0)],
+                ),
+                'meta' => __('Uncovered :amount', [
+                    'amount' => InsightFormatter::money((float) ($loanEmiForecast['uncovered_amount'] ?? 0)),
+                ]),
+                'url' => LoanResource::listTabUrl('emi_collect'),
+            ],
+            [
+                'key' => 'treasury',
+                'label' => __('Treasury pressure'),
+                'tone' => $treasuryForecast['tone'] ?? 'warning',
+                'primary' => InsightFormatter::money((float) ($treasuryForecast['pending_net_amount'] ?? 0)),
+                'secondary' => __('Pending net flow'),
+                'detail' => __('Projected cash :amount', [
+                    'amount' => InsightFormatter::money((float) ($treasuryForecast['projected_available_cash'] ?? 0)),
+                ]),
+                'meta' => __('Clearing backlog :amount', [
+                    'amount' => InsightFormatter::money((float) ($treasuryForecast['clearing_backlog_amount'] ?? 0)),
+                ]),
+                'url' => BankAccountsResource::getUrl('index'),
+            ],
+        ];
+
+        $topRisk = collect($cards)->first(fn (array $card): bool => $card['tone'] === 'danger')
+            ?? collect($cards)->first(fn (array $card): bool => $card['tone'] === 'warning')
+            ?? $cards[0];
+
+        return [
+            'cards' => $cards,
+            'top_risk' => [
+                'label' => $topRisk['label'],
+                'secondary' => $topRisk['secondary'],
+                'detail' => $topRisk['detail'],
+                'tone' => $topRisk['tone'],
+            ],
         ];
     }
 

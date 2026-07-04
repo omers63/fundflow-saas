@@ -500,6 +500,54 @@
     color: #fff;
     padding: 1rem 1.25rem;
     margin-block-end: 0.875rem;
+    animation: ff-member-greeting-enter 0.55s ease-out both;
+}
+
+@keyframes ff-member-greeting-enter {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.ff-member-greeting__shape {
+    pointer-events: none;
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(0.5px);
+}
+
+.ff-member-greeting__shape--one {
+    top: -2.5rem;
+    right: -1.5rem;
+    width: 8rem;
+    height: 8rem;
+    background: rgb(255 255 255 / 0.08);
+    animation: ff-member-greeting-drift 12s ease-in-out infinite alternate;
+}
+
+.ff-member-greeting__shape--two {
+    bottom: -3rem;
+    left: -2rem;
+    width: 10rem;
+    height: 10rem;
+    background: rgb(175 169 236 / 0.16);
+    animation: ff-member-greeting-drift 14s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes ff-member-greeting-drift {
+    from {
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+
+    to {
+        transform: translate3d(0.35rem, -0.35rem, 0) scale(1.06);
+    }
 }
 
 .ff-member-greeting__glow {
@@ -598,6 +646,14 @@
     color: rgb(255 255 255 / 0.92);
 }
 
+.ff-member-greeting__highlight {
+    margin: 0.35rem 0 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.35;
+    color: #fff;
+}
+
 .ff-member-greeting__meta {
     display: flex;
     flex-wrap: wrap;
@@ -670,11 +726,16 @@
     color: #fff;
     backdrop-filter: blur(8px);
     border: 1px solid rgb(255 255 255 / 0.2);
-    transition: background 0.2s ease;
+    transition:
+        transform 0.2s ease,
+        background 0.2s ease,
+        box-shadow 0.2s ease;
 }
 
 .ff-member-greeting__balance:hover {
+    transform: translateY(-2px);
     background: rgb(255 255 255 / 0.22);
+    box-shadow: 0 8px 24px rgb(38 33 92 / 0.22);
 }
 
 .ff-member-greeting__balance-head {
@@ -773,6 +834,101 @@
     height: 0.75rem;
     width: 0.75rem;
     opacity: 0.9;
+}
+
+.ff-member-greeting__spotlights {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin: 0.875rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+@media (min-width: 640px) {
+    .ff-member-greeting__spotlights {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+.ff-member-greeting__spotlight {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgb(255 255 255 / 0.18);
+    background: rgb(255 255 255 / 0.1);
+    padding: 0.625rem 0.75rem;
+    color: inherit;
+    text-decoration: none;
+    transition:
+        transform 0.2s ease,
+        background-color 0.2s ease,
+        border-color 0.2s ease;
+}
+
+.ff-member-greeting__spotlight:hover {
+    transform: translateY(-1px);
+    border-color: rgb(255 255 255 / 0.32);
+    background: rgb(255 255 255 / 0.16);
+}
+
+.ff-member-greeting__spotlight-icon {
+    height: 1rem;
+    width: 1rem;
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+    opacity: 0.92;
+}
+
+.ff-member-greeting__spotlight-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.ff-member-greeting__spotlight-label {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgb(238 237 254 / 0.82);
+}
+
+.ff-member-greeting__spotlight-value {
+    font-size: 0.875rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: #fff;
+}
+
+.ff-member-greeting__spotlight-sub {
+    font-size: 0.6875rem;
+    color: rgb(238 237 254 / 0.78);
+}
+
+.ff-member-greeting__pill--danger {
+    background: rgb(254 226 226 / 0.16);
+    border-color: rgb(252 165 165 / 0.35);
+}
+
+.ff-member-greeting__pill--warning,
+.ff-member-greeting__pill--amber {
+    background: rgb(254 243 199 / 0.14);
+    border-color: rgb(251 191 36 / 0.32);
+}
+
+.ff-member-greeting__pill--info {
+    background: rgb(219 234 254 / 0.14);
+    border-color: rgb(147 197 253 / 0.32);
+}
+
+.ff-member-greeting__pill--violet {
+    background: rgb(237 233 254 / 0.14);
+    border-color: rgb(196 181 253 / 0.32);
 }
 
 .ff-member-quick-actions {

@@ -7,9 +7,8 @@ use App\Services\ContributionInsightsService;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
@@ -52,6 +51,8 @@ test('insights snapshot aggregates contribution pipeline metrics', function () {
         ->and($snapshot['failed'])->toBe(1)
         ->and($snapshot['late_count'])->toBe(1)
         ->and($snapshot['open_period']['label'])->not->toBeEmpty()
+        ->and($snapshot['forecast'])->toHaveKeys(['days_remaining', 'projected_close_percent', 'remaining_count', 'required_amount_per_day'])
+        ->and($snapshot['forecast']['remaining_count'])->toBeGreaterThanOrEqual(0)
         ->and($snapshot['method_breakdown'])->not->toBeEmpty()
         ->and($snapshot['trend'])->toHaveCount(6)
         ->and($snapshot['sparkline'])->toHaveCount(8)
