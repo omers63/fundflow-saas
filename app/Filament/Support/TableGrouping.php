@@ -96,6 +96,48 @@ final class TableGrouping
     /**
      * @return array<int, Group>
      */
+    public static function globalTransactions(): array
+    {
+        return [
+            Group::make('account.is_master')
+                ->label(__('Scope'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn (Transaction $record): string => $record->account?->is_master
+                    ? __('Master')
+                    : __('Member')),
+            Group::make('account.type')
+                ->label(__('Account type'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn (Transaction $record): string => match ($record->account?->type) {
+                    'cash' => __('Cash'),
+                    'fund' => __('Fund'),
+                    'bank' => __('Bank'),
+                    'expense' => __('Expense'),
+                    'fees' => __('Fees'),
+                    'invest' => __('Invest'),
+                    'loan' => __('Loan'),
+                    'suspense' => __('Suspense'),
+                    default => __('Other'),
+                }),
+            Group::make('type')
+                ->label(__('Type'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn (Transaction $record): string => $record->type === 'credit'
+                    ? __('Credit')
+                    : __('Debit')),
+            Group::make('transacted_at')
+                ->label(__('Date'))
+                ->date(),
+            Group::make('member.name')
+                ->label(__('Member'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn (Transaction $record): string => $record->member?->name ?? __('Unassigned')),
+        ];
+    }
+
+    /**
+     * @return array<int, Group>
+     */
     public static function bankTransactions(): array
     {
         return [

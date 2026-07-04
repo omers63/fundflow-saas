@@ -23,6 +23,7 @@ use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
 use App\Filament\Tenant\Resources\SupportRequests\SupportRequestResource;
+use App\Filament\Tenant\Resources\Transactions\TransactionResource;
 use App\Support\Lang;
 
 /**
@@ -61,6 +62,7 @@ final class TenantSidebarRegistry
             FundPostingResource::class,
             CashOutRequestResource::class,
             BankAccountsResource::class,
+            TransactionResource::class,
             ReconciliationOverviewPage::class,
             ReportsPage::class,
             AuditSystemPage::class,
@@ -81,6 +83,7 @@ final class TenantSidebarRegistry
             Lang::formatUiLabel(__('Deposits')),
             Lang::formatUiLabel(__('Cash outs')),
             Lang::formatUiLabel(__('Bank clearing')),
+            Lang::formatUiLabel(__('Transactions')),
             Lang::formatUiLabel(__('Reconciliation')),
             Lang::formatUiLabel(__('Reports')),
             Lang::formatUiLabel(__('Audit & System')),

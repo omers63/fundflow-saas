@@ -349,8 +349,8 @@ test('snapshot presenter formats global trial counts as numbers not currency', f
 
     $flat = collect($metrics)->flatMap(fn (array $row): array => $row);
 
-    expect(array_key_first($metrics[0]))->toBe(__('Σ credits'))
-        ->and(array_key_first($metrics[1]))->toBe(__('Σ debits'))
+    expect(array_key_first($metrics[0]))->toBe(__('Σ credits Flow'))
+        ->and(array_key_first($metrics[1]))->toBe(__('Σ debits Flow'))
         ->and($flat[__('Unbalanced posting groups')])->toBe('3')
         ->and($flat[__('Null-reference lines')])->toBe('2')
         ->and($flat[__('Null-reference credits')])->toContain('1,500')

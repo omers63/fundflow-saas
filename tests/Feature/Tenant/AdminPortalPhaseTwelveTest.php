@@ -10,6 +10,7 @@ use App\Filament\Tenant\Pages\MessagesInboxPage;
 use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Filament\Tenant\Pages\ReportsPage;
 use App\Filament\Tenant\Pages\Settings;
+use App\Filament\Tenant\Resources\Transactions\Pages\ListTransactions;
 use App\Filament\Tenant\Support\TenantSidebarRegistry;
 use App\Filament\Tenant\Widgets\TenantDashboardWidget;
 use App\Models\Central\Tenant;
@@ -22,14 +23,19 @@ use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
 
+function adminPortalTenantDomain(): string
+{
+    return 'testing.localhost';
+}
+
 beforeEach(function () {
     $this->initializeTenancy();
 
     $tenant = Tenant::find('testing');
-    $this->domain = 'testing.localhost';
+    $domain = adminPortalTenantDomain();
 
-    if (! $tenant->domains()->where('domain', $this->domain)->exists()) {
-        $tenant->domains()->create(['domain' => $this->domain]);
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
+        $tenant->domains()->create(['domain' => $domain]);
     }
 
     App::setLocale('en');
@@ -47,6 +53,7 @@ const ADMIN_PORTAL_HTTP_SMOKE_ROUTES = [
     ['path' => '/admin/contributions', 'label' => 'collections'],
     ['path' => '/admin/disbursements', 'label' => 'disbursements'],
     ['path' => '/admin/bank-accounts', 'label' => 'bank clearing'],
+    ['path' => '/admin/transactions', 'label' => 'transactions'],
     ['path' => '/admin/reconciliation', 'label' => 'reconciliation'],
     ['path' => '/admin/reports', 'label' => 'reports'],
     ['path' => '/admin/audit-system', 'label' => 'audit system'],
@@ -92,7 +99,7 @@ test('consolidated admin routes respond successfully over http in english', func
     App::setLocale('en');
 
     $this->actingAs($admin, 'tenant')
-        ->get('http://'.$this->domain.$route['path'])
+        ->get('http://'.adminPortalTenantDomain().$route['path'])
         ->assertSuccessful()
         ->assertSee('fi-panel-tenant', false);
 })->with(array_map(fn (array $route): array => [$route], ADMIN_PORTAL_HTTP_SMOKE_ROUTES));
@@ -103,7 +110,7 @@ test('consolidated admin routes respond successfully over http in arabic', funct
     App::setLocale('ar');
 
     $this->actingAs($admin, 'tenant')
-        ->get('http://'.$this->domain.$route['path'])
+        ->get('http://'.adminPortalTenantDomain().$route['path'])
         ->assertSuccessful()
         ->assertSee('dir="rtl"', false)
         ->assertSee('fi-panel-tenant', false);
@@ -116,7 +123,7 @@ test('admin dashboard http response includes redesign chrome', function () {
 
     $this->actingAs($admin, 'tenant');
 
-    $this->get('http://'.$this->domain.'/admin')
+    $this->get('http://'.adminPortalTenantDomain().'/admin')
         ->assertSuccessful()
         ->assertSee('ff-tenant-dashboard-hero', false)
         ->assertSee('ff-portal-topbar-chip', false)
@@ -203,6 +210,7 @@ test('tenant admin redesign livewire pages render without error', function (stri
     DisbursementsPage::class,
     ReportsPage::class,
     ReconciliationOverviewPage::class,
+    ListTransactions::class,
     AuditSystemPage::class,
     Settings::class,
     MessagesInboxPage::class,
@@ -221,7 +229,7 @@ test('consolidated sidebar registry matches live navigation labels in english', 
         ->values()
         ->all();
 
-    expect($labels)->toHaveCount(13);
+    expect($labels)->toHaveCount(14);
 
     foreach (TenantSidebarRegistry::consolidatedNavigationLabels() as $label) {
         expect($labels)->toContain($label);
