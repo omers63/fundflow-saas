@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTransaction;
+use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FeeDeduction;
 use App\Models\Tenant\FundPosting;
@@ -20,8 +21,10 @@ use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Services\Loans\LoanLedgerService;
 use App\Support\ContributionPolicySettings;
+use App\Support\LoanFundingStrategy;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -186,7 +189,7 @@ class ReconciliationReportService
             $incrementWarning();
         }
 
-        $checks['paired_control_totals'] = [
+        $checks['paired_control_totals'] = array_merge([
             'label' => 'Master control vs aggregate member mirrors',
             'severity' => $balanced ? 'ok' : 'warning',
             'master_cash_balance' => round($pool['master_cash'], 2),
@@ -208,7 +211,7 @@ class ReconciliationReportService
             'master_invest_return_to_fund_credits' => round($pool['master_invest_return_to_fund_credits'], 2),
             'tolerance' => $tolerance,
             'note' => __('Fund comparison uses pool-adjusted master fund: ledger fund balance minus invest returns credited to fund, plus invest/expense reserve funding from fund. Fees, bank, and suspense are control/reserve accounts (not member mirrors); suspense should be near zero after rounding.'),
-        ];
+        ], $balanced ? [] : $this->buildPairedControlDiagnostics($pool, $tolerance));
 
         // --- 3b) Bank statement vs master_cash book (optional) ---
         if ($declaredBank !== null && $masterCash !== null) {
@@ -257,11 +260,15 @@ class ReconciliationReportService
                             ->where('reference_id', $row->id)
                             ->exists();
                         if (! $exists) {
+                            $period = $row->period;
+
                             $missingLedgerContributions[] = [
                                 'contribution_id' => $row->id,
                                 'member_id' => $row->member_id,
                                 'amount' => (float) $row->amount,
-                                'period' => $row->period?->format('Y-m'),
+                                'period' => $period instanceof CarbonInterface
+                                    ? $period->format('Y-m')
+                                    : (is_string($period) && $period !== '' ? Carbon::parse($period)->format('Y-m') : null),
                             ];
                         }
                     }
@@ -1396,6 +1403,7 @@ class ReconciliationReportService
         $groupPostingDeltaSql = 'ABS('.$groupCreditSumSql.' - '.$groupDebitSumSql.')';
         $creditSumSql = "COALESCE(SUM(CASE WHEN t.type = 'credit' THEN t.amount ELSE 0 END), 0)";
         $debitSumSql = "COALESCE(SUM(CASE WHEN t.type = 'debit' THEN t.amount ELSE 0 END), 0)";
+        $expectedOneSidedReferenceTypes = $this->expectedOneSidedGlobalTrialReferenceTypes();
 
         $unbalancedGroupsQuery = DB::table('transactions')
             ->selectRaw("
@@ -1409,16 +1417,22 @@ class ReconciliationReportService
             ")
             ->whereNotNull('reference_id')
             ->whereNotNull('reference_type')
+            ->whereNotIn('reference_type', $expectedOneSidedReferenceTypes)
             ->groupBy('reference_type', 'reference_id')
             ->havingRaw("{$groupPostingDeltaSql} > ?", [$tolerance])
             ->orderByRaw("{$groupPostingDeltaSql} DESC");
 
-        $unbalancedGroupCount = (int) DB::query()
-            ->fromSub($unbalancedGroupsQuery, 'unbalanced_postings')
-            ->count();
+        $unbalancedGroups = collect($unbalancedGroupsQuery->get())
+            ->reject(fn (object $row): bool => $this->isExpectedOneSidedGlobalTrialGroup(
+                (string) $row->reference_type,
+                (int) $row->reference_id,
+            ))
+            ->values();
+
+        $unbalancedGroupCount = $unbalancedGroups->count();
 
         $suspectedPostings = [];
-        foreach ($unbalancedGroupsQuery->limit(75)->get() as $row) {
+        foreach ($unbalancedGroups->take(75) as $row) {
             $sumCredits = round((float) $row->sum_credits, 2);
             $sumDebits = round((float) $row->sum_debits, 2);
 
@@ -1462,6 +1476,10 @@ class ReconciliationReportService
                     ->limit(75)
                     ->get() as $transaction
             ) {
+                if (! $transaction instanceof Transaction) {
+                    continue;
+                }
+
                 $nullReferenceLines[] = [
                     'transaction_id' => (int) $transaction->id,
                     'type' => (string) $transaction->type,
@@ -1474,6 +1492,53 @@ class ReconciliationReportService
                     'transacted_at' => $transaction->transacted_at?->toDateTimeString(),
                 ];
             }
+        }
+
+        $suspectedPostingLines = [];
+        $suspectedPostingLinesTruncated = false;
+
+        foreach (array_slice($suspectedPostings, 0, 8) as $postingGroup) {
+            $groupRows = Transaction::query()
+                ->where('reference_type', $postingGroup['reference_type'])
+                ->where('reference_id', $postingGroup['reference_id'])
+                ->with(['account', 'member'])
+                ->orderBy('transacted_at')
+                ->orderBy('id')
+                ->limit(12)
+                ->get();
+
+            foreach ($groupRows as $transaction) {
+                if (! $transaction instanceof Transaction) {
+                    continue;
+                }
+
+                $suspectedPostingLines[] = [
+                    'reference_type' => (string) $postingGroup['reference_type'],
+                    'reference_id' => (int) $postingGroup['reference_id'],
+                    'transaction_id' => (int) $transaction->id,
+                    'type' => (string) $transaction->type,
+                    'amount' => round((float) $transaction->amount, 2),
+                    'account_id' => (int) $transaction->account_id,
+                    'account_type' => (string) ($transaction->account?->type ?? ''),
+                    'account_scope' => $transaction->account?->is_master ? 'master' : 'member',
+                    'member' => $transaction->member?->name,
+                    'description' => $transaction->displayDescription(),
+                    'transacted_at' => $transaction->transacted_at?->toDateTimeString(),
+                ];
+            }
+
+            $groupLineCount = Transaction::query()
+                ->where('reference_type', $postingGroup['reference_type'])
+                ->where('reference_id', $postingGroup['reference_id'])
+                ->count();
+
+            if ($groupLineCount > $groupRows->count()) {
+                $suspectedPostingLinesTruncated = true;
+            }
+        }
+
+        if (count($suspectedPostings) > 8) {
+            $suspectedPostingLinesTruncated = true;
         }
 
         $netByAccountType = [];
@@ -1517,6 +1582,8 @@ class ReconciliationReportService
             'unbalanced_posting_group_count' => $unbalancedGroupCount,
             'suspected_postings' => $suspectedPostings,
             'suspected_postings_truncated' => $unbalancedGroupCount > count($suspectedPostings),
+            'suspected_posting_lines' => $suspectedPostingLines,
+            'suspected_posting_lines_truncated' => $suspectedPostingLinesTruncated,
             'null_reference_line_count' => $nullReferenceLineCount,
             'null_reference_credits' => $nullReferenceCredits,
             'null_reference_debits' => $nullReferenceDebits,
@@ -1525,12 +1592,286 @@ class ReconciliationReportService
             'null_reference_lines_truncated' => $nullReferenceLineCount > count($nullReferenceLines),
             'net_by_account_type' => array_slice($netByAccountType, 0, 20),
             'resolution_hints' => [
-                __('Each posting group (same reference type and ID) should have equal total credits and debits. Groups listed below are the most likely source of trial drift.'),
-                __('Lines without a reference often come from manual adjustments — open a row below, then use the Linked source column or filter on the account ledger to review or correct the entry.'),
+                __('Each posting group (same reference type and ID) should have equal total credits and debits. Groups listed below are filtered to the most likely unexpected sources of trial drift.'),
+                __('Use Suspected posting lines to see the individual ledger rows for the top unbalanced groups. The Linked source shown there is the posting-group key (same reference type and ID).'),
+                __('Lines without a reference often come from manual adjustments — open a transaction row below, then review the Linked source field in the modal or enable the Linked source column from Columns on the account ledger if it is hidden.'),
                 __('Account-type nets show where credits and debits fail to cancel; member cash and fund accounts commonly carry net drift when only one pool leg was posted.'),
                 __('Cross-check related checks: stored balance vs ledger, paired control totals, and the flow-specific integrity checks for contributions, loans, and bank imports.'),
             ],
         ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function expectedOneSidedGlobalTrialReferenceTypes(): array
+    {
+        return [
+            (new CashOutRequest)->getMorphClass(),
+            (new FundPosting)->getMorphClass(),
+        ];
+    }
+
+    private function isExpectedOneSidedGlobalTrialGroup(string $referenceType, int $referenceId): bool
+    {
+        if ($referenceId <= 0) {
+            return false;
+        }
+
+        if (in_array($referenceType, $this->expectedOneSidedGlobalTrialReferenceTypes(), true)) {
+            return true;
+        }
+
+        if ($referenceType !== (new Loan)->getMorphClass()) {
+            return match ($referenceType) {
+                (new LoanRepayment)->getMorphClass() => $this->hasExpectedLoanRepaymentCashFlowShape($referenceType, $referenceId),
+                (new Contribution)->getMorphClass() => $this->hasExpectedContributionCashFlowShape($referenceType, $referenceId),
+                default => false,
+            };
+        }
+
+        $loan = Loan::query()
+            ->select(['id', 'funding_strategy', 'member_portion', 'master_portion'])
+            ->find($referenceId);
+
+        if (! $loan instanceof Loan) {
+            return false;
+        }
+
+        return LoanFundingStrategy::normalize($loan->funding_strategy) === LoanFundingStrategy::SPLIT_PERCENTAGE
+            && ((float) $loan->member_portion > 0.00001 || (float) $loan->master_portion > 0.00001);
+    }
+
+    private function hasExpectedLoanRepaymentCashFlowShape(string $referenceType, int $referenceId): bool
+    {
+        $shape = $this->referenceGroupAccountShape($referenceType, $referenceId);
+
+        return $shape['cash_credit_count'] > 0
+            && $shape['cash_debit_count'] > 0
+            && ($shape['fund_credit_count'] > 0 || $shape['loan_credit_count'] > 0);
+    }
+
+    private function hasExpectedContributionCashFlowShape(string $referenceType, int $referenceId): bool
+    {
+        $shape = $this->referenceGroupAccountShape($referenceType, $referenceId);
+
+        return $shape['cash_credit_count'] > 0
+            && $shape['cash_debit_count'] > 0
+            && $shape['fund_credit_count'] > 0;
+    }
+
+    /**
+     * @return array{
+     *     cash_credit_count: int,
+     *     cash_debit_count: int,
+     *     fund_credit_count: int,
+     *     loan_credit_count: int
+     * }
+     */
+    private function referenceGroupAccountShape(string $referenceType, int $referenceId): array
+    {
+        $shape = DB::table('transactions as t')
+            ->join('accounts as a', 'a.id', '=', 't.account_id')
+            ->where('t.reference_type', $referenceType)
+            ->where('t.reference_id', $referenceId)
+            ->selectRaw("
+                COALESCE(SUM(CASE WHEN a.type = 'cash' AND t.type = 'credit' THEN 1 ELSE 0 END), 0) as cash_credit_count,
+                COALESCE(SUM(CASE WHEN a.type = 'cash' AND t.type = 'debit' THEN 1 ELSE 0 END), 0) as cash_debit_count,
+                COALESCE(SUM(CASE WHEN a.type = 'fund' AND t.type = 'credit' THEN 1 ELSE 0 END), 0) as fund_credit_count,
+                COALESCE(SUM(CASE WHEN a.type = 'loan' AND t.type = 'credit' THEN 1 ELSE 0 END), 0) as loan_credit_count
+            ")
+            ->first();
+
+        return [
+            'cash_credit_count' => (int) ($shape->cash_credit_count ?? 0),
+            'cash_debit_count' => (int) ($shape->cash_debit_count ?? 0),
+            'fund_credit_count' => (int) ($shape->fund_credit_count ?? 0),
+            'loan_credit_count' => (int) ($shape->loan_credit_count ?? 0),
+        ];
+    }
+
+    /**
+     * @param  array<string, float|bool>  $pool
+     * @return array<string, mixed>
+     */
+    private function buildPairedControlDiagnostics(array $pool, float $tolerance): array
+    {
+        $cashMirrorMismatches = abs((float) ($pool['cash_delta'] ?? 0)) > $tolerance
+            ? $this->buildPoolMirrorMismatchGroups('cash', $tolerance)
+            : [];
+        $fundMirrorMismatches = abs((float) ($pool['fund_delta'] ?? 0)) > $tolerance
+            ? $this->buildPoolMirrorMismatchGroups('fund', $tolerance)
+            : [];
+        $cashRelatedTransactions = abs((float) ($pool['cash_delta'] ?? 0)) > $tolerance
+            ? $this->buildPoolRelatedTransactions(['cash'])
+            : [];
+        $fundRelatedTransactions = abs((float) ($pool['fund_delta'] ?? 0)) > $tolerance
+            ? $this->buildPoolRelatedTransactions(['fund', 'invest', 'expense', 'suspense'])
+            : [];
+        $fundPoolAdjustments = abs((float) ($pool['fund_delta'] ?? 0)) > $tolerance
+            ? $this->buildFundPoolAdjustmentTransactions()
+            : [];
+
+        return [
+            'cash_mirror_mismatches' => $cashMirrorMismatches,
+            'cash_mirror_mismatches_truncated' => count($cashMirrorMismatches) >= 50,
+            'fund_mirror_mismatches' => $fundMirrorMismatches,
+            'fund_mirror_mismatches_truncated' => count($fundMirrorMismatches) >= 50,
+            'cash_related_transactions' => $cashRelatedTransactions,
+            'cash_related_transactions_truncated' => count($cashRelatedTransactions) >= 50,
+            'fund_related_transactions' => $fundRelatedTransactions,
+            'fund_related_transactions_truncated' => count($fundRelatedTransactions) >= 50,
+            'fund_pool_adjustments' => $fundPoolAdjustments,
+            'fund_pool_adjustments_truncated' => count($fundPoolAdjustments) >= 50,
+            'resolution_hints' => [
+                __('Cash mirror mismatches compare signed master cash postings vs signed member cash postings for the same linked source. A non-zero delta usually means a missing or extra cash mirror leg.'),
+                __('Fund mirror mismatches compare signed master fund postings vs signed member fund postings for the same linked source. Review fund pool adjustments separately when reserve funding or investment returns are involved.'),
+                __('Related transactions list the most recent master/member pool-account lines, including linked source and transaction links, so you can open the ledger and correct or reverse the specific entry.'),
+            ],
+        ];
+    }
+
+    /**
+     * @return list<array<string, scalar|null>>
+     */
+    private function buildPoolMirrorMismatchGroups(string $accountType, float $tolerance): array
+    {
+        $signedAmountSql = "CASE WHEN t.type = 'credit' THEN t.amount ELSE -t.amount END";
+        $masterAmountSql = "COALESCE(SUM(CASE WHEN a.is_master = 1 THEN {$signedAmountSql} ELSE 0 END), 0)";
+        $memberAmountSql = "COALESCE(SUM(CASE WHEN a.is_master = 0 THEN {$signedAmountSql} ELSE 0 END), 0)";
+        $deltaSql = "ABS({$masterAmountSql} - {$memberAmountSql})";
+
+        return DB::table('transactions as t')
+            ->join('accounts as a', 'a.id', '=', 't.account_id')
+            ->selectRaw("
+                t.reference_type,
+                t.reference_id,
+                {$masterAmountSql} as master_amount,
+                {$memberAmountSql} as member_amount,
+                COALESCE(SUM(CASE WHEN a.is_master = 1 THEN 1 ELSE 0 END), 0) as master_lines,
+                COALESCE(SUM(CASE WHEN a.is_master = 0 THEN 1 ELSE 0 END), 0) as member_lines,
+                MIN(t.description) as sample_description,
+                MAX(t.transacted_at) as last_transacted_at
+            ")
+            ->where('a.type', $accountType)
+            ->whereNotNull('t.reference_type')
+            ->whereNotNull('t.reference_id')
+            ->groupBy('t.reference_type', 't.reference_id')
+            ->havingRaw("{$deltaSql} > ?", [$tolerance])
+            ->orderByRaw("{$deltaSql} DESC")
+            ->limit(50)
+            ->get()
+            ->map(fn (object $row): array => [
+                'reference_type' => (string) $row->reference_type,
+                'reference_id' => (int) $row->reference_id,
+                'master_amount' => round((float) $row->master_amount, 2),
+                'member_amount' => round((float) $row->member_amount, 2),
+                'mirror_delta' => round((float) $row->master_amount - (float) $row->member_amount, 2),
+                'master_lines' => (int) $row->master_lines,
+                'member_lines' => (int) $row->member_lines,
+                'sample_description' => $row->sample_description !== null ? (string) $row->sample_description : null,
+                'last_transacted_at' => $row->last_transacted_at !== null ? (string) $row->last_transacted_at : null,
+            ])
+            ->all();
+    }
+
+    /**
+     * @param  list<string>  $accountTypes
+     * @return list<array<string, scalar|null>>
+     */
+    private function buildPoolRelatedTransactions(array $accountTypes): array
+    {
+        $accountIds = Account::query()
+            ->where(function (Builder $query) use ($accountTypes): void {
+                $query->whereIn('type', $accountTypes);
+            })
+            ->pluck('id');
+
+        if ($accountIds->isEmpty()) {
+            return [];
+        }
+
+        return Transaction::query()
+            ->with(['account', 'member'])
+            ->whereIn('account_id', $accountIds)
+            ->orderByDesc('transacted_at')
+            ->orderByDesc('id')
+            ->limit(50)
+            ->get()
+            ->map(fn (Transaction $transaction): array => [
+                'transaction_id' => (int) $transaction->id,
+                'transacted_at' => $transaction->transacted_at?->toDateTimeString(),
+                'account_id' => (int) $transaction->account_id,
+                'account_type' => (string) ($transaction->account?->type ?? ''),
+                'account_scope' => (bool) ($transaction->account?->is_master) ? 'master' : 'member',
+                'member' => $transaction->member?->name,
+                'type' => (string) $transaction->type,
+                'amount' => round((float) $transaction->amount, 2),
+                'linked_source' => $transaction->linkedSourceLabel(),
+                'description' => $transaction->displayDescription(),
+            ])
+            ->all();
+    }
+
+    /**
+     * @return list<array<string, scalar|null>>
+     */
+    private function buildFundPoolAdjustmentTransactions(): array
+    {
+        $accountIds = array_values(array_filter([
+            Account::masterFund()?->id,
+            Account::masterInvest()?->id,
+            Account::masterExpense()?->id,
+            Account::masterSuspense()?->id,
+        ]));
+
+        if ($accountIds === []) {
+            return [];
+        }
+
+        return Transaction::query()
+            ->with('account')
+            ->whereIn('account_id', $accountIds)
+            ->orderByDesc('transacted_at')
+            ->orderByDesc('id')
+            ->limit(120)
+            ->get()
+            ->map(function (Transaction $transaction): ?array {
+                $adjustmentKind = $this->fundPoolAdjustmentKind($transaction);
+
+                if ($adjustmentKind === null) {
+                    return null;
+                }
+
+                return [
+                    'transaction_id' => (int) $transaction->id,
+                    'transacted_at' => $transaction->transacted_at?->toDateTimeString(),
+                    'account_id' => (int) $transaction->account_id,
+                    'account_type' => (string) ($transaction->account?->type ?? ''),
+                    'adjustment_kind' => $adjustmentKind,
+                    'type' => (string) $transaction->type,
+                    'amount' => round((float) $transaction->amount, 2),
+                    'linked_source' => $transaction->linkedSourceLabel(),
+                    'description' => $transaction->displayDescription(),
+                ];
+            })
+            ->filter()
+            ->take(50)
+            ->values()
+            ->all();
+    }
+
+    private function fundPoolAdjustmentKind(Transaction $transaction): ?string
+    {
+        $description = (string) ($transaction->description ?? '');
+
+        return match (true) {
+            str_contains($description, '(master fund transfer)') => __('Master fund transfer'),
+            str_contains($description, '(reserve funding)') => __('Reserve funding'),
+            str_contains($description, '(reserve return)') => __('Reserve return'),
+            str_contains($description, '(invest return to fund)') => __('Invest return to fund'),
+            default => null,
+        };
     }
 
     /**

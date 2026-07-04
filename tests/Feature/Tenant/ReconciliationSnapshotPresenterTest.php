@@ -109,6 +109,21 @@ test('snapshot presenter builds global trial diagnostic sections', function () {
                 'first_transacted_at' => '2026-01-01 00:00:00',
             ],
         ],
+        'suspected_posting_lines' => [
+            [
+                'reference_type' => Contribution::class,
+                'reference_id' => 42,
+                'transaction_id' => 101,
+                'type' => 'credit',
+                'amount' => 1000.0,
+                'description' => 'Test posting line',
+                'account_id' => 1,
+                'account_type' => 'cash',
+                'account_scope' => 'master',
+                'member' => null,
+                'transacted_at' => '2026-01-01 00:00:00',
+            ],
+        ],
         'net_by_account_type' => [
             [
                 'account_type' => 'cash',
@@ -122,13 +137,86 @@ test('snapshot presenter builds global trial diagnostic sections', function () {
 
     expect(collect($sections)->pluck('title'))->toContain(__('How to investigate'))
         ->and(collect($sections)->firstWhere('format', 'hints')['format'] ?? null)->toBe('hints')
+        ->and(collect($sections)->firstWhere('format', 'metrics')['title'] ?? null)->toBe(__('Global totals and diagnostic counts'))
         ->and(collect($sections)->pluck('title'))->toContain(__('Suspected unbalanced postings'))
+        ->and(collect($sections)->pluck('title'))->toContain(__('Suspected posting lines'))
         ->and(collect($sections)->pluck('title'))->toContain(__('Null-reference ledger lines'))
-        ->and(collect($sections)->pluck('title'))->toContain(__('Trial drift by account type'))
+        ->and(collect($sections)->pluck('title'))->toContain(__('Net movement by account bucket'))
         ->and(collect($sections)->firstWhere('title', __('Suspected unbalanced postings'))['collapsible'] ?? false)->toBeTrue()
+        ->and(collect($sections)->firstWhere('title', __('Suspected posting lines'))['collapsible'] ?? false)->toBeTrue()
         ->and(collect($sections)->firstWhere('title', __('Null-reference ledger lines'))['collapsible'] ?? false)->toBeTrue()
-        ->and(collect($sections)->firstWhere('title', __('Metrics'))['collapsible'] ?? false)->toBeFalse()
-        ->and(collect($sections)->firstWhere('title', __('Trial drift by account type'))['table_align'] ?? null)->toBe('center');
+        ->and(collect($sections)->firstWhere('title', __('Global totals and diagnostic counts'))['collapsible'] ?? false)->toBeFalse()
+        ->and(collect($sections)->firstWhere('title', __('Net movement by account bucket'))['table_align'] ?? null)->toBe('center');
+});
+
+test('snapshot presenter builds paired control diagnostic sections', function () {
+    $sections = Presenter::checkDetailSections('paired_control_totals', [
+        'severity' => 'warning',
+        'cash_delta_abs' => 40.0,
+        'fund_delta_abs' => 30.0,
+        'cash_mirror_mismatches' => [
+            [
+                'reference_type' => Contribution::class,
+                'reference_id' => 42,
+                'master_amount' => 100.0,
+                'member_amount' => 60.0,
+                'mirror_delta' => 40.0,
+                'master_lines' => 1,
+                'member_lines' => 1,
+                'sample_description' => 'Cash mismatch',
+                'last_transacted_at' => '2026-01-02 00:00:00',
+            ],
+        ],
+        'fund_mirror_mismatches' => [
+            [
+                'reference_type' => Contribution::class,
+                'reference_id' => 42,
+                'master_amount' => 80.0,
+                'member_amount' => 50.0,
+                'mirror_delta' => 30.0,
+                'master_lines' => 1,
+                'member_lines' => 1,
+                'sample_description' => 'Fund mismatch',
+                'last_transacted_at' => '2026-01-02 00:00:00',
+            ],
+        ],
+        'cash_related_transactions' => [
+            [
+                'transaction_id' => 10,
+                'transacted_at' => '2026-01-02 00:00:00',
+                'type' => 'credit',
+                'amount' => 100.0,
+                'account_id' => 1,
+                'account_type' => 'cash',
+                'account_scope' => 'master',
+                'member' => null,
+                'linked_source' => 'Contribution #42',
+                'description' => 'Cash mismatch',
+            ],
+        ],
+        'fund_pool_adjustments' => [
+            [
+                'transaction_id' => 11,
+                'transacted_at' => '2026-01-02 00:00:00',
+                'type' => 'credit',
+                'amount' => 25.0,
+                'account_id' => 2,
+                'account_type' => 'invest',
+                'account_scope' => 'master',
+                'adjustment_kind' => 'Reserve funding',
+                'linked_source' => 'InvestDisbursement #5',
+                'description' => 'Reserve funding',
+            ],
+        ],
+        'resolution_hints' => [__('Review the cash and fund mismatch groups first.')],
+    ]);
+
+    expect(collect($sections)->pluck('title'))->toContain(__('Cash mirror mismatch groups'))
+        ->and(collect($sections)->pluck('title'))->toContain(__('Fund mirror mismatch groups'))
+        ->and(collect($sections)->pluck('title'))->toContain(__('Cash related transactions'))
+        ->and(collect($sections)->pluck('title'))->toContain(__('Fund pool adjustments'))
+        ->and(collect($sections)->firstWhere('title', __('Cash mirror mismatch groups'))['collapsible'] ?? false)->toBeTrue()
+        ->and(collect($sections)->firstWhere('title', __('Fund pool adjustments'))['collapsible'] ?? false)->toBeTrue();
 });
 
 test('snapshot presenter links suspected posting references to admin destinations', function () {
@@ -213,13 +301,45 @@ test('snapshot presenter enriches suspected postings with linked posting column'
         ],
     ]);
 
-    expect($rows[0]['posting'])->toBeInstanceOf(HtmlString::class)
-        ->and((string) $rows[0]['posting'])->toContain('contributions');
+    expect($rows[0]['reference'])->toBeInstanceOf(HtmlString::class)
+        ->and((string) $rows[0]['reference'])->toContain('contributions');
+});
+
+test('snapshot presenter links account ids to the correct account resource by scope', function () {
+    Account::query()->delete();
+
+    $masterFund = Account::create([
+        'type' => 'fund',
+        'name' => 'Master Fund',
+        'balance' => 0,
+        'is_master' => true,
+    ]);
+
+    $member = Member::factory()->create();
+
+    $memberCash = Account::create([
+        'type' => 'cash',
+        'name' => 'Member Cash',
+        'balance' => 0,
+        'is_master' => false,
+        'member_id' => $member->id,
+    ]);
+
+    $masterLink = Presenter::detailCellValue('account_id', $masterFund->id);
+    $memberLink = Presenter::detailCellValue('account_id', $memberCash->id);
+
+    expect($masterLink)->toBeInstanceOf(HtmlString::class)
+        ->and((string) $masterLink)->toContain('master-accounts/'.$masterFund->id)
+        ->and($memberLink)->toBeInstanceOf(HtmlString::class)
+        ->and((string) $memberLink)->toContain('member-accounts/'.$memberCash->id);
 });
 
 test('snapshot presenter formats global trial counts as numbers not currency', function () {
     $metrics = Presenter::checkMetricRows('global_trial', [
         'severity' => 'warning',
+        'sum_credits' => 1700.5,
+        'sum_debits' => 200.0,
+        'delta' => 1500.5,
         'unbalanced_posting_group_count' => 3,
         'null_reference_line_count' => 2,
         'null_reference_credits' => 1500.5,
@@ -229,8 +349,55 @@ test('snapshot presenter formats global trial counts as numbers not currency', f
 
     $flat = collect($metrics)->flatMap(fn (array $row): array => $row);
 
-    expect($flat[__('Unbalanced posting groups')])->toBe('3')
+    expect(array_key_first($metrics[0]))->toBe(__('Σ credits'))
+        ->and(array_key_first($metrics[1]))->toBe(__('Σ debits'))
+        ->and($flat[__('Unbalanced posting groups')])->toBe('3')
         ->and($flat[__('Null-reference lines')])->toBe('2')
         ->and($flat[__('Null-reference credits')])->toContain('1,500')
-        ->and($flat[__('Null-reference debits')])->toContain('200');
+        ->and($flat[__('Null-reference debits')])->toContain('200')
+        ->and($flat[__('How to read these metrics')])
+        ->toBe(__('These figures are book-wide aggregates across all ledger lines in this snapshot. They are not totals for one linked source or one posting group.'));
+});
+
+test('snapshot presenter organizes paired control totals metrics and formats pool values as money', function () {
+    $metrics = Presenter::checkMetricRows('paired_control_totals', [
+        'severity' => 'warning',
+        'tolerance' => 0.03,
+        'master_cash_balance' => 2000.0,
+        'sum_member_cash' => 1800.0,
+        'cash_delta' => 200.0,
+        'cash_delta_abs' => 200.0,
+        'master_fund_balance' => 1300.0,
+        'master_invest_from_fund_credits' => 500.0,
+        'master_expense_from_fund_credits' => 300.0,
+        'master_invest_return_to_fund_credits' => 300.0,
+        'master_fund_pool' => 1800.0,
+        'sum_member_fund' => 1700.0,
+        'fund_delta' => 100.0,
+        'fund_delta_abs' => 100.0,
+        'master_invest_balance' => 500.0,
+        'master_expense_balance' => 300.0,
+        'master_fees_balance' => 0.0,
+        'master_suspense_balance' => 0.0,
+        'master_bank_balance' => 2500.0,
+        'note' => 'Pool note',
+    ]);
+
+    $labels = array_map(
+        static fn (array $row): string => (string) array_key_first($row),
+        $metrics,
+    );
+    $flat = collect($metrics)->flatMap(fn (array $row): array => $row);
+
+    expect(array_slice($labels, 0, 5))->toBe([
+        __('Tolerance'),
+        __('Master cash balance'),
+        __('Sum member cash'),
+        __('Cash delta'),
+        __('Absolute cash delta'),
+    ])->and($flat[__('Tolerance')])->toContain('0.03')
+        ->and($flat[__('Sum member cash')])->toContain('1,800')
+        ->and($flat[__('Adjusted master fund pool')])->toContain('1,800')
+        ->and($flat[__('Absolute fund pool delta')])->toContain('100')
+        ->and($labels)->toContain(__('Note'));
 });

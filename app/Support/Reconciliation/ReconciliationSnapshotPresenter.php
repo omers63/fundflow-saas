@@ -180,7 +180,7 @@ final class ReconciliationSnapshotPresenter
                 (int) ($check['mismatch_count'] ?? $check['issue_count'] ?? 0),
                 ['count' => number_format((int) ($check['mismatch_count'] ?? $check['issue_count'] ?? 0))],
             ),
-            'bank_transaction_posting_integrity', 'bank_pipeline', 'member_portal_posting_integrity', 'contribution_flow_integrity',
+            'bank_transaction_posting_integrity', 'member_portal_posting_integrity', 'contribution_flow_integrity',
             'membership_application_fee_integrity', 'subscription_fee_integrity', 'loan_installment_flow_integrity',
             'member_cash_transfer_integrity', 'orphan_loan_accounts' => trans_choice(
                 ':count issue|:count issues',
@@ -211,7 +211,20 @@ final class ReconciliationSnapshotPresenter
             ];
         }
 
-        foreach (['mismatches', 'issues', 'missing_ledger_sample', 'suspected_postings', 'null_reference_lines', 'net_by_account_type'] as $bucket) {
+        foreach ([
+            'mismatches',
+            'issues',
+            'missing_ledger_sample',
+            'suspected_postings',
+            'suspected_posting_lines',
+            'null_reference_lines',
+            'cash_mirror_mismatches',
+            'fund_mirror_mismatches',
+            'fund_pool_adjustments',
+            'cash_related_transactions',
+            'fund_related_transactions',
+            'net_by_account_type',
+        ] as $bucket) {
             $rows = $check[$bucket] ?? null;
 
             if (! is_array($rows) || $rows === []) {
@@ -220,7 +233,10 @@ final class ReconciliationSnapshotPresenter
 
             $displayRows = match ($bucket) {
                 'suspected_postings' => self::enrichSuspectedPostingRows($rows),
+                'suspected_posting_lines' => self::enrichPostingGroupLineRows($rows),
                 'null_reference_lines' => self::enrichNullReferenceRows($rows),
+                'cash_mirror_mismatches', 'fund_mirror_mismatches' => self::enrichPoolMirrorMismatchRows($rows),
+                'cash_related_transactions', 'fund_related_transactions', 'fund_pool_adjustments' => self::enrichPoolRelatedTransactionRows($rows),
                 default => array_map(
                     fn (mixed $row): array => is_array($row) ? self::normalizeDetailRow($row) : ['value' => (string) $row],
                     array_values($rows),
@@ -233,15 +249,32 @@ final class ReconciliationSnapshotPresenter
                     'issues' => __('Issue details'),
                     'missing_ledger_sample' => __('Missing ledger rows (sample)'),
                     'suspected_postings' => __('Suspected unbalanced postings'),
+                    'suspected_posting_lines' => __('Suspected posting lines'),
                     'null_reference_lines' => __('Null-reference ledger lines'),
-                    'net_by_account_type' => __('Trial drift by account type'),
+                    'cash_mirror_mismatches' => __('Cash mirror mismatch groups'),
+                    'fund_mirror_mismatches' => __('Fund mirror mismatch groups'),
+                    'fund_pool_adjustments' => __('Fund pool adjustments'),
+                    'cash_related_transactions' => __('Cash related transactions'),
+                    'fund_related_transactions' => __('Fund related transactions'),
+                    'net_by_account_type' => $key === 'global_trial'
+                        ? __('Net movement by account bucket')
+                        : __('Trial drift by account type'),
                     default => __('Details'),
                 },
                 'format' => 'table',
                 'table_align' => $bucket === 'net_by_account_type' ? 'center' : 'start',
                 'rows' => $displayRows,
                 'truncated' => (bool) ($check[$bucket.'_truncated'] ?? false),
-                'collapsible' => in_array($bucket, ['suspected_postings', 'null_reference_lines'], true),
+                'collapsible' => in_array($bucket, [
+                    'suspected_postings',
+                    'suspected_posting_lines',
+                    'null_reference_lines',
+                    'cash_mirror_mismatches',
+                    'fund_mirror_mismatches',
+                    'fund_pool_adjustments',
+                    'cash_related_transactions',
+                    'fund_related_transactions',
+                ], true),
                 'default_open' => false,
             ];
         }
@@ -250,7 +283,9 @@ final class ReconciliationSnapshotPresenter
 
         if ($metrics !== []) {
             array_unshift($sections, [
-                'title' => __('Metrics'),
+                'title' => $key === 'global_trial'
+                    ? __('Global totals and diagnostic counts')
+                    : __('Metrics'),
                 'format' => 'metrics',
                 'rows' => $metrics,
                 'truncated' => false,
@@ -267,20 +302,37 @@ final class ReconciliationSnapshotPresenter
     public static function checkMetricRows(string $key, array $check): array
     {
         $currency = self::currency();
-        $money = static fn (mixed $value): ?string => is_numeric($value)
-            ? MoneyDisplay::format((float) $value, $currency)
-            : null;
+
+        if ($key === 'global_trial') {
+            return self::globalTrialMetricRows($check, $currency);
+        }
+
+        if ($key === 'paired_control_totals') {
+            return self::pairedControlMetricRows($check, $currency);
+        }
 
         $skip = [
             'label', 'severity', 'note', 'mismatches', 'issues', 'missing_ledger_sample',
             'suspected_postings',
+            'suspected_posting_lines',
             'null_reference_lines',
+            'cash_mirror_mismatches',
+            'fund_mirror_mismatches',
+            'fund_pool_adjustments',
+            'cash_related_transactions',
+            'fund_related_transactions',
             'net_by_account_type',
             'resolution_hints',
             'mismatches_truncated',
             'issues_truncated',
             'suspected_postings_truncated',
+            'suspected_posting_lines_truncated',
             'null_reference_lines_truncated',
+            'cash_mirror_mismatches_truncated',
+            'fund_mirror_mismatches_truncated',
+            'fund_pool_adjustments_truncated',
+            'cash_related_transactions_truncated',
+            'fund_related_transactions_truncated',
         ];
 
         $rows = [];
@@ -295,16 +347,100 @@ final class ReconciliationSnapshotPresenter
                 $label = str((string) $field)->beforeLast('_count')->replace('_', ' ')->headline()->append(' '.__('count'))->toString();
             }
 
-            $formatted = is_numeric($value) && self::metricValueIsMoney((string) $field)
-                ? $money($value)
-                : (is_bool($value) ? ($value ? __('Yes') : __('No')) : (is_numeric($value) && str_ends_with((string) $field, '_count')
-                    ? number_format((int) $value)
-                    : (string) $value));
+            $formatted = self::formatMetricValue((string) $field, $value, $currency);
 
             $rows[] = [$label => $formatted];
         }
 
         if (filled($check['note'] ?? null) && ! in_array($key, ['bank_statement_vs_book'], true)) {
+            $rows[] = [__('Note') => (string) $check['note']];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  array<string, mixed>  $check
+     * @return list<array<string, scalar|null>>
+     */
+    private static function globalTrialMetricRows(array $check, string $currency): array
+    {
+        $orderedFields = [
+            'sum_credits',
+            'sum_debits',
+            'delta',
+            'unbalanced_posting_group_count',
+            'null_reference_line_count',
+            'null_reference_credits',
+            'null_reference_debits',
+            'null_reference_delta',
+        ];
+
+        $rows = [];
+
+        foreach ($orderedFields as $field) {
+            if (! array_key_exists($field, $check)) {
+                continue;
+            }
+
+            $rows[] = [
+                self::detailCellLabel($field) => self::formatMetricValue($field, $check[$field], $currency),
+            ];
+        }
+
+        $rows[] = [
+            __('How to read these metrics') => __(
+                'These figures are book-wide aggregates across all ledger lines in this snapshot. They are not totals for one linked source or one posting group.',
+            ),
+        ];
+
+        if (filled($check['note'] ?? null)) {
+            $rows[] = [__('Note') => (string) $check['note']];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  array<string, mixed>  $check
+     * @return list<array<string, scalar|null>>
+     */
+    private static function pairedControlMetricRows(array $check, string $currency): array
+    {
+        $orderedFields = [
+            'tolerance',
+            'master_cash_balance',
+            'sum_member_cash',
+            'cash_delta',
+            'cash_delta_abs',
+            'master_fund_balance',
+            'master_invest_from_fund_credits',
+            'master_expense_from_fund_credits',
+            'master_invest_return_to_fund_credits',
+            'master_fund_pool',
+            'sum_member_fund',
+            'fund_delta',
+            'fund_delta_abs',
+            'master_invest_balance',
+            'master_expense_balance',
+            'master_fees_balance',
+            'master_suspense_balance',
+            'master_bank_balance',
+        ];
+
+        $rows = [];
+
+        foreach ($orderedFields as $field) {
+            if (! array_key_exists($field, $check)) {
+                continue;
+            }
+
+            $rows[] = [
+                self::detailCellLabel($field) => self::formatMetricValue($field, $check[$field], $currency),
+            ];
+        }
+
+        if (filled($check['note'] ?? null)) {
             $rows[] = [__('Note') => (string) $check['note']];
         }
 
@@ -332,9 +468,6 @@ final class ReconciliationSnapshotPresenter
         return $normalized;
     }
 
-    /**
-     * @param  array<string, scalar|null>  $row
-     */
     public static function detailCellLabel(string $field): string
     {
         return match ($field) {
@@ -373,13 +506,37 @@ final class ReconciliationSnapshotPresenter
             'unbalanced_posting_group_count' => __('Unbalanced posting groups'),
             'transaction_id' => __('Transaction'),
             'account_scope' => __('Scope'),
+            'tolerance' => __('Tolerance'),
+            'master_cash_balance' => __('Master cash balance'),
+            'sum_member_cash' => __('Sum member cash'),
+            'cash_delta' => __('Cash delta'),
+            'cash_delta_abs' => __('Absolute cash delta'),
+            'master_fund_balance' => __('Master fund balance'),
+            'master_fund_pool' => __('Adjusted master fund pool'),
+            'sum_member_fund' => __('Sum member fund'),
+            'fund_delta' => __('Fund pool delta'),
+            'fund_delta_abs' => __('Absolute fund pool delta'),
+            'master_invest_from_fund_credits' => __('Reserve funding to invest'),
+            'master_expense_from_fund_credits' => __('Reserve funding to expense'),
+            'master_invest_return_to_fund_credits' => __('Invest return credited to fund'),
+            'master_invest_balance' => __('Master invest balance'),
+            'master_expense_balance' => __('Master expense balance'),
+            'master_fees_balance' => __('Master fees balance'),
+            'master_suspense_balance' => __('Master suspense balance'),
+            'master_bank_balance' => __('Master bank balance'),
+            'reference' => __('Linked source'),
+            'master_amount' => __('Master amount'),
+            'member_amount' => __('Member amount'),
+            'mirror_delta' => __('Mirror Δ'),
+            'master_lines' => __('Master lines'),
+            'member_lines' => __('Member lines'),
+            'last_transacted_at' => __('Last posted'),
+            'linked_source' => __('Linked source'),
+            'adjustment_kind' => __('Adjustment'),
             default => str($field)->replace('_', ' ')->headline()->toString(),
         };
     }
 
-    /**
-     * @param  array<string, scalar|null>  $row
-     */
     public static function detailCellValue(string $field, mixed $value, ?string $currency = null): Htmlable|string|null
     {
         if ($value === null || $value === '') {
@@ -400,7 +557,7 @@ final class ReconciliationSnapshotPresenter
             return new HtmlString(MoneyDisplay::html((float) $value, $currency)?->toHtml() ?? (string) $value);
         }
 
-        if ($field === 'posting' && $value instanceof Htmlable) {
+        if (in_array($field, ['posting', 'reference'], true) && $value instanceof Htmlable) {
             return $value;
         }
 
@@ -442,7 +599,12 @@ final class ReconciliationSnapshotPresenter
 
     public static function accountLink(int $accountId): Htmlable
     {
-        $url = AccountResource::getUrl('view', ['record' => $accountId]);
+        $account = Account::query()->find($accountId);
+
+        $url = match (true) {
+            $account?->is_master === true => MasterAccountResource::getUrl('view', ['record' => $accountId]),
+            default => AccountResource::getUrl('view', ['record' => $accountId]),
+        };
 
         return new HtmlString(
             '<a href="'.e($url).'" class="font-semibold text-sky-600 hover:underline dark:text-sky-400">#'
@@ -483,13 +645,40 @@ final class ReconciliationSnapshotPresenter
             $referenceId = (int) ($row['reference_id'] ?? 0);
 
             return [
-                'posting' => self::referenceLink($referenceType, $referenceId),
+                'reference' => self::referenceLink($referenceType, $referenceId),
                 'sum_credits' => $row['sum_credits'] ?? null,
                 'sum_debits' => $row['sum_debits'] ?? null,
                 'posting_delta' => $row['posting_delta'] ?? null,
                 'line_count' => $row['line_count'] ?? null,
                 'sample_description' => $row['sample_description'] ?? null,
                 'first_transacted_at' => $row['first_transacted_at'] ?? null,
+            ];
+        }, $rows);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, scalar|null>>
+     */
+    public static function enrichPostingGroupLineRows(array $rows): array
+    {
+        return array_map(function (array $row): array {
+            $referenceType = (string) ($row['reference_type'] ?? '');
+            $referenceId = (int) ($row['reference_id'] ?? 0);
+            $transactionId = (int) ($row['transaction_id'] ?? 0);
+            $type = (string) ($row['type'] ?? '');
+
+            return [
+                'reference' => self::referenceLink($referenceType, $referenceId),
+                'transaction_id' => $transactionId,
+                'transacted_at' => $row['transacted_at'] ?? null,
+                'type' => Transaction::typeLabel($type !== '' ? $type : null),
+                'amount' => $row['amount'] ?? null,
+                'account_id' => $row['account_id'] ?? null,
+                'account_type' => $row['account_type'] ?? null,
+                'account_scope' => $row['account_scope'] ?? null,
+                'member' => $row['member'] ?? null,
+                'description' => $row['description'] ?? null,
             ];
         }, $rows);
     }
@@ -513,6 +702,55 @@ final class ReconciliationSnapshotPresenter
                 'account_type' => $row['account_type'] ?? null,
                 'account_scope' => $row['account_scope'] ?? null,
                 'member' => $row['member'] ?? null,
+                'description' => $row['description'] ?? null,
+            ];
+        }, $rows);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, scalar|null>>
+     */
+    public static function enrichPoolMirrorMismatchRows(array $rows): array
+    {
+        return array_map(function (array $row): array {
+            $referenceType = (string) ($row['reference_type'] ?? '');
+            $referenceId = (int) ($row['reference_id'] ?? 0);
+
+            return [
+                'reference' => self::referenceLink($referenceType, $referenceId),
+                'master_amount' => $row['master_amount'] ?? null,
+                'member_amount' => $row['member_amount'] ?? null,
+                'mirror_delta' => $row['mirror_delta'] ?? null,
+                'master_lines' => $row['master_lines'] ?? null,
+                'member_lines' => $row['member_lines'] ?? null,
+                'sample_description' => $row['sample_description'] ?? null,
+                'last_transacted_at' => $row['last_transacted_at'] ?? null,
+            ];
+        }, $rows);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, scalar|null>>
+     */
+    public static function enrichPoolRelatedTransactionRows(array $rows): array
+    {
+        return array_map(function (array $row): array {
+            $transactionId = (int) ($row['transaction_id'] ?? 0);
+            $type = (string) ($row['type'] ?? '');
+
+            return [
+                'transaction_id' => $transactionId,
+                'transacted_at' => $row['transacted_at'] ?? null,
+                'type' => Transaction::typeLabel($type !== '' ? $type : null),
+                'amount' => $row['amount'] ?? null,
+                'account_id' => $row['account_id'] ?? null,
+                'account_type' => $row['account_type'] ?? null,
+                'account_scope' => $row['account_scope'] ?? null,
+                'member' => $row['member'] ?? null,
+                'linked_source' => $row['linked_source'] ?? null,
+                'adjustment_kind' => $row['adjustment_kind'] ?? null,
                 'description' => $row['description'] ?? null,
             ];
         }, $rows);
@@ -730,9 +968,30 @@ final class ReconciliationSnapshotPresenter
             || str_contains($field, 'debits')
             || str_ends_with($field, '_sum')
             || in_array($field, [
+                'tolerance',
+                'sum_member_cash',
+                'sum_member_fund',
+                'master_fund_pool',
                 'null_reference_credits',
                 'null_reference_debits',
                 'null_reference_delta',
             ], true);
+    }
+
+    private static function formatMetricValue(string $field, mixed $value, string $currency): string
+    {
+        if (is_numeric($value) && self::metricValueIsMoney($field)) {
+            return MoneyDisplay::format((float) $value, $currency) ?? (string) $value;
+        }
+
+        if (is_bool($value)) {
+            return $value ? __('Yes') : __('No');
+        }
+
+        if (is_numeric($value) && str_ends_with($field, '_count')) {
+            return number_format((int) $value);
+        }
+
+        return (string) $value;
     }
 }

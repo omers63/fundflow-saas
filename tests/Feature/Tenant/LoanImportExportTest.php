@@ -24,6 +24,7 @@ use App\Services\MemberImportService;
 use App\Support\AssociativeCsv;
 use App\Support\LegacyMigrationSampleCsv;
 use Filament\Facades\Filament;
+use Filament\Tables\Columns\Summarizers\Sum;
 use Illuminate\Auth\Access\AuthorizationException;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
@@ -480,6 +481,19 @@ test('portfolio tab table includes import and export header actions', function (
         ->all();
 
     expect($names)->toContain('importLoans', 'exportLoans', 'importRepayments', 'exportRepayments');
+});
+
+test('portfolio loans table summarizes approved amounts', function () {
+    $component = Livewire::test(ListLoans::class)
+        ->assertSet('activeTab', 'portfolio');
+
+    $approvedColumn = collect($component->instance()->getTable()->getColumns())
+        ->first(fn ($column) => $column->getName() === 'amount_approved');
+
+    expect($approvedColumn)->not->toBeNull()
+        ->and($approvedColumn->getSummarizers())->toHaveCount(1)
+        ->and($approvedColumn->getSummarizers()[0])->toBeInstanceOf(Sum::class)
+        ->and($approvedColumn->getSummarizers()[0]->getLabel())->toBe(__('Approved'));
 });
 
 test('portfolio tab table can sort by outstanding balance', function () {

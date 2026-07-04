@@ -6,6 +6,7 @@ use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\LoanFilamentActions;
 use App\Filament\Support\LoanListTableHeaderActions;
 use App\Filament\Support\LoanOutstandingColumn;
+use App\Filament\Support\MoneyDisplay;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Models\Tenant\Loan;
@@ -13,6 +14,7 @@ use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -38,7 +40,15 @@ class LoansTable
                 TextColumn::make('amount_approved')
                     ->label(__('Approved'))
                     ->money($currency)
-                    ->placeholder(__('—')),
+                    ->placeholder(__('—'))
+                    ->summarize([
+                        Sum::make()
+                            ->label(fn (): string => __('Approved'))
+                            ->formatStateUsing(
+                                fn ($state): ?string => MoneyDisplay::tableSummaryHtml($state, $currency)
+                            )
+                            ->html(),
+                    ]),
                 TextColumn::make('queue_position')
                     ->label(__('Queue'))
                     ->placeholder(__('—')),
