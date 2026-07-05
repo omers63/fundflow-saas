@@ -15,10 +15,34 @@ use Filament\Tables\Table;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
+use Livewire\Attributes\Url;
 
 class ListContributions extends ListRecords
 {
     protected static string $resource = ContributionResource::class;
+
+    #[Url(as: 'cycle')]
+    public ?string $selectedCycle = null;
+
+    public function mount(): void
+    {
+        parent::mount();
+
+        if (!filled($this->selectedCycle)) {
+            $cycles = app(ContributionCycleService::class);
+            [$month, $year] = $cycles->currentOpenPeriod();
+            $this->selectedCycle = $cycles->contributionCycleKey($month, $year);
+        }
+    }
+
+    public function updatedSelectedCycle(): void
+    {
+        if (in_array(ContributionResource::resolveListTab(), ['collect', 'collected'], true)) {
+            $this->reconfigureTableForActiveTab();
+        }
+
+        ContributionResource::dispatchInsightsRefresh($this);
+    }
 
     protected function makeTable(): Table
     {
@@ -97,20 +121,18 @@ class ListContributions extends ListRecords
 
     public function getSubheading(): string|Htmlable|null
     {
-        $cycles = app(ContributionCycleService::class);
-        [$month, $year] = $cycles->currentOpenPeriod();
-        $openLabel = $cycles->periodLabel($month, $year);
+        $periodLabel = ContributionResource::resolveListCycleLabel();
 
         return match (ContributionResource::resolveListTab()) {
-            'collect' => __('Members who still owe for the open period (:period). Apply from cash balance or post manually on the ledger.', [
-                'period' => $openLabel,
+            'collect' => __('Members who still owe for :period. Apply from cash balance or post manually on the ledger.', [
+                'period' => $periodLabel,
             ]),
-            'collected' => __('Contributions already posted for the open period (:period).', [
-                'period' => $openLabel,
+            'collected' => __('Contributions already posted for :period.', [
+                'period' => $periodLabel,
             ]),
             'arrears' => __('Unposted contribution periods after the deadline (since each member joined). Post from the member record or ledger.'),
-            default => __('Full contribution history, filters, and manual posting. Open period: :period.', [
-                'period' => $openLabel,
+            default => __('Full contribution history, filters, and manual posting. Selected cycle: :period.', [
+                'period' => $periodLabel,
             ]),
         };
     }
@@ -177,7 +199,8 @@ class ListContributions extends ListRecords
 
     protected function collectTabBadge(): ?string
     {
-        $pending = ContributionResource::openCyclePendingCount();
+        [$month, $year] = ContributionResource::resolveListCycle();
+        $pending = ContributionResource::pendingCountForPeriod($month, $year);
 
         return $pending > 0 ? (string) $pending : null;
     }

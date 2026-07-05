@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
@@ -24,7 +25,7 @@ final class ContributionCycleTables
     public static function configurePendingMembersTable(Table $table): Table
     {
         $cycles = app(ContributionCycleService::class);
-        [$month, $year] = $cycles->currentOpenPeriod();
+        [$month, $year] = ContributionResource::resolveListCycle();
         $currency = Setting::get('general', 'currency', 'USD');
 
         return TableGrouping::apply($table
@@ -137,7 +138,7 @@ final class ContributionCycleTables
     public static function configureCollectedTable(Table $table): Table
     {
         $cycles = app(ContributionCycleService::class);
-        [$month, $year] = $cycles->currentOpenPeriod();
+        [$month, $year] = ContributionResource::resolveListCycle();
         $currency = Setting::get('general', 'currency', 'USD');
 
         return TableGrouping::apply($table

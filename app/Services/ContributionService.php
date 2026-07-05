@@ -388,9 +388,33 @@ class ContributionService
             'skipped' => collect(),
         ];
 
-        Member::active()->with('user')->each(function (Member $member) use ($month, $year, &$results): void {
-            $this->applyForPeriod($member, $month, $year, $results);
-        });
+        $householdMemberIds = [];
+        $collectionCycle = app(ContributionCollectionCycleService::class);
+
+        Member::query()
+            ->active()
+            ->whereNull('parent_member_id')
+            ->whereHas('dependents', fn ($query) => $query->where('status', 'active'))
+            ->with(['dependents' => fn ($query) => $query->where('status', 'active')->orderBy('member_number')])
+            ->orderBy('id')
+            ->each(function (Member $parent) use ($month, $year, &$results, &$householdMemberIds, $collectionCycle): void {
+                $dependents = $parent->dependents;
+
+                $collectionCycle->applyHouseholdContributionsForPeriod($parent, $dependents, $month, $year, $results);
+
+                $householdMemberIds[] = $parent->id;
+
+                foreach ($dependents as $dependent) {
+                    $householdMemberIds[] = $dependent->id;
+                }
+            });
+
+        Member::active()
+            ->with('user')
+            ->when($householdMemberIds !== [], fn ($query) => $query->whereNotIn('id', $householdMemberIds))
+            ->each(function (Member $member) use ($month, $year, &$results): void {
+                $this->applyForPeriod($member, $month, $year, $results);
+            });
 
         return $results;
     }

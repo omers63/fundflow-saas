@@ -22,6 +22,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use InvalidArgumentException;
 use Livewire\Component;
 use Livewire\Livewire;
 use UnitEnum;
@@ -91,13 +92,19 @@ class ContributionResource extends Resource
      *
      * @param  array<string, array<string, mixed>>  $filters
      */
-    public static function listUrl(string $tab = 'contributions', array $filters = []): string
+    public static function listUrl(string $tab = 'contributions', array $filters = [], ?string $cycle = null): string
     {
         $tab = self::normalizeListTab($tab);
         $parameters = [];
 
         if ($tab !== 'contributions') {
             $parameters['tab'] = $tab;
+        }
+
+        $cycle ??= self::resolveListCycleKey();
+
+        if (filled($cycle)) {
+            $parameters['cycle'] = $cycle;
         }
 
         if ($filters !== []) {
@@ -169,13 +176,67 @@ class ContributionResource extends Resource
         return self::normalizeListTab($tab);
     }
 
+    public static function resolveListCycleKey(): ?string
+    {
+        $livewire = Livewire::current();
+
+        if ($livewire instanceof ListContributions && filled($livewire->selectedCycle)) {
+            return $livewire->selectedCycle;
+        }
+
+        $fromRequest = request()->string('cycle')->toString();
+
+        return $fromRequest !== '' ? $fromRequest : null;
+    }
+
+    /**
+     * @return array{0: int, 1: int}
+     */
+    public static function resolveListCycle(): array
+    {
+        $cycles = app(ContributionCycleService::class);
+        $key = self::resolveListCycleKey();
+
+        if (filled($key)) {
+            try {
+                return $cycles->parseContributionCycleKey($key);
+            } catch (InvalidArgumentException) {
+            }
+        }
+
+        return $cycles->currentOpenPeriod();
+    }
+
+    public static function resolveListCycleLabel(): string
+    {
+        [$month, $year] = self::resolveListCycle();
+
+        return app(ContributionCycleService::class)->periodLabel($month, $year);
+    }
+
+    public static function isViewingOpenCycle(): bool
+    {
+        $cycles = app(ContributionCycleService::class);
+        [$selectedMonth, $selectedYear] = self::resolveListCycle();
+        [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+
+        return $selectedMonth === $openMonth && $selectedYear === $openYear;
+    }
+
+    public static function pendingCountForPeriod(int $month, int $year): int
+    {
+        return app(ContributionCycleService::class)
+            ->pendingMembersQueryForPeriod($month, $year)
+            ->count();
+    }
+
     public static function openCyclePendingCount(): int
     {
         return once(function (): int {
             $cycles = app(ContributionCycleService::class);
             [$month, $year] = $cycles->currentOpenPeriod();
 
-            return $cycles->pendingMembersQueryForPeriod($month, $year)->count();
+            return self::pendingCountForPeriod($month, $year);
         });
     }
 

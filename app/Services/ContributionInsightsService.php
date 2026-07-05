@@ -48,7 +48,7 @@ final class ContributionInsightsService
      */
     public function collectSnapshot(): array
     {
-        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        [$openMonth, $openYear] = ContributionResource::resolveListCycle();
         $currency = Setting::get('general', 'currency', 'USD');
         $periodLabel = $this->cycles->periodLabel($openMonth, $openYear);
 
@@ -148,7 +148,7 @@ final class ContributionInsightsService
      */
     public function collectedSnapshot(): array
     {
-        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        [$openMonth, $openYear] = ContributionResource::resolveListCycle();
         $currency = Setting::get('general', 'currency', 'USD');
         $periodLabel = $this->cycles->periodLabel($openMonth, $openYear);
 

@@ -134,6 +134,72 @@ test('apply for period succeeds after a soft-deleted pending contribution blocke
         ->and(Contribution::query()->where('member_id', $member->id)->forPeriod($month, $year)->posted()->exists())->toBeTrue();
 });
 
+test('apply contributions for period allocates to dependents before collecting household', function () {
+    $period = now()->subMonths(2);
+
+    $parent = Member::create([
+        'member_number' => 'MEM-HH-P',
+        'name' => 'Household Parent',
+        'email' => 'household-parent@example.com',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => $period->copy()->startOfMonth(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($parent);
+
+    $dependent = Member::create([
+        'member_number' => 'MEM-HH-D',
+        'name' => 'Household Child',
+        'email' => 'household-child@example.com',
+        'parent_member_id' => $parent->id,
+        'household_email' => 'household-parent@example.com',
+        'monthly_contribution_amount' => 80,
+        'joined_at' => $period->copy()->startOfMonth(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($dependent);
+
+    foreach ([$parent, $dependent] as $member) {
+        Contribution::create([
+            'member_id' => $member->id,
+            'period' => Contribution::periodDate((int) $period->month, (int) $period->year),
+            'amount' => (float) $member->monthly_contribution_amount,
+            'amount_due' => (float) $member->monthly_contribution_amount,
+            'amount_collected' => 0,
+            'status' => 'pending',
+            'collection_status' => ContributionCollectionStatus::OVERDUE,
+            'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+            'overdue_since' => $period->copy()->endOfMonth(),
+            'is_late' => true,
+        ]);
+    }
+
+    AccountingService::withoutMemberCashCollection(fn () => $this->accounting->credit(
+        $parent->cashAccount,
+        180,
+        'Parent funding',
+    ));
+
+    $month = (int) $period->month;
+    $year = (int) $period->year;
+    $results = $this->service->applyContributionsForPeriod($month, $year);
+
+    $parentContribution = Contribution::query()
+        ->where('member_id', $parent->id)
+        ->forPeriod($month, $year)
+        ->first();
+
+    $dependentContribution = Contribution::query()
+        ->where('member_id', $dependent->id)
+        ->forPeriod($month, $year)
+        ->first();
+
+    expect($results['applied']->pluck('id')->all())->toContain($parent->id, $dependent->id)
+        ->and($parentContribution->status)->toBe('posted')
+        ->and($dependentContribution->status)->toBe('posted')
+        ->and((float) $parent->cashAccount->fresh()->balance)->toBe(0.0);
+});
+
 test('apply for period repairs collected contribution that was never posted', function () {
     $member = Member::create([
         'member_number' => 'MEM-COLLECTED',

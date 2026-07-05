@@ -26,6 +26,7 @@ function tenantTransactionsDomain(): string
 
 beforeEach(function (): void {
     $this->initializeTenancy();
+    app()->setLocale('en');
     Filament::setCurrentPanel('tenant');
 
     $tenant = Tenant::find('testing');
@@ -56,7 +57,7 @@ test('transactions page renders for tenant admin', function (): void {
 test('transactions insights widget renders on transactions page', function (): void {
     Livewire::test(ListTransactions::class)
         ->assertSuccessful()
-        ->assertSee(__('30-day flow trend'))
+        ->assertSee(trans_choice(':count-day flow trend|:count-day flow trend', 30, ['count' => 30]), false)
         ->assertSee(__('Current view'))
         ->assertSee(__('Scope mix'));
 });

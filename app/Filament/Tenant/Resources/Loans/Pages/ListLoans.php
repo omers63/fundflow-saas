@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\Loans\Pages;
 
 use App\Filament\Support\LoanDelinquencyTables;
+use App\Filament\Support\LoanEmiCollectionHeaderActions;
 use App\Filament\Tenant\Pages\LoanEmiCollectionCalendarPage;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
@@ -83,13 +84,19 @@ class ListLoans extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        return [
-            Action::make('collection_calendar')
-                ->label(__('Collection calendar'))
-                ->icon('heroicon-o-calendar-days')
-                ->color('gray')
-                ->url(LoanEmiCollectionCalendarPage::getUrl()),
-        ];
+        $actions = [];
+
+        if (LoanResource::resolveListTab() === 'emi_collect') {
+            $actions[] = LoanEmiCollectionHeaderActions::cycleCollectionGroup();
+        }
+
+        $actions[] = Action::make('collection_calendar')
+            ->label(__('Collection calendar'))
+            ->icon('heroicon-o-calendar-days')
+            ->color('gray')
+            ->url(LoanEmiCollectionCalendarPage::getUrl());
+
+        return $actions;
     }
 
     protected function getHeaderWidgets(): array

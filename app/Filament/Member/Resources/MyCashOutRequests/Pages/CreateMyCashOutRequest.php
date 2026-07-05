@@ -7,6 +7,8 @@ use App\Services\MemberCashOutService;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 
 class CreateMyCashOutRequest extends CreateRecord
 {
@@ -16,11 +18,17 @@ class CreateMyCashOutRequest extends CreateRecord
     {
         $member = auth('tenant')->user()->member;
 
-        return app(MemberCashOutService::class)->submit(
-            member: $member,
-            amount: (float) $data['amount'],
-            notes: $data['notes'] ?? null,
-        );
+        try {
+            return app(MemberCashOutService::class)->submit(
+                member: $member,
+                amount: (float) $data['amount'],
+                notes: $data['notes'] ?? null,
+            );
+        } catch (InvalidArgumentException $exception) {
+            throw ValidationException::withMessages([
+                'amount' => $exception->getMessage(),
+            ]);
+        }
     }
 
     protected function getCreatedNotification(): ?Notification

@@ -379,6 +379,38 @@ class ContributionCollectionCycleService
         return array_values($periods);
     }
 
+    /**
+     * Manual batch apply for one period: allocate parent cash to dependents, then collect contributions.
+     *
+     * @param  array{applied: SupportCollection, insufficient: SupportCollection, skipped: SupportCollection}  $results
+     */
+    public function applyHouseholdContributionsForPeriod(
+        Member $parent,
+        SupportCollection $dependents,
+        int $month,
+        int $year,
+        array &$results,
+    ): void {
+        $parent = $parent->fresh() ?? $parent;
+        $parent->unsetRelation('accounts');
+
+        if ($dependents->isNotEmpty() && $parent->getCashBalance() >= 0.00001) {
+            $this->cycles->applyDependentAllocationForParentForPeriod($parent, $month, $year);
+        }
+
+        $parent = $parent->fresh() ?? $parent;
+        $parent->unsetRelation('accounts');
+
+        app(ContributionService::class)->applyForPeriod($parent, $month, $year, $results);
+
+        foreach ($dependents as $dependent) {
+            $dependent = $dependent->fresh() ?? $dependent;
+            $dependent->unsetRelation('accounts');
+
+            app(ContributionService::class)->applyForPeriod($dependent, $month, $year, $results);
+        }
+    }
+
     protected function settleHouseholdContributions(Member $parent, SupportCollection $dependents): void
     {
         $householdPeriods = $this->outstandingPeriodsForHousehold($parent, $dependents);

@@ -9,7 +9,11 @@ use App\Models\Central\Tenant;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
+use App\Services\AccountingService;
+use App\Services\ContributionCycleService;
 use App\Services\ContributionInsightsService;
+use App\Support\ContributionCollectionStatus;
+use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
@@ -49,6 +53,39 @@ test('contributions list defaults to contributions tab', function () {
 
     expect(ContributionResource::listUrl('collect'))
         ->toContain('tab=collect');
+});
+
+test('contributions list cycle selector drives collect tab data', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $previous = Carbon::create($openYear, $openMonth, 1)->subMonthNoOverflow();
+    $previousKey = $cycles->contributionCycleKey((int) $previous->month, (int) $previous->year);
+
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    Contribution::factory()->for($member)->create([
+        'period' => Contribution::periodDate((int) $previous->month, (int) $previous->year),
+        'amount' => 500,
+        'amount_due' => 500,
+        'status' => 'pending',
+        'collection_status' => ContributionCollectionStatus::PENDING,
+    ]);
+
+    Livewire::test(ListContributions::class)
+        ->set('activeTab', 'collect')
+        ->set('selectedCycle', $previousKey)
+        ->assertSee($cycles->periodLabel((int) $previous->month, (int) $previous->year), false)
+        ->assertSee($member->name, false);
+
+    Carbon::setTestNow();
 });
 
 test('contributions list has unified open cycle collect and collected tabs', function () {

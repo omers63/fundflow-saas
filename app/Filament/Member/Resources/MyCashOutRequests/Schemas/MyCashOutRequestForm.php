@@ -6,6 +6,7 @@ use App\Filament\Support\MoneyDisplay;
 use App\Services\MemberCashOutService;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
+use Closure;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -41,6 +42,23 @@ class MyCashOutRequestForm
                     ->numeric()
                     ->required()
                     ->minValue(0.01)
+                    ->rules([
+                        fn (MemberCashOutService $service): Closure => function (string $attribute, mixed $value, Closure $fail) use ($service): void {
+                            $member = CurrentMember::get();
+
+                            if ($member === null) {
+                                return;
+                            }
+
+                            $available = $service->availableCashForWithdrawal($member);
+
+                            if ((float) $value > $available + 0.01) {
+                                $fail(__('Amount exceeds available cash (:available).', [
+                                    'available' => number_format($available, 2),
+                                ]));
+                            }
+                        },
+                    ])
                     ->helperText(__('Cash out draws from your cash account, not your fund account.')),
                 Textarea::make('notes')
                     ->label(__('Notes'))

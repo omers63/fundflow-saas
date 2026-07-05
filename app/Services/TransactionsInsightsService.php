@@ -22,6 +22,8 @@ use App\Support\BusinessDay;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Insights\InsightKpi;
 use App\Support\TransactionBusinessTypeCatalog;
+use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 
 final class TransactionsInsightsService
@@ -46,7 +48,8 @@ final class TransactionsInsightsService
         $scopeBreakdown = $this->scopeBreakdown($query, $transactionCount);
         $accountTypeBreakdown = $this->accountTypeBreakdown($query, $transactionCount);
         $businessTypeBreakdown = $this->businessTypeBreakdown($query, $transactionCount);
-        $trend = $this->trend($query);
+        $trendResult = $this->trend($query, $tableFilters);
+        $trend = $trendResult['buckets'];
         $sparkline = array_map(
             static fn (array $day): float => (float) $day['flow_total'],
             $trend,
@@ -86,6 +89,9 @@ final class TransactionsInsightsService
             ],
             'filters' => $this->buildFilterSummary($tableFilters, $tableSearch),
             'trend' => $trend,
+            'trend_title' => $trendResult['title'],
+            'trend_period_label' => $trendResult['period_label'],
+            'trend_label_interval' => $trendResult['label_interval'],
             'breakdowns' => [
                 'scope' => $scopeBreakdown,
                 'account_type' => $accountTypeBreakdown,
@@ -211,16 +217,106 @@ final class TransactionsInsightsService
 
     /**
      * @param  Builder<Transaction>  $query
-     * @return list<array<string, mixed>>
+     * @param  array<string, mixed>  $tableFilters
+     * @return array{title: string, period_label: string, label_interval: int, buckets: list<array<string, mixed>>}
      */
-    private function trend(Builder $query): array
+    private function trend(Builder $query, array $tableFilters = []): array
     {
-        $now = BusinessDay::now();
-        $windowStart = $now->copy()->subDays(29)->startOfDay();
+        $window = $this->resolveTrendWindow($tableFilters);
+        $start = $window['start'];
+        $end = $window['end'];
+        $granularity = $this->resolveTrendGranularity($start, $end);
+        $dailyTotals = $this->dailyTrendTotals($query, $start, $end);
+        $buckets = $this->buildTrendBuckets($start, $end, $granularity, $dailyTotals);
+        $bucketCount = count($buckets);
+
+        $maxFlow = 0.0;
+        $maxNet = 0.0;
+
+        foreach ($buckets as &$bucket) {
+            $maxFlow = max($maxFlow, (float) $bucket['flow_total']);
+            $maxNet = max($maxNet, abs((float) $bucket['net_total']));
+        }
+        unset($bucket);
+
+        foreach ($buckets as &$bucket) {
+            $bucket['flow_bar'] = $maxFlow > 0 ? max(4, round(((float) $bucket['flow_total'] / $maxFlow) * 100)) : 0;
+            $bucket['net_bar'] = $maxNet > 0 ? max(4, round((abs((float) $bucket['net_total']) / $maxNet) * 100)) : 0;
+            $bucket['tone'] = $bucket['net_total'] > 0
+                ? 'emerald'
+                : ($bucket['net_total'] < 0 ? 'rose' : 'gray');
+        }
+        unset($bucket);
+
+        return [
+            'title' => $this->trendTitle($granularity, $start, $end, $bucketCount),
+            'period_label' => $this->trendPeriodLabel($start, $end),
+            'label_interval' => max(1, (int) ceil($bucketCount / 5)),
+            'buckets' => $buckets,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $tableFilters
+     * @return array{start: CarbonInterface, end: CarbonInterface}
+     */
+    private function resolveTrendWindow(array $tableFilters): array
+    {
+        $now = BusinessDay::now()->startOfDay();
+        $dateFilter = $tableFilters['date_range_transacted_at'] ?? null;
+        $from = is_array($dateFilter) ? ($dateFilter['from'] ?? null) : null;
+        $until = is_array($dateFilter) ? ($dateFilter['until'] ?? null) : null;
+
+        if (filled($from) && filled($until)) {
+            $start = Carbon::parse((string) $from)->startOfDay();
+            $end = Carbon::parse((string) $until)->startOfDay();
+        } elseif (filled($from)) {
+            $start = Carbon::parse((string) $from)->startOfDay();
+            $end = $now->copy();
+        } elseif (filled($until)) {
+            $end = Carbon::parse((string) $until)->startOfDay();
+            $start = $end->copy()->subDays(29);
+        } else {
+            $end = $now->copy();
+            $start = $end->copy()->subDays(29);
+        }
+
+        if ($start->gt($end)) {
+            [$start, $end] = [$end->copy(), $start->copy()];
+        }
+
+        return [
+            'start' => $start,
+            'end' => $end,
+        ];
+    }
+
+    private function resolveTrendGranularity(CarbonInterface $start, CarbonInterface $end): string
+    {
+        $inclusiveDays = (int) $start->diffInDays($end) + 1;
+
+        if ($inclusiveDays <= 31) {
+            return 'day';
+        }
+
+        if ($inclusiveDays <= 120) {
+            return 'week';
+        }
+
+        return 'month';
+    }
+
+    /**
+     * @param  Builder<Transaction>  $query
+     * @return array<string, array{credits_total: float, debits_total: float}>
+     */
+    private function dailyTrendTotals(Builder $query, CarbonInterface $start, CarbonInterface $end): array
+    {
         $dailyTotals = [];
 
         $this->baseQuery($query)
-            ->where('transacted_at', '>=', $windowStart)
+            ->whereDate('transacted_at', '>=', $start)
+            ->whereDate('transacted_at', '<=', $end)
             ->selectRaw('DATE(transacted_at) as trend_day')
             ->selectRaw("COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END), 0) as credits_total")
             ->selectRaw("COALESCE(SUM(CASE WHEN type = 'debit' THEN amount ELSE 0 END), 0) as debits_total")
@@ -234,40 +330,168 @@ final class TransactionsInsightsService
                 ];
             });
 
-        $trend = [];
-        $maxFlow = 0.0;
-        $maxNet = 0.0;
+        return $dailyTotals;
+    }
 
-        for ($i = 29; $i >= 0; $i--) {
-            $day = $now->copy()->subDays($i)->startOfDay();
-            $key = $day->toDateString();
-            $creditsTotal = (float) ($dailyTotals[$key]['credits_total'] ?? 0);
-            $debitsTotal = (float) ($dailyTotals[$key]['debits_total'] ?? 0);
-            $flowTotal = $creditsTotal + $debitsTotal;
-            $netTotal = $creditsTotal - $debitsTotal;
+    /**
+     * @param  array<string, array{credits_total: float, debits_total: float}>  $dailyTotals
+     * @return list<array<string, mixed>>
+     */
+    private function buildTrendBuckets(
+        CarbonInterface $start,
+        CarbonInterface $end,
+        string $granularity,
+        array $dailyTotals,
+    ): array {
+        return match ($granularity) {
+            'week' => $this->buildWeeklyTrendBuckets($start, $end, $dailyTotals),
+            'month' => $this->buildMonthlyTrendBuckets($start, $end, $dailyTotals),
+            default => $this->buildDailyTrendBuckets($start, $end, $dailyTotals),
+        };
+    }
 
-            $maxFlow = max($maxFlow, $flowTotal);
-            $maxNet = max($maxNet, abs($netTotal));
+    /**
+     * @param  array<string, array{credits_total: float, debits_total: float}>  $dailyTotals
+     * @return list<array<string, mixed>>
+     */
+    private function buildDailyTrendBuckets(CarbonInterface $start, CarbonInterface $end, array $dailyTotals): array
+    {
+        $buckets = [];
+        $cursor = Carbon::parse($start->toDateString())->startOfDay();
 
-            $trend[] = [
-                'label' => $day->locale(app()->getLocale())->translatedFormat('M j'),
-                'credits_total' => $creditsTotal,
-                'debits_total' => $debitsTotal,
-                'net_total' => $netTotal,
-                'flow_total' => $flowTotal,
-            ];
+        while ($cursor->lte($end)) {
+            $buckets[] = $this->trendBucketFromDailyTotals(
+                $cursor,
+                $cursor->copy(),
+                $dailyTotals,
+                $cursor->locale(app()->getLocale())->translatedFormat('M j'),
+            );
+            $cursor->addDay();
         }
 
-        foreach ($trend as &$day) {
-            $day['flow_bar'] = $maxFlow > 0 ? max(4, round(($day['flow_total'] / $maxFlow) * 100)) : 0;
-            $day['net_bar'] = $maxNet > 0 ? max(4, round((abs($day['net_total']) / $maxNet) * 100)) : 0;
-            $day['tone'] = $day['net_total'] > 0
-                ? 'emerald'
-                : ($day['net_total'] < 0 ? 'rose' : 'gray');
-        }
-        unset($day);
+        return $buckets;
+    }
 
-        return $trend;
+    /**
+     * @param  array<string, array{credits_total: float, debits_total: float}>  $dailyTotals
+     * @return list<array<string, mixed>>
+     */
+    private function buildWeeklyTrendBuckets(CarbonInterface $start, CarbonInterface $end, array $dailyTotals): array
+    {
+        $buckets = [];
+        $cursor = Carbon::parse($start->toDateString())->startOfDay();
+
+        while ($cursor->lte($end)) {
+            $bucketStart = $cursor->copy();
+            $bucketEnd = $cursor->copy()->addDays(6);
+
+            if ($bucketEnd->gt($end)) {
+                $bucketEnd = Carbon::parse($end->toDateString())->startOfDay();
+            }
+
+            $label = $bucketStart->toDateString() === $bucketEnd->toDateString()
+                ? $bucketStart->locale(app()->getLocale())->translatedFormat('M j')
+                : __(':from – :to', [
+                    'from' => $bucketStart->locale(app()->getLocale())->translatedFormat('M j'),
+                    'to' => $bucketEnd->locale(app()->getLocale())->translatedFormat('M j'),
+                ]);
+
+            $buckets[] = $this->trendBucketFromDailyTotals($bucketStart, $bucketEnd, $dailyTotals, $label);
+            $cursor = $bucketEnd->copy()->addDay();
+        }
+
+        return $buckets;
+    }
+
+    /**
+     * @param  array<string, array{credits_total: float, debits_total: float}>  $dailyTotals
+     * @return list<array<string, mixed>>
+     */
+    private function buildMonthlyTrendBuckets(CarbonInterface $start, CarbonInterface $end, array $dailyTotals): array
+    {
+        $buckets = [];
+        $rangeStart = Carbon::parse($start->toDateString())->startOfDay();
+        $rangeEnd = Carbon::parse($end->toDateString())->startOfDay();
+        $cursor = $rangeStart->copy()->startOfMonth();
+
+        while ($cursor->lte($rangeEnd)) {
+            $bucketStart = $cursor->copy();
+
+            if ($bucketStart->lt($rangeStart)) {
+                $bucketStart = $rangeStart->copy();
+            }
+
+            $bucketEnd = $cursor->copy()->endOfMonth()->startOfDay();
+
+            if ($bucketEnd->gt($rangeEnd)) {
+                $bucketEnd = $rangeEnd->copy();
+            }
+
+            $buckets[] = $this->trendBucketFromDailyTotals(
+                $bucketStart,
+                $bucketEnd,
+                $dailyTotals,
+                $cursor->locale(app()->getLocale())->translatedFormat('M Y'),
+            );
+
+            $cursor = $cursor->copy()->addMonthNoOverflow()->startOfMonth();
+        }
+
+        return $buckets;
+    }
+
+    /**
+     * @param  array<string, array{credits_total: float, debits_total: float}>  $dailyTotals
+     * @return array<string, mixed>
+     */
+    private function trendBucketFromDailyTotals(
+        CarbonInterface $bucketStart,
+        CarbonInterface $bucketEnd,
+        array $dailyTotals,
+        string $label,
+    ): array {
+        $creditsTotal = 0.0;
+        $debitsTotal = 0.0;
+        $cursor = Carbon::parse($bucketStart->toDateString())->startOfDay();
+
+        while ($cursor->lte($bucketEnd)) {
+            $dayTotals = $dailyTotals[$cursor->toDateString()] ?? null;
+            $creditsTotal += (float) ($dayTotals['credits_total'] ?? 0);
+            $debitsTotal += (float) ($dayTotals['debits_total'] ?? 0);
+            $cursor->addDay();
+        }
+
+        $flowTotal = $creditsTotal + $debitsTotal;
+        $netTotal = $creditsTotal - $debitsTotal;
+
+        return [
+            'label' => $label,
+            'credits_total' => $creditsTotal,
+            'debits_total' => $debitsTotal,
+            'net_total' => $netTotal,
+            'flow_total' => $flowTotal,
+        ];
+    }
+
+    private function trendTitle(string $granularity, CarbonInterface $start, CarbonInterface $end, int $bucketCount): string
+    {
+        $inclusiveDays = (int) $start->diffInDays($end) + 1;
+
+        return match ($granularity) {
+            'week' => trans_choice(':count-week flow trend|:count-week flow trend', $bucketCount, ['count' => $bucketCount]),
+            'month' => trans_choice(':count-month flow trend|:count-month flow trend', $bucketCount, ['count' => $bucketCount]),
+            default => trans_choice(':count-day flow trend|:count-day flow trend', $inclusiveDays, ['count' => $inclusiveDays]),
+        };
+    }
+
+    private function trendPeriodLabel(CarbonInterface $start, CarbonInterface $end): string
+    {
+        $locale = app()->getLocale();
+
+        return __(':from – :to', [
+            'from' => Carbon::parse($start->toDateString())->locale($locale)->translatedFormat('j M Y'),
+            'to' => Carbon::parse($end->toDateString())->locale($locale)->translatedFormat('j M Y'),
+        ]);
     }
 
     /**
