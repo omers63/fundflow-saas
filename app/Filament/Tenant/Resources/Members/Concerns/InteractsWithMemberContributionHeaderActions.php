@@ -69,11 +69,12 @@ trait InteractsWithMemberContributionHeaderActions
             ->label(__('Allocate'))
             ->icon('heroicon-o-arrow-right-circle')
             ->color('warning')
-            ->visible(function () use ($cycles): bool {
+            ->visible(function (): bool {
                 $member = $this->resolveMemberForContributionAction();
 
                 return $member instanceof Member
-                    && $cycles->shouldShowDependentAllocationAction($member);
+                    && $member->status === 'active'
+                    && $member->dependents()->where('status', 'active')->exists();
             })
             ->modalHeading(__('Allocate to dependents'))
             ->modalDescription(

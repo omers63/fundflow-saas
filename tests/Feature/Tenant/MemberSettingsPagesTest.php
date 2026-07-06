@@ -3,12 +3,16 @@
 use App\Filament\Member\Pages\MyContributionSettingsPage;
 use App\Filament\Member\Pages\MyNotificationPreferencesPage;
 use App\Filament\Member\Pages\SupportPage;
+use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberCommunicationPreference;
 use App\Models\Tenant\SupportRequest;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\ContributionCycleService;
 use App\Services\Tenant\NotificationPreferenceService;
+use App\Support\BusinessDaySettings;
+use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
@@ -45,15 +49,64 @@ beforeEach(function () {
     Filament::setCurrentPanel('member');
 });
 
+afterEach(function () {
+    Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
+});
+
 test('member can view contribution settings page', function () {
     Livewire::test(MyContributionSettingsPage::class)
         ->assertSuccessful()
-        ->assertSee('Monthly Contribution')
+        ->assertSee(__('Monthly Contribution'), false)
         ->assertSee('1,000');
 });
 
 test('member can update monthly contribution amount when there are no arrears', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-05'));
+    BusinessDaySettings::saveFromForm('2026-06-05');
+
+    $this->member->update([
+        'joined_at' => Carbon::parse('2026-06-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2026-06-01'),
+    ]);
+
     Livewire::test(MyContributionSettingsPage::class)
+        ->assertSet('allocationChangeBlocked', false)
+        ->mountAction('save_allocation')
+        ->setActionData(['monthly_contribution_amount' => 1500])
+        ->callMountedAction()
+        ->assertNotified();
+
+    expect((int) $this->member->fresh()->monthly_contribution_amount)->toBe(1500);
+});
+
+test('member can update allocation when only the open cycle contribution is unpaid', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+    BusinessDaySettings::saveFromForm('2026-06-15');
+
+    $this->member->update([
+        'joined_at' => Carbon::parse('2024-06-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2024-06-01'),
+    ]);
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $cursor = Carbon::parse('2024-06-01')->startOfMonth();
+    $openStart = Carbon::create($openYear, $openMonth, 1)->startOfMonth();
+
+    while ($cursor->lt($openStart)) {
+        Contribution::create([
+            'member_id' => $this->member->id,
+            'period' => Contribution::periodDate((int) $cursor->month, (int) $cursor->year),
+            'amount' => 1000,
+            'status' => 'posted',
+            'posted_at' => $cursor->copy(),
+        ]);
+        $cursor->addMonthNoOverflow();
+    }
+
+    Livewire::test(MyContributionSettingsPage::class)
+        ->assertSet('allocationChangeBlocked', false)
         ->mountAction('save_allocation')
         ->setActionData(['monthly_contribution_amount' => 1500])
         ->callMountedAction()

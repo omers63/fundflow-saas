@@ -56,6 +56,8 @@ class ApplyForLoan extends Page implements HasForms
 
     protected static ?int $navigationSort = MemberNavigation::SORT_REQUEST_LOAN;
 
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $slug = 'apply-for-loan';
 
     protected string $view = 'filament.member.pages.apply-for-loan';

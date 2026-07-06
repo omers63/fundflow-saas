@@ -11,6 +11,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Notifications\Tenant\ContributionDueNotification;
 use App\Services\Loans\LateFeeService;
+use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Support\BusinessDay;
 use App\Support\MemberMembershipPolicy;
 use Carbon\Carbon;
@@ -353,6 +354,19 @@ class ContributionCycleService
         return $options;
     }
 
+    /**
+     * @return array{visible: array<string, string>, more: array<string, string>}
+     */
+    public function contributionCyclePillGroups(int $visibleCount = 6): array
+    {
+        $all = $this->contributionCycleSelectOptionsForBulk();
+
+        return [
+            'visible' => array_slice($all, 0, $visibleCount, true),
+            'more' => array_slice($all, $visibleCount, null, true),
+        ];
+    }
+
     public function lateFeeForContributionPeriod(int $month, int $year, ?Carbon $at = null): float
     {
         $at = $at ?? BusinessDay::now();
@@ -470,11 +484,23 @@ class ContributionCycleService
             return false;
         }
 
-        if ((float) $dependent->monthly_contribution_amount <= 0) {
-            return false;
+        return $this->dependentCycleDuesForPeriod($dependent, $month, $year) > 0.00001;
+    }
+
+    public function dependentCycleDuesForPeriod(Member $member, int $month, int $year): float
+    {
+        $dues = 0.0;
+
+        if (
+            (float) $member->monthly_contribution_amount > 0
+            && ! $member->isExemptFromContributions($month, $year)
+        ) {
+            $dues += $this->requiredCollectionCashForMemberPeriod($member, $month, $year);
         }
 
-        return ! $dependent->isExemptFromContributions($month, $year);
+        $dues += app(LoanEmiCollectionCatalogService::class)->requiredCashForMember($member, $month, $year);
+
+        return $dues;
     }
 
     public function memberEligibleForDependentAllocationFunding(Member $dependent, int $month, int $year): bool
@@ -492,7 +518,7 @@ class ContributionCycleService
             return 0.0;
         }
 
-        $required = $this->requiredCollectionCashForMemberPeriod($dependent, $month, $year);
+        $required = $this->dependentCycleDuesForPeriod($dependent, $month, $year);
 
         return max(0.0, $required - $dependent->getCashBalance());
     }
@@ -587,7 +613,7 @@ class ContributionCycleService
                 continue;
             }
 
-            $required = $this->requiredCollectionCashForMemberPeriod($dependent, $month, $year);
+            $required = $this->dependentCycleDuesForPeriod($dependent, $month, $year);
             $cash = $dependent->getCashBalance();
             $name = e($dependent->name);
 
@@ -736,7 +762,7 @@ class ContributionCycleService
             $shortfall = $this->dependentAllocationShortfallForPeriod($dependent, $month, $year);
 
             if ($shortfall <= 0.00001) {
-                $required = $this->requiredCollectionCashForMemberPeriod($dependent, $month, $year);
+                $required = $this->dependentCycleDuesForPeriod($dependent, $month, $year);
                 $details[] = $this->dependentAllocationDetailLine(
                     $dependent,
                     __('Cash already covers :amount.', [

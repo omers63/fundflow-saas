@@ -11,6 +11,7 @@ use App\Support\MemberLocale;
 use App\Support\MemberNotificationChannels;
 use App\Support\NotificationPlainText;
 use App\Support\TenantAbsoluteUrl;
+use App\Support\WebPushNotification;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -45,7 +46,7 @@ trait DeliversToMemberChannels
             $title = (string) ($payload['title'] ?? '');
             $body = (string) ($payload['body'] ?? '');
 
-            return trim($title . ($body !== '' ? ': ' . $body : ''));
+            return trim($title.($body !== '' ? ': '.$body : ''));
         });
     }
 
@@ -64,17 +65,17 @@ trait DeliversToMemberChannels
             $message = (new WebPushMessage)
                 ->title($title)
                 ->body($body)
-                ->icon('/icons/icon-192x192.png')
-                ->badge('/icons/icon-192x192.png')
+                ->icon(WebPushNotification::ICON_PATH)
+                ->badge(WebPushNotification::BADGE_PATH)
                 ->options(['TTL' => 86400]);
 
             if (isset($payload['loan_id'])) {
                 $message
-                    ->tag('member-loan-' . $payload['loan_id'])
+                    ->tag('member-loan-'.$payload['loan_id'])
                     ->data(['url' => $this->memberLoanUrl((int) $payload['loan_id'])]);
             } elseif (isset($payload['fund_posting_id'])) {
                 $message
-                    ->tag('member-fund-posting-' . $payload['fund_posting_id'])
+                    ->tag('member-fund-posting-'.$payload['fund_posting_id'])
                     ->data(['url' => $this->memberFundPostingsUrl()]);
             } elseif (isset($payload['url'])) {
                 $message->data(['url' => (string) $payload['url']]);

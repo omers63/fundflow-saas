@@ -275,3 +275,48 @@ test('contribution arrears records can be filtered by member', function () {
 
     Carbon::setTestNow();
 });
+
+test('contribution arrears can be scoped to a selected past collection cycle', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+
+    $member = createMemberForDelinquency(app(AccountingService::class));
+
+    [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+    $recent = Carbon::create($openYear, $openMonth, 1)->subMonthNoOverflow();
+    $recentMonth = (int) $recent->month;
+    $recentYear = (int) $recent->year;
+
+    Contribution::create([
+        'member_id' => $member->id,
+        'period' => Contribution::periodDate($recentMonth, $recentYear),
+        'amount' => 5000,
+        'status' => 'pending',
+        'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
+    ]);
+
+    Contribution::create([
+        'member_id' => $member->id,
+        'period' => Contribution::periodDate(7, 2025),
+        'amount' => 5000,
+        'status' => 'pending',
+        'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
+    ]);
+
+    $global = $this->delinquency->contributionArrearsTableRecords();
+    $recentLabel = $this->cycles->periodLabel($recentMonth, $recentYear);
+
+    expect($global->contains(
+        fn (array $row): bool => $row['member_id'] === $member->id && $row['period_label'] === $recentLabel,
+    ))->toBeTrue();
+
+    $julyScoped = $this->delinquency->contributionArrearsTableRecords(null, 7, 2025, false);
+
+    expect($julyScoped->contains(
+        fn (array $row): bool => $row['member_id'] === $member->id && $row['period_label'] === $recentLabel,
+    ))->toBeFalse()
+        ->and($julyScoped->contains(
+            fn (array $row): bool => $row['member_id'] === $member->id && $row['year'] === 2025 && $row['month'] === 7,
+        ))->toBeTrue();
+
+    Carbon::setTestNow();
+});

@@ -24,7 +24,7 @@ class MyFundPostingResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
 
-    protected static ?string $navigationLabel = 'My Deposits';
+    protected static ?string $navigationLabel = 'Deposits';
 
     protected static ?string $modelLabel = 'Deposit';
 

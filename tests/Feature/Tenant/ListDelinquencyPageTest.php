@@ -157,7 +157,8 @@ test('contribution arrears tab apply now posts from member cash', function () {
     $row = $rows->first();
 
     Livewire::test(ListContributions::class)
-        ->set('activeTab', 'arrears')
+        ->set('activeTab', 'ledger')
+        ->set('ledgerView', 'arrears')
         ->callTableAction('apply_single', (string) $row['__key'])
         ->assertNotified();
 
@@ -193,7 +194,8 @@ test('contribution arrears tab bulk apply now posts selected periods', function 
     $keys = $selected->pluck('__key')->map(fn ($key): string => (string) $key)->all();
 
     Livewire::test(ListContributions::class)
-        ->set('activeTab', 'arrears')
+        ->set('activeTab', 'ledger')
+        ->set('ledgerView', 'arrears')
         ->callTableBulkAction('applySelected', $keys)
         ->assertNotified();
 
@@ -230,7 +232,8 @@ test('contribution arrears tab clear arrears waives period without posting cash'
     $row = $rows->first();
 
     Livewire::test(ListContributions::class)
-        ->set('activeTab', 'arrears')
+        ->set('activeTab', 'ledger')
+        ->set('ledgerView', 'arrears')
         ->callTableAction('clear_arrears', (string) $row['__key'], data: ['note' => 'Board approved'])
         ->assertNotified();
 
@@ -271,7 +274,8 @@ test('contribution arrears tab bulk clear arrears waives selected periods', func
     $keys = $selected->pluck('__key')->map(fn ($key): string => (string) $key)->all();
 
     Livewire::test(ListContributions::class)
-        ->set('activeTab', 'arrears')
+        ->set('activeTab', 'ledger')
+        ->set('ledgerView', 'arrears')
         ->callTableBulkAction('clearSelected', $keys)
         ->assertNotified();
 
@@ -352,7 +356,7 @@ test('member workspace exposes arrears header actions', function () {
     ]);
 
     $held = Member::create([
-        'member_number' => 'HLD-' . uniqid(),
+        'member_number' => 'HLD-'.uniqid(),
         'name' => 'Held Row Member',
         'monthly_contribution_amount' => 100,
         'joined_at' => now()->subYear(),

@@ -1,6 +1,6 @@
 @php
+    use App\Filament\Member\Pages\CommunicationsPage;
     use App\Filament\Member\Resources\MyContributions\MyContributionResource;
-    use App\Filament\Member\Resources\MyMessages\MyMessageResource;
     use App\Filament\Member\Support\MemberNavigation;
     use App\Services\ContributionCycleService;
 
@@ -18,7 +18,7 @@
             <span>{{ __('Cycle: :label', ['label' => $cycleLabel]) }}</span>
         </a>
 
-        <a href="{{ MyMessageResource::getUrl('index') }}"
+        <a href="{{ CommunicationsPage::getUrl(['tab' => 'messages']) }}"
             class="ff-portal-topbar-chip inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-gray-700 dark:text-gray-200">
             <x-heroicon-o-chat-bubble-left-right class="h-4 w-4 shrink-0" />
             <span>{{ __('Messages') }}</span>

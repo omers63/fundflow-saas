@@ -6,7 +6,6 @@ use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\Members\Pages\EditMember;
 use App\Filament\Tenant\Resources\Members\Pages\ListMembers;
 use App\Filament\Tenant\Resources\Members\Pages\ViewMember;
-use App\Filament\Tenant\Resources\Members\RelationManagers\AccountsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\ContributionsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\DependentsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\GuarantorExposureRelationManager;
@@ -18,6 +17,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\MemberWorkspaceSummaryService;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
@@ -30,7 +30,7 @@ beforeEach(function () {
     User::query()->delete();
 });
 
-test('view member workspace shows insights and grouped header actions', function () {
+test('view member workspace shows inline summary and grouped header actions', function () {
     $admin = User::create([
         'name' => 'Fund Admin',
         'email' => 'admin-view-member@test.com',
@@ -65,8 +65,9 @@ test('view member workspace shows insights and grouped header actions', function
         ->assertSee(__('Member'))
         ->assertSee('Jane Member')
         ->assertSee('MEM-0042')
-        ->assertSee('ff-member-detail-shell', false)
-        ->assertSee('ff-member-stepper', false)
+        ->assertSee('ff-member-workspace-summary', false)
+        ->assertDontSee('ff-member-detail-shell', false)
+        ->assertDontSee('ff-member-stepper', false)
         ->assertDontSee('ff-app-insights-kpi-strip', false)
         ->assertSee(__('Contribute'))
         ->assertSee(__('Treasury'))
@@ -100,15 +101,11 @@ test('edit member profile page focuses on form fields and links back to workspac
         ->assertSuccessful()
         ->assertSee('Profile Member')
         ->assertSee(__('Membership'))
-        ->assertDontSee(__('Treasury'));
-
-    expect(collect($component->instance()->getHeaderActions())
-        ->map(fn ($action) => $action->getName())
-        ->all())
-        ->toContain('backToWorkspace');
+        ->assertDontSee(__('Treasury'))
+        ->assertActionExists('backToWorkspace');
 });
 
-test('member accounts relation manager rows link to account view page', function () {
+test('member workspace summary cash card links to account view page', function () {
     $admin = User::create([
         'name' => 'Fund Admin',
         'email' => 'admin-accounts-url@test.com',
@@ -139,15 +136,14 @@ test('member accounts relation manager rows link to account view page', function
 
     Filament::setCurrentPanel('tenant');
 
-    $component = Livewire::actingAs($admin, 'tenant')
-        ->test(AccountsRelationManager::class, [
-            'ownerRecord' => $member,
-            'pageClass' => ViewMember::class,
-        ])
+    Livewire::actingAs($admin, 'tenant')
+        ->test(ViewMember::class, ['record' => $member->getRouteKey()])
         ->assertSuccessful()
-        ->assertTableColumnExists('name');
+        ->assertSee('ff-member-workspace-summary', false);
 
-    expect($component->instance()->getTable()->getRecordUrl($cashAccount))
+    $summary = app(MemberWorkspaceSummaryService::class)->summary($member->fresh(['cashAccount', 'fundAccount']));
+
+    expect($summary['balances']['cash']['url'])
         ->toBe(AccountResource::getUrl('view', ['record' => $cashAccount]));
 });
 
@@ -268,17 +264,16 @@ test('member loans tab opens loan view page on row click', function () {
         ->toBe(LoanResource::getUrl('view', ['record' => $loan]));
 });
 
-test('member resource relation tabs are ordered with loans before dependents and messages after', function () {
+test('member resource relation tabs are ordered with ledger first and accounts tab removed', function () {
     $relations = MemberResource::getRelations();
 
     expect($relations)->toBe([
-        LoansRelationManager::class,
-        ContributionsRelationManager::class,
         MemberTransactionsTabsRelationManager::class,
-        AccountsRelationManager::class,
-        RepaymentsRelationManager::class,
+        ContributionsRelationManager::class,
+        LoansRelationManager::class,
         DependentsRelationManager::class,
         GuarantorExposureRelationManager::class,
+        RepaymentsRelationManager::class,
         MessagesRelationManager::class,
     ]);
 });

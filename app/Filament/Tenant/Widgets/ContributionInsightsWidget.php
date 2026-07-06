@@ -12,7 +12,7 @@ class ContributionInsightsWidget extends Widget
 {
     protected static bool $isDiscovered = false;
 
-    protected static bool $isLazy = false;
+    protected static bool $isLazy = true;
 
     protected string $view = 'filament.tenant.widgets.contribution-insights';
 
@@ -22,7 +22,7 @@ class ContributionInsightsWidget extends Widget
 
     public function resolvedContext(): string
     {
-        return ContributionResource::resolveListTab();
+        return ContributionResource::resolveInsightsContext();
     }
 
     /**

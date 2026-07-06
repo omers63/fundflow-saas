@@ -30,7 +30,7 @@ final class MemberNotificationChannels
             return $channels;
         }
 
-        if (CommunicationSettings::emailEnabled() && filled($notifiable->email)) {
+        if (CommunicationSettings::emailEnabled() && self::emailFor($notifiable) !== null) {
             $channels[] = 'mail';
         }
 
@@ -49,6 +49,11 @@ final class MemberNotificationChannels
         }
 
         return $channels;
+    }
+
+    public static function emailFor(User $user): ?string
+    {
+        return app(MemberUserEmail::class)->deliverableEmailFor($user);
     }
 
     public static function phoneFor(User $user): ?string

@@ -9,7 +9,7 @@ use App\Filament\Member\Pages\CashAccountPage;
 use App\Filament\Member\Pages\CommunicationsPage;
 use App\Filament\Member\Pages\FundAccountPage;
 use App\Filament\Member\Pages\MemberActivityPage;
-use App\Filament\Member\Pages\MyProfilePage;
+use App\Filament\Member\Pages\MemberSettingsPage;
 use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
 use App\Filament\Member\Resources\MyCashOutRequests\MyCashOutRequestResource;
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
@@ -198,15 +198,9 @@ final class MemberPortalInsightsService
         return [
             'notice' => $notice,
             'pending_actions' => $this->buildPendingActions(
-                $member,
-                $postedThisCycle,
                 $pendingDeposits,
                 $unreadMessages,
                 $arrears,
-                $cycles,
-                $curMonth,
-                $curYear,
-                $activeLoan,
             ),
             'cash_card' => $this->buildCashCard($member, $cashBalance, $nextInstallment),
             'fund_card' => $this->buildFundCard($member, $fundBalance, $monthly),
@@ -586,7 +580,7 @@ final class MemberPortalInsightsService
             'status_tone' => $statusTone,
             'initials' => $this->memberDisplayInitials($member),
             'avatar_url' => $user?->avatarPublicUrl(),
-            'profile_url' => MyProfilePage::getUrl(),
+            'profile_url' => MemberSettingsPage::getUrl(['tab' => 'profile']),
             'joined_label' => $member->joined_at
                 ? __('Member since :date', [
                     'date' => Carbon::parse((string) $member->joined_at)
@@ -1183,15 +1177,9 @@ final class MemberPortalInsightsService
      * @return list<array{label: string, url: string, tone: string}>
      */
     private function buildPendingActions(
-        Member $member,
-        bool $postedThisCycle,
         int $pendingDeposits,
         int $unreadMessages,
         array $arrears,
-        ContributionCycleService $cycles,
-        int $curMonth,
-        int $curYear,
-        ?Loan $activeLoan = null,
     ): array {
         $actions = [];
 
@@ -1207,26 +1195,6 @@ final class MemberPortalInsightsService
             $actions[] = [
                 'label' => trans_choice(':count deposit pending|:count deposits pending', $pendingDeposits, ['count' => $pendingDeposits]),
                 'url' => MyFundPostingResource::getUrl('index'),
-                'tone' => 'amber',
-            ];
-        }
-
-        if ($this->loanRepaymentCycleAttentionApplies($member, $postedThisCycle)) {
-            $actions[] = [
-                'label' => __('Loan repayment · :period', [
-                    'period' => $cycles->periodLabel($curMonth, $curYear),
-                ]),
-                'url' => $activeLoan !== null
-                    ? MyLoanResource::getUrl('view', ['record' => $activeLoan])
-                    : MyLoanResource::getUrl('index'),
-                'tone' => 'violet',
-            ];
-        } elseif ($this->contributionNotPostedApplies($member, $postedThisCycle)) {
-            $actions[] = [
-                'label' => __('Contribution not posted :period', [
-                    'period' => $cycles->periodLabel($curMonth, $curYear),
-                ]),
-                'url' => MyContributionResource::getUrl('index'),
                 'tone' => 'amber',
             ];
         }

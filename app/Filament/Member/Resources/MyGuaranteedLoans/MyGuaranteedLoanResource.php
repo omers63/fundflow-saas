@@ -16,6 +16,7 @@ use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class MyGuaranteedLoanResource extends Resource
 {
@@ -25,7 +26,7 @@ class MyGuaranteedLoanResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldCheck;
 
-    protected static ?string $navigationLabel = 'My Guaranteed-Loans';
+    protected static ?string $navigationLabel = 'Guaranteed Loans';
 
     protected static ?string $modelLabel = 'Guaranteed loan';
 
@@ -59,6 +60,16 @@ class MyGuaranteedLoanResource extends Resource
     }
 
     public static function canCreate(): bool
+    {
+        return false;
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return false;
+    }
+
+    public static function canDelete(Model $record): bool
     {
         return false;
     }

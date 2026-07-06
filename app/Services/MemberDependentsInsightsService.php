@@ -170,13 +170,6 @@ final class MemberDependentsInsightsService
                 'accent' => 'emerald',
             ],
             [
-                'label' => __('Fund total'),
-                'value' => InsightFormatter::compactAmount($fundTotal),
-                'sub' => InsightFormatter::money($fundTotal),
-                'icon' => 'heroicon-o-building-library',
-                'accent' => 'indigo',
-            ],
-            [
                 'label' => __('Cash total'),
                 'value' => InsightFormatter::compactAmount($cashTotal),
                 'sub' => InsightFormatter::money($cashTotal),
@@ -186,16 +179,11 @@ final class MemberDependentsInsightsService
             [
                 'label' => __('Open cycle'),
                 'value' => $postedOpenCycle.'/'.$dependents->count(),
-                'sub' => $openPeriodLabel,
+                'sub' => $pendingOpenCycle > 0
+                    ? trans_choice(':count pending|:count pending', $pendingOpenCycle, ['count' => $pendingOpenCycle])
+                    : $openPeriodLabel,
                 'icon' => 'heroicon-o-arrow-path',
                 'accent' => $pendingOpenCycle > 0 ? 'amber' : 'violet',
-            ],
-            [
-                'label' => __('Pending'),
-                'value' => (string) $pendingOpenCycle,
-                'sub' => __('This cycle'),
-                'icon' => 'heroicon-o-clock',
-                'accent' => $pendingOpenCycle > 0 ? 'amber' : 'gray',
             ],
         ];
     }

@@ -4,6 +4,7 @@ namespace App\Models\Tenant;
 
 use App\Support\AppLocale;
 use App\Support\LocalizationSettings;
+use App\Support\MemberNotificationChannels;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasAvatar;
 use Filament\Panel;
@@ -93,6 +94,14 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
             'password' => 'hashed',
             'is_admin' => 'boolean',
         ];
+    }
+
+    /**
+     * @param  mixed  $notification
+     */
+    public function routeNotificationForMail($notification = null): ?string
+    {
+        return MemberNotificationChannels::emailFor($this);
     }
 
     public function preferredLocale(): string

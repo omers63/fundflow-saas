@@ -6,6 +6,7 @@ namespace App\Notifications\Concerns;
 
 use App\Support\AdminNotificationChannels;
 use App\Support\NotificationPlainText;
+use App\Support\WebPushNotification;
 use NotificationChannels\WebPush\WebPushMessage;
 
 trait DeliversToAdminChannels
@@ -27,8 +28,8 @@ trait DeliversToAdminChannels
         $message = (new WebPushMessage)
             ->title(NotificationPlainText::from($title))
             ->body(NotificationPlainText::from($body))
-            ->icon('/icons/icon-192x192.png')
-            ->badge('/icons/icon-192x192.png')
+            ->icon(WebPushNotification::ICON_PATH)
+            ->badge(WebPushNotification::BADGE_PATH)
             ->options(['TTL' => 86400]);
 
         if ($tag !== null) {

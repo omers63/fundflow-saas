@@ -2,9 +2,12 @@
 
 namespace App\Filament\Tenant\Resources\Contributions\Pages;
 
+use App\Filament\Support\ContributionListTableHeaderActions;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Widgets\ContributionInsightsWidget;
 use App\Services\ContributionCycleService;
+use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\RenderHook;
@@ -14,21 +17,40 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Table;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Support\Htmlable;
-use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Url;
 
 class ListContributions extends ListRecords
 {
     protected static string $resource = ContributionResource::class;
 
+    #[Url(as: 'tab', except: 'cycle')]
+    public ?string $activeTab = 'cycle';
+
     #[Url(as: 'cycle')]
     public ?string $selectedCycle = null;
 
+    #[Url(as: 'segment', except: 'collect')]
+    public ?string $cycleSegment = 'collect';
+
+    #[Url(as: 'view')]
+    public ?string $ledgerView = null;
+
     public function mount(): void
     {
+        $legacyTab = request()->query('tab');
+
+        if (is_string($legacyTab) && in_array($legacyTab, ContributionResource::legacyTabKeys(), true)) {
+            $this->redirect(
+                ContributionResource::listTabUrl($legacyTab, cycle: request()->query('cycle')),
+                navigate: true,
+            );
+
+            return;
+        }
+
         parent::mount();
 
-        if (!filled($this->selectedCycle)) {
+        if (! filled($this->selectedCycle)) {
             $cycles = app(ContributionCycleService::class);
             [$month, $year] = $cycles->currentOpenPeriod();
             $this->selectedCycle = $cycles->contributionCycleKey($month, $year);
@@ -37,30 +59,39 @@ class ListContributions extends ListRecords
 
     public function updatedSelectedCycle(): void
     {
-        if (in_array(ContributionResource::resolveListTab(), ['collect', 'collected'], true)) {
+        if (
+            ContributionResource::resolvePrimaryTab() === 'cycle'
+            || (ContributionResource::resolvePrimaryTab() === 'ledger' && ContributionResource::resolveLedgerView() === 'arrears')
+        ) {
             $this->reconfigureTableForActiveTab();
         }
 
         ContributionResource::dispatchInsightsRefresh($this);
     }
 
+    public function updatedCycleSegment(): void
+    {
+        $this->reconfigureTableForActiveTab();
+        ContributionResource::dispatchInsightsRefresh($this);
+    }
+
+    public function updatedLedgerView(): void
+    {
+        $this->reconfigureTableForActiveTab();
+        ContributionResource::dispatchInsightsRefresh($this);
+    }
+
     protected function makeTable(): Table
     {
-        $tab = ContributionResource::resolveListTab();
-
-        if (in_array($tab, ['collect', 'collected', 'arrears'], true)) {
-            $table = $this->makeBaseTable();
-
-            static::getResource()::configureTable($table);
-
-            return $table;
-        }
-
         return parent::makeTable();
     }
 
     public function updatedActiveTab(): void
     {
+        if ($this->activeTab !== 'ledger') {
+            $this->ledgerView = null;
+        }
+
         $this->tableSort = null;
         $this->reconfigureTableForActiveTab();
 
@@ -79,9 +110,23 @@ class ListContributions extends ListRecords
         $this->getTableFiltersForm()->fill([]);
     }
 
+    /**
+     * @return array<Action|ActionGroup>
+     */
+    protected function getHeaderActions(): array
+    {
+        if (ContributionResource::resolvePrimaryTab() !== 'cycle') {
+            return [];
+        }
+
+        return [
+            ContributionListTableHeaderActions::cycleCollectionGroup('primary'),
+        ];
+    }
+
     public function isTableColumnToggledHidden(string $name): bool
     {
-        if (ContributionResource::resolveListTab() === 'arrears') {
+        if (ContributionResource::resolveLedgerView() === 'arrears') {
             return false;
         }
 
@@ -90,10 +135,10 @@ class ListContributions extends ListRecords
 
     public function getTableColumnsSessionKey(): string
     {
-        $tab = ContributionResource::resolveListTab();
+        $layout = ContributionResource::tableLayoutKey();
 
-        if (in_array($tab, ['collect', 'collected', 'arrears'], true)) {
-            return 'tables.'.md5(static::class.'|'.$tab).'_columns';
+        if ($layout !== 'ledger') {
+            return 'tables.'.md5(static::class.'|'.$layout).'_columns';
         }
 
         return parent::getTableColumnsSessionKey();
@@ -101,37 +146,34 @@ class ListContributions extends ListRecords
 
     public function getHasReorderedTableColumnsSessionKey(): string
     {
-        $tab = ContributionResource::resolveListTab();
+        $layout = ContributionResource::tableLayoutKey();
 
-        if (in_array($tab, ['collect', 'collected', 'arrears'], true)) {
-            return 'tables.'.md5(static::class.'|'.$tab).'_has_reordered_columns';
+        if ($layout !== 'ledger') {
+            return 'tables.'.md5(static::class.'|'.$layout).'_has_reordered_columns';
         }
 
         return parent::getHasReorderedTableColumnsSessionKey();
-    }
-
-    public function getFilteredTableQuery(): ?Builder
-    {
-        if (ContributionResource::resolveListTab() === 'arrears') {
-            return null;
-        }
-
-        return parent::getFilteredTableQuery();
     }
 
     public function getSubheading(): string|Htmlable|null
     {
         $periodLabel = ContributionResource::resolveListCycleLabel();
 
-        return match (ContributionResource::resolveListTab()) {
-            'collect' => __('Members who still owe for :period. Apply from cash balance or post manually on the ledger.', [
-                'period' => $periodLabel,
-            ]),
+        if (ContributionResource::resolvePrimaryTab() === 'ledger') {
+            return ContributionResource::resolveLedgerView() === 'arrears'
+                ? __('Unposted contribution periods after the deadline through :period (since each member joined). Post from the member record or ledger.', [
+                    'period' => $periodLabel,
+                ])
+                : __('Full contribution history, filters, and manual posting. Selected cycle: :period.', [
+                    'period' => $periodLabel,
+                ]);
+        }
+
+        return match (ContributionResource::resolveCycleSegment()) {
             'collected' => __('Contributions already posted for :period.', [
                 'period' => $periodLabel,
             ]),
-            'arrears' => __('Unposted contribution periods after the deadline (since each member joined). Post from the member record or ledger.'),
-            default => __('Full contribution history, filters, and manual posting. Selected cycle: :period.', [
+            default => __('Members who still owe for :period. Apply from cash balance or post manually on the ledger.', [
                 'period' => $periodLabel,
             ]),
         };
@@ -141,8 +183,9 @@ class ListContributions extends ListRecords
     {
         return $schema
             ->components([
-                View::make('filament.tenant.resources.contributions.partials.cycle-context-banner'),
+                View::make('filament.tenant.resources.contributions.partials.cycle-header'),
                 $this->getTabsContentComponent(),
+                View::make('filament.tenant.resources.contributions.partials.workspace-subnav-wrapper'),
                 RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
                 EmbeddedTable::make(),
                 RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
@@ -179,33 +222,35 @@ class ListContributions extends ListRecords
     {
         return [
             ...parent::getWidgetData(),
-            'context' => ContributionResource::resolveListTab(),
+            'context' => ContributionResource::resolveInsightsContext(),
         ];
     }
 
     public function getTabs(): array
     {
         return [
-            'contributions' => Tab::make(ContributionResource::listTabLabel('contributions')),
-            'collect' => Tab::make(ContributionResource::listTabLabel('collect'))
-                ->badge(fn (): ?string => $this->collectTabBadge())
+            'cycle' => Tab::make(ContributionResource::listTabLabel('cycle'))
+                ->badge(fn (): ?string => $this->cycleTabBadge())
                 ->badgeColor('warning'),
-            'collected' => Tab::make(ContributionResource::listTabLabel('collected')),
-            'arrears' => Tab::make(ContributionResource::listTabLabel('arrears'))
-                ->badge(fn (): ?string => $this->arrearsTabBadge())
+            'ledger' => Tab::make(ContributionResource::listTabLabel('ledger'))
+                ->badge(fn (): ?string => $this->ledgerArrearsBadge())
                 ->badgeColor('danger'),
         ];
     }
 
-    protected function collectTabBadge(): ?string
+    protected function cycleTabBadge(): ?string
     {
+        if (ContributionResource::resolveCycleSegment() !== 'collect') {
+            return null;
+        }
+
         [$month, $year] = ContributionResource::resolveListCycle();
         $pending = ContributionResource::pendingCountForPeriod($month, $year);
 
         return $pending > 0 ? (string) $pending : null;
     }
 
-    protected function arrearsTabBadge(): ?string
+    protected function ledgerArrearsBadge(): ?string
     {
         $count = ContributionResource::contributionArrearsPeriodCount(
             $this->arrearsMemberFilterFromTable(),
@@ -229,8 +274,8 @@ class ListContributions extends ListRecords
 
     protected function getTableQueryStringIdentifier(): ?string
     {
-        $tab = ContributionResource::resolveListTab();
-
-        return $tab === 'collect' ? null : 'contributions-'.$tab;
+        return ContributionResource::tableLayoutKey() === 'cycle|collect'
+            ? null
+            : 'contributions-'.str_replace('|', '-', ContributionResource::tableLayoutKey());
     }
 }

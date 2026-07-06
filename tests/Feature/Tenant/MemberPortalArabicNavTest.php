@@ -77,11 +77,11 @@ test('member portal pages render arabic navigation labels when locale is ar', fu
 
     $this->get('http://'.$this->domain.'/member/settings')
         ->assertSuccessful()
-        ->assertSee('الإعدادات', false);
+        ->assertSee('الملف الشخصي', false);
 
-    $this->get('http://'.$this->domain.'/member/help')
+    $this->get('http://'.$this->domain.'/member/messages')
         ->assertSuccessful()
-        ->assertSee('المساعدة والأسئلة الشائعة', false);
+        ->assertSee('الرسائل', false);
 
     $this->get('http://'.$this->domain.'/member/my-contributions')
         ->assertSuccessful()

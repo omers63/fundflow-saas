@@ -4,11 +4,10 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
-use App\Filament\Tenant\Resources\Contributions\ContributionResource;
-use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Services\MemberWorkspaceSummaryService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -64,7 +63,7 @@ final class MemberDelinquencyActions
             ->label(__('Check arrears'))
             ->icon('heroicon-o-arrow-path')
             ->color('warning')
-            ->visible(fn(Member $record): bool => $record->status === 'active')
+            ->visible(fn (Member $record): bool => $record->status === 'active')
             ->action(function (Member $record, LoanDelinquencyService $delinquency, Component $livewire): void {
                 $result = $delinquency->syncMemberDelinquencyStatusForMember($record);
 
@@ -96,20 +95,12 @@ final class MemberDelinquencyActions
             ->label(__('Open arrears'))
             ->icon('heroicon-o-arrow-top-right-on-square')
             ->color('gray')
-            ->visible(fn(Member $record, LoanDelinquencyService $delinquency): bool => $delinquency->isDelinquent($record)
-                || $delinquency->memberHasArrears($record))
-            ->url(function (Member $record, LoanDelinquencyService $delinquency): string {
-                $summary = $delinquency->memberArrearsSummary($record);
+            ->visible(fn (Member $record): bool => app(MemberWorkspaceSummaryService::class)->arrearsVisible($record))
+            ->url(function (Member $record): string {
+                $summary = app(MemberWorkspaceSummaryService::class)->summary($record);
 
-                if (count($summary['unpaid_contribution_periods']) > 0) {
-                    return ContributionResource::arrearsUrlForMember($record);
-                }
-
-                if ($summary['overdue_installment_count'] > 0) {
-                    return LoanResource::overdueInstallmentsUrlForMember($record);
-                }
-
-                return MemberResource::getUrl('view', ['record' => $record]);
+                return $summary['arrears']['cta_url']
+                    ?? MemberResource::getUrl('view', ['record' => $record]);
             });
     }
 
@@ -125,7 +116,7 @@ final class MemberDelinquencyActions
                 $clear = 0;
 
                 foreach ($records as $record) {
-                    if (!$record instanceof Member || $record->status !== 'active') {
+                    if (! $record instanceof Member || $record->status !== 'active') {
                         continue;
                     }
 

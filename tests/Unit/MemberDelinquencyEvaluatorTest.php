@@ -8,9 +8,8 @@ use App\Models\Tenant\Setting;
 use App\Services\MemberDelinquencyEvaluator;
 use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
@@ -147,6 +146,40 @@ it('ignores closed periods before the legacy migration contribution cut-off', fu
 
     expect($stats['rolling_total'])->toBe(0)
         ->and($stats['trailing_consecutive'])->toBe(0);
+
+    Carbon::setTestNow();
+});
+
+it('evaluateMany matches single-member evaluate results', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+    Setting::set('delinquency', 'total_miss_lookback_months', 6);
+
+    $memberA = Member::factory()->create([
+        'joined_at' => Carbon::create(2026, 1, 10),
+        'monthly_contribution_amount' => 5000,
+        'status' => 'active',
+    ]);
+
+    $memberB = Member::factory()->create([
+        'joined_at' => Carbon::create(2026, 2, 10),
+        'monthly_contribution_amount' => 3000,
+        'status' => 'active',
+    ]);
+
+    Contribution::create([
+        'member_id' => $memberA->id,
+        'period' => Contribution::periodDate(3, 2026),
+        'amount' => 5000,
+        'status' => 'posted',
+        'posted_at' => now(),
+        'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
+    ]);
+
+    $evaluator = app(MemberDelinquencyEvaluator::class);
+    $batch = $evaluator->evaluateMany(collect([$memberA->fresh(), $memberB->fresh()]));
+
+    expect($batch[(int) $memberA->id])->toEqual($evaluator->evaluate($memberA->fresh()))
+        ->and($batch[(int) $memberB->id])->toEqual($evaluator->evaluate($memberB->fresh()));
 
     Carbon::setTestNow();
 });

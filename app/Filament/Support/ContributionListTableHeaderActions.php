@@ -31,7 +31,6 @@ final class ContributionListTableHeaderActions
             self::exportContributionsAction(),
             CreateAction::make()
                 ->label(__('New contribution')),
-            self::cycleCollectionGroup('gray'),
         ];
     }
 
@@ -40,10 +39,7 @@ final class ContributionListTableHeaderActions
      */
     public static function collect(): array
     {
-        return [
-            self::cycleCollectionGroup('primary'),
-            self::delinquencyToolsGroup('warning'),
-        ];
+        return [];
     }
 
     /**

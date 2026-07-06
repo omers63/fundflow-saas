@@ -210,12 +210,7 @@ final class MemberFilamentActions
             ->label(__('Contribute'))
             ->icon('heroicon-o-banknotes')
             ->color('success')
-            ->visible(function (Member $record): bool {
-                $cycles = app(ContributionCycleService::class);
-
-                return app(MemberMembershipPolicy::class)->canAdminContribute($record)
-                    && $cycles->contributionCycleSelectOptionsForMember($record) !== [];
-            })
+            ->visible(fn (Member $record): bool => app(MemberMembershipPolicy::class)->canAdminContribute($record))
             ->schema([
                 Select::make('cycle')
                     ->label(__('Cycle'))

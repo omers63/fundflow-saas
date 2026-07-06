@@ -10,6 +10,7 @@ use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
+use App\Filament\Tenant\Resources\Members\Concerns\SuppressesMemberWorkspaceTabBadges;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
@@ -23,6 +24,7 @@ use Filament\Tables\Table;
 
 class LoansRelationManager extends RelationManager
 {
+    use SuppressesMemberWorkspaceTabBadges;
     use TranslatesRelationManagerTitle;
 
     protected static string $relationship = 'loans';

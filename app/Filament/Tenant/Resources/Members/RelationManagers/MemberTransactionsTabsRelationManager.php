@@ -17,6 +17,7 @@ use App\Filament\Support\AccountTransactionTypeFilter;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\UiLabelIcons;
 use App\Filament\Support\ViewActions\ViewAccountTransactionAction;
+use App\Filament\Tenant\Resources\Members\Concerns\SuppressesMemberWorkspaceTabBadges;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
@@ -29,15 +30,14 @@ use Illuminate\Database\Eloquent\Builder;
 class MemberTransactionsTabsRelationManager extends RelationManager
 {
     use OpensFocusedLedgerTransaction;
+    use SuppressesMemberWorkspaceTabBadges;
     use TranslatesRelationManagerTitle;
-
-    protected static bool $isLazy = false;
 
     protected string $view = 'filament.tenant.resources.members.relation-managers.member-transactions-tabs';
 
     protected static string $relationship = 'transactions';
 
-    protected static ?string $title = 'Transactions';
+    protected static ?string $title = 'Ledger';
 
     public string $ledgerTab = 'cash';
 

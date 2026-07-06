@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace App\Filament\Member\Resources\MyDependents\Tables;
 
+use App\Filament\Member\Resources\MyDependents\Support\DependentOpenCycleStatus;
 use App\Filament\Member\Resources\MyDependents\Support\MyDependentTableActions;
-use App\Filament\Support\DateColumnRangeFilter;
-use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableToolbar;
-use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DependentAllocationChange;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
@@ -27,22 +25,53 @@ class MyDependentsTable
         $currency = Setting::get('general', 'currency', 'USD');
         [$openMonth, $openYear] = app(ContributionCycleService::class)->currentOpenPeriod();
 
-        return TableGrouping::apply($table
+        $cycleStatus = fn (Member $record): array => DependentOpenCycleStatus::resolve($record, $openMonth, $openYear);
+
+        return $table
             ->columns([
-                TextColumn::make('member_number')
-                    ->label(__('Member #'))
-                    ->searchable(),
                 TextColumn::make('name')
-                    ->searchable()
-                    ->sortable(),
+                    ->label(__('Dependent'))
+                    ->description(fn (Member $record): string => $record->member_number)
+                    ->searchable(['name', 'member_number'])
+                    ->sortable()
+                    ->wrap(),
                 TextColumn::make('monthly_contribution_amount')
-                    ->label(__('Monthly contribution'))
+                    ->label(__('Allocation'))
                     ->money($currency)
                     ->sortable(),
+                TextColumn::make('cash_balance')
+                    ->label(__('Cash'))
+                    ->state(fn (Member $record): float => $record->getCashBalance())
+                    ->money($currency)
+                    ->color(fn (Member $record): string => $record->getCashBalance() < 0 ? 'danger' : 'gray')
+                    ->searchable(false)
+                    ->sortable(false),
+                TextColumn::make('open_cycle_status')
+                    ->label(__('This cycle'))
+                    ->badge()
+                    ->sortable(false)
+                    ->searchable(false)
+                    ->state(fn (Member $record): string => $cycleStatus($record)['label'])
+                    ->color(fn (Member $record): string => $cycleStatus($record)['color'])
+                    ->description(fn (Member $record): ?string => $cycleStatus($record)['description']),
+                TextColumn::make('fund_balance')
+                    ->label(__('Fund'))
+                    ->state(fn (Member $record): float => $record->getFundBalance())
+                    ->money($currency)
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->searchable(false)
+                    ->sortable(false),
+                TextColumn::make('status')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
+                    ->color(fn (string $state): string => Member::statusBadgeColor($state))
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('last_allocation_change')
                     ->label(__('Last changed'))
+                    ->sortable(false)
+                    ->searchable(false)
                     ->state(function (Member $record) use ($currency): ?string {
-                        if (!Schema::hasTable('dependent_allocation_changes')) {
+                        if (! Schema::hasTable('dependent_allocation_changes')) {
                             return null;
                         }
 
@@ -59,69 +88,16 @@ class MyDependentsTable
 
                         return "{$dir} {$last->deltaLabel($currency)} · {$last->created_at->diffForHumans()}";
                     })
-                    ->placeholder(__('Never changed')),
-                TextColumn::make('cash_balance')
-                    ->label(__('Cash'))
-                    ->state(fn(Member $record): float => $record->getCashBalance())
-                    ->money($currency)
-                    ->searchable(false)
-                    ->sortable(false),
-                TextColumn::make('fund_balance')
-                    ->label(__('Fund'))
-                    ->state(fn(Member $record): float => $record->getFundBalance())
-                    ->money($currency)
-                    ->searchable(false)
-                    ->sortable(false),
-                TextColumn::make('open_cycle_status')
-                    ->label(__('Open cycle'))
-                    ->badge()
-                    ->state(function (Member $record) use ($openMonth, $openYear): string {
-                        $row = Contribution::query()
-                            ->where('member_id', $record->id)
-                            ->forPeriod($openMonth, $openYear)
-                            ->first();
-
-                        if ($row === null) {
-                            return __('Not started');
-                        }
-
-                        return match ($row->status) {
-                            'posted' => __('Posted'),
-                            'pending' => __('Pending'),
-                            'failed' => __('Failed'),
-                            default => ucfirst($row->status),
-                        };
-                    })
-                    ->color(function (Member $record) use ($openMonth, $openYear): string {
-                        $row = Contribution::query()
-                            ->where('member_id', $record->id)
-                            ->forPeriod($openMonth, $openYear)
-                            ->first();
-
-                        return match ($row?->status) {
-                            'posted' => 'success',
-                            'pending' => 'warning',
-                            'failed' => 'danger',
-                            default => 'gray',
-                        };
-                    }),
-                TextColumn::make('status')
-                    ->badge()
-                    ->formatStateUsing(fn(string $state): string => Member::statusOptions()[$state] ?? ucfirst($state))
-                    ->color(fn(string $state): string => Member::statusBadgeColor($state)),
+                    ->placeholder(__('Never changed'))
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 SelectFilter::make('status')
                     ->options(Member::statusOptions()),
-                SelectFilter::make('monthly_contribution_amount')
-                    ->label(__('Monthly contribution'))
-                    ->options(Member::contributionAmountOptions()),
-                DateColumnRangeFilter::make('joined_at', __('Joined')),
             ])
-            ->headerActions(MyDependentTableActions::headerActions())
             ->recordActions(MyDependentTableActions::recordActions())
             ->recordUrl(function (Model $record): ?string {
-                if (!$record instanceof Member) {
+                if (! $record instanceof Member) {
                     return null;
                 }
 
@@ -136,6 +112,6 @@ class MyDependentsTable
                     TableToolbar::refreshBulkAction(),
                 ]),
             ])
-            ->defaultSort('name'), TableGrouping::members());
+            ->defaultSort('name');
     }
 }

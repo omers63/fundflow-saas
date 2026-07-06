@@ -35,11 +35,12 @@ test('contribution arrears url for member uses tab and filters query keys', func
     $url = ContributionResource::arrearsUrlForMember(42);
 
     expect($url)
-        ->toContain('tab=arrears')
+        ->toContain('tab=ledger')
+        ->toContain('view=arrears')
         ->toContain('filters')
         ->toContain('member_id')
         ->not->toContain('tableFilters')
-        ->not->toContain('?tab=arrears?');
+        ->not->toContain('?tab=ledger?view=arrears');
 });
 
 test('overdue installments url for member uses tab and member filter', function () {

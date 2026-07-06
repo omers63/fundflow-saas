@@ -9,6 +9,7 @@ use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Resources\Members\Concerns\SuppressesMemberWorkspaceTabBadges;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
@@ -26,14 +27,29 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class MessagesRelationManager extends RelationManager
 {
+    use SuppressesMemberWorkspaceTabBadges;
     use TranslatesRelationManagerTitle;
 
     protected static string $relationship = 'directMessages';
 
     protected static ?string $title = 'Messages';
+
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        if (! parent::canViewForRecord($ownerRecord, $pageClass)) {
+            return false;
+        }
+
+        if (! $ownerRecord instanceof Member) {
+            return false;
+        }
+
+        return $ownerRecord->user_id !== null;
+    }
 
     public function form(Schema $schema): Schema
     {

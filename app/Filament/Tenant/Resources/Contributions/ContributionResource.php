@@ -37,13 +37,13 @@ class ContributionResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
 
-    protected static ?string $navigationLabel = 'Collections';
+    protected static ?string $navigationLabel = 'Contributions';
 
     protected static ?int $navigationSort = TenantNavigation::SORT_CONTRIBUTIONS;
 
     public static function getNavigationBadge(): ?string
     {
-        $count = Contribution::pending()->count();
+        $count = self::openCyclePendingCount();
 
         return $count > 0 ? (string) $count : null;
     }
@@ -56,25 +56,45 @@ class ContributionResource extends Resource
     /**
      * @return list<string>
      */
-    public static function listTabKeys(): array
+    public static function primaryTabKeys(): array
+    {
+        return ['cycle', 'ledger'];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function legacyTabKeys(): array
     {
         return ['contributions', 'collect', 'collected', 'arrears'];
     }
 
+    public static function normalizePrimaryTab(?string $tab): string
+    {
+        return match ($tab) {
+            'contributions', 'ledger', 'arrears' => 'ledger',
+            'collect', 'collected', 'cycle', null, '' => 'cycle',
+            default => in_array($tab, self::primaryTabKeys(), true) ? $tab : 'cycle',
+        };
+    }
+
+    /**
+     * @deprecated Use {@see resolveInsightsContext()} for widget snapshots.
+     */
     public static function normalizeListTab(string $tab): string
     {
-        if ($tab === 'ledger') {
-            return 'contributions';
-        }
-
-        return in_array($tab, self::listTabKeys(), true) ? $tab : 'contributions';
+        return match ($tab) {
+            'ledger' => 'contributions',
+            'cycle' => 'collect',
+            default => in_array($tab, ['collect', 'collected', 'arrears', 'contributions'], true) ? $tab : 'contributions',
+        };
     }
 
     public static function listTabLabel(string $tab): string
     {
-        $tab = self::normalizeListTab($tab);
-
         return match ($tab) {
+            'cycle' => __('Cycle'),
+            'ledger', 'contributions' => __('Ledger'),
             'collect' => __('To collect'),
             'collected' => __('Collected'),
             'arrears' => __('Arrears'),
@@ -82,29 +102,54 @@ class ContributionResource extends Resource
         };
     }
 
-    public static function listTabUrl(string $tab): string
+    public static function listTabUrl(string $tab, ?string $cycle = null): string
     {
-        return static::listUrl($tab);
+        return match ($tab) {
+            'collect' => static::listUrl('cycle', cycle: $cycle, segment: 'collect'),
+            'collected' => static::listUrl('cycle', cycle: $cycle, segment: 'collected'),
+            'arrears' => static::listUrl('ledger', cycle: $cycle, view: 'arrears'),
+            'contributions', 'ledger' => static::listUrl('ledger', cycle: $cycle),
+            default => static::listUrl($tab, cycle: $cycle),
+        };
     }
 
     /**
-     * Contributions list URL with optional tab and Filament table filter state (URL key `filters`).
-     *
      * @param  array<string, array<string, mixed>>  $filters
      */
-    public static function listUrl(string $tab = 'contributions', array $filters = [], ?string $cycle = null): string
-    {
-        $tab = self::normalizeListTab($tab);
+    public static function listUrl(
+        string $tab = 'cycle',
+        array $filters = [],
+        ?string $cycle = null,
+        ?string $segment = null,
+        ?string $view = null,
+    ): string {
+        $primaryTab = self::normalizePrimaryTab($tab);
         $parameters = [];
 
-        if ($tab !== 'contributions') {
-            $parameters['tab'] = $tab;
+        if ($primaryTab !== 'cycle') {
+            $parameters['tab'] = $primaryTab;
         }
 
         $cycle ??= self::resolveListCycleKey();
 
         if (filled($cycle)) {
             $parameters['cycle'] = $cycle;
+        }
+
+        $segment ??= match ($tab) {
+            'collect' => 'collect',
+            'collected' => 'collected',
+            default => null,
+        };
+
+        if ($primaryTab === 'cycle' && filled($segment) && $segment !== 'collect') {
+            $parameters['segment'] = $segment;
+        }
+
+        $view ??= $tab === 'arrears' ? 'arrears' : null;
+
+        if ($primaryTab === 'ledger' && $view === 'arrears') {
+            $parameters['view'] = 'arrears';
         }
 
         if ($filters !== []) {
@@ -130,7 +175,7 @@ class ContributionResource extends Resource
 
     public static function arrearsUrlForMember(int|Member $member): string
     {
-        return static::listUrl('arrears', static::memberFilter($member));
+        return static::listUrl('ledger', static::memberFilter($member), view: 'arrears');
     }
 
     public static function memberFilterFromRequest(): ?int
@@ -149,8 +194,22 @@ class ContributionResource extends Resource
 
     public static function contributionArrearsPeriodCount(?int $memberId = null): int
     {
+        $throughMonth = null;
+        $throughYear = null;
+        $live = null;
+
+        if (Livewire::current() instanceof ListContributions) {
+            [$throughMonth, $throughYear] = self::resolveListCycle();
+            $live = self::isViewingOpenCycle();
+        }
+
         return app(LoanDelinquencyService::class)
-            ->countContributionArrearsPeriods($memberId);
+            ->countContributionArrearsPeriods(
+                $memberId,
+                $throughMonth,
+                $throughYear,
+                $live,
+            );
     }
 
     public static function ledgerUrlForMember(int|Member $member): string
@@ -160,20 +219,86 @@ class ContributionResource extends Resource
 
     public static function contributionsUrlForMember(int|Member $member): string
     {
-        return static::listUrl('contributions', static::memberFilter($member));
+        return static::listUrl('ledger', static::memberFilter($member));
     }
 
-    public static function resolveListTab(): string
+    public static function resolvePrimaryTab(): string
     {
         $livewire = Livewire::current();
 
         if ($livewire instanceof ListContributions && filled($livewire->activeTab)) {
             $tab = $livewire->activeTab;
         } else {
-            $tab = request()->string('tab')->toString() ?: 'contributions';
+            $tab = request()->string('tab')->toString() ?: 'cycle';
         }
 
-        return self::normalizeListTab($tab);
+        return self::normalizePrimaryTab($tab);
+    }
+
+    public static function resolveCycleSegment(): string
+    {
+        $livewire = Livewire::current();
+
+        if ($livewire instanceof ListContributions && filled($livewire->cycleSegment)) {
+            return in_array($livewire->cycleSegment, ['collect', 'collected'], true)
+                ? $livewire->cycleSegment
+                : 'collect';
+        }
+
+        $segment = request()->string('segment')->toString();
+
+        if (in_array($segment, ['collect', 'collected'], true)) {
+            return $segment;
+        }
+
+        return match (request()->string('tab')->toString()) {
+            'collected' => 'collected',
+            'collect' => 'collect',
+            default => 'collect',
+        };
+    }
+
+    public static function resolveLedgerView(): ?string
+    {
+        if (self::resolvePrimaryTab() !== 'ledger') {
+            return null;
+        }
+
+        $livewire = Livewire::current();
+
+        if ($livewire instanceof ListContributions && filled($livewire->ledgerView)) {
+            return $livewire->ledgerView === 'arrears' ? 'arrears' : null;
+        }
+
+        if (request()->string('view')->toString() === 'arrears') {
+            return 'arrears';
+        }
+
+        if (request()->string('tab')->toString() === 'arrears') {
+            return 'arrears';
+        }
+
+        return null;
+    }
+
+    /**
+     * Insight/widget context: collect, collected, contributions, arrears.
+     */
+    public static function resolveInsightsContext(): string
+    {
+        if (self::resolvePrimaryTab() === 'ledger') {
+            return self::resolveLedgerView() === 'arrears' ? 'arrears' : 'contributions';
+        }
+
+        return self::resolveCycleSegment();
+    }
+
+    /**
+     * @deprecated Use {@see resolveInsightsContext()}.
+     */
+    public static function resolveListTab(): string
+    {
+        return self::resolveInsightsContext();
     }
 
     public static function resolveListCycleKey(): ?string
@@ -240,6 +365,35 @@ class ContributionResource extends Resource
         });
     }
 
+    public static function tableLayoutKey(): string
+    {
+        if (self::resolvePrimaryTab() === 'cycle') {
+            return 'cycle|'.self::resolveCycleSegment();
+        }
+
+        return self::resolveLedgerView() === 'arrears' ? 'ledger|arrears' : 'ledger';
+    }
+
+    public static function listCycleSegmentUrl(string $segment, ?string $cycle = null): string
+    {
+        return static::listUrl('cycle', cycle: $cycle, segment: $segment);
+    }
+
+    public static function listLedgerViewUrl(?string $view = null, ?string $cycle = null): string
+    {
+        return static::listUrl('ledger', cycle: $cycle, view: $view);
+    }
+
+    public static function listWithCycle(?string $cycleKey): string
+    {
+        $primary = self::resolvePrimaryTab();
+
+        return match ($primary) {
+            'ledger' => self::listUrl('ledger', cycle: $cycleKey, view: self::resolveLedgerView()),
+            default => self::listUrl('cycle', cycle: $cycleKey, segment: self::resolveCycleSegment()),
+        };
+    }
+
     public static function form(Schema $schema): Schema
     {
         return ContributionForm::configure($schema);
@@ -247,14 +401,19 @@ class ContributionResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return match (self::resolveListTab()) {
-            'collect' => ContributionCycleTables::configurePendingMembersTable($table),
-            'collected' => ContributionCycleTables::configureCollectedTable($table),
-            'arrears' => LoanDelinquencyTables::configureContributionArrearsTable(
+        if (self::resolvePrimaryTab() === 'cycle') {
+            return self::resolveCycleSegment() === 'collected'
+                ? ContributionCycleTables::configureCollectedTable($table)
+                : ContributionCycleTables::configurePendingMembersTable($table);
+        }
+
+        if (self::resolveLedgerView() === 'arrears') {
+            return LoanDelinquencyTables::configureContributionArrearsTable(
                 $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Contribution arrears'))),
-            ),
-            default => ContributionsTable::configure($table),
-        };
+            );
+        }
+
+        return ContributionsTable::configure($table);
     }
 
     public static function getPages(): array

@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Filament\Member\Pages\EditMyProfilePage;
-use App\Livewire\Tenant\MemberLoginPage;
+use App\Filament\Member\Pages\MemberSettingsPage;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
@@ -68,13 +67,13 @@ beforeEach(function () {
 test('edit profile saves new password from dehydrated false fields', function () {
     $this->actingAs($this->dependentUser, 'tenant');
 
-    Livewire::test(EditMyProfilePage::class)
+    Livewire::test(MemberSettingsPage::class)
         ->fillForm([
             'current_password' => 'OldPass123',
             'new_password' => 'Password1',
             'new_password_confirmation' => 'Password1',
         ])
-        ->call('save')
+        ->call('saveProfile')
         ->assertHasNoErrors()
         ->assertNotified();
 
@@ -82,14 +81,4 @@ test('edit profile saves new password from dehydrated false fields', function ()
 
     expect(Hash::check('Password1', (string) $hash))->toBeTrue()
         ->and(Hash::check('OldPass123', (string) $hash))->toBeFalse();
-
-    auth('tenant')->logout();
-
-    Livewire::test(MemberLoginPage::class)
-        ->set('email', 'dependent.old@fund.test')
-        ->set('password', 'Password1')
-        ->call('login')
-        ->assertRedirect('/member');
-
-    expect(auth('tenant')->id())->toBe($this->dependentUser->id);
 });

@@ -22,7 +22,7 @@ class MyLoanResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentText;
 
-    protected static ?string $navigationLabel = 'My loans';
+    protected static ?string $navigationLabel = 'Loans';
 
     protected static ?string $modelLabel = 'Loan';
 

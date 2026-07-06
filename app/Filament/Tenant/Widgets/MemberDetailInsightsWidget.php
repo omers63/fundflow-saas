@@ -4,16 +4,23 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Widgets;
 
+use App\Filament\Tenant\Resources\Members\Pages\ViewMember;
 use App\Models\Tenant\Member;
+use App\Services\Loans\LoanDelinquencyService;
 use App\Services\MemberDetailInsightsService;
 use Filament\Widgets\Widget;
 use Livewire\Attributes\On;
 
+/**
+ * @deprecated Replaced by inline workspace summary on {@see ViewMember}.
+ */
 class MemberDetailInsightsWidget extends Widget
 {
     protected static bool $isDiscovered = false;
 
-    protected static bool $isLazy = false;
+    protected static bool $isLazy = true;
+
+    protected ?string $placeholderHeight = '12rem';
 
     protected string $view = 'filament.tenant.widgets.member-detail-insights';
 
@@ -34,6 +41,9 @@ class MemberDetailInsightsWidget extends Widget
         if ($this->memberId === null || $memberId !== $this->memberId) {
             return;
         }
+
+        MemberDetailInsightsService::forgetCachedSnapshot($memberId);
+        app(LoanDelinquencyService::class)->forgetMemberRuntimeCaches($memberId);
     }
 
     /**
@@ -45,7 +55,9 @@ class MemberDetailInsightsWidget extends Widget
             return [];
         }
 
-        $member = Member::query()->find($this->memberId);
+        $member = Member::query()
+            ->with(['cashAccount', 'fundAccount', 'parent', 'dependents', 'user', 'accounts'])
+            ->find($this->memberId);
 
         if ($member === null) {
             return [];

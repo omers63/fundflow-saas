@@ -74,7 +74,7 @@ class MemberPanelProvider extends PanelProvider
                 ReturnToParentPortalAction::make()
                     ->sort(-20),
                 Action::make('profile')
-                    ->label(fn (): string => __('My profile'))
+                    ->label(fn (): string => __('Profile'))
                     ->icon('heroicon-o-user-circle')
                     ->url(fn (): string => MemberSettingsPage::getUrl(['tab' => 'profile']))
                     ->sort(-1),

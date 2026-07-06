@@ -48,7 +48,6 @@ test('member resources use navigation groups and sort order', function (string $
     'cash account' => [CashAccountPage::class, MemberNavigation::GROUP_MY_ACCOUNTS, MemberNavigation::SORT_CASH_ACCOUNT],
     'fund account' => [FundAccountPage::class, MemberNavigation::GROUP_MY_ACCOUNTS, MemberNavigation::SORT_FUND_ACCOUNT],
     'my loans' => [MyLoanResource::class, MemberNavigation::GROUP_LOANS, MemberNavigation::SORT_LOANS],
-    'request a loan' => [ApplyForLoan::class, MemberNavigation::GROUP_LOANS, MemberNavigation::SORT_REQUEST_LOAN],
     'guaranteed loans' => [MyGuaranteedLoanResource::class, MemberNavigation::GROUP_LOANS, MemberNavigation::SORT_GUARANTEED_LOANS],
     'loan calculator' => [LoanCalculatorPage::class, MemberNavigation::GROUP_LOANS, MemberNavigation::SORT_LOAN_CALCULATOR],
     'contributions' => [MyContributionResource::class, MemberNavigation::GROUP_HISTORY, MemberNavigation::SORT_CONTRIBUTIONS],
@@ -69,6 +68,10 @@ test('business day testing page is hidden from member navigation', function () {
     expect(BusinessDayTestingPage::shouldRegisterNavigation())->toBeFalse();
 });
 
+test('apply for loan page is hidden from member navigation', function () {
+    expect(ApplyForLoan::shouldRegisterNavigation())->toBeFalse();
+});
+
 test('legacy member resources remain hidden from navigation', function (string $class) {
     expect($class::shouldRegisterNavigation())->toBeFalse();
 })->with([
@@ -84,6 +87,5 @@ test('restored member features register in navigation', function (string $class)
     expect($class::shouldRegisterNavigation())->toBeTrue();
 })->with([
     MyFundPostingResource::class,
-    ApplyForLoan::class,
     LoanCalculatorPage::class,
 ]);

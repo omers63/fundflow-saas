@@ -105,11 +105,17 @@ Route::middleware([
 
     Route::middleware(['auth:tenant'])->group(function () {
         Route::redirect('/member/my-accounts', '/member/cash-account');
-        Route::redirect('/member/support', '/member/help?tab=requests');
+        Route::get('/member/help', function () {
+            $query = request()->getQueryString();
+
+            return redirect('/member/messages'.($query !== null && $query !== '' ? '?'.$query : ''));
+        });
+        Route::redirect('/member/support', '/member/messages?tab=requests');
         Route::redirect('/member/contribution-settings', '/member/settings?tab=contributions');
         Route::redirect('/member/notification-preferences', '/member/settings?tab=notifications');
         Route::redirect('/member/my-profile', '/member/settings?tab=profile');
-        Route::redirect('/member/my-messages', '/member/help?tab=messages');
+        Route::redirect('/member/edit-profile', '/member/settings?tab=profile');
+        Route::redirect('/member/my-messages', '/member/messages?tab=messages');
 
         Route::middleware('member-portal-maintenance')->group(function () {
             Route::get('/member/dependents/{dependent}/impersonate', StartDependentImpersonationController::class)

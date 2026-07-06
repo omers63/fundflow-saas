@@ -24,7 +24,7 @@ class MemberAlertHistoryTableWidget extends TableWidget
 
     public function getHeading(): ?string
     {
-        return __('Alert history');
+        return __('Alerts');
     }
 
     protected function getTableQuery(): Builder
@@ -44,7 +44,7 @@ class MemberAlertHistoryTableWidget extends TableWidget
     {
         return TableGrouping::apply(
             $table
-                ->heading(__('Alert history'))
+                ->heading(__('Alerts'))
                 ->description(__('Past SMS, email, and in-app alerts sent to you. This list is read-only.'))
                 ->columns([
                     TextColumn::make('channel')

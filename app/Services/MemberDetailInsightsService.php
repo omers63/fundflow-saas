@@ -20,18 +20,45 @@ use App\Services\Loans\LoanDelinquencyService;
 use App\Support\BusinessDay;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
+use App\Support\TenantRuntimeCache;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 
+/**
+ * @deprecated Replaced by {@see MemberWorkspaceSummaryService} for the member view workspace shell.
+ */
 final class MemberDetailInsightsService
 {
+    public static function forgetCachedSnapshot(int $memberId): void
+    {
+        TenantRuntimeCache::forget(self::snapshotCacheKey($memberId));
+    }
+
     /**
      * @return array<string, mixed>
      */
     public function snapshot(Member $member): array
     {
-        $member->loadMissing(['cashAccount', 'fundAccount', 'parent', 'dependents', 'user']);
-        $member = $member->fresh() ?? $member;
+        $memberId = (int) $member->id;
+
+        return TenantRuntimeCache::remember(
+            self::snapshotCacheKey($memberId),
+            45,
+            fn (): array => $this->composeMemberSnapshot($member),
+        );
+    }
+
+    private static function snapshotCacheKey(int $memberId): string
+    {
+        return "member_detail_insights:snapshot:{$memberId}";
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function composeMemberSnapshot(Member $member): array
+    {
+        $member->loadMissing(['cashAccount', 'fundAccount', 'parent', 'dependents', 'user', 'accounts']);
 
         $cycles = app(ContributionCycleService::class);
         $delinquency = app(LoanDelinquencyService::class);
@@ -84,23 +111,25 @@ final class MemberDetailInsightsService
             ? (int) round(($installmentsPaid / $installmentsTotal) * 100)
             : 0;
 
-        $contributionsPostedCount = (int) Contribution::query()
+        $contributionsPostedStats = Contribution::query()
             ->where('member_id', $member->id)
             ->posted()
-            ->count();
+            ->selectRaw('COUNT(*) as posted_count, COALESCE(SUM(amount), 0) as posted_total')
+            ->first();
 
-        $contributionsPostedTotal = (float) Contribution::query()
-            ->where('member_id', $member->id)
-            ->posted()
-            ->sum('amount');
+        $contributionsPostedCount = (int) ($contributionsPostedStats->posted_count ?? 0);
+        $contributionsPostedTotal = (float) ($contributionsPostedStats->posted_total ?? 0);
 
         $pendingPostings = (int) FundPosting::query()
             ->where('member_id', $member->id)
             ->where('status', 'pending')
             ->count();
 
-        $dependentsCount = $member->dependents()->count();
-        $eligibility = $loanService->checkEligibility($member);
+        $dependents = $member->dependents->sortBy('name')->values();
+        $dependentsCount = $dependents->count();
+        $eligibility = $activeLoan !== null
+            ? ['eligible' => false, 'reason' => null]
+            : $loanService->checkEligibility($member);
         $lifetimeDisbursed = $this->lifetimeDisbursedTotal($member);
         $disbursedLoanCount = $this->disbursedLoanCount($member);
         $lifetimeRepaid = $this->lifetimeRepaidTotal($member);
@@ -227,10 +256,8 @@ final class MemberDetailInsightsService
                 'reason' => $eligibility['reason'] ?? null,
             ],
             'household' => [
-                'dependents' => $member->dependents()
-                    ->orderBy('name')
-                    ->limit(5)
-                    ->get()
+                'dependents' => $dependents
+                    ->take(5)
                     ->map(fn (Member $dependent): array => [
                         'name' => $dependent->name,
                         'number' => $dependent->member_number,
@@ -840,28 +867,18 @@ final class MemberDetailInsightsService
 
         $now = BusinessDay::now();
         $oldestDay = $now->copy()->subDays(7)->startOfDay();
-        $dayCounts = [];
-
-        Transaction::query()
+        $dayCounts = Transaction::query()
             ->where('account_id', $accountId)
             ->whereBetween('transacted_at', [$oldestDay, $now->copy()->endOfDay()])
-            ->get(['transacted_at'])
-            ->each(function (Transaction $transaction) use (&$dayCounts): void {
-                $transactedAt = $transaction->transacted_at;
-
-                if ($transactedAt === null) {
-                    return;
-                }
-
-                $key = Carbon::parse((string) $transactedAt)->startOfDay()->toDateString();
-                $dayCounts[$key] = ($dayCounts[$key] ?? 0) + 1;
-            });
+            ->selectRaw('DATE(transacted_at) as day, COUNT(*) as aggregate')
+            ->groupBy('day')
+            ->pluck('aggregate', 'day');
 
         $points = [];
 
         for ($i = 7; $i >= 0; $i--) {
             $day = $now->copy()->subDays($i)->startOfDay()->toDateString();
-            $points[] = $dayCounts[$day] ?? 0;
+            $points[] = (int) ($dayCounts[$day] ?? 0);
         }
 
         return $points;
@@ -894,7 +911,7 @@ final class MemberDetailInsightsService
      */
     private function recentTransactions(Member $member): array
     {
-        $accountIds = $member->accounts()->pluck('id');
+        $accountIds = $member->accounts->pluck('id');
 
         if ($accountIds->isEmpty()) {
             return [];

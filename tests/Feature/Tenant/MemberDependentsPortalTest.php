@@ -3,11 +3,16 @@
 use App\Filament\Member\Pages\MemberSettingsPage;
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Member\Resources\MyDependents\Pages\ListMyDependents;
+use App\Filament\Member\Widgets\MyHouseholdRequestsTableWidget;
+use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\MemberDependentsInsightsService;
 use App\Services\Tenant\ImpersonationService;
+use App\Support\BusinessDaySettings;
+use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
@@ -105,10 +110,24 @@ test('parent can list dependents page', function () {
 
     Livewire::test(ListMyDependents::class)
         ->assertSuccessful()
+        ->assertSet('activeSection', 'dependents')
         ->assertSee('Child Member')
         ->assertSee('MEM-C001')
         ->assertTableActionDoesNotExist('view')
-        ->assertTableActionDoesNotExist('switchToPortal');
+        ->assertTableActionExists('openDependentPortal');
+});
+
+test('parent can switch to household requests section', function () {
+    $this->actingAs($this->parentUser, 'tenant');
+
+    Livewire::test(ListMyDependents::class)
+        ->call('setActiveSection', 'requests')
+        ->assertSet('activeSection', 'requests')
+        ->assertSuccessful();
+
+    Livewire::test(MyHouseholdRequestsTableWidget::class)
+        ->assertTableActionExists('requestAddDependent')
+        ->assertTableActionExists('requestRemoveDependent');
 });
 
 test('dependent table row links to impersonation route', function () {
@@ -129,7 +148,7 @@ test('dependents insights snapshot summarizes household', function () {
 
     expect($snapshot)->toHaveKeys(['hero', 'kpis', 'open_period', 'dependents_count'])
         ->and($snapshot['dependents_count'])->toBe(1)
-        ->and($snapshot['kpis'])->toHaveCount(6);
+        ->and($snapshot['kpis'])->toHaveCount(4);
 });
 
 test('parent can switch into dependent portal', function () {
@@ -248,4 +267,50 @@ test('impersonation route returns forbidden for non parent', function () {
 
     $this->get($this->tenantBaseUrl.route('tenant.member.dependents.impersonate', ['dependent' => $this->dependent], false))
         ->assertForbidden();
+});
+
+test('dependents table shows EMI and contribution status for loan cycle dependent', function () {
+    BusinessDaySettings::saveFromForm('2026-06-15');
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    LoanInstallment::query()->delete();
+    Loan::query()->delete();
+
+    $loan = Loan::create([
+        'member_id' => $this->dependent->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    foreach ([
+        ['month' => 6, 'year' => 2026, 'number' => 1],
+        ['month' => 7, 'year' => 2026, 'number' => 2],
+    ] as $period) {
+        LoanInstallment::create([
+            'loan_id' => $loan->id,
+            'installment_number' => $period['number'],
+            'amount' => 1000,
+            'due_date' => Carbon::create($period['year'], $period['month'], 15),
+            'status' => 'pending',
+        ]);
+    }
+
+    $this->actingAs($this->parentUser, 'tenant');
+
+    Livewire::test(ListMyDependents::class)
+        ->assertSuccessful()
+        ->assertSee(__('EMI: :status', ['status' => __('Pending')]))
+        ->assertSee(__('Contribution: :status', ['status' => __('Exempt')]));
+
+    BusinessDaySettings::saveFromForm(null);
+    Carbon::setTestNow();
 });

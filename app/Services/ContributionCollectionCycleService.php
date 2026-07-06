@@ -9,6 +9,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LateFeeService;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Services\Loans\LoanInstallmentCollectionService;
 use App\Services\Loans\LoanRepaymentService;
 use App\Support\BusinessDay;
@@ -170,7 +171,8 @@ class ContributionCollectionCycleService
      * Overdue contribution periods are settled oldest first. In-window cycles that
      * are not yet past deadline are not auto-collected on cash deposits (including
      * import cut-off balances). For household parents, each overdue cycle is processed
-     * oldest first: allocate to dependents, settle the parent's contribution and loan
+     * oldest first: allocate to dependents (contributions and EMI dues for the cycle),
+     * settle the parent's contribution and loan installments due that cycle, then settle
      * installments due that cycle, then settle each dependent's contributions (oldest
      * arrears through that cycle) and loan installments due that cycle. Later cycles still
      * run when earlier cycles were only partly funded (allocation and settlement use
@@ -368,10 +370,28 @@ class ContributionCollectionCycleService
         $householdMembers = collect([$parent])
             ->merge($dependents);
 
+        $emiCatalog = app(LoanEmiCollectionCatalogService::class);
+
         foreach ($householdMembers as $member) {
             foreach ($this->orderedCollectiblePeriodsForAutoCollection($member) as [$month, $year]) {
                 $periods[sprintf('%04d-%02d', $year, $month)] = [$month, $year];
             }
+        }
+
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $cursor = Carbon::create($openYear, $openMonth, 1)->startOfMonth();
+
+        for ($i = 0; $i < 24; $i++) {
+            $month = (int) $cursor->month;
+            $year = (int) $cursor->year;
+
+            foreach ($householdMembers as $member) {
+                if ($emiCatalog->pendingInstallmentCountForMember($member, $month, $year) > 0) {
+                    $periods[sprintf('%04d-%02d', $year, $month)] = [$month, $year];
+                }
+            }
+
+            $cursor->subMonthNoOverflow();
         }
 
         ksort($periods);

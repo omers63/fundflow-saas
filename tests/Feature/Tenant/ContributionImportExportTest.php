@@ -141,13 +141,14 @@ test('contribution export streams csv with round-trip headers', function () {
 
 test('contributions tab exposes import and export header actions', function () {
     Livewire::test(ListContributions::class)
+        ->set('activeTab', 'ledger')
         ->assertSuccessful()
         ->assertTableActionExists('importContributions')
         ->assertTableActionExists('exportContributions')
         ->assertTableActionExists('create');
 
     Livewire::test(ListContributions::class)
-        ->set('activeTab', 'collect')
+        ->set('activeTab', 'cycle')
         ->assertTableActionDoesNotExist('importContributions')
         ->assertTableActionDoesNotExist('exportContributions');
 });

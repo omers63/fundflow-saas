@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Filament\Member\Resources\MyMessages\Pages;
 
+use App\Filament\Member\Pages\CommunicationsPage;
 use App\Filament\Member\Resources\MyMessages\MyMessageResource;
-use App\Filament\Member\Support\ComposeMemberMessageAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListMyMessages extends ListRecords
@@ -14,22 +14,12 @@ class ListMyMessages extends ListRecords
 
     public function mount(): void
     {
-        parent::mount();
+        $parameters = ['tab' => 'messages'];
 
-        if (request()->boolean('compose') && MyMessageResource::resolveAdminRecipient() !== null) {
-            $this->defaultAction = 'compose';
+        if (request()->boolean('compose')) {
+            $parameters['compose'] = '1';
         }
-    }
 
-    public function getSubheading(): ?string
-    {
-        return __('Secure messages between you and fund administrators.');
-    }
-
-    protected function getHeaderActions(): array
-    {
-        return [
-            ComposeMemberMessageAction::make(),
-        ];
+        $this->redirect(CommunicationsPage::getUrl($parameters), navigate: true);
     }
 }

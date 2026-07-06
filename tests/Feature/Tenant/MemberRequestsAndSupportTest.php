@@ -106,13 +106,13 @@ test('member can submit support request and household request from support page'
     expect(SupportRequest::query()->count())->toBe(1);
 
     Livewire::test(MyMemberRequestsTableWidget::class)
-        ->mountTableAction('requestAddDependent')
-        ->setTableActionData(['details' => 'Please add Jane Doe as my dependent.'])
+        ->mountTableAction('requestFreezeMembership')
+        ->setTableActionData(['reason' => 'Traveling abroad for six months.'])
         ->callMountedTableAction()
         ->assertNotified();
 
     expect(MemberRequest::query()->count())->toBe(1)
-        ->and(MemberRequest::query()->first()->type)->toBe(MemberRequest::TYPE_ADD_DEPENDENT);
+        ->and(MemberRequest::query()->first()->type)->toBe(MemberRequest::TYPE_FREEZE_MEMBERSHIP);
 });
 
 test('admin can approve independence request', function () {

@@ -3,6 +3,8 @@
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DependentCashAllocation;
+use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Services\ContributionCollectionCycleService;
@@ -1100,4 +1102,133 @@ test('onMemberCashIncreased does not drive member cash below zero', function () 
         ->count();
 
     expect($posted)->toBe(0);
+});
+
+test('parent cash credit allocates to dependent in loan repayment cycle for EMI dues', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $parent = Member::create([
+        'member_number' => 'MEM-P-EMI',
+        'name' => 'Parent EMI Household',
+        'email' => 'parent-emi@example.com',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => Carbon::parse('2026-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($parent);
+
+    $dependent = Member::create([
+        'member_number' => 'MEM-D-EMI',
+        'name' => 'Child EMI Borrower',
+        'email' => 'child-emi@example.com',
+        'parent_member_id' => $parent->id,
+        'household_email' => 'parent-emi@example.com',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2026-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($dependent);
+
+    $loan = Loan::create([
+        'member_id' => $dependent->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    foreach ([
+        ['month' => 6, 'year' => 2026, 'number' => 1],
+        ['month' => 7, 'year' => 2026, 'number' => 2],
+        ['month' => 8, 'year' => 2026, 'number' => 3],
+        ['month' => 9, 'year' => 2026, 'number' => 4],
+    ] as $period) {
+        LoanInstallment::create([
+            'loan_id' => $loan->id,
+            'installment_number' => $period['number'],
+            'amount' => 1000,
+            'due_date' => Carbon::create($period['year'], $period['month'], 15),
+            'status' => 'pending',
+        ]);
+    }
+
+    $installment = LoanInstallment::query()
+        ->where('loan_id', $loan->id)
+        ->where('installment_number', 1)
+        ->firstOrFail();
+
+    expect($dependent->fresh()->isExemptFromContributions(6, 2026))->toBeTrue()
+        ->and($this->cycles->dependentAllocationShortfallForPeriod($dependent->fresh(), 6, 2026))->toBe(1000.0);
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->accounting->credit($parent->cashAccount, 1000, 'Parent deposit'),
+    );
+
+    $allocation = $this->cycles->applyDependentAllocationForParentForPeriod($parent->fresh(), 6, 2026);
+
+    expect($allocation['transfers'])->toBe(1)
+        ->and(DependentCashAllocation::query()->where('dependent_member_id', $dependent->id)->exists())->toBeTrue()
+        ->and((float) $dependent->cashAccount->fresh()->balance)->toBe(1000.0);
+
+    $this->collection->onMemberCashIncreased($parent->fresh());
+
+    expect($installment->fresh()->status)->toBe('paid')
+        ->and((float) $parent->cashAccount->fresh()->balance)->toBe(0.0)
+        ->and((float) $dependent->cashAccount->fresh()->balance)->toBe(0.0);
+
+    Carbon::setTestNow();
+});
+
+test('dependent allocation shortfall counts EMI dues when contributions are exempt', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $dependent = Member::create([
+        'member_number' => 'MEM-D-MIX',
+        'name' => 'Child Borrower',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($dependent);
+
+    $loan = Loan::create([
+        'member_id' => $dependent->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    foreach ([
+        ['month' => 6, 'year' => 2026, 'number' => 1],
+        ['month' => 7, 'year' => 2026, 'number' => 2],
+    ] as $period) {
+        LoanInstallment::create([
+            'loan_id' => $loan->id,
+            'installment_number' => $period['number'],
+            'amount' => 1000,
+            'due_date' => Carbon::create($period['year'], $period['month'], 15),
+            'status' => 'pending',
+        ]);
+    }
+
+    expect($dependent->fresh()->isExemptFromContributions(6, 2026))->toBeTrue()
+        ->and($this->cycles->dependentCycleDuesForPeriod($dependent->fresh(), 6, 2026))->toBe(1000.0)
+        ->and($this->cycles->dependentAllocationShortfallForPeriod($dependent->fresh(), 6, 2026))->toBe(1000.0);
+
+    Carbon::setTestNow();
 });

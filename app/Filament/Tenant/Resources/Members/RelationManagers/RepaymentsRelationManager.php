@@ -11,22 +11,39 @@ use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
+use App\Filament\Tenant\Resources\Members\Concerns\SuppressesMemberWorkspaceTabBadges;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class RepaymentsRelationManager extends RelationManager
 {
+    use SuppressesMemberWorkspaceTabBadges;
     use TranslatesRelationManagerTitle;
 
     protected static string $relationship = 'paidLoanInstallments';
 
     protected static ?string $title = 'Repayments';
+
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        if (! parent::canViewForRecord($ownerRecord, $pageClass)) {
+            return false;
+        }
+
+        if (! $ownerRecord instanceof Member) {
+            return false;
+        }
+
+        return $ownerRecord->paidLoanInstallments()->exists();
+    }
 
     public function table(Table $table): Table
     {

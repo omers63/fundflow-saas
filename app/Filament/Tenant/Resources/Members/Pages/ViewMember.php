@@ -9,15 +9,18 @@ use App\Filament\Support\MemberFilamentActions;
 use App\Filament\Tenant\Resources\Members\Concerns\InteractsWithMemberContributionHeaderActions;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\Members\Schemas\MemberViewInfolist;
-use App\Filament\Tenant\Widgets\MemberDetailInsightsWidget;
 use App\Models\Tenant\Member;
+use App\Services\Loans\LoanDelinquencyService;
+use App\Services\MemberWorkspaceSummaryService;
 use App\Support\ArabicDisplaySettings;
 use App\Support\ArabicTypography;
 use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Schemas\Components\View as SchemaView;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Database\Eloquent\Model;
 use Livewire\Attributes\On;
 
 class ViewMember extends ViewRecord
@@ -26,6 +29,11 @@ class ViewMember extends ViewRecord
     use RefreshesResourceRecord;
 
     protected static string $resource = MemberResource::class;
+
+    /**
+     * @var array<string, mixed>|null
+     */
+    private ?array $workspaceSummaryCache = null;
 
     public function getTitle(): string
     {
@@ -47,7 +55,8 @@ class ViewMember extends ViewRecord
     {
         assert($this->record instanceof Member);
 
-        $status = $this->record->adminStatusLabel();
+        $status = Member::statusOptions()[(string) $this->record->status]
+            ?? ucfirst((string) $this->record->status);
 
         return __(':number · :status', [
             'number' => $this->record->member_number,
@@ -82,30 +91,26 @@ class ViewMember extends ViewRecord
         ];
     }
 
-    /**
-     * @return array<int, class-string>
-     */
-    protected function getHeaderWidgets(): array
+    public function content(Schema $schema): Schema
     {
-        return [
-            MemberDetailInsightsWidget::class,
-        ];
-    }
-
-    public function getHeaderWidgetsColumns(): int|array
-    {
-        return 1;
+        return $schema->components([
+            SchemaView::make('filament.tenant.pages.member-workspace-summary')
+                ->viewData(fn (): array => [
+                    'summary' => $this->workspaceSummary(),
+                ]),
+            $this->getRelationManagersContentComponent(),
+        ]);
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function getWidgetData(): array
+    public function workspaceSummary(): array
     {
-        return [
-            ...parent::getWidgetData(),
-            'memberId' => $this->getRecord()->getKey(),
-        ];
+        assert($this->record instanceof Member);
+
+        return $this->workspaceSummaryCache ??= app(MemberWorkspaceSummaryService::class)
+            ->summary($this->record);
     }
 
     protected function getHeaderActions(): array
@@ -123,12 +128,30 @@ class ViewMember extends ViewRecord
         return MemberViewInfolist::configure($schema);
     }
 
+    protected function resolveRecord(int|string $key): Model
+    {
+        /** @var Member $record */
+        $record = parent::resolveRecord($key);
+
+        return $record->load([
+            'parent',
+            'user',
+            'cashAccount',
+            'fundAccount',
+        ]);
+    }
+
     #[On('refresh-member-detail-insights')]
     public function refreshMemberFromInsights(int $memberId): void
     {
         if ((int) $this->getRecord()->getKey() !== $memberId) {
             return;
         }
+
+        MemberWorkspaceSummaryService::forgetCached($memberId);
+        app(LoanDelinquencyService::class)->forgetMemberRuntimeCaches($memberId);
+
+        $this->workspaceSummaryCache = null;
 
         $this->refreshResolvedRecord();
     }

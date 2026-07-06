@@ -75,6 +75,23 @@ beforeEach(function () {
     ]);
 });
 
+test('member portal dashboard does not duplicate contribution not posted in pending actions', function () {
+    Filament::setCurrentPanel('member');
+    app()->setLocale('en');
+    auth('tenant')->login($this->memberUser);
+
+    $cycles = app(ContributionCycleService::class);
+    [$month, $year] = $cycles->currentOpenPeriod();
+    $periodLabel = $cycles->periodLabel($month, $year);
+
+    $snapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
+
+    $contributionPendingLabel = __('Contribution not posted :period', ['period' => $periodLabel]);
+
+    expect(collect($snapshot['pending_actions'])->pluck('label')->all())
+        ->not->toContain($contributionPendingLabel);
+});
+
 test('member dashboard renders redesigned zones with quick actions', function () {
     Filament::setCurrentPanel('member');
     $this->actingAs($this->memberUser, 'tenant');
@@ -88,7 +105,7 @@ test('member dashboard renders redesigned zones with quick actions', function ()
         ->assertSee(__('Fund account'), false)
         ->assertSee(__('Loan eligibility'), false)
         ->assertSee(__('Quick actions'), false)
-        ->assertSee(__('Forecasts'), false)
+        ->assertDontSee(__('Forecasts'), false)
         ->assertSee('ff-member-greeting', false)
         ->assertSee('Dashboard Member', false)
         ->assertSee('ff-member-greeting__spotlights', false)

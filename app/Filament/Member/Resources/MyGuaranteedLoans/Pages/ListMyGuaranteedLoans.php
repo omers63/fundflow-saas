@@ -26,6 +26,6 @@ class ListMyGuaranteedLoans extends ListRecords
 
     public function getSubheading(): ?string
     {
-        return __('Loans where you are named as guarantor.');
+        return __('Loans where you are named as guarantor. Browse the read-only list below.');
     }
 }

@@ -30,7 +30,6 @@ final class ContributionCycleTables
 
         return TableGrouping::apply($table
             ->query(fn (): Builder => $cycles->pendingMembersQueryForPeriod($month, $year))
-            ->headerActions(ContributionListTableHeaderActions::collect())
             ->heading(__('To collect – :period', ['period' => $cycles->periodLabel($month, $year)]))
             ->columns([
                 MemberTableColumns::number(label: __('Member #'))

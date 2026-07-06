@@ -7,7 +7,6 @@ use App\Filament\Tenant\Resources\Members\Pages\CreateMember;
 use App\Filament\Tenant\Resources\Members\Pages\EditMember;
 use App\Filament\Tenant\Resources\Members\Pages\ListMembers;
 use App\Filament\Tenant\Resources\Members\Pages\ViewMember;
-use App\Filament\Tenant\Resources\Members\RelationManagers\AccountsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\ContributionsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\DependentsRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\GuarantorExposureRelationManager;
@@ -18,7 +17,6 @@ use App\Filament\Tenant\Resources\Members\RelationManagers\RepaymentsRelationMan
 use App\Filament\Tenant\Resources\Members\Schemas\MemberForm;
 use App\Filament\Tenant\Resources\Members\Tables\MembersTable;
 use App\Filament\Tenant\Support\TenantNavigation;
-use App\Filament\Tenant\Widgets\MemberDetailInsightsWidget;
 use App\Filament\Tenant\Widgets\MemberInsightsWidget;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
@@ -129,13 +127,12 @@ class MemberResource extends Resource
     public static function getRelations(): array
     {
         return [
-            LoansRelationManager::class,
-            ContributionsRelationManager::class,
             MemberTransactionsTabsRelationManager::class,
-            AccountsRelationManager::class,
-            RepaymentsRelationManager::class,
+            ContributionsRelationManager::class,
+            LoansRelationManager::class,
             DependentsRelationManager::class,
             GuarantorExposureRelationManager::class,
+            RepaymentsRelationManager::class,
             MessagesRelationManager::class,
         ];
     }
@@ -193,19 +190,39 @@ class MemberResource extends Resource
         );
     }
 
-    public static function dispatchMemberDetailInsightsRefresh(?Component $livewire): void
+    public static function dispatchMemberDetailInsightsRefresh(?Component $livewire, ?int $memberId = null): void
     {
         if ($livewire === null) {
             return;
         }
 
-        $targetName = json_encode(
-            app('livewire.factory')->resolveComponentName(MemberDetailInsightsWidget::class),
-            JSON_THROW_ON_ERROR
-        );
+        $memberId ??= self::resolveMemberIdFromLivewire($livewire);
 
-        $livewire->js(
-            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
-        );
+        if ($memberId === null) {
+            return;
+        }
+
+        $livewire->dispatch('refresh-member-detail-insights', memberId: $memberId);
+    }
+
+    private static function resolveMemberIdFromLivewire(Component $livewire): ?int
+    {
+        if (method_exists($livewire, 'getRecord')) {
+            $record = $livewire->getRecord();
+
+            if ($record instanceof Member) {
+                return (int) $record->getKey();
+            }
+        }
+
+        if (method_exists($livewire, 'getOwnerRecord')) {
+            $owner = $livewire->getOwnerRecord();
+
+            if ($owner instanceof Member) {
+                return (int) $owner->getKey();
+            }
+        }
+
+        return null;
     }
 }

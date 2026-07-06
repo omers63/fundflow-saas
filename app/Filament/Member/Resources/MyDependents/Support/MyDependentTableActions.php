@@ -6,6 +6,7 @@ namespace App\Filament\Member\Resources\MyDependents\Support;
 
 use App\Filament\Support\DependentAllocationFilamentActions;
 use App\Filament\Support\TableRecordActionGroups;
+use App\Models\Tenant\Member;
 use App\Support\Tenant\CurrentMember;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -18,15 +19,8 @@ final class MyDependentTableActions
     public static function headerActions(): array
     {
         return [
-            Action::make('apply_for_dependent')
-                ->label(__('Apply for a Dependent'))
-                ->icon('heroicon-o-user-plus')
-                ->color('success')
-                ->url(fn (): string => route('tenant.membership', ['on_behalf' => 1]))
-                ->openUrlInNewTab(),
-
             DependentAllocationFilamentActions::updateAllAllocationsHeaderAction(
-                fn (): ?\App\Models\Tenant\Member => CurrentMember::get(),
+                fn (): ?Member => CurrentMember::get(),
             ),
         ];
     }
@@ -36,10 +30,18 @@ final class MyDependentTableActions
      */
     public static function recordActions(): array
     {
-        return TableRecordActionGroups::wrap(
-            DependentAllocationFilamentActions::forRow(
-                fn (): ?\App\Models\Tenant\Member => CurrentMember::get(),
-            ),
-        );
+        $parentResolver = fn (): ?Member => CurrentMember::get();
+
+        return TableRecordActionGroups::wrap([
+            Action::make('openDependentPortal')
+                ->label(__('Open portal'))
+                ->icon('heroicon-o-arrow-top-right-on-square')
+                ->color('primary')
+                ->url(function (Member $record): string {
+                    return route('tenant.member.dependents.impersonate', ['dependent' => $record]);
+                })
+                ->visible(fn (Member $record): bool => ! in_array($record->status, Member::PORTAL_BLOCKED_STATUSES, true)),
+            ...DependentAllocationFilamentActions::forRow($parentResolver),
+        ]);
     }
 }

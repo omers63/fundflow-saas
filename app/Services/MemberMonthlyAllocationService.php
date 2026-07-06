@@ -33,16 +33,16 @@ class MemberMonthlyAllocationService
     public function allocationChangeBlockedMessage(Member $member): string
     {
         if ($this->memberBelongsToHousehold($member)) {
-            return __('Clear all contribution and repayment arrears for every member in your household before changing monthly allocations.');
+            return __('Clear contribution and repayment arrears from prior cycles for every member in your household before changing monthly allocations.');
         }
 
-        return __('Clear all contribution and repayment arrears before changing your monthly allocation.');
+        return __('Clear contribution and repayment arrears from prior cycles before changing your monthly allocation.');
     }
 
     public function householdHasUnpaidArrears(Member $member): bool
     {
         foreach ($this->householdMembers($member) as $householdMember) {
-            if ($this->delinquency->memberHasArrears($householdMember)) {
+            if ($this->delinquency->memberHasArrearsExcludingOpenCycle($householdMember)) {
                 return true;
             }
         }

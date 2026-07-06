@@ -19,6 +19,8 @@ class MyProfilePage extends Page
 
     protected static bool $shouldRegisterNavigation = false;
 
+    protected static bool $isDiscovered = false;
+
     protected string $view = 'filament.member.pages.my-profile';
 
     public static function getNavigationLabel(): string

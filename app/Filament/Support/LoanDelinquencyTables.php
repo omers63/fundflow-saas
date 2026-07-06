@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
@@ -203,12 +204,16 @@ final class LoanDelinquencyTables
     {
         $currency = Setting::get('general', 'currency', 'USD');
         $delinquency = app(LoanDelinquencyService::class);
+        [$throughMonth, $throughYear] = ContributionResource::resolveListCycle();
+        $liveArrears = ContributionResource::isViewingOpenCycle();
 
         return TableGrouping::apply(
             $table
                 ->headerActions(ContributionListTableHeaderActions::arrears())
                 ->query(null)
-                ->records(function (?string $search, ?string $sortColumn, ?string $sortDirection, ?array $filters) use ($delinquency): Collection {
+                ->recordAction(null)
+                ->recordUrl(null)
+                ->records(function (?string $search, ?string $sortColumn, ?string $sortDirection, ?array $filters) use ($delinquency, $throughMonth, $throughYear, $liveArrears): Collection {
                     $filters ??= [];
 
                     $memberId = isset($filters['member_id']['value'])
@@ -219,7 +224,12 @@ final class LoanDelinquencyTables
                         $memberId = null;
                     }
 
-                    $records = $delinquency->contributionArrearsTableRecords($memberId);
+                    $records = $delinquency->contributionArrearsTableRecords(
+                        $memberId,
+                        $throughMonth,
+                        $throughYear,
+                        $liveArrears,
+                    );
 
                     return $delinquency->filterContributionArrearsRecords(
                         $records,

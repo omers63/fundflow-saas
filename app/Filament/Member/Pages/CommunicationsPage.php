@@ -5,19 +5,13 @@ declare(strict_types=1);
 namespace App\Filament\Member\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
-use App\Filament\Member\Resources\MyMessages\MyMessageResource;
+use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Member\Support\MemberNavigation;
-use App\Filament\Member\Support\MemberPortalViewModal;
+use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\SupportRequest;
-use App\Models\Tenant\User;
 use App\Support\MemberFaq;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
-use Filament\Actions\Action;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Livewire\Attributes\Url;
@@ -26,20 +20,23 @@ class CommunicationsPage extends Page
 {
     use TranslatesPageNavigationLabel;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedLifebuoy;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftRight;
 
-    protected static ?string $navigationLabel = 'Help & FAQ';
+    protected static ?string $navigationLabel = 'Messages';
 
     protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_SELF_SERVICE;
 
     protected static ?int $navigationSort = MemberNavigation::SORT_HELP;
 
-    protected static ?string $slug = 'help';
+    protected static ?string $slug = 'messages';
 
     protected string $view = 'filament.member.pages.communications';
 
     #[Url(as: 'tab', except: 'messages')]
     public string $activeTab = 'messages';
+
+    #[Url(as: 'section', except: 'support')]
+    public string $requestsSection = 'support';
 
     public static function canAccess(): bool
     {
@@ -60,12 +57,20 @@ class CommunicationsPage extends Page
 
     public function getTitle(): string
     {
-        return __('Help & FAQ');
+        return __('Messages');
     }
 
     public function getSubheading(): ?string
     {
-        return __('Messages, support requests, alerts, and frequently asked questions.');
+        return match ($this->activeTab) {
+            'requests' => match ($this->requestsSection) {
+                    'membership' => __('Freeze, withdraw, or change your membership status.'),
+                    default => __('Message fund administrators and track responses.'),
+                },
+            'alerts' => __('Past alerts and notifications delivered to your account.'),
+            'faq' => __('Quick answers about contributions, loans, and account features.'),
+            default => __('Inbox messages from fund administrators.'),
+        };
     }
 
     public function setTab(string $tab): void
@@ -75,91 +80,11 @@ class CommunicationsPage extends Page
         }
     }
 
-    protected function getHeaderActions(): array
+    public function setRequestsSection(string $section): void
     {
-        if ($this->activeTab !== 'requests') {
-            return [];
+        if (in_array($section, ['support', 'membership'], true)) {
+            $this->requestsSection = $section;
         }
-
-        return [
-            MemberPortalViewModal::applyToForm(
-                Action::make('submit_request')
-                    ->label(__('Submit request'))
-                    ->icon('heroicon-o-paper-airplane')
-                    ->color('primary')
-                    ->modalHeading(__('Submit support request'))
-                    ->modalDescription(__('Send a message to fund administrators. They will be notified in the admin panel.'))
-                    ->schema([
-                        Select::make('category')
-                            ->label(__('Category'))
-                            ->options(SupportRequest::categoryOptions())
-                            ->required()
-                            ->native(false),
-                        TextInput::make('subject')
-                            ->label(__('Subject'))
-                            ->required()
-                            ->maxLength(150),
-                        Textarea::make('message')
-                            ->label(__('Message'))
-                            ->required()
-                            ->rows(5)
-                            ->maxLength(2000),
-                    ])
-                    ->action(function (array $data): void {
-                        $user = auth('tenant')->user();
-                        $member = CurrentMember::get();
-
-                        if ($user === null) {
-                            return;
-                        }
-
-                        $supportRequest = SupportRequest::query()->create([
-                            'user_id' => $user->id,
-                            'member_id' => $member?->id,
-                            'category' => $data['category'],
-                            'subject' => $data['subject'],
-                            'message' => $data['message'],
-                        ]);
-
-                        $categoryLabel = SupportRequest::categoryLabel($data['category']);
-                        $memberInfo = $member !== null
-                            ? "{$user->name} (#{$member->member_number})"
-                            : $user->name;
-
-                        $body = __('Request #:id from :from', [
-                            'id' => $supportRequest->id,
-                            'from' => $memberInfo,
-                        ])
-                            ."\n".__('Category: :category', ['category' => $categoryLabel])
-                            ."\n\n".$data['message'];
-
-                        User::query()
-                            ->where('is_admin', true)
-                            ->each(function (User $admin) use ($data, $body, $supportRequest): void {
-                                Notification::make()
-                                    ->title(__('Support request #:id: :subject', [
-                                        'id' => $supportRequest->id,
-                                        'subject' => $data['subject'],
-                                    ]))
-                                    ->body($body)
-                                    ->icon('heroicon-o-chat-bubble-left-right')
-                                    ->iconColor('warning')
-                                    ->sendToDatabase($admin);
-                            });
-
-                        Notification::make()
-                            ->title(__('Request submitted'))
-                            ->body(__('Fund administrators have been notified.'))
-                            ->success()
-                            ->send();
-                    }),
-            ),
-        ];
-    }
-
-    public function messagesUrl(): string
-    {
-        return MyMessageResource::getUrl('index');
     }
 
     /**
@@ -167,8 +92,45 @@ class CommunicationsPage extends Page
      */
     protected function getViewData(): array
     {
+        $member = CurrentMember::get();
+        $user = auth('tenant')->user();
+
+        $openSupportCount = 0;
+        $pendingMembershipCount = 0;
+
+        if ($user !== null) {
+            $openSupportCount = SupportRequest::query()
+                ->where(function ($query) use ($user, $member): void {
+                    $query->where('user_id', $user->id);
+
+                    if ($member !== null) {
+                        $query->orWhere('member_id', $member->id);
+                    }
+                })
+                ->whereIn('status', [SupportRequest::STATUS_OPEN, SupportRequest::STATUS_IN_PROGRESS])
+                ->count();
+        }
+
+        if ($member !== null) {
+            $pendingMembershipCount = MemberRequest::query()
+                ->where('requester_member_id', $member->id)
+                ->where('status', MemberRequest::STATUS_PENDING)
+                ->whereIn('type', [
+                    MemberRequest::TYPE_FREEZE_MEMBERSHIP,
+                    MemberRequest::TYPE_UNFREEZE_MEMBERSHIP,
+                    MemberRequest::TYPE_WITHDRAW_MEMBERSHIP,
+                    MemberRequest::TYPE_REQUEST_INDEPENDENCE,
+                ])
+                ->count();
+        }
+
         return [
             'faqItems' => MemberFaq::items(),
+            'requestsSection' => $this->requestsSection,
+            'openSupportCount' => $openSupportCount,
+            'pendingMembershipCount' => $pendingMembershipCount,
+            'showDependentsLink' => $member?->isParent() ?? false,
+            'dependentsUrl' => MyDependentResource::getUrl('index'),
         ];
     }
 }

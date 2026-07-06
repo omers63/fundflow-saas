@@ -38,6 +38,39 @@ final class MemberUserEmail
         return str_ends_with(strtolower(trim($email)), '@'.self::INTERNAL_DOMAIN);
     }
 
+    public function isSyntheticImportLoginEmail(string $email): bool
+    {
+        return str_ends_with(strtolower(trim($email)), '@import.fundflow.local');
+    }
+
+    public function isDeliverableEmail(string $email): bool
+    {
+        $email = strtolower(trim($email));
+
+        return $email !== ''
+            && ! $this->isInternalLoginEmail($email)
+            && ! $this->isSyntheticImportLoginEmail($email);
+    }
+
+    public function deliverableEmailFor(User $user): ?string
+    {
+        $user->loadMissing('member');
+
+        $candidates = [
+            (string) $user->email,
+            (string) ($user->member?->email ?? ''),
+            (string) ($user->member?->household_email ?? ''),
+        ];
+
+        foreach ($candidates as $candidate) {
+            if ($this->isDeliverableEmail($candidate)) {
+                return strtolower(trim($candidate));
+            }
+        }
+
+        return null;
+    }
+
     public function generateInternalLoginEmail(): string
     {
         do {

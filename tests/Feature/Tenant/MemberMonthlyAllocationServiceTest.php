@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 use App\Filament\Member\Pages\MyContributionSettingsPage;
 use App\Models\Tenant\Account;
+use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\ContributionCycleService;
+use App\Services\Loans\LoanDelinquencyService;
 use App\Services\MemberMonthlyAllocationService;
+use App\Support\BusinessDaySettings;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
@@ -27,7 +31,51 @@ beforeEach(function () {
     User::query()->delete();
 
     $this->allocations = app(MemberMonthlyAllocationService::class);
+    $this->delinquency = app(LoanDelinquencyService::class);
     $this->accounting = app(AccountingService::class);
+});
+
+afterEach(function () {
+    Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('member can change allocation when only the open cycle contribution is unpaid', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+    BusinessDaySettings::saveFromForm('2026-06-15');
+
+    $member = Member::create([
+        'member_number' => 'MEM-OPEN-CYCLE',
+        'name' => 'Open Cycle Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => Carbon::parse('2024-06-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2024-06-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $cursor = Carbon::parse('2024-06-01')->startOfMonth();
+    $openStart = Carbon::create($openYear, $openMonth, 1)->startOfMonth();
+
+    while ($cursor->lt($openStart)) {
+        Contribution::create([
+            'member_id' => $member->id,
+            'period' => Contribution::periodDate((int) $cursor->month, (int) $cursor->year),
+            'amount' => 1000,
+            'status' => 'posted',
+            'posted_at' => $cursor->copy(),
+        ]);
+        $cursor->addMonthNoOverflow();
+    }
+
+    expect($this->delinquency->memberHasArrearsExcludingOpenCycle($member))->toBeFalse()
+        ->and($this->allocations->canChangeMonthlyContribution($member))->toBeTrue();
+
+    $member->update(['monthly_contribution_amount' => 1500]);
+
+    expect((int) $member->fresh()->monthly_contribution_amount)->toBe(1500);
 });
 
 test('independent member cannot change allocation while they have repayment arrears', function () {
@@ -107,6 +155,7 @@ test('parent cannot change allocation when a dependent has contribution arrears'
 
 test('household can change allocation after all arrears are cleared', function () {
     Carbon::setTestNow(Carbon::parse('2026-06-15'));
+    BusinessDaySettings::saveFromForm('2026-06-15');
 
     $member = Member::create([
         'member_number' => 'MEM-CLEAR',
@@ -125,6 +174,7 @@ test('household can change allocation after all arrears are cleared', function (
     expect((int) $member->fresh()->monthly_contribution_amount)->toBe(1500);
 
     Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
 });
 
 test('member portal blocks saving allocation while household has arrears', function () {

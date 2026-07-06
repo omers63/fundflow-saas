@@ -15,6 +15,7 @@ use App\Services\MemberDelinquencyEvaluator;
 use App\Support\BusinessDay;
 use App\Support\InstallmentCollectionStatus;
 use App\Support\LegacyImportedLoan;
+use App\Support\TenantRuntimeCache;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
@@ -32,10 +33,19 @@ class LoanDelinquencyService
     /** @var array<int, Collection<int, array<string, mixed>>> */
     private array $contributionArrearsRecordsByMemberCache = [];
 
+    /** @var array<string, Collection<int, array<string, mixed>>> */
+    private array $contributionArrearsScopedRecordsCache = [];
+
     private ?int $contributionArrearsPeriodCountCache = null;
 
     /** @var array{periods: int, members: int}|null */
     private ?array $contributionArrearsDigestStatsCache = null;
+
+    /** @var list<int>|null */
+    private ?array $delinquentMemberIdsCache = null;
+
+    /** @var array<int, bool> */
+    private array $memberBreachResultCache = [];
 
     public function __construct(
         protected ContributionCycleService $cycles,
@@ -267,6 +277,7 @@ class LoanDelinquencyService
     public function syncMemberDelinquencyStatusForMember(Member $member): array
     {
         $member->refresh();
+        $this->forgetMemberRuntimeCaches((int) $member->id);
 
         if ($member->status !== 'active') {
             return ['delinquent_count' => 0, 'cleared_count' => 0];
@@ -291,29 +302,83 @@ class LoanDelinquencyService
      */
     public function delinquentMemberIds(): array
     {
+        if ($this->delinquentMemberIdsCache !== null) {
+            return $this->delinquentMemberIdsCache;
+        }
+
+        return $this->delinquentMemberIdsCache = TenantRuntimeCache::remember(
+            'loan_delinquency:delinquent_member_ids',
+            60,
+            fn (): array => $this->computeDelinquentMemberIds(),
+        );
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function computeDelinquentMemberIds(): array
+    {
+        $members = Member::query()
+            ->where('status', 'active')
+            ->select(['id', 'monthly_contribution_amount', 'joined_at', 'contribution_arrears_cutoff_date'])
+            ->orderBy('id')
+            ->get();
+
+        $statsByMember = $this->delinquencyEvaluator->evaluateMany($members);
         $ids = [];
 
-        Member::query()
-            ->where('status', 'active')
-            ->select(['id'])
-            ->orderBy('id')
-            ->each(function (Member $member) use (&$ids): void {
-                if ($this->memberBreachesDelinquencyPolicy($member)) {
-                    $ids[] = (int) $member->id;
-                }
-            });
+        foreach ($members as $member) {
+            $stats = $statsByMember[(int) $member->id] ?? null;
+
+            if ($stats === null) {
+                continue;
+            }
+
+            if (
+                $this->delinquencyEvaluator->shouldSuspend(
+                    $stats['trailing_consecutive'],
+                    $stats['rolling_total'],
+                )
+            ) {
+                $ids[] = (int) $member->id;
+            }
+        }
 
         return $ids;
     }
 
     public function memberBreachesDelinquencyPolicy(Member $member): bool
     {
-        $stats = $this->delinquencyEvaluator->evaluate($member);
+        $memberId = (int) $member->id;
 
-        return $this->delinquencyEvaluator->shouldSuspend(
-            $stats['trailing_consecutive'],
-            $stats['rolling_total'],
+        if (array_key_exists($memberId, $this->memberBreachResultCache)) {
+            return $this->memberBreachResultCache[$memberId];
+        }
+
+        return $this->memberBreachResultCache[$memberId] = TenantRuntimeCache::remember(
+            self::memberBreachCacheKey($memberId),
+            60,
+            function () use ($member): bool {
+                $stats = $this->delinquencyEvaluator->evaluate($member);
+
+                return $this->delinquencyEvaluator->shouldSuspend(
+                    $stats['trailing_consecutive'],
+                    $stats['rolling_total'],
+                );
+            },
         );
+    }
+
+    public function forgetMemberRuntimeCaches(int $memberId): void
+    {
+        unset($this->memberBreachResultCache[$memberId]);
+
+        TenantRuntimeCache::forget(self::memberBreachCacheKey($memberId));
+    }
+
+    private static function memberBreachCacheKey(int $memberId): string
+    {
+        return "loan_delinquency:member_breach:{$memberId}";
     }
 
     public function markMemberDelinquent(Member $member): void
@@ -440,21 +505,73 @@ class LoanDelinquencyService
         );
     }
 
-    public function contributionArrearsTableRecords(?int $memberId = null): Collection
-    {
-        if ($memberId !== null) {
-            if (! array_key_exists($memberId, $this->contributionArrearsRecordsByMemberCache)) {
-                $this->contributionArrearsRecordsByMemberCache[$memberId] = $this->buildContributionArrearsTableRecords($memberId);
+    public function contributionArrearsTableRecords(
+        ?int $memberId = null,
+        ?int $throughMonth = null,
+        ?int $throughYear = null,
+        ?bool $live = null,
+    ): Collection {
+        if ($throughMonth === null || $throughYear === null) {
+            if ($memberId !== null) {
+                if (! array_key_exists($memberId, $this->contributionArrearsRecordsByMemberCache)) {
+                    $this->contributionArrearsRecordsByMemberCache[$memberId] = $this->buildContributionArrearsTableRecords($memberId);
+                }
+
+                return $this->contributionArrearsRecordsByMemberCache[$memberId];
             }
 
-            return $this->contributionArrearsRecordsByMemberCache[$memberId];
+            return $this->contributionArrearsAllRecordsCache ??= $this->buildContributionArrearsTableRecords(null);
         }
 
-        return $this->contributionArrearsAllRecordsCache ??= $this->buildContributionArrearsTableRecords(null);
+        $context = $this->contributionArrearsEvaluationContext($throughMonth, $throughYear, $live);
+        $cacheKey = $this->contributionArrearsScopedCacheKey($memberId, $context);
+
+        if (isset($this->contributionArrearsScopedRecordsCache[$cacheKey])) {
+            return $this->contributionArrearsScopedRecordsCache[$cacheKey];
+        }
+
+        return $this->contributionArrearsScopedRecordsCache[$cacheKey] = $this->buildContributionArrearsTableRecords($memberId, $context);
     }
 
-    public function countContributionArrearsPeriods(?int $memberId = null): int
+    public function countContributionArrearsMembers(
+        ?int $throughMonth = null,
+        ?int $throughYear = null,
+        ?bool $live = null,
+    ): int {
+        if ($throughMonth === null || $throughYear === null) {
+            return $this->contributionArrearsDigestStats()['members'];
+        }
+
+        return $this->contributionArrearsTableRecords(null, $throughMonth, $throughYear, $live)
+            ->pluck('member_id')
+            ->unique()
+            ->count();
+    }
+
+    /**
+     * @param  array{anchor_month: int, anchor_year: int, as_of: Carbon}  $context
+     */
+    private function contributionArrearsScopedCacheKey(?int $memberId, array $context): string
     {
+        return sprintf(
+            '%s|%d-%02d|%s',
+            $memberId ?? 'all',
+            $context['anchor_year'],
+            $context['anchor_month'],
+            $context['as_of']->toDateString(),
+        );
+    }
+
+    public function countContributionArrearsPeriods(
+        ?int $memberId = null,
+        ?int $throughMonth = null,
+        ?int $throughYear = null,
+        ?bool $live = null,
+    ): int {
+        if ($throughMonth !== null && $throughYear !== null) {
+            return $this->contributionArrearsTableRecords($memberId, $throughMonth, $throughYear, $live)->count();
+        }
+
         if ($memberId !== null) {
             return $this->contributionArrearsTableRecords($memberId)->count();
         }
@@ -471,6 +588,29 @@ class LoanDelinquencyService
     }
 
     /**
+     * @return array{anchor_month: int, anchor_year: int, as_of: Carbon}
+     */
+    public function contributionArrearsEvaluationContext(int $throughMonth, int $throughYear, ?bool $live = null): array
+    {
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $live ??= $throughMonth === $openMonth && $throughYear === $openYear;
+
+        if ($live) {
+            return [
+                'anchor_month' => $throughMonth,
+                'anchor_year' => $throughYear,
+                'as_of' => BusinessDay::now(),
+            ];
+        }
+
+        return [
+            'anchor_month' => $throughMonth,
+            'anchor_year' => $throughYear,
+            'as_of' => $this->cycles->deadline($throughMonth, $throughYear)->copy()->addDay()->startOfDay(),
+        ];
+    }
+
+    /**
      * @return array{periods: int, members: int}
      */
     private function contributionArrearsDigestStats(): array
@@ -479,6 +619,18 @@ class LoanDelinquencyService
             return $this->contributionArrearsDigestStatsCache;
         }
 
+        return $this->contributionArrearsDigestStatsCache = TenantRuntimeCache::remember(
+            'loan_delinquency:contribution_arrears_digest',
+            60,
+            fn (): array => $this->computeContributionArrearsDigestStats(),
+        );
+    }
+
+    /**
+     * @return array{periods: int, members: int}
+     */
+    private function computeContributionArrearsDigestStats(): array
+    {
         $periods = 0;
         $membersWithArrears = 0;
 
@@ -491,6 +643,7 @@ class LoanDelinquencyService
 
         $memberIds = $members->pluck('id')->map(fn ($id): int => (int) $id)->all();
         $globalExemptions = $this->preloadGlobalContributionExemptions($memberIds);
+        $graceLoansByMember = $this->preloadLoanGraceCycles($memberIds);
         $preloadedContributions = $this->memberContributionsByPeriodForMembers($memberIds);
         $now = BusinessDay::now();
 
@@ -500,6 +653,7 @@ class LoanDelinquencyService
                 $preloadedContributions[$member->id] ?? [],
                 $now,
                 $globalExemptions[$member->id] ?? false,
+                graceLoansByMember: $graceLoansByMember,
             );
 
             $unpaidCount = count($unpaidPeriods);
@@ -514,7 +668,7 @@ class LoanDelinquencyService
 
         $this->contributionArrearsPeriodCountCache = $periods;
 
-        return $this->contributionArrearsDigestStatsCache = [
+        return [
             'periods' => $periods,
             'members' => $membersWithArrears,
         ];
@@ -523,10 +677,16 @@ class LoanDelinquencyService
     /**
      * One table row per unpaid period (Filament array records).
      *
+     * @param  array{anchor_month: int, anchor_year: int, as_of: Carbon}|null  $evaluationContext
      * @return Collection<int, array<string, mixed>>
      */
-    private function buildContributionArrearsTableRecords(?int $memberId): Collection
+    private function buildContributionArrearsTableRecords(?int $memberId, ?array $evaluationContext = null): Collection
     {
+        $evaluationContext ??= $this->contributionArrearsEvaluationContext(
+            ...$this->cycles->currentOpenPeriod(),
+            live: true,
+        );
+
         $rows = collect();
 
         $membersQuery = Member::query()
@@ -542,17 +702,24 @@ class LoanDelinquencyService
         $members = $membersQuery->get();
         $memberIds = $members->pluck('id')->map(fn ($id): int => (int) $id)->all();
         $globalExemptions = $this->preloadGlobalContributionExemptions($memberIds);
-        $preloadedContributions = $this->memberContributionsByPeriodForMembers($memberIds);
+        $graceLoansByMember = $this->preloadLoanGraceCycles($memberIds);
+        $preloadedContributions = $this->memberContributionsByPeriodForMembers(
+            $memberIds,
+            $this->contributionArrearsEarliestPeriodDateForContext($evaluationContext),
+        );
 
         $members
-            ->each(function (Member $member) use ($rows, $preloadedContributions, $globalExemptions): void {
+            ->each(function (Member $member) use ($rows, $preloadedContributions, $globalExemptions, $graceLoansByMember, $evaluationContext): void {
                 $contributionsByPeriod = $preloadedContributions[$member->id] ?? [];
 
                 foreach ($this->buildUnpaidContributionPeriods(
                     $member,
                     $contributionsByPeriod,
-                    BusinessDay::now(),
+                    $evaluationContext['as_of'],
                     $globalExemptions[$member->id] ?? false,
+                    $evaluationContext['anchor_month'],
+                    $evaluationContext['anchor_year'],
+                    $graceLoansByMember,
                 ) as $period) {
                     $rows->push([
                         '__key' => $period['record_key'],
@@ -762,12 +929,91 @@ class LoanDelinquencyService
 
     private function contributionArrearsEarliestPeriodDate(): string
     {
+        return $this->contributionArrearsEarliestPeriodDateForContext();
+    }
+
+    /**
+     * @param  array{anchor_month: int, anchor_year: int, as_of: Carbon}|null  $evaluationContext
+     */
+    private function contributionArrearsEarliestPeriodDateForContext(?array $evaluationContext = null): string
+    {
+        if ($evaluationContext !== null) {
+            return Carbon::create($evaluationContext['anchor_year'], $evaluationContext['anchor_month'], 1)
+                ->startOfMonth()
+                ->subMonths(self::CONTRIBUTION_ARREARS_LOOKBACK_MONTHS - 1)
+                ->toDateString();
+        }
+
         [$curM, $curY] = $this->cycles->currentOpenPeriod();
 
         return Carbon::create($curY, $curM, 1)
             ->startOfMonth()
             ->subMonths(self::CONTRIBUTION_ARREARS_LOOKBACK_MONTHS - 1)
             ->toDateString();
+    }
+
+    /**
+     * @param  list<int>  $memberIds
+     * @return array<int, list<array{first_repayment_month: ?int, first_repayment_year: ?int}>>
+     */
+    private function preloadLoanGraceCycles(array $memberIds): array
+    {
+        if ($memberIds === []) {
+            return [];
+        }
+
+        $grouped = [];
+
+        Loan::query()
+            ->whereIn('member_id', $memberIds)
+            ->whereIn('status', ['active', 'approved'])
+            ->where('has_grace_cycle', true)
+            ->get(['member_id', 'first_repayment_month', 'first_repayment_year'])
+            ->each(function (Loan $loan) use (&$grouped): void {
+                $grouped[(int) $loan->member_id][] = [
+                    'first_repayment_month' => $loan->first_repayment_month !== null
+                        ? (int) $loan->first_repayment_month
+                        : null,
+                    'first_repayment_year' => $loan->first_repayment_year !== null
+                        ? (int) $loan->first_repayment_year
+                        : null,
+                ];
+            });
+
+        return $grouped;
+    }
+
+    /**
+     * @param  array<int, list<array{first_repayment_month: ?int, first_repayment_year: ?int}>>  $graceLoansByMember
+     */
+    private function memberIsInLoanGracePeriodForCycle(
+        int $memberId,
+        int $month,
+        int $year,
+        array $graceLoansByMember,
+    ): bool {
+        foreach ($graceLoansByMember[$memberId] ?? [] as $loan) {
+            $firstMonth = $loan['first_repayment_month'];
+            $firstYear = $loan['first_repayment_year'];
+
+            if ($firstMonth === null) {
+                return true;
+            }
+
+            if ($firstYear === null) {
+                continue;
+            }
+
+            if ($firstYear > $year) {
+                return true;
+            }
+
+            if ($firstYear === $year && $firstMonth > $month) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function contributionPeriodKey(Contribution $contribution): string
@@ -795,13 +1041,18 @@ class LoanDelinquencyService
         array $postedContributionsByPeriod,
         Carbon $now,
         bool $isGloballyExemptFromContributions = false,
+        ?int $anchorMonth = null,
+        ?int $anchorYear = null,
+        array $graceLoansByMember = [],
     ): array {
         if ((float) $member->monthly_contribution_amount <= 0 || $isGloballyExemptFromContributions) {
             return [];
         }
 
         $periods = [];
-        [$curM, $curY] = $this->cycles->currentOpenPeriod();
+        [$curM, $curY] = $anchorMonth !== null && $anchorYear !== null
+            ? [$anchorMonth, $anchorYear]
+            : $this->cycles->currentOpenPeriod();
         $cursor = Carbon::create($curY, $curM, 1)->startOfMonth();
 
         for ($i = 0; $i < self::CONTRIBUTION_ARREARS_LOOKBACK_MONTHS; $i++) {
@@ -815,7 +1066,7 @@ class LoanDelinquencyService
                 continue;
             }
 
-            if ($member->isInLoanGracePeriodForCycle($month, $year)) {
+            if ($this->memberIsInLoanGracePeriodForCycle((int) $member->id, $month, $year, $graceLoansByMember)) {
                 $cursor->subMonthNoOverflow();
 
                 continue;
@@ -857,8 +1108,10 @@ class LoanDelinquencyService
      * @param  list<int>  $memberIds
      * @return array<int, array<string, Contribution>>
      */
-    private function memberContributionsByPeriodForMembers(array $memberIds): array
-    {
+    private function memberContributionsByPeriodForMembers(
+        array $memberIds,
+        ?string $earliestPeriodDate = null,
+    ): array {
         if ($memberIds === []) {
             return [];
         }
@@ -867,7 +1120,7 @@ class LoanDelinquencyService
 
         Contribution::query()
             ->whereIn('member_id', $memberIds)
-            ->where('period', '>=', $this->contributionArrearsEarliestPeriodDate())
+            ->where('period', '>=', $earliestPeriodDate ?? $this->contributionArrearsEarliestPeriodDate())
             ->orderBy('id')
             ->get(['id', 'member_id', 'period', 'status', 'is_late'])
             ->each(function (Contribution $contribution) use (&$grouped): void {

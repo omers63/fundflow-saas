@@ -1,60 +1,51 @@
 @php
-    use App\Models\Tenant\Member;
+use App\Models\Tenant\Member;
 
-    $user = $user ?? auth('tenant')->user();
-    $member = $member ?? $user?->member;
+$user = $user ?? auth('tenant')->user();
+$member = $member ?? $user?->member;
 @endphp
 
 <div class="space-y-6">
-    <div class="member-profile-identity-card">
-        <div class="flex flex-col gap-5 sm:flex-row sm:items-center">
-            <div
-                class="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/30 bg-white/20 text-3xl font-bold text-white select-none ring-2 ring-white/30">
-                @if ($url = $user?->avatarPublicUrl())
-                    <img src="{{ $url }}" alt="{{ $user?->name }}" class="absolute inset-0 h-full w-full object-cover">
-                @else
-                    {{ strtoupper(mb_substr($user?->name ?? '?', 0, 1)) }}
-                @endif
-            </div>
-            <div class="min-w-0 flex-1">
-                <p class="member-profile-identity-heading">
-                    <x-arabic-text :text="$user?->name" />
-                </p>
-                @if ($member)
-                    <p class="member-profile-identity-muted mt-1 font-mono text-sm">{{ $member->member_number }}</p>
-                @endif
-                <div class="mt-2 flex flex-wrap gap-3 text-sm">
-                    <span class="member-profile-identity-muted flex items-center gap-1">
-                        <x-heroicon-o-envelope class="h-4 w-4 shrink-0" />
-                        {{ $user?->email }}
-                    </span>
-                    @if ($user?->phone)
-                        <span class="member-profile-identity-muted flex items-center gap-1">
-                            <x-heroicon-o-phone class="h-4 w-4 shrink-0" />
-                            {{ $user->phone }}
-                        </span>
-                    @endif
-                </div>
-            </div>
-            @if ($member)
-                <div class="shrink-0">
-                    <span
-                        class="member-profile-status {{ $member->status === 'active' ? 'member-profile-status--active' : 'member-profile-status--inactive' }}">
-                        {{ Member::statusOptions()[$member->status] ?? $member->status }}
-                    </span>
-                </div>
-            @endif
-        </div>
-    </div>
-
     @if ($member)
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <x-member::stat-card :label="__('Member since')"
-                :value="$member->joined_at?->locale(app()->getLocale())->translatedFormat('d M Y') ?? '—'" />
-            <x-member::stat-card :label="__('Monthly contribution')" :amount="(float) $member->monthly_contribution_amount" />
-            <x-member::stat-card :label="__('Fund balance')" :amount="$member->getFundBalance()" />
-        </div>
+        <x-member::detail-grid :items="[
+                ['label' => __('Member number'), 'value' => $member->member_number],
+                [
+                    'label' => __('Member since'),
+                    'value' => $member->joined_at?->locale(app()->getLocale())->translatedFormat('d M Y') ?? '—',
+                ],
+                [
+                    'label' => __('Status'),
+                    'value' => Member::statusOptions()[$member->status] ?? $member->status,
+                ],
+            ]" />
     @endif
+
+    <form wire:submit="saveProfile">
+        {{ $this->form }}
+
+        <div class="mt-6">
+            <x-filament::button type="submit">
+                {{ __('Save account details') }}
+            </x-filament::button>
+        </div>
+    </form>
+
+    <x-member::panel :title="__('Payout bank details')">
+        @if (filled($payoutIban))
+            <x-member::detail-grid :items="[
+                ['label' => __('Registered IBAN'), 'value' => $payoutIban],
+            ]" />
+            <p class="ff-member-dashboard-meta mt-3 mb-0">
+                {{ __('Cash-out withdrawals are sent to this IBAN. Contact support to update your payout details.') }}
+            </p>
+        @else
+            <x-member::notice tone="blue">
+                <p class="m-0">
+                    {{ __('No payout IBAN is on file. Contact fund administrators to register your bank account for cash-out withdrawals.') }}
+                </p>
+            </x-member::notice>
+        @endif
+    </x-member::panel>
 
     @if ($householdProfiles->isNotEmpty() && $member?->isParent())
         <x-member::panel :title="__('Household profiles')">

@@ -23,7 +23,7 @@ class MyContributionResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCurrencyDollar;
 
-    protected static ?string $navigationLabel = 'My Contributions';
+    protected static ?string $navigationLabel = 'Contributions';
 
     protected static ?string $modelLabel = 'Contribution';
 

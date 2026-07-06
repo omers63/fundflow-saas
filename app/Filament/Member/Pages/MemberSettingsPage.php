@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Filament\Member\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Member\Concerns\ManagesMemberProfileForm;
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Member\Support\ReturnToParentPortalAction;
 use App\Filament\Member\Support\SwitchHouseholdProfileAction;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberCommunicationPreference;
@@ -19,19 +21,24 @@ use App\Support\Tenant\CurrentMember;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
 
-class MemberSettingsPage extends Page
+class MemberSettingsPage extends Page implements HasForms
 {
+    use InteractsWithForms;
+    use ManagesMemberProfileForm;
     use TranslatesPageNavigationLabel;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserCircle;
 
-    protected static ?string $navigationLabel = 'Settings';
+    protected static ?string $navigationLabel = 'Profile';
 
     protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_SELF_SERVICE;
 
@@ -62,12 +69,12 @@ class MemberSettingsPage extends Page
 
     public function getTitle(): string
     {
-        return __('Settings');
+        return __('Profile');
     }
 
     public function getSubheading(): ?string
     {
-        return __('Profile, contributions, notifications, and payout details.');
+        return __('Update your profile, payout details, contributions, and notification preferences.');
     }
 
     public function mount(): void
@@ -78,13 +85,23 @@ class MemberSettingsPage extends Page
             auth('tenant')->setUser($user->fresh(['member']));
         }
 
+        if (! in_array($this->activeTab, ['profile', 'contributions', 'notifications'], true)) {
+            $this->activeTab = 'profile';
+        }
+
         $this->loadContributionSettings();
         $this->loadPreferences();
+        $this->fillProfileForm();
+    }
+
+    public function form(Schema $schema): Schema
+    {
+        return $this->profileForm($schema);
     }
 
     public function setTab(string $tab): void
     {
-        if (in_array($tab, ['profile', 'contributions', 'notifications', 'payout'], true)) {
+        if (in_array($tab, ['profile', 'contributions', 'notifications'], true)) {
             $this->activeTab = $tab;
         }
     }
@@ -249,8 +266,14 @@ class MemberSettingsPage extends Page
 
     protected function getHeaderActions(): array
     {
+        $actions = [];
+
+        if (ReturnToParentPortalAction::isImpersonating()) {
+            $actions[] = ReturnToParentPortalAction::make($this);
+        }
+
         if ($this->activeTab === 'contributions') {
-            $actions = [
+            $actions = array_merge($actions, [
                 Action::make('save_allocation')
                     ->label(__('Save allocation'))
                     ->icon('heroicon-o-check-circle')
@@ -335,7 +358,7 @@ class MemberSettingsPage extends Page
 
                         $this->loadContributionSettings();
                     }),
-            ];
+            ]);
 
             $member = CurrentMember::get();
 
@@ -350,28 +373,12 @@ class MemberSettingsPage extends Page
             return $actions;
         }
 
-        if ($this->activeTab === 'profile') {
-            return [
-                Action::make('edit_profile')
-                    ->label(__('Edit profile'))
-                    ->icon('heroicon-o-pencil-square')
-                    ->url(fn (): string => EditMyProfilePage::getUrl(panel: 'member'))
-                    ->color('primary'),
-            ];
-        }
-
-        return [];
+        return $actions;
     }
 
     protected function currentMember(): ?Member
     {
-        $user = auth('tenant')->user();
-
-        if (! $user instanceof User) {
-            return null;
-        }
-
-        return $user->activeMember()?->load(['user', 'parent', 'dependents.user']);
+        return $this->profileMember();
     }
 
     private function resolvePayoutIban(?Member $member): ?string

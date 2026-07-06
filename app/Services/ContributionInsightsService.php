@@ -8,6 +8,7 @@ use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Support\BusinessDay;
@@ -77,7 +78,7 @@ final class ContributionInsightsService
             : 0;
 
         $delinquency = app(LoanDelinquencyService::class);
-        $arrearsPeriods = $delinquency->countContributionArrearsPeriods();
+        $arrearsPeriods = ContributionResource::contributionArrearsPeriodCount();
         $targets = $this->cycles->expectedCollectionTargetsForPeriod($openMonth, $openYear);
         $forecast = app(CycleForecastService::class)->project(
             $openMonth,
@@ -186,7 +187,7 @@ final class ContributionInsightsService
                 ['key' => 'remaining', 'label' => __('Remaining'), 'value' => (string) $missingOpenPeriod, 'sub' => __('Members'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $missingOpenPeriod > 0],
                 ['key' => 'contributions', 'label' => __('Contributions'), 'value' => (string) Contribution::query()->posted()->count(), 'sub' => __('All time'), 'icon' => 'heroicon-o-book-open', 'accent' => 'sky', 'active' => true],
                 ['key' => 'collect', 'label' => __('To collect'), 'value' => (string) $missingOpenPeriod, 'sub' => __('Open period'), 'icon' => 'heroicon-o-arrow-down-tray', 'accent' => 'violet', 'active' => $missingOpenPeriod > 0],
-                ['key' => 'arrears', 'label' => __('Arrears'), 'value' => (string) app(LoanDelinquencyService::class)->countContributionArrearsPeriods(), 'sub' => __('Past periods'), 'icon' => 'heroicon-o-banknotes', 'accent' => 'rose', 'active' => true],
+                ['key' => 'arrears', 'label' => __('Arrears'), 'value' => (string) ContributionResource::contributionArrearsPeriodCount(), 'sub' => __('Past periods'), 'icon' => 'heroicon-o-banknotes', 'accent' => 'rose', 'active' => true],
             ], [
                 'posted' => $collectedUrl,
                 'amount' => $collectedUrl,
@@ -210,10 +211,16 @@ final class ContributionInsightsService
     public function arrearsSnapshot(): array
     {
         $delinquency = app(LoanDelinquencyService::class);
-        $counts = $delinquency->digestCounts();
-        $arrearsPeriods = $delinquency->countContributionArrearsPeriods();
-        $arrearsMembers = $counts['contribution_arrears_members'];
-        $delinquentMembers = $counts['delinquent_members'];
+        [$month, $year] = ContributionResource::resolveListCycle();
+        $live = ContributionResource::isViewingOpenCycle();
+        $arrearsPeriods = ContributionResource::contributionArrearsPeriodCount();
+        $arrearsMembers = $delinquency->countContributionArrearsMembers($month, $year, $live);
+        $delinquentMembers = count($delinquency->delinquentMemberIds());
+        $overdueInstallments = (int) LoanInstallment::query()
+            ->where('status', 'overdue')
+            ->whereHas('loan', fn ($query) => $query->where('status', 'active'))
+            ->count();
+        $guarantorAtRisk = $delinquency->loansAtGuarantorRiskCount();
 
         $arrearsUrl = ContributionResource::listTabUrl('arrears');
 
@@ -238,8 +245,8 @@ final class ContributionInsightsService
                 ['key' => 'members', 'label' => __('Members'), 'value' => (string) $arrearsMembers, 'sub' => __('With arrears'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $arrearsMembers > 0],
                 ['key' => 'delinquent', 'label' => __('Delinquent'), 'value' => (string) $delinquentMembers, 'sub' => __('Members'), 'icon' => 'heroicon-o-user-minus', 'accent' => 'violet', 'active' => $delinquentMembers > 0],
                 ['key' => 'collect', 'label' => __('To collect'), 'value' => (string) ContributionResource::openCyclePendingCount(), 'sub' => __('Open period'), 'icon' => 'heroicon-o-arrow-down-tray', 'accent' => 'sky', 'active' => true],
-                ['key' => 'overdue', 'label' => __('Overdue EMIs'), 'value' => (string) $counts['overdue_installments'], 'sub' => __('Loans'), 'icon' => 'heroicon-o-calendar-days', 'accent' => 'rose', 'active' => $counts['overdue_installments'] > 0],
-                ['key' => 'guarantor', 'label' => __('Guarantor'), 'value' => (string) $counts['guarantor_at_risk'], 'sub' => __('Exposure'), 'icon' => 'heroicon-o-shield-exclamation', 'accent' => 'amber', 'active' => $counts['guarantor_at_risk'] > 0],
+                ['key' => 'overdue', 'label' => __('Overdue EMIs'), 'value' => (string) $overdueInstallments, 'sub' => __('Loans'), 'icon' => 'heroicon-o-calendar-days', 'accent' => 'rose', 'active' => $overdueInstallments > 0],
+                ['key' => 'guarantor', 'label' => __('Guarantor'), 'value' => (string) $guarantorAtRisk, 'sub' => __('Exposure'), 'icon' => 'heroicon-o-shield-exclamation', 'accent' => 'amber', 'active' => $guarantorAtRisk > 0],
             ], [
                 'arrears' => $arrearsUrl,
                 'members' => $arrearsUrl,
@@ -252,8 +259,8 @@ final class ContributionInsightsService
                 'arrears_periods' => $arrearsPeriods,
                 'arrears_members' => $arrearsMembers,
                 'delinquent_members' => $delinquentMembers,
-                'overdue_installments' => $counts['overdue_installments'],
-                'guarantor_at_risk' => $counts['guarantor_at_risk'],
+                'overdue_installments' => $overdueInstallments,
+                'guarantor_at_risk' => $guarantorAtRisk,
                 'arrears_url' => $arrearsUrl,
                 'collect_url' => ContributionResource::listTabUrl('collect'),
                 'delinquent_url' => MemberResource::listTabUrl('delinquent'),

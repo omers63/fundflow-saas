@@ -9,9 +9,8 @@ use App\Services\MemberDetailInsightsService;
 use App\Support\Insights\InsightFormatter;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();

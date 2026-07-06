@@ -13,6 +13,7 @@ use App\Filament\Support\TableToolbar;
 use App\Filament\Tables\Columns\TextColumn;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Members\Concerns\InteractsWithMemberContributionHeaderActions;
+use App\Filament\Tenant\Resources\Members\Concerns\SuppressesMemberWorkspaceTabBadges;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
@@ -23,6 +24,7 @@ use Illuminate\Database\Eloquent\Builder;
 class ContributionsRelationManager extends RelationManager
 {
     use InteractsWithMemberContributionHeaderActions;
+    use SuppressesMemberWorkspaceTabBadges;
     use TranslatesRelationManagerTitle;
 
     protected static string $relationship = 'contributions';
