@@ -2,25 +2,49 @@
 
 use App\Filament\Member\Pages\MemberSettingsPage;
 use App\Livewire\Tenant\MemberLoginPage;
+use App\Models\Tenant\Contribution;
+use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\ContributionCycleService;
+use App\Services\Loans\LoanDelinquencyService;
 use App\Services\MembershipApplicationApprovalService;
 use App\Services\Tenant\HouseholdAccessService;
 use App\Services\Tenant\ImpersonationService;
+use App\Support\BusinessDaySettings;
+use App\Support\MemberPortalMaintenance;
 use App\Support\MemberUserEmail;
+use Carbon\Carbon;
+use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
 
+afterEach(function () {
+    Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
+});
+
 beforeEach(function () {
     $this->initializeTenancy();
+    MemberPortalMaintenance::disable();
+    Filament::setCurrentPanel('member');
 
     Member::query()->delete();
     User::query()->delete();
+    Contribution::query()->delete();
+    LoanInstallment::query()->delete();
+    Loan::query()->delete();
+
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+    BusinessDaySettings::saveFromForm('2026-06-15');
+
+    $joinedAt = Carbon::parse('2024-06-01');
 
     $this->parentUser = User::create([
         'name' => 'Parent User',
@@ -36,7 +60,8 @@ beforeEach(function () {
         'email' => 'family@fund.test',
         'household_email' => 'family@fund.test',
         'monthly_contribution_amount' => 1000,
-        'joined_at' => now(),
+        'joined_at' => $joinedAt,
+        'contribution_arrears_cutoff_date' => $joinedAt,
         'status' => 'active',
         'portal_pin' => bcrypt('1234'),
     ]);
@@ -45,7 +70,7 @@ beforeEach(function () {
 
     $this->dependentUser = User::create([
         'name' => 'Dependent User',
-        'email' => 'family@fund.test',
+        'email' => app(MemberUserEmail::class)->generateInternalLoginEmail(),
         'password' => bcrypt('DependentPass123'),
         'is_admin' => false,
     ]);
@@ -58,11 +83,33 @@ beforeEach(function () {
         'email' => 'family@fund.test',
         'household_email' => 'family@fund.test',
         'monthly_contribution_amount' => 500,
-        'joined_at' => now(),
+        'joined_at' => $joinedAt,
+        'contribution_arrears_cutoff_date' => $joinedAt,
         'status' => 'active',
     ]);
 
     app(AccountingService::class)->createMemberAccounts($this->dependent);
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $cursor = $joinedAt->copy()->startOfMonth();
+    $openStart = Carbon::create($openYear, $openMonth, 1)->startOfMonth();
+
+    while ($cursor->lt($openStart)) {
+        foreach ([$this->parent, $this->dependent] as $member) {
+            Contribution::create([
+                'member_id' => $member->id,
+                'period' => Contribution::periodDate((int) $cursor->month, (int) $cursor->year),
+                'amount' => (int) $member->monthly_contribution_amount,
+                'status' => 'posted',
+                'posted_at' => $cursor->copy(),
+            ]);
+        }
+        $cursor->addMonthNoOverflow();
+    }
+
+    app(LoanDelinquencyService::class)->forgetMemberRuntimeCaches((int) $this->parent->id);
+    app(LoanDelinquencyService::class)->forgetMemberRuntimeCaches((int) $this->dependent->id);
 });
 
 test('household login shows netflix style profile picker', function () {
@@ -115,31 +162,6 @@ test('dependent can verify with password and sign in', function () {
     expect(auth('tenant')->id())->toBe($this->dependentUser->id);
 });
 
-test('separated dependent can verify with own password on household profile picker', function () {
-    $this->dependent->update([
-        'email' => 'dependent.unique@fund.test',
-        'is_separated' => true,
-        'direct_login_enabled' => true,
-    ]);
-
-    $this->dependentUser->update([
-        'email' => 'dependent.unique@fund.test',
-        'password' => 'SeparatedPass123',
-    ]);
-
-    Livewire::test(MemberLoginPage::class)
-        ->set('email', 'family@fund.test')
-        ->set('password', 'ParentPass123')
-        ->call('login')
-        ->assertSet('showProfilePicker', true)
-        ->call('selectProfile', $this->dependent->id)
-        ->set('verificationSecret', 'SeparatedPass123')
-        ->call('verifySelectedProfile')
-        ->assertRedirect('/member');
-
-    expect(auth('tenant')->id())->toBe($this->dependentUser->id);
-});
-
 test('household dependent with internal login email can verify with password on profile picker', function () {
     $internalEmail = app(MemberUserEmail::class)->generateInternalLoginEmail();
 
@@ -162,7 +184,7 @@ test('household dependent with internal login email can verify with password on 
     expect(auth('tenant')->id())->toBe($this->dependentUser->id);
 });
 
-test('separated dependent approved from application can verify on household profile picker', function () {
+test('dependent approved from application uses household email and profile picker login', function () {
     $parentApplication = MembershipApplication::create([
         'name' => 'Parent Applicant',
         'email' => 'household@example.test',
@@ -191,7 +213,8 @@ test('separated dependent approved from application can verify on household prof
     $child = Member::query()->where('name', 'Adult Child')->firstOrFail();
     $childUser = $child->user;
 
-    expect($child->is_separated)->toBeTrue()
+    expect($child->email)->toBe('household@example.test')
+        ->and($child->is_separated)->toBeFalse()
         ->and(Hash::check('ChildPass123', (string) $childUser?->password))->toBeTrue();
 
     Livewire::test(MemberLoginPage::class)
@@ -219,7 +242,6 @@ test('member without dependents logs in directly', function () {
 });
 
 test('parent can access household profiles on settings page', function () {
-    Filament\Facades\Filament::setCurrentPanel('member');
     $this->actingAs($this->parentUser, 'tenant');
 
     Livewire::test(MemberSettingsPage::class)
@@ -229,27 +251,28 @@ test('parent can access household profiles on settings page', function () {
         ->assertSee('Dependent User');
 });
 
-test('separated dependent can login directly after profile email and password change', function () {
+test('changing dependent email to a unique address detaches them from the household', function () {
     $this->actingAs($this->dependentUser, 'tenant');
 
     app(HouseholdAccessService::class)->updateMemberLoginEmail(
         $this->dependent,
         $this->dependentUser,
-        'separated.dependent@fund.test',
+        'independent.dependent@fund.test',
     );
 
-    $this->dependentUser->refresh()->update(['password' => 'NewSeparatedPass123']);
+    $this->dependentUser->refresh()->update(['password' => 'NewIndependentPass123']);
     $this->dependent->refresh();
 
-    expect($this->dependent->is_separated)->toBeTrue()
-        ->and($this->dependent->direct_login_enabled)->toBeTrue()
-        ->and($this->dependentUser->fresh()->email)->toBe('separated.dependent@fund.test');
+    expect($this->dependent->parent_member_id)->toBeNull()
+        ->and($this->dependent->is_separated)->toBeFalse()
+        ->and($this->dependent->email)->toBe('independent.dependent@fund.test')
+        ->and($this->dependentUser->fresh()->email)->toBe('independent.dependent@fund.test');
 
     auth('tenant')->logout();
 
     Livewire::test(MemberLoginPage::class)
-        ->set('email', 'separated.dependent@fund.test')
-        ->set('password', 'NewSeparatedPass123')
+        ->set('email', 'independent.dependent@fund.test')
+        ->set('password', 'NewIndependentPass123')
         ->call('login')
         ->assertSet('showProfilePicker', false)
         ->assertRedirect('/member');
@@ -257,48 +280,21 @@ test('separated dependent can login directly after profile email and password ch
     expect(auth('tenant')->id())->toBe($this->dependentUser->id);
 });
 
-test('separated dependent can login via household profile picker after profile email and password change', function () {
-    $this->actingAs($this->dependentUser, 'tenant');
-
+test('independent member direct login accepts mixed case email', function () {
     app(HouseholdAccessService::class)->updateMemberLoginEmail(
         $this->dependent,
         $this->dependentUser,
-        'separated.dependent@fund.test',
+        'independent.dependent@fund.test',
     );
 
-    $this->dependentUser->refresh()->update(['password' => 'NewSeparatedPass123']);
-    $this->dependent->refresh();
-
-    auth('tenant')->logout();
-
-    Livewire::test(MemberLoginPage::class)
-        ->set('email', 'family@fund.test')
-        ->set('password', 'ParentPass123')
-        ->call('login')
-        ->assertSet('showProfilePicker', true)
-        ->call('selectProfile', $this->dependent->id)
-        ->set('verificationSecret', 'NewSeparatedPass123')
-        ->call('verifySelectedProfile')
-        ->assertRedirect('/member');
-
-    expect(auth('tenant')->id())->toBe($this->dependentUser->id);
-});
-
-test('separated dependent direct login accepts mixed case email', function () {
-    $this->dependent->update([
-        'email' => 'separated.dependent@fund.test',
-        'is_separated' => true,
-        'direct_login_enabled' => true,
-    ]);
-
-    $this->dependentUser->update([
-        'email' => 'separated.dependent@fund.test',
-        'password' => 'NewSeparatedPass123',
+    $this->dependentUser->refresh()->update([
+        'email' => 'independent.dependent@fund.test',
+        'password' => 'NewIndependentPass123',
     ]);
 
     Livewire::test(MemberLoginPage::class)
-        ->set('email', 'Separated.Dependent@Fund.test')
-        ->set('password', 'NewSeparatedPass123')
+        ->set('email', 'Independent.Dependent@Fund.test')
+        ->set('password', 'NewIndependentPass123')
         ->call('login')
         ->assertRedirect('/member');
 

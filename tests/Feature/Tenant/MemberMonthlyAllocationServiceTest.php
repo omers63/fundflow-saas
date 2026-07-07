@@ -145,7 +145,7 @@ test('parent cannot change allocation when a dependent has contribution arrears'
 
     expect($this->allocations->householdHasUnpaidArrears($parent))->toBeTrue()
         ->and($this->allocations->canChangeMonthlyContribution($parent))->toBeFalse()
-        ->and($this->allocations->canChangeMonthlyContribution($dependent))->toBeFalse();
+        ->and($this->allocations->canSelfChangeMonthlyContribution($dependent))->toBeFalse();
 
     expect(fn () => $parent->update(['monthly_contribution_amount' => 1500]))
         ->toThrow(InvalidArgumentException::class);
@@ -172,6 +172,168 @@ test('household can change allocation after all arrears are cleared', function (
     $member->update(['monthly_contribution_amount' => 1500]);
 
     expect((int) $member->fresh()->monthly_contribution_amount)->toBe(1500);
+
+    Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('sponsored dependent cannot self-change allocation even when arrears are clear', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+    BusinessDaySettings::saveFromForm('2026-06-15');
+
+    $parent = Member::create([
+        'member_number' => 'MEM-SP-P',
+        'name' => 'Sponsor Parent',
+        'email' => 'sponsor-parent@example.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => Carbon::parse('2024-06-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2024-06-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($parent);
+
+    $dependent = Member::create([
+        'member_number' => 'MEM-SP-D',
+        'name' => 'Sponsored Child',
+        'email' => 'sponsored-child@example.test',
+        'parent_member_id' => $parent->id,
+        'household_email' => 'sponsor-parent@example.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-06-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2024-06-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($dependent);
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $cursor = Carbon::parse('2024-06-01')->startOfMonth();
+    $openStart = Carbon::create($openYear, $openMonth, 1)->startOfMonth();
+
+    while ($cursor->lt($openStart)) {
+        foreach ([$parent, $dependent] as $member) {
+            Contribution::create([
+                'member_id' => $member->id,
+                'period' => Contribution::periodDate((int) $cursor->month, (int) $cursor->year),
+                'amount' => (int) $member->monthly_contribution_amount,
+                'status' => 'posted',
+                'posted_at' => $cursor->copy(),
+            ]);
+        }
+        $cursor->addMonthNoOverflow();
+    }
+
+    expect($this->allocations->canSelfChangeMonthlyContribution($dependent))->toBeFalse();
+
+    expect(fn () => $dependent->update(['monthly_contribution_amount' => 1500]))
+        ->toThrow(InvalidArgumentException::class);
+
+    Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('independent member can change allocation when a former household parent has arrears', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+    BusinessDaySettings::saveFromForm('2026-06-15');
+
+    $parent = Member::create([
+        'member_number' => 'MEM-SEP-P',
+        'name' => 'Former Household Parent',
+        'email' => 'separated-parent@example.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => Carbon::parse('2024-06-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2024-06-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($parent);
+
+    $independent = Member::create([
+        'member_number' => 'MEM-SEP-D',
+        'name' => 'Independent Former Child',
+        'email' => 'independent-child@example.test',
+        'household_email' => 'independent-child@example.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-06-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2024-06-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($independent);
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $cursor = Carbon::parse('2024-06-01')->startOfMonth();
+    $openStart = Carbon::create($openYear, $openMonth, 1)->startOfMonth();
+
+    while ($cursor->lt($openStart)) {
+        Contribution::create([
+            'member_id' => $independent->id,
+            'period' => Contribution::periodDate((int) $cursor->month, (int) $cursor->year),
+            'amount' => 500,
+            'status' => 'posted',
+            'posted_at' => $cursor->copy(),
+        ]);
+        $cursor->addMonthNoOverflow();
+    }
+
+    expect($this->allocations->householdHasUnpaidArrears($parent))->toBeTrue()
+        ->and($this->allocations->canSelfChangeMonthlyContribution($independent))->toBeTrue()
+        ->and($this->allocations->canChangeMonthlyContribution($parent))->toBeFalse();
+
+    $independent->update(['monthly_contribution_amount' => 1000]);
+
+    expect((int) $independent->fresh()->monthly_contribution_amount)->toBe(1000);
+
+    Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('parent allocation is not blocked by detached member arrears', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+    BusinessDaySettings::saveFromForm('2026-06-15');
+
+    $parent = Member::create([
+        'member_number' => 'MEM-SEP-P2',
+        'name' => 'Clear Parent',
+        'email' => 'clear-parent@example.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => Carbon::parse('2024-06-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2024-06-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($parent);
+
+    Member::create([
+        'member_number' => 'MEM-SEP-D2',
+        'name' => 'Arrears Independent Child',
+        'email' => 'arrears-independent@example.test',
+        'household_email' => 'arrears-independent@example.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-06-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2024-06-01'),
+        'status' => 'active',
+    ]);
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $cursor = Carbon::parse('2024-06-01')->startOfMonth();
+    $openStart = Carbon::create($openYear, $openMonth, 1)->startOfMonth();
+
+    while ($cursor->lt($openStart)) {
+        Contribution::create([
+            'member_id' => $parent->id,
+            'period' => Contribution::periodDate((int) $cursor->month, (int) $cursor->year),
+            'amount' => 1000,
+            'status' => 'posted',
+            'posted_at' => $cursor->copy(),
+        ]);
+        $cursor->addMonthNoOverflow();
+    }
+
+    expect($this->allocations->canChangeMonthlyContribution($parent))->toBeTrue();
+
+    $parent->update(['monthly_contribution_amount' => 1500]);
+
+    expect((int) $parent->fresh()->monthly_contribution_amount)->toBe(1500);
 
     Carbon::setTestNow();
     BusinessDaySettings::saveFromForm(null);

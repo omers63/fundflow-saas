@@ -33,30 +33,12 @@ final class MemberHouseholdLoginService
 
     public function memberAllowsDirectLogin(Member $member): bool
     {
-        return $member->parent_member_id !== null
-            && ($member->direct_login_enabled || $member->is_separated);
+        return false;
     }
 
     public function resolveDirectLoginUser(string $email, string $password): ?User
     {
-        $email = $this->normalizeEmail($email);
-
-        $user = User::query()
-            ->where('email', $email)
-            ->whereHas('member', fn ($query) => $query
-                ->whereNotNull('parent_member_id')
-                ->where(function ($query): void {
-                    $query
-                        ->where('direct_login_enabled', true)
-                        ->orWhere('is_separated', true);
-                }))
-            ->first();
-
-        if ($user === null || ! $this->verifyPassword($user, $password)) {
-            return null;
-        }
-
-        return $user;
+        return null;
     }
 
     public function resolveHouseholdParent(string $email): ?Member

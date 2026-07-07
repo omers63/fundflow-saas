@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Filament\Member\Concerns;
 
+use App\Filament\Member\Support\MembershipApplicationProfileSchema;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\Tenant\HouseholdAccessService;
+use App\Services\Tenant\MemberMembershipProfileService;
 use App\Support\StorageFilename;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
@@ -31,25 +33,27 @@ trait ManagesMemberProfileForm
         $user = auth('tenant')->user();
         $member = $this->profileMember();
 
-        if (! $user instanceof User) {
+        if (! $user instanceof User || $member === null) {
             return;
         }
 
+        $profileService = app(MemberMembershipProfileService::class);
+
         $this->form->fill([
             'name' => $user->name,
-            'phone' => $user->phone,
             'email' => $user->email,
             'preferred_locale' => $user->preferredLocale(),
             'avatar' => filled($user->avatar_path)
                 ? (User::normalizePublicDiskRelativePath($user->avatar_path) ?? $user->avatar_path)
                 : null,
             'remove_avatar' => false,
-            'set_parent_pin' => $member?->isParent() ?? false,
+            'set_parent_pin' => $member->isParent(),
             'current_password' => null,
             'new_password' => null,
             'new_password_confirmation' => null,
             'pin' => null,
             'pin_confirmation' => null,
+            ...$profileService->formState($profileService->findForMember($member), $user),
         ]);
     }
 
@@ -61,19 +65,16 @@ trait ManagesMemberProfileForm
                 Section::make(__('Account details'))
                     ->schema([
                         TextInput::make('name')
+                            ->label(__('Full name'))
                             ->required()
                             ->maxLength(255)
                             ->columnSpanFull(),
-                        TextInput::make('phone')
-                            ->tel()
-                            ->maxLength(50)
-                            ->helperText(__('Used for fund contact and notifications.')),
                         TextInput::make('email')
                             ->email()
                             ->required()
                             ->maxLength(255)
                             ->columnSpanFull()
-                            ->helperText(__('Dependents that use a unique login email become separated (direct login enabled). Using household email rejoins and disables direct login.')),
+                            ->helperText(__('Dependents must keep the household email. Changing to a different email unlinks you from the parent household.')),
                         Select::make('preferred_locale')
                             ->label(__('Preferred language'))
                             ->options([
@@ -135,6 +136,7 @@ trait ManagesMemberProfileForm
                             ->visible(fn ($get): bool => (bool) $get('set_parent_pin')),
                     ])
                     ->columns(2),
+                ...MembershipApplicationProfileSchema::sections(),
             ]);
     }
 
@@ -169,7 +171,6 @@ trait ManagesMemberProfileForm
 
         $user->update([
             'name' => (string) $data['name'],
-            'phone' => (string) ($data['phone'] ?? ''),
             'preferred_locale' => (string) $preferredLocale,
         ]);
 
@@ -182,7 +183,7 @@ trait ManagesMemberProfileForm
             } catch (\InvalidArgumentException) {
                 Notification::make()
                     ->title(__('Email already in use.'))
-                    ->body(__('Choose a unique email, or use your household email to rejoin.'))
+                    ->body(__('Choose a unique email, or use your household email to stay linked.'))
                     ->danger()
                     ->send();
 
@@ -241,6 +242,8 @@ trait ManagesMemberProfileForm
         if ($member->isParent() && $shouldSetPin && $pin !== '') {
             $member->update(['portal_pin' => Hash::make($pin)]);
         }
+
+        app(MemberMembershipProfileService::class)->syncFromPortalForm($member, $user->fresh(), $data);
 
         Notification::make()->title(__('Profile updated successfully.'))->success()->send();
 

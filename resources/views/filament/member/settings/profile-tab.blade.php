@@ -8,16 +8,16 @@ $member = $member ?? $user?->member;
 <div class="space-y-6">
     @if ($member)
         <x-member::detail-grid :items="[
-                ['label' => __('Member number'), 'value' => $member->member_number],
-                [
-                    'label' => __('Member since'),
-                    'value' => $member->joined_at?->locale(app()->getLocale())->translatedFormat('d M Y') ?? '—',
-                ],
-                [
-                    'label' => __('Status'),
-                    'value' => Member::statusOptions()[$member->status] ?? $member->status,
-                ],
-            ]" />
+            ['label' => __('Member number'), 'value' => $member->member_number],
+            [
+                'label' => __('Member since'),
+                'value' => $member->joined_at?->locale(app()->getLocale())->translatedFormat('d M Y') ?? '—',
+            ],
+            [
+                'label' => __('Status'),
+                'value' => Member::statusOptions()[$member->status] ?? $member->status,
+            ],
+        ]" />
     @endif
 
     <form wire:submit="saveProfile">
@@ -30,23 +30,6 @@ $member = $member ?? $user?->member;
         </div>
     </form>
 
-    <x-member::panel :title="__('Payout bank details')">
-        @if (filled($payoutIban))
-            <x-member::detail-grid :items="[
-                ['label' => __('Registered IBAN'), 'value' => $payoutIban],
-            ]" />
-            <p class="ff-member-dashboard-meta mt-3 mb-0">
-                {{ __('Cash-out withdrawals are sent to this IBAN. Contact support to update your payout details.') }}
-            </p>
-        @else
-            <x-member::notice tone="blue">
-                <p class="m-0">
-                    {{ __('No payout IBAN is on file. Contact fund administrators to register your bank account for cash-out withdrawals.') }}
-                </p>
-            </x-member::notice>
-        @endif
-    </x-member::panel>
-
     @if ($householdProfiles->isNotEmpty() && $member?->isParent())
         <x-member::panel :title="__('Household profiles')">
             <p class="ff-member-dashboard-meta mb-3">
@@ -54,9 +37,9 @@ $member = $member ?? $user?->member;
             </p>
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                 @foreach ($householdProfiles as $profile)
-                    @php
-                        $isCurrent = (int) $profile->user_id === (int) auth('tenant')->id();
-                    @endphp
+                                @php
+                                    $isCurrent = (int) $profile->user_id === (int) auth('tenant')->id();
+                                @endphp
                     <div @class([
                         'flex flex-col items-center rounded-xl border p-3 text-center',
                         'border-emerald-500 bg-emerald-50' => $isCurrent,
@@ -77,20 +60,12 @@ $member = $member ?? $user?->member;
                         @if ($isCurrent)
                             <span class="mt-2 text-[10px] font-semibold text-emerald-600">{{ __('Current') }}</span>
                         @elseif (!$profile->isParent())
-                            @if ($profile->is_separated)
-                                <button type="button"
-                                    wire:click="mountAction('switchHouseholdProfile', { memberId: {{ $profile->id }} })"
-                                    class="mt-2 text-[10px] font-semibold text-sky-600 hover:underline">
-                                    {{ __('Switch') }}
-                                </button>
-                            @else
-                                <a href="{{ route('tenant.member.dependents.impersonate', ['dependent' => $profile->id]) }}"
-                                    class="mt-2 text-[10px] font-semibold text-sky-600 hover:underline">
-                                    {{ __('Switch') }}
-                                </a>
-                            @endif
+                            <a href="{{ route('tenant.member.dependents.impersonate', ['dependent' => $profile->id]) }}"
+                                class="mt-2 text-[10px] font-semibold text-sky-600 hover:underline">
+                                {{ __('Switch') }}
+                            </a>
                         @endif
-                    </div>
+                                </div>
                 @endforeach
             </div>
         </x-member::panel>

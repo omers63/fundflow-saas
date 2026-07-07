@@ -20,6 +20,8 @@ class Member extends Model
 {
     use HasFactory;
 
+    private static bool $bypassSelfAllocationGuard = false;
+
     /** @var list<int> */
     public const CONTRIBUTION_STEPS = [500, 1000, 1500, 2000, 2500, 3000];
 
@@ -75,17 +77,39 @@ class Member extends Model
     protected static function booted(): void
     {
         static::updating(function (Member $member): void {
-            if (! $member->isDirty('monthly_contribution_amount')) {
+            if (! $member->isDirty('monthly_contribution_amount') || self::$bypassSelfAllocationGuard) {
                 return;
             }
 
-            app(MemberMonthlyAllocationService::class)->assertCanChangeMonthlyContribution($member);
+            app(MemberMonthlyAllocationService::class)->assertCanSelfChangeMonthlyContribution($member);
         });
+    }
+
+    /**
+     * @template TReturn
+     *
+     * @param  callable(): TReturn  $callback
+     * @return TReturn
+     */
+    public static function withoutSelfAllocationGuard(callable $callback): mixed
+    {
+        self::$bypassSelfAllocationGuard = true;
+
+        try {
+            return $callback();
+        } finally {
+            self::$bypassSelfAllocationGuard = false;
+        }
     }
 
     public function isParent(): bool
     {
         return $this->parent_member_id === null;
+    }
+
+    public function isSponsoredDependent(): bool
+    {
+        return $this->parent_member_id !== null;
     }
 
     public function householdHead(): self
@@ -324,15 +348,15 @@ class Member extends Model
         $label = self::statusOptions()[(string) $this->status] ?? ucfirst((string) $this->status);
 
         if ($this->status === 'active' && app(LoanDelinquencyService::class)->isDelinquent($this)) {
-            return $label . ' · ' . __('arrears');
+            return $label.' · '.__('arrears');
         }
 
         if ($this->status === 'inactive' && $this->frozen_at !== null) {
-            return $label . ' · ' . __('frozen');
+            return $label.' · '.__('frozen');
         }
 
         if ($this->status === 'withdrawn' && $this->payout_frozen_at !== null) {
-            return $label . ' · ' . __('payout hold');
+            return $label.' · '.__('payout hold');
         }
 
         return $label;

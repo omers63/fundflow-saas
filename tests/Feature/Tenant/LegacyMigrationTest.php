@@ -792,7 +792,7 @@ test('legacy payment import posts split classified rows that share the same sour
     Account::masterCash()->update(['balance' => 100_000]);
     Account::masterFund()->update(['balance' => 100_000]);
     AccountingService::withoutMemberCashCollection(
-        fn() => app(AccountingService::class)->credit($member->cashAccount, 10_000, 'Seed'),
+        fn () => app(AccountingService::class)->credit($member->cashAccount, 10_000, 'Seed'),
     );
 
     $loan = Loan::create([
@@ -828,7 +828,7 @@ test('legacy payment import posts split classified rows that share the same sour
     ]);
 
     $result = ContributionService::withoutPostedNotifications(
-        fn(): array => app(LegacyPaymentImportService::class)->import($classifiedPath),
+        fn (): array => app(LegacyPaymentImportService::class)->import($classifiedPath),
     );
 
     expect($result['loan_repayments'])->toBe(1)
@@ -867,9 +867,6 @@ test('legacy migration classify payments writes downloadable classified csv', fu
         ->fillForm([
             'cutoff_date' => '2025-12-31',
             'default_password' => 'password123',
-            'members_csv' => ['legacy-migration/working/members.csv'],
-            'loans_csv' => ['legacy-migration/working/loans.csv'],
-            'payments_csv' => ['legacy-migration/working/payments.csv'],
         ])
         ->call('importMembers')
         ->assertNotified(__('Members imported'))
@@ -923,9 +920,6 @@ test('legacy migration blocks classify payments until members and loans are impo
         ->test(LegacyMigrationPage::class)
         ->fillForm([
             'cutoff_date' => '2025-12-31',
-            'members_csv' => ['legacy-migration/working/members.csv'],
-            'loans_csv' => ['legacy-migration/working/loans.csv'],
-            'payments_csv' => ['legacy-migration/working/payments.csv'],
         ])
         ->call('classifyPayments')
         ->assertNotified(__('Import loans first'))
@@ -973,9 +967,6 @@ test('legacy migration can classify payments without default password', function
         ->fillForm([
             'cutoff_date' => '2025-12-31',
             'default_password' => '',
-            'members_csv' => ['legacy-migration/working/members.csv'],
-            'loans_csv' => ['legacy-migration/working/loans.csv'],
-            'payments_csv' => ['legacy-migration/working/payments.csv'],
         ])
         ->call('classifyPayments')
         ->assertSet('classifiedPaymentsReady', true);

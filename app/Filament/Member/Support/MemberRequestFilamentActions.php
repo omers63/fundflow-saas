@@ -107,7 +107,7 @@ final class MemberRequestFilamentActions
             ->visible(fn (): bool => CurrentMember::get()?->parent_member_id !== null)
             ->requiresConfirmation()
             ->modalHeading(__('Request independence'))
-            ->modalDescription(__('Leave your household parent’s sponsorship. Dependent add/remove requests are managed on the My dependents page.'))
+            ->modalDescription(__('Ask fund administrators to unlink you from your household parent. After approval, you will manage your own membership.'))
             ->action(fn () => self::submit($service, MemberRequest::TYPE_REQUEST_INDEPENDENCE, []));
     }
 

@@ -115,9 +115,6 @@
                                 </span>
                                 <span class="member-login-profile-card__role">
                                     {{ $profile['is_parent'] ? __('Parent profile') : __('Dependent profile') }}
-                                    @if ($profile['is_separated'])
-                                        · {{ __('Separated') }}
-                                    @endif
                                 </span>
                             </button>
                         @endforeach

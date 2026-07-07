@@ -10,6 +10,7 @@ use App\Services\AccountingService;
 use App\Services\DependentAllocationService;
 use App\Services\MembershipApplicationApprovalService;
 use App\Services\MembershipEnrollmentService;
+use App\Support\BusinessDaySettings;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
@@ -19,6 +20,7 @@ uses(InitializesTenancy::class);
 
 beforeEach(function () {
     Carbon::setTestNow(Carbon::parse('2026-06-15'));
+    BusinessDaySettings::saveFromForm('2026-06-15');
 
     $tenant = $this->initializeTenancy();
     Filament::setCurrentPanel('member');
@@ -82,6 +84,7 @@ beforeEach(function () {
 
 afterEach(function () {
     Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
 });
 
 test('parent can update dependent allocation via service', function () {

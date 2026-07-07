@@ -16,6 +16,7 @@ use App\Support\LegacyMigrationFundingStrategySettings;
 use App\Support\LegacyMigrationGraceCycleSettings;
 use App\Support\LegacyMigrationSettlementThresholdSettings;
 use App\Support\LoanFundingStrategy;
+use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
 

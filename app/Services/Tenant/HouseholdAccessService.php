@@ -17,7 +17,7 @@ class HouseholdAccessService
     ) {}
 
     /**
-     * @return array{changed: bool, rejoined: bool}
+     * @return array{changed: bool, rejoined: bool, detached: bool}
      */
     public function updateMemberLoginEmail(Member $member, User $user, string $newEmail): array
     {
@@ -25,16 +25,16 @@ class HouseholdAccessService
         $oldEmail = strtolower(trim((string) $user->email));
 
         if ($newEmail === $oldEmail) {
-            return ['changed' => false, 'rejoined' => false];
+            return ['changed' => false, 'rejoined' => false, 'detached' => false];
         }
 
         if ($this->memberUserEmail->isTaken($newEmail, $user->id)) {
             throw new InvalidArgumentException(__('Email already in use.'));
         }
 
-        $user->update(['email' => $newEmail]);
-
         if ($member->parent_member_id === null) {
+            $user->update(['email' => $newEmail]);
+
             $member->update([
                 'email' => $newEmail,
                 'household_email' => $newEmail,
@@ -42,37 +42,43 @@ class HouseholdAccessService
                 'direct_login_enabled' => false,
             ]);
 
-            $member->dependents()
-                ->where('is_separated', false)
-                ->update([
-                    'household_email' => $newEmail,
-                ]);
+            $member->dependents()->update([
+                'household_email' => $newEmail,
+            ]);
 
-            return ['changed' => true, 'rejoined' => false];
+            return ['changed' => true, 'rejoined' => false, 'detached' => false];
         }
 
         $parent = $member->parent;
 
         if ($parent === null) {
+            $user->update(['email' => $newEmail]);
             $member->update(['email' => $newEmail]);
 
-            return ['changed' => true, 'rejoined' => false];
+            return ['changed' => true, 'rejoined' => false, 'detached' => false];
         }
 
         $parentHouseholdEmail = strtolower(trim((string) ($parent->household_email ?? $parent->email ?? '')));
-        $isRejoin = $parentHouseholdEmail !== '' && $newEmail === $parentHouseholdEmail;
 
-        $member->update(['email' => $isRejoin ? $parentHouseholdEmail : $newEmail]);
-        $member = $member->fresh();
+        if ($parentHouseholdEmail !== '' && $newEmail !== $parentHouseholdEmail) {
+            $user->update(['email' => $newEmail]);
+            $member->update(['email' => $newEmail]);
+            $this->householdMembers->removeFromHousehold($member->fresh());
 
-        if ($isRejoin && $this->memberUserEmail->isInternalLoginEmail($newEmail)) {
-            $user->update([
-                'email' => $this->memberUserEmail->resolveForUserEmailChange($parentHouseholdEmail, $user->id),
-            ]);
+            return ['changed' => true, 'rejoined' => false, 'detached' => true];
         }
 
-        $this->householdMembers->syncHouseholdAccessFlags($member->fresh());
+        $user->update([
+            'email' => $this->memberUserEmail->resolveForUserEmailChange($parentHouseholdEmail, $user->id),
+        ]);
 
-        return ['changed' => true, 'rejoined' => $isRejoin];
+        $member->update([
+            'email' => $parentHouseholdEmail,
+            'household_email' => $parentHouseholdEmail,
+            'is_separated' => false,
+            'direct_login_enabled' => false,
+        ]);
+
+        return ['changed' => true, 'rejoined' => true, 'detached' => false];
     }
 }

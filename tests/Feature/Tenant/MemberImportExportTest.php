@@ -176,6 +176,27 @@ test('member import fails when parent reference never resolves', function () {
         ->and(Member::query()->where('member_number', 'IMP-ORPHAN-1')->exists())->toBeFalse();
 });
 
+test('member import assigns parent household email to dependents with personal csv emails', function () {
+    $path = writeMemberImportCsv(
+        "member_number,name,email,parent_member_number\n".
+        "1,Household Head,head.samman@fund.test,\n".
+        "2,Household Dependent,dependent.personal@fund.test,1\n"
+    );
+
+    $result = app(MemberImportService::class)->import($path, 'TempPass@123');
+
+    expect($result['created'])->toBe(2)
+        ->and($result['failed'])->toBe(0);
+
+    $parent = Member::query()->where('member_number', '1')->first();
+    $child = Member::query()->where('member_number', '2')->first();
+
+    expect($parent?->email)->toBe('head.samman@fund.test')
+        ->and($child?->parent_member_id)->toBe($parent?->id)
+        ->and($child?->email)->toBe('head.samman@fund.test')
+        ->and($child?->household_email)->toBe('head.samman@fund.test');
+});
+
 test('member import links dependent when parent_member_number contains legacy household shorthand name', function () {
     $path = writeMemberImportCsv(
         "member_number,name,email,parent_member_number\n".

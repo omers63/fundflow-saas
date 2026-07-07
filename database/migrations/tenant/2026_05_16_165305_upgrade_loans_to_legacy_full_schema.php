@@ -5,10 +5,11 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
-        if (!Schema::hasTable('loan_tiers')) {
+        if (! Schema::hasTable('loan_tiers')) {
             Schema::create('loan_tiers', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedTinyInteger('tier_number')->unique();
@@ -49,7 +50,7 @@ return new class extends Migration {
             }
         }
 
-        if (!Schema::hasTable('fund_tiers')) {
+        if (! Schema::hasTable('fund_tiers')) {
             Schema::create('fund_tiers', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedTinyInteger('tier_number')->unique();
@@ -71,12 +72,16 @@ return new class extends Migration {
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
+
+            /** @var array<int, int> $loanTierIdsByNumber */
+            $loanTierIdsByNumber = DB::table('loan_tiers')->pluck('id', 'tier_number')->all();
+
             for ($i = 1; $i <= 11; $i++) {
-                $loanTierId = $i - 1;
+                $loanTierNumber = $i - 1;
                 DB::table('fund_tiers')->insert([
                     'tier_number' => $i,
-                    'label' => "Fund Tier {$i} - Loan Tier {$loanTierId}",
-                    'loan_tier_id' => $i - 1,
+                    'label' => "Fund Tier {$i} - Loan Tier {$loanTierNumber}",
+                    'loan_tier_id' => $loanTierIdsByNumber[$loanTierNumber] ?? null,
                     'percentage' => 100,
                     'is_active' => true,
                     'created_at' => $now,
@@ -86,100 +91,100 @@ return new class extends Migration {
         }
 
         Schema::table('loans', function (Blueprint $table) {
-            if (!Schema::hasColumn('loans', 'amount_requested')) {
+            if (! Schema::hasColumn('loans', 'amount_requested')) {
                 $table->decimal('amount_requested', 15, 2)->nullable()->after('member_id');
             }
-            if (!Schema::hasColumn('loans', 'amount_approved')) {
+            if (! Schema::hasColumn('loans', 'amount_approved')) {
                 $table->decimal('amount_approved', 15, 2)->nullable();
             }
-            if (!Schema::hasColumn('loans', 'amount_disbursed')) {
+            if (! Schema::hasColumn('loans', 'amount_disbursed')) {
                 $table->decimal('amount_disbursed', 15, 2)->default(0);
             }
-            if (!Schema::hasColumn('loans', 'loan_tier_id')) {
+            if (! Schema::hasColumn('loans', 'loan_tier_id')) {
                 $table->foreignId('loan_tier_id')->nullable()->constrained('loan_tiers')->nullOnDelete();
             }
-            if (!Schema::hasColumn('loans', 'fund_tier_id')) {
+            if (! Schema::hasColumn('loans', 'fund_tier_id')) {
                 $table->foreignId('fund_tier_id')->nullable()->constrained('fund_tiers')->nullOnDelete();
             }
-            if (!Schema::hasColumn('loans', 'queue_position')) {
+            if (! Schema::hasColumn('loans', 'queue_position')) {
                 $table->unsignedInteger('queue_position')->nullable();
             }
-            if (!Schema::hasColumn('loans', 'member_portion')) {
+            if (! Schema::hasColumn('loans', 'member_portion')) {
                 $table->decimal('member_portion', 15, 2)->nullable();
             }
-            if (!Schema::hasColumn('loans', 'master_portion')) {
+            if (! Schema::hasColumn('loans', 'master_portion')) {
                 $table->decimal('master_portion', 15, 2)->nullable();
             }
-            if (!Schema::hasColumn('loans', 'repaid_to_master')) {
+            if (! Schema::hasColumn('loans', 'repaid_to_master')) {
                 $table->decimal('repaid_to_master', 15, 2)->default(0);
             }
-            if (!Schema::hasColumn('loans', 'installments_count')) {
+            if (! Schema::hasColumn('loans', 'installments_count')) {
                 $table->unsignedInteger('installments_count')->default(0);
             }
-            if (!Schema::hasColumn('loans', 'approved_by_id')) {
+            if (! Schema::hasColumn('loans', 'approved_by_id')) {
                 $table->foreignId('approved_by_id')->nullable()->constrained('users')->nullOnDelete();
             }
-            if (!Schema::hasColumn('loans', 'has_grace_cycle')) {
+            if (! Schema::hasColumn('loans', 'has_grace_cycle')) {
                 $table->boolean('has_grace_cycle')->default(true);
             }
-            if (!Schema::hasColumn('loans', 'settled_at')) {
+            if (! Schema::hasColumn('loans', 'settled_at')) {
                 $table->timestamp('settled_at')->nullable();
             }
-            if (!Schema::hasColumn('loans', 'due_date')) {
+            if (! Schema::hasColumn('loans', 'due_date')) {
                 $table->date('due_date')->nullable();
             }
-            if (!Schema::hasColumn('loans', 'guarantor_member_id')) {
+            if (! Schema::hasColumn('loans', 'guarantor_member_id')) {
                 $table->foreignId('guarantor_member_id')->nullable()->constrained('members')->nullOnDelete();
             }
-            if (!Schema::hasColumn('loans', 'guarantor_released_at')) {
+            if (! Schema::hasColumn('loans', 'guarantor_released_at')) {
                 $table->timestamp('guarantor_released_at')->nullable();
             }
-            if (!Schema::hasColumn('loans', 'guarantor_liability_transferred_at')) {
+            if (! Schema::hasColumn('loans', 'guarantor_liability_transferred_at')) {
                 $table->timestamp('guarantor_liability_transferred_at')->nullable();
             }
-            if (!Schema::hasColumn('loans', 'witness1_name')) {
+            if (! Schema::hasColumn('loans', 'witness1_name')) {
                 $table->string('witness1_name')->nullable();
             }
-            if (!Schema::hasColumn('loans', 'witness1_phone')) {
+            if (! Schema::hasColumn('loans', 'witness1_phone')) {
                 $table->string('witness1_phone', 50)->nullable();
             }
-            if (!Schema::hasColumn('loans', 'witness2_name')) {
+            if (! Schema::hasColumn('loans', 'witness2_name')) {
                 $table->string('witness2_name')->nullable();
             }
-            if (!Schema::hasColumn('loans', 'witness2_phone')) {
+            if (! Schema::hasColumn('loans', 'witness2_phone')) {
                 $table->string('witness2_phone', 50)->nullable();
             }
-            if (!Schema::hasColumn('loans', 'exempted_month')) {
+            if (! Schema::hasColumn('loans', 'exempted_month')) {
                 $table->unsignedTinyInteger('exempted_month')->nullable();
             }
-            if (!Schema::hasColumn('loans', 'exempted_year')) {
+            if (! Schema::hasColumn('loans', 'exempted_year')) {
                 $table->unsignedSmallInteger('exempted_year')->nullable();
             }
-            if (!Schema::hasColumn('loans', 'first_repayment_month')) {
+            if (! Schema::hasColumn('loans', 'first_repayment_month')) {
                 $table->unsignedTinyInteger('first_repayment_month')->nullable();
             }
-            if (!Schema::hasColumn('loans', 'first_repayment_year')) {
+            if (! Schema::hasColumn('loans', 'first_repayment_year')) {
                 $table->unsignedSmallInteger('first_repayment_year')->nullable();
             }
-            if (!Schema::hasColumn('loans', 'settlement_threshold')) {
+            if (! Schema::hasColumn('loans', 'settlement_threshold')) {
                 $table->decimal('settlement_threshold', 8, 4)->nullable();
             }
-            if (!Schema::hasColumn('loans', 'late_repayment_count')) {
+            if (! Schema::hasColumn('loans', 'late_repayment_count')) {
                 $table->unsignedInteger('late_repayment_count')->default(0);
             }
-            if (!Schema::hasColumn('loans', 'late_repayment_amount')) {
+            if (! Schema::hasColumn('loans', 'late_repayment_amount')) {
                 $table->decimal('late_repayment_amount', 15, 2)->default(0);
             }
-            if (!Schema::hasColumn('loans', 'cancellation_reason')) {
+            if (! Schema::hasColumn('loans', 'cancellation_reason')) {
                 $table->text('cancellation_reason')->nullable();
             }
-            if (!Schema::hasColumn('loans', 'is_emergency')) {
+            if (! Schema::hasColumn('loans', 'is_emergency')) {
                 $table->boolean('is_emergency')->default(false);
             }
-            if (!Schema::hasColumn('loans', 'payout_at')) {
+            if (! Schema::hasColumn('loans', 'payout_at')) {
                 $table->timestamp('payout_at')->nullable();
             }
-            if (!Schema::hasColumn('loans', 'deleted_at')) {
+            if (! Schema::hasColumn('loans', 'deleted_at')) {
                 $table->softDeletes();
             }
         });
@@ -204,7 +209,7 @@ return new class extends Migration {
 
         DB::table('loans')->where('status', 'completed')->update(['status' => 'completed']);
 
-        if (!Schema::hasTable('loan_installments')) {
+        if (! Schema::hasTable('loan_installments')) {
             Schema::create('loan_installments', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('loan_id')->constrained()->cascadeOnDelete();
@@ -223,7 +228,7 @@ return new class extends Migration {
             });
         }
 
-        if (!Schema::hasTable('loan_disbursements')) {
+        if (! Schema::hasTable('loan_disbursements')) {
             Schema::create('loan_disbursements', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('loan_id')->constrained()->cascadeOnDelete();
@@ -238,7 +243,7 @@ return new class extends Migration {
         }
 
         Schema::table('accounts', function (Blueprint $table) {
-            if (!Schema::hasColumn('accounts', 'loan_id')) {
+            if (! Schema::hasColumn('accounts', 'loan_id')) {
                 $table->foreignId('loan_id')->nullable()->after('member_id')->constrained('loans')->nullOnDelete();
             }
         });

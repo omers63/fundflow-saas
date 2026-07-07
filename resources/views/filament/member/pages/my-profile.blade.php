@@ -1,9 +1,9 @@
 <x-filament-panels::page>
     @php
-        use App\Models\Tenant\Member;
+use App\Models\Tenant\Member;
 
-        $user = $user ?? auth('tenant')->user();
-        $member = $member ?? $user?->member;
+$user = $user ?? auth('tenant')->user();
+$member = $member ?? $user?->member;
     @endphp
 
     <div class="space-y-6">
@@ -66,40 +66,32 @@
                 </p>
                 <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                     @foreach ($householdProfiles as $profile)
-                        @php
-                            $isCurrent = (int) $profile->user_id === (int) auth('tenant')->id();
-                        @endphp
-                        <div
-                            class="flex flex-col items-center rounded-xl border p-3 text-center {{ $isCurrent ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' : 'border-gray-200 dark:border-gray-700' }}">
-                            <span
-                                class="mb-2 flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-gray-200 text-sm font-bold text-gray-600">
-                                @if ($profile->user?->avatarPublicUrl())
-                                    <img src="{{ $profile->user->avatarPublicUrl() }}" alt="" class="h-full w-full object-cover">
-                                @else
-                                    {{ strtoupper(mb_substr($profile->user?->name ?? $profile->name, 0, 1)) }}
-                                @endif
-                            </span>
-                            <span class="text-xs font-semibold text-gray-900 dark:text-white">{{ $profile->user?->name ?? $profile->name }}</span>
-                            <span class="mt-0.5 text-[10px] text-gray-500">
-                                {{ $profile->isParent() ? __('Parent') : __('Dependent') }}
-                            </span>
-                            @if ($isCurrent)
-                                <span class="mt-2 text-[10px] font-semibold text-emerald-600">{{ __('Current') }}</span>
-                            @elseif (! $profile->isParent())
-                                @if ($profile->is_separated)
-                                    <button type="button"
-                                        wire:click="mountAction('switchHouseholdProfile', { memberId: {{ $profile->id }} })"
-                                        class="mt-2 text-[10px] font-semibold text-sky-600 hover:underline">
-                                        {{ __('Switch') }}
-                                    </button>
-                                @else
-                                    <a href="{{ route('tenant.member.dependents.impersonate', ['dependent' => $profile->id]) }}"
-                                        class="mt-2 text-[10px] font-semibold text-sky-600 hover:underline">
-                                        {{ __('Switch') }}
-                                    </a>
-                                @endif
-                            @endif
-                        </div>
+                                        @php
+                        $isCurrent = (int) $profile->user_id === (int) auth('tenant')->id();
+                                        @endphp
+                                        <div
+                                            class="flex flex-col items-center rounded-xl border p-3 text-center {{ $isCurrent ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' : 'border-gray-200 dark:border-gray-700' }}">
+                                            <span
+                                                class="mb-2 flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-gray-200 text-sm font-bold text-gray-600">
+                                                @if ($profile->user?->avatarPublicUrl())
+                                                    <img src="{{ $profile->user->avatarPublicUrl() }}" alt="" class="h-full w-full object-cover">
+                                                @else
+                                                    {{ strtoupper(mb_substr($profile->user?->name ?? $profile->name, 0, 1)) }}
+                                                @endif
+                                            </span>
+                                            <span class="text-xs font-semibold text-gray-900 dark:text-white">{{ $profile->user?->name ?? $profile->name }}</span>
+                                            <span class="mt-0.5 text-[10px] text-gray-500">
+                                                {{ $profile->isParent() ? __('Parent') : __('Dependent') }}
+                                            </span>
+                                            @if ($isCurrent)
+                                                <span class="mt-2 text-[10px] font-semibold text-emerald-600">{{ __('Current') }}</span>
+                                            @elseif (!$profile->isParent())
+                                                <a href="{{ route('tenant.member.dependents.impersonate', ['dependent' => $profile->id]) }}"
+                                                    class="mt-2 text-[10px] font-semibold text-sky-600 hover:underline">
+                                                    {{ __('Switch') }}
+                                                </a>
+                                            @endif
+                                        </div>
                     @endforeach
                 </div>
             </div>

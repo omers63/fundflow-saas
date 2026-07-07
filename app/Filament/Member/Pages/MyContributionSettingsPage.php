@@ -59,7 +59,7 @@ class MyContributionSettingsPage extends Page
 
         if ($member !== null) {
             $allocations = app(MemberMonthlyAllocationService::class);
-            $this->allocationChangeBlocked = ! $allocations->canChangeMonthlyContribution($member);
+            $this->allocationChangeBlocked = ! $allocations->canSelfChangeMonthlyContribution($member);
             $this->allocationChangeBlockedMessage = $this->allocationChangeBlocked
                 ? $allocations->allocationChangeBlockedMessage($member)
                 : null;
@@ -119,7 +119,7 @@ class MyContributionSettingsPage extends Page
                     }
 
                     try {
-                        app(MemberMonthlyAllocationService::class)->assertCanChangeMonthlyContribution($member);
+                        app(MemberMonthlyAllocationService::class)->assertCanSelfChangeMonthlyContribution($member);
                     } catch (\InvalidArgumentException $exception) {
                         Notification::make()
                             ->title(__('Allocation cannot be changed'))

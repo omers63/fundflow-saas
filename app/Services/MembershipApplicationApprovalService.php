@@ -164,7 +164,6 @@ class MembershipApplicationApprovalService
             $this->householdMembers->assignToHousehold(
                 $dependentMember,
                 $parentMember,
-                strtolower(trim((string) $application->email)),
             );
 
             $application->update(['parent_member_id' => $parentMember->id]);

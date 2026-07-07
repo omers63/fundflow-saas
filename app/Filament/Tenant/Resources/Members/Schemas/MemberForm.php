@@ -45,11 +45,11 @@ class MemberForm
                             ->default(500)
                             ->required()
                             ->disabled(fn (?Member $record, MemberMonthlyAllocationService $allocations): bool => $record !== null
-                                && ! $allocations->canChangeMonthlyContribution($record))
+                                && ! $allocations->canSelfChangeMonthlyContribution($record))
                             ->dehydrated(fn (?Member $record, MemberMonthlyAllocationService $allocations): bool => $record === null
-                                || $allocations->canChangeMonthlyContribution($record))
+                                || $allocations->canSelfChangeMonthlyContribution($record))
                             ->helperText(function (?Member $record, MemberMonthlyAllocationService $allocations): string {
-                                if ($record !== null && ! $allocations->canChangeMonthlyContribution($record)) {
+                                if ($record !== null && ! $allocations->canSelfChangeMonthlyContribution($record)) {
                                     return $allocations->allocationChangeBlockedMessage($record);
                                 }
 
@@ -84,7 +84,7 @@ class MemberForm
                                 ->pluck('name', 'id'))
                             ->searchable()
                             ->nullable()
-                            ->helperText(__('Only fund administrators can link a member to a household parent. Applicants cannot choose a parent themselves.')),
+                            ->helperText(__('Only fund administrators can link a member to a household parent. Dependents must use the parent\'s household email.')),
                         TextInput::make('portal_password')
                             ->label(__('Portal password'))
                             ->password()
@@ -113,12 +113,12 @@ class MemberForm
                             ->label(__('Separated household'))
                             ->disabled()
                             ->dehydrated(false)
-                            ->helperText(__('Automatically enabled when this member\'s email differs from the household login email.')),
+                            ->visible(false),
                         Toggle::make('direct_login_enabled')
                             ->label(__('Direct login enabled'))
                             ->disabled()
                             ->dehydrated(false)
-                            ->helperText(__('Automatically enabled for dependents with their own email so they can sign in directly.')),
+                            ->visible(false),
                     ]),
             ]);
     }

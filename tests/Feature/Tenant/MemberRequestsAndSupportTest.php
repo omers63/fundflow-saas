@@ -115,6 +115,41 @@ test('member can submit support request and household request from support page'
         ->and(MemberRequest::query()->first()->type)->toBe(MemberRequest::TYPE_FREEZE_MEMBERSHIP);
 });
 
+test('membership requests table description reflects household link', function () {
+    Filament::setCurrentPanel('member');
+    $this->actingAs($this->memberUser, 'tenant');
+
+    Livewire::test(MyMemberRequestsTableWidget::class)
+        ->assertSuccessful()
+        ->assertSee(__('Freeze, unfreeze, or withdraw from the fund.'), false);
+
+    $parentUser = User::create([
+        'name' => 'Household Parent',
+        'email' => 'parent-desc@fund.test',
+        'password' => bcrypt('password'),
+        'is_admin' => false,
+    ]);
+
+    $parent = Member::create([
+        'user_id' => $parentUser->id,
+        'member_number' => 'MEM-PARENT-DESC',
+        'name' => 'Household Parent',
+        'email' => 'parent-desc@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $this->member->update(['parent_member_id' => $parent->id]);
+    $this->memberUser->unsetRelation('members');
+    $this->memberUser->refresh();
+
+    Livewire::test(MyMemberRequestsTableWidget::class)
+        ->assertSuccessful()
+        ->assertSee(__('Freeze, unfreeze, withdraw, or request independence from your household parent.'), false)
+        ->assertDontSee(__('My dependents page'), false);
+});
+
 test('admin can approve independence request', function () {
     $parentUser = User::create([
         'name' => 'Household Parent',

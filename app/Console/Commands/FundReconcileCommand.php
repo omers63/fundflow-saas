@@ -6,8 +6,10 @@ namespace App\Console\Commands;
 
 use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Models\Tenant\ReconciliationSnapshot;
+use App\Services\ReconciliationDigestService;
 use App\Services\ReconciliationReportService;
 use Carbon\Carbon;
+use Filament\Facades\Filament;
 use Illuminate\Console\Command;
 
 class FundReconcileCommand extends Command
@@ -75,6 +77,11 @@ class FundReconcileCommand extends Command
         if (! $this->option('no-store')) {
             $snapshot = $service->persistSnapshot($report, null);
             $this->line('Snapshot #'.$snapshot->id.' stored.');
+        }
+
+        if (in_array($mode, [ReconciliationSnapshot::MODE_DAILY, ReconciliationSnapshot::MODE_MONTHLY], true)) {
+            Filament::setCurrentPanel('tenant');
+            app(ReconciliationDigestService::class)->notifyAdminsOfReport($mode, $report);
         }
 
         return $verdict['pass'] ? self::SUCCESS : self::FAILURE;

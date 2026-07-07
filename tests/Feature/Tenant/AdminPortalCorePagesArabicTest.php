@@ -7,6 +7,7 @@ use App\Filament\Tenant\Pages\Dashboard;
 use App\Filament\Tenant\Pages\LegacyMigrationPage;
 use App\Filament\Tenant\Pages\ReportsPage;
 use App\Filament\Tenant\Pages\Settings;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\App;
@@ -68,13 +69,16 @@ test('settings reports audit and dashboard render primary arabic headings', func
         ->assertSee(__('Audit log', locale: 'ar'), false)
         ->assertSee(__('Fund audit log', locale: 'ar'), false);
 
+    Setting::set('legacy_migration', 'members_imported', '1');
+    Setting::set('legacy_migration', 'loans_imported', '1');
+
     Livewire::actingAs($admin, 'tenant')
         ->test(LegacyMigrationPage::class, ['embedded' => true])
         ->call('goToStep', 3)
         ->assertSuccessful()
         ->assertSee(__('Legacy migration wizard', locale: 'ar'), false)
-        ->assertSee(__('Review & classify', locale: 'ar'), false)
-        ->assertSee(__('Preview', locale: 'ar'), false);
+        ->assertSee(__('Step 3: Classify payments'), false)
+        ->assertSee(__('Classify payments', locale: 'ar'), false);
 
     Livewire::actingAs($admin, 'tenant')
         ->test(Dashboard::class)

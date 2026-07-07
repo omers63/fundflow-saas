@@ -24,8 +24,10 @@ class HouseholdMemberService
 
     public function createFromApplication(MembershipApplication $application, ?Member $parentMember = null): Member
     {
-        $contactEmail = strtolower(trim((string) $application->email));
         $householdEmail = $this->resolveHouseholdEmailFromApplication($application, $parentMember);
+        $contactEmail = $parentMember !== null
+            ? $householdEmail
+            : strtolower(trim((string) $application->email));
 
         return $this->createMemberWithUser(
             name: $application->name,
@@ -69,9 +71,14 @@ class HouseholdMemberService
             ? $this->resolveParentHouseholdEmail($parentMember)
             : ($contactEmail !== '' ? $contactEmail : throw new InvalidArgumentException(__('Email is required for a household parent.')));
 
+        if ($parentMember !== null) {
+            $this->assertDependentUsesHouseholdEmail($householdEmail, $contactEmail);
+            $contactEmail = $householdEmail;
+        }
+
         $member = $this->createMemberWithUser(
             name: (string) $attributes['name'],
-            contactEmail: $contactEmail !== '' ? $contactEmail : $householdEmail,
+            contactEmail: $contactEmail,
             householdEmail: $householdEmail,
             password: $password,
             phone: $attributes['phone'] ?? null,
@@ -84,7 +91,7 @@ class HouseholdMemberService
         );
 
         if ($parentMember !== null) {
-            $this->assignToHousehold($member, $parentMember, $contactEmail !== '' ? $contactEmail : null);
+            $this->assignToHousehold($member, $parentMember, $householdEmail);
         }
 
         return $member->fresh();
@@ -101,25 +108,26 @@ class HouseholdMemberService
             $contact = $parentHouseholdEmail;
         }
 
-        $flags = $this->householdAccessFlags($parentHouseholdEmail, $contact);
+        $this->assertDependentUsesHouseholdEmail($parentHouseholdEmail, $contact);
+
         $user = $member->user;
 
         if ($user === null) {
             throw new RuntimeException(__('Member must have a login user before joining a household.'));
         }
 
-        if ($flags['is_separated'] && $this->memberUserEmail->isInternalLoginEmail((string) $user->email)) {
+        if ($this->memberUserEmail->isInternalLoginEmail((string) $user->email) || strtolower((string) $user->email) !== $parentHouseholdEmail) {
             $user->update([
-                'email' => $this->memberUserEmail->resolveForUserEmailChange($contact, $user->id),
+                'email' => $this->memberUserEmail->resolveForUserEmailChange($parentHouseholdEmail, $user->id),
             ]);
         }
 
         $member->update([
             'parent_member_id' => $parent->id,
-            'email' => $contact,
+            'email' => $parentHouseholdEmail,
             'household_email' => $parentHouseholdEmail,
-            'is_separated' => $flags['is_separated'],
-            'direct_login_enabled' => $flags['direct_login_enabled'],
+            'is_separated' => false,
+            'direct_login_enabled' => false,
         ]);
 
         return $member->fresh();
@@ -129,7 +137,11 @@ class HouseholdMemberService
     {
         $contactEmail = strtolower(trim((string) ($member->email ?? $member->user?->email ?? '')));
 
-        if ($contactEmail === '') {
+        if ($contactEmail === '' || $this->memberUserEmail->isInternalLoginEmail($contactEmail)) {
+            $contactEmail = strtolower(trim((string) ($member->user?->email ?? '')));
+        }
+
+        if ($contactEmail === '' || $this->memberUserEmail->isInternalLoginEmail($contactEmail)) {
             throw new InvalidArgumentException(__('Member must have an email before becoming a household parent.'));
         }
 
@@ -178,18 +190,51 @@ class HouseholdMemberService
             return $member;
         }
 
-        $flags = $this->householdAccessFlags(
-            $this->resolveParentHouseholdEmail($parent),
-            strtolower(trim((string) ($member->email ?? $member->user?->email ?? ''))),
-        );
+        $parentHouseholdEmail = $this->resolveParentHouseholdEmail($parent);
+        $contactEmail = strtolower(trim((string) ($member->email ?? $member->user?->email ?? '')));
+
+        if ($contactEmail !== $parentHouseholdEmail) {
+            return $this->removeFromHousehold($member);
+        }
 
         $member->update([
-            'household_email' => $flags['household_email'],
-            'is_separated' => $flags['is_separated'],
-            'direct_login_enabled' => $flags['direct_login_enabled'],
+            'household_email' => $parentHouseholdEmail,
+            'is_separated' => false,
+            'direct_login_enabled' => false,
         ]);
 
         return $member->fresh();
+    }
+
+    /**
+     * Detach dependents that no longer qualify for household sponsorship.
+     *
+     * @return list<Member>
+     */
+    public function detachInvalidDependents(): array
+    {
+        $detached = [];
+
+        Member::query()
+            ->whereNotNull('parent_member_id')
+            ->with('parent')
+            ->orderBy('id')
+            ->each(function (Member $member) use (&$detached): void {
+                $parent = $member->parent;
+
+                if ($parent === null) {
+                    return;
+                }
+
+                $parentHouseholdEmail = strtolower(trim((string) ($parent->household_email ?? $parent->email ?? '')));
+                $contactEmail = strtolower(trim((string) ($member->email ?? '')));
+
+                if ($member->is_separated || ($parentHouseholdEmail !== '' && $contactEmail !== $parentHouseholdEmail)) {
+                    $detached[] = $this->removeFromHousehold($member);
+                }
+            });
+
+        return $detached;
     }
 
     public function validateParentAssignment(Member $member, int $parentMemberId): void
@@ -279,17 +324,12 @@ class HouseholdMemberService
             ? $this->resolveParentHouseholdEmail($parentMember)
             : $householdEmail;
 
-        $flags = $parentMember !== null
-            ? $this->householdAccessFlags($parentHouseholdEmail, $contactEmail)
-            : [
-                'household_email' => $householdEmail,
-                'is_separated' => false,
-                'direct_login_enabled' => false,
-            ];
+        if ($parentMember !== null) {
+            $this->assertDependentUsesHouseholdEmail($parentHouseholdEmail, $contactEmail);
+            $contactEmail = $parentHouseholdEmail;
+        }
 
-        $userLoginEmail = $flags['direct_login_enabled']
-            ? $this->memberUserEmail->resolveForNewMember($contactEmail)
-            : $this->memberUserEmail->resolveForNewMember($contactEmail);
+        $userLoginEmail = $this->memberUserEmail->resolveForNewMember($contactEmail);
 
         $user = User::create([
             'name' => $name,
@@ -303,15 +343,15 @@ class HouseholdMemberService
             'parent_member_id' => $parentMember?->id,
             'member_number' => $memberNumber ?? Member::generateMemberNumber(),
             'name' => $name,
-            'email' => $contactEmail !== '' ? $contactEmail : $parentHouseholdEmail,
-            'household_email' => $flags['household_email'],
+            'email' => $contactEmail,
+            'household_email' => $parentMember !== null ? $parentHouseholdEmail : $householdEmail,
             'phone' => $phone,
             'monthly_contribution_amount' => $monthlyContribution,
             'joined_at' => $joinedAt,
             'status' => $status,
             'portal_pin' => filled($portalPin) ? Hash::make($portalPin) : null,
-            'is_separated' => $flags['is_separated'],
-            'direct_login_enabled' => $flags['direct_login_enabled'],
+            'is_separated' => false,
+            'direct_login_enabled' => false,
         ]);
 
         $this->accounting->createMemberAccounts($member);
@@ -319,21 +359,14 @@ class HouseholdMemberService
         return $member;
     }
 
-    /**
-     * @return array{household_email: string, is_separated: bool, direct_login_enabled: bool}
-     */
-    private function householdAccessFlags(string $parentHouseholdEmail, string $contactEmail): array
+    private function assertDependentUsesHouseholdEmail(string $parentHouseholdEmail, string $contactEmail): void
     {
         $parentHouseholdEmail = strtolower(trim($parentHouseholdEmail));
         $contactEmail = strtolower(trim($contactEmail));
 
-        $isSeparated = $contactEmail !== '' && $contactEmail !== $parentHouseholdEmail;
-
-        return [
-            'household_email' => $parentHouseholdEmail,
-            'is_separated' => $isSeparated,
-            'direct_login_enabled' => $isSeparated,
-        ];
+        if ($contactEmail !== '' && $contactEmail !== $parentHouseholdEmail) {
+            throw new InvalidArgumentException(__('Dependents must use the household parent\'s email. Unlink the parent first if this member needs their own email.'));
+        }
     }
 
     private function resolveHouseholdEmailFromApplication(MembershipApplication $application, ?Member $parentMember): string

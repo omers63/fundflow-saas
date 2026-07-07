@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Console\Concerns\TenantAwareScheduledCommand;
+use App\Services\ReconciliationDigestService;
 use App\Services\ReconciliationService;
+use Filament\Facades\Filament;
 use Illuminate\Console\Command;
 
 class FundNightlyReconciliationCommand extends Command
@@ -16,9 +18,13 @@ class FundNightlyReconciliationCommand extends Command
 
     protected $description = 'Run nightly reconciliation batch (master invariants, domain checks, auto-resolve)';
 
-    public function handle(ReconciliationService $reconciliation): int
+    public function handle(ReconciliationService $reconciliation, ReconciliationDigestService $digest): int
     {
+        Filament::setCurrentPanel('tenant');
+
         $result = $reconciliation->runNightlyBatch();
+
+        $digest->notifyAdminsOfNightlyBatch($result);
 
         if ($result['halted']) {
             $this->error(__('Reconciliation halted: critical master imbalance.'));

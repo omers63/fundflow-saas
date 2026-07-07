@@ -52,7 +52,9 @@ class MyMemberRequestsTableWidget extends TableWidget
         return TableRecordActionGroups::apply(
             $table
                 ->heading(__('Membership requests'))
-                ->description(__('Freeze, unfreeze, withdraw, or request independence from a household parent.'))
+                ->description(fn (): string => CurrentMember::get()?->parent_member_id !== null
+                    ? __('Freeze, unfreeze, withdraw, or request independence from your household parent.')
+                    : __('Freeze, unfreeze, or withdraw from the fund.'))
                 ->headerActions(MemberRequestFilamentActions::membershipHeaderActions())
                 ->filters([
                     SelectFilter::make('status')

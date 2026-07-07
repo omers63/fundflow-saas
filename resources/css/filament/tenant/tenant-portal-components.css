@@ -1066,7 +1066,7 @@ html[dir='rtl'] .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-he
 /* Legacy migration wizard */
 .fi-body.fi-panel-tenant .ff-legacy-wizard-stepper__list {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 0.5rem;
     list-style: none;
     margin: 0;

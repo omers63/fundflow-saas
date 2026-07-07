@@ -1,6 +1,5 @@
 <?php
 
-use App\Filament\Member\Pages\MemberSettingsPage;
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Member\Resources\MyDependents\Pages\ListMyDependents;
 use App\Filament\Member\Widgets\MyHouseholdRequestsTableWidget;
@@ -10,6 +9,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\MemberDependentsInsightsService;
+use App\Services\Tenant\HouseholdMemberService;
 use App\Services\Tenant\ImpersonationService;
 use App\Support\BusinessDaySettings;
 use Carbon\Carbon;
@@ -225,41 +225,13 @@ test('stop impersonation route restores parent portal', function () {
     expect(session('impersonator_user_id'))->toBeNull();
 });
 
-test('separated dependent impersonation route redirects to profile settings', function () {
-    $this->dependent->update([
-        'email' => 'child.unique@dependents.test',
-        'is_separated' => true,
-        'direct_login_enabled' => true,
-    ]);
+test('parent cannot impersonate a detached dependent', function () {
+    app(HouseholdMemberService::class)->removeFromHousehold($this->dependent);
 
     $this->actingAs($this->parentUser, 'tenant');
 
     $this->get($this->tenantBaseUrl.route('tenant.member.dependents.impersonate', ['dependent' => $this->dependent], false))
-        ->assertRedirect('/member/settings?tab=profile');
-});
-
-test('parent can switch into separated dependent portal', function () {
-    $this->dependent->update([
-        'email' => 'child.unique@dependents.test',
-        'is_separated' => true,
-        'direct_login_enabled' => true,
-    ]);
-
-    $this->dependentUser->update([
-        'email' => 'child.unique@dependents.test',
-        'password' => 'SeparatedPass123',
-    ]);
-
-    $this->actingAs($this->parentUser, 'tenant');
-
-    Livewire::test(MemberSettingsPage::class)
-        ->mountAction('switchHouseholdProfile', ['memberId' => $this->dependent->id])
-        ->setActionData(['verification_secret' => 'SeparatedPass123'])
-        ->callMountedAction()
-        ->assertRedirect('/member');
-
-    expect(auth('tenant')->id())->toBe($this->dependentUser->id)
-        ->and(session('impersonated_member_id'))->toBe($this->dependent->id);
+        ->assertForbidden();
 });
 
 test('impersonation route returns forbidden for non parent', function () {

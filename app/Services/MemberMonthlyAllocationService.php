@@ -16,6 +16,31 @@ class MemberMonthlyAllocationService
         private readonly LoanDelinquencyService $delinquency,
     ) {}
 
+    public function isSponsoredDependent(Member $member): bool
+    {
+        $member = $member->fresh() ?? $member;
+
+        return $member->parent_member_id !== null;
+    }
+
+    public function canSelfChangeMonthlyContribution(Member $member): bool
+    {
+        if ($this->isSponsoredDependent($member)) {
+            return false;
+        }
+
+        return $this->canChangeMonthlyContribution($member);
+    }
+
+    public function assertCanSelfChangeMonthlyContribution(Member $member): void
+    {
+        if ($this->isSponsoredDependent($member)) {
+            throw new InvalidArgumentException($this->sponsoredDependentAllocationMessage());
+        }
+
+        $this->assertCanChangeMonthlyContribution($member);
+    }
+
     public function canChangeMonthlyContribution(Member $member): bool
     {
         return ! $this->householdHasUnpaidArrears($member);
@@ -30,10 +55,19 @@ class MemberMonthlyAllocationService
         throw new InvalidArgumentException($this->allocationChangeBlockedMessage($member));
     }
 
+    public function sponsoredDependentAllocationMessage(): string
+    {
+        return __('Your monthly contribution is set by your household parent. They can update it from My dependents.');
+    }
+
     public function allocationChangeBlockedMessage(Member $member): string
     {
-        if ($this->memberBelongsToHousehold($member)) {
-            return __('Clear contribution and repayment arrears from prior cycles for every member in your household before changing monthly allocations.');
+        if ($this->isSponsoredDependent($member)) {
+            return $this->sponsoredDependentAllocationMessage();
+        }
+
+        if ($this->memberManagesHouseholdAllocations($member)) {
+            return __('Clear contribution and repayment arrears from prior cycles for every sponsored member in your household before changing monthly allocations.');
         }
 
         return __('Clear contribution and repayment arrears from prior cycles before changing your monthly allocation.');
@@ -51,7 +85,7 @@ class MemberMonthlyAllocationService
     }
 
     /**
-     * Parent, dependents, or the member alone when not in a household.
+     * Members whose arrears gate allocation changes for this member.
      *
      * @return Collection<int, Member>
      */
@@ -60,13 +94,7 @@ class MemberMonthlyAllocationService
         $member = $member->fresh() ?? $member;
 
         if ($member->parent_member_id !== null) {
-            $parent = Member::query()->find($member->parent_member_id);
-
-            if ($parent === null) {
-                return collect([$member]);
-            }
-
-            return $this->parentHouseholdMembers($parent);
+            return collect([$member]);
         }
 
         if ($member->dependents()->exists()) {
@@ -76,12 +104,12 @@ class MemberMonthlyAllocationService
         return collect([$member]);
     }
 
-    public function memberBelongsToHousehold(Member $member): bool
+    public function memberManagesHouseholdAllocations(Member $member): bool
     {
         $member = $member->fresh() ?? $member;
 
-        return $member->parent_member_id !== null
-            || $member->dependents()->exists();
+        return $member->parent_member_id === null
+            && $member->dependents()->exists();
     }
 
     /**

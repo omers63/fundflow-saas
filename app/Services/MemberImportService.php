@@ -390,6 +390,10 @@ final class MemberImportService
 
     private function resolveImportEmail(array $row, string $name, string $memberNumber, ?Member $parentMember): string
     {
+        if ($parentMember !== null) {
+            return $this->resolveParentHouseholdEmail($parentMember);
+        }
+
         $explicitEmail = strtolower(trim($this->cell($row, 'email')));
 
         if ($explicitEmail !== '') {
@@ -400,10 +404,6 @@ final class MemberImportService
             }
 
             return $explicitEmail;
-        }
-
-        if ($parentMember !== null) {
-            return '';
         }
 
         if ($memberNumber === '') {
@@ -423,6 +423,17 @@ final class MemberImportService
         return app(MemberUserEmail::class)->resolveForNewMember(
             $this->syntheticImportEmailFromToken($token),
         );
+    }
+
+    private function resolveParentHouseholdEmail(Member $parentMember): string
+    {
+        $householdEmail = strtolower(trim((string) ($parentMember->household_email ?? $parentMember->email ?? '')));
+
+        if ($householdEmail === '') {
+            throw new InvalidArgumentException(__('Parent member must have a household email.'));
+        }
+
+        return $householdEmail;
     }
 
     private function syntheticImportEmailFromToken(string $token): string

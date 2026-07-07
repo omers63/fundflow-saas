@@ -12,7 +12,6 @@ use App\Filament\Member\Support\ReturnToParentPortalAction;
 use App\Filament\Member\Support\SwitchHouseholdProfileAction;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberCommunicationPreference;
-use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\User;
 use App\Services\MemberMonthlyAllocationService;
 use App\Services\Tenant\NotificationPreferenceService;
@@ -104,6 +103,10 @@ class MemberSettingsPage extends Page implements HasForms
         if (in_array($tab, ['profile', 'contributions', 'notifications'], true)) {
             $this->activeTab = $tab;
         }
+
+        if ($tab === 'contributions') {
+            $this->loadContributionSettings();
+        }
     }
 
     public function loadContributionSettings(): void
@@ -116,7 +119,7 @@ class MemberSettingsPage extends Page implements HasForms
         }
 
         $allocations = app(MemberMonthlyAllocationService::class);
-        $this->allocationChangeBlocked = ! $allocations->canChangeMonthlyContribution($member);
+        $this->allocationChangeBlocked = ! $allocations->canSelfChangeMonthlyContribution($member);
         $this->allocationChangeBlockedMessage = $this->allocationChangeBlocked
             ? $allocations->allocationChangeBlockedMessage($member)
             : null;
@@ -259,7 +262,6 @@ class MemberSettingsPage extends Page implements HasForms
                     ->orderByRaw('CASE WHEN id = ? THEN 0 ELSE 1 END', [$member->id])
                     ->get()
                 : collect(),
-            'payoutIban' => $this->resolvePayoutIban($member),
             'faqItems' => [],
         ];
     }
@@ -322,7 +324,7 @@ class MemberSettingsPage extends Page implements HasForms
                         }
 
                         try {
-                            app(MemberMonthlyAllocationService::class)->assertCanChangeMonthlyContribution($member);
+                            app(MemberMonthlyAllocationService::class)->assertCanSelfChangeMonthlyContribution($member);
                         } catch (\InvalidArgumentException $exception) {
                             Notification::make()
                                 ->title(__('Allocation cannot be changed'))
@@ -379,21 +381,6 @@ class MemberSettingsPage extends Page implements HasForms
     protected function currentMember(): ?Member
     {
         return $this->profileMember();
-    }
-
-    private function resolvePayoutIban(?Member $member): ?string
-    {
-        if ($member === null) {
-            return null;
-        }
-
-        $iban = MembershipApplication::query()
-            ->where('email', $member->email)
-            ->whereNotNull('iban')
-            ->latest('id')
-            ->value('iban');
-
-        return filled($iban) ? strtoupper((string) $iban) : null;
     }
 
     public function switchHouseholdProfileAction(): Action

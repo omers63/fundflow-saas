@@ -19,10 +19,9 @@
                 
                 <div wire:show="activeTab === 'profile'" class="ff-member-settings-tab">
                     @include('filament.member.settings.profile-tab', [
-                        'user' => $profileUser,
-                        'member' => $profileMember,
+                                            'user' => $profileUser,
+                                            'member' => $profileMember,
                         'householdProfiles' => $householdProfiles,
-                        'payoutIban' => $payoutIban,
                     ])
                     </div>
                 

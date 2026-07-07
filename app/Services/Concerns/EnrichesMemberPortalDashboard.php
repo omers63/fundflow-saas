@@ -352,9 +352,7 @@ trait EnrichesMemberPortalDashboard
                     'name' => $dependent->name,
                     'number' => $dependent->member_number,
                     'status' => Member::statusOptions()[$dependent->status] ?? $dependent->status,
-                    'switch_url' => $dependent->is_separated
-                        ? MemberSettingsPage::getUrl(['tab' => 'profile'])
-                        : route('tenant.member.dependents.impersonate', ['dependent' => $dependent->id]),
+                    'switch_url' => route('tenant.member.dependents.impersonate', ['dependent' => $dependent->id]),
                 ])
                 ->all(),
             'dependents_count' => $member->dependents()->count(),

@@ -19,7 +19,7 @@ beforeEach(function () {
     User::query()->where('is_admin', false)->delete();
 });
 
-test('approving dependent application with a different contact email creates a separated member', function () {
+test('approving dependent application uses the household email for the member record', function () {
     $parentApplication = MembershipApplication::create([
         'name' => 'Parent Applicant',
         'email' => 'household@example.test',
@@ -52,14 +52,14 @@ test('approving dependent application with a different contact email creates a s
         ->and($child)->not->toBeNull()
         ->and($child->parent_member_id)->toBe($parent->id)
         ->and($child->household_email)->toBe('household@example.test')
-        ->and($child->email)->toBe('adult.child@example.test')
-        ->and($child->is_separated)->toBeTrue()
-        ->and($child->direct_login_enabled)->toBeTrue()
+        ->and($child->email)->toBe('household@example.test')
+        ->and($child->is_separated)->toBeFalse()
+        ->and($child->direct_login_enabled)->toBeFalse()
         ->and($child->user_id)->not->toBe($parent->user_id)
-        ->and($child->user?->email)->toBe('adult.child@example.test');
+        ->and(app(MemberUserEmail::class)->isInternalLoginEmail((string) $child->user?->email))->toBeTrue();
 });
 
-test('admin can assign an existing member to a household parent with a unique email', function () {
+test('admin cannot assign an existing member with a unique email to a household parent', function () {
     $parentUser = User::create([
         'name' => 'Household Parent',
         'email' => 'household@example.test',
@@ -87,13 +87,8 @@ test('admin can assign an existing member to a household parent with a unique em
         'member_number' => 'MEM-L001',
     ], 'LaterPass123');
 
-    $linked = app(HouseholdMemberService::class)->assignToHousehold($member, $parent);
-
-    expect($linked->parent_member_id)->toBe($parent->id)
-        ->and($linked->household_email)->toBe('household@example.test')
-        ->and($linked->is_separated)->toBeTrue()
-        ->and($linked->direct_login_enabled)->toBeTrue()
-        ->and($linked->user?->email)->toBe('later.joiner@example.test');
+    expect(fn () => app(HouseholdMemberService::class)->assignToHousehold($member, $parent))
+        ->toThrow(InvalidArgumentException::class);
 });
 
 test('same household email dependents receive unique internal login emails', function () {
@@ -109,4 +104,51 @@ test('same household email dependents receive unique internal login emails', fun
     $second = $resolver->resolveForNewMember('household@example.test');
 
     expect($resolver->isInternalLoginEmail($second))->toBeTrue();
+});
+
+test('detach invalid dependents unlinks separated or mismatched email dependents', function () {
+    $parentUser = User::create([
+        'name' => 'Detach Parent User',
+        'email' => 'household@example.test',
+        'password' => bcrypt('password'),
+        'is_admin' => false,
+    ]);
+
+    $parent = Member::create([
+        'user_id' => $parentUser->id,
+        'member_number' => 'MEM-DET-P',
+        'name' => 'Detach Parent',
+        'email' => 'household@example.test',
+        'household_email' => 'household@example.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now(),
+        'status' => 'active',
+    ]);
+
+    $separatedUser = User::create([
+        'name' => 'Stale Separated',
+        'email' => 'separated@example.test',
+        'password' => bcrypt('password'),
+        'is_admin' => false,
+    ]);
+
+    $separated = Member::create([
+        'user_id' => $separatedUser->id,
+        'member_number' => 'MEM-DET-S',
+        'name' => 'Stale Separated',
+        'email' => 'separated@example.test',
+        'parent_member_id' => $parent->id,
+        'household_email' => 'household@example.test',
+        'is_separated' => true,
+        'direct_login_enabled' => true,
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now(),
+        'status' => 'active',
+    ]);
+
+    $detached = app(HouseholdMemberService::class)->detachInvalidDependents();
+
+    expect($detached)->toHaveCount(1)
+        ->and($separated->fresh()->parent_member_id)->toBeNull()
+        ->and($separated->fresh()->is_separated)->toBeFalse();
 });

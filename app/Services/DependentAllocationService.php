@@ -42,7 +42,7 @@ class DependentAllocationService
         $change = null;
 
         DB::transaction(function () use ($parent, $dependent, $oldAmount, $newAmount, $note, $changedBy, &$change): void {
-            $dependent->update(['monthly_contribution_amount' => $newAmount]);
+            Member::withoutSelfAllocationGuard(fn () => $dependent->update(['monthly_contribution_amount' => $newAmount]));
 
             $change = DependentAllocationChange::query()->create([
                 'parent_member_id' => $parent->id,

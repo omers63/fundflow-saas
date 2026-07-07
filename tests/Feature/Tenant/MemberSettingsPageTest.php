@@ -169,6 +169,38 @@ test('settings contributions tab save allocation when prior cycles are clear', f
     expect((int) $this->member->fresh()->monthly_contribution_amount)->toBe(1500);
 });
 
+test('settings contributions tab shows paid amount for business day open cycle not calendar month', function () {
+    Carbon::setTestNow(Carbon::parse('2026-07-05'));
+    BusinessDaySettings::saveFromForm('2026-07-05');
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+
+    expect($openMonth)->toBe(6)
+        ->and($openYear)->toBe(2026);
+
+    Contribution::create([
+        'member_id' => $this->member->id,
+        'period' => Contribution::periodDate($openMonth, $openYear),
+        'amount' => 1000,
+        'status' => 'posted',
+        'posted_at' => Carbon::parse('2026-06-20'),
+    ]);
+
+    Filament::setCurrentPanel('member');
+    $this->actingAs($this->memberUser, 'tenant');
+
+    $openLabel = $cycles->periodLabel($openMonth, $openYear);
+
+    Livewire::test(MemberSettingsPage::class)
+        ->set('activeTab', 'contributions')
+        ->assertSee($openLabel, false)
+        ->assertSee(__('Paid'), false);
+
+    Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
+});
+
 test('settings tab switch keeps all tab panels mounted', function () {
     Filament::setCurrentPanel('member');
     $this->actingAs($this->memberUser, 'tenant');
@@ -184,6 +216,72 @@ test('settings tab switch keeps all tab panels mounted', function () {
         ->assertHasNoErrors();
 });
 
+test('settings contributions tab allows independent member to manage allocation', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+    BusinessDaySettings::saveFromForm('2026-06-15');
+
+    $parent = Member::create([
+        'member_number' => 'MEM-SET-P',
+        'name' => 'Settings Parent',
+        'email' => 'settings-parent@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => Carbon::parse('2024-06-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2024-06-01'),
+        'status' => 'active',
+    ]);
+    app(AccountingService::class)->createMemberAccounts($parent);
+
+    $independent = Member::create([
+        'member_number' => 'MEM-SET-D',
+        'name' => 'Settings Independent',
+        'email' => 'settings-independent@fund.test',
+        'household_email' => 'settings-independent@fund.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-06-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2024-06-01'),
+        'status' => 'active',
+    ]);
+    app(AccountingService::class)->createMemberAccounts($independent);
+
+    $independentUser = User::create([
+        'name' => $independent->name,
+        'email' => $independent->email,
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => false,
+        'preferred_locale' => 'en',
+    ]);
+    $independent->update(['user_id' => $independentUser->id]);
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $cursor = Carbon::parse('2024-06-01')->startOfMonth();
+    $openStart = Carbon::create($openYear, $openMonth, 1)->startOfMonth();
+
+    while ($cursor->lt($openStart)) {
+        Contribution::create([
+            'member_id' => $independent->id,
+            'period' => Contribution::periodDate((int) $cursor->month, (int) $cursor->year),
+            'amount' => 500,
+            'status' => 'posted',
+            'posted_at' => $cursor->copy(),
+        ]);
+        $cursor->addMonthNoOverflow();
+    }
+
+    Filament::setCurrentPanel('member');
+    $this->actingAs($independentUser, 'tenant');
+
+    Livewire::test(MemberSettingsPage::class)
+        ->set('activeTab', 'contributions')
+        ->assertSet('allocationChangeBlocked', false)
+        ->assertDontSee(__('Sponsored member'), false)
+        ->assertDontSee(__('Allocation locked'), false);
+
+    Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
+});
+
 test('settings page renders in arabic with faq-free profile labels', function () {
     Filament::setCurrentPanel('member');
     $this->memberUser->update(['preferred_locale' => 'ar']);
@@ -192,6 +290,5 @@ test('settings page renders in arabic with faq-free profile labels', function ()
 
     $this->get('http://'.$this->domain.'/member/settings?tab=profile')
         ->assertSuccessful()
-        ->assertSee(__('Account'), false)
-        ->assertSee(__('Payout bank details'), false);
+        ->assertSee(__('Account'), false);
 });

@@ -39,6 +39,12 @@ final class FilamentStoredUploadPath
      */
     public static function tryResolveReadableCsvToAbsolutePath(mixed $state): ?array
     {
+        if (is_string($state) && TemporaryUploadedFile::canUnserialize($state)) {
+            return self::tryResolveReadableCsvToAbsolutePath(
+                TemporaryUploadedFile::unserializeFromLivewireRequest($state),
+            );
+        }
+
         if ($state instanceof TemporaryUploadedFile) {
             return self::resolveTemporaryUploadedFile($state);
         }
@@ -56,6 +62,18 @@ final class FilamentStoredUploadPath
                 }
 
                 if (is_string($value) && trim($value) !== '') {
+                    if (TemporaryUploadedFile::canUnserialize($value)) {
+                        $candidate = self::tryResolveReadableCsvToAbsolutePath(
+                            TemporaryUploadedFile::unserializeFromLivewireRequest($value),
+                        );
+
+                        if ($candidate !== null) {
+                            return $candidate;
+                        }
+
+                        continue;
+                    }
+
                     $candidate = self::resolveStoredRelativePath(trim($value));
 
                     if ($candidate !== null) {
