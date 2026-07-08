@@ -7,6 +7,7 @@ use App\Filament\Support\MoneyDisplay;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Setting;
+use App\Support\BusinessDayDisplay;
 use App\Support\MemberDateDisplay;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Textarea;
@@ -47,7 +48,7 @@ final class ViewFundPostingAction
             'reference_display' => $record->reference ?: __('—'),
             'comments_display' => $record->comments ?: __('—'),
             'admin_remarks_display' => $record->admin_remarks ?: __('—'),
-            'submitted_at_display' => $record->created_at?->format('M j, Y g:i A'),
+            'submitted_at_display' => BusinessDayDisplay::formatDateTime($record->created_at),
             'reviewed_at_display' => $record->reviewed_at?->format('M j, Y g:i A'),
             'reviewer_name' => $record->reviewer?->name ?: __('—'),
             'attachment_url' => $record->attachment
@@ -137,7 +138,7 @@ final class ViewFundPostingAction
                 'items' => [
                     ['label' => __('Posting date'), 'value' => MemberDateDisplay::format($record->posting_date, 'M j, Y') ?? $data['posting_date_display']],
                     ['label' => __('Reference'), 'value' => $data['reference_display']],
-                    ['label' => __('Submitted'), 'value' => MemberDateDisplay::format($record->created_at, 'M j, Y g:i A') ?? $data['submitted_at_display']],
+                    ['label' => __('Submitted'), 'value' => $data['submitted_at_display']],
                 ],
             ],
         ];

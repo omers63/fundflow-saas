@@ -56,7 +56,7 @@ test('open cycle status shows contribution only when no EMI is due', function ()
     Carbon::setTestNow();
 });
 
-test('open cycle status shows EMI and exempt contribution for loan repayment cycle', function () {
+test('open cycle status hides exempt contribution description during EMI cycle', function () {
     Carbon::setTestNow(Carbon::parse('2026-06-15'));
 
     $member = Member::factory()->create([
@@ -100,7 +100,7 @@ test('open cycle status shows EMI and exempt contribution for loan repayment cyc
     expect($member->fresh()->isExemptFromContributions($openMonth, $openYear))->toBeTrue()
         ->and($status['label'])->toBe(__('EMI: :status', ['status' => __('Pending')]))
         ->and($status['color'])->toBe('warning')
-        ->and($status['description'])->toBe(__('Contribution: :status', ['status' => __('Exempt')]));
+        ->and($status['description'])->toBeNull();
 
     Carbon::setTestNow();
 });

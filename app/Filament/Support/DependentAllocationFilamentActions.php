@@ -152,10 +152,10 @@ final class DependentAllocationFilamentActions
 
                 return [
                     Select::make('monthly_contribution_amount')
-                        ->label(__('Monthly contribution amount'))
-                        ->options(Member::contributionAmountOptions())
+                        ->label(__('Monthly allocation amount'))
+                        ->options(Member::dependentContributionAmountOptions())
                         ->required()
-                        ->helperText(__('Current allocation: :amount · Cash balance: :cash', [
+                        ->helperText(__('Current allocation: :amount · Cash balance: :cash. None (zero allocation) means you will not fund this dependent’s contribution dues; EMI may still be funded if they have loan dues. Member contribution amounts remain 500–3000.', [
                             'amount' => MoneyDisplay::format((float) $record->monthly_contribution_amount, $currency),
                             'cash' => MoneyDisplay::format($record->getCashBalance(), $currency),
                         ])),
@@ -176,7 +176,7 @@ final class DependentAllocationFilamentActions
 
                 $newAmount = (int) $data['monthly_contribution_amount'];
 
-                if (! Member::isValidContributionAmount($newAmount)) {
+                if (! Member::isValidDependentContributionAmount($newAmount)) {
                     Notification::make()->title(__('Invalid amount selected.'))->danger()->send();
 
                     return;
@@ -324,10 +324,10 @@ final class DependentAllocationFilamentActions
 
             $fields[] = Select::make("amounts.{$dependent->id}")
                 ->label("{$dependent->member_number} — {$dependent->name}")
-                ->options(Member::contributionAmountOptions())
+                ->options(Member::dependentContributionAmountOptions())
                 ->default($dependent->monthly_contribution_amount)
                 ->required()
-                ->helperText(__('Current allocation: :alloc · Cash: :cash', [
+                ->helperText(__('Current allocation: :alloc · Cash: :cash. None (zero allocation) means you will not fund this dependent’s contribution dues; EMI may still be funded if they have loan dues. Member contribution amounts remain 500–3000.', [
                     'alloc' => MoneyDisplay::format((float) $dependent->monthly_contribution_amount, $currency, precision: 0) ?? '',
                     'cash' => MoneyDisplay::format($dependent->getCashBalance(), $currency) ?? '',
                 ]));

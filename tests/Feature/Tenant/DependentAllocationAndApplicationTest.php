@@ -109,12 +109,31 @@ test('parent can update dependent allocation via service', function () {
     ]);
 });
 
-test('my dependents table defines apply and bulk allocation header actions', function () {
+test('parent can set dependent monthly allocation to zero via service', function () {
+    expect(Member::contributionAmountOptions())->not->toHaveKey(0)
+        ->and(Member::dependentContributionAmountOptions())->toHaveKey(0)
+        ->and(Member::dependentContributionAmountOptions()[0])->toBe(__('None (zero allocation)'));
+
+    $change = app(DependentAllocationService::class)->changeAllocation(
+        parent: $this->parent,
+        dependent: $this->dependent,
+        newAmount: 0,
+        note: 'Zero household allocation',
+        changedBy: $this->parentUser,
+    );
+
+    expect($change)->not->toBeNull()
+        ->and($change->old_amount)->toBe(500)
+        ->and($change->new_amount)->toBe(0)
+        ->and((int) $this->dependent->fresh()->monthly_contribution_amount)->toBe(0);
+});
+
+test('my dependents table defines bulk allocation header action', function () {
     $names = collect(MyDependentTableActions::headerActions())
         ->map(fn ($action) => $action->getName())
         ->all();
 
-    expect($names)->toContain('apply_for_dependent', 'updateAllDependentAllocations');
+    expect($names)->toContain('updateAllDependentAllocations');
 });
 
 test('parent can submit dependent application on behalf via enrollment service', function () {

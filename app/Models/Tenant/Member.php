@@ -297,6 +297,11 @@ class Member extends Model
         return in_array($amount, self::CONTRIBUTION_STEPS, true);
     }
 
+    public static function isValidDependentContributionAmount(int $amount): bool
+    {
+        return $amount === 0 || self::isValidContributionAmount($amount);
+    }
+
     /**
      * @return array<int, string>
      */
@@ -310,6 +315,17 @@ class Member extends Model
         }
 
         return $options;
+    }
+
+    /**
+     * Options for parent-set dependent monthly allocations, including zero.
+     * Member self-contribution amounts stay on CONTRIBUTION_STEPS (500–3000).
+     *
+     * @return array<int, string>
+     */
+    public static function dependentContributionAmountOptions(): array
+    {
+        return [0 => __('None (zero allocation)')] + self::contributionAmountOptions();
     }
 
     /**

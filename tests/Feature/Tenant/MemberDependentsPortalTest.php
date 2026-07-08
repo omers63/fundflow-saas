@@ -241,7 +241,7 @@ test('impersonation route returns forbidden for non parent', function () {
         ->assertForbidden();
 });
 
-test('dependents table shows EMI and contribution status for loan cycle dependent', function () {
+test('dependents table hides exempt contribution label for loan cycle dependent', function () {
     BusinessDaySettings::saveFromForm('2026-06-15');
     Carbon::setTestNow(Carbon::parse('2026-06-15'));
 
@@ -281,7 +281,7 @@ test('dependents table shows EMI and contribution status for loan cycle dependen
     Livewire::test(ListMyDependents::class)
         ->assertSuccessful()
         ->assertSee(__('EMI: :status', ['status' => __('Pending')]))
-        ->assertSee(__('Contribution: :status', ['status' => __('Exempt')]));
+        ->assertDontSee(__('Contribution: :status', ['status' => __('Exempt')]));
 
     BusinessDaySettings::saveFromForm(null);
     Carbon::setTestNow();

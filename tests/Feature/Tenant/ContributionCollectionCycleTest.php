@@ -1232,3 +1232,74 @@ test('dependent allocation shortfall counts EMI dues when contributions are exem
 
     Carbon::setTestNow();
 });
+
+test('zero monthly contribution excludes dependent from household fund allocation', function () {
+    $period = now()->subMonth();
+
+    $parent = Member::create([
+        'member_number' => 'MEM-P-ZERO',
+        'name' => 'Parent Zero Alloc',
+        'email' => 'parent-zero@example.com',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => $period->copy()->startOfMonth(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($parent);
+
+    $activeDependent = Member::create([
+        'member_number' => 'MEM-D-ACTIVE',
+        'name' => 'Included Child',
+        'email' => 'included-child@example.com',
+        'parent_member_id' => $parent->id,
+        'household_email' => 'parent-zero@example.com',
+        'monthly_contribution_amount' => 80,
+        'joined_at' => $period->copy()->startOfMonth(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($activeDependent);
+
+    $excludedDependent = Member::create([
+        'member_number' => 'MEM-D-ZERO',
+        'name' => 'Excluded Child',
+        'email' => 'excluded-child@example.com',
+        'parent_member_id' => $parent->id,
+        'household_email' => 'parent-zero@example.com',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => $period->copy()->startOfMonth(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($excludedDependent);
+
+    foreach ([$parent, $activeDependent] as $member) {
+        Contribution::create([
+            'member_id' => $member->id,
+            'period' => Contribution::periodDate((int) $period->month, (int) $period->year),
+            'amount' => (float) $member->monthly_contribution_amount,
+            'amount_due' => (float) $member->monthly_contribution_amount,
+            'amount_collected' => 0,
+            'status' => 'pending',
+            'collection_status' => ContributionCollectionStatus::OVERDUE,
+            'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+            'overdue_since' => $period->copy()->endOfMonth(),
+            'is_late' => true,
+        ]);
+    }
+
+    AccountingService::withoutMemberCashCollection(fn () => $this->accounting->credit(
+        $parent->cashAccount,
+        500,
+        'Parent deposit',
+    ));
+
+    $result = $this->cycles->applyDependentAllocationForParentForPeriod(
+        $parent->fresh(),
+        (int) $period->month,
+        (int) $period->year,
+    );
+
+    expect($result['allocated_dependent_ids'])->toContain($activeDependent->id)
+        ->and($result['allocated_dependent_ids'])->not->toContain($excludedDependent->id)
+        ->and(DependentCashAllocation::query()->where('dependent_member_id', $excludedDependent->id)->exists())->toBeFalse()
+        ->and(DependentCashAllocation::query()->where('dependent_member_id', $activeDependent->id)->exists())->toBeTrue()
+        ->and($this->cycles->dependentCycleDuesForPeriod($excludedDependent->fresh(), (int) $period->month, (int) $period->year))->toBe(0.0);
+});

@@ -27,8 +27,8 @@ class DependentAllocationService
     ): ?DependentAllocationChange {
         $this->assertDependentBelongsToParent($parent, $dependent);
 
-        if (! Member::isValidContributionAmount($newAmount)) {
-            throw new InvalidArgumentException(__('Invalid monthly contribution amount selected.'));
+        if (! Member::isValidDependentContributionAmount($newAmount)) {
+            throw new InvalidArgumentException(__('Invalid monthly allocation amount selected.'));
         }
 
         $this->monthlyAllocations->assertCanChangeMonthlyContribution($parent);

@@ -23,10 +23,14 @@ final class DependentOpenCycleStatus
         $contribution = self::contributionStatus($member, $month, $year);
 
         if ($emi !== null) {
+            $description = $member->isExemptFromContributions($month, $year)
+                ? null
+                : __('Contribution: :status', ['status' => $contribution['label']]);
+
             return [
                 'label' => __('EMI: :status', ['status' => $emi['label']]),
                 'color' => $emi['color'],
-                'description' => __('Contribution: :status', ['status' => $contribution['label']]),
+                'description' => $description,
             ];
         }
 

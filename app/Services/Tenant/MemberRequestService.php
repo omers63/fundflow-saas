@@ -128,7 +128,7 @@ class MemberRequestService
             ]);
         }
 
-        if (! Member::isValidContributionAmount($amount)) {
+        if (! Member::isValidDependentContributionAmount($amount)) {
             throw ValidationException::withMessages([
                 'requested_amount' => __('Choose a valid monthly amount.'),
             ]);

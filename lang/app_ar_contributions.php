@@ -53,6 +53,7 @@ return [
     'Imported members with opening balances who still have unresolved contribution arrears before full go-live clearance.' => 'أعضاء مستوردون بأرصدة افتتاحية ما زالت لديهم متأخرات مساهمات غير مُسوّاة قبل إنهاء التشغيل الكامل.',
     'Init contribution cycle' => 'تهيئة دورة المساهمة',
     'Initialized :count contribution(s) for :period.' => 'تم تهيئة :count مساهمة/مساهمات لـ :period.',
+    'Invalid monthly allocation amount selected.' => 'مبلغ تخصيص شهري مختار غير صالح.',
     'Invalid monthly contribution amount selected.' => 'مبلغ مساهمة شهري مختار غير صالح.',
     'Legacy migration contribution' => 'مساهمة ترحيل تاريخية',
     'Member :number — dismissed :count pre-cut-off cycle(s).' => 'العضو :number — تم تجاهل :count دورة/دورات قبل القطع.',

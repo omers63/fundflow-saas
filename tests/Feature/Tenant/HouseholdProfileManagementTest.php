@@ -13,6 +13,7 @@ use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\MembershipApplicationApprovalService;
 use App\Services\Tenant\HouseholdAccessService;
+use App\Services\Tenant\HouseholdMemberService;
 use App\Services\Tenant\ImpersonationService;
 use App\Support\BusinessDaySettings;
 use App\Support\MemberPortalMaintenance;
@@ -249,6 +250,27 @@ test('parent can access household profiles on settings page', function () {
         ->assertSee(__('Household profiles'))
         ->assertSee('Parent User')
         ->assertSee('Dependent User');
+});
+
+test('changing parent email keeps dependents email and household_email in sync', function () {
+    app(HouseholdAccessService::class)->updateMemberLoginEmail(
+        $this->parent,
+        $this->parentUser,
+        'newfamily@fund.test',
+    );
+
+    $this->parent->refresh();
+    $this->dependent->refresh();
+
+    expect($this->parent->email)->toBe('newfamily@fund.test')
+        ->and($this->parent->household_email)->toBe('newfamily@fund.test')
+        ->and($this->dependent->parent_member_id)->toBe($this->parent->id)
+        ->and($this->dependent->email)->toBe('newfamily@fund.test')
+        ->and($this->dependent->household_email)->toBe('newfamily@fund.test');
+
+    expect(app(HouseholdMemberService::class)->detachInvalidDependents())->toBeEmpty();
+
+    expect($this->dependent->fresh()->parent_member_id)->toBe($this->parent->id);
 });
 
 test('changing dependent email to a unique address detaches them from the household', function () {

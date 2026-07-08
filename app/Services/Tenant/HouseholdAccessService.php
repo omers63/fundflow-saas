@@ -43,6 +43,7 @@ class HouseholdAccessService
             ]);
 
             $member->dependents()->update([
+                'email' => $newEmail,
                 'household_email' => $newEmail,
             ]);
 
