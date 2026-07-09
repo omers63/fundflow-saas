@@ -24,6 +24,8 @@ final class TenantNavigation
 
     public const SORT_LOANS = 20;
 
+    public const SORT_LOAN_QUEUE = 21;
+
     public const SORT_CONTRIBUTIONS = 30;
 
     public const SORT_DISBURSEMENTS = 40;

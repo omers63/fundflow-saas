@@ -31,11 +31,7 @@ final class LoanListTableHeaderActions
     public static function portfolio(): array
     {
         return [
-            self::importLoansAction(),
-            self::exportLoansAction(),
-            self::importRepaymentsAction(),
-            self::exportRepaymentsAction(),
-            self::createLoanAction(),
+            self::portfolioGroup(),
         ];
     }
 
@@ -45,8 +41,7 @@ final class LoanListTableHeaderActions
     public static function delinquency(): array
     {
         return [
-            self::exportGuarantorExposureAction(),
-            self::delinquencyToolsGroup(),
+            self::delinquencyGroup(),
         ];
     }
 
@@ -56,16 +51,61 @@ final class LoanListTableHeaderActions
     public static function eligibilityReviews(): array
     {
         return [
-            self::loanOverridesAction(),
+            self::eligibilityReviewsGroup(),
         ];
     }
 
     /**
-     * @return list<Action>
+     * @return list<Action|ActionGroup>
      */
     public static function queue(): array
     {
         return [
+            self::queueGroup(),
+        ];
+    }
+
+    public static function portfolioGroup(): ActionGroup
+    {
+        return ActionGroup::make([
+            self::importLoansAction(asGroupItem: true),
+            self::exportLoansAction(asGroupItem: true),
+            self::importRepaymentsAction(asGroupItem: true),
+            self::exportRepaymentsAction(asGroupItem: true),
+            self::createLoanAction(asGroupItem: true),
+        ])
+            ->label(__('Portfolio'))
+            ->icon(Heroicon::OutlinedBriefcase)
+            ->color('gray')
+            ->button();
+    }
+
+    public static function delinquencyGroup(): ActionGroup
+    {
+        return ActionGroup::make([
+            self::exportGuarantorExposureAction(),
+            ...LoanDelinquencyHeaderActions::make(),
+        ])
+            ->label(__('Delinquency tools'))
+            ->icon('heroicon-o-exclamation-triangle')
+            ->color('gray')
+            ->button();
+    }
+
+    public static function eligibilityReviewsGroup(): ActionGroup
+    {
+        return ActionGroup::make([
+            self::loanOverridesAction(),
+        ])
+            ->label(__('Eligibility'))
+            ->icon(Heroicon::OutlinedShieldCheck)
+            ->color('gray')
+            ->button();
+    }
+
+    public static function queueGroup(): ActionGroup
+    {
+        return ActionGroup::make([
             Action::make('resequence')
                 ->label(__('Resequence queues'))
                 ->icon('heroicon-o-arrows-up-down')
@@ -80,9 +120,16 @@ final class LoanListTableHeaderActions
                         ->success()
                         ->send();
                 }),
-        ];
+        ])
+            ->label(__('Queue'))
+            ->icon('heroicon-o-queue-list')
+            ->color('gray')
+            ->button();
     }
 
+    /**
+     * Delinquency maintenance only (used on contribution arrears).
+     */
     public static function delinquencyToolsGroup(): ActionGroup
     {
         return ActionGroup::make(LoanDelinquencyHeaderActions::make())
@@ -100,7 +147,7 @@ final class LoanListTableHeaderActions
             ->url(fn (): string => LoanEligibilityOverrideResource::getUrl('index'));
     }
 
-    public static function importLoansAction(): Action
+    public static function importLoansAction(bool $asGroupItem = false): Action
     {
         $action = Action::make('importLoans')
             ->label(__('Import loans'))
@@ -191,18 +238,19 @@ final class LoanListTableHeaderActions
                 }
             });
 
-        return self::portfolioToolbarAction($action);
+        return self::portfolioToolbarAction($action, $asGroupItem);
     }
 
-    public static function exportLoansAction(): Action
+    public static function exportLoansAction(bool $asGroupItem = false): Action
     {
         return self::portfolioToolbarAction(
             Action::make('exportLoans')
                 ->label(__('Export loans'))
                 ->icon(Heroicon::OutlinedArrowDownTray)
                 ->color('warning')
-                ->visible(fn(): bool => LoanResource::canCreate())
-                ->action(fn(): mixed => app(LoanExportService::class)->downloadCsv()),
+                ->visible(fn (): bool => LoanResource::canCreate())
+                ->action(fn (): mixed => app(LoanExportService::class)->downloadCsv()),
+            $asGroupItem,
         );
     }
 
@@ -216,7 +264,7 @@ final class LoanListTableHeaderActions
             ->action(fn (): mixed => app(GuarantorExposureExportService::class)->downloadCsv());
     }
 
-    public static function importRepaymentsAction(): Action
+    public static function importRepaymentsAction(bool $asGroupItem = false): Action
     {
         $action = Action::make('importRepayments')
             ->label(__('Import repayments'))
@@ -307,33 +355,35 @@ final class LoanListTableHeaderActions
                 }
             });
 
-        return self::portfolioToolbarAction($action);
+        return self::portfolioToolbarAction($action, $asGroupItem);
     }
 
-    public static function exportRepaymentsAction(): Action
+    public static function exportRepaymentsAction(bool $asGroupItem = false): Action
     {
         return self::portfolioToolbarAction(
             Action::make('exportRepayments')
                 ->label(__('Export repayments'))
                 ->icon(Heroicon::OutlinedArrowDownTray)
                 ->color('warning')
-                ->visible(fn(): bool => LoanResource::canCreate())
-                ->action(fn(): mixed => app(LoanRepaymentExportService::class)->downloadCsv()),
+                ->visible(fn (): bool => LoanResource::canCreate())
+                ->action(fn (): mixed => app(LoanRepaymentExportService::class)->downloadCsv()),
+            $asGroupItem,
         );
     }
 
-    public static function createLoanAction(): Action
+    public static function createLoanAction(bool $asGroupItem = false): Action
     {
         return self::portfolioToolbarAction(
             Action::make('create')
                 ->label(__('New loan'))
                 ->icon(Heroicon::OutlinedPlusCircle)
-                ->url(fn(): string => LoanResource::getUrl('create'))
-                ->visible(fn(): bool => LoanResource::canCreate()),
+                ->url(fn (): string => LoanResource::getUrl('create'))
+                ->visible(fn (): bool => LoanResource::canCreate()),
+            $asGroupItem,
         );
     }
 
-    private static function portfolioToolbarAction(Action $action): Action
+    private static function portfolioToolbarAction(Action $action, bool $asGroupItem = false): Action
     {
         $icon = $action->getIcon();
 
@@ -341,6 +391,29 @@ final class LoanListTableHeaderActions
             $action->tableIcon($icon);
         }
 
-        return $action->button();
+        return $asGroupItem ? $action : $action->button();
+    }
+
+    /**
+     * @param  list<Action|ActionGroup>  $actions
+     * @return list<string>
+     */
+    public static function flattenActionNames(array $actions): array
+    {
+        $names = [];
+
+        foreach ($actions as $action) {
+            if ($action instanceof ActionGroup) {
+                foreach ($action->getActions() as $child) {
+                    $names[] = $child->getName();
+                }
+
+                continue;
+            }
+
+            $names[] = $action->getName();
+        }
+
+        return $names;
     }
 }

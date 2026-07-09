@@ -1,10 +1,9 @@
 @php
-    use App\Filament\Tenant\Resources\Contributions\ContributionResource;
+    use App\Filament\Tenant\Resources\Loans\LoanResource;
 
-    $activeSegment = ContributionResource::resolveCycleSegment();
-    [$month, $year] = ContributionResource::resolveListCycle();
-    $pending = ContributionResource::pendingCountForPeriod($month, $year);
-    $collected = ContributionResource::collectedContributionCount();
+    $activeSegment = LoanResource::resolveCollectionSegment();
+    $pending = LoanResource::pendingEmiCollectionMemberCount();
+    $collected = LoanResource::collectedEmiInstallmentCount();
 @endphp
 
 <div class="mb-4 space-y-2">
@@ -13,7 +12,7 @@
             'collect' => __('To collect'),
             'collected' => __('Collected'),
         ] as $segment => $label)
-            <a href="{{ ContributionResource::listCycleSegmentUrl($segment) }}" @class([
+            <a href="{{ LoanResource::listCollectionSegmentUrl($segment) }}" @class([
                 'ff-tenant-tab-pills__item no-underline',
                 'ff-tenant-tab-pills__item--active' => $activeSegment === $segment,
                 'ff-tenant-tab-pills__item--warning' => $activeSegment !== $segment && $segment === 'collect' && $pending > 0,

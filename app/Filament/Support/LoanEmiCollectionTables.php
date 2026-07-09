@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
@@ -22,7 +23,7 @@ final class LoanEmiCollectionTables
     public static function configurePendingMembersTable(Table $table): Table
     {
         $catalog = app(LoanEmiCollectionCatalogService::class);
-        [$month, $year] = $catalog->currentOpenPeriod();
+        [$month, $year] = LoanResource::resolveListCycle();
         $currency = Setting::get('general', 'currency', 'USD');
 
         return TableGrouping::apply(
@@ -31,6 +32,9 @@ final class LoanEmiCollectionTables
                 ->heading(__('To collect – EMIs through :period', [
                     'period' => $catalog->periodLabel($month, $year),
                 ]))
+                ->headerActions([
+                    LoanEmiCollectionHeaderActions::cycleCollectionGroup(),
+                ])
                 ->columns([
                     MemberTableColumns::number(label: __('Member #'))
                         ->searchable()
@@ -142,7 +146,7 @@ final class LoanEmiCollectionTables
     public static function configureCollectedTable(Table $table): Table
     {
         $catalog = app(LoanEmiCollectionCatalogService::class);
-        [$month, $year] = $catalog->currentOpenPeriod();
+        [$month, $year] = LoanResource::resolveListCycle();
         $currency = Setting::get('general', 'currency', 'USD');
 
         return TableGrouping::apply(

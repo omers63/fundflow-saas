@@ -109,6 +109,40 @@ test('contributions list has cycle and ledger primary tabs', function () {
         ->assertSee(__('Collected'), false);
 });
 
+test('collected segment pill shows posted contribution count badge', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $cycles = app(ContributionCycleService::class);
+    [$month, $year] = $cycles->currentOpenPeriod();
+
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    Contribution::factory()->for($member)->create([
+        'period' => Contribution::periodDate($month, $year),
+        'amount' => 500,
+        'amount_due' => 500,
+        'amount_collected' => 500,
+        'status' => 'posted',
+        'collection_status' => ContributionCollectionStatus::COLLECTED,
+        'posted_at' => now(),
+    ]);
+
+    expect(ContributionResource::collectedContributionCount())->toBe(1);
+
+    Livewire::test(ListContributions::class)
+        ->assertSuccessful()
+        ->assertSee(__('Collected'), false)
+        ->assertSee('>1</span>', false);
+
+    Carbon::setTestNow();
+});
+
 test('legacy contribution tab urls redirect to cycle and ledger routes', function () {
     $path = parse_url(ContributionResource::getUrl('index'), PHP_URL_PATH) ?? '/admin/contributions';
 

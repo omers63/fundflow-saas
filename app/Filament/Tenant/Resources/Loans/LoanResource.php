@@ -6,10 +6,10 @@ use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Support\LoanDelinquencyTables;
 use App\Filament\Support\LoanEmiCollectionTables;
 use App\Filament\Tenant\Clusters\LoansCluster;
+use App\Filament\Tenant\Pages\LoanQueueWorkbenchPage;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\Tables\LoanEligibilityOverrideRequestsTable;
 use App\Filament\Tenant\Resources\Loans\Pages\CreateLoan;
 use App\Filament\Tenant\Resources\Loans\Pages\EditLoan;
-use App\Filament\Tenant\Resources\Loans\Pages\ListLoanQueue;
 use App\Filament\Tenant\Resources\Loans\Pages\ListLoans;
 use App\Filament\Tenant\Resources\Loans\Pages\ViewLoan;
 use App\Filament\Tenant\Resources\Loans\RelationManagers\DisbursementsRelationManager;
@@ -22,6 +22,7 @@ use App\Filament\Tenant\Widgets\LoanInsightsWidget;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
 use App\Models\Tenant\Member;
+use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
 use BackedEnum;
@@ -29,6 +30,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use InvalidArgumentException;
 use Livewire\Component;
 use Livewire\Livewire;
 
@@ -49,51 +51,132 @@ class LoanResource extends Resource
     /**
      * @return list<string>
      */
+    public static function primaryTabKeys(): array
+    {
+        return ['collection', 'portfolio', 'delinquency'];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function legacyTabKeys(): array
+    {
+        return [
+            'emi_collect',
+            'emi_collected',
+            'overdue_installments',
+            'guarantor_exposure',
+            'eligibility_reviews',
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
     public static function listTabKeys(): array
     {
-        $tabs = ['emi_collect', 'emi_collected', 'portfolio', 'overdue_installments', 'guarantor_exposure'];
+        return [
+            ...self::primaryTabKeys(),
+            ...self::legacyTabKeys(),
+        ];
+    }
 
-        if (LoanEligibilityOverrideRequest::isTableReady()) {
-            $tabs[] = 'eligibility_reviews';
-        }
-
-        return $tabs;
+    public static function normalizePrimaryTab(?string $tab): string
+    {
+        return match ($tab) {
+            'emi_collect', 'emi_collected', 'collection', null, '' => 'collection',
+            'overdue_installments', 'guarantor_exposure', 'delinquency' => 'delinquency',
+            'eligibility_reviews', 'portfolio' => 'portfolio',
+            default => in_array($tab, self::primaryTabKeys(), true) ? $tab : 'collection',
+        };
     }
 
     public static function listTabLabel(string $tab): string
     {
         return match ($tab) {
-            'emi_collect' => __('EMI To Collect'),
-            'emi_collected' => __('EMI collected'),
-            'overdue_installments' => __('Overdue installments'),
-            'guarantor_exposure' => __('Guarantor exposure'),
+            'collection', 'emi_collect', 'emi_collected' => __('Collection'),
+            'delinquency', 'overdue_installments', 'guarantor_exposure' => __('Delinquency'),
             'eligibility_reviews' => __('Eligibility reviews'),
-            default => __('Loans'),
+            default => __('Portfolio'),
         };
     }
 
     public static function pendingEmiCollectionMemberCount(): int
     {
         $catalog = app(LoanEmiCollectionCatalogService::class);
-        [$month, $year] = $catalog->currentOpenPeriod();
+        [$month, $year] = self::resolveListCycle();
 
         return $catalog->pendingMemberCount($month, $year);
     }
 
-    public static function listTabUrl(string $tab): string
+    public static function collectedEmiInstallmentCount(): int
     {
-        return static::listUrl($tab);
+        $catalog = app(LoanEmiCollectionCatalogService::class);
+        [$month, $year] = self::resolveListCycle();
+
+        return $catalog->collectedInstallmentCount($month, $year);
+    }
+
+    public static function listTabUrl(string $tab, array $filters = []): string
+    {
+        return match ($tab) {
+            'emi_collect' => static::listUrl('collection', $filters, segment: 'collect'),
+            'emi_collected' => static::listUrl('collection', $filters, segment: 'collected'),
+            'overdue_installments' => static::listUrl('delinquency', $filters, view: 'overdue'),
+            'guarantor_exposure' => static::listUrl('delinquency', $filters, view: 'guarantor'),
+            'eligibility_reviews' => static::listUrl('portfolio', $filters, portfolioView: 'eligibility'),
+            default => static::listUrl($tab, $filters),
+        };
     }
 
     /**
      * @param  array<string, array<string, mixed>>  $filters
      */
-    public static function listUrl(string $tab = 'portfolio', array $filters = []): string
-    {
+    public static function listUrl(
+        string $tab = 'collection',
+        array $filters = [],
+        ?string $segment = null,
+        ?string $view = null,
+        ?string $portfolioView = null,
+        ?string $cycle = null,
+    ): string {
+        $primaryTab = self::normalizePrimaryTab($tab);
         $parameters = [];
 
-        if ($tab !== 'portfolio') {
-            $parameters['tab'] = $tab;
+        if ($primaryTab !== 'collection') {
+            $parameters['tab'] = $primaryTab;
+        }
+
+        $cycle ??= self::resolveListCycleKey();
+
+        if (filled($cycle)) {
+            $parameters['cycle'] = $cycle;
+        }
+
+        $segment ??= match ($tab) {
+            'emi_collect', 'collect' => 'collect',
+            'emi_collected', 'collected' => 'collected',
+            default => null,
+        };
+
+        if ($primaryTab === 'collection' && filled($segment) && $segment !== 'collect') {
+            $parameters['segment'] = $segment;
+        }
+
+        $view ??= match ($tab) {
+            'overdue_installments', 'overdue' => 'overdue',
+            'guarantor_exposure', 'guarantor' => 'guarantor',
+            default => null,
+        };
+
+        if ($primaryTab === 'delinquency' && filled($view) && $view !== 'overdue') {
+            $parameters['view'] = $view;
+        }
+
+        $portfolioView ??= $tab === 'eligibility_reviews' ? 'eligibility' : null;
+
+        if ($primaryTab === 'portfolio' && $portfolioView === 'eligibility') {
+            $parameters['portfolioView'] = 'eligibility';
         }
 
         if ($filters !== []) {
@@ -101,6 +184,21 @@ class LoanResource extends Resource
         }
 
         return static::getUrl('index', $parameters, panel: 'tenant');
+    }
+
+    public static function listCollectionSegmentUrl(string $segment, ?string $cycle = null): string
+    {
+        return static::listUrl('collection', segment: $segment, cycle: $cycle ?? self::resolveListCycleKey());
+    }
+
+    public static function listDelinquencyViewUrl(string $view): string
+    {
+        return static::listUrl('delinquency', view: $view);
+    }
+
+    public static function listPortfolioViewUrl(?string $portfolioView = null): string
+    {
+        return static::listUrl('portfolio', portfolioView: $portfolioView);
     }
 
     /**
@@ -130,28 +228,189 @@ class LoanResource extends Resource
 
     public static function queueUrl(string $tab = 'needs_decision'): string
     {
-        return static::getUrl('queue', ['tab' => $tab]);
+        $parameters = $tab !== 'needs_decision' ? ['tab' => $tab] : [];
+
+        return LoanQueueWorkbenchPage::getUrl($parameters);
+    }
+
+    public static function resolveListCycleKey(): ?string
+    {
+        $livewire = Livewire::current();
+
+        if ($livewire instanceof ListLoans && filled($livewire->selectedCycle)) {
+            return $livewire->selectedCycle;
+        }
+
+        $fromRequest = request()->string('cycle')->toString();
+
+        return $fromRequest !== '' ? $fromRequest : null;
+    }
+
+    /**
+     * @return array{0: int, 1: int}
+     */
+    public static function resolveListCycle(): array
+    {
+        $cycles = app(ContributionCycleService::class);
+        $key = self::resolveListCycleKey();
+
+        if (filled($key)) {
+            try {
+                return $cycles->parseContributionCycleKey($key);
+            } catch (InvalidArgumentException) {
+            }
+        }
+
+        return $cycles->currentOpenPeriod();
+    }
+
+    public static function resolveListCycleLabel(): string
+    {
+        [$month, $year] = self::resolveListCycle();
+
+        return app(ContributionCycleService::class)->periodLabel($month, $year);
+    }
+
+    public static function isViewingOpenCycle(): bool
+    {
+        $cycles = app(ContributionCycleService::class);
+        [$selectedMonth, $selectedYear] = self::resolveListCycle();
+        [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+
+        return $selectedMonth === $openMonth && $selectedYear === $openYear;
+    }
+
+    public static function listWithCycle(?string $cycleKey): string
+    {
+        $primary = self::resolvePrimaryTab();
+
+        return match ($primary) {
+            'portfolio' => self::listUrl('portfolio', cycle: $cycleKey, portfolioView: self::resolvePortfolioView()),
+            'delinquency' => self::listUrl('delinquency', cycle: $cycleKey, view: self::resolveDelinquencyView()),
+            default => self::listUrl('collection', cycle: $cycleKey, segment: self::resolveCollectionSegment()),
+        };
     }
 
     public static function overdueInstallmentsUrlForMember(int|Member $member): string
     {
-        return static::listUrl('overdue_installments', static::memberFilter($member));
+        return static::listUrl('delinquency', static::memberFilter($member), view: 'overdue');
     }
 
-    /**
-     * Must stay aligned with {@see ListLoans::getTabs()} keys and the `tab` URL query.
-     */
-    public static function resolveListTab(): string
+    public static function resolvePrimaryTab(): string
     {
         $livewire = Livewire::current();
 
         if ($livewire instanceof ListLoans && filled($livewire->activeTab)) {
             $tab = $livewire->activeTab;
         } else {
-            $tab = request()->string('tab')->toString() ?: 'portfolio';
+            $tab = request()->string('tab')->toString() ?: 'collection';
         }
 
-        return in_array($tab, self::listTabKeys(), true) ? $tab : 'portfolio';
+        return self::normalizePrimaryTab($tab);
+    }
+
+    /**
+     * @deprecated Use {@see resolvePrimaryTab()} or {@see tableLayoutKey()}.
+     */
+    public static function resolveListTab(): string
+    {
+        return self::tableLayoutKey();
+    }
+
+    public static function resolveCollectionSegment(): string
+    {
+        $livewire = Livewire::current();
+
+        if ($livewire instanceof ListLoans && filled($livewire->collectionSegment)) {
+            return in_array($livewire->collectionSegment, ['collect', 'collected'], true)
+                ? $livewire->collectionSegment
+                : 'collect';
+        }
+
+        $segment = request()->string('segment')->toString();
+
+        if (in_array($segment, ['collect', 'collected'], true)) {
+            return $segment;
+        }
+
+        return match (request()->string('tab')->toString()) {
+            'emi_collected', 'collected' => 'collected',
+            'emi_collect', 'collect' => 'collect',
+            default => 'collect',
+        };
+    }
+
+    public static function resolveDelinquencyView(): string
+    {
+        if (self::resolvePrimaryTab() !== 'delinquency') {
+            return 'overdue';
+        }
+
+        $livewire = Livewire::current();
+
+        if ($livewire instanceof ListLoans && filled($livewire->delinquencyView)) {
+            return in_array($livewire->delinquencyView, ['overdue', 'guarantor'], true)
+                ? $livewire->delinquencyView
+                : 'overdue';
+        }
+
+        $view = request()->string('view')->toString();
+
+        if (in_array($view, ['overdue', 'guarantor'], true)) {
+            return $view;
+        }
+
+        return match (request()->string('tab')->toString()) {
+            'guarantor_exposure', 'guarantor' => 'guarantor',
+            'overdue_installments', 'overdue' => 'overdue',
+            default => 'overdue',
+        };
+    }
+
+    public static function resolvePortfolioView(): ?string
+    {
+        if (self::resolvePrimaryTab() !== 'portfolio') {
+            return null;
+        }
+
+        $livewire = Livewire::current();
+
+        if ($livewire instanceof ListLoans && filled($livewire->portfolioView)) {
+            return $livewire->portfolioView === 'eligibility' ? 'eligibility' : null;
+        }
+
+        if (request()->string('portfolioView')->toString() === 'eligibility') {
+            return 'eligibility';
+        }
+
+        if (request()->string('tab')->toString() === 'eligibility_reviews') {
+            return 'eligibility';
+        }
+
+        return null;
+    }
+
+    public static function tableLayoutKey(): string
+    {
+        return match (self::resolvePrimaryTab()) {
+            'collection' => 'collection|'.self::resolveCollectionSegment(),
+            'delinquency' => 'delinquency|'.self::resolveDelinquencyView(),
+            'portfolio' => self::resolvePortfolioView() === 'eligibility'
+            ? 'portfolio|eligibility'
+            : 'portfolio',
+            default => 'portfolio',
+        };
+    }
+
+    public static function resolveInsightsContext(): string
+    {
+        return match (self::tableLayoutKey()) {
+            'collection|collect' => 'emi_collect',
+            'collection|collected' => 'emi_collected',
+            'delinquency|overdue', 'delinquency|guarantor' => 'delinquency',
+            'portfolio|eligibility' => 'eligibility_reviews',
+            default => 'portfolio',
+        };
     }
 
     public static function form(Schema $schema): Schema
@@ -163,15 +422,15 @@ class LoanResource extends Resource
     {
         $livewire = Livewire::current();
 
-        return match (self::resolveListTab()) {
-            'emi_collect' => LoanEmiCollectionTables::configurePendingMembersTable($table),
-            'emi_collected' => LoanEmiCollectionTables::configureCollectedTable($table),
-            'overdue_installments' => LoanDelinquencyTables::configureOverdueInstallmentsTable($table),
-            'guarantor_exposure' => LoanDelinquencyTables::configureGuarantorExposureTable(
+        return match (self::tableLayoutKey()) {
+            'collection|collect' => LoanEmiCollectionTables::configurePendingMembersTable($table),
+            'collection|collected' => LoanEmiCollectionTables::configureCollectedTable($table),
+            'delinquency|overdue' => LoanDelinquencyTables::configureOverdueInstallmentsTable($table),
+            'delinquency|guarantor' => LoanDelinquencyTables::configureGuarantorExposureTable(
                 $table,
                 $livewire instanceof ListLoans ? $livewire : null,
             ),
-            'eligibility_reviews' => LoanEligibilityOverrideRequestsTable::configure($table),
+            'portfolio|eligibility' => LoanEligibilityOverrideRequestsTable::configure($table),
             default => LoansTable::configure($table),
         };
     }
@@ -215,7 +474,6 @@ class LoanResource extends Resource
     {
         return [
             'index' => ListLoans::route('/'),
-            'queue' => ListLoanQueue::route('/queue'),
             'create' => CreateLoan::route('/create'),
             'view' => ViewLoan::route('/{record}'),
             'edit' => EditLoan::route('/{record}/edit'),

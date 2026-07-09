@@ -48,6 +48,7 @@ final class CommunicationSettings
     {
         return match ($channel) {
             'in_app' => self::inAppEnabled(),
+            'push' => WebPushNotification::enabled(),
             'email' => self::emailEnabled(),
             'sms' => NotificationSettings::smsEnabled() && NotificationSettings::twilioConfigured(),
             'whatsapp' => NotificationSettings::whatsappEnabled() && NotificationSettings::twilioConfigured(),
@@ -61,7 +62,7 @@ final class CommunicationSettings
     public static function enabledLogicalChannels(): array
     {
         return array_values(array_filter(
-            ['in_app', 'email', 'sms', 'whatsapp'],
+            ['in_app', 'push', 'email', 'sms', 'whatsapp'],
             fn (string $channel): bool => self::channelEnabled($channel),
         ));
     }

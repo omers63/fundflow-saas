@@ -286,7 +286,7 @@ final class TenantDashboardService
             'active_loans_url' => $pipeline['loans_active_url'] ?? LoanResource::listUrl('portfolio', ['status' => ['value' => 'active']]),
             'outstanding_url' => LoanResource::listUrl(),
             'overdue_url' => LoanResource::listTabUrl('overdue_installments'),
-            'queue_url' => $pipeline['queue_url'] ?? LoanResource::getUrl('queue'),
+            'queue_url' => $pipeline['queue_url'] ?? LoanResource::queueUrl(),
         ];
     }
 
@@ -490,7 +490,7 @@ final class TenantDashboardService
                 'label' => Lang::ui('Loan queue'),
                 'description' => Lang::ui('Decisions & disbursement'),
                 'icon' => 'heroicon-o-queue-list',
-                'url' => LoanResource::getUrl('queue'),
+                'url' => LoanResource::queueUrl(),
                 'tone' => 'queue',
                 'badge' => $loanQueueCount > 0 ? (string) $loanQueueCount : null,
             ],
@@ -695,7 +695,7 @@ final class TenantDashboardService
                 'body' => Lang::uiText(trans_choice(':count loan awaiting action|:count loans awaiting action', $loanQueueCount, ['count' => $loanQueueCount])),
                 'tone' => 'amber',
                 'icon' => 'heroicon-o-queue-list',
-                'url' => LoanResource::getUrl('queue'),
+                'url' => LoanResource::queueUrl(),
             ];
         }
 
@@ -1053,7 +1053,7 @@ final class TenantDashboardService
                 'title' => Lang::ui('Loans & tiers'),
                 'links' => [
                     ['label' => Lang::ui('All loans'), 'icon' => 'heroicon-o-banknotes', 'url' => LoanResource::getUrl('index')],
-                    ['label' => Lang::ui('Loan queue'), 'icon' => 'heroicon-o-queue-list', 'url' => LoanResource::getUrl('queue')],
+                    ['label' => Lang::ui('Loan queue'), 'icon' => 'heroicon-o-queue-list', 'url' => LoanResource::queueUrl()],
                     ['label' => Lang::ui('Overdue installments'), 'icon' => 'heroicon-o-calendar-days', 'url' => LoanResource::listTabUrl('overdue_installments')],
                     ['label' => Lang::ui('Contribution arrears'), 'icon' => 'heroicon-o-banknotes', 'url' => ContributionResource::listTabUrl('arrears')],
                     ['label' => Lang::ui('Delinquent members'), 'icon' => 'heroicon-o-user-minus', 'url' => MemberResource::listTabUrl('delinquent')],

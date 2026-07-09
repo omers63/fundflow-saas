@@ -87,6 +87,11 @@ class LoanEmiCollectionCatalogService
         return $this->membersWithCollectableEmisQuery($month, $year)->count();
     }
 
+    public function collectedInstallmentCount(int $month, int $year): int
+    {
+        return $this->collectedInstallmentsQuery($month, $year)->count();
+    }
+
     /**
      * @return Collection<int, LoanInstallment>
      */

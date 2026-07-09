@@ -16,6 +16,7 @@ use Filament\Actions\BulkAction;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\HtmlString;
@@ -57,6 +58,7 @@ final class DependentAllocationFilamentActions
                 }
 
                 $amounts = $data['amounts'] ?? [];
+                $excludes = $data['excludes'] ?? [];
                 $note = is_string($data['note'] ?? null) ? $data['note'] : null;
 
                 if ($amounts === []) {
@@ -65,10 +67,18 @@ final class DependentAllocationFilamentActions
                     return;
                 }
 
+                $updates = [];
+                foreach ($amounts as $dependentId => $amount) {
+                    $updates[(int) $dependentId] = [
+                        'amount' => (int) $amount,
+                        'exclude' => (bool) ($excludes[$dependentId] ?? false),
+                    ];
+                }
+
                 $user = auth('tenant')->user();
                 $results = app(DependentAllocationService::class)->changeMultiple(
                     parent: $parent,
-                    updates: $amounts,
+                    updates: $updates,
                     note: $note,
                     changedBy: $user instanceof User ? $user : null,
                 );
@@ -108,6 +118,7 @@ final class DependentAllocationFilamentActions
                 }
 
                 $amounts = $data['amounts'] ?? [];
+                $excludes = $data['excludes'] ?? [];
                 $note = is_string($data['note'] ?? null) ? $data['note'] : null;
 
                 if ($amounts === []) {
@@ -116,10 +127,18 @@ final class DependentAllocationFilamentActions
                     return;
                 }
 
+                $updates = [];
+                foreach ($amounts as $dependentId => $amount) {
+                    $updates[(int) $dependentId] = [
+                        'amount' => (int) $amount,
+                        'exclude' => (bool) ($excludes[$dependentId] ?? false),
+                    ];
+                }
+
                 $user = auth('tenant')->user();
                 $results = app(DependentAllocationService::class)->changeMultiple(
                     parent: $parent,
-                    updates: $amounts,
+                    updates: $updates,
                     note: $note,
                     changedBy: $user instanceof User ? $user : null,
                 );
@@ -145,6 +164,7 @@ final class DependentAllocationFilamentActions
             ->color('warning')
             ->fillForm(fn (Member $record): array => [
                 'monthly_contribution_amount' => $record->monthly_contribution_amount,
+                'exclude_from_household_contribution_funding' => (bool) $record->exclude_from_household_contribution_funding,
                 'note' => null,
             ])
             ->schema(function (Member $record): array {
@@ -152,13 +172,17 @@ final class DependentAllocationFilamentActions
 
                 return [
                     Select::make('monthly_contribution_amount')
-                        ->label(__('Monthly allocation amount'))
+                        ->label(__('Monthly contribution amount'))
                         ->options(Member::dependentContributionAmountOptions())
                         ->required()
-                        ->helperText(__('Current allocation: :amount · Cash balance: :cash. None (zero allocation) means you will not fund this dependent’s contribution dues; EMI may still be funded if they have loan dues. Member contribution amounts remain 500–3000.', [
+                        ->helperText(__('Current amount: :amount · Cash balance: :cash. Contribution must be 500–3000. EMI exemption still applies while the dependent is in a loan cycle.', [
                             'amount' => MoneyDisplay::format((float) $record->monthly_contribution_amount, $currency),
                             'cash' => MoneyDisplay::format($record->getCashBalance(), $currency),
                         ])),
+                    Toggle::make('exclude_from_household_contribution_funding')
+                        ->label(__('Do not fund contribution from household'))
+                        ->helperText(__('When enabled, the parent will not transfer cash for this dependent’s contribution dues. EMI may still be funded if they have loan dues. The contribution amount itself stays 500–3000.'))
+                        ->default(false),
                     TextInput::make('note')
                         ->label(__('Note / reason (optional)'))
                         ->maxLength(200)
@@ -190,6 +214,7 @@ final class DependentAllocationFilamentActions
                         newAmount: $newAmount,
                         note: is_string($data['note'] ?? null) ? $data['note'] : null,
                         changedBy: $user instanceof User ? $user : null,
+                        excludeFromHouseholdContributionFunding: (bool) ($data['exclude_from_household_contribution_funding'] ?? false),
                     );
                 } catch (\Throwable $exception) {
                     Notification::make()
@@ -327,10 +352,15 @@ final class DependentAllocationFilamentActions
                 ->options(Member::dependentContributionAmountOptions())
                 ->default($dependent->monthly_contribution_amount)
                 ->required()
-                ->helperText(__('Current allocation: :alloc · Cash: :cash. None (zero allocation) means you will not fund this dependent’s contribution dues; EMI may still be funded if they have loan dues. Member contribution amounts remain 500–3000.', [
+                ->helperText(__('Current amount: :alloc · Cash: :cash. Contribution must be 500–3000.', [
                     'alloc' => MoneyDisplay::format((float) $dependent->monthly_contribution_amount, $currency, precision: 0) ?? '',
                     'cash' => MoneyDisplay::format($dependent->getCashBalance(), $currency) ?? '',
                 ]));
+
+            $fields[] = Toggle::make("excludes.{$dependent->id}")
+                ->label(__('Do not fund contribution from household'))
+                ->helperText(__('EMI may still be funded if they have loan dues.'))
+                ->default((bool) $dependent->exclude_from_household_contribution_funding);
         }
 
         $fields[] = TextInput::make('note')

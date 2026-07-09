@@ -109,23 +109,24 @@ test('parent can update dependent allocation via service', function () {
     ]);
 });
 
-test('parent can set dependent monthly allocation to zero via service', function () {
+test('parent can exclude dependent contribution from household funding without zeroing amount', function () {
     expect(Member::contributionAmountOptions())->not->toHaveKey(0)
-        ->and(Member::dependentContributionAmountOptions())->toHaveKey(0)
-        ->and(Member::dependentContributionAmountOptions()[0])->toBe(__('None (zero allocation)'));
+        ->and(Member::dependentContributionAmountOptions())->not->toHaveKey(0);
 
     $change = app(DependentAllocationService::class)->changeAllocation(
         parent: $this->parent,
         dependent: $this->dependent,
-        newAmount: 0,
-        note: 'Zero household allocation',
+        newAmount: 500,
+        note: 'Exclude contribution funding',
         changedBy: $this->parentUser,
+        excludeFromHouseholdContributionFunding: true,
     );
 
     expect($change)->not->toBeNull()
         ->and($change->old_amount)->toBe(500)
-        ->and($change->new_amount)->toBe(0)
-        ->and((int) $this->dependent->fresh()->monthly_contribution_amount)->toBe(0);
+        ->and($change->new_amount)->toBe(500)
+        ->and((int) $this->dependent->fresh()->monthly_contribution_amount)->toBe(500)
+        ->and($this->dependent->fresh()->excludesHouseholdContributionFunding())->toBeTrue();
 });
 
 test('my dependents table defines bulk allocation header action', function () {

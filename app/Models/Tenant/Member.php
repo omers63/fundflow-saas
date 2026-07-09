@@ -43,6 +43,7 @@ class Member extends Model
         'direct_login_enabled',
         'portal_pin',
         'monthly_contribution_amount',
+        'exclude_from_household_contribution_funding',
         'joined_at',
         'contribution_arrears_cutoff_date',
         'opening_cash_balance',
@@ -60,6 +61,7 @@ class Member extends Model
     {
         return [
             'monthly_contribution_amount' => 'decimal:2',
+            'exclude_from_household_contribution_funding' => 'boolean',
             'joined_at' => 'date',
             'contribution_arrears_cutoff_date' => 'date',
             'opening_cash_balance' => 'decimal:2',
@@ -299,7 +301,7 @@ class Member extends Model
 
     public static function isValidDependentContributionAmount(int $amount): bool
     {
-        return $amount === 0 || self::isValidContributionAmount($amount);
+        return self::isValidContributionAmount($amount);
     }
 
     /**
@@ -318,14 +320,19 @@ class Member extends Model
     }
 
     /**
-     * Options for parent-set dependent monthly allocations, including zero.
-     * Member self-contribution amounts stay on CONTRIBUTION_STEPS (500–3000).
+     * Dependent contribution amount options (same steps as members: 500–3000).
+     * Household funding exclusion is a separate flag.
      *
      * @return array<int, string>
      */
     public static function dependentContributionAmountOptions(): array
     {
-        return [0 => __('None (zero allocation)')] + self::contributionAmountOptions();
+        return self::contributionAmountOptions();
+    }
+
+    public function excludesHouseholdContributionFunding(): bool
+    {
+        return (bool) $this->exclude_from_household_contribution_funding;
     }
 
     /**

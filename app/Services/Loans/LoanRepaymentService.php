@@ -70,8 +70,9 @@ class LoanRepaymentService
                     $loan->member->user->notify(new LoanRepaymentDueNotification(
                         loan: $loan,
                         installment: $installment,
-                        deadline: $deadline,
+                        deadline: $deadline->copy()->startOfDay(),
                         cashBalance: $cashBalance,
+                        memberName: (string) $loan->member->name,
                     ));
                     $notified++;
                 } catch (\Throwable $e) {

@@ -29,10 +29,10 @@ class SendContributionNotifications extends Command
             $year = (int) $previous->year;
         }
 
-        $count = $cycles->sendDueNotifications($month, $year);
+        $stats = $cycles->sendDueNotifications($month, $year);
 
         $this->info(__('Notified :count member(s) for :period.', [
-            'count' => $count,
+            'count' => $stats['notified'],
             'period' => Carbon::create($year, $month, 1)->format('F Y'),
         ]));
 

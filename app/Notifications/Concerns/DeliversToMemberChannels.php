@@ -61,6 +61,11 @@ trait DeliversToMemberChannels
             $payload = $this->toArray($notifiable);
             $title = NotificationPlainText::from((string) ($payload['title'] ?? ''));
             $body = NotificationPlainText::from((string) ($payload['body'] ?? ''));
+            $memberName = $this->pushRecipientName($notifiable, $payload);
+
+            if ($memberName !== '') {
+                $title = $memberName.' — '.$title;
+            }
 
             $message = (new WebPushMessage)
                 ->title($title)
@@ -83,6 +88,31 @@ trait DeliversToMemberChannels
 
             return $message;
         });
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function pushRecipientName(object $notifiable, array $payload): string
+    {
+        if (filled($payload['member_name'] ?? null)) {
+            return trim((string) $payload['member_name']);
+        }
+
+        if ($notifiable instanceof User) {
+            $member = $notifiable->relationLoaded('member')
+                ? $notifiable->member
+                : $notifiable->activeMember();
+
+            $fromMember = trim((string) ($member?->name ?? ''));
+            if ($fromMember !== '') {
+                return $fromMember;
+            }
+
+            return trim((string) ($notifiable->name ?? ''));
+        }
+
+        return '';
     }
 
     protected function memberLoanUrl(int $loanId): string

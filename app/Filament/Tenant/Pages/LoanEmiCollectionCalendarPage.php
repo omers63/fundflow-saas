@@ -130,7 +130,7 @@ class LoanEmiCollectionCalendarPage extends Page
             Action::make('emi_list')
                 ->label(__('EMI to collect'))
                 ->icon('heroicon-o-banknotes')
-                ->url(LoanResource::listUrl('emi_collect')),
+                ->url(LoanResource::listTabUrl('emi_collect')),
         ];
     }
 }

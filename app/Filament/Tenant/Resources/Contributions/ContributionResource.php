@@ -355,6 +355,14 @@ class ContributionResource extends Resource
             ->count();
     }
 
+    public static function collectedContributionCount(): int
+    {
+        [$month, $year] = self::resolveListCycle();
+
+        return app(ContributionCycleService::class)
+            ->postedContributionCount($month, $year);
+    }
+
     public static function openCyclePendingCount(): int
     {
         return once(function (): int {

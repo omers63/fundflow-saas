@@ -5,9 +5,11 @@ declare(strict_types=1);
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationSnapshot;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\ReconciliationDigestNotification;
 use App\Services\ReconciliationDigestService;
+use App\Support\ReconciliationDigestSettings;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
@@ -65,6 +67,28 @@ test('nightly batch digest notifies admins via database and web push', function 
     );
 
     Notification::assertNotSentTo($this->nonAdmin, ReconciliationDigestNotification::class);
+});
+
+test('nightly batch digest omits web push when setting disabled', function () {
+    Notification::fake();
+
+    ReconciliationDigestSettings::saveFromForm([
+        'reconciliation_digest_push_enabled' => false,
+    ]);
+
+    app(ReconciliationDigestService::class)->notifyAdminsOfNightlyBatch([
+        'halted' => false,
+        'raised' => 1,
+        'resolved' => 0,
+        'critical' => 0,
+    ]);
+
+    Notification::assertSentTo(
+        $this->admin,
+        ReconciliationDigestNotification::class,
+        fn (ReconciliationDigestNotification $notification, array $channels): bool => in_array('database', $channels, true)
+        && ! in_array(WebPushChannel::class, $channels, true),
+    );
 });
 
 test('halted nightly batch digest is flagged critical', function () {
@@ -135,4 +159,19 @@ test('nightly reconciliation command notifies admins', function () {
     $this->artisan('fund:nightly-reconciliation')->assertSuccessful();
 
     Notification::assertSentTo($this->admin, ReconciliationDigestNotification::class);
+});
+
+test('reconciliation digest push setting persists from form state', function () {
+    ReconciliationDigestSettings::saveFromForm([
+        'reconciliation_digest_push_enabled' => false,
+    ]);
+
+    expect(ReconciliationDigestSettings::digestPushEnabled())->toBeFalse()
+        ->and(Setting::get('reconciliation', 'digest_push_enabled'))->toBe('0');
+
+    ReconciliationDigestSettings::saveFromForm([
+        'reconciliation_digest_push_enabled' => true,
+    ]);
+
+    expect(ReconciliationDigestSettings::digestPushEnabled())->toBeTrue();
 });

@@ -49,7 +49,7 @@ const ADMIN_PORTAL_HTTP_SMOKE_ROUTES = [
     ['path' => '/admin', 'label' => 'dashboard'],
     ['path' => '/admin/members', 'label' => 'members'],
     ['path' => '/admin/loans/loans', 'label' => 'loans'],
-    ['path' => '/admin/loans/loans/queue', 'label' => 'loan queue'],
+    ['path' => '/admin/loan-queue', 'label' => 'loan queue'],
     ['path' => '/admin/contributions', 'label' => 'collections'],
     ['path' => '/admin/disbursements', 'label' => 'disbursements'],
     ['path' => '/admin/bank-accounts', 'label' => 'bank clearing'],
@@ -121,12 +121,15 @@ test('admin dashboard http response includes redesign chrome', function () {
 
     App::setLocale('ar');
 
-    $this->actingAs($admin, 'tenant');
+    $this->actingAs($admin, 'tenant')
+        ->get('http://'.adminPortalTenantDomain().'/admin')
+        ->assertSuccessful()
+        ->assertSee('ff-portal-topbar-chip', false);
 
-    $this->get('http://'.adminPortalTenantDomain().'/admin')
+    Livewire::actingAs($admin, 'tenant')
+        ->test(TenantDashboardWidget::class)
         ->assertSuccessful()
         ->assertSee('ff-tenant-dashboard-hero', false)
-        ->assertSee('ff-portal-topbar-chip', false)
         ->assertSee(__('Fund pool health', locale: 'ar'), false)
         ->assertSee(__('Loan pipeline', locale: 'ar'), false);
 });
@@ -229,7 +232,7 @@ test('consolidated sidebar registry matches live navigation labels in english', 
         ->values()
         ->all();
 
-    expect($labels)->toHaveCount(14);
+    expect($labels)->toHaveCount(15);
 
     foreach (TenantSidebarRegistry::consolidatedNavigationLabels() as $label) {
         expect($labels)->toContain($label);

@@ -54,7 +54,7 @@ test('loan list url uses filters and includes tab when not default', function ()
     $overdueUrl = LoanResource::listUrl('overdue_installments', ['status' => ['value' => 'overdue']]);
 
     expect($overdueUrl)
-        ->toContain('tab=overdue_installments')
+        ->toContain('tab=delinquency')
         ->toContain('filters')
         ->not->toContain('?tab=overdue_installments?');
 });
@@ -63,6 +63,7 @@ test('loan queue url uses tab query parameter', function () {
     $url = LoanResource::queueUrl('ready_to_disburse');
 
     expect($url)
+        ->toContain('/admin/loan-queue')
         ->toContain('tab=ready_to_disburse')
         ->not->toContain('?tab=ready_to_disburse?');
 });

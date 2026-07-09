@@ -250,6 +250,11 @@ class ContributionCycleService
             ->orderByDesc('posted_at');
     }
 
+    public function postedContributionCount(int $month, int $year): int
+    {
+        return $this->postedContributionsQueryForPeriod($month, $year)->count();
+    }
+
     /**
      * Members who should have a posted collection for the period (posted + still outstanding).
      *
@@ -413,24 +418,58 @@ class ContributionCycleService
         return $this->requiredCashForMemberPeriod($member, $month, $year);
     }
 
-    public function sendDueNotifications(int $month, int $year): int
+    /**
+     * Total cash a member should hold for the period: own contribution shortfall
+     * plus, for parents, dependent contribution/EMI allocation shortfalls.
+     */
+    public function dueNotificationAmountForMember(Member $member, int $month, int $year): float
     {
-        $deadline = $this->deadline($month, $year);
-        $notified = 0;
+        $amount = 0.0;
 
-        Member::active()->with('user')->each(function (Member $member) use ($month, $year, $deadline, &$notified): void {
-            $alreadyPaid = Contribution::query()
-                ->where('member_id', $member->id)
-                ->forPeriod($month, $year)
-                ->exists();
+        if (!$member->isExemptFromContributions($month, $year)) {
+            $amount += $this->requiredCollectionCashForMemberPeriod($member, $month, $year);
+        }
 
-            if ($alreadyPaid || $member->isExemptFromContributions()) {
+        if ($member->parent_member_id === null) {
+            $member->loadMissing(['dependents']);
+            $amount += $this->totalDependentShortfallForParentForPeriod($member, $month, $year);
+        }
+
+        return round($amount, 2);
+    }
+
+    /**
+     * @return array{notified: int, skipped_paid: int, skipped_exempt: int, skipped_no_user: int, failed: int}
+     */
+    public function sendDueNotifications(int $month, int $year): array
+    {
+        $deadline = $this->deadline($month, $year)->copy()->startOfDay();
+        $stats = [
+            'notified' => 0,
+            'skipped_paid' => 0,
+            'skipped_exempt' => 0,
+            'skipped_no_user' => 0,
+            'failed' => 0,
+        ];
+
+        Member::active()->with(['user', 'dependents'])->each(function (Member $member) use ($month, $year, $deadline, &$stats): void {
+            $amount = $this->dueNotificationAmountForMember($member, $month, $year);
+
+            if ($amount <= 0.00001) {
+                if ($member->isExemptFromContributions($month, $year) && $member->parent_member_id !== null) {
+                    $stats['skipped_exempt']++;
+                } else {
+                    $stats['skipped_paid']++;
+                }
+
                 return;
             }
 
             $user = $member->user;
 
             if ($user === null) {
+                $stats['skipped_no_user']++;
+
                 return;
             }
 
@@ -438,12 +477,14 @@ class ContributionCycleService
                 $user->notify(new ContributionDueNotification(
                     month: $month,
                     year: $year,
-                    amount: (float) $member->monthly_contribution_amount,
+                    amount: $amount,
                     deadline: $deadline,
                     cashBalance: $member->getCashBalance(),
+                    memberName: (string) $member->name,
                 ));
-                $notified++;
+                $stats['notified']++;
             } catch (\Throwable $e) {
+                $stats['failed']++;
                 logger()->error('ContributionCycleService: notification failed', [
                     'member_id' => $member->id,
                     'error' => $e->getMessage(),
@@ -451,7 +492,7 @@ class ContributionCycleService
             }
         });
 
-        return $notified;
+        return $stats;
     }
 
     /**
@@ -494,6 +535,7 @@ class ContributionCycleService
         if (
             (float) $member->monthly_contribution_amount > 0
             && ! $member->isExemptFromContributions($month, $year)
+            && !$member->excludesHouseholdContributionFunding()
         ) {
             $dues += $this->requiredCollectionCashForMemberPeriod($member, $month, $year);
         }

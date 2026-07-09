@@ -115,10 +115,17 @@ test('member can update allocation when only the open cycle contribution is unpa
     expect((int) $this->member->fresh()->monthly_contribution_amount)->toBe(1500);
 });
 
-test('member can save notification preferences', function () {
+test('member can save notification preferences including push', function () {
+    config([
+        'webpush.vapid.public_key' => 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U',
+        'webpush.vapid.private_key' => 'UUxI4O8-FbRqjAihg6f42nd_pmTQj2vmanuelys70Ho',
+    ]);
+
     Livewire::test(MyNotificationPreferencesPage::class)
         ->assertSuccessful()
+        ->assertSee(__('Push'))
         ->call('toggleChannel', NotificationPreferenceService::CONTRIBUTIONS, NotificationPreferenceService::CH_SMS)
+        ->call('toggleChannel', NotificationPreferenceService::CONTRIBUTIONS, NotificationPreferenceService::CH_PUSH)
         ->call('save')
         ->assertNotified();
 
@@ -128,7 +135,9 @@ test('member can save notification preferences', function () {
         [],
     );
 
-    expect($channels)->toContain(NotificationPreferenceService::CH_SMS);
+    expect($channels)->toContain(NotificationPreferenceService::CH_SMS)
+        ->and($channels)->not->toContain(NotificationPreferenceService::CH_PUSH)
+        ->and($channels)->toContain(NotificationPreferenceService::CH_IN_APP);
 });
 
 test('notification preference categories render in arabic', function () {

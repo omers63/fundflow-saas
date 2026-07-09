@@ -78,7 +78,7 @@ test('new deposit request includes web push for admin', function () {
     Notification::assertSentTo(
         $this->admin,
         NewFundPostingNotification::class,
-        fn(NewFundPostingNotification $notification, array $channels): bool => in_array('database', $channels, true)
+        fn (NewFundPostingNotification $notification, array $channels): bool => in_array('database', $channels, true)
         && in_array(WebPushChannel::class, $channels, true),
     );
 });
@@ -93,7 +93,7 @@ test('deposit accept and reject include web push for member', function () {
     Notification::assertSentTo(
         $this->memberUser,
         FundPostingAcceptedNotification::class,
-        fn(FundPostingAcceptedNotification $notification, array $channels): bool => in_array(WebPushChannel::class, $channels, true)
+        fn (FundPostingAcceptedNotification $notification, array $channels): bool => in_array(WebPushChannel::class, $channels, true)
         && isset($notification->toArray($this->memberUser)['fund_posting_id']),
     );
 
@@ -105,7 +105,7 @@ test('deposit accept and reject include web push for member', function () {
     Notification::assertSentTo(
         $this->memberUser,
         FundPostingRejectedNotification::class,
-        fn(FundPostingRejectedNotification $notification, array $channels): bool => in_array(WebPushChannel::class, $channels, true),
+        fn (FundPostingRejectedNotification $notification, array $channels): bool => in_array(WebPushChannel::class, $channels, true),
     );
 });
 
@@ -114,13 +114,18 @@ test('contribution due reminder includes web push for member', function () {
 
     [$month, $year] = app(ContributionCycleService::class)->currentOpenPeriod();
 
-    expect(app(ContributionCycleService::class)->sendDueNotifications($month, $year))->toBe(1);
+    expect(app(ContributionCycleService::class)->sendDueNotifications($month, $year)['notified'])->toBe(1);
 
     Notification::assertSentTo(
         $this->memberUser,
         ContributionDueNotification::class,
-        fn(ContributionDueNotification $notification, array $channels): bool => in_array(WebPushChannel::class, $channels, true)
-        && filled($notification->toArray($this->memberUser)['url'] ?? null),
+        function (ContributionDueNotification $notification, array $channels): bool {
+            $push = $notification->toWebPush($this->memberUser, $notification)->toArray();
+
+            return in_array(WebPushChannel::class, $channels, true)
+                && filled($notification->toArray($this->memberUser)['url'] ?? null)
+                && str_starts_with((string) ($push['title'] ?? ''), 'Member — ');
+        },
     );
 });
 
@@ -132,7 +137,7 @@ test('direct messages include web push for member and admin', function () {
     Notification::assertSentTo(
         $this->memberUser,
         MemberDirectMessageNotification::class,
-        fn(MemberDirectMessageNotification $notification, array $channels): bool => in_array(WebPushChannel::class, $channels, true)
+        fn (MemberDirectMessageNotification $notification, array $channels): bool => in_array(WebPushChannel::class, $channels, true)
         && filled($notification->toArray($this->memberUser)['url'] ?? null),
     );
 
@@ -143,7 +148,7 @@ test('direct messages include web push for member and admin', function () {
     Notification::assertSentTo(
         $this->admin,
         AdminDirectMessageNotification::class,
-        fn(AdminDirectMessageNotification $notification, array $channels): bool => in_array(WebPushChannel::class, $channels, true),
+        fn (AdminDirectMessageNotification $notification, array $channels): bool => in_array(WebPushChannel::class, $channels, true),
     );
 });
 
@@ -161,7 +166,7 @@ test('email announcements include web push for member', function () {
     Notification::assertSentTo(
         $this->memberUser,
         MemberAnnouncementNotification::class,
-        fn(MemberAnnouncementNotification $notification, array $channels): bool => in_array('mail', $channels, true)
+        fn (MemberAnnouncementNotification $notification, array $channels): bool => in_array('mail', $channels, true)
         && in_array(WebPushChannel::class, $channels, true),
     );
 });
@@ -180,6 +185,6 @@ test('in-app announcements include web push for member', function () {
     Notification::assertSentTo(
         $this->memberUser,
         MemberDirectMessageNotification::class,
-        fn(MemberDirectMessageNotification $notification, array $channels): bool => in_array(WebPushChannel::class, $channels, true),
+        fn (MemberDirectMessageNotification $notification, array $channels): bool => in_array(WebPushChannel::class, $channels, true),
     );
 });

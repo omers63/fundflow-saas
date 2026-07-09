@@ -49,7 +49,7 @@ test('overdue installments url for member uses tab and member filter', function 
     $url = LoanResource::overdueInstallmentsUrlForMember($member);
 
     expect($url)
-        ->toContain('tab=overdue_installments')
+        ->toContain('tab=delinquency')
         ->toContain('filters')
         ->toContain('member_id')
         ->toContain((string) $member->id)

@@ -53,7 +53,7 @@ class LoanEmiCollectionPage extends Page implements HasTable
             ? 'emi_collected'
             : 'emi_collect';
 
-        $this->redirect(LoanResource::listUrl($filamentTab), navigate: true);
+        $this->redirect(LoanResource::listTabUrl($filamentTab), navigate: true);
     }
 
     public function setEmiTab(string $tab): void
@@ -107,7 +107,7 @@ class LoanEmiCollectionPage extends Page implements HasTable
 
     public static function url(string $tab = 'collect'): string
     {
-        return LoanResource::listUrl($tab === 'collected' ? 'emi_collected' : 'emi_collect');
+        return LoanResource::listTabUrl($tab === 'collected' ? 'emi_collected' : 'emi_collect');
     }
 
     protected function getHeaderActions(): array

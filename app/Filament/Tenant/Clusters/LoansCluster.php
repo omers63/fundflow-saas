@@ -6,11 +6,9 @@ namespace App\Filament\Tenant\Clusters;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Support\TenantNavigation;
-use App\Models\Tenant\Loan;
 use App\Support\Lang;
 use BackedEnum;
 use Filament\Clusters\Cluster;
-use Filament\Pages\Enums\SubNavigationPosition;
 use Filament\Support\Icons\Heroicon;
 use UnitEnum;
 
@@ -28,7 +26,7 @@ class LoansCluster extends Cluster
 
     protected static ?string $clusterBreadcrumb = 'Loans';
 
-    protected static ?SubNavigationPosition $subNavigationPosition = SubNavigationPosition::Top;
+    protected static bool $shouldRegisterSubNavigation = false;
 
     public static function getClusterBreadcrumb(): ?string
     {
@@ -43,13 +41,11 @@ class LoansCluster extends Cluster
 
     public static function getNavigationBadge(): ?string
     {
-        $count = Loan::query()->inQueue()->count();
-
-        return $count > 0 ? (string) $count : null;
+        return null;
     }
 
     public static function getNavigationBadgeColor(): ?string
     {
-        return 'warning';
+        return null;
     }
 }

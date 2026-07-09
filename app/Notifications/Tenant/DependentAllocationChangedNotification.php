@@ -26,8 +26,7 @@ class DependentAllocationChangedNotification extends Notification
     public function __construct(
         public DependentAllocationChange $change,
         public string $role = 'dependent',
-    ) {
-    }
+    ) {}
 
     /**
      * @return list<string|class-string>
@@ -40,14 +39,20 @@ class DependentAllocationChangedNotification extends Notification
                 NotificationPreferenceService::ALLOCATIONS,
                 [
                     NotificationPreferenceService::CH_IN_APP,
+                    NotificationPreferenceService::CH_PUSH,
                     NotificationPreferenceService::CH_EMAIL,
                     NotificationPreferenceService::CH_SMS,
                     NotificationPreferenceService::CH_WHATSAPP,
                 ],
             ),
-            'parent' => NotificationPreferenceService::resolveMailOnly(
+            'parent' => NotificationPreferenceService::resolve(
                 $notifiable,
                 NotificationPreferenceService::ALLOCATIONS,
+                [
+                    NotificationPreferenceService::CH_IN_APP,
+                    NotificationPreferenceService::CH_PUSH,
+                    NotificationPreferenceService::CH_EMAIL,
+                ],
             ),
             default => ['database'],
         };

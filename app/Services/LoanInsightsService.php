@@ -180,7 +180,7 @@ final class LoanInsightsService
                     : ($queueTotal > 0 ? __('Open queue') : null),
                 'cta_url' => $pendingEligibilityReviews > 0 && $queueTotal === 0
                     ? $eligibilityReviewsUrl
-                    : ($queueTotal > 0 ? LoanResource::getUrl('queue') : null),
+                    : ($queueTotal > 0 ? LoanResource::queueUrl() : null),
             ],
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'pending', 'label' => __('Pending'), 'value' => (string) $pending, 'sub' => __('Applications'), 'icon' => 'heroicon-o-clock', 'accent' => 'amber', 'active' => $pending > 0],
@@ -207,7 +207,7 @@ final class LoanInsightsService
                 'outstanding_total' => $outstanding,
                 'overdue_installments' => $overdueCount,
                 'approved_month' => $approvedThisMonth,
-                'queue_url' => LoanResource::getUrl('queue'),
+                'queue_url' => LoanResource::queueUrl(),
                 'queue_needs_decision_url' => LoanResource::queueUrl('needs_decision'),
                 'queue_ready_to_disburse_url' => LoanResource::queueUrl('ready_to_disburse'),
                 'loans_url' => LoanResource::listUrl(),
@@ -651,13 +651,13 @@ final class LoanInsightsService
                 'decision' => LoanResource::queueUrl('needs_decision'),
                 'disburse' => LoanResource::queueUrl('ready_to_disburse'),
                 'tab_total' => LoanResource::queueUrl($activeTab),
-                'emergency' => LoanResource::getUrl('queue'),
-                'queue' => LoanResource::getUrl('queue'),
+                'emergency' => LoanResource::queueUrl(),
+                'queue' => LoanResource::queueUrl(),
             ]),
             'pipeline' => [
                 'needs_decision' => $needsDecision,
                 'ready_to_disburse' => $readyToDisburse,
-                'queue_url' => LoanResource::getUrl('queue'),
+                'queue_url' => LoanResource::queueUrl(),
                 'queue_needs_decision_url' => LoanResource::queueUrl('needs_decision'),
                 'queue_ready_to_disburse_url' => LoanResource::queueUrl('ready_to_disburse'),
             ],
@@ -799,7 +799,7 @@ final class LoanInsightsService
             'max_used' => $maxUsed,
             'utilization' => $utilization,
             'fund_tiers_url' => FundTierResource::getUrl('index'),
-            'queue_url' => LoanResource::getUrl('queue'),
+            'queue_url' => LoanResource::queueUrl(),
         ];
     }
 
@@ -835,7 +835,7 @@ final class LoanInsightsService
             : LoanResource::getUrl('view', ['record' => $loan]);
 
         $queueUrl = $loan->status === 'pending'
-            ? ($memberPanel ? $this->memberLoansIndexUrl('pending') : LoanResource::getUrl('queue'))
+            ? ($memberPanel ? $this->memberLoansIndexUrl('pending') : LoanResource::queueUrl())
             : null;
 
         $remainingToDisburse = max(0, $approved - $disbursed);

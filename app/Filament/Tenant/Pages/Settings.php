@@ -28,6 +28,7 @@ use App\Support\LocalizationSettings;
 use App\Support\MemberNumberSettings;
 use App\Support\NotificationSettings;
 use App\Support\PublicPageSettings;
+use App\Support\ReconciliationDigestSettings;
 use App\Support\StatementSettings;
 use BackedEnum;
 use Carbon\Carbon;
@@ -197,6 +198,7 @@ class Settings extends Page implements HasForms
             'reconciliation_bank_statement_balance' => $reconciliation['bank_statement_balance'] ?? null,
             'reconciliation_bank_statement_date' => $reconciliation['bank_statement_date'] ?? null,
             'reconciliation_bank_variance_critical' => filter_var($reconciliation['bank_variance_critical'] ?? false, FILTER_VALIDATE_BOOL),
+            ...ReconciliationDigestSettings::allForForm(),
             'fiscal_year_start_month' => $fiscal['fiscal_year_start_month'],
             'fiscal_year_start_day' => $fiscal['fiscal_year_start_day'],
             'fiscal_current_year_label' => $fiscal['current_fiscal_year_label']
@@ -819,6 +821,14 @@ class Settings extends Page implements HasForms
                             ->label(__('Treat bank vs book variance as critical on scheduled runs'))
                             ->default(false),
                     ]),
+                Section::make(__('Digest notifications'))
+                    ->description(__('Database alerts always go to admins. Push can be turned off for scheduled digests.'))
+                    ->schema([
+                        Toggle::make('reconciliation_digest_push_enabled')
+                            ->label(__('Send web push for daily and nightly reconciliation digests'))
+                            ->helperText(__('When off, admins still receive in-app reconciliation digests without browser push.'))
+                            ->default(true),
+                    ]),
                 Section::make(__('Auto-resolve & matching'))
                     ->description(__('Operational tolerances used by nightly reconciliation and bank clearing.'))
                     ->columns(3)
@@ -1250,6 +1260,7 @@ class Settings extends Page implements HasForms
         Setting::set('reconciliation', 'bank_statement_balance', $state['reconciliation_bank_statement_balance'] ?? '');
         Setting::set('reconciliation', 'bank_statement_date', $state['reconciliation_bank_statement_date'] ?? '');
         Setting::set('reconciliation', 'bank_variance_critical', ($state['reconciliation_bank_variance_critical'] ?? false) ? '1' : '0');
+        ReconciliationDigestSettings::saveFromForm($state);
         BusinessDaySettings::saveFromForm($state['business_day'] ?? null);
         FiscalSettings::saveFromForm([
             'fiscal_year_start_month' => $state['fiscal_year_start_month'],

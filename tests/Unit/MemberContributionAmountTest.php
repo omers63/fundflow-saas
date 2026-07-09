@@ -12,12 +12,12 @@ test('contribution amount steps are five-hundred increments up to three thousand
         ->and(Member::isValidContributionAmount(3500))->toBeFalse();
 });
 
-test('parent may set dependent monthly allocation to zero; member contribution steps exclude zero', function () {
-    expect(Member::isValidDependentContributionAmount(0))->toBeTrue()
+test('dependent contribution amounts use the same steps and never allow zero', function () {
+    expect(Member::isValidDependentContributionAmount(0))->toBeFalse()
         ->and(Member::isValidDependentContributionAmount(500))->toBeTrue()
         ->and(Member::isValidDependentContributionAmount(750))->toBeFalse()
-        ->and(Member::isValidContributionAmount(0))->toBeFalse()
-        ->and(Member::dependentContributionAmountOptions()[0])->toBe(__('None (zero allocation)'));
+        ->and(Member::dependentContributionAmountOptions())->not->toHaveKey(0)
+        ->and(Member::dependentContributionAmountOptions())->toBe(Member::contributionAmountOptions());
 });
 
 test('member statuses are simplified to active inactive withdrawn', function () {

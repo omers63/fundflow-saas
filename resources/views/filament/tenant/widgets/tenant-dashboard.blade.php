@@ -1,14 +1,14 @@
 @php
-    $d = $this->getData();
-    $breakdown = $d['collection_breakdown'];
-    $loanQueue = $d['loan_queue_preview'];
-    $activity = $d['recent_activity'];
-    $pipeline = $d['loan_pipeline'];
-    $loanPortfolio = $d['loan_portfolio'];
-    $lifetime = $d['lifetime_fund_activity'];
-    $forecast = $d['forecast_summary'];
-    $greeting = $d['greeting'];
-    $pool = $d['pool_health'];
+$d = $this->getData();
+$breakdown = $d['collection_breakdown'];
+$loanQueue = $d['loan_queue_preview'];
+$activity = $d['recent_activity'];
+$pipeline = $d['loan_pipeline'];
+$loanPortfolio = $d['loan_portfolio'];
+$lifetime = $d['lifetime_fund_activity'];
+$forecast = $d['forecast_summary'];
+$greeting = $d['greeting'];
+$pool = $d['pool_health'];
 @endphp
     
     <div class="w-full max-w-none space-y-3 pb-6">
@@ -76,12 +76,12 @@
         <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
             @foreach ($d['kpi_stats'] as $stat)
                 @php
-                    $subColor = match ($stat['sub_tone'] ?? '') {
-                        'success', 'emerald' => 'text-emerald-600 dark:text-emerald-400',
-                        'amber', 'warning' => 'text-amber-600 dark:text-amber-400',
-                        'danger', 'rose' => 'text-red-600 dark:text-red-400',
-                        default => 'text-gray-400',
-                    };
+    $subColor = match ($stat['sub_tone'] ?? '') {
+        'success', 'emerald' => 'text-emerald-600 dark:text-emerald-400',
+        'amber', 'warning' => 'text-amber-600 dark:text-amber-400',
+        'danger', 'rose' => 'text-red-600 dark:text-red-400',
+        default => 'text-gray-400',
+    };
                 @endphp
                 <a href="{{ $stat['url'] }}"
                     class="ff-tenant-dashboard-kpi group flex min-w-0 flex-col gap-1 overflow-hidden rounded-xl border border-gray-200 bg-white px-4 py-3.5 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900">
@@ -105,11 +105,11 @@
                         class="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Forecast summary') }}</span>
                 </div>
                 <span @class([
-                    'inline-flex items-center rounded-lg px-2.5 py-1 text-[10px] font-semibold ring-1 ring-inset',
-                    'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/30 dark:text-red-300 dark:ring-red-800/40' => ($forecast['top_risk']['tone'] ?? '') === 'danger',
-                    'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-800/40' => ($forecast['top_risk']['tone'] ?? '') === 'warning',
-                    'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-800/40' => !in_array(($forecast['top_risk']['tone'] ?? ''), ['danger', 'warning'], true),
-                ])>
+    'inline-flex items-center rounded-lg px-2.5 py-1 text-[10px] font-semibold ring-1 ring-inset',
+    'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/30 dark:text-red-300 dark:ring-red-800/40' => ($forecast['top_risk']['tone'] ?? '') === 'danger',
+    'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-800/40' => ($forecast['top_risk']['tone'] ?? '') === 'warning',
+    'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-800/40' => !in_array(($forecast['top_risk']['tone'] ?? ''), ['danger', 'warning'], true),
+])>
                 {{ $forecast['top_risk']['label'] }} · {{ $forecast['top_risk']['secondary'] }}
                 </span>
             </div>
@@ -121,11 +121,11 @@
                             <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                                 {{ $card['label'] }}</p>
                             <span @class([
-                                'rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase',
-                                'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' => ($card['tone'] ?? '') === 'danger',
-                                'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' => ($card['tone'] ?? '') === 'warning',
-                                'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' => !in_array(($card['tone'] ?? ''), ['danger', 'warning'], true),
-                            ])>{{ $card['secondary'] }}</span>
+        'rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase',
+        'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' => ($card['tone'] ?? '') === 'danger',
+        'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' => ($card['tone'] ?? '') === 'warning',
+        'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' => !in_array(($card['tone'] ?? ''), ['danger', 'warning'], true),
+    ])>{{ $card['secondary'] }}</span>
                         </div>
                         <p class="mt-2 text-lg font-bold tabular-nums text-gray-900 dark:text-white">{{ $card['primary'] }}</p>
                         <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">{{ $card['detail'] }}</p>
@@ -351,7 +351,7 @@
                     <x-heroicon-o-queue-list class="h-4 w-4 text-amber-500" />
                     <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Loan queue') }} — {{ __('top requests') }}</span>
                 </div>
-                <a href="{{ \App\Filament\Tenant\Resources\Loans\LoanResource::getUrl('queue') }}"
+                <a href="{{ \App\Filament\Tenant\Pages\LoanQueueWorkbenchPage::getUrl() }}"
                     class="text-[11px] font-medium text-sky-600 hover:underline dark:text-sky-400">{{ __('View all →') }}</a>
             </div>
             @if (count($loanQueue) > 0)

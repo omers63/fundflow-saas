@@ -79,7 +79,7 @@ class LoanInsightsWidget extends Widget
         return match (true) {
             str_contains($route, 'loan-tiers') => 'loan_tiers',
             str_contains($route, 'fund-tiers') => 'fund_tiers',
-            str_contains($route, 'loans.queue') => 'queue',
+            str_contains($route, 'loan-queue') => 'queue',
             str_contains($route, 'loans.delinquency') => 'delinquency',
             str_contains($route, 'loans.view'),
             str_contains($route, 'loans.edit') => 'loan_detail',

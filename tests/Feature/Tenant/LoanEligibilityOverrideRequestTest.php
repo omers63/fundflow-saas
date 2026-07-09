@@ -128,7 +128,10 @@ test('admin eligibility review queue lists pending member requests', function ()
     Filament::setCurrentPanel('tenant');
     $this->actingAs($admin, 'tenant');
 
-    Livewire::test(ListLoans::class, ['activeTab' => 'eligibility_reviews'])
+    Livewire::test(ListLoans::class, [
+        'activeTab' => 'portfolio',
+        'portfolioView' => 'eligibility',
+    ])
         ->assertCanSeeTableRecords([$request])
         ->assertSee(__('Review outcomes'), false)
         ->assertSee(__('Pending reviews'), false);

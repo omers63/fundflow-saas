@@ -24,6 +24,7 @@ class DependentAllocationService
         int $newAmount,
         ?string $note = null,
         ?User $changedBy = null,
+        ?bool $excludeFromHouseholdContributionFunding = null,
     ): ?DependentAllocationChange {
         $this->assertDependentBelongsToParent($parent, $dependent);
 
@@ -34,15 +35,20 @@ class DependentAllocationService
         $this->monthlyAllocations->assertCanChangeMonthlyContribution($parent);
 
         $oldAmount = (int) $dependent->monthly_contribution_amount;
+        $oldExclude = (bool) $dependent->exclude_from_household_contribution_funding;
+        $newExclude = $excludeFromHouseholdContributionFunding ?? $oldExclude;
 
-        if ($oldAmount === $newAmount) {
+        if ($oldAmount === $newAmount && $oldExclude === $newExclude) {
             return null;
         }
 
         $change = null;
 
-        DB::transaction(function () use ($parent, $dependent, $oldAmount, $newAmount, $note, $changedBy, &$change): void {
-            Member::withoutSelfAllocationGuard(fn () => $dependent->update(['monthly_contribution_amount' => $newAmount]));
+        DB::transaction(function () use ($parent, $dependent, $oldAmount, $newAmount, $newExclude, $note, $changedBy, &$change): void {
+            Member::withoutSelfAllocationGuard(fn () => $dependent->update([
+                'monthly_contribution_amount' => $newAmount,
+                'exclude_from_household_contribution_funding' => $newExclude,
+            ]));
 
             $change = DependentAllocationChange::query()->create([
                 'parent_member_id' => $parent->id,
@@ -64,7 +70,7 @@ class DependentAllocationService
     }
 
     /**
-     * @param  array<int, int>  $updates  dependent_id => new_amount
+     * @param  array<int, int|array{amount: int, exclude?: bool}>  $updates  dependent_id => amount or payload
      * @return list<array{dependent: Member, change: ?DependentAllocationChange, error: ?string}>
      */
     public function changeMultiple(
@@ -75,7 +81,7 @@ class DependentAllocationService
     ): array {
         $results = [];
 
-        foreach ($updates as $dependentId => $newAmount) {
+        foreach ($updates as $dependentId => $payload) {
             $dependent = $parent->dependents()
                 ->whereKey((int) $dependentId)
                 ->first();
@@ -84,8 +90,25 @@ class DependentAllocationService
                 continue;
             }
 
+            if (is_array($payload)) {
+                $newAmount = (int) ($payload['amount'] ?? 0);
+                $exclude = array_key_exists('exclude', $payload)
+                    ? (bool) $payload['exclude']
+                    : null;
+            } else {
+                $newAmount = (int) $payload;
+                $exclude = null;
+            }
+
             try {
-                $change = $this->changeAllocation($parent, $dependent, (int) $newAmount, $note, $changedBy);
+                $change = $this->changeAllocation(
+                    parent: $parent,
+                    dependent: $dependent,
+                    newAmount: $newAmount,
+                    note: $note,
+                    changedBy: $changedBy,
+                    excludeFromHouseholdContributionFunding: $exclude,
+                );
                 $results[] = [
                     'dependent' => $dependent,
                     'change' => $change,

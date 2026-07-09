@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Support\LoanListTableHeaderActions;
 use App\Filament\Tenant\Resources\Loans\Pages\ListLoans;
 use App\Models\Central\Tenant;
 use App\Models\Tenant\Account;
@@ -474,18 +475,18 @@ test('loan export streams csv with legacy-compatible headers', function () {
 
 test('portfolio tab table includes import and export header actions', function () {
     $component = Livewire::test(ListLoans::class)
-        ->assertSet('activeTab', 'portfolio');
+        ->set('activeTab', 'portfolio');
 
-    $names = collect($component->instance()->getTable()->getHeaderActions())
-        ->map(fn ($action) => $action->getName())
-        ->all();
+    $names = LoanListTableHeaderActions::flattenActionNames(
+        $component->instance()->getTable()->getHeaderActions(),
+    );
 
     expect($names)->toContain('importLoans', 'exportLoans', 'importRepayments', 'exportRepayments');
 });
 
 test('portfolio loans table summarizes approved amounts', function () {
     $component = Livewire::test(ListLoans::class)
-        ->assertSet('activeTab', 'portfolio');
+        ->set('activeTab', 'portfolio');
 
     $approvedColumn = collect($component->instance()->getTable()->getColumns())
         ->first(fn ($column) => $column->getName() === 'amount_approved');
@@ -568,11 +569,12 @@ test('portfolio tab table can sort by outstanding balance', function () {
 
 test('emi collection tab table omits loan import export header actions', function () {
     $component = Livewire::test(ListLoans::class)
-        ->set('activeTab', 'emi_collect');
+        ->set('activeTab', 'collection')
+        ->set('collectionSegment', 'collect');
 
-    $names = collect($component->instance()->getTable()->getHeaderActions())
-        ->map(fn ($action) => $action->getName())
-        ->all();
+    $names = LoanListTableHeaderActions::flattenActionNames(
+        $component->instance()->getTable()->getHeaderActions(),
+    );
 
     expect($names)->not->toContain('importLoans')
         ->and($names)->not->toContain('exportLoans')
@@ -816,7 +818,7 @@ test('portfolio loans table can filter by loan tier and fund tier', function () 
     ]);
 
     Livewire::test(ListLoans::class)
-        ->assertSet('activeTab', 'portfolio')
+        ->set('activeTab', 'portfolio')
         ->filterTable('loan_tier_id', $this->loanTier->id)
         ->assertCanSeeTableRecords([$matchingLoan])
         ->assertCanNotSeeTableRecords([$otherLoan])

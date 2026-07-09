@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
-use App\Filament\Tenant\Resources\Loans\LoanResource;
 use BackedEnum;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -33,6 +32,6 @@ class LoanQueue extends Page
 
     public function mount(): void
     {
-        $this->redirect(LoanResource::getUrl('queue'), navigate: true);
+        $this->redirect(LoanQueueWorkbenchPage::getUrl(), navigate: true);
     }
 }

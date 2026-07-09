@@ -1,7 +1,7 @@
 <?php
 
-use App\Filament\Tenant\Clusters\LoanQueuePage;
 use App\Filament\Tenant\Clusters\LoansCluster;
+use App\Filament\Tenant\Pages\LoanQueueWorkbenchPage;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
@@ -149,9 +149,9 @@ test('loans navigation badges show pending queue count', function () {
 
     $this->service->applyForLoan($member, 20000);
 
-    expect(LoansCluster::getNavigationBadge())->toBe('1')
-        ->and(LoansCluster::getNavigationBadgeColor())->toBe('warning')
-        ->and(LoanQueuePage::getNavigationBadge())->toBe('1');
+    expect(LoansCluster::getNavigationBadge())->toBeNull()
+        ->and(LoanQueueWorkbenchPage::getNavigationBadge())->toBe('1')
+        ->and(LoanQueueWorkbenchPage::getNavigationBadgeColor())->toBe('warning');
 });
 
 test('approve and full disburse activates loan with installments', function () {

@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App\Notifications\Tenant;
 
 use App\Notifications\Concerns\DeliversToAdminChannels;
+use App\Support\AdminNotificationChannels;
+use App\Support\ReconciliationDigestSettings;
 use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
 
 class ReconciliationDigestNotification extends Notification
@@ -24,6 +27,23 @@ class ReconciliationDigestNotification extends Notification
         public string $reconciliationUrl,
         public bool $critical = false,
     ) {}
+
+    /**
+     * @return list<string|class-string>
+     */
+    public function via(object $notifiable): array
+    {
+        $channels = AdminNotificationChannels::resolve();
+
+        if (ReconciliationDigestSettings::digestPushEnabled()) {
+            return $channels;
+        }
+
+        return array_values(array_filter(
+            $channels,
+            fn (mixed $channel): bool => $channel !== WebPushChannel::class,
+        ));
+    }
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {

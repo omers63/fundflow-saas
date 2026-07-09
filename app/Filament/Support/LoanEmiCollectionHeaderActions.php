@@ -6,6 +6,8 @@ namespace App\Filament\Support;
 
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Services\ContributionCycleService;
+use App\Services\Loans\EmiCollectionSummaryExportService;
+use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Services\Loans\LoanRepaymentService;
 use Filament\Actions\Action;
@@ -16,15 +18,17 @@ use Livewire\Component;
 final class LoanEmiCollectionHeaderActions
 {
     /**
-     * @return list<Action|ActionGroup>
+     * Parallel to contribution Cycle collection: notify, export, collect, prepare overdue.
      */
     public static function cycleCollectionGroup(string $color = 'primary'): ActionGroup
     {
         return ActionGroup::make([
             self::sendDueNotifications(),
+            self::exportCollectionSummary(),
             self::runEmiCollectionCycle(),
+            self::prepareOverdueEmis(),
         ])
-            ->label(__('EMI cycle'))
+            ->label(__('Cycle collection'))
             ->icon('heroicon-o-arrow-path-rounded-square')
             ->color($color)
             ->button();
@@ -49,8 +53,23 @@ final class LoanEmiCollectionHeaderActions
                         'count' => $count,
                         'period' => $cycles->periodLabel($month, $year),
                     ]))
-                    ->success()
+                    ->color($count > 0 ? 'success' : 'warning')
                     ->send();
+            });
+    }
+
+    public static function exportCollectionSummary(): Action
+    {
+        return Action::make('exportEmiCollectionSummary')
+            ->label(__('Export collection summary'))
+            ->icon('heroicon-o-arrow-down-tray')
+            ->color('gray')
+            ->schema(ContributionCycleHeaderActions::periodFormSchema())
+            ->fillForm(fn (): array => ContributionCycleHeaderActions::defaultPeriod())
+            ->action(function (array $data): mixed {
+                [$month, $year] = ContributionCycleHeaderActions::resolvePeriodFromForm($data);
+
+                return app(EmiCollectionSummaryExportService::class)->downloadCsv($month, $year);
             });
     }
 
@@ -75,6 +94,36 @@ final class LoanEmiCollectionHeaderActions
                         'skipped' => $results['skipped']->count(),
                     ]))
                     ->color($results['insufficient']->count() > 0 ? 'warning' : 'success')
+                    ->send();
+
+                LoanResource::dispatchInsightsRefresh($livewire);
+
+                if (method_exists($livewire, 'resetTable')) {
+                    $livewire->resetTable();
+                }
+            });
+    }
+
+    /**
+     * EMI parallel to contribution "Generate pending": mark past-deadline installments overdue
+     * so the To collect workspace reflects current arrears.
+     */
+    public static function prepareOverdueEmis(): Action
+    {
+        return Action::make('prepareOverdueEmis')
+            ->label(__('Prepare overdue EMIs'))
+            ->icon('heroicon-o-arrow-path')
+            ->color('info')
+            ->requiresConfirmation()
+            ->modalHeading(__('Prepare overdue EMIs'))
+            ->modalDescription(__('Marks pending installments past their cycle deadline as overdue and refreshes late fees so they appear in EMI collection.'))
+            ->action(function (LoanDelinquencyService $delinquency, Component $livewire): void {
+                $count = $delinquency->markOverdueInstallments();
+
+                Notification::make()
+                    ->title(__('Overdue EMIs prepared'))
+                    ->body(__(':count installment(s) marked overdue.', ['count' => $count]))
+                    ->success()
                     ->send();
 
                 LoanResource::dispatchInsightsRefresh($livewire);

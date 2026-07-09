@@ -2,11 +2,10 @@
 
 declare(strict_types=1);
 
-use App\Filament\Tenant\Clusters\LoanQueuePage;
+use App\Filament\Tenant\Pages\LoanQueueWorkbenchPage;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Contributions\Pages\ListContributions;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
-use App\Filament\Tenant\Resources\Loans\Pages\ListLoanQueue;
 use App\Filament\Tenant\Resources\Loans\Pages\ListLoans;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\Members\Pages\ViewMember;
@@ -15,9 +14,12 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Support\Lang;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\App;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
@@ -40,58 +42,54 @@ beforeEach(function () {
         'password' => bcrypt('password'),
         'email_verified_at' => now(),
         'is_admin' => true,
+        'preferred_locale' => 'en',
     ]);
 
     $this->actingAs($admin, 'tenant');
+    App::setLocale('en');
 });
 
-test('loan queue sub-navigation active route targets queue page only', function () {
-    $base = LoanResource::getRouteBaseName();
-
-    expect(LoanQueuePage::getNavigationItemActiveRoutePattern())->toBe("{$base}.queue")
-        ->and(LoanResource::getNavigationItemActiveRoutePattern())->toBe([
-            "{$base}.index",
-            "{$base}.create",
-            "{$base}.view",
-            "{$base}.edit",
-        ]);
+test('loan queue is a standalone sidebar page', function () {
+    expect(LoanQueueWorkbenchPage::getNavigationLabel())->toBe(Lang::formatUiLabel(__('Loan queue')))
+        ->and(LoanQueueWorkbenchPage::getUrl())->toContain('/admin/loan-queue');
 });
 
-test('loan queue kind tabs render and switch without view errors', function () {
-    Livewire::test(ListLoanQueue::class)
+test('loan queue kind filter narrows pending applications', function () {
+    Livewire::test(LoanQueueWorkbenchPage::class)
         ->assertSuccessful()
-        ->assertSeeHtml('ff-tenant-tab-pills')
-        ->call('setQueueKind', 'emergency')
-        ->assertSet('queueKind', 'emergency')
+        ->filterTable('queue_kind', 'emergency')
         ->assertSuccessful();
 });
 
-test('loans list defaults to portfolio tab', function () {
+test('loans list defaults to collection tab', function () {
     Livewire::test(ListLoans::class)
-        ->assertSet('activeTab', 'portfolio');
+        ->assertSet('activeTab', 'collection');
 });
 
-test('emi collection tab loads on loans list', function () {
+test('emi collection segment loads on loans list', function () {
     $path = parse_url(LoanResource::listTabUrl('emi_collect'), PHP_URL_PATH) ?? '/admin/loans';
     $query = parse_url(LoanResource::listTabUrl('emi_collect'), PHP_URL_QUERY);
 
     $this->get('http://'.$this->domain.$path.($query ? '?'.$query : ''))
         ->assertSuccessful()
-        ->assertSee(__('EMI To Collect'), false);
+        ->assertSee(__('Collection'), false)
+        ->assertSee(__('To collect'), false);
 });
 
-test('loans list exposes delinquency maintenance actions on overdue tab', function () {
+test('loans list exposes delinquency maintenance actions on delinquency tab', function () {
     Livewire::test(ListLoans::class)
-        ->set('activeTab', 'overdue_installments')
+        ->set('activeTab', 'delinquency')
+        ->set('delinquencyView', 'overdue')
         ->mountTableAction('markOverdueInstallments')
         ->callMountedTableAction()
         ->assertNotified();
 });
 
-test('overdue installments tab loads on loans list', function () {
+test('overdue installments view loads on loans list', function () {
     $path = parse_url(LoanResource::listTabUrl('overdue_installments'), PHP_URL_PATH) ?? '/admin/loans';
+    $query = parse_url(LoanResource::listTabUrl('overdue_installments'), PHP_URL_QUERY);
 
-    $this->get('http://'.$this->domain.$path)
+    $this->get('http://'.$this->domain.$path.($query ? '?'.$query : ''))
         ->assertSuccessful()
         ->assertSee(__('Overdue installments'), false);
 });
@@ -120,7 +118,14 @@ test('contribution arrears tab renders member and period columns', function () {
     $accounting->createMemberAccounts($member);
     $member = $member->fresh();
 
-    $rows = app(LoanDelinquencyService::class)->contributionArrearsTableRecords($member->id);
+    $cycles = app(ContributionCycleService::class);
+    [$month, $year] = $cycles->currentOpenPeriod();
+    $rows = app(LoanDelinquencyService::class)->contributionArrearsTableRecords(
+        $member->id,
+        $month,
+        $year,
+        true,
+    );
     expect($rows)->not->toBeEmpty();
 
     $periodLabel = $rows->first()['period_label'];
@@ -343,7 +348,7 @@ test('delinquent members tab loads on members list', function () {
         ->assertSuccessful()
         ->assertSee(__('Arrears'), false);
 
-    expect(LoanResource::listTabUrl('overdue_installments'))->toContain('tab=overdue_installments');
+    expect(LoanResource::listTabUrl('overdue_installments'))->toContain('tab=delinquency');
 });
 
 test('member workspace exposes arrears header actions', function () {

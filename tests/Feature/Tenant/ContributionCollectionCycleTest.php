@@ -1233,14 +1233,14 @@ test('dependent allocation shortfall counts EMI dues when contributions are exem
     Carbon::setTestNow();
 });
 
-test('zero monthly contribution excludes dependent from household fund allocation', function () {
+test('excluded household contribution funding keeps contribution amount and skips parent fund allocation', function () {
     $period = now()->subMonth();
 
     $parent = Member::create([
         'member_number' => 'MEM-P-ZERO',
         'name' => 'Parent Zero Alloc',
         'email' => 'parent-zero@example.com',
-        'monthly_contribution_amount' => 100,
+        'monthly_contribution_amount' => 500,
         'joined_at' => $period->copy()->startOfMonth(),
         'status' => 'active',
     ]);
@@ -1252,7 +1252,7 @@ test('zero monthly contribution excludes dependent from household fund allocatio
         'email' => 'included-child@example.com',
         'parent_member_id' => $parent->id,
         'household_email' => 'parent-zero@example.com',
-        'monthly_contribution_amount' => 80,
+        'monthly_contribution_amount' => 500,
         'joined_at' => $period->copy()->startOfMonth(),
         'status' => 'active',
     ]);
@@ -1264,13 +1264,14 @@ test('zero monthly contribution excludes dependent from household fund allocatio
         'email' => 'excluded-child@example.com',
         'parent_member_id' => $parent->id,
         'household_email' => 'parent-zero@example.com',
-        'monthly_contribution_amount' => 0,
+        'monthly_contribution_amount' => 500,
+        'exclude_from_household_contribution_funding' => true,
         'joined_at' => $period->copy()->startOfMonth(),
         'status' => 'active',
     ]);
     $this->accounting->createMemberAccounts($excludedDependent);
 
-    foreach ([$parent, $activeDependent] as $member) {
+    foreach ([$parent, $activeDependent, $excludedDependent] as $member) {
         Contribution::create([
             'member_id' => $member->id,
             'period' => Contribution::periodDate((int) $period->month, (int) $period->year),
@@ -1301,5 +1302,7 @@ test('zero monthly contribution excludes dependent from household fund allocatio
         ->and($result['allocated_dependent_ids'])->not->toContain($excludedDependent->id)
         ->and(DependentCashAllocation::query()->where('dependent_member_id', $excludedDependent->id)->exists())->toBeFalse()
         ->and(DependentCashAllocation::query()->where('dependent_member_id', $activeDependent->id)->exists())->toBeTrue()
-        ->and($this->cycles->dependentCycleDuesForPeriod($excludedDependent->fresh(), (int) $period->month, (int) $period->year))->toBe(0.0);
+        ->and((int) $excludedDependent->fresh()->monthly_contribution_amount)->toBe(500)
+        ->and($this->cycles->dependentCycleDuesForPeriod($excludedDependent->fresh(), (int) $period->month, (int) $period->year))->toBe(0.0)
+        ->and($this->cycles->requiredCollectionCashForMemberPeriod($excludedDependent->fresh(), (int) $period->month, (int) $period->year))->toBe(500.0);
 });

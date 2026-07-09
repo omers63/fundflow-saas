@@ -37,15 +37,21 @@ final class ContributionCycleHeaderActions
             ->action(function (array $data): void {
                 [$month, $year] = self::resolvePeriodFromForm($data);
                 $cycles = app(ContributionCycleService::class);
-                $count = $cycles->sendDueNotifications($month, $year);
+                $stats = $cycles->sendDueNotifications($month, $year);
+                $period = $cycles->periodLabel($month, $year);
+                $skipped = $stats['skipped_paid'] + $stats['skipped_exempt'] + $stats['skipped_no_user'];
 
                 Notification::make()
                     ->title(__('Notifications sent'))
-                    ->body(__(':count member(s) notified for :period', [
-                        'count' => $count,
-                        'period' => $cycles->periodLabel($month, $year),
+                    ->body(__(':count member(s) notified for :period. Skipped: :skipped (paid :paid · loan-exempt :exempt · no login :nouser). Push only reaches members who enabled browser push.', [
+                        'count' => $stats['notified'],
+                        'period' => $period,
+                        'skipped' => $skipped,
+                        'paid' => $stats['skipped_paid'],
+                        'exempt' => $stats['skipped_exempt'],
+                        'nouser' => $stats['skipped_no_user'],
                     ]))
-                    ->success()
+                    ->color($stats['notified'] > 0 ? 'success' : 'warning')
                     ->send();
             });
     }

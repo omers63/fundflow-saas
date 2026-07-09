@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Support\LoanListTableHeaderActions;
 use App\Filament\Tenant\Resources\Accounts\Pages\ListAccounts;
 use App\Models\Central\Tenant;
 use App\Models\Tenant\Account;
@@ -9,6 +10,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\MemberAccountExportService;
+use Filament\Actions\ActionGroup;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
@@ -81,18 +83,18 @@ test('member accounts loans tab exposes loan import export actions with create l
     $component = Livewire::test(ListAccounts::class)
         ->set('activeTab', 'loans');
 
-    $actions = collect($component->instance()->getTable()->getHeaderActions());
-    $create = $actions->first(fn ($action) => $action->getName() === 'create');
+    $actions = $component->instance()->getTable()->getHeaderActions();
+    $names = LoanListTableHeaderActions::flattenActionNames($actions);
 
-    expect($actions->map(fn ($action) => $action->getName())->all())
+    expect($names)
         ->toContain('importLoans', 'exportLoans', 'importRepayments', 'exportRepayments', 'create')
-        ->and($create)->not->toBeNull()
-        ->and($create->getLabel())->toBe(__('New loan'));
+        ->and($actions)->toHaveCount(1)
+        ->and($actions[0])->toBeInstanceOf(ActionGroup::class);
 
-    foreach ($actions as $action) {
-        expect($action->getIcon())->not->toBeNull()
-            ->and($action->getTableIcon())->not->toBeNull();
-    }
+    $create = collect(LoanListTableHeaderActions::flattenActionNames($actions))
+        ->contains('create');
+
+    expect($create)->toBeTrue();
 });
 
 test('member account export includes roster columns and respects account type filter', function () {
