@@ -25,7 +25,8 @@ class AdminDirectMessageNotification extends Notification
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        return $this->buildAdminWebPush(
+        return $this->buildAdminWebPushFor(
+            $notifiable,
             $this->title(),
             $this->subject.': '.$this->preview,
             $this->inboxUrl(),

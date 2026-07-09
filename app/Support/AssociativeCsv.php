@@ -60,11 +60,7 @@ final class AssociativeCsv
      */
     public static function write(string $absolutePath, array $headers, iterable $rows): void
     {
-        $handle = fopen($absolutePath, 'w');
-
-        if ($handle === false) {
-            throw new InvalidArgumentException(__('Cannot write CSV file.'));
-        }
+        $handle = Utf8CsvStream::openFile($absolutePath);
 
         fputcsv($handle, $headers);
 

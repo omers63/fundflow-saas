@@ -6,6 +6,7 @@ namespace App\Services\Tenant;
 
 use App\Filament\Support\MemberDatabaseNotification;
 use App\Filament\Support\MemberFilamentActions;
+use App\Filament\Support\RecipientDatabaseNotification;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\User;
@@ -39,16 +40,17 @@ class MemberRequestService
         User::query()
             ->where('is_admin', true)
             ->each(function (User $admin) use ($request, $requester): void {
-                Notification::make()
-                    ->title(__('New member request'))
-                    ->body(
-                        ($requester->name ?? __('Member'))
-                        .' — '
-                        .MemberRequest::typeLabel($request->type)
-                    )
-                    ->icon('heroicon-o-clipboard-document-list')
-                    ->iconColor('warning')
-                    ->sendToDatabase($admin);
+                RecipientDatabaseNotification::send($admin, function (Notification $notification) use ($request, $requester): void {
+                    $notification
+                        ->title(__('New member request'))
+                        ->body(
+                            ($requester->name ?? __('Member'))
+                            .' — '
+                            .MemberRequest::typeLabel($request->type)
+                        )
+                        ->icon('heroicon-o-clipboard-document-list')
+                        ->iconColor('warning');
+                });
             });
 
         return $request;

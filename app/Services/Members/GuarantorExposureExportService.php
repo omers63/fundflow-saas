@@ -6,6 +6,7 @@ namespace App\Services\Members;
 
 use App\Models\Tenant\Loan;
 use App\Support\BusinessDay;
+use App\Support\Utf8CsvStream;
 use Illuminate\Database\Eloquent\Builder;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -39,7 +40,7 @@ final class GuarantorExposureExportService
         $filename = 'guarantor-exposure-'.BusinessDay::now()->format('Y-m-d').'.csv';
 
         return response()->streamDownload(function () use ($from, $until): void {
-            $handle = fopen('php://output', 'w');
+            $handle = Utf8CsvStream::open();
             fputcsv($handle, self::csvHeaders());
 
             $this->portfolioQuery($from, $until)
@@ -49,7 +50,7 @@ final class GuarantorExposureExportService
 
             fclose($handle);
         }, $filename, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
+            ...Utf8CsvStream::downloadHeaders(),
             'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
         ]);
     }

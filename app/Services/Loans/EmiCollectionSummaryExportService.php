@@ -8,6 +8,7 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\ContributionCycleService;
 use App\Support\InstallmentCollectionStatus;
+use App\Support\Utf8CsvStream;
 use Illuminate\Database\Eloquent\Builder;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -27,7 +28,7 @@ class EmiCollectionSummaryExportService
         $filename = 'emi-collection-summary-'.$year.'-'.sprintf('%02d', $month).'.csv';
 
         return response()->streamDownload(function () use ($start, $end): void {
-            $handle = fopen('php://output', 'w');
+            $handle = Utf8CsvStream::open();
             fputcsv($handle, [
                 __('Member #'),
                 __('Member'),
@@ -83,8 +84,6 @@ class EmiCollectionSummaryExportService
                 });
 
             fclose($handle);
-        }, $filename, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-        ]);
+        }, $filename, Utf8CsvStream::downloadHeaders());
     }
 }

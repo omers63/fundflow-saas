@@ -59,7 +59,7 @@ final class ContributionCycleHeaderActions
     public static function exportCollectionSummary(): Action
     {
         return Action::make('exportCollectionSummary')
-            ->label(__('Export collection summary'))
+            ->label(__('Export Contributions Summary'))
             ->icon('heroicon-o-arrow-down-tray')
             ->color('gray')
             ->schema(self::periodFormSchema())

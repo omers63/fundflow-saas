@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Tenant\Member;
 use App\Support\BusinessDay;
+use App\Support\Utf8CsvStream;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class MemberExportService
@@ -38,7 +39,7 @@ final class MemberExportService
         $filename = 'members-'.BusinessDay::now()->format('Y-m-d').'.csv';
 
         return response()->streamDownload(function (): void {
-            $handle = fopen('php://output', 'w');
+            $handle = Utf8CsvStream::open();
             fputcsv($handle, self::csvHeaders());
 
             Member::query()
@@ -50,7 +51,7 @@ final class MemberExportService
 
             fclose($handle);
         }, $filename, [
-            'Content-Type' => 'text/csv',
+            ...Utf8CsvStream::downloadHeaders(),
             'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
         ]);
     }

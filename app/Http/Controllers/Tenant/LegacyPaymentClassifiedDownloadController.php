@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
 use App\Services\LegacyMigration\LegacyPaymentClassifierService;
+use App\Support\Utf8CsvStream;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -33,7 +34,7 @@ class LegacyPaymentClassifiedDownloadController extends Controller
         $filename = 'legacy-payments-classified.csv';
 
         return response()->streamDownload(function () use ($result): void {
-            $out = fopen('php://output', 'w');
+            $out = Utf8CsvStream::open();
             $headers = [
                 'member_email',
                 'member_number',
@@ -59,7 +60,7 @@ class LegacyPaymentClassifiedDownloadController extends Controller
             }
             fclose($out);
         }, $filename, [
-            'Content-Type' => 'text/csv',
+            ...Utf8CsvStream::downloadHeaders(),
             'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
         ]);
     }

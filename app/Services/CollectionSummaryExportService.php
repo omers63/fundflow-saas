@@ -6,7 +6,8 @@ namespace App\Services;
 
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
-use App\Support\ContributionCollectionStatus;
+use App\Support\ContributionCollectionSummaryState;
+use App\Support\Utf8CsvStream;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CollectionSummaryExportService
@@ -21,51 +22,68 @@ class CollectionSummaryExportService
     public function downloadCsv(int $month, int $year): StreamedResponse
     {
         $period = Contribution::periodDate($month, $year);
-        $filename = 'collection-summary-'.$year.'-'.sprintf('%02d', $month).'.csv';
+        $filename = 'contributions-summary-'.$year.'-'.sprintf('%02d', $month).'.csv';
 
         return response()->streamDownload(function () use ($period, $month, $year): void {
-            $handle = fopen('php://output', 'w');
+            $handle = Utf8CsvStream::open();
             fputcsv($handle, [
                 __('Member #'),
                 __('Member'),
                 __('Amount due'),
                 __('Collected'),
+                __('Outstanding'),
+                __('State'),
                 __('Status'),
                 __('Collection status'),
                 __('Late fee'),
                 __('Cash balance'),
             ]);
 
-            Member::active()->orderBy('member_number')->each(function (Member $member) use ($handle, $period, $month, $year): void {
-                if ($member->isExemptFromContributions($month, $year)) {
-                    return;
-                }
+            $memberIds = $this->cycles->summaryExportMemberIds($month, $year);
 
-                $contribution = Contribution::query()
-                    ->where('member_id', $member->id)
-                    ->where('period', $period)
-                    ->first();
+            if ($memberIds === []) {
+                fclose($handle);
 
-                $due = (float) $member->monthly_contribution_amount;
-                $collected = (float) ($contribution?->amount_collected ?? 0);
-                $status = $contribution?->status ?? 'missing';
-                $collectionStatus = $contribution?->collection_status ?? ContributionCollectionStatus::PENDING;
+                return;
+            }
 
-                fputcsv($handle, [
-                    $member->member_number,
-                    $member->name,
-                    number_format($due, 2, '.', ''),
-                    number_format($collected, 2, '.', ''),
-                    $status,
-                    $collectionStatus,
-                    number_format((float) ($contribution?->late_fee_amount ?? 0), 2, '.', ''),
-                    number_format($member->getCashBalance(), 2, '.', ''),
-                ]);
-            });
+            Member::query()
+                ->contributionCycleEligible()
+                ->whereIn('id', $memberIds)
+                ->with(['cashAccount'])
+                ->orderBy('member_number')
+                ->each(function (Member $member) use ($handle, $period, $month, $year): void {
+                    if (ContributionCollectionSummaryState::isExcludedFromSummaryExport($member, $month, $year)) {
+                        return;
+                    }
+
+                    $contribution = Contribution::query()
+                        ->where('member_id', $member->id)
+                        ->where('period', $period)
+                        ->first();
+
+                    $due = (float) ($contribution?->amount_due ?? $member->monthly_contribution_amount);
+                    $collected = (float) ($contribution?->amount_collected ?? 0);
+                    $outstanding = max(0.0, $due - $collected);
+                    $state = ContributionCollectionSummaryState::resolve($member, $month, $year, $contribution);
+                    $status = $contribution?->status ?? 'missing';
+                    $collectionStatus = $contribution?->collection_status ?? 'pending';
+
+                    fputcsv($handle, [
+                        $member->member_number,
+                        $member->name,
+                        number_format($due, 2, '.', ''),
+                        number_format($collected, 2, '.', ''),
+                        number_format($outstanding, 2, '.', ''),
+                        $state,
+                        $status,
+                        $collectionStatus,
+                        number_format((float) ($contribution?->late_fee_amount ?? 0), 2, '.', ''),
+                        number_format($member->getCashBalance(), 2, '.', ''),
+                    ]);
+                });
 
             fclose($handle);
-        }, $filename, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-        ]);
+        }, $filename, Utf8CsvStream::downloadHeaders());
     }
 }

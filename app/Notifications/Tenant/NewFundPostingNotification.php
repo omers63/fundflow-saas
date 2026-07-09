@@ -28,11 +28,12 @@ class NewFundPostingNotification extends Notification
     {
         $this->fundPosting->loadMissing('member');
 
-        return $this->buildAdminWebPush(
+        return $this->buildAdminWebPushFor(
+            $notifiable,
             __('New deposit request'),
             FundPostingNotificationFormatter::adminNewRequestPlainText($this->fundPosting),
             $this->reviewUrl(),
-            'fund-posting-' . $this->fundPosting->getKey(),
+            'fund-posting-'.$this->fundPosting->getKey(),
         );
     }
 

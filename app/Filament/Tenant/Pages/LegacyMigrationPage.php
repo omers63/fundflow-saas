@@ -22,6 +22,7 @@ use App\Support\LegacyMigrationFundingStrategySettings;
 use App\Support\LegacyMigrationGraceCycleSettings;
 use App\Support\LegacyMigrationSettlementThresholdSettings;
 use App\Support\LegacyMigrationUploadDiagnostics;
+use App\Support\Utf8CsvStream;
 use BackedEnum;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -366,7 +367,7 @@ class LegacyMigrationPage extends Page implements HasForms
                 ->longRunningMessage(__('Importing loans and building repayment windows. This can take a few minutes.'))
                 ->modalHeading(__('Import loans now?'))
                 ->modalDescription(__('Creates loan records and repayment schedules from the loans CSV. The payments CSV is used to calculate each member fund top-up on the disbursement date.'))
-                ->disabled(fn(): bool => $this->loansImportRunning || !$this->membersImported() || !$this->hasWorkingLoansCsv() || !$this->hasWorkingPaymentsCsv())
+                ->disabled(fn (): bool => $this->loansImportRunning || ! $this->membersImported() || ! $this->hasWorkingLoansCsv() || ! $this->hasWorkingPaymentsCsv())
                 ->action(fn (): mixed => $this->importLoans()),
             Action::make('classifyPayments')
                 ->label(__('Classify payments'))
@@ -451,7 +452,7 @@ class LegacyMigrationPage extends Page implements HasForms
                             ->default(LegacyMigrationSettlementThresholdSettings::defaultSkipSettlementThreshold())
                             ->helperText(__('When enabled, imported loans use 0% settlement threshold unless the loans CSV sets settlement_threshold explicitly.')),
                     ])
-                    ->visible(fn(): bool => $this->currentStep === 2),
+                    ->visible(fn (): bool => $this->currentStep === 2),
             ]);
     }
 
@@ -619,7 +620,7 @@ class LegacyMigrationPage extends Page implements HasForms
 
         $working = $this->workingPaths();
 
-        if (!isset($working['payments_path'])) {
+        if (! isset($working['payments_path'])) {
             Notification::make()
                 ->title(__('Payments CSV required'))
                 ->body(__('Upload the payments CSV in step 2 (or replace it here) before classifying.'))
@@ -701,7 +702,7 @@ class LegacyMigrationPage extends Page implements HasForms
         return Storage::disk('local')->download(
             self::CLASSIFIED_PAYMENTS_PATH,
             'legacy-payments-classified.csv',
-            ['Content-Type' => 'text/csv'],
+            [...Utf8CsvStream::downloadHeaders()],
         );
     }
 
@@ -897,7 +898,7 @@ class LegacyMigrationPage extends Page implements HasForms
 
         $working = $this->workingPaths();
 
-        if (!isset($working['members_path'])) {
+        if (! isset($working['members_path'])) {
             Notification::make()
                 ->title(__('Members CSV required'))
                 ->body(__('Upload the members CSV on this step first.'))
@@ -987,7 +988,7 @@ class LegacyMigrationPage extends Page implements HasForms
 
         $working = $this->workingPaths();
 
-        if (!isset($working['loans_path'])) {
+        if (! isset($working['loans_path'])) {
             Notification::make()
                 ->title(__('Loans CSV required'))
                 ->body(__('Upload the loans CSV on this step first.'))
@@ -997,7 +998,7 @@ class LegacyMigrationPage extends Page implements HasForms
             return;
         }
 
-        if (!isset($working['payments_path'])) {
+        if (! isset($working['payments_path'])) {
             Notification::make()
                 ->title(__('Payments CSV required'))
                 ->body(__('Upload the payments CSV on this step too. It is used to calculate each member fund top-up on the loan disbursement date.'))
@@ -1132,7 +1133,7 @@ class LegacyMigrationPage extends Page implements HasForms
     {
         $file = $this->{$property};
 
-        if (!$file instanceof TemporaryUploadedFile) {
+        if (! $file instanceof TemporaryUploadedFile) {
             return;
         }
 

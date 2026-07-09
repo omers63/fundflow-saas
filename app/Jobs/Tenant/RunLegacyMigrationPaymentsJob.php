@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs\Tenant;
 
+use App\Filament\Support\RecipientDatabaseNotification;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\LegacyMigration\LegacyMigrationOrchestrator;
@@ -63,13 +64,14 @@ final class RunLegacyMigrationPaymentsJob implements ShouldQueue
             $members = $summarized['members'] ?? [];
 
             $this->notifyRequester(
-                __('Migration complete'),
-                __('Members created: :created · Payment contributions: :contributions · Loan repayments: :repayments · Reclassified: :reclassified', [
-                    'created' => $members['created'] ?? 0,
-                    'contributions' => $payments['contributions'] ?? 0,
-                    'repayments' => $payments['loan_repayments'] ?? 0,
-                    'reclassified' => $payments['reclassified_as_contribution'] ?? 0,
-                ]),
+                fn (Notification $notification): Notification => $notification
+                    ->title(__('Migration complete'))
+                    ->body(__('Members created: :created · Payment contributions: :contributions · Loan repayments: :repayments · Reclassified: :reclassified', [
+                        'created' => $members['created'] ?? 0,
+                        'contributions' => $payments['contributions'] ?? 0,
+                        'repayments' => $payments['loan_repayments'] ?? 0,
+                        'reclassified' => $payments['reclassified_as_contribution'] ?? 0,
+                    ])),
                 'success',
             );
         } catch (Throwable $exception) {
@@ -79,8 +81,9 @@ final class RunLegacyMigrationPaymentsJob implements ShouldQueue
             Setting::set('legacy_migration', 'last_error', $exception->getMessage());
 
             $this->notifyRequester(
-                __('Payment import failed'),
-                $exception->getMessage(),
+                fn (Notification $notification): Notification => $notification
+                    ->title(__('Payment import failed'))
+                    ->body($exception->getMessage()),
                 'danger',
             );
 
@@ -99,7 +102,10 @@ final class RunLegacyMigrationPaymentsJob implements ShouldQueue
         }
     }
 
-    private function notifyRequester(string $title, string $body, string $color): void
+    /**
+     * @param  callable(Notification): Notification  $configure
+     */
+    private function notifyRequester(callable $configure, string $color): void
     {
         if ($this->notifyUserId === null) {
             return;
@@ -111,17 +117,7 @@ final class RunLegacyMigrationPaymentsJob implements ShouldQueue
             return;
         }
 
-        $notification = Notification::make()
-            ->title($title)
-            ->body($body);
-
-        match ($color) {
-            'success' => $notification->success(),
-            'danger' => $notification->danger(),
-            default => $notification,
-        };
-
-        $notification->sendToDatabase($user);
+        RecipientDatabaseNotification::sendWithColor($user, $configure, $color);
     }
 
     /**

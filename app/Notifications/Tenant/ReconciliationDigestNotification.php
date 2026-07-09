@@ -47,7 +47,8 @@ class ReconciliationDigestNotification extends Notification
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        return $this->buildAdminWebPush(
+        return $this->buildAdminWebPushFor(
+            $notifiable,
             $this->title(),
             $this->summary,
             $this->absoluteUrl(),

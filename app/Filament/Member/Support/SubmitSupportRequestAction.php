@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Member\Support;
 
+use App\Filament\Support\RecipientDatabaseNotification;
 use App\Models\Tenant\SupportRequest;
 use App\Models\Tenant\User;
 use App\Support\Tenant\CurrentMember;
@@ -56,30 +57,30 @@ final class SubmitSupportRequestAction
                         'message' => $data['message'],
                     ]);
 
-                    $categoryLabel = SupportRequest::categoryLabel($data['category']);
                     $memberInfo = $member !== null
                         ? "{$user->name} (#{$member->member_number})"
                         : $user->name;
 
-                    $body = __('Request #:id from :from', [
-                        'id' => $supportRequest->id,
-                        'from' => $memberInfo,
-                    ])
-                        ."\n".__('Category: :category', ['category' => $categoryLabel])
-                        ."\n\n".$data['message'];
-
                     User::query()
                         ->where('is_admin', true)
-                        ->each(function (User $admin) use ($data, $body, $supportRequest): void {
-                            Notification::make()
-                                ->title(__('Support request #:id: :subject', [
+                        ->each(function (User $admin) use ($data, $memberInfo, $supportRequest): void {
+                            RecipientDatabaseNotification::send($admin, function (Notification $notification) use ($data, $memberInfo, $supportRequest): void {
+                                $body = __('Request #:id from :from', [
                                     'id' => $supportRequest->id,
-                                    'subject' => $data['subject'],
-                                ]))
-                                ->body($body)
-                                ->icon('heroicon-o-chat-bubble-left-right')
-                                ->iconColor('warning')
-                                ->sendToDatabase($admin);
+                                    'from' => $memberInfo,
+                                ])
+                                    ."\n".__('Category: :category', ['category' => SupportRequest::categoryLabel($data['category'])])
+                                    ."\n\n".$data['message'];
+
+                                $notification
+                                    ->title(__('Support request #:id: :subject', [
+                                        'id' => $supportRequest->id,
+                                        'subject' => $data['subject'],
+                                    ]))
+                                    ->body($body)
+                                    ->icon('heroicon-o-chat-bubble-left-right')
+                                    ->iconColor('warning');
+                            });
                         });
 
                     Notification::make()

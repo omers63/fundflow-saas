@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Services\MemberActivityFeedService;
 use App\Support\Insights\InsightFormatter;
 use App\Support\MemberLocale;
+use App\Support\Utf8CsvStream;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -40,8 +41,7 @@ class MemberActivityExportController extends Controller
             $filename = 'member-activity-'.$member->member_number.'-'.$from->format('Y-m-d').'-'.$to->format('Y-m-d').'.csv';
 
             return response()->streamDownload(function () use ($feed, $rows, $currency): void {
-                $out = fopen('php://output', 'w');
-                fwrite($out, "\xEF\xBB\xBF");
+                $out = Utf8CsvStream::open();
                 fputcsv($out, $feed->exportCsvHeaders());
 
                 foreach ($rows as $transaction) {
@@ -50,7 +50,7 @@ class MemberActivityExportController extends Controller
 
                 fclose($out);
             }, $filename, [
-                'Content-Type' => 'text/csv; charset=UTF-8',
+                ...Utf8CsvStream::downloadHeaders(),
                 'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
             ]);
         };

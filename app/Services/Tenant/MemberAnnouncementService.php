@@ -140,7 +140,7 @@ final class MemberAnnouncementService
             return false;
         }
 
-        $locale = $member->user?->locale ?? config('app.locale');
+        $locale = $member->user?->preferredLocale() ?? config('app.locale');
         $title = $locale === 'ar' && filled($announcement->title_ar)
             ? (string) $announcement->title_ar
             : $announcement->title_en;

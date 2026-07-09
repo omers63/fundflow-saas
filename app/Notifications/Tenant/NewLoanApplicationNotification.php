@@ -25,7 +25,8 @@ class NewLoanApplicationNotification extends Notification
     {
         $this->loan->loadMissing('member');
 
-        return $this->buildAdminWebPush(
+        return $this->buildAdminWebPushFor(
+            $notifiable,
             __('New loan application'),
             __(':name applied for :amount.', [
                 'name' => $this->loan->member?->name ?? __('Member'),

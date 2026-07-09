@@ -6,6 +6,7 @@ namespace App\Services\Tenant;
 
 use App\Models\Tenant\FundAuditLog;
 use App\Support\BusinessDay;
+use App\Support\Utf8CsvStream;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -35,7 +36,7 @@ final class FundAuditLogExportService
         $filename = 'fund-audit-log-'.BusinessDay::now()->format('Y-m-d').'.csv';
 
         return response()->streamDownload(function () use ($from, $until): void {
-            $handle = fopen('php://output', 'w');
+            $handle = Utf8CsvStream::open();
             fputcsv($handle, self::csvHeaders());
 
             $this->query($from, $until)
@@ -55,7 +56,7 @@ final class FundAuditLogExportService
 
             fclose($handle);
         }, $filename, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
+            ...Utf8CsvStream::downloadHeaders(),
             'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
         ]);
     }

@@ -225,6 +225,7 @@ class ContributionCycleService
     {
         return Member::query()
             ->contributionCycleEligible()
+            ->notExemptFromContributionsForCycle($month, $year)
             ->whereDoesntHave('contributions', function (Builder $query) use ($month, $year): void {
                 $query->forPeriod($month, $year)->posted();
             })
@@ -232,10 +233,6 @@ class ContributionCycleService
                 $periodStart = Carbon::create($year, $month, 1)->startOfMonth();
                 $query->whereNull('joined_at')
                     ->orWhere('joined_at', '<=', $periodStart->copy()->endOfMonth());
-            })
-            ->whereDoesntHave('loans', function (Builder $loan): void {
-                $loan->where('status', 'active')
-                    ->whereHas('installments', fn (Builder $installment): Builder => $installment->whereIn('status', ['pending', 'overdue']));
             })
             ->with(['parent', 'cashAccount'])
             ->orderBy('name');
@@ -253,6 +250,27 @@ class ContributionCycleService
     public function postedContributionCount(int $month, int $year): int
     {
         return $this->postedContributionsQueryForPeriod($month, $year)->count();
+    }
+
+    /**
+     * Member ids that appear on the cycle To collect / Collected workspaces for export.
+     *
+     * @return list<int>
+     */
+    public function summaryExportMemberIds(int $month, int $year): array
+    {
+        $pendingIds = $this->pendingMembersQueryForPeriod($month, $year)
+            ->pluck('id')
+            ->map(fn(mixed $id): int => (int) $id)
+            ->all();
+
+        $postedIds = $this->postedContributionsQueryForPeriod($month, $year)
+            ->whereHas('member', fn(Builder $query): Builder => $query->contributionCycleEligible())
+            ->pluck('member_id')
+            ->map(fn(mixed $id): int => (int) $id)
+            ->all();
+
+        return array_values(array_unique([...$pendingIds, ...$postedIds]));
     }
 
     /**

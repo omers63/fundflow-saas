@@ -41,6 +41,7 @@ beforeEach(function () {
         'password' => bcrypt('password'),
         'email_verified_at' => now(),
         'is_admin' => false,
+        'preferred_locale' => 'en',
     ]);
 
     $member->update(['user_id' => $this->memberUser->id]);

@@ -15,7 +15,8 @@ class TestAdminWebPushNotification extends Notification
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        return $this->buildAdminWebPush(
+        return $this->buildAdminWebPushFor(
+            $notifiable,
             __('Test notification'),
             __('This is a test push notification from FundFlow.'),
             null,

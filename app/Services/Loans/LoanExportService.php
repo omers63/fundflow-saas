@@ -6,6 +6,7 @@ namespace App\Services\Loans;
 
 use App\Models\Tenant\Loan;
 use App\Support\BusinessDay;
+use App\Support\Utf8CsvStream;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class LoanExportService
@@ -41,7 +42,7 @@ final class LoanExportService
         $filename = 'loans-'.BusinessDay::now()->format('Y-m-d').'.csv';
 
         return response()->streamDownload(function (): void {
-            $handle = fopen('php://output', 'w');
+            $handle = Utf8CsvStream::open();
             fputcsv($handle, self::csvHeaders());
 
             Loan::query()
@@ -55,7 +56,7 @@ final class LoanExportService
 
             fclose($handle);
         }, $filename, [
-            'Content-Type' => 'text/csv',
+            ...Utf8CsvStream::downloadHeaders(),
             'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
         ]);
     }

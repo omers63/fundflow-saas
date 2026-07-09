@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs\Tenant;
 
+use App\Filament\Support\RecipientDatabaseNotification;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\LegacyMigration\LegacyMigrationOrchestrator;
@@ -72,7 +73,12 @@ final class ImportLegacyMembersJob implements ShouldQueue
             Setting::set('legacy_migration', 'members_import_status', 'failed');
             Setting::set('legacy_migration', 'members_import_error', $exception->getMessage());
 
-            $this->notifyRequester(__('Import failed'), $exception->getMessage(), 'danger');
+            $this->notifyRequester(
+                fn (Notification $notification): Notification => $notification
+                    ->title(__('Import failed'))
+                    ->body($exception->getMessage()),
+                'danger',
+            );
 
             throw $exception;
         }
@@ -91,7 +97,10 @@ final class ImportLegacyMembersJob implements ShouldQueue
         }
     }
 
-    private function notifyRequester(string $title, string $body, string $color): void
+    /**
+     * @param  callable(Notification): Notification  $configure
+     */
+    private function notifyRequester(callable $configure, string $color): void
     {
         if ($this->notifyUserId === null) {
             return;
@@ -103,14 +112,6 @@ final class ImportLegacyMembersJob implements ShouldQueue
             return;
         }
 
-        $notification = Notification::make()->title($title)->body($body);
-
-        match ($color) {
-            'success' => $notification->success(),
-            'danger' => $notification->danger(),
-            default => $notification,
-        };
-
-        $notification->sendToDatabase($user);
+        RecipientDatabaseNotification::sendWithColor($user, $configure, $color);
     }
 }

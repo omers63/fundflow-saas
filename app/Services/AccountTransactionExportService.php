@@ -8,6 +8,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Transaction;
 use App\Support\BusinessDay;
 use App\Support\MasterInvestLedgerImport;
+use App\Support\Utf8CsvStream;
 use Illuminate\Database\Eloquent\Builder;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -40,7 +41,7 @@ final class AccountTransactionExportService
         $filename = 'master-'.$account->type.'-ledger-'.BusinessDay::now()->format('Y-m-d').'.csv';
 
         return response()->streamDownload(function () use ($account): void {
-            $handle = fopen('php://output', 'w');
+            $handle = Utf8CsvStream::open();
             fputcsv($handle, self::csvHeaders());
 
             $this->query($account)
@@ -52,7 +53,7 @@ final class AccountTransactionExportService
 
             fclose($handle);
         }, $filename, [
-            'Content-Type' => 'text/csv',
+            ...Utf8CsvStream::downloadHeaders(),
             'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
         ]);
     }

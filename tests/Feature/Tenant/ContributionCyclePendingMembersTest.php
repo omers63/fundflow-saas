@@ -62,7 +62,7 @@ test('pending members for period exclude posted contributors and pre-join member
         'member_number' => 'MEM-NEW',
         'name' => 'Future Join',
         'monthly_contribution_amount' => 5000,
-        'joined_at' => now()->addMonth(),
+        'joined_at' => Carbon::create($year, $month, 1)->addMonths(2),
         'status' => 'active',
     ]);
     $this->accounting->createMemberAccounts($futureJoin);
@@ -136,6 +136,69 @@ test('pending members exclude loan-exempt members and non-posted contribution ro
         ->and($pendingIds)->toContain($pendingOnly->id);
 
     Carbon::setTestNow();
+});
+
+test('pending members exclude members who were emi exempt during a completed loan cycle', function () {
+    $month = 6;
+    $year = 2025;
+
+    $exemptDuringLoan = Member::create([
+        'member_number' => 'MEM-31',
+        'name' => 'Historical EMI Member',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($exemptDuringLoan);
+
+    Loan::create([
+        'member_id' => $exemptDuringLoan->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
+        'interest_rate' => 10,
+        'term_months' => 5,
+        'monthly_repayment' => 2000,
+        'total_repaid' => 10000,
+        'status' => 'completed',
+        'applied_at' => Carbon::parse('2025-06-01'),
+        'disbursed_at' => Carbon::parse('2025-06-01'),
+        'completed_at' => Carbon::parse('2025-10-31'),
+    ]);
+
+    $dueAfterLoan = Member::create([
+        'member_number' => 'MEM-DUE-NOV',
+        'name' => 'Due After Loan',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($dueAfterLoan);
+
+    Loan::create([
+        'member_id' => $dueAfterLoan->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
+        'interest_rate' => 10,
+        'term_months' => 5,
+        'monthly_repayment' => 2000,
+        'total_repaid' => 10000,
+        'status' => 'completed',
+        'applied_at' => Carbon::parse('2025-06-01'),
+        'disbursed_at' => Carbon::parse('2025-06-01'),
+        'completed_at' => Carbon::parse('2025-10-31'),
+    ]);
+
+    $junePendingIds = $this->cycles->pendingMembersQueryForPeriod($month, $year)->pluck('id');
+    $novemberPendingIds = $this->cycles->pendingMembersQueryForPeriod(11, $year)->pluck('id');
+
+    expect($exemptDuringLoan->fresh()->isExemptFromContributions($month, $year))->toBeTrue()
+        ->and($junePendingIds)->not->toContain($exemptDuringLoan->id)
+        ->and($dueAfterLoan->fresh()->isExemptFromContributions(11, $year))->toBeFalse()
+        ->and($novemberPendingIds)->toContain($dueAfterLoan->id);
 });
 
 test('pending members query can order by member cash account balance', function () {

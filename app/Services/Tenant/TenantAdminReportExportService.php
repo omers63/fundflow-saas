@@ -11,6 +11,7 @@ use App\Models\Tenant\ReconciliationSnapshot;
 use App\Services\Members\GuarantorExposureExportService;
 use App\Services\ReconciliationPdfService;
 use App\Support\BusinessDay;
+use App\Support\Utf8CsvStream;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -63,7 +64,7 @@ final class TenantAdminReportExportService
         $filename = 'collections-report-'.BusinessDay::now()->format('Y-m-d').'.csv';
 
         return response()->streamDownload(function () use ($from, $until): void {
-            $handle = fopen('php://output', 'w');
+            $handle = Utf8CsvStream::open();
             fputcsv($handle, [
                 'member_number',
                 'member_name',
@@ -104,7 +105,7 @@ final class TenantAdminReportExportService
 
             fclose($handle);
         }, $filename, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
+            ...Utf8CsvStream::downloadHeaders(),
             'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
         ]);
     }
@@ -118,7 +119,7 @@ final class TenantAdminReportExportService
         $filename = 'loan-portfolio-report-'.BusinessDay::now()->format('Y-m-d').'.csv';
 
         return response()->streamDownload(function () use ($from, $until): void {
-            $handle = fopen('php://output', 'w');
+            $handle = Utf8CsvStream::open();
             fputcsv($handle, [
                 'loan_id',
                 'member_number',
@@ -163,7 +164,7 @@ final class TenantAdminReportExportService
 
             fclose($handle);
         }, $filename, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
+            ...Utf8CsvStream::downloadHeaders(),
             'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
         ]);
     }
@@ -183,7 +184,7 @@ final class TenantAdminReportExportService
         $filename = 'reconciliation-report-'.BusinessDay::now()->format('Y-m-d').'.csv';
 
         return response()->streamDownload(function () use ($from, $until): void {
-            $handle = fopen('php://output', 'w');
+            $handle = Utf8CsvStream::open();
             fputcsv($handle, [
                 'record_kind',
                 'id',
@@ -233,7 +234,7 @@ final class TenantAdminReportExportService
 
             fclose($handle);
         }, $filename, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
+            ...Utf8CsvStream::downloadHeaders(),
             'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
         ]);
     }

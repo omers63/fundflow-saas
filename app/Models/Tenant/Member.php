@@ -8,6 +8,7 @@ use App\Services\LoanService;
 use App\Services\MemberMonthlyAllocationService;
 use App\Support\MemberMembershipPolicy;
 use App\Support\MemberNumberSettings;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -238,6 +239,38 @@ class Member extends Model
                     ->orWhere(function ($inner): void {
                         $inner->where('status', 'inactive')
                             ->where('contribution_cycles_active', true);
+                    });
+            });
+    }
+
+    public function scopeNotExemptFromContributionsForCycle(Builder $query, int $month, int $year): Builder
+    {
+        $periodStart = Carbon::create($year, $month, 1)->startOfMonth();
+        $periodEnd = $periodStart->copy()->endOfMonth();
+
+        return $query
+            ->whereDoesntHave('loans', function (Builder $loan) use ($month, $year): void {
+                $loan->whereIn('status', ['active', 'approved'])
+                    ->where('has_grace_cycle', true)
+                    ->where(function (Builder $grace) use ($month, $year): void {
+                        $grace->whereNull('first_repayment_month')
+                            ->orWhere('first_repayment_year', '>', $year)
+                            ->orWhere(function (Builder $inner) use ($month, $year): void {
+                                $inner->where('first_repayment_year', $year)
+                                    ->where('first_repayment_month', '>', $month);
+                            });
+                    });
+            })
+            ->whereDoesntHave('loans', function (Builder $loan) use ($periodStart, $periodEnd): void {
+                $loan->whereNotNull('disbursed_at')
+                    ->whereIn('status', ['active', 'transferred', 'completed', 'early_settled'])
+                    ->whereDate('disbursed_at', '<=', $periodEnd)
+                    ->where(function (Builder $cycle) use ($periodStart): void {
+                        $cycle->where(function (Builder $open): void {
+                            $open->whereNull('settled_at')
+                                ->whereNull('completed_at')
+                                ->whereIn('status', ['active', 'transferred']);
+                        })->orWhereRaw('LAST_DAY(COALESCE(settled_at, completed_at)) >= ?', [$periodStart->toDateString()]);
                     });
             });
     }

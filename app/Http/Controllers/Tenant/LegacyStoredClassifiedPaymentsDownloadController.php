@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\Setting;
 use App\Services\LegacyMigration\LegacyPaymentClassifierService;
+use App\Support\Utf8CsvStream;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -34,7 +35,7 @@ class LegacyStoredClassifiedPaymentsDownloadController extends Controller
             $relativePath,
             'legacy-payments-classified.csv',
             [
-                'Content-Type' => 'text/csv',
+                ...Utf8CsvStream::downloadHeaders(),
                 'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
                 'Pragma' => 'no-cache',
             ],

@@ -2,9 +2,11 @@
 
 namespace App\Filament\Tenant\Resources\MembershipApplications\Pages;
 
+use App\Filament\Support\RecipientDatabaseNotification;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Filament\Tenant\Widgets\MembershipApplicationInsightsWidget;
 use App\Models\Tenant\MembershipApplication;
+use App\Models\Tenant\User;
 use App\Services\MembershipApplicationImportService;
 use App\Support\BusinessDay;
 use App\Support\FilamentStoredUploadPath;
@@ -73,13 +75,11 @@ class ListMembershipApplications extends ListRecords
                         $resolved = FilamentStoredUploadPath::tryResolveReadableCsvToAbsolutePath($csvRaw);
 
                         if ($resolved === null) {
-                            $this->sendImportNotification(
-                                Notification::make()
-                                    ->title(__('Import failed'))
-                                    ->body(__('No readable CSV file was found. Re-upload the file, wait until it finishes uploading, then submit.'))
-                                    ->danger()
-                                    ->persistent()
-                            );
+                            $this->sendImportNotification(fn (Notification $notification): Notification => $notification
+                                ->title(__('Import failed'))
+                                ->body(__('No readable CSV file was found. Re-upload the file, wait until it finishes uploading, then submit.'))
+                                ->danger()
+                                ->persistent());
 
                             return;
                         }
@@ -106,43 +106,43 @@ class ListMembershipApplications extends ListRecords
                             }
                         }
 
-                        $body = __('Created: :created · Skipped: :skipped · Failed: :failed', [
-                            'created' => $result['created'],
-                            'skipped' => $result['skipped'],
-                            'failed' => $result['failed'],
-                        ]);
-
-                        if ($result['errors'] !== []) {
-                            $previewLines = array_slice($result['errors'], 0, 6);
-                            $preview = implode("\n", $previewLines);
-                            if (count($result['errors']) > 6) {
-                                $preview .= "\n… ".__('and :count more (see storage/logs/laravel.log)', [
-                                    'count' => count($result['errors']) - 6,
-                                ]);
-                            }
-                            $body .= "\n\n".$preview;
-                        }
-
                         $livewire->resetTable();
                         MembershipApplicationResource::dispatchInsightsRefresh($livewire);
 
-                        $this->sendImportNotification(
-                            Notification::make()
+                        $this->sendImportNotification(function (Notification $notification) use ($result): Notification {
+                            $body = __('Created: :created · Skipped: :skipped · Failed: :failed', [
+                                'created' => $result['created'],
+                                'skipped' => $result['skipped'],
+                                'failed' => $result['failed'],
+                            ]);
+
+                            if ($result['errors'] !== []) {
+                                $previewLines = array_slice($result['errors'], 0, 6);
+                                $preview = implode("\n", $previewLines);
+                                if (count($result['errors']) > 6) {
+                                    $preview .= "\n… ".__('and :count more (see storage/logs/laravel.log)', [
+                                        'count' => count($result['errors']) - 6,
+                                    ]);
+                                }
+                                $body .= "\n\n".$preview;
+                            }
+
+                            return $notification
                                 ->title(__('Application import finished'))
                                 ->body(nl2br(e($body)))
                                 ->color($result['failed'] > 0 || $result['errors'] !== [] ? 'warning' : 'success')
-                                ->persistent()
-                        );
+                                ->persistent();
+                        });
                     } catch (\Throwable $e) {
                         report($e);
 
-                        $this->sendImportNotification(
-                            Notification::make()
+                        $this->sendImportNotification(function (Notification $notification) use ($e): Notification {
+                            return $notification
                                 ->title(__('Import failed'))
                                 ->body($e->getMessage() !== '' ? $e->getMessage() : __('An unexpected error occurred during import.'))
                                 ->danger()
-                                ->persistent()
-                        );
+                                ->persistent();
+                        });
                     }
                 }),
             CreateAction::make()
@@ -219,13 +219,18 @@ class ListMembershipApplications extends ListRecords
         ];
     }
 
-    private function sendImportNotification(Notification $notification): void
+    /**
+     * @param  callable(Notification): Notification  $configure
+     */
+    private function sendImportNotification(callable $configure): void
     {
-        $notification->send();
+        $toast = Notification::make();
+        $configure($toast);
+        $toast->send();
 
         $user = auth('tenant')->user();
-        if ($user !== null) {
-            $notification->sendToDatabase($user);
+        if ($user instanceof User) {
+            RecipientDatabaseNotification::send($user, $configure);
         }
     }
 }

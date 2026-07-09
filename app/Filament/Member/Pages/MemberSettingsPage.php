@@ -10,6 +10,7 @@ use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Member\Support\MemberNavigation;
 use App\Filament\Member\Support\ReturnToParentPortalAction;
 use App\Filament\Member\Support\SwitchHouseholdProfileAction;
+use App\Filament\Support\RecipientDatabaseNotification;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberCommunicationPreference;
 use App\Models\Tenant\User;
@@ -340,16 +341,17 @@ class MemberSettingsPage extends Page implements HasForms
                         User::query()
                             ->where('is_admin', true)
                             ->each(function (User $admin) use ($member, $oldAmount, $newAmount): void {
-                                Notification::make()
-                                    ->title(__('Member allocation updated'))
-                                    ->body(__('Member :name changed monthly contribution from :old to :new.', [
-                                        'name' => $member->name,
-                                        'old' => number_format($oldAmount),
-                                        'new' => number_format($newAmount),
-                                    ]))
-                                    ->icon('heroicon-o-adjustments-horizontal')
-                                    ->iconColor('info')
-                                    ->sendToDatabase($admin);
+                                RecipientDatabaseNotification::send($admin, function (Notification $notification) use ($member, $oldAmount, $newAmount): void {
+                                    $notification
+                                        ->title(__('Member allocation updated'))
+                                        ->body(__('Member :name changed monthly contribution from :old to :new.', [
+                                            'name' => $member->name,
+                                            'old' => number_format($oldAmount),
+                                            'new' => number_format($newAmount),
+                                        ]))
+                                        ->icon('heroicon-o-adjustments-horizontal')
+                                        ->iconColor('info');
+                                });
                             });
 
                         Notification::make()

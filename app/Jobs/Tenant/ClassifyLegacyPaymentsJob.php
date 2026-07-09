@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs\Tenant;
 
+use App\Filament\Support\RecipientDatabaseNotification;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\LegacyMigration\LegacyMigrationOrchestrator;
@@ -111,8 +112,9 @@ final class ClassifyLegacyPaymentsJob implements ShouldQueue
             Setting::set('legacy_migration', 'classify_error', $exception->getMessage());
 
             $this->notifyRequester(
-                __('Classification failed'),
-                $exception->getMessage(),
+                fn (Notification $notification): Notification => $notification
+                    ->title(__('Classification failed'))
+                    ->body($exception->getMessage()),
                 'danger',
             );
 
@@ -120,7 +122,10 @@ final class ClassifyLegacyPaymentsJob implements ShouldQueue
         }
     }
 
-    private function notifyRequester(string $title, string $body, string $color): void
+    /**
+     * @param  callable(Notification): Notification  $configure
+     */
+    private function notifyRequester(callable $configure, string $color): void
     {
         if ($this->notifyUserId === null) {
             return;
@@ -132,17 +137,6 @@ final class ClassifyLegacyPaymentsJob implements ShouldQueue
             return;
         }
 
-        $notification = Notification::make()
-            ->title($title)
-            ->body($body);
-
-        match ($color) {
-            'success' => $notification->success(),
-            'warning' => $notification->warning(),
-            'danger' => $notification->danger(),
-            default => $notification,
-        };
-
-        $notification->sendToDatabase($user);
+        RecipientDatabaseNotification::sendWithColor($user, $configure, $color);
     }
 }

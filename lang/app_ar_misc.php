@@ -208,6 +208,7 @@ return [
     'Exception written off' => 'شُطب الاستثناء',
     'Existing backups' => 'النسخ الاحتياطية الحالية',
     'Export collection summary' => 'تصدير ملخّص التحصيل',
+    'Export Contributions Summary' => 'تصدير ملخّص الاشتراكات',
     'Export file is not available.' => 'ملف التصدير غير متاح.',
     'Exports require a certified snapshot.' => 'تتطلب التصديرات لقطة معتمدة.',
     'Exposure risk' => 'مخاطر التعرّض',

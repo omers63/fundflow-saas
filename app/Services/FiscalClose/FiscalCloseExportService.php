@@ -8,6 +8,7 @@ use App\Models\Tenant\FiscalClose;
 use App\Models\Tenant\FiscalCloseMemberSnapshot;
 use App\Models\Tenant\Transaction;
 use App\Support\BusinessDay;
+use App\Support\Utf8CsvStream;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 
@@ -53,11 +54,7 @@ class FiscalCloseExportService
         $path = $this->basePath($close).'/gl.csv';
         $periodEnd = $close->period_end->copy()->endOfDay();
 
-        $handle = fopen($this->absolutePath($path), 'w');
-
-        if ($handle === false) {
-            throw new InvalidArgumentException(__('Unable to create GL export file.'));
-        }
+        $handle = Utf8CsvStream::openFile($this->absolutePath($path));
 
         fputcsv($handle, [
             __('ID'),
@@ -101,11 +98,7 @@ class FiscalCloseExportService
     {
         $path = $this->basePath($close).'/arrears-aging.csv';
 
-        $handle = fopen($this->absolutePath($path), 'w');
-
-        if ($handle === false) {
-            throw new InvalidArgumentException(__('Unable to create arrears export file.'));
-        }
+        $handle = Utf8CsvStream::openFile($this->absolutePath($path));
 
         fputcsv($handle, [
             __('Member ID'),
@@ -146,11 +139,7 @@ class FiscalCloseExportService
     {
         $path = $this->basePath($close).'/loan-portfolio.csv';
 
-        $handle = fopen($this->absolutePath($path), 'w');
-
-        if ($handle === false) {
-            throw new InvalidArgumentException(__('Unable to create loan portfolio export file.'));
-        }
+        $handle = Utf8CsvStream::openFile($this->absolutePath($path));
 
         fputcsv($handle, [
             __('Member ID'),
