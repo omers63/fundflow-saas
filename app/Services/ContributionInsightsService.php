@@ -53,7 +53,7 @@ final class ContributionInsightsService
         $currency = Setting::get('general', 'currency', 'USD');
         $periodLabel = $this->cycles->periodLabel($openMonth, $openYear);
 
-        $missingOpenPeriod = $this->cycles->pendingMembersQueryForPeriod($openMonth, $openYear)->count();
+        $missingOpenPeriod = ContributionResource::pendingCountForPeriod($openMonth, $openYear);
         $postedOpenPeriod = Contribution::query()
             ->forPeriod($openMonth, $openYear)
             ->posted()
@@ -161,7 +161,7 @@ final class ContributionInsightsService
             ->forPeriod($openMonth, $openYear)
             ->posted()
             ->sum('amount');
-        $missingOpenPeriod = $this->cycles->pendingMembersQueryForPeriod($openMonth, $openYear)->count();
+        $missingOpenPeriod = ContributionResource::pendingCountForPeriod($openMonth, $openYear);
 
         $collectedUrl = ContributionResource::listTabUrl('collected');
 
@@ -304,7 +304,7 @@ final class ContributionInsightsService
             ->where('is_late', true)
             ->count();
 
-        $missingOpenPeriod = $this->cycles->pendingMembersQueryForPeriod($openMonth, $openYear)->count();
+        $missingOpenPeriod = ContributionResource::pendingCountForPeriod($openMonth, $openYear);
         $postedOpenPeriod = Contribution::query()
             ->forPeriod($openMonth, $openYear)
             ->posted()

@@ -632,7 +632,7 @@ class Loan extends Model
 
     /**
      * True if the member has a non-deleted contribution for the given calendar month/year
-     * recorded on or before {@code $asOf} (uses paid_at when set, otherwise created_at).
+     * recorded on or before {@code $asOf} (uses paid_at when set, otherwise posted_at, then created_at).
      */
     public static function memberHasContributionForCycleAsOf(int $memberId, int $month, int $year, Carbon $asOf): bool
     {
@@ -641,7 +641,7 @@ class Loan extends Model
         return Contribution::query()
             ->where('member_id', $memberId)
             ->where('period', $period)
-            ->where('created_at', '<=', $asOf)
+            ->whereRaw('COALESCE(paid_at, posted_at, created_at) <= ?', [$asOf])
             ->exists();
     }
 

@@ -22,26 +22,28 @@ final class ContributionCollectionSummaryState
 
     public static function resolve(Member $member, int $month, int $year, ?Contribution $contribution): string
     {
-        if ($member->isInLoanGracePeriodForCycle($month, $year)) {
-            return self::GRACE_EXEMPT;
-        }
-
-        if ($member->isInActiveLoanContributionExemptCycle($month, $year)) {
-            return self::EMI_EXEMPT;
-        }
-
         if ($contribution?->status === 'posted') {
             return self::PAID;
         }
 
         $collectionStatus = $contribution?->collection_status;
 
-        if ($collectionStatus === null || $collectionStatus === ContributionCollectionStatus::PENDING) {
-            return self::DUE;
-        }
-
         if ($collectionStatus === ContributionCollectionStatus::COLLECTED) {
             return self::PAID;
+        }
+
+        $policy = app(ContributionExemptionPolicy::class);
+
+        if ($policy->memberIsInGraceCycle($member, $month, $year)) {
+            return self::GRACE_EXEMPT;
+        }
+
+        if ($policy->memberIsInEmiRepaymentPhase($member, $month, $year)) {
+            return self::EMI_EXEMPT;
+        }
+
+        if ($collectionStatus === null || $collectionStatus === ContributionCollectionStatus::PENDING) {
+            return self::DUE;
         }
 
         return (string) $collectionStatus;

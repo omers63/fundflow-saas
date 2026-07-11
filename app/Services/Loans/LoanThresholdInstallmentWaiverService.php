@@ -24,6 +24,10 @@ final class LoanThresholdInstallmentWaiverService
 
     public function ineligibilityReason(Loan $loan): ?string
     {
+        if ($loan->status === 'transferred') {
+            return __('Transferred guarantor loans have no settlement-threshold installments to waive.');
+        }
+
         if ($loan->status !== 'active') {
             return __('Only active loans can have threshold installments waived.');
         }

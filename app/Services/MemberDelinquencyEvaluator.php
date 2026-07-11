@@ -9,6 +9,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Support\BusinessDay;
+use App\Support\ContributionExemptionPolicy;
 use App\Support\ContributionPolicySettings;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -159,8 +160,7 @@ class MemberDelinquencyEvaluator
 
         $contributionsByMember = $this->preloadPostedContributionPeriods($memberIds, $earliestLiability, $endOfLastClosed);
         $repaymentMissByMember = $this->preloadRepaymentMissPeriods($memberIds, $endOfLastClosed);
-        $graceLoansByMember = $this->preloadLoanGraceCycles($memberIds);
-        $repaymentLoansByMember = $this->preloadLoanRepaymentCycles($memberIds);
+        $exemptionLoansByMember = $this->preloadExemptionLoans($memberIds);
 
         $results = [];
 
@@ -198,8 +198,8 @@ class MemberDelinquencyEvaluator
                         $y,
                         $postedContributionPeriods,
                         $repaymentMissPeriods,
-                        $graceLoansByMember,
-                        $repaymentLoansByMember,
+                        $exemptionLoansByMember,
+                        $exemptionLoansByMember,
                     )
                 ) {
                     $rollingTotal++;
@@ -222,8 +222,8 @@ class MemberDelinquencyEvaluator
                         $y,
                         $postedContributionPeriods,
                         $repaymentMissPeriods,
-                        $graceLoansByMember,
-                        $repaymentLoansByMember,
+                        $exemptionLoansByMember,
+                        $exemptionLoansByMember,
                     )
                 ) {
                     break;
@@ -419,83 +419,43 @@ class MemberDelinquencyEvaluator
         array $graceLoansByMember,
         array $repaymentLoansByMember,
     ): bool {
-        if ($this->isInLoanGracePeriodForCycle($memberId, $month, $year, $graceLoansByMember)) {
-            return true;
-        }
-
-        return $this->wasInLoanRepaymentCycle($memberId, $month, $year, $repaymentLoansByMember);
-    }
-
-    /**
-     * @param  array<int, list<array{first_repayment_month: ?int, first_repayment_year: ?int}>>  $graceLoansByMember
-     */
-    protected function isInLoanGracePeriodForCycle(
-        int $memberId,
-        int $month,
-        int $year,
-        array $graceLoansByMember,
-    ): bool {
-        foreach ($graceLoansByMember[$memberId] ?? [] as $loan) {
-            $firstMonth = $loan['first_repayment_month'];
-            $firstYear = $loan['first_repayment_year'];
-
-            if ($firstMonth === null) {
-                return true;
-            }
-
-            if ($firstYear > $year) {
-                return true;
-            }
-
-            if ($firstYear === $year && $firstMonth > $month) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * @param  array<int, list<array{
-     *     disbursed_at: string,
-     *     settled_at: ?string,
-     *     completed_at: ?string,
-     *     status: string
-     * }>>  $repaymentLoansByMember
-     */
-    protected function wasInLoanRepaymentCycle(
-        int $memberId,
-        int $month,
-        int $year,
-        array $repaymentLoansByMember,
-    ): bool {
-        $periodStart = Carbon::create($year, $month, 1)->startOfMonth();
-        $periodKey = sprintf('%04d-%02d', $year, $month);
+        $policy = app(ContributionExemptionPolicy::class);
 
         foreach ($repaymentLoansByMember[$memberId] ?? [] as $loan) {
-            $disbursedAt = Carbon::parse($loan['disbursed_at']);
-            $disbursedKey = sprintf('%04d-%02d', (int) $disbursedAt->year, (int) $disbursedAt->month);
-
-            if ($disbursedKey > $periodKey) {
-                continue;
+            if ($policy->isLoanInGraceCycle($loan, $month, $year)) {
+                return true;
             }
 
-            $cycleEnd = $loan['settled_at'] ?? $loan['completed_at'];
-
-            if ($cycleEnd === null) {
-                if (in_array($loan['status'], ['active', 'transferred'], true)) {
-                    return true;
-                }
-
-                continue;
-            }
-
-            if (Carbon::parse($cycleEnd)->endOfMonth()->greaterThanOrEqualTo($periodStart)) {
+            if ($policy->isLoanInEmiRepaymentPhase($loan, $month, $year)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * @param  list<int>  $memberIds
+     * @return array<int, list<Loan>>
+     */
+    protected function preloadExemptionLoans(array $memberIds): array
+    {
+        if ($memberIds === []) {
+            return [];
+        }
+
+        $grouped = [];
+
+        Loan::query()
+            ->whereIn('member_id', $memberIds)
+            ->whereNotNull('disbursed_at')
+            ->with('member')
+            ->get()
+            ->each(function (Loan $loan) use (&$grouped): void {
+                $grouped[(int) $loan->member_id][] = $loan;
+            });
+
+        return $grouped;
     }
 
     /**
@@ -561,71 +521,6 @@ class MemberDelinquencyEvaluator
                 $dueDate = Carbon::parse((string) $installment->due_date);
                 $memberId = (int) $installment->loan->member_id;
                 $grouped[$memberId][$this->monthKey((int) $dueDate->month, (int) $dueDate->year)] = true;
-            });
-
-        return $grouped;
-    }
-
-    /**
-     * @param  list<int>  $memberIds
-     * @return array<int, list<array{first_repayment_month: ?int, first_repayment_year: ?int}>>
-     */
-    protected function preloadLoanGraceCycles(array $memberIds): array
-    {
-        if ($memberIds === []) {
-            return [];
-        }
-
-        $grouped = [];
-
-        Loan::query()
-            ->whereIn('member_id', $memberIds)
-            ->whereIn('status', ['active', 'approved'])
-            ->where('has_grace_cycle', true)
-            ->get(['member_id', 'first_repayment_month', 'first_repayment_year'])
-            ->each(function (Loan $loan) use (&$grouped): void {
-                $grouped[(int) $loan->member_id][] = [
-                    'first_repayment_month' => $loan->first_repayment_month !== null
-                        ? (int) $loan->first_repayment_month
-                        : null,
-                    'first_repayment_year' => $loan->first_repayment_year !== null
-                        ? (int) $loan->first_repayment_year
-                        : null,
-                ];
-            });
-
-        return $grouped;
-    }
-
-    /**
-     * @param  list<int>  $memberIds
-     * @return array<int, list<array{
-     *     disbursed_at: string,
-     *     settled_at: ?string,
-     *     completed_at: ?string,
-     *     status: string
-     * }>>
-     */
-    protected function preloadLoanRepaymentCycles(array $memberIds): array
-    {
-        if ($memberIds === []) {
-            return [];
-        }
-
-        $grouped = [];
-
-        Loan::query()
-            ->whereIn('member_id', $memberIds)
-            ->whereNotNull('disbursed_at')
-            ->whereIn('status', ['active', 'transferred', 'completed', 'early_settled'])
-            ->get(['member_id', 'disbursed_at', 'settled_at', 'completed_at', 'status'])
-            ->each(function (Loan $loan) use (&$grouped): void {
-                $grouped[(int) $loan->member_id][] = [
-                    'disbursed_at' => (string) $loan->disbursed_at,
-                    'settled_at' => $loan->settled_at !== null ? (string) $loan->settled_at : null,
-                    'completed_at' => $loan->completed_at !== null ? (string) $loan->completed_at : null,
-                    'status' => (string) $loan->status,
-                ];
             });
 
         return $grouped;

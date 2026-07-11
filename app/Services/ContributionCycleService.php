@@ -13,6 +13,7 @@ use App\Notifications\Tenant\ContributionDueNotification;
 use App\Services\Loans\LateFeeService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Support\BusinessDay;
+use App\Support\ContributionExemptionPolicy;
 use App\Support\MemberMembershipPolicy;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -139,6 +140,50 @@ class ContributionCycleService
     }
 
     /**
+     * Whether a loan's repayment span overlaps the labelled contribution cycle window.
+     *
+     * Uses {@see cycleStartAt()} / {@see cycleDueEndAt()} so tenant cycle_start_day is respected.
+     */
+    public function loanRepaymentOverlapsContributionCycle(
+        Carbon|string|null $disbursedAt,
+        Carbon|string|null $settledAt,
+        Carbon|string|null $completedAt,
+        string $status,
+        int $month,
+        int $year,
+        ?int $firstRepaymentMonth = null,
+        ?int $firstRepaymentYear = null,
+    ): bool {
+        if ($disbursedAt === null || $disbursedAt === '') {
+            return false;
+        }
+
+        $disbursed = Carbon::parse($disbursedAt)->startOfDay();
+        $cycleStart = $this->cycleStartAt($month, $year)->startOfDay();
+        $cycleEnd = $this->cycleDueEndAt($month, $year)->startOfDay();
+
+        if ($disbursed->greaterThan($cycleEnd)) {
+            return false;
+        }
+
+        if ($firstRepaymentMonth !== null && $firstRepaymentYear !== null) {
+            $emiStart = $this->cycleStartAt($firstRepaymentMonth, $firstRepaymentYear)->startOfDay();
+
+            if ($cycleStart->lessThan($emiStart)) {
+                return false;
+            }
+        }
+
+        $repaymentEnd = $settledAt ?? $completedAt;
+
+        if ($repaymentEnd === null || $repaymentEnd === '') {
+            return in_array($status, ['active', 'transferred'], true);
+        }
+
+        return Carbon::parse($repaymentEnd)->startOfDay()->greaterThanOrEqualTo($cycleStart);
+    }
+
+    /**
      * @return array{0: int, 1: int}
      */
     public function currentOpenPeriod(): array
@@ -223,17 +268,34 @@ class ContributionCycleService
 
     public function pendingMembersQueryForPeriod(int $month, int $year): Builder
     {
-        return Member::query()
+        $policy = app(ContributionExemptionPolicy::class);
+
+        $candidateIds = Member::query()
             ->contributionCycleEligible()
-            ->notExemptFromContributionsForCycle($month, $year)
-            ->whereDoesntHave('contributions', function (Builder $query) use ($month, $year): void {
-                $query->forPeriod($month, $year)->posted();
+            ->collectibleForContributionPeriod($month, $year)
+            ->whereDoesntHave('contributions', function (Builder $query) use ($month, $year): Builder {
+                return $query->forPeriod($month, $year)->posted();
             })
-            ->where(function (Builder $query) use ($month, $year): void {
+            ->where(function (Builder $query) use ($month, $year): Builder {
                 $periodStart = Carbon::create($year, $month, 1)->startOfMonth();
-                $query->whereNull('joined_at')
+
+                return $query->whereNull('joined_at')
                     ->orWhere('joined_at', '<=', $periodStart->copy()->endOfMonth());
             })
+            ->with(['parent', 'cashAccount', 'loans'])
+            ->orderBy('name')
+            ->get()
+            ->reject(fn (Member $member): bool => $policy->isContributionExemptForCycle($member, $month, $year))
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->all();
+
+        if ($candidateIds === []) {
+            return Member::query()->whereRaw('0 = 1');
+        }
+
+        return Member::query()
+            ->whereIn('id', $candidateIds)
             ->with(['parent', 'cashAccount'])
             ->orderBy('name');
     }
@@ -261,13 +323,13 @@ class ContributionCycleService
     {
         $pendingIds = $this->pendingMembersQueryForPeriod($month, $year)
             ->pluck('id')
-            ->map(fn(mixed $id): int => (int) $id)
+            ->map(fn (mixed $id): int => (int) $id)
             ->all();
 
         $postedIds = $this->postedContributionsQueryForPeriod($month, $year)
-            ->whereHas('member', fn(Builder $query): Builder => $query->contributionCycleEligible())
+            ->whereHas('member', fn (Builder $query): Builder => $query->contributionCycleEligible())
             ->pluck('member_id')
-            ->map(fn(mixed $id): int => (int) $id)
+            ->map(fn (mixed $id): int => (int) $id)
             ->all();
 
         return array_values(array_unique([...$pendingIds, ...$postedIds]));
@@ -444,7 +506,7 @@ class ContributionCycleService
     {
         $amount = 0.0;
 
-        if (!$member->isExemptFromContributions($month, $year)) {
+        if (! $member->isExemptFromContributions($month, $year)) {
             $amount += $this->requiredCollectionCashForMemberPeriod($member, $month, $year);
         }
 
@@ -553,7 +615,7 @@ class ContributionCycleService
         if (
             (float) $member->monthly_contribution_amount > 0
             && ! $member->isExemptFromContributions($month, $year)
-            && !$member->excludesHouseholdContributionFunding()
+            && ! $member->excludesHouseholdContributionFunding()
         ) {
             $dues += $this->requiredCollectionCashForMemberPeriod($member, $month, $year);
         }

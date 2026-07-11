@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Models\Tenant;
 
 use App\Services\AccountingService;
+use App\Services\ContributionCycleService;
 use App\Services\ContributionService;
 use App\Support\ContributionCollectionStatus;
+use App\Support\ContributionExemptionPolicy;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -68,14 +70,23 @@ class Contribution extends Model
         static::creating(function (Contribution $contribution): void {
             $member = Member::query()->find((int) $contribution->member_id);
 
-            if (
-                $member
-                && ! ContributionService::liveCollectionGuardsSuppressed()
-                && $member->isExemptFromContributions()
-            ) {
-                throw ValidationException::withMessages([
-                    'member_id' => [__('This member has an active loan with pending repayments. Keep funds in cash until installments are paid.')],
-                ]);
+            if ($member && !ContributionService::liveCollectionGuardsSuppressed()) {
+                $policy = app(ContributionExemptionPolicy::class);
+
+                if ($contribution->period !== null) {
+                    $month = (int) $contribution->period->month;
+                    $year = (int) $contribution->period->year;
+                    $blocked = $policy->memberIsInEmiRepaymentPhase($member, $month, $year);
+                } else {
+                    [$openMonth, $openYear] = app(ContributionCycleService::class)->currentOpenPeriod();
+                    $blocked = $policy->memberIsInEmiRepaymentPhase($member, $openMonth, $openYear);
+                }
+
+                if ($blocked) {
+                    throw ValidationException::withMessages([
+                        'member_id' => [__('This member has an active loan with pending repayments. Keep funds in cash until installments are paid.')],
+                    ]);
+                }
             }
 
             if ($contribution->period === null) {

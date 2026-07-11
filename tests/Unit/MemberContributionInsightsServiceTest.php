@@ -9,6 +9,7 @@ use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\MemberContributionInsightsService;
+use App\Support\BusinessDaySettings;
 use App\Support\Insights\InsightFormatter;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
@@ -47,9 +48,17 @@ beforeEach(function () {
     ]);
 
     app(AccountingService::class)->createMemberAccounts($this->member);
+
+    BusinessDaySettings::saveFromForm(null);
+});
+
+afterEach(function () {
+    BusinessDaySettings::saveFromForm(null);
+    Carbon::setTestNow();
 });
 
 test('member contribution stat cards include cycle forecast fields', function () {
+    BusinessDaySettings::saveFromForm('2026-06-15');
     Carbon::setTestNow(Carbon::parse('2026-06-15'));
 
     $cards = app(MemberContributionInsightsService::class)->statCards($this->member);
@@ -61,6 +70,7 @@ test('member contribution stat cards include cycle forecast fields', function ()
 });
 
 test('member contribution insights snapshot includes cycle and trend data', function () {
+    BusinessDaySettings::saveFromForm('2026-06-15');
     Carbon::setTestNow(Carbon::parse('2026-06-15'));
 
     $cycles = app(ContributionCycleService::class);
@@ -104,6 +114,7 @@ test('member contribution insights returns empty array without member', function
 });
 
 test('on-time rate counts pre-loan cycles when member is under active loan repayment', function () {
+    BusinessDaySettings::saveFromForm('2026-06-15');
     Carbon::setTestNow(Carbon::parse('2026-06-15'));
 
     Loan::query()->delete();
@@ -141,6 +152,8 @@ test('on-time rate counts pre-loan cycles when member is under active loan repay
         'has_grace_cycle' => false,
         'applied_at' => Carbon::parse('2026-04-01'),
         'disbursed_at' => Carbon::parse('2026-04-01'),
+        'first_repayment_month' => 4,
+        'first_repayment_year' => 2026,
     ]);
 
     LoanInstallment::create([

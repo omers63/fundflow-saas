@@ -569,15 +569,21 @@ class LoanDelinquencyService
         ?bool $live = null,
     ): int {
         if ($throughMonth !== null && $throughYear !== null) {
-            return $this->contributionArrearsTableRecords($memberId, $throughMonth, $throughYear, $live)->count();
+            $context = $this->contributionArrearsEvaluationContext($throughMonth, $throughYear, $live);
+            $cacheKey = $this->contributionArrearsScopedCacheKey($memberId, $context);
+
+            return (int) TenantRuntimeCache::remember(
+                'loan_delinquency:contribution_arrears_scoped_count:'.$cacheKey,
+                60,
+                fn (): int => $this->countContributionArrearsTableRecords($memberId, $context),
+            );
         }
 
         if ($memberId !== null) {
-            return $this->contributionArrearsTableRecords($memberId)->count();
-        }
-
-        if ($this->contributionArrearsAllRecordsCache !== null) {
-            return $this->contributionArrearsAllRecordsCache->count();
+            return $this->countContributionArrearsTableRecords(
+                $memberId,
+                $this->contributionArrearsEvaluationContext(...$this->cycles->currentOpenPeriod(), live: true),
+            );
         }
 
         if ($this->contributionArrearsPeriodCountCache !== null) {
@@ -689,6 +695,59 @@ class LoanDelinquencyService
 
         $rows = collect();
 
+        $this->eachContributionArrearsUnpaidPeriod(
+            $memberId,
+            $evaluationContext,
+            function (Member $member, array $period) use ($rows): void {
+                $rows->push([
+                    '__key' => $period['record_key'],
+                    'member_id' => $member->id,
+                    'member_name' => $member->name,
+                    'member_number' => $member->member_number,
+                    'member_status' => $member->status,
+                    'monthly_contribution_amount' => (float) $member->monthly_contribution_amount,
+                    'period_label' => $period['period_label'],
+                    'month' => $period['month'],
+                    'year' => $period['year'],
+                    'contribution_status' => $period['contribution_status'],
+                    'late_fee' => $period['late_fee'],
+                ]);
+            },
+        );
+
+        return $rows->sortBy([
+            ['member_name', 'asc'],
+            ['year', 'asc'],
+            ['month', 'asc'],
+        ])->values();
+    }
+
+    /**
+     * @param  array{anchor_month: int, anchor_year: int, as_of: Carbon}  $evaluationContext
+     */
+    private function countContributionArrearsTableRecords(?int $memberId, array $evaluationContext): int
+    {
+        $count = 0;
+
+        $this->eachContributionArrearsUnpaidPeriod(
+            $memberId,
+            $evaluationContext,
+            static function (Member $member, array $period) use (&$count): void {
+                $count++;
+            },
+        );
+
+        return $count;
+    }
+
+    /**
+     * @param  array{anchor_month: int, anchor_year: int, as_of: Carbon}  $evaluationContext
+     */
+    private function eachContributionArrearsUnpaidPeriod(
+        ?int $memberId,
+        array $evaluationContext,
+        callable $visitor,
+    ): void {
         $membersQuery = Member::query()
             ->select(['id', 'name', 'member_number', 'status', 'monthly_contribution_amount', 'joined_at', 'contribution_arrears_cutoff_date'])
             ->where('status', 'active')
@@ -708,40 +767,21 @@ class LoanDelinquencyService
             $this->contributionArrearsEarliestPeriodDateForContext($evaluationContext),
         );
 
-        $members
-            ->each(function (Member $member) use ($rows, $preloadedContributions, $globalExemptions, $graceLoansByMember, $evaluationContext): void {
-                $contributionsByPeriod = $preloadedContributions[$member->id] ?? [];
+        foreach ($members as $member) {
+            $contributionsByPeriod = $preloadedContributions[$member->id] ?? [];
 
-                foreach ($this->buildUnpaidContributionPeriods(
-                    $member,
-                    $contributionsByPeriod,
-                    $evaluationContext['as_of'],
-                    $globalExemptions[$member->id] ?? false,
-                    $evaluationContext['anchor_month'],
-                    $evaluationContext['anchor_year'],
-                    $graceLoansByMember,
-                ) as $period) {
-                    $rows->push([
-                        '__key' => $period['record_key'],
-                        'member_id' => $member->id,
-                        'member_name' => $member->name,
-                        'member_number' => $member->member_number,
-                        'member_status' => $member->status,
-                        'monthly_contribution_amount' => (float) $member->monthly_contribution_amount,
-                        'period_label' => $period['period_label'],
-                        'month' => $period['month'],
-                        'year' => $period['year'],
-                        'contribution_status' => $period['contribution_status'],
-                        'late_fee' => $period['late_fee'],
-                    ]);
-                }
-            });
-
-        return $rows->sortBy([
-            ['member_name', 'asc'],
-            ['year', 'asc'],
-            ['month', 'asc'],
-        ])->values();
+            foreach ($this->buildUnpaidContributionPeriods(
+                $member,
+                $contributionsByPeriod,
+                $evaluationContext['as_of'],
+                $globalExemptions[$member->id] ?? false,
+                $evaluationContext['anchor_month'],
+                $evaluationContext['anchor_year'],
+                $graceLoansByMember,
+            ) as $period) {
+                $visitor($member, $period);
+            }
+        }
     }
 
     private function computeContributionArrearsPeriodCount(): int

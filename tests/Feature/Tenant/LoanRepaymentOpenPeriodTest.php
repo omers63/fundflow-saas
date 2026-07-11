@@ -15,6 +15,28 @@ use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
 
+function openPeriodRepaymentLoanAttributes(Member $member, array $overrides = []): array
+{
+    return array_merge([
+        'member_id' => $member->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'member_portion' => 12_000,
+        'master_portion' => 12_000,
+        'settlement_threshold' => 0,
+        'installments_count' => 12,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ], $overrides);
+}
+
 beforeEach(function () {
     $this->initializeTenancy();
 
@@ -52,20 +74,7 @@ test('open period repayment applies installment due mar 5 within february cycle'
     ]);
     $this->accounting->createMemberAccounts($member);
 
-    $loan = Loan::create([
-        'member_id' => $member->id,
-        'amount' => 12_000,
-        'amount_requested' => 12_000,
-        'amount_approved' => 12_000,
-        'amount_disbursed' => 12_000,
-        'interest_rate' => 10,
-        'term_months' => 12,
-        'monthly_repayment' => 1000,
-        'total_repaid' => 0,
-        'status' => 'active',
-        'applied_at' => Carbon::parse('2026-01-01'),
-        'disbursed_at' => Carbon::parse('2026-01-01'),
-    ]);
+    $loan = Loan::create(openPeriodRepaymentLoanAttributes($member));
 
     LoanInstallment::create([
         'loan_id' => $loan->id,
@@ -94,20 +103,7 @@ test('open period repayment skips installment due mar 6 in march cycle', functio
     ]);
     $this->accounting->createMemberAccounts($member);
 
-    $loan = Loan::create([
-        'member_id' => $member->id,
-        'amount' => 12_000,
-        'amount_requested' => 12_000,
-        'amount_approved' => 12_000,
-        'amount_disbursed' => 12_000,
-        'interest_rate' => 10,
-        'term_months' => 12,
-        'monthly_repayment' => 1000,
-        'total_repaid' => 0,
-        'status' => 'active',
-        'applied_at' => Carbon::parse('2026-01-01'),
-        'disbursed_at' => Carbon::parse('2026-01-01'),
-    ]);
+    $loan = Loan::create(openPeriodRepaymentLoanAttributes($member));
 
     LoanInstallment::create([
         'loan_id' => $loan->id,
@@ -133,20 +129,7 @@ test('open period repayment applies february installment when business date is i
     ]);
     $this->accounting->createMemberAccounts($member);
 
-    $loan = Loan::create([
-        'member_id' => $member->id,
-        'amount' => 12_000,
-        'amount_requested' => 12_000,
-        'amount_approved' => 12_000,
-        'amount_disbursed' => 12_000,
-        'interest_rate' => 10,
-        'term_months' => 12,
-        'monthly_repayment' => 1000,
-        'total_repaid' => 0,
-        'status' => 'active',
-        'applied_at' => Carbon::parse('2026-01-01'),
-        'disbursed_at' => Carbon::parse('2026-01-01'),
-    ]);
+    $loan = Loan::create(openPeriodRepaymentLoanAttributes($member));
 
     LoanInstallment::create([
         'loan_id' => $loan->id,
@@ -186,20 +169,7 @@ test('open period repayment applies when member is loan exempt despite posted co
         'amount' => 500,
     ]);
 
-    $loan = Loan::create([
-        'member_id' => $member->id,
-        'amount' => 12_000,
-        'amount_requested' => 12_000,
-        'amount_approved' => 12_000,
-        'amount_disbursed' => 12_000,
-        'interest_rate' => 10,
-        'term_months' => 12,
-        'monthly_repayment' => 1000,
-        'total_repaid' => 0,
-        'status' => 'active',
-        'applied_at' => Carbon::parse('2026-01-01'),
-        'disbursed_at' => Carbon::parse('2026-01-01'),
-    ]);
+    $loan = Loan::create(openPeriodRepaymentLoanAttributes($member));
 
     LoanInstallment::create([
         'loan_id' => $loan->id,

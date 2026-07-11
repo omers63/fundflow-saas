@@ -108,7 +108,7 @@ class MemberOpeningBalanceService
             });
         });
 
-        if ($cashBalance > 0.00001 && $entryLabel !== 'IMPORT_CUTOFF') {
+        if ($cashBalance > 0.00001) {
             $this->accounting->triggerMemberCashCollection($member->fresh() ?? $member);
         }
 

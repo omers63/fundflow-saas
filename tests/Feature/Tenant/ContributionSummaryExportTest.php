@@ -137,10 +137,10 @@ test('contributions summary export excludes inactive grace exempt and emi exempt
         'status' => 'active',
         'has_grace_cycle' => true,
         'grace_cycles' => 1,
-        'first_repayment_month' => $month + 1 > 12 ? 1 : $month + 1,
-        'first_repayment_year' => $month + 1 > 12 ? $year + 1 : $year,
-        'applied_at' => Carbon::parse('2026-01-01'),
-        'disbursed_at' => Carbon::parse('2026-06-01'),
+        'first_repayment_month' => 7,
+        'first_repayment_year' => 2026,
+        'applied_at' => Carbon::parse('2026-06-21'),
+        'disbursed_at' => Carbon::parse('2026-06-21'),
     ]);
 
     $emiMember = Member::create([

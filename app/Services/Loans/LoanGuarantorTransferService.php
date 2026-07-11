@@ -60,7 +60,7 @@ class LoanGuarantorTransferService
 
             $loan->installments()
                 ->whereIn('status', ['pending', 'overdue'])
-                ->delete();
+                ->forceDelete();
 
             $this->rebuildGuarantorSchedule($loan->fresh(), $guarantor, $remaining);
         });
@@ -71,14 +71,18 @@ class LoanGuarantorTransferService
         ]);
     }
 
+    /**
+     * Remaining fund-slice obligation the guarantor inherits (master portion only).
+     *
+     * Settlement threshold is part of the normal borrower schedule only; it is not
+     * transferred to the guarantor.
+     */
     protected function remainingGuarantorObligation(Loan $loan): float
     {
         $masterPortion = max(0.0, (float) $loan->master_portion);
         $repaidToMaster = (float) ($loan->repaid_to_master ?? 0);
-        $thresholdPct = (float) ($loan->settlement_threshold ?? 0);
-        $thresholdAddon = (float) $loan->amount_approved * $thresholdPct;
 
-        return max(0.0, ($masterPortion - $repaidToMaster) + $thresholdAddon);
+        return max(0.0, $masterPortion - $repaidToMaster);
     }
 
     protected function rebuildGuarantorSchedule(Loan $loan, Member $guarantor, float $obligation): void
@@ -89,17 +93,30 @@ class LoanGuarantorTransferService
             throw new InvalidArgumentException(__('Cannot rebuild schedule without a valid EMI amount.'));
         }
 
+        if ($obligation <= 0.01) {
+            $loan->update(['installments_count' => 0]);
+
+            return;
+        }
+
         $remaining = $obligation;
-        $number = 1;
+        $position = 1;
+        $startNumber = ((int) $loan->installments()->max('installment_number')) + 1;
         $due = BusinessDay::now()->addMonthNoOverflow()->startOfMonth()->addDays(4);
+        $installmentsCount = (int) ceil($obligation / $emi);
 
         while ($remaining > 0.01) {
-            $amount = min($emi, $remaining);
+            $amount = Loan::scheduleInstallmentAmount(
+                $position,
+                $installmentsCount,
+                $emi,
+                $obligation,
+            );
 
             LoanInstallment::create([
                 'loan_id' => $loan->id,
-                'installment_number' => $number,
-                'amount' => round($amount, 2),
+                'installment_number' => $startNumber + $position - 1,
+                'amount' => $amount,
                 'due_date' => $due->copy(),
                 'status' => 'pending',
                 'collection_status' => 'pending',
@@ -107,8 +124,10 @@ class LoanGuarantorTransferService
             ]);
 
             $remaining -= $amount;
-            $number++;
+            $position++;
             $due = $due->copy()->addMonthNoOverflow();
         }
+
+        $loan->update(['installments_count' => $loan->installments()->count()]);
     }
 }

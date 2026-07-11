@@ -453,7 +453,9 @@ test('import cut-off cash does not collect the in-window current cycle before it
 });
 
 test('import cut-off cash posting triggers oldest-first arrear collection', function () {
-    $arrearMonth = now()->subMonths(2);
+    Carbon::setTestNow(Carbon::parse('2026-06-15 10:00:00'));
+
+    $arrearMonth = Carbon::create(2026, 4, 1)->startOfMonth();
 
     $member = Member::create([
         'member_number' => 'MEM-CUTOFF-1',

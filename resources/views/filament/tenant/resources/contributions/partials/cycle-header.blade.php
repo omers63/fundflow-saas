@@ -24,12 +24,17 @@
 
             <div class="ff-tenant-tab-pills flex flex-wrap items-center gap-2">
                 @foreach ($groups['visible'] as $key => $label)
-                    <a href="{{ ContributionResource::listWithCycle($key) }}" @class([
-                        'ff-tenant-tab-pills__item no-underline',
-                        'ff-tenant-tab-pills__item--active' => $selectedKey === $key,
-                    ])>
+                    <button
+                        type="button"
+                        wire:click="$set('selectedCycle', @js($key))"
+                        wire:loading.attr="disabled"
+                        @class([
+                            'ff-tenant-tab-pills__item',
+                            'ff-tenant-tab-pills__item--active' => $selectedKey === $key,
+                        ])
+                    >
                         {{ $label }}
-                    </a>
+                    </button>
                 @endforeach
 
                 @if ($groups['more'] !== [])

@@ -25,6 +25,7 @@ use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\BankClearingMatchService;
 use App\Services\ContributionCollectionCycleService;
+use App\Services\ContributionService;
 use App\Services\MasterFeeDisbursementService;
 use App\Services\MemberInvariantService;
 use App\Services\MemberOpeningBalanceService;
@@ -40,6 +41,7 @@ uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
+    app()->setLocale('en');
 
     Account::query()->delete();
     Member::query()->delete();
@@ -76,12 +78,12 @@ test('contribution collection uses settling status during partial payment', func
     ]);
 
     app(AccountingService::class)->createMemberAccounts($member);
-    app(AccountingService::class)->credit(
+    AccountingService::withoutMemberCashCollection(fn() => app(AccountingService::class)->credit(
         $member->cashAccount,
         300,
         'Test deposit',
         null,
-    );
+    ));
 
     $period = Contribution::periodDate((int) now()->month, (int) now()->year);
 
@@ -221,7 +223,7 @@ test('correction service reverses a linked transaction', function () {
     ]);
 
     app(AccountingService::class)->createMemberAccounts($member);
-    app(AccountingService::class)->credit($member->cashAccount, 50, 'Seed cash');
+    AccountingService::withoutMemberCashCollection(fn() => app(AccountingService::class)->credit($member->cashAccount, 50, 'Seed cash'));
 
     $original = Transaction::query()->where('type', 'credit')->first();
 
@@ -242,14 +244,14 @@ test('correction service reverses a linked transaction', function () {
     );
 
     expect($result['reversal_count'])->toBe(1)
-        ->and(Transaction::query()->where('reference_type', Transaction::class)->count())->toBe(1);
+        ->and(Transaction::query()->where('reference_type', Transaction::class)->count())->toBe(2);
 });
 
 test('resolution service posts member cash correction', function () {
     $member = Member::create([
         'member_number' => 'COR-001',
         'name' => 'Correction Member',
-        'monthly_contribution_amount' => 100,
+        'monthly_contribution_amount' => 0,
         'joined_at' => now()->subYear(),
         'status' => 'active',
     ]);
@@ -471,7 +473,7 @@ test('custom journal correction posts balanced multi-leg entry', function () {
     $member = Member::create([
         'member_number' => 'CJ-001',
         'name' => 'Journal Member',
-        'monthly_contribution_amount' => 500,
+        'monthly_contribution_amount' => 0,
         'joined_at' => now()->subYear(),
         'status' => 'active',
     ]);
@@ -789,7 +791,9 @@ test('member cash invariant stays balanced after mirrored contribution late fee'
 });
 
 test('late fees settled column sums member cash debits only not master cash mirror', function () {
-    Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
+    if (Account::query()->where('type', 'fees')->where('is_master', true)->doesntExist()) {
+        Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
+    }
     Account::masterCash()->update(['balance' => 500]);
 
     $member = Member::create([
@@ -892,9 +896,12 @@ test('pending past window close is not raised for contribution-exempt members', 
 
     $loan = Loan::factory()->for($member)->create([
         'status' => 'active',
-        'member_portion' => 10000,
+        'member_portion' => 10_000,
         'master_portion' => 0,
-        'amount_disbursed' => 10000,
+        'amount_disbursed' => 10_000,
+        'disbursed_at' => $pastPeriod->copy()->subMonth(),
+        'first_repayment_month' => (int) $pastPeriod->month,
+        'first_repayment_year' => (int) $pastPeriod->year,
     ]);
 
     $loan->installments()->create([
@@ -938,7 +945,7 @@ test('reconciliation does not flag legacy imported contributions collected durin
         'completed_at' => $loanPeriod->copy()->addMonths(3),
     ]);
 
-    Contribution::create([
+    ContributionService::withoutLiveCollectionGuards(fn() => Contribution::create([
         'member_id' => $member->id,
         'period' => $loanPeriod,
         'amount' => 500,
@@ -948,7 +955,7 @@ test('reconciliation does not flag legacy imported contributions collected durin
         'posted_at' => $loanPeriod,
         'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
         'notes' => 'Legacy migration contribution [legacy-import:LEG-EXEMPT||'.$loanPeriod->format('Y-m-d').'|500|contribution|'.$loanPeriod->format('Y-m').']',
-    ]);
+    ]));
 
     expect($member->isExemptFromContributions(
         (int) $loanPeriod->month,
@@ -988,7 +995,7 @@ test('reconciliation still flags live contributions collected during loan exempt
         'disbursed_at' => $loanPeriod->copy()->subMonth(),
     ]);
 
-    $contribution = Contribution::create([
+    $contribution = ContributionService::withoutLiveCollectionGuards(fn() => Contribution::create([
         'member_id' => $member->id,
         'period' => $loanPeriod,
         'amount' => 500,
@@ -998,7 +1005,7 @@ test('reconciliation still flags live contributions collected during loan exempt
         'posted_at' => $loanPeriod,
         'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
         'notes' => 'Manual correction',
-    ]);
+    ]));
 
     expect($member->isExemptFromContributions(
         (int) $loanPeriod->month,

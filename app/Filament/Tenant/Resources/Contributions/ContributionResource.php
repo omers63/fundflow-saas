@@ -29,6 +29,12 @@ use UnitEnum;
 
 class ContributionResource extends Resource
 {
+    /** @var array<string, int> */
+    private static array $pendingCountCache = [];
+
+    /** @var array<string, int> */
+    private static array $arrearsPeriodCountCache = [];
+
     use TranslatesFilamentNavigationLabels;
 
     protected static ?string $model = Contribution::class;
@@ -203,7 +209,19 @@ class ContributionResource extends Resource
             $live = self::isViewingOpenCycle();
         }
 
-        return app(LoanDelinquencyService::class)
+        $cacheKey = sprintf(
+            '%s|%s|%s|%s',
+            $memberId ?? 'all',
+            $throughMonth ?? 'open',
+            $throughYear ?? 'open',
+            $live === null ? 'na' : ($live ? 'live' : 'past'),
+        );
+
+        if (array_key_exists($cacheKey, self::$arrearsPeriodCountCache)) {
+            return self::$arrearsPeriodCountCache[$cacheKey];
+        }
+
+        return self::$arrearsPeriodCountCache[$cacheKey] = app(LoanDelinquencyService::class)
             ->countContributionArrearsPeriods(
                 $memberId,
                 $throughMonth,
@@ -350,7 +368,13 @@ class ContributionResource extends Resource
 
     public static function pendingCountForPeriod(int $month, int $year): int
     {
-        return app(ContributionCycleService::class)
+        $cacheKey = $month.'-'.$year;
+
+        if (array_key_exists($cacheKey, self::$pendingCountCache)) {
+            return self::$pendingCountCache[$cacheKey];
+        }
+
+        return self::$pendingCountCache[$cacheKey] = app(ContributionCycleService::class)
             ->pendingMembersQueryForPeriod($month, $year)
             ->count();
     }

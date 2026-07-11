@@ -3,6 +3,7 @@
 namespace Tests\Concerns;
 
 use App\Models\Central\Tenant;
+use App\Support\BusinessDaySettings;
 use Stancl\Tenancy\Bootstrappers\DatabaseTenancyBootstrapper;
 
 trait InitializesTenancy
@@ -20,6 +21,8 @@ trait InitializesTenancy
             if ($attributes) {
                 $tenant->update($attributes);
             }
+
+            BusinessDaySettings::saveFromForm(null);
 
             return $tenant;
         }
@@ -47,6 +50,8 @@ trait InitializesTenancy
         if (! config()->has('database.connections.tenant')) {
             app(DatabaseTenancyBootstrapper::class)->bootstrap($tenant);
         }
+
+        BusinessDaySettings::saveFromForm(null);
 
         return $tenant;
     }

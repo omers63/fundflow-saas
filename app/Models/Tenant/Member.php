@@ -6,6 +6,7 @@ use App\Filament\Support\MoneyDisplay;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\LoanService;
 use App\Services\MemberMonthlyAllocationService;
+use App\Support\ContributionExemptionPolicy;
 use App\Support\MemberMembershipPolicy;
 use App\Support\MemberNumberSettings;
 use Illuminate\Database\Eloquent\Builder;
@@ -230,49 +231,37 @@ class Member extends Model
         return $query->where('status', 'active');
     }
 
-    public function scopeContributionCycleEligible($query)
+    public function scopeContributionCycleEligible(Builder $query): Builder
     {
         return $query
             ->where('monthly_contribution_amount', '>', 0)
-            ->where(function ($query): void {
-                $query->where('status', 'active')
-                    ->orWhere(function ($inner): void {
+            ->where(function (Builder $subQuery): void {
+                $subQuery->where('status', 'active')
+                    ->orWhere(function (Builder $inner): void {
                         $inner->where('status', 'inactive')
                             ->where('contribution_cycles_active', true);
                     });
             });
     }
 
-    public function scopeNotExemptFromContributionsForCycle(Builder $query, int $month, int $year): Builder
+    public function scopeCollectibleForContributionPeriod(Builder $query, int $month, int $year): Builder
     {
         $periodStart = Carbon::create($year, $month, 1)->startOfMonth();
-        $periodEnd = $periodStart->copy()->endOfMonth();
 
-        return $query
-            ->whereDoesntHave('loans', function (Builder $loan) use ($month, $year): void {
-                $loan->whereIn('status', ['active', 'approved'])
-                    ->where('has_grace_cycle', true)
-                    ->where(function (Builder $grace) use ($month, $year): void {
-                        $grace->whereNull('first_repayment_month')
-                            ->orWhere('first_repayment_year', '>', $year)
-                            ->orWhere(function (Builder $inner) use ($month, $year): void {
-                                $inner->where('first_repayment_year', $year)
-                                    ->where('first_repayment_month', '>', $month);
-                            });
-                    });
-            })
-            ->whereDoesntHave('loans', function (Builder $loan) use ($periodStart, $periodEnd): void {
-                $loan->whereNotNull('disbursed_at')
-                    ->whereIn('status', ['active', 'transferred', 'completed', 'early_settled'])
-                    ->whereDate('disbursed_at', '<=', $periodEnd)
-                    ->where(function (Builder $cycle) use ($periodStart): void {
-                        $cycle->where(function (Builder $open): void {
-                            $open->whereNull('settled_at')
-                                ->whereNull('completed_at')
-                                ->whereIn('status', ['active', 'transferred']);
-                        })->orWhereRaw('LAST_DAY(COALESCE(settled_at, completed_at)) >= ?', [$periodStart->toDateString()]);
-                    });
-            });
+        return $query->where(function (Builder $inner) use ($periodStart): void {
+            $inner
+                ->whereNotNull('contribution_arrears_cutoff_date')
+                ->whereRaw('DATE_FORMAT(contribution_arrears_cutoff_date, "%Y-%m-01") <= ?', [$periodStart->toDateString()])
+                ->orWhere(function (Builder $fallback) use ($periodStart): void {
+                    $fallback
+                        ->whereNull('contribution_arrears_cutoff_date')
+                        ->where(function (Builder $joined) use ($periodStart): void {
+                            $joined
+                                ->whereNull('joined_at')
+                                ->orWhereDate('joined_at', '<=', $periodStart->copy()->endOfMonth()->toDateString());
+                        });
+                });
+        });
     }
 
     public function scopeActiveWithZeroCash($query)
@@ -444,55 +433,28 @@ class Member extends Model
 
     public function isExemptFromContributions(?int $month = null, ?int $year = null): bool
     {
+        $policy = app(ContributionExemptionPolicy::class);
+
         if ($month === null || $year === null) {
-            return $this->hasActiveLoanRepaymentObligation()
-                || $this->hasPartiallyDisbursedLoan();
+            return $policy->isContributionExemptNow($this);
         }
 
-        if ($this->isInLoanGracePeriodForCycle($month, $year)) {
-            return true;
-        }
-
-        return $this->isInActiveLoanContributionExemptCycle($month, $year);
+        return $policy->isContributionExemptForCycle($this, $month, $year);
     }
 
     public function isInActiveLoanContributionExemptCycle(int $month, int $year): bool
     {
-        return $this->wasInLoanRepaymentCycle($month, $year);
+        return app(ContributionExemptionPolicy::class)
+            ->memberIsInEmiRepaymentPhase($this, $month, $year);
     }
 
     /**
-     * Whether the member was in a loan repayment cycle during the given month
+     * Whether the member was in a loan repayment cycle during the labelled contribution period
      * (contributions are not expected; only loan installment obligations apply).
      */
     public function wasInLoanRepaymentCycle(int $month, int $year): bool
     {
-        $periodStart = Carbon::create($year, $month, 1)->startOfMonth();
-        $periodEnd = $periodStart->copy()->endOfMonth();
-        $periodKey = sprintf('%04d-%02d', $year, $month);
-
-        return Loan::query()
-            ->where('member_id', $this->id)
-            ->whereNotNull('disbursed_at')
-            ->whereIn('status', ['active', 'transferred', 'completed', 'early_settled'])
-            ->whereDate('disbursed_at', '<=', $periodEnd)
-            ->get(['disbursed_at', 'settled_at', 'completed_at', 'status'])
-            ->contains(function (Loan $loan) use ($periodStart, $periodKey): bool {
-                $disbursedAt = Carbon::parse((string) $loan->disbursed_at);
-                $disbursedKey = sprintf('%04d-%02d', (int) $disbursedAt->year, (int) $disbursedAt->month);
-
-                if ($disbursedKey > $periodKey) {
-                    return false;
-                }
-
-                $cycleEnd = $loan->settled_at ?? $loan->completed_at;
-
-                if ($cycleEnd === null) {
-                    return in_array($loan->status, ['active', 'transferred'], true);
-                }
-
-                return Carbon::parse((string) $cycleEnd)->endOfMonth()->greaterThanOrEqualTo($periodStart);
-            });
+        return $this->isInActiveLoanContributionExemptCycle($month, $year);
     }
 
     public function hasActiveLoanRepaymentObligation(): bool
@@ -515,21 +477,8 @@ class Member extends Model
 
     public function isInLoanGracePeriodForCycle(int $month, int $year): bool
     {
-        $cycleStart = \Carbon\Carbon::create($year, $month, 1)->startOfMonth();
-
-        return Loan::query()
-            ->where('member_id', $this->id)
-            ->whereIn('status', ['active', 'approved'])
-            ->where('has_grace_cycle', true)
-            ->where(function ($query) use ($cycleStart): void {
-                $query->whereNull('first_repayment_month')
-                    ->orWhere('first_repayment_year', '>', (int) $cycleStart->year)
-                    ->orWhere(function ($inner) use ($cycleStart): void {
-                        $inner->where('first_repayment_year', (int) $cycleStart->year)
-                            ->where('first_repayment_month', '>', (int) $cycleStart->month);
-                    });
-            })
-            ->exists();
+        return app(ContributionExemptionPolicy::class)
+            ->memberIsInGraceCycle($this, $month, $year);
     }
 
     public function transactions(): HasMany

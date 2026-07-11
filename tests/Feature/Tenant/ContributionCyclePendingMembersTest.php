@@ -165,6 +165,8 @@ test('pending members exclude members who were emi exempt during a completed loa
         'applied_at' => Carbon::parse('2025-06-01'),
         'disbursed_at' => Carbon::parse('2025-06-01'),
         'completed_at' => Carbon::parse('2025-10-31'),
+        'first_repayment_month' => 6,
+        'first_repayment_year' => 2025,
     ]);
 
     $dueAfterLoan = Member::create([
@@ -190,6 +192,8 @@ test('pending members exclude members who were emi exempt during a completed loa
         'applied_at' => Carbon::parse('2025-06-01'),
         'disbursed_at' => Carbon::parse('2025-06-01'),
         'completed_at' => Carbon::parse('2025-10-31'),
+        'first_repayment_month' => 6,
+        'first_repayment_year' => 2025,
     ]);
 
     $junePendingIds = $this->cycles->pendingMembersQueryForPeriod($month, $year)->pluck('id');
@@ -199,6 +203,22 @@ test('pending members exclude members who were emi exempt during a completed loa
         ->and($junePendingIds)->not->toContain($exemptDuringLoan->id)
         ->and($dueAfterLoan->fresh()->isExemptFromContributions(11, $year))->toBeFalse()
         ->and($novemberPendingIds)->toContain($dueAfterLoan->id);
+});
+
+test('pending members exclude periods before import arrears cut-off', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-CUTOFF',
+        'name' => 'Cutoff Member',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2021-02-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2025-11-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    expect($this->cycles->pendingMembersQueryForPeriod(4, 2025)->where('id', $member->id)->exists())->toBeFalse()
+        ->and($this->cycles->pendingMembersQueryForPeriod(10, 2025)->where('id', $member->id)->exists())->toBeFalse()
+        ->and($this->cycles->pendingMembersQueryForPeriod(11, 2025)->where('id', $member->id)->exists())->toBeTrue();
 });
 
 test('pending members query can order by member cash account balance', function () {
