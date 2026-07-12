@@ -425,7 +425,7 @@ final class LoanInsightsService
     public function emiCollectSnapshot(): array
     {
         $catalog = app(LoanEmiCollectionCatalogService::class);
-        [$month, $year] = $catalog->currentOpenPeriod();
+        [$month, $year] = LoanResource::resolveListCycle();
         $currency = Setting::get('general', 'currency', 'USD');
         $periodLabel = $catalog->periodLabel($month, $year);
         $metrics = $this->aggregateEmiCollectMetrics($catalog, $month, $year);
@@ -520,7 +520,7 @@ final class LoanInsightsService
     public function emiCollectedSnapshot(): array
     {
         $catalog = app(LoanEmiCollectionCatalogService::class);
-        [$month, $year] = $catalog->currentOpenPeriod();
+        [$month, $year] = LoanResource::resolveListCycle();
         $currency = Setting::get('general', 'currency', 'USD');
         $periodLabel = $catalog->periodLabel($month, $year);
         $metrics = $this->aggregateEmiCollectMetrics($catalog, $month, $year);
@@ -1120,7 +1120,7 @@ final class LoanInsightsService
             'pending_emis' => $pending,
             'required_cash' => $required,
             'has_cash' => $catalog->memberHasSufficientCash($member, $month, $year),
-            'filter_url' => LoanResource::listUrl('emi_collect', [
+            'filter_url' => LoanResource::listTabUrl('emi_collect', [
                 'tableSearch' => $member->name,
             ]),
         ];

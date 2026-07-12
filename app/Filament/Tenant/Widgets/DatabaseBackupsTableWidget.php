@@ -28,7 +28,7 @@ class DatabaseBackupsTableWidget extends TableWidget
 
     protected function getTableQuery(): Builder
     {
-        return DatabaseBackup::query()->with('user')->latest();
+        return DatabaseBackup::query()->with('user');
     }
 
     public function table(Table $table): Table

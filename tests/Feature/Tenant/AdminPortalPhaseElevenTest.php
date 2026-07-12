@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 use App\Filament\Support\MoneyDisplay;
 use App\Filament\Tenant\Pages\AuditSystemPage;
+use App\Filament\Tenant\Pages\CollectionCalendarPage;
 use App\Filament\Tenant\Pages\Dashboard;
 use App\Filament\Tenant\Pages\DisbursementsPage;
-use App\Filament\Tenant\Pages\LoanEmiCollectionCalendarPage;
 use App\Filament\Tenant\Pages\MessagesInboxPage;
 use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Filament\Tenant\Pages\ReportsPage;
@@ -88,7 +88,7 @@ test('consolidated admin portal pages render in arabic locale', function (string
     ReconciliationOverviewPage::class,
     AuditSystemPage::class,
     Settings::class,
-    LoanEmiCollectionCalendarPage::class,
+            CollectionCalendarPage::class,
     MessagesInboxPage::class,
 ]);
 

@@ -31,15 +31,14 @@ class MembersTable
             ->headerActions(MemberListTableHeaderActions::all())
             ->columns([
                 MemberTableColumns::number(label: __('Member #'))
-                    ->searchable()
-                    ->sortable(),
+                    ->searchable(),
                 MemberTableColumns::name()
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn(string $state, Member $record): string => $record->adminStatusLabel())
-                    ->color(fn(Member $record): string => $record->adminStatusBadgeColor()),
+                    ->formatStateUsing(fn (string $state, Member $record): string => $record->adminStatusLabel())
+                    ->color(fn (Member $record): string => $record->adminStatusBadgeColor()),
                 TextColumn::make('cash_balance')
                     ->label(__('Cash'))
                     ->state(fn (Member $record): float => $record->getCashBalance())

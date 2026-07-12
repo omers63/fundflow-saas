@@ -6,6 +6,7 @@ use App\Filament\Support\MoneyDisplay;
 use App\Filament\Tables\Columns\Summarizers\SignedLedgerSum;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
+use Illuminate\Database\Eloquent\Builder;
 
 class LedgerAmountColumn extends TextColumn
 {
@@ -14,7 +15,7 @@ class LedgerAmountColumn extends TextColumn
         $currency = fn (): string => Setting::get('general', 'currency', 'USD');
 
         $this
-            ->sortable()
+            ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBySignedAmount($direction))
             ->formatStateUsing(function ($state, Transaction $record) use ($currency): ?string {
                 if (blank($state) && blank($record->amount)) {
                     return null;

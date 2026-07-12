@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 use App\Filament\Tenant\Pages\AuditSystemPage;
+use App\Filament\Tenant\Pages\CollectionCalendarPage;
 use App\Filament\Tenant\Pages\Dashboard;
 use App\Filament\Tenant\Pages\DisbursementsPage;
-use App\Filament\Tenant\Pages\LoanEmiCollectionCalendarPage;
 use App\Filament\Tenant\Pages\MessagesInboxPage;
 use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Filament\Tenant\Pages\ReportsPage;
@@ -59,7 +59,7 @@ const ADMIN_PORTAL_HTTP_SMOKE_ROUTES = [
     ['path' => '/admin/audit-system', 'label' => 'audit system'],
     ['path' => '/admin/settings', 'label' => 'settings'],
     ['path' => '/admin/messages', 'label' => 'messages'],
-    ['path' => '/admin/loans/emi-collection-calendar', 'label' => 'emi calendar'],
+    ['path' => '/admin/collection-calendar', 'label' => 'collection calendar'],
 ];
 
 function createTenantAdmin(string $suffix): User
@@ -217,7 +217,7 @@ test('tenant admin redesign livewire pages render without error', function (stri
     AuditSystemPage::class,
     Settings::class,
     MessagesInboxPage::class,
-    LoanEmiCollectionCalendarPage::class,
+            CollectionCalendarPage::class,
 ]);
 
 test('consolidated sidebar registry matches live navigation labels in english', function () {

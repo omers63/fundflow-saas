@@ -36,8 +36,7 @@ class MemberAlertHistoryTableWidget extends TableWidget
         }
 
         return NotificationLog::query()
-            ->where('user_id', $userId)
-            ->latest('sent_at');
+            ->where('user_id', $userId);
     }
 
     public function table(Table $table): Table

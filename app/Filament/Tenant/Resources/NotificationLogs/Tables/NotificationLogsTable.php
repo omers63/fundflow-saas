@@ -24,7 +24,7 @@ class NotificationLogsTable
     public static function configure(Table $table): Table
     {
         return TableGrouping::apply($table
-            ->query(NotificationLog::query()->with('user')->latest('sent_at'))
+            ->query(NotificationLog::query()->with('user'))
             ->columns([
                 TextColumn::make('user.name')
                     ->label(__('Recipient'))

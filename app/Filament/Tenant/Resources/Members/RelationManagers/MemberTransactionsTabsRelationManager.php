@@ -61,8 +61,7 @@ class MemberTransactionsTabsRelationManager extends RelationManager
                 return $query
                     ->where('member_id', $member->id)
                     ->whereHas('account', fn (Builder $q): Builder => $q->where('type', $this->ledgerTab))
-                    ->with('account')
-                    ->latest('transacted_at');
+                    ->with('account');
             })
             ->heading(match ($this->ledgerTab) {
                 'fund' => UiLabelIcons::labeledHtml(__('Fund transactions'), UiLabelIcons::forKey('fund')),
@@ -107,6 +106,7 @@ class MemberTransactionsTabsRelationManager extends RelationManager
         }
 
         return ViewAccountTransactionAction::configure($table)
+            ->defaultSort('transacted_at', 'desc')
             ->toolbarActions(ViewAccountTransactionAction::tenantToolbarActions());
     }
 

@@ -283,7 +283,6 @@ class ContributionCycleService
                     ->orWhere('joined_at', '<=', $periodStart->copy()->endOfMonth());
             })
             ->with(['parent', 'cashAccount', 'loans'])
-            ->orderBy('name')
             ->get()
             ->reject(fn (Member $member): bool => $policy->isContributionExemptForCycle($member, $month, $year))
             ->pluck('id')
@@ -296,8 +295,7 @@ class ContributionCycleService
 
         return Member::query()
             ->whereIn('id', $candidateIds)
-            ->with(['parent', 'cashAccount'])
-            ->orderBy('name');
+            ->with(['parent', 'cashAccount']);
     }
 
     public function postedContributionsQueryForPeriod(int $month, int $year): Builder
@@ -305,8 +303,7 @@ class ContributionCycleService
         return Contribution::query()
             ->forPeriod($month, $year)
             ->posted()
-            ->with('member')
-            ->orderByDesc('posted_at');
+            ->with('member');
     }
 
     public function postedContributionCount(int $month, int $year): int

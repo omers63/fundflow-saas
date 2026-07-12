@@ -4,6 +4,7 @@ namespace App\Models\Tenant;
 
 use App\Support\MemberDateDisplay;
 use App\Support\MemberLedgerDescriptionTranslator;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -100,6 +101,16 @@ class Transaction extends Model
         $amount = abs((float) $this->amount);
 
         return $this->isDebit() ? -$amount : $amount;
+    }
+
+    public function scopeOrderBySignedAmount(Builder $query, string $direction = 'asc'): Builder
+    {
+        $direction = strtolower($direction) === 'desc' ? 'desc' : 'asc';
+        $table = $query->getModel()->getTable();
+
+        return $query->orderByRaw(
+            "CASE WHEN {$table}.type = 'debit' THEN -ABS({$table}.amount) ELSE ABS({$table}.amount) END {$direction}",
+        );
     }
 
     public function referenceSummary(): ?string

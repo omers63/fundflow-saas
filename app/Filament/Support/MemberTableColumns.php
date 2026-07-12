@@ -8,8 +8,10 @@ use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
 use App\Support\ArabicDisplaySettings;
 use App\Support\ArabicTypography;
+use App\Support\MemberNumberSettings;
 use Filament\Tables\Columns\TextColumn;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Database\Eloquent\Builder;
 
 final class MemberTableColumns
 {
@@ -75,9 +77,15 @@ final class MemberTableColumns
             $textColumn->label($label);
         }
 
-        return $textColumn->url(
-            fn (mixed $state, Member $record): string => self::memberRecordEditUrl($record),
-        );
+        return $textColumn
+            ->url(
+                fn (mixed $state, Member $record): string => self::memberRecordEditUrl($record),
+            )
+            ->sortable(query: fn (Builder $query, string $direction): Builder => MemberNumberSettings::applySequenceOrder(
+                $query,
+                $direction,
+                self::qualifiedMemberNumberColumn($column),
+            ));
     }
 
     public static function name(
@@ -96,8 +104,31 @@ final class MemberTableColumns
 
     public static function relationNumber(?string $label = null): TextColumn
     {
-        return self::number('member.member_number', $label ?? __('Member #'))
-            ->url(fn (mixed $state, mixed $record): ?string => self::relatedMemberEditUrl($record));
+        return self::relationNumberFor(
+            memberNumberColumn: 'member.member_number',
+            memberIdColumn: null,
+            label: $label ?? __('Member #'),
+        )->url(fn (mixed $state, mixed $record): ?string => self::relatedMemberEditUrl($record));
+    }
+
+    public static function relationNumberFor(
+        string $memberNumberColumn = 'member.member_number',
+        ?string $memberIdColumn = null,
+        ?string $label = null,
+    ): TextColumn {
+        $textColumn = TextColumn::make($memberNumberColumn);
+
+        if ($label !== null) {
+            $textColumn->label($label);
+        }
+
+        return $textColumn->sortable(query: function (Builder $query, string $direction) use ($memberIdColumn): Builder {
+            return MemberNumberSettings::applyOrderByMemberIdColumn(
+                $query,
+                $direction,
+                $memberIdColumn ?? $query->getModel()->getTable().'.member_id',
+            );
+        });
     }
 
     public static function relationName(?string $label = null): TextColumn
@@ -183,5 +214,14 @@ final class MemberTableColumns
             'loan.guarantor.name' => $record->loan?->guarantor instanceof Member ? $record->loan->guarantor : null,
             default => null,
         };
+    }
+
+    private static function qualifiedMemberNumberColumn(string $column): string
+    {
+        if (str_contains($column, '.')) {
+            return $column;
+        }
+
+        return (new Member)->getTable().'.'.$column;
     }
 }

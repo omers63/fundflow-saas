@@ -10,6 +10,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\ContributionCycleService;
+use App\Support\MemberNumberSettings;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -31,10 +32,10 @@ final class ContributionCycleTables
         return TableGrouping::apply($table
             ->query(fn (): Builder => $cycles->pendingMembersQueryForPeriod($month, $year))
             ->heading(__('To collect – :period', ['period' => $cycles->periodLabel($month, $year)]))
+            ->defaultSort(fn (Builder $query, string $direction): Builder => MemberNumberSettings::applySequenceOrder($query, $direction))
             ->columns([
                 MemberTableColumns::number(label: __('Member #'))
-                    ->searchable()
-                    ->sortable(),
+                    ->searchable(),
                 MemberTableColumns::name(label: __('Member'))
                     ->searchable()
                     ->sortable()
@@ -143,9 +144,11 @@ final class ContributionCycleTables
         return TableGrouping::apply($table
             ->query(fn (): Builder => $cycles->postedContributionsQueryForPeriod($month, $year))
             ->heading(__('Collected – :period', ['period' => $cycles->periodLabel($month, $year)]))
+            ->defaultSort('posted_at', 'desc')
             ->columns([
                 MemberTableColumns::relationNumber(),
-                MemberTableColumns::relationName(),
+                MemberTableColumns::relationName()
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => self::sortCollectedByMemberName($query, $direction)),
                 TextColumn::make('amount')->money($currency),
                 TextColumn::make('status')
                     ->label(__('Status'))
@@ -155,7 +158,7 @@ final class ContributionCycleTables
                     ->tooltip(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionWasSettledLate($record)
                         ? LateSettledArrearsTableStyling::eligibilityHint()
                         : null),
-                TextColumn::make('posted_at')->dateTime()->placeholder(__('—')),
+                TextColumn::make('posted_at')->dateTime()->placeholder(__('—'))->sortable(),
             ])
             ->recordClasses(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionRecordClasses($record))
             ->recordActions(TableRecordActionGroups::wrap([]))
@@ -164,5 +167,16 @@ final class ContributionCycleTables
                     TableToolbar::refreshBulkAction(),
                 ]),
             ]), TableGrouping::contributions(includeMember: false));
+    }
+
+    private static function sortCollectedByMemberName(Builder $query, string $direction): Builder
+    {
+        return $query->orderBy(
+            Member::query()
+                ->select('members.name')
+                ->whereColumn('members.id', 'contributions.member_id')
+                ->limit(1),
+            $direction,
+        );
     }
 }

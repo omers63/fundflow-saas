@@ -7,6 +7,7 @@ namespace App\Support;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 
 final class MemberNumberSettings
@@ -279,5 +280,65 @@ final class MemberNumberSettings
         return in_array($format, [self::FORMAT_FORMATTED, self::FORMAT_SEQUENTIAL], true)
             ? $format
             : self::defaults()['format'];
+    }
+
+    /**
+     * SQL expression that orders member numbers by their numeric sequence (not lexicographically).
+     */
+    public static function sequenceOrderExpression(string $qualifiedColumn = 'member_number'): string
+    {
+        $config = self::all();
+
+        if ($config['format'] === self::FORMAT_SEQUENTIAL) {
+            return "CAST({$qualifiedColumn} AS UNSIGNED)";
+        }
+
+        $padding = self::normalizePadding($config['padding']);
+
+        return "CAST(RIGHT({$qualifiedColumn}, {$padding}) AS UNSIGNED)";
+    }
+
+    public static function applySequenceOrder(
+        Builder $query,
+        string $direction,
+        string $qualifiedColumn = 'member_number',
+    ): Builder {
+        $direction = strtolower($direction) === 'desc' ? 'desc' : 'asc';
+
+        return $query
+            ->orderByRaw(self::sequenceOrderExpression($qualifiedColumn).' '.$direction)
+            ->orderBy($qualifiedColumn, $direction);
+    }
+
+    public static function applyOrderByMemberIdColumn(
+        Builder $query,
+        string $direction,
+        string $memberIdColumn,
+    ): Builder {
+        $direction = strtolower($direction) === 'desc' ? 'desc' : 'asc';
+        $expression = self::sequenceOrderExpression('members.member_number');
+
+        return $query->orderBy(
+            Member::query()
+                ->selectRaw($expression)
+                ->whereColumn('members.id', $memberIdColumn)
+                ->limit(1),
+            $direction,
+        );
+    }
+
+    public static function applyOrderByLoanInstallmentMember(Builder $query, string $direction): Builder
+    {
+        $direction = strtolower($direction) === 'desc' ? 'desc' : 'asc';
+        $expression = self::sequenceOrderExpression('members.member_number');
+
+        return $query->orderBy(
+            Member::query()
+                ->selectRaw($expression)
+                ->join('loans', 'loans.member_id', '=', 'members.id')
+                ->whereColumn('loans.id', 'loan_installments.loan_id')
+                ->limit(1),
+            $direction,
+        );
     }
 }

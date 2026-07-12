@@ -22,26 +22,24 @@ final class LoanQueueTable
             ->with(['member', 'loanTier', 'fundTier'])
             ->select('loans.*');
 
-        $query = match ($tab) {
+        return match ($tab) {
             'ready_to_disburse' => $query
                 ->whereIn('loans.status', ['approved', 'partially_disbursed'])
                 ->whereRaw('COALESCE(loans.amount_disbursed, 0) < COALESCE(loans.amount_approved, loans.amount_requested, 0)'),
             default => $query->where('loans.status', 'pending'),
         };
-
-        if ($tab === 'needs_decision') {
-            return app(LoanQueuePriorityScoreService::class)->applySort($query);
-        }
-
-        return $query
-            ->orderBy('queue_position')
-            ->orderBy('applied_at');
     }
 
-    public static function configure(Table $table): Table
+    public static function configure(Table $table, string $queueTab = 'needs_decision'): Table
     {
         $currency = Setting::get('general', 'currency', 'USD');
         $priorityService = app(LoanQueuePriorityScoreService::class);
+
+        $table = $queueTab === 'needs_decision'
+            ? $table->defaultSort(
+                fn (Builder $query, string $direction): Builder => $priorityService->applySort($query, $direction),
+            )
+            : $table->defaultSort('queue_position');
 
         return TableGrouping::apply($table
             ->headerActions(LoanListTableHeaderActions::queue())

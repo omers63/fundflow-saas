@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Tenant\Pages\CollectionCalendarPage;
 use App\Filament\Tenant\Pages\ContributionCyclePage;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Contributions\Pages\ListContributions;
@@ -14,6 +15,7 @@ use App\Services\ContributionCycleService;
 use App\Services\ContributionInsightsService;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Support\ContributionCollectionStatus;
+use App\Support\MemberNumberSettings;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
@@ -288,4 +290,129 @@ test('ledger arrears view respects the selected collection cycle', function () {
         ))->toBeFalse();
 
     Carbon::setTestNow();
+});
+
+test('to collect table sorts by member number without being pinned to name order', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+
+    MemberNumberSettings::save([
+        'format' => MemberNumberSettings::FORMAT_SEQUENTIAL,
+    ]);
+
+    $cycles = app(ContributionCycleService::class);
+    [$month, $year] = $cycles->currentOpenPeriod();
+    $accounting = app(AccountingService::class);
+
+    $alphaHighNumber = Member::create([
+        'member_number' => '11',
+        'name' => 'Aaa First Alphabetically',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($alphaHighNumber);
+
+    $zetaLowNumber = Member::create([
+        'member_number' => '2',
+        'name' => 'Zzz Last Alphabetically',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($zetaLowNumber);
+
+    expect($cycles->pendingMembersQueryForPeriod($month, $year)->pluck('id'))
+        ->toContain($alphaHighNumber->id)
+        ->toContain($zetaLowNumber->id);
+
+    Livewire::test(ListContributions::class)
+        ->set('activeTab', 'cycle')
+        ->set('cycleSegment', 'collect')
+        ->sortTable('member_number', 'asc')
+        ->assertCanSeeTableRecords([$zetaLowNumber, $alphaHighNumber], inOrder: true)
+        ->sortTable('member_number', 'desc')
+        ->assertCanSeeTableRecords([$alphaHighNumber, $zetaLowNumber], inOrder: true);
+
+    Carbon::setTestNow();
+});
+
+test('collected table sorts by member number', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+
+    MemberNumberSettings::save([
+        'format' => MemberNumberSettings::FORMAT_SEQUENTIAL,
+    ]);
+
+    $cycles = app(ContributionCycleService::class);
+    [$month, $year] = $cycles->currentOpenPeriod();
+    $accounting = app(AccountingService::class);
+
+    $alphaHighNumber = Member::create([
+        'member_number' => '11',
+        'name' => 'Aaa Collected Alphabetically',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($alphaHighNumber);
+
+    $zetaLowNumber = Member::create([
+        'member_number' => '2',
+        'name' => 'Zzz Collected Alphabetically',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($zetaLowNumber);
+
+    $highContribution = Contribution::create([
+        'member_id' => $alphaHighNumber->id,
+        'period' => Contribution::periodDate($month, $year),
+        'amount' => 500,
+        'status' => 'posted',
+        'posted_at' => now()->subMinute(),
+        'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
+    ]);
+
+    $lowContribution = Contribution::create([
+        'member_id' => $zetaLowNumber->id,
+        'period' => Contribution::periodDate($month, $year),
+        'amount' => 500,
+        'status' => 'posted',
+        'posted_at' => now(),
+        'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
+    ]);
+
+    Livewire::test(ListContributions::class)
+        ->set('activeTab', 'cycle')
+        ->set('cycleSegment', 'collected')
+        ->sortTable('member.member_number', 'asc')
+        ->assertCanSeeTableRecords([$lowContribution, $highContribution], inOrder: true)
+        ->sortTable('member.member_number', 'desc')
+        ->assertCanSeeTableRecords([$highContribution, $lowContribution], inOrder: true);
+
+    Carbon::setTestNow();
+});
+
+test('legacy emi collection calendar url redirects to unified collection calendar', function () {
+    Filament::setCurrentPanel('tenant');
+
+    $admin = User::create([
+        'name' => 'Legacy Calendar Admin',
+        'email' => 'legacy-calendar@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $this->actingAs($admin, 'tenant')
+        ->get('http://' . $this->domain . '/admin/loans/emi-collection-calendar')
+        ->assertRedirect(CollectionCalendarPage::getUrl());
+});
+
+test('contributions cycle tab exposes collection calendar header action', function () {
+    Livewire::test(ListContributions::class)
+        ->set('activeTab', 'cycle')
+        ->assertSuccessful()
+        ->assertSee(__('Collection calendar'), false);
 });

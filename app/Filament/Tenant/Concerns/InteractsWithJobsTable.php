@@ -166,7 +166,7 @@ trait InteractsWithJobsTable
     protected function configureJobsHistoryTable(Table $table): Table
     {
         return TableGrouping::apply($table
-            ->query(SystemJobRun::query()->with('triggeredByUser')->latestFirst())
+            ->query(SystemJobRun::query()->with('triggeredByUser'))
             ->columnManager(false)
             ->persistColumnsInSession(false)
             ->defaultSort('started_at', 'desc')

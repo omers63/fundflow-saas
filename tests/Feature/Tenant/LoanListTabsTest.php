@@ -5,13 +5,16 @@ declare(strict_types=1);
 use App\Filament\Support\LoanListTableHeaderActions;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Loans\Pages\ListLoans;
+use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Central\Tenant;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
+use App\Services\Loans\LoanEmiCollectionCatalogService;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
@@ -136,6 +139,139 @@ test('collection tab table exposes cycle collection header group', function () {
         ->and($component->instance()->getTable()->getHeaderActions()[0]->getLabel())->toBe(__('Cycle collection'));
 });
 
+test('collected segment url preserves historical cycle key', function () {
+    $url = LoanResource::listCollectionSegmentUrl('collected', '2025-10');
+
+    expect($url)
+        ->toContain('segment=collected')
+        ->toContain('cycle=2025-10')
+        ->not->toContain('/loans/2025-10');
+
+    $path = parse_url($url, PHP_URL_PATH) ?? '/admin/loans/loans';
+    $query = parse_url($url, PHP_URL_QUERY);
+
+    $this->get('http://'.$this->domain.$path.($query ? '?'.$query : ''))
+        ->assertSuccessful()
+        ->assertSee(__('Collected'), false);
+});
+
+test('collected installment table links rows to the loan view', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $previous = Carbon::create($openYear, $openMonth, 1)->subMonthNoOverflow();
+    $month = (int) $previous->month;
+    $year = (int) $previous->year;
+    $cycleKey = $cycles->contributionCycleKey($month, $year);
+
+    $accounting = app(AccountingService::class);
+    $member = Member::create([
+        'member_number' => 'LOAN-COL-URL',
+        'name' => 'Collected URL Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    $installment = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::create($year, $month, 10),
+        'status' => 'paid',
+        'paid_at' => now(),
+    ]);
+
+    $component = Livewire::test(ListLoans::class)
+        ->set('selectedCycle', $cycleKey)
+        ->set('collectionSegment', 'collected');
+
+    $table = $component->instance()->getTable();
+    $recordUrl = $table->getRecordUrl($installment);
+
+    expect($recordUrl)->toBe(LoanResource::getUrl('view', ['record' => $loan->id]))
+        ->and($recordUrl)->not->toContain('/'.$installment->getKey());
+
+    $memberUrl = MemberResource::getUrl('view', ['record' => $member]);
+
+    expect($table->getColumn('loan.member.member_number')->record($installment)->getUrl())->toBe($memberUrl)
+        ->and($table->getColumn('loan.member.name')->record($installment)->getUrl())->toBe($memberUrl);
+
+    Carbon::setTestNow();
+});
+
+test('to collect table links rows to the member loan not the member profile', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $cycles = app(ContributionCycleService::class);
+    [$month, $year] = $cycles->currentOpenPeriod();
+
+    $accounting = app(AccountingService::class);
+    $member = Member::create([
+        'member_number' => 'EMI-77',
+        'name' => 'EMI Collect Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::create($year, $month, 10),
+        'status' => 'pending',
+    ]);
+
+    $component = Livewire::test(ListLoans::class)
+        ->set('collectionSegment', 'collect');
+
+    $table = $component->instance()->getTable();
+    $recordUrl = $table->getRecordUrl($member);
+
+    $memberUrl = MemberResource::getUrl('view', ['record' => $member]);
+
+    expect($recordUrl)->toBe(LoanResource::getUrl('view', ['record' => $loan->id]))
+        ->and($recordUrl)->not->toBe($memberUrl)
+        ->and($table->getColumn('member_number')->record($member)->getUrl($member->member_number))->toBe($memberUrl)
+        ->and($table->getColumn('name')->record($member)->getUrl($member->name))->toBe($memberUrl);
+
+    Carbon::setTestNow();
+});
+
 test('collected segment pill shows installment count badge', function () {
     Carbon::setTestNow(Carbon::parse('2026-06-15'));
 
@@ -167,6 +303,8 @@ test('collected segment pill shows installment count badge', function () {
         'disbursed_at' => Carbon::parse('2026-01-01'),
     ]);
 
+    $before = LoanResource::collectedEmiInstallmentCount();
+
     LoanInstallment::create([
         'loan_id' => $loan->id,
         'installment_number' => 1,
@@ -176,14 +314,118 @@ test('collected segment pill shows installment count badge', function () {
         'paid_at' => now(),
     ]);
 
-    expect(LoanResource::collectedEmiInstallmentCount())->toBe(1);
+    expect(LoanResource::collectedEmiInstallmentCount())->toBe($before + 1);
 
     Livewire::test(ListLoans::class)
         ->assertSuccessful()
         ->assertSee(__('Collected'), false)
-        ->assertSee('>1</span>', false);
+        ->assertSee('>'.($before + 1).'</span>', false);
 
     Carbon::setTestNow();
+});
+
+test('collected list excludes installments for loans paid off before the labelled cycle', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+
+    $catalog = app(LoanEmiCollectionCatalogService::class);
+    $accounting = app(AccountingService::class);
+
+    $member = Member::create([
+        'member_number' => 'LOAN-164-LIKE',
+        'name' => 'Early Payoff Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 20_000,
+        'amount_requested' => 20_000,
+        'amount_approved' => 20_000,
+        'amount_disbursed' => 20_000,
+        'interest_rate' => 10,
+        'term_months' => 20,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 20_000,
+        'status' => 'completed',
+        'applied_at' => Carbon::parse('2024-01-01'),
+        'disbursed_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    $paidAt = Carbon::parse('2025-07-08');
+
+    $julyCycleInstallment = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 12,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-08-05'),
+        'status' => 'paid',
+        'paid_at' => $paidAt,
+    ]);
+
+    $futureDueInstallment = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 19,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-10-05'),
+        'status' => 'paid',
+        'paid_at' => $paidAt,
+    ]);
+
+    expect($catalog->collectedInstallmentsQuery(7, 2025)->pluck('id'))
+        ->toContain($julyCycleInstallment->id)
+        ->and($catalog->collectedInstallmentsQuery(10, 2025)->pluck('id'))
+        ->not->toContain($futureDueInstallment->id);
+});
+
+test('collected list includes arrears installments paid during the labelled cycle', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+
+    $catalog = app(LoanEmiCollectionCatalogService::class);
+    $accounting = app(AccountingService::class);
+
+    $member = Member::create([
+        'member_number' => 'LOAN-171-LIKE',
+        'name' => 'Late Schedule Completion Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 10_000,
+        'amount_requested' => 10_000,
+        'amount_approved' => 10_000,
+        'amount_disbursed' => 10_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 10_000,
+        'status' => 'completed',
+        'applied_at' => Carbon::parse('2024-01-01'),
+        'disbursed_at' => Carbon::parse('2024-01-01'),
+        'settled_at' => Carbon::parse('2025-10-28'),
+    ]);
+
+    $paidAt = Carbon::parse('2025-10-28');
+
+    $juneCycleInstallment = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 6,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-06-10'),
+        'status' => 'paid',
+        'paid_at' => $paidAt,
+    ]);
+
+    expect($catalog->collectedInstallmentsQuery(6, 2025)->pluck('id'))
+        ->not->toContain($juneCycleInstallment->id)
+        ->and($catalog->collectedInstallmentsQuery(10, 2025)->pluck('id'))
+        ->toContain($juneCycleInstallment->id);
 });
 
 test('delinquency tab exposes maintenance actions on overdue view', function () {

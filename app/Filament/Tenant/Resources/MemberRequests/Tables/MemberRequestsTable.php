@@ -39,12 +39,13 @@ final class MemberRequestsTable
                         ])
                     )
                     ->columns([
-                        TextColumn::make('requester.member_number')
-                            ->label(__('Member #'))
-                            ->url(fn (MemberRequest $record): ?string => $record->requester
-                                ? MemberTableColumns::memberRecordUrl($record->requester)
-                                : null)
-                            ->sortable(),
+                        MemberTableColumns::relationNumberFor(
+                            memberNumberColumn: 'requester.member_number',
+                            memberIdColumn: 'member_requests.requester_member_id',
+                            label: __('Member #'),
+                        )->url(fn (MemberRequest $record): ?string => $record->requester
+                            ? MemberTableColumns::memberRecordUrl($record->requester)
+                            : null),
                         TextColumn::make('requester.name')
                             ->label(__('Member'))
                             ->searchable()

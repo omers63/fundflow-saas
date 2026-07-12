@@ -117,15 +117,17 @@ class LoanResource extends Resource
         return $catalog->collectedInstallmentCount($month, $year);
     }
 
-    public static function listTabUrl(string $tab, array $filters = []): string
+    public static function listTabUrl(string $tab, array $filters = [], ?string $cycle = null): string
     {
+        $cycle ??= self::resolveListCycleKey();
+
         return match ($tab) {
-            'emi_collect' => static::listUrl('collection', $filters, segment: 'collect'),
-            'emi_collected' => static::listUrl('collection', $filters, segment: 'collected'),
-            'overdue_installments' => static::listUrl('delinquency', $filters, view: 'overdue'),
-            'guarantor_exposure' => static::listUrl('delinquency', $filters, view: 'guarantor'),
-            'eligibility_reviews' => static::listUrl('portfolio', $filters, portfolioView: 'eligibility'),
-            default => static::listUrl($tab, $filters),
+            'emi_collect' => static::listUrl('collection', $filters, segment: 'collect', cycle: $cycle),
+            'emi_collected' => static::listUrl('collection', $filters, segment: 'collected', cycle: $cycle),
+            'overdue_installments' => static::listUrl('delinquency', $filters, view: 'overdue', cycle: $cycle),
+            'guarantor_exposure' => static::listUrl('delinquency', $filters, view: 'guarantor', cycle: $cycle),
+            'eligibility_reviews' => static::listUrl('portfolio', $filters, portfolioView: 'eligibility', cycle: $cycle),
+            default => static::listUrl($tab, $filters, cycle: $cycle),
         };
     }
 

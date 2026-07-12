@@ -37,13 +37,11 @@ final class SupportRequestsTable
                     TextColumn::make('id')
                         ->label(__('ID'))
                         ->sortable(),
-                    TextColumn::make('member.member_number')
-                        ->label(__('Member #'))
+                    MemberTableColumns::relationNumber()
                         ->placeholder(__('—'))
                         ->url(fn (SupportRequest $record): ?string => $record->member
                             ? MemberTableColumns::memberRecordEditUrl($record->member)
-                            : null)
-                        ->sortable(),
+                            : null),
                     TextColumn::make('user.name')
                         ->label(__('Submitted by'))
                         ->searchable()

@@ -71,7 +71,7 @@ class MasterAccountsTable
                     default => null,
                 };
             })
-            ->sortable()
+            ->sortable(false)
             ->summarize([]);
 
         $columns[] = $balanceColumn;

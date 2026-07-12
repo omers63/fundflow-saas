@@ -9,12 +9,14 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
+use App\Support\MemberNumberSettings;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Component;
 
@@ -32,13 +34,13 @@ final class LoanEmiCollectionTables
                 ->heading(__('To collect – EMIs through :period', [
                     'period' => $catalog->periodLabel($month, $year),
                 ]))
+                ->defaultSort(fn (Builder $query, string $direction): Builder => MemberNumberSettings::applySequenceOrder($query, $direction))
                 ->headerActions([
                     LoanEmiCollectionHeaderActions::cycleCollectionGroup(),
                 ])
                 ->columns([
                     MemberTableColumns::number(label: __('Member #'))
-                        ->searchable()
-                        ->sortable(),
+                        ->searchable(),
                     MemberTableColumns::name(label: __('Member'))
                         ->searchable()
                         ->sortable()
@@ -80,6 +82,8 @@ final class LoanEmiCollectionTables
                         ->placeholder(__('—'))
                         ->toggleable(),
                 ])
+                ->recordAction(null)
+                ->recordUrl(fn (Member $record): ?string => self::collectLoanViewUrl($catalog, $record, $month, $year))
                 ->recordActions(TableRecordActionGroups::wrap([
                     Action::make('apply_single')
                         ->label(__('Apply now'))
@@ -158,6 +162,7 @@ final class LoanEmiCollectionTables
                 ->columns([
                     TextColumn::make('loan.member.member_number')
                         ->label(__('Member #'))
+                        ->sortable(query: fn (Builder $query, string $direction): Builder => MemberNumberSettings::applyOrderByLoanInstallmentMember($query, $direction))
                         ->url(fn (LoanInstallment $record): ?string => MemberTableColumns::resolveMemberUrl(
                             'loan.member.name',
                             $record,
@@ -165,13 +170,16 @@ final class LoanEmiCollectionTables
                     TextColumn::make('loan.member.name')
                         ->label(__('Member'))
                         ->wrap()
+                        ->sortable(query: fn (Builder $query, string $direction): Builder => self::sortCollectedByMemberName($query, $direction))
                         ->url(fn (LoanInstallment $record): ?string => MemberTableColumns::resolveMemberUrl(
                             'loan.member.name',
                             $record,
                         )),
                     TextColumn::make('loan_id')
                         ->label(__('Loan'))
-                        ->formatStateUsing(fn (int $state): string => '#'.$state),
+                        ->formatStateUsing(fn (int $state): string => '#'.$state)
+                        ->sortable()
+                        ->url(fn (LoanInstallment $record): ?string => self::collectedLoanViewUrl($record)),
                     TextColumn::make('installment_number')
                         ->label(__('#'))
                         ->sortable(),
@@ -189,6 +197,8 @@ final class LoanEmiCollectionTables
                         ->dateTime()
                         ->sortable(),
                 ])
+                ->recordAction(null)
+                ->recordUrl(fn (LoanInstallment $record): ?string => self::collectedLoanViewUrl($record))
                 ->recordActions(TableRecordActionGroups::wrap([]))
                 ->toolbarActions([
                     BulkActionGroup::make([
@@ -197,6 +207,38 @@ final class LoanEmiCollectionTables
                 ])
                 ->defaultSort('paid_at', 'desc'),
             TableGrouping::loanInstallments(includeLoanMember: true),
+        );
+    }
+
+    private static function collectLoanViewUrl(
+        LoanEmiCollectionCatalogService $catalog,
+        Member $member,
+        int $month,
+        int $year,
+    ): ?string {
+        $loanId = $catalog->primaryCollectableLoanIdForMember($member, $month, $year);
+
+        return filled($loanId)
+            ? LoanResource::getUrl('view', ['record' => $loanId])
+            : null;
+    }
+
+    private static function collectedLoanViewUrl(LoanInstallment $installment): ?string
+    {
+        return filled($installment->loan_id)
+            ? LoanResource::getUrl('view', ['record' => $installment->loan_id])
+            : null;
+    }
+
+    private static function sortCollectedByMemberName(Builder $query, string $direction): Builder
+    {
+        return $query->orderBy(
+            Member::query()
+                ->select('members.name')
+                ->join('loans', 'loans.member_id', '=', 'members.id')
+                ->whereColumn('loans.id', 'loan_installments.loan_id')
+                ->limit(1),
+            $direction,
         );
     }
 }

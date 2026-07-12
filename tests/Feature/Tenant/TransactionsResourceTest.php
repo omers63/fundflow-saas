@@ -74,6 +74,64 @@ test('transactions table amount column includes footer summary', function (): vo
         ->and($amountColumn->getSummarizers()[0]->getLabel())->toBe(__('Amount'));
 });
 
+test('transactions table sorts ledger amounts by signed value', function (): void {
+    $member = Member::create([
+        'member_number' => 'MEM-TXN-SIGNED',
+        'name' => 'Signed Sort Member',
+        'email' => 'signed-sort@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $credit = Transaction::create([
+        'account_id' => $member->cashAccount->id,
+        'member_id' => $member->id,
+        'type' => 'credit',
+        'amount' => 100,
+        'balance_after' => 100,
+        'description' => 'Signed sort credit',
+        'transacted_at' => now()->subMinutes(3),
+    ]);
+
+    $smallDebit = Transaction::create([
+        'account_id' => $member->cashAccount->id,
+        'member_id' => $member->id,
+        'type' => 'debit',
+        'amount' => 50,
+        'balance_after' => 50,
+        'description' => 'Signed sort debit small',
+        'transacted_at' => now()->subMinutes(2),
+    ]);
+
+    $largeDebit = Transaction::create([
+        'account_id' => $member->cashAccount->id,
+        'member_id' => $member->id,
+        'type' => 'debit',
+        'amount' => 200,
+        'balance_after' => 0,
+        'description' => 'Signed sort debit large',
+        'transacted_at' => now()->subMinute(),
+    ]);
+
+    expect(
+        Transaction::query()
+            ->where('member_id', $member->id)
+            ->orderBySignedAmount('asc')
+            ->pluck('id')
+            ->all(),
+    )->toBe([$largeDebit->id, $smallDebit->id, $credit->id])
+        ->and(
+            Transaction::query()
+                ->where('member_id', $member->id)
+                ->orderBySignedAmount('desc')
+                ->pluck('id')
+                ->all(),
+        )->toBe([$credit->id, $smallDebit->id, $largeDebit->id]);
+});
+
 test('transactions table filters by business type class and account type', function (): void {
     $member = Member::create([
         'member_number' => 'MEM-TXN-01',

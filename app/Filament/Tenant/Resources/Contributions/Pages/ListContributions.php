@@ -2,6 +2,7 @@
 
 namespace App\Filament\Tenant\Resources\Contributions\Pages;
 
+use App\Filament\Support\CollectionCalendarHeaderAction;
 use App\Filament\Support\ContributionListTableHeaderActions;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Widgets\ContributionInsightsWidget;
@@ -120,6 +121,7 @@ class ListContributions extends ListRecords
         }
 
         return [
+            CollectionCalendarHeaderAction::make(),
             ContributionListTableHeaderActions::cycleCollectionGroup('primary'),
         ];
     }

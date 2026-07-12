@@ -1,12 +1,11 @@
-wh<?php
+<?php
 
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Support\MemberNumberSettings;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
@@ -174,4 +173,62 @@ it('preserves formatted settings when saving sequential format only', function (
         'padding' => 5,
         'include_year' => true,
     ]);
+});
+
+it('orders sequential member numbers numerically', function () {
+    MemberNumberSettings::save([
+        'format' => MemberNumberSettings::FORMAT_SEQUENTIAL,
+    ]);
+
+    $eleven = Member::create([
+        'member_number' => '11',
+        'name' => 'Eleven',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now(),
+        'status' => 'active',
+    ]);
+
+    $two = Member::create([
+        'member_number' => '2',
+        'name' => 'Two',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now(),
+        'status' => 'active',
+    ]);
+
+    $orderedIds = MemberNumberSettings::applySequenceOrder(Member::query(), 'asc')
+        ->pluck('id');
+
+    expect($orderedIds->all())->toBe([$two->id, $eleven->id]);
+});
+
+it('orders formatted member numbers by padded sequence', function () {
+    MemberNumberSettings::save([
+        'format' => MemberNumberSettings::FORMAT_FORMATTED,
+        'prefix' => 'MEM',
+        'separator' => MemberNumberSettings::SEPARATOR_HYPHEN,
+        'padding' => 4,
+        'include_year' => false,
+    ]);
+
+    $eleven = Member::create([
+        'member_number' => 'MEM-0011',
+        'name' => 'Eleven',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now(),
+        'status' => 'active',
+    ]);
+
+    $two = Member::create([
+        'member_number' => 'MEM-0002',
+        'name' => 'Two',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now(),
+        'status' => 'active',
+    ]);
+
+    $orderedIds = MemberNumberSettings::applySequenceOrder(Member::query(), 'asc')
+        ->pluck('id');
+
+    expect($orderedIds->all())->toBe([$two->id, $eleven->id]);
 });

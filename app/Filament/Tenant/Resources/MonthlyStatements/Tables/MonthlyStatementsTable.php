@@ -42,8 +42,7 @@ class MonthlyStatementsTable
 
         return TableGrouping::apply($table
             ->columns([
-                MemberTableColumns::relationNumber()
-                    ->sortable(),
+                MemberTableColumns::relationNumber(),
                 MemberTableColumns::relationName(label: __('Member'))
                     ->searchable()
                     ->sortable(),

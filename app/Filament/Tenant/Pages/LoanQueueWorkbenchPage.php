@@ -86,6 +86,7 @@ class LoanQueueWorkbenchPage extends Page implements HasTable
     {
         return LoanQueueTable::configure(
             $table->query(fn (): Builder => LoanQueueTable::queueQuery($this->queueTab)),
+            $this->queueTab,
         );
     }
 

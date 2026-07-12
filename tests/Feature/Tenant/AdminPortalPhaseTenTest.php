@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Filament\Tenant\Pages\LoanEmiCollectionCalendarPage;
+use App\Filament\Tenant\Pages\CollectionCalendarPage;
 use App\Filament\Tenant\Pages\MessagesInboxPage;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\Members\Pages\EditMember;
@@ -193,11 +193,13 @@ test('emi collection calendar page renders', function () {
     ]);
 
     Livewire::actingAs($admin, 'tenant')
-        ->test(LoanEmiCollectionCalendarPage::class)
+        ->test(CollectionCalendarPage::class)
         ->assertSuccessful()
-        ->assertSee(__('EMI collection calendar'))
-        ->assertSee(__('Paid on'))
-        ->assertSee(__('To be collected'));
+        ->assertSee(__('Collection calendar'))
+        ->assertSee(__('Contributions collected'))
+        ->assertSee(__('EMI collected'))
+        ->assertSee(__('Contributions to collect'))
+        ->assertSee(__('EMI to collect'));
 });
 
 test('member announcement service resolves active audience', function () {

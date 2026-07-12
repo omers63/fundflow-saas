@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -235,11 +236,9 @@ class MessagesInboxPage extends Page implements HasTable
                     ->searchable()
                     ->sortable()
                     ->placeholder(__('No linked user')),
-                TextColumn::make('member_number')
-                    ->label(__('Member #'))
+                MemberTableColumns::number(label: __('Member #'))
                     ->wrap()
-                    ->searchable()
-                    ->sortable(),
+                    ->searchable(),
                 TextColumn::make('messages_received_count')
                     ->label(__('Received'))
                     ->badge()

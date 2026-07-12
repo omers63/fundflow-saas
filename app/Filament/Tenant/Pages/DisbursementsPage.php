@@ -123,8 +123,13 @@ class DisbursementsPage extends Page implements HasTable
                     ->label(__('Member'))
                     ->searchable()
                     ->wrap(),
-                MemberTableColumns::number()
-                    ->label(__('Member #')),
+                MemberTableColumns::relationNumberFor(
+                    memberNumberColumn: 'member.member_number',
+                    memberIdColumn: 'loans.member_id',
+                    label: __('Member #'),
+                )->url(fn (Loan $record): ?string => $record->member
+                    ? MemberTableColumns::memberRecordEditUrl($record->member)
+                    : null),
                 TextColumn::make('amount_approved')
                     ->label(__('Approved'))
                     ->money($currency)

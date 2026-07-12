@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support;
 
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 
 final class BusinessDay
 {
@@ -54,5 +55,20 @@ final class BusinessDay
     public static function isOverridden(): bool
     {
         return BusinessDaySettings::isOverridden();
+    }
+
+    /**
+     * Y-m-d key for placing a collection timestamp on the calendar grid.
+     *
+     * Collections posted through the app use {@see now()} and already carry the
+     * configured business day on the date component.
+     */
+    public static function collectionDateKey(CarbonInterface|string|null $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return Carbon::parse($value)->startOfDay()->toDateString();
     }
 }
