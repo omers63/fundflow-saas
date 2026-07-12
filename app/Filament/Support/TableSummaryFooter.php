@@ -2,6 +2,7 @@
 
 namespace App\Filament\Support;
 
+use App\Filament\Tables\Columns\CollectedEmiCashColumn;
 use App\Filament\Tables\Columns\LedgerAmountColumn;
 use App\Models\Tenant\Setting;
 use Filament\Facades\Filament;
@@ -23,7 +24,7 @@ final class TableSummaryFooter
 
     public static function applySummarizersToTextColumn(TextColumn $column): TextColumn
     {
-        if ($column instanceof LedgerAmountColumn) {
+        if ($column instanceof LedgerAmountColumn || $column instanceof CollectedEmiCashColumn) {
             return $column;
         }
 

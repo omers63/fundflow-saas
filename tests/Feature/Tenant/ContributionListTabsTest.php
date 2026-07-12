@@ -92,10 +92,10 @@ test('contributions list cycle selector drives collect segment data', function (
     Carbon::setTestNow();
 });
 
-test('contributions list has cycle and ledger primary tabs', function () {
+test('contributions list has collection and ledger primary tabs', function () {
     Livewire::test(ListContributions::class)
         ->assertSuccessful()
-        ->assertSee(__('Cycle'), false)
+        ->assertSee(__('Collection'), false)
         ->assertSee(__('Ledger'), false)
         ->assertSee(__('To collect'), false)
         ->assertSee(__('Collected'), false);
@@ -406,7 +406,7 @@ test('legacy emi collection calendar url redirects to unified collection calenda
     ]);
 
     $this->actingAs($admin, 'tenant')
-        ->get('http://' . $this->domain . '/admin/loans/emi-collection-calendar')
+        ->get('http://'.$this->domain.'/admin/loans/emi-collection-calendar')
         ->assertRedirect(CollectionCalendarPage::getUrl());
 });
 

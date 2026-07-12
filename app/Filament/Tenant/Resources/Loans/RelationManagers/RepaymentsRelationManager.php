@@ -24,7 +24,7 @@ class RepaymentsRelationManager extends RelationManager
 
     protected static string $relationship = 'repayments';
 
-    protected static ?string $title = 'Imported/legacy repayments';
+    protected static ?string $title = 'Actual Repayments';
 
     public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
     {

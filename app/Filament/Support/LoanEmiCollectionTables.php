@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Filament\Tables\Columns\CollectedEmiCashColumn;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
@@ -186,8 +187,8 @@ final class LoanEmiCollectionTables
                     TextColumn::make('due_date')
                         ->date()
                         ->sortable(),
-                    TextColumn::make('amount')
-                        ->money($currency),
+                    CollectedEmiCashColumn::make()
+                        ->label(__('Amount')),
                     TextColumn::make('late_fee_amount')
                         ->label(__('Late fee'))
                         ->money($currency)

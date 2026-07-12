@@ -12,6 +12,12 @@ class LoanInstallment extends Model
 {
     use SoftDeletes;
 
+    /** @var array<string, float> */
+    private static array $repaymentSumCache = [];
+
+    /** @var array<string, int> */
+    private static array $paidInstallmentCountCache = [];
+
     protected $fillable = [
         'loan_id',
         'installment_number',
@@ -50,6 +56,35 @@ class LoanInstallment extends Model
     public function loan(): BelongsTo
     {
         return $this->belongsTo(Loan::class);
+    }
+
+    /**
+     * Cash collected for this installment in the payment event (collection UI / KPIs).
+     *
+     * Uses {@see amount_collected} when set. For legacy imports where the final schedule slot
+     * exceeds the remaining principal, falls back to the repayment row on {@see paid_at}.
+     */
+    public function collectedCashAmount(): float
+    {
+        if ((float) ($this->amount_collected ?? 0) > 0) {
+            return (float) $this->amount_collected;
+        }
+
+        if ($this->paid_at === null || ! $this->isPaid()) {
+            return (float) $this->amount;
+        }
+
+        $repaymentTotal = $this->repaymentSumOnPaidDate();
+
+        if ($repaymentTotal <= 0) {
+            return (float) $this->amount;
+        }
+
+        if ($this->paidInstallmentCountOnPaidDate() === 1) {
+            return $repaymentTotal;
+        }
+
+        return (float) $this->amount;
     }
 
     /** True when migration {@code show_as_loan_repayment_in_collections} has been applied. */
@@ -94,5 +129,34 @@ class LoanInstallment extends Model
     public function scopePending($query)
     {
         return $query->where('status', 'pending');
+    }
+
+    private function repaymentSumOnPaidDate(): float
+    {
+        $key = $this->loan_id.'|'.$this->paid_at->toDateString();
+
+        if (! array_key_exists($key, self::$repaymentSumCache)) {
+            self::$repaymentSumCache[$key] = (float) LoanRepayment::query()
+                ->where('loan_id', $this->loan_id)
+                ->whereDate('paid_at', $this->paid_at)
+                ->sum('amount');
+        }
+
+        return self::$repaymentSumCache[$key];
+    }
+
+    private function paidInstallmentCountOnPaidDate(): int
+    {
+        $key = $this->loan_id.'|'.$this->paid_at->toDateString();
+
+        if (! array_key_exists($key, self::$paidInstallmentCountCache)) {
+            self::$paidInstallmentCountCache[$key] = (int) static::query()
+                ->where('loan_id', $this->loan_id)
+                ->where('status', 'paid')
+                ->whereDate('paid_at', $this->paid_at)
+                ->count();
+        }
+
+        return self::$paidInstallmentCountCache[$key];
     }
 }

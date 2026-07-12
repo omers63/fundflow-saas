@@ -61,7 +61,7 @@ class ReconciliationDigestNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
-        return FilamentNotification::make()
+        return $this->withRecipientLocale($notifiable, fn (): array => FilamentNotification::make()
             ->title($this->title())
             ->body($this->summary)
             ->icon($this->critical ? 'heroicon-o-exclamation-triangle' : 'heroicon-o-shield-check')
@@ -72,7 +72,7 @@ class ReconciliationDigestNotification extends Notification
                     ->url($this->absoluteUrl())
                     ->markAsRead(),
             ])
-            ->getDatabaseMessage();
+            ->getDatabaseMessage());
     }
 
     protected function title(): string

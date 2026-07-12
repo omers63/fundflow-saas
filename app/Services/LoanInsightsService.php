@@ -526,9 +526,8 @@ final class LoanInsightsService
         $metrics = $this->aggregateEmiCollectMetrics($catalog, $month, $year);
 
         $collectedCount = $metrics['collected_count'];
-        $collectedAmount = (float) $catalog->collectedInstallmentsQuery($month, $year)->sum('amount');
-        $pendingMembers = $metrics['pending_members'];
         $collectedAmount = $metrics['collected_amount'];
+        $pendingMembers = $metrics['pending_members'];
         $cycleForecast = app(CycleForecastService::class)->project(
             $month,
             $year,
@@ -1057,7 +1056,7 @@ final class LoanInsightsService
     {
         $pendingMembers = $catalog->pendingMemberCount($month, $year);
         $collectedCount = $catalog->collectedInstallmentsQuery($month, $year)->count();
-        $collectedAmount = (float) $catalog->collectedInstallmentsQuery($month, $year)->sum('amount');
+        $collectedAmount = $catalog->collectedInstallmentsCashTotal($month, $year);
         $totalPendingEmis = 0;
         $readyWithCash = 0;
         $readyCashTotal = 0.0;

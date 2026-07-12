@@ -9,6 +9,7 @@ use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\ReconciliationDigestNotification;
 use App\Services\ReconciliationDigestService;
+use App\Support\LocalizationSettings;
 use App\Support\ReconciliationDigestSettings;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Notification;
@@ -146,6 +147,30 @@ test('monthly report digest is critical when verdict fails', function () {
         fn (ReconciliationDigestNotification $notification): bool => $notification->mode === 'monthly'
             && $notification->critical === true,
     );
+});
+
+test('reconciliation digest uses admin preferred locale when tenant default is arabic', function () {
+    app()->setLocale('ar');
+
+    LocalizationSettings::saveFromForm([
+        'localization_default_admin_locale' => 'ar',
+        'localization_default_member_locale' => 'ar',
+    ]);
+
+    $this->admin->update(['preferred_locale' => 'en']);
+
+    app(ReconciliationDigestService::class)->notifyAdminsOfNightlyBatch([
+        'halted' => false,
+        'raised' => 2,
+        'resolved' => 1,
+        'critical' => 0,
+    ]);
+
+    $stored = $this->admin->fresh()->notifications()->firstOrFail();
+    $payload = $stored->data;
+
+    expect($payload['title'] ?? null)->toBe('Nightly reconciliation complete')
+        ->and($payload['body'] ?? null)->toBe('Raised 2 · resolved 1 · critical 0.');
 });
 
 test('nightly reconciliation command notifies admins', function () {

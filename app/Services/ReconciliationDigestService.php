@@ -8,6 +8,7 @@ use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\ReconciliationDigestNotification;
+use App\Support\MemberLocale;
 
 class ReconciliationDigestService
 {
@@ -16,28 +17,23 @@ class ReconciliationDigestService
      */
     public function notifyAdminsOfNightlyBatch(array $result): int
     {
-        $raised = (int) ($result['raised'] ?? 0);
-        $resolved = (int) ($result['resolved'] ?? 0);
-        $critical = (int) ($result['critical'] ?? 0);
         $halted = (bool) ($result['halted'] ?? false);
-
-        $summary = $halted
-            ? __('Halted on a critical master imbalance. Raised :raised · resolved :resolved · critical :critical.', [
-                'raised' => $raised,
-                'resolved' => $resolved,
-                'critical' => $critical,
-            ])
-            : __('Raised :raised · resolved :resolved · critical :critical.', [
-                'raised' => $raised,
-                'resolved' => $resolved,
-                'critical' => $critical,
-            ]);
 
         return $this->dispatch(
             'nightly',
-            $summary,
+            fn (): string => $halted
+                ? __('Halted on a critical master imbalance. Raised :raised · resolved :resolved · critical :critical.', [
+                    'raised' => (int) ($result['raised'] ?? 0),
+                    'resolved' => (int) ($result['resolved'] ?? 0),
+                    'critical' => (int) ($result['critical'] ?? 0),
+                ])
+                : __('Raised :raised · resolved :resolved · critical :critical.', [
+                    'raised' => (int) ($result['raised'] ?? 0),
+                    'resolved' => (int) ($result['resolved'] ?? 0),
+                    'critical' => (int) ($result['critical'] ?? 0),
+                ]),
             ReconciliationOverviewPage::getUrl(['sideTab' => 'exceptions']),
-            $halted || $critical > 0,
+            $halted || (int) ($result['critical'] ?? 0) > 0,
         );
     }
 
@@ -56,37 +52,44 @@ class ReconciliationDigestService
         $ledgerMismatches = (int) ($report['checks']['ledger_balances']['mismatch_count'] ?? 0);
         $openExceptions = (int) ($report['control_layer']['open_exception_count'] ?? 0);
 
-        $summary = $pass
-            ? __('Passed. Warnings :warnings · ledger mismatches :ledger · open exceptions :open.', [
-                'warnings' => $warnings,
-                'ledger' => $ledgerMismatches,
-                'open' => $openExceptions,
-            ])
-            : __('Failed. Critical :critical · warnings :warnings · ledger mismatches :ledger · open exceptions :open.', [
-                'critical' => $criticalIssues,
-                'warnings' => $warnings,
-                'ledger' => $ledgerMismatches,
-                'open' => $openExceptions,
-            ]);
-
         return $this->dispatch(
             $mode,
-            $summary,
+            fn (): string => $pass
+                ? __('Passed. Warnings :warnings · ledger mismatches :ledger · open exceptions :open.', [
+                    'warnings' => $warnings,
+                    'ledger' => $ledgerMismatches,
+                    'open' => $openExceptions,
+                ])
+                : __('Failed. Critical :critical · warnings :warnings · ledger mismatches :ledger · open exceptions :open.', [
+                    'critical' => $criticalIssues,
+                    'warnings' => $warnings,
+                    'ledger' => $ledgerMismatches,
+                    'open' => $openExceptions,
+                ]),
             ReconciliationOverviewPage::getUrl(['sideTab' => 'snapshots']),
             ! $pass || $criticalIssues > 0,
         );
     }
 
-    private function dispatch(string $mode, string $summary, string $url, bool $critical): int
+    /**
+     * @param  callable(): string  $summaryForLocale
+     */
+    private function dispatch(string $mode, callable $summaryForLocale, string $url, bool $critical): int
     {
-        $notification = new ReconciliationDigestNotification($mode, $summary, $url, $critical);
-
         $notified = 0;
 
         User::query()
             ->where('is_admin', true)
-            ->each(function (User $admin) use ($notification, &$notified): void {
-                $admin->notify(clone $notification);
+            ->each(function (User $admin) use ($mode, $summaryForLocale, $url, $critical, &$notified): void {
+                MemberLocale::usingPreferred($admin, function () use ($admin, $mode, $summaryForLocale, $url, $critical): void {
+                    $admin->notify(new ReconciliationDigestNotification(
+                        $mode,
+                        $summaryForLocale(),
+                        $url,
+                        $critical,
+                    ));
+                });
+
                 $notified++;
             });
 

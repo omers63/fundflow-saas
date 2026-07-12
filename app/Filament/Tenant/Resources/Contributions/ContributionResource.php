@@ -99,7 +99,7 @@ class ContributionResource extends Resource
     public static function listTabLabel(string $tab): string
     {
         return match ($tab) {
-            'cycle' => __('Cycle'),
+            'cycle' => __('Collection'),
             'ledger', 'contributions' => __('Ledger'),
             'collect' => __('To collect'),
             'collected' => __('Collected'),

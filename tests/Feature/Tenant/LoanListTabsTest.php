@@ -428,6 +428,103 @@ test('collected list includes arrears installments paid during the labelled cycl
         ->toContain($juneCycleInstallment->id);
 });
 
+test('collected list assigns installment to cycle containing paid on date not later due cycle', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+
+    $catalog = app(LoanEmiCollectionCatalogService::class);
+    $accounting = app(AccountingService::class);
+
+    $member = Member::create([
+        'member_number' => 'LOAN-170-LIKE',
+        'name' => 'Early October Payment Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 10_000,
+        'amount_requested' => 10_000,
+        'amount_approved' => 10_000,
+        'amount_disbursed' => 10_000,
+        'interest_rate' => 10,
+        'term_months' => 20,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 1000,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2024-01-01'),
+        'disbursed_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    $installment = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 19,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-10-10'),
+        'status' => 'paid',
+        'paid_at' => Carbon::parse('2025-10-04'),
+    ]);
+
+    expect($catalog->collectedInstallmentsQuery(9, 2025)->pluck('id'))
+        ->toContain($installment->id)
+        ->and($catalog->collectedInstallmentsQuery(10, 2025)->pluck('id'))
+        ->not->toContain($installment->id);
+});
+
+test('collected list uses actual repayment cash for final legacy top-up installment', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+
+    $catalog = app(LoanEmiCollectionCatalogService::class);
+
+    $member = Member::create([
+        'member_number' => 'LOAN-193-TOPUP',
+        'name' => 'Final Top-up Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'master_portion' => 12_000,
+        'interest_rate' => 0,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'status' => 'completed',
+        'applied_at' => Carbon::parse('2024-06-01'),
+        'disbursed_at' => Carbon::parse('2024-06-01'),
+        'settled_at' => Carbon::parse('2025-10-01'),
+    ]);
+
+    $installment = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 12,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2026-01-05'),
+        'status' => 'paid',
+        'paid_at' => Carbon::parse('2025-10-01'),
+        'amount_collected' => 0,
+    ]);
+
+    $loan->repayments()->create([
+        'amount' => 900,
+        'paid_at' => Carbon::parse('2025-10-01'),
+        'notes' => 'legacy-import:test|2025-10-01|900|loan_repayment',
+    ]);
+
+    $collected = $catalog->collectedInstallmentsQuery(9, 2025)->get();
+
+    expect($collected->pluck('id'))->toContain($installment->id)
+        ->and($collected->firstWhere('id', $installment->id)?->collectedCashAmount())->toBe(900.0)
+        ->and($catalog->collectedInstallmentsCashTotal(9, 2025))->toBe(900.0);
+});
+
 test('delinquency tab exposes maintenance actions on overdue view', function () {
     Livewire::test(ListLoans::class)
         ->set('activeTab', 'delinquency')

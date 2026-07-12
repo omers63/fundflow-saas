@@ -99,6 +99,16 @@ class LoanEmiCollectionCatalogService
         return $this->collectedInstallmentsQuery($month, $year)->count();
     }
 
+    public function collectedInstallmentsCashTotal(int $month, int $year): float
+    {
+        return round(
+            $this->collectedInstallmentsQuery($month, $year)
+                ->get()
+                ->sum(fn (LoanInstallment $installment): float => $installment->collectedCashAmount()),
+            2,
+        );
+    }
+
     /**
      * @return Collection<int, LoanInstallment>
      */
@@ -353,14 +363,10 @@ class LoanEmiCollectionCatalogService
             ->where(function (Builder $query) use ($start, $end, $cycleStart, $cycleEnd): void {
                 $query
                     ->whereBetween('paid_at', [$cycleStart, $cycleEnd])
-                    ->orWhere(function (Builder $dueCollectedInCycle) use ($start, $end, $cycleEnd): void {
-                        $dueCollectedInCycle
-                            ->whereBetween('due_date', [$start, $end])
-                            ->where(function (Builder $paidOnOrBeforeCycleEnd) use ($cycleEnd): void {
-                                $paidOnOrBeforeCycleEnd
-                                    ->whereNull('paid_at')
-                                    ->orWhere('paid_at', '<=', $cycleEnd);
-                            });
+                    ->orWhere(function (Builder $legacyDueInCycle) use ($start, $end): void {
+                        $legacyDueInCycle
+                            ->whereNull('paid_at')
+                            ->whereBetween('due_date', [$start, $end]);
                     });
             })
             ->whereHas('loan', fn (Builder $loan): Builder => $loan
