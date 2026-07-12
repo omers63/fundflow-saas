@@ -18,11 +18,7 @@ final class MyDependentTableActions
      */
     public static function headerActions(): array
     {
-        return [
-            DependentAllocationFilamentActions::updateAllAllocationsHeaderAction(
-                fn (): ?Member => CurrentMember::get(),
-            ),
-        ];
+        return [];
     }
 
     /**

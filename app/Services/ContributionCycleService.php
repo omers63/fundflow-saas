@@ -609,10 +609,13 @@ class ContributionCycleService
     {
         $dues = 0.0;
 
+        if ($member->excludesHouseholdContributionFunding()) {
+            return 0.0;
+        }
+
         if (
             (float) $member->monthly_contribution_amount > 0
             && ! $member->isExemptFromContributions($month, $year)
-            && ! $member->excludesHouseholdContributionFunding()
         ) {
             $dues += $this->requiredCollectionCashForMemberPeriod($member, $month, $year);
         }

@@ -168,6 +168,47 @@ class HouseholdMemberService
         return $member->fresh();
     }
 
+    public function establishAsHouseholdParent(Member $member, string $newEmail): Member
+    {
+        if ($member->parent_member_id === null) {
+            throw new InvalidArgumentException(__('You are already a household parent.'));
+        }
+
+        $newEmail = strtolower(trim($newEmail));
+
+        if (!$this->memberUserEmail->isDeliverableEmail($newEmail)) {
+            throw new InvalidArgumentException(__('Enter a valid email address.'));
+        }
+
+        if ($this->memberUserEmail->isTaken($newEmail, $member->user_id)) {
+            throw new InvalidArgumentException(__('This email is already in use. Choose another.'));
+        }
+
+        $user = $member->user;
+
+        if ($user === null) {
+            throw new RuntimeException(__('Member must have a login user.'));
+        }
+
+        $resolvedEmail = $this->memberUserEmail->resolveForUserEmailChange($newEmail, $user->id);
+
+        if ($resolvedEmail !== $newEmail) {
+            throw new InvalidArgumentException(__('This email is already in use. Choose another.'));
+        }
+
+        $user->update(['email' => $newEmail]);
+
+        $member->update([
+            'parent_member_id' => null,
+            'email' => $newEmail,
+            'household_email' => $newEmail,
+            'is_separated' => false,
+            'direct_login_enabled' => false,
+        ]);
+
+        return $member->fresh();
+    }
+
     public function syncHouseholdAccessFlags(Member $member): Member
     {
         if ($member->parent_member_id === null) {

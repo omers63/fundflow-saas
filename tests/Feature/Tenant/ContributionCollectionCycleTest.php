@@ -1235,7 +1235,7 @@ test('dependent allocation shortfall counts EMI dues when contributions are exem
     Carbon::setTestNow();
 });
 
-test('excluded household contribution funding keeps contribution amount and skips parent fund allocation', function () {
+test('self-funded dependent skips parent fund allocation for contributions and emi', function () {
     $period = now()->subMonth();
 
     $parent = Member::create([
@@ -1307,4 +1307,60 @@ test('excluded household contribution funding keeps contribution amount and skip
         ->and((int) $excludedDependent->fresh()->monthly_contribution_amount)->toBe(500)
         ->and($this->cycles->dependentCycleDuesForPeriod($excludedDependent->fresh(), (int) $period->month, (int) $period->year))->toBe(0.0)
         ->and($this->cycles->requiredCollectionCashForMemberPeriod($excludedDependent->fresh(), (int) $period->month, (int) $period->year))->toBe(500.0);
+});
+
+test('self-funded dependent loan emi is excluded from parent cycle allocation', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $parent = Member::create([
+        'member_number' => 'MEM-P-EMI',
+        'name' => 'Parent EMI',
+        'email' => 'parent-emi@example.com',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($parent);
+
+    $dependent = Member::create([
+        'member_number' => 'MEM-D-EMI',
+        'name' => 'Self Funded Borrower',
+        'email' => 'self-funded-borrower@example.com',
+        'parent_member_id' => $parent->id,
+        'household_email' => 'parent-emi@example.com',
+        'monthly_contribution_amount' => 500,
+        'exclude_from_household_contribution_funding' => true,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($dependent);
+
+    $loan = Loan::create([
+        'member_id' => $dependent->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2026-06-15'),
+        'status' => 'pending',
+    ]);
+
+    expect($dependent->fresh()->isFundedByParent())->toBeFalse()
+        ->and($this->cycles->dependentCycleDuesForPeriod($dependent->fresh(), 6, 2026))->toBe(0.0)
+        ->and($this->cycles->dependentAllocationShortfallForPeriod($dependent->fresh(), 6, 2026))->toBe(0.0);
+
+    Carbon::setTestNow();
 });

@@ -7,6 +7,7 @@ use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\HouseholdDependentFilamentActions;
 use App\Filament\Support\MemberTableColumns;
+use App\Filament\Support\MoneyDisplay;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -54,10 +55,21 @@ class DependentsRelationManager extends RelationManager
                 MemberTableColumns::name()
                     ->searchable()
                     ->sortable(),
-                TextColumn::make('monthly_contribution_amount')
-                    ->label('Monthly contribution')
-                    ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
-                    ->sortable(),
+                TextColumn::make('household_funding')
+                    ->label(__('Funding'))
+                    ->badge()
+                    ->sortable(false)
+                    ->state(fn (Member $record): string => $record->isFundedByParent()
+                        ? __('Funded')
+                        : __('Self-funded'))
+                    ->color(fn (Member $record): string => $record->isFundedByParent() ? 'success' : 'gray')
+                    ->description(fn (Member $record): ?string => $record->isFundedByParent()
+                        ? MoneyDisplay::format(
+                            (float) $record->monthly_contribution_amount,
+                            Setting::get('general', 'currency', 'USD'),
+                            precision: 0,
+                        )
+                        : null),
                 TextColumn::make('status')
                     ->badge()
                     ->formatStateUsing(fn (string $state, Member $record): string => $record->adminStatusLabel())

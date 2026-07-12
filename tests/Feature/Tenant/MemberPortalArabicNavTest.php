@@ -101,7 +101,7 @@ test('member portal pages render arabic navigation labels when locale is ar', fu
         ->assertSee('حاسبة القرض', false);
 
     expect(MyContributionResource::getNavigationLabel())->toBe('مساهماتي')
-        ->and(MyDependentResource::getNavigationLabel())->toBe('تابعيني')
+        ->and(MyDependentResource::getNavigationLabel())->toBe('التابعون')
         ->and(MyContributionResource::getPluralModelLabel())->toBe('مساهماتي')
         ->and(MyCashOutRequestResource::getPluralModelLabel())->toBe('عمليات السحب');
 });

@@ -6,7 +6,6 @@ namespace App\Filament\Member\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Concerns\ManagesMemberProfileForm;
-use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Member\Support\MemberNavigation;
 use App\Filament\Member\Support\ReturnToParentPortalAction;
 use App\Filament\Member\Support\SwitchHouseholdProfileAction;
@@ -20,7 +19,6 @@ use App\Support\CommunicationSettings;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
@@ -61,6 +59,8 @@ class MemberSettingsPage extends Page implements HasForms
     public array $prefs = [];
 
     public ?string $savedAt = null;
+
+    public ?string $contributionSavedAt = null;
 
     public static function canAccess(): bool
     {
@@ -108,6 +108,129 @@ class MemberSettingsPage extends Page implements HasForms
         if ($tab === 'contributions') {
             $this->loadContributionSettings();
         }
+    }
+
+    public function selectContributionAmount(int $amount): void
+    {
+        if ($this->allocationChangeBlocked) {
+            return;
+        }
+
+        $member = CurrentMember::get();
+
+        if ($member === null || $member->isSponsoredDependent()) {
+            return;
+        }
+
+        if (! Member::isValidContributionAmount($amount)) {
+            return;
+        }
+
+        $this->monthly_contribution_amount = $amount;
+    }
+
+    public function saveContributionAllocation(): void
+    {
+        $member = CurrentMember::get();
+
+        if ($member === null) {
+            Notification::make()
+                ->title(__('Member record not found'))
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        if ($member->isSponsoredDependent()) {
+            Notification::make()
+                ->title(__('Allocation cannot be changed'))
+                ->body(app(MemberMonthlyAllocationService::class)->sponsoredDependentAllocationMessage())
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $newAmount = $this->monthly_contribution_amount;
+        $oldAmount = (int) $member->monthly_contribution_amount;
+
+        if (! Member::isValidContributionAmount($newAmount)) {
+            Notification::make()
+                ->title(__('Invalid amount selected'))
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        if ($newAmount === $oldAmount) {
+            Notification::make()
+                ->title(__('No changes detected'))
+                ->info()
+                ->send();
+
+            return;
+        }
+
+        try {
+            app(MemberMonthlyAllocationService::class)->assertCanSelfChangeMonthlyContribution($member);
+        } catch (\InvalidArgumentException $exception) {
+            Notification::make()
+                ->title(__('Allocation cannot be changed'))
+                ->body($exception->getMessage())
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $member->update(['monthly_contribution_amount' => $newAmount]);
+
+        User::query()
+            ->where('is_admin', true)
+            ->each(function (User $admin) use ($member, $oldAmount, $newAmount): void {
+                RecipientDatabaseNotification::send($admin, function (Notification $notification) use ($member, $oldAmount, $newAmount): void {
+                    $notification
+                        ->title(__('Member allocation updated'))
+                        ->body(__('Member :name changed monthly contribution from :old to :new.', [
+                            'name' => $member->name,
+                            'old' => number_format($oldAmount),
+                            'new' => number_format($newAmount),
+                        ]))
+                        ->icon('heroicon-o-adjustments-horizontal')
+                        ->iconColor('info');
+                });
+            });
+
+        $this->contributionSavedAt = now()->toTimeString();
+
+        Notification::make()
+            ->title(__('Allocation updated'))
+            ->body(__('Your monthly contribution amount has been saved.'))
+            ->success()
+            ->send();
+
+        $this->loadContributionSettings();
+    }
+
+    public function hasPendingContributionChange(): bool
+    {
+        $member = CurrentMember::get();
+
+        return $member !== null
+            && (int) $member->monthly_contribution_amount !== $this->monthly_contribution_amount;
+    }
+
+    public function canEditContributionAllocation(): bool
+    {
+        if ($this->allocationChangeBlocked) {
+            return false;
+        }
+
+        $member = CurrentMember::get();
+
+        return $member !== null && ! $member->isSponsoredDependent();
     }
 
     public function loadContributionSettings(): void
@@ -269,115 +392,11 @@ class MemberSettingsPage extends Page implements HasForms
 
     protected function getHeaderActions(): array
     {
-        $actions = [];
-
         if (ReturnToParentPortalAction::isImpersonating()) {
-            $actions[] = ReturnToParentPortalAction::make($this);
+            return [ReturnToParentPortalAction::make($this)];
         }
 
-        if ($this->activeTab === 'contributions') {
-            $actions = array_merge($actions, [
-                Action::make('save_allocation')
-                    ->label(__('Save allocation'))
-                    ->icon('heroicon-o-check-circle')
-                    ->color('primary')
-                    ->disabled($this->allocationChangeBlocked)
-                    ->tooltip($this->allocationChangeBlockedMessage)
-                    ->fillForm(['monthly_contribution_amount' => $this->monthly_contribution_amount])
-                    ->schema([
-                        Select::make('monthly_contribution_amount')
-                            ->label(__('Monthly contribution amount'))
-                            ->options(Member::contributionAmountOptions())
-                            ->required()
-                            ->helperText(__('Choose your monthly contribution tier. Administrators are notified when you change it.')),
-                    ])
-                    ->action(function (array $data): void {
-                        $member = CurrentMember::get();
-
-                        if ($member === null) {
-                            Notification::make()
-                                ->title(__('Member record not found'))
-                                ->danger()
-                                ->send();
-
-                            return;
-                        }
-
-                        $newAmount = (int) $data['monthly_contribution_amount'];
-                        $oldAmount = (int) $member->monthly_contribution_amount;
-
-                        if (! Member::isValidContributionAmount($newAmount)) {
-                            Notification::make()
-                                ->title(__('Invalid amount selected'))
-                                ->danger()
-                                ->send();
-
-                            return;
-                        }
-
-                        if ($newAmount === $oldAmount) {
-                            Notification::make()
-                                ->title(__('No changes detected'))
-                                ->info()
-                                ->send();
-
-                            return;
-                        }
-
-                        try {
-                            app(MemberMonthlyAllocationService::class)->assertCanSelfChangeMonthlyContribution($member);
-                        } catch (\InvalidArgumentException $exception) {
-                            Notification::make()
-                                ->title(__('Allocation cannot be changed'))
-                                ->body($exception->getMessage())
-                                ->danger()
-                                ->send();
-
-                            return;
-                        }
-
-                        $member->update(['monthly_contribution_amount' => $newAmount]);
-
-                        User::query()
-                            ->where('is_admin', true)
-                            ->each(function (User $admin) use ($member, $oldAmount, $newAmount): void {
-                                RecipientDatabaseNotification::send($admin, function (Notification $notification) use ($member, $oldAmount, $newAmount): void {
-                                    $notification
-                                        ->title(__('Member allocation updated'))
-                                        ->body(__('Member :name changed monthly contribution from :old to :new.', [
-                                            'name' => $member->name,
-                                            'old' => number_format($oldAmount),
-                                            'new' => number_format($newAmount),
-                                        ]))
-                                        ->icon('heroicon-o-adjustments-horizontal')
-                                        ->iconColor('info');
-                                });
-                            });
-
-                        Notification::make()
-                            ->title(__('Allocation updated'))
-                            ->body(__('Your monthly contribution amount has been saved.'))
-                            ->success()
-                            ->send();
-
-                        $this->loadContributionSettings();
-                    }),
-            ]);
-
-            $member = CurrentMember::get();
-
-            if ($member !== null && $member->dependents()->exists()) {
-                $actions[] = Action::make('family_requests')
-                    ->label(__('My dependents'))
-                    ->icon('heroicon-o-users')
-                    ->url(MyDependentResource::getUrl())
-                    ->color('gray');
-            }
-
-            return $actions;
-        }
-
-        return $actions;
+        return [];
     }
 
     protected function currentMember(): ?Member

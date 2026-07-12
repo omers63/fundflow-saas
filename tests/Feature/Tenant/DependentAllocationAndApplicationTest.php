@@ -109,7 +109,7 @@ test('parent can update dependent allocation via service', function () {
     ]);
 });
 
-test('parent can exclude dependent contribution from household funding without zeroing amount', function () {
+test('parent can mark dependent as self-funded without changing contribution amount', function () {
     expect(Member::contributionAmountOptions())->not->toHaveKey(0)
         ->and(Member::dependentContributionAmountOptions())->not->toHaveKey(0);
 
@@ -117,7 +117,7 @@ test('parent can exclude dependent contribution from household funding without z
         parent: $this->parent,
         dependent: $this->dependent,
         newAmount: 500,
-        note: 'Exclude contribution funding',
+        note: 'Self-funded',
         changedBy: $this->parentUser,
         excludeFromHouseholdContributionFunding: true,
     );
@@ -126,15 +126,11 @@ test('parent can exclude dependent contribution from household funding without z
         ->and($change->old_amount)->toBe(500)
         ->and($change->new_amount)->toBe(500)
         ->and((int) $this->dependent->fresh()->monthly_contribution_amount)->toBe(500)
-        ->and($this->dependent->fresh()->excludesHouseholdContributionFunding())->toBeTrue();
+        ->and($this->dependent->fresh()->isFundedByParent())->toBeFalse();
 });
 
-test('my dependents table defines bulk allocation header action', function () {
-    $names = collect(MyDependentTableActions::headerActions())
-        ->map(fn ($action) => $action->getName())
-        ->all();
-
-    expect($names)->toContain('updateAllDependentAllocations');
+test('my dependents list has no bulk allocation header action', function () {
+    expect(MyDependentTableActions::headerActions())->toBeEmpty();
 });
 
 test('parent can submit dependent application on behalf via enrollment service', function () {

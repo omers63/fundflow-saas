@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyDependents\Tables;
 
 use App\Filament\Member\Resources\MyDependents\Support\DependentOpenCycleStatus;
+use App\Filament\Member\Resources\MyDependents\Support\DependentsTableHeaderActions;
 use App\Filament\Member\Resources\MyDependents\Support\MyDependentTableActions;
+use App\Filament\Support\MoneyDisplay;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\DependentAllocationChange;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\ContributionCycleService;
+use App\Support\Tenant\CurrentMember;
 use Filament\Actions\BulkActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -28,6 +31,21 @@ class MyDependentsTable
         $cycleStatus = fn (Member $record): array => DependentOpenCycleStatus::resolve($record, $openMonth, $openYear);
 
         return $table
+            ->headerActions(DependentsTableHeaderActions::actions())
+            ->emptyStateHeading(__('No dependents'))
+            ->emptyStateDescription(function (): string {
+                $member = CurrentMember::get();
+
+                if ($member === null) {
+                    return __('Your dependents will appear here once they are linked to your household.');
+                }
+
+                if ($member->isSponsoredDependent()) {
+                    return __('You are linked to a household parent. Use Add a dependent above to become a parent and request a new dependent.');
+                }
+
+                return __('Your dependents will appear here once they are linked to your household.');
+            })
             ->columns([
                 TextColumn::make('name')
                     ->label(__('Dependent'))
@@ -35,10 +53,18 @@ class MyDependentsTable
                     ->searchable(['name', 'member_number'])
                     ->sortable()
                     ->wrap(),
-                TextColumn::make('monthly_contribution_amount')
-                    ->label(__('Allocation'))
-                    ->money($currency)
-                    ->sortable(),
+                TextColumn::make('household_funding')
+                    ->label(__('Funding'))
+                    ->badge()
+                    ->sortable(false)
+                    ->searchable(false)
+                    ->state(fn(Member $record): string => $record->isFundedByParent()
+                        ? __('Funded')
+                        : __('Self-funded'))
+                    ->color(fn(Member $record): string => $record->isFundedByParent() ? 'success' : 'gray')
+                    ->description(fn(Member $record): ?string => $record->isFundedByParent()
+                        ? MoneyDisplay::format((float) $record->monthly_contribution_amount, $currency, precision: 0)
+                        : null),
                 TextColumn::make('cash_balance')
                     ->label(__('Cash'))
                     ->state(fn (Member $record): float => $record->getCashBalance())

@@ -129,7 +129,7 @@ class CommunicationsPage extends Page
             'requestsSection' => $this->requestsSection,
             'openSupportCount' => $openSupportCount,
             'pendingMembershipCount' => $pendingMembershipCount,
-            'showDependentsLink' => $member?->isParent() ?? false,
+            'showDependentsLink' => $member !== null,
             'dependentsUrl' => MyDependentResource::getUrl('index'),
         ];
     }

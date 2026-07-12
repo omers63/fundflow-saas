@@ -160,7 +160,6 @@ final class HouseholdDependentFilamentActions
     public static function forBulk(Closure $resolveParent): array
     {
         return [
-            DependentAllocationFilamentActions::bulkUpdateAllocations($resolveParent),
             ...MemberFilamentActions::forMemberListBulk(),
             ...MemberDelinquencyActions::forMemberListBulk(),
         ];

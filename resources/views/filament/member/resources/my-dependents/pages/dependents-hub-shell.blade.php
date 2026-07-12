@@ -1,8 +1,8 @@
 @php
-    $tabs = [
-        'dependents' => __('Dependents'),
-        'requests' => __('Requests'),
-    ];
+$tabs = [
+    'dependents' => __('Dependents'),
+    'requests' => __('Requests'),
+];
 @endphp
 
 <div class="ff-member-dependents-hub mb-4 space-y-4">
@@ -12,10 +12,10 @@
                 type="button"
                 wire:click="setActiveSection('{{ $key }}')"
                 @class([
-                    'ff-member-tab-bar__item rounded-t-lg px-3 py-1.5 text-sm font-semibold transition',
-                    'border-b-2 border-primary-600 text-primary-700 dark:text-primary-400' => $activeSection === $key,
-                    'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200' => $activeSection !== $key,
-                ])
+        'ff-member-tab-bar__item rounded-t-lg px-3 py-1.5 text-sm font-semibold transition',
+        'border-b-2 border-primary-600 text-primary-700 dark:text-primary-400' => $activeSection === $key,
+        'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200' => $activeSection !== $key,
+    ])
             >
                 {{ $label }}
                 @if ($key === 'dependents' && $dependentsCount > 0)
@@ -33,7 +33,7 @@
 
     @if ($activeSection === 'dependents')
         <p class="text-xs text-gray-500 dark:text-gray-400">
-            {{ __('Click a row to open that dependent’s portal. Use row actions to update allocation or transfer cash.') }}
+            {{ __('Click a row to open that dependent’s portal. Use row actions to manage funding or transfer cash.') }}
         </p>
     @endif
 </div>

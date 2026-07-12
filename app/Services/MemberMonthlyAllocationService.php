@@ -57,7 +57,7 @@ class MemberMonthlyAllocationService
 
     public function sponsoredDependentAllocationMessage(): string
     {
-        return __('Your monthly contribution is set by your household parent. They can update it from My dependents.');
+        return __('Your monthly contribution is set by your household parent. They can update it from Dependents.');
     }
 
     public function allocationChangeBlockedMessage(Member $member): string

@@ -11,9 +11,9 @@ $currency = $currency ?? null;
     <div class="ff-member-dashboard-overview w-full max-w-none space-y-3.5">
         @if (!empty($d['greeting']))
             @include('filament.member.widgets.partials.portal-greeting-hero', [
-                'greeting' => $d['greeting'],
-                'currency' => $currency,
-            ])
+            'greeting' => $d['greeting'],
+            'currency' => $currency,
+        ])
         @endif
 
         @if (!empty($d['notice']))
@@ -341,7 +341,7 @@ $currency = $currency ?? null;
                             @endif
                             @if (filled($d['expandable']['household']['settings_url'] ?? null))
                                 <p class="mt-3 mb-0">
-                                    <a href="{{ $d['expandable']['household']['settings_url'] }}" wire:navigate
+                                    <a href="{{ $d['expandable']['household']['settings_url'] }}"
                                         class="text-xs font-semibold text-primary-600 hover:underline">
                                         {{ __('Manage household in settings') }} →
                                     </a>

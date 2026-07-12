@@ -1,26 +1,25 @@
 @php
-    use App\Filament\Member\Pages\MemberSettingsPage;
-    use App\Models\Tenant\Member;
-    use App\Models\Tenant\User;
-    use App\Support\MemberDateDisplay;
-    use App\Support\Tenant\CurrentMember;
+use App\Filament\Member\Pages\MemberSettingsPage;
+use App\Models\Tenant\Member;
+use App\Models\Tenant\User;
+use App\Support\MemberDateDisplay;
+use App\Support\Tenant\CurrentMember;
 
-    $user = auth('tenant')->user();
-    $member = CurrentMember::get();
+$user = auth('tenant')->user();
+$member = CurrentMember::get();
 
-    $initials = collect(preg_split('/\s+/u', trim((string) ($user?->name ?? ''), " \t\n\r\0\x0B"), -1, PREG_SPLIT_NO_EMPTY))
-        ->take(2)
-        ->map(fn (string $part): string => mb_strtoupper(mb_substr($part, 0, 1)))
-        ->join('') ?: '?';
+$initials = collect(preg_split('/\s+/u', trim((string) ($user?->name ?? ''), " \t\n\r\0\x0B"), -1, PREG_SPLIT_NO_EMPTY))
+    ->take(2)
+    ->map(fn(string $part): string => mb_strtoupper(mb_substr($part, 0, 1)))
+    ->join('') ?: '?';
 
-    $sinceDate = MemberDateDisplay::format($member?->joined_at, 'M Y');
-    $sidebarCollapsible = filament()->isSidebarCollapsibleOnDesktop() || filament()->isSidebarFullyCollapsibleOnDesktop();
+$sinceDate = MemberDateDisplay::format($member?->joined_at, 'M Y');
+$sidebarCollapsible = filament()->isSidebarCollapsibleOnDesktop() || filament()->isSidebarFullyCollapsibleOnDesktop();
 @endphp
 
 @if ($user instanceof User && $member !== null)
     <a
         href="{{ MemberSettingsPage::getUrl(['tab' => 'profile']) }}"
-        wire:navigate
         @class(['ff-member-sidebar-profile'])
         @if ($sidebarCollapsible)
             x-data="{ tooltip: false }"
@@ -60,9 +59,9 @@
             @if (filled($member->member_number))
                 <span class="ff-member-sidebar-profile__subtitle">
                     {{ __('Member #:number · since :date', [
-                        'number' => $member->member_number,
-                        'date' => $sinceDate ?? __('—'),
-                    ]) }}
+            'number' => $member->member_number,
+            'date' => $sinceDate ?? __('—'),
+        ]) }}
                 </span>
             @endif
 

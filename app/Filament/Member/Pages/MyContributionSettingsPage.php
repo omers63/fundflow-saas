@@ -161,7 +161,7 @@ class MyContributionSettingsPage extends Page
 
         if ($member !== null && $member->dependents()->exists()) {
             $actions[] = Action::make('family_requests')
-                ->label(__('My dependents'))
+                ->label(__('Dependents'))
                 ->icon('heroicon-o-users')
                 ->url(MyDependentResource::getUrl())
                 ->color('gray');

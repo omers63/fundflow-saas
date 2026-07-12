@@ -13,6 +13,7 @@ use App\Models\Tenant\User;
 use App\Services\DependentAllocationService;
 use App\Services\MemberStatusService;
 use App\Services\MemberWithdrawalSettlementService;
+use App\Support\MemberUserEmail;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -30,30 +31,39 @@ class MemberRequestService
         $this->validatePayload($requester, $type, $payload);
         $this->assertNoPendingDuplicate($requester, $type);
 
-        $request = MemberRequest::query()->create([
-            'requester_member_id' => $requester->id,
-            'type' => $type,
-            'status' => MemberRequest::STATUS_PENDING,
-            'payload' => $payload,
-        ]);
+        return DB::transaction(function () use ($requester, $type, $payload): MemberRequest {
+            if ($type === MemberRequest::TYPE_ADD_DEPENDENT && $requester->isSponsoredDependent()) {
+                $newEmail = strtolower(trim((string) ($payload['new_email'] ?? '')));
 
-        User::query()
-            ->where('is_admin', true)
-            ->each(function (User $admin) use ($request, $requester): void {
-                RecipientDatabaseNotification::send($admin, function (Notification $notification) use ($request, $requester): void {
-                    $notification
-                        ->title(__('New member request'))
-                        ->body(
-                            ($requester->name ?? __('Member'))
-                            .' — '
-                            .MemberRequest::typeLabel($request->type)
-                        )
-                        ->icon('heroicon-o-clipboard-document-list')
-                        ->iconColor('warning');
+                $this->householdMembers->establishAsHouseholdParent($requester, $newEmail);
+                $requester = $requester->fresh() ?? $requester;
+            }
+
+            $request = MemberRequest::query()->create([
+                'requester_member_id' => $requester->id,
+                'type' => $type,
+                'status' => MemberRequest::STATUS_PENDING,
+                'payload' => $payload,
+            ]);
+
+            User::query()
+                ->where('is_admin', true)
+                ->each(function (User $admin) use ($request, $requester): void {
+                    RecipientDatabaseNotification::send($admin, function (Notification $notification) use ($request, $requester): void {
+                        $notification
+                            ->title(__('New member request'))
+                            ->body(
+                                ($requester->name ?? __('Member'))
+                                . ' — '
+                                . MemberRequest::typeLabel($request->type)
+                            )
+                            ->icon('heroicon-o-clipboard-document-list')
+                            ->iconColor('warning');
+                    });
                 });
-            });
 
-        return $request;
+            return $request;
+        });
     }
 
     /**
@@ -62,7 +72,7 @@ class MemberRequestService
     protected function validatePayload(Member $requester, string $type, array $payload): void
     {
         match ($type) {
-            MemberRequest::TYPE_ADD_DEPENDENT => $this->validateAddDependent($payload),
+            MemberRequest::TYPE_ADD_DEPENDENT => $this->validateAddDependent($requester, $payload),
             MemberRequest::TYPE_REMOVE_DEPENDENT => $this->validateRemoveDependent($requester, $payload),
             MemberRequest::TYPE_OWN_ALLOCATION => $this->validateOwnAllocation($requester, $payload),
             MemberRequest::TYPE_DEPENDENT_ALLOCATION => $this->validateDependentAllocation($requester, $payload),
@@ -74,11 +84,36 @@ class MemberRequestService
         };
     }
 
-    protected function validateAddDependent(array $payload): void
+    protected function validateAddDependent(Member $requester, array $payload): void
     {
         if (blank($payload['details'] ?? null)) {
             throw ValidationException::withMessages([
                 'details' => __('Please describe who you want to add as a dependent.'),
+            ]);
+        }
+
+        if (!$requester->isSponsoredDependent()) {
+            return;
+        }
+
+        $newEmail = strtolower(trim((string) ($payload['new_email'] ?? '')));
+        $memberUserEmail = app(MemberUserEmail::class);
+
+        if ($newEmail === '') {
+            throw ValidationException::withMessages([
+                'new_email' => __('Enter a unique email for your login before requesting a dependent.'),
+            ]);
+        }
+
+        if (!$memberUserEmail->isDeliverableEmail($newEmail)) {
+            throw ValidationException::withMessages([
+                'new_email' => __('Enter a valid email address.'),
+            ]);
+        }
+
+        if ($memberUserEmail->isTaken($newEmail, $requester->user_id)) {
+            throw ValidationException::withMessages([
+                'new_email' => __('This email is already in use. Choose another.'),
             ]);
         }
     }

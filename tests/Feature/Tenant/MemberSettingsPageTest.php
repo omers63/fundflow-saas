@@ -94,6 +94,16 @@ test('settings notifications tab can save preferences', function () {
         ->assertHasNoErrors();
 });
 
+test('settings notifications tab does not show contribution header actions', function () {
+    Filament::setCurrentPanel('member');
+    $this->actingAs($this->memberUser, 'tenant');
+
+    Livewire::test(MemberSettingsPage::class)
+        ->set('activeTab', 'notifications')
+        ->assertActionDoesNotExist('save_allocation')
+        ->assertActionDoesNotExist('family_requests');
+});
+
 test('settings contributions tab allows allocation when prior cycles are clear', function () {
     Carbon::setTestNow(Carbon::parse('2026-06-15'));
     BusinessDaySettings::saveFromForm('2026-06-15');
@@ -161,9 +171,8 @@ test('settings contributions tab save allocation when prior cycles are clear', f
     Livewire::test(MemberSettingsPage::class)
         ->set('activeTab', 'contributions')
         ->assertSet('allocationChangeBlocked', false)
-        ->mountAction('save_allocation')
-        ->setActionData(['monthly_contribution_amount' => 1500])
-        ->callMountedAction()
+        ->call('selectContributionAmount', 1500)
+        ->call('saveContributionAllocation')
         ->assertNotified();
 
     expect((int) $this->member->fresh()->monthly_contribution_amount)->toBe(1500);
@@ -275,6 +284,7 @@ test('settings contributions tab allows independent member to manage allocation'
     Livewire::test(MemberSettingsPage::class)
         ->set('activeTab', 'contributions')
         ->assertSet('allocationChangeBlocked', false)
+        ->assertSee(__('Save allocation'), false)
         ->assertDontSee(__('Sponsored member'), false)
         ->assertDontSee(__('Allocation locked'), false);
 

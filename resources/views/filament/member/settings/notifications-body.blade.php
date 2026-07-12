@@ -1,12 +1,12 @@
 @php
-    $profileUrl = $profileUrl ?? \App\Filament\Member\Pages\MemberSettingsPage::getUrl(['tab' => 'profile']);
-    $sysChannels = [
-        ['in_app', '🔔', __('In-App Inbox'), __('Notifications inside the member portal.'), 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'],
-        ['push', '📲', __('Push'), __('Browser or device push notifications when enabled.'), 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-900/30 dark:text-fuchsia-300'],
-        ['email', '✉️', __('Email'), __('Sent to your registered email address.'), 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300'],
-        ['sms', '📱', __('SMS'), __('Text message to your registered phone.'), 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'],
-        ['whatsapp', '💬', __('WhatsApp'), __('WhatsApp message to your registered phone.'), 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'],
-    ];
+$profileUrl = $profileUrl ?? \App\Filament\Member\Pages\MemberSettingsPage::getUrl(['tab' => 'profile']);
+$sysChannels = [
+    ['in_app', '🔔', __('In-App Inbox'), __('Notifications inside the member portal.'), 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'],
+    ['push', '📲', __('Push'), __('Browser or device push notifications when enabled.'), 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-900/30 dark:text-fuchsia-300'],
+    ['email', '✉️', __('Email'), __('Sent to your registered email address.'), 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300'],
+    ['sms', '📱', __('SMS'), __('Text message to your registered phone.'), 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'],
+    ['whatsapp', '💬', __('WhatsApp'), __('WhatsApp message to your registered phone.'), 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'],
+];
 @endphp
         <div
             class="mb-6 rounded-xl bg-gradient-to-br from-sky-100 via-white to-indigo-50 dark:from-slate-800 dark:via-sky-950/35 dark:to-indigo-950/30 ring-1 ring-sky-200/80 dark:ring-sky-600/40 p-5 shadow-md">
@@ -17,10 +17,10 @@
                 @foreach ($sysChannels as [$ch, $icon, $label, $desc, $style])
                     @php $chEnabled = $this->isSystemEnabled($ch); @endphp
                     <div @class([
-                        'relative flex items-start gap-3 rounded-lg p-3',
-                        $style => $chEnabled,
-                        'bg-gray-100 dark:bg-gray-700/40 text-gray-400 dark:text-gray-500' => !$chEnabled,
-                    ])>
+        'relative flex items-start gap-3 rounded-lg p-3',
+        $style => $chEnabled,
+        'bg-gray-100 dark:bg-gray-700/40 text-gray-400 dark:text-gray-500' => !$chEnabled,
+    ])>
                         @if (!$chEnabled)
                             <div
                                 class="absolute inset-0 rounded-lg flex items-center justify-center bg-gray-100/80 dark:bg-gray-800/80 z-10">
@@ -62,9 +62,9 @@
         
             @foreach ($this->categories as $type => $meta)
                     @php
-                        $channels = ['in_app', 'push', 'email', 'sms', 'whatsapp'];
-                        $channelLabels = ['in_app' => __('In-App'), 'push' => __('Push'), 'email' => __('Email'), 'sms' => __('SMS'), 'whatsapp' => __('WhatsApp')];
-                        $channelIcons = ['in_app' => '🔔', 'push' => '📲', 'email' => '✉️', 'sms' => '📱', 'whatsapp' => '💬'];
+    $channels = ['in_app', 'push', 'email', 'sms', 'whatsapp'];
+    $channelLabels = ['in_app' => __('In-App'), 'push' => __('Push'), 'email' => __('Email'), 'sms' => __('SMS'), 'whatsapp' => __('WhatsApp')];
+    $channelIcons = ['in_app' => '🔔', 'push' => '📲', 'email' => '✉️', 'sms' => '📱', 'whatsapp' => '💬'];
                     @endphp
                     <div wire:key="cat-{{ $type }}"
                         class="rounded-xl bg-white dark:bg-gray-800 ring-1 ring-gray-200 dark:ring-gray-700 shadow-sm overflow-hidden">
@@ -90,31 +90,31 @@
                             <div class="lg:col-span-9 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                             @foreach ($channels as $ch)
                                 @php
-                $supported = $this->isSupported($type, $ch);
-                $forced = $this->isForced($type, $ch);
-                $enabled = $this->isEnabled($type, $ch);
-                $sysEnabled = $this->isSystemEnabled($ch);
-                $clickable = $supported && !$forced && $sysEnabled;
+        $supported = $this->isSupported($type, $ch);
+        $forced = $this->isForced($type, $ch);
+        $enabled = $this->isEnabled($type, $ch);
+        $sysEnabled = $this->isSystemEnabled($ch);
+        $clickable = $supported && !$forced && $sysEnabled;
                                 @endphp
                                 <button wire:click="{{ $clickable ? 'toggleChannel(\'' . $type . '\', \'' . $ch . '\')' : '' }}"
                                     type="button" @disabled(!$clickable)
                                     title="{{ !$sysEnabled ? __('Disabled by administrator') : ($forced ? __('Required — cannot be disabled') : ($supported ? '' : __('Not available for this category'))) }}"
                                     @class([
-                    'relative flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 text-center transition-all duration-150',
-                    'cursor-not-allowed opacity-50 border-red-200 dark:border-red-800/40 bg-red-50/50 dark:bg-red-950/10' => !$sysEnabled,
-                    'cursor-default opacity-40 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/20' => $sysEnabled && !$supported,
-                    'cursor-not-allowed border-amber-300 bg-amber-50 dark:border-amber-700/50 dark:bg-amber-950/20' => $sysEnabled && $supported && $forced,
-                    'cursor-pointer hover:shadow-md active:scale-95 border-primary-500 bg-primary-50 dark:bg-primary-900/20 shadow-sm' => $sysEnabled && $supported && !$forced && $enabled,
-                    'cursor-pointer hover:shadow-md active:scale-95 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/20' => $sysEnabled && $supported && !$forced && !$enabled,
-                ])>
+            'relative flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 text-center transition-all duration-150',
+            'cursor-not-allowed opacity-50 border-red-200 dark:border-red-800/40 bg-red-50/50 dark:bg-red-950/10' => !$sysEnabled,
+            'cursor-default opacity-40 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/20' => $sysEnabled && !$supported,
+            'cursor-not-allowed border-amber-300 bg-amber-50 dark:border-amber-700/50 dark:bg-amber-950/20' => $sysEnabled && $supported && $forced,
+            'cursor-pointer hover:shadow-md active:scale-95 border-primary-500 bg-primary-50 dark:bg-primary-900/20 shadow-sm' => $sysEnabled && $supported && !$forced && $enabled,
+            'cursor-pointer hover:shadow-md active:scale-95 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/20' => $sysEnabled && $supported && !$forced && !$enabled,
+        ])>
                                     <span class="text-xl leading-none">{{ $channelIcons[$ch] }}</span>
                                     <span @class([
-                    'text-xs font-semibold',
-                    'text-red-400 dark:text-red-500' => !$sysEnabled,
-                    'text-amber-600 dark:text-amber-400' => $sysEnabled && $forced,
-                    'text-primary-700 dark:text-primary-300' => $sysEnabled && $enabled && $supported && !$forced,
-                    'text-gray-500 dark:text-gray-400' => $sysEnabled && (!$enabled || !$supported) && !$forced,
-                ])>
+            'text-xs font-semibold',
+            'text-red-400 dark:text-red-500' => !$sysEnabled,
+            'text-amber-600 dark:text-amber-400' => $sysEnabled && $forced,
+            'text-primary-700 dark:text-primary-300' => $sysEnabled && $enabled && $supported && !$forced,
+            'text-gray-500 dark:text-gray-400' => $sysEnabled && (!$enabled || !$supported) && !$forced,
+        ])>
                                         {{ $channelLabels[$ch] }}
                                     </span>
 
@@ -179,7 +179,7 @@
 <div class="mt-4 rounded-lg bg-blue-50 dark:bg-blue-950/30 ring-1 ring-blue-200 dark:ring-blue-800/40 p-4">
     <p class="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
         <strong>{{ __('Tips:') }}</strong>
-        {!! __('Make sure your phone number is set in <a href=":url" wire:navigate class="underline">your profile</a> to receive SMS and WhatsApp notifications.', ['url' => $profileUrl]) !!}
+        {!! __('Make sure your phone number is set in <a href=":url" class="underline">your profile</a> to receive SMS and WhatsApp notifications.', ['url' => $profileUrl]) !!}
         {{ __('You can update your preferences at any time. Changes are reflected on the next notification sent.') }}
     </p>
 </div>

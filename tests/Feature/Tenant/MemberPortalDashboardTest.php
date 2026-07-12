@@ -92,6 +92,38 @@ test('member portal dashboard does not duplicate contribution not posted in pend
         ->not->toContain($contributionPendingLabel);
 });
 
+test('member dashboard household settings link uses full page navigation', function () {
+    $dependent = Member::create([
+        'parent_member_id' => $this->member->id,
+        'member_number' => 'MEM-DASH-DEP',
+        'name' => 'Dashboard Dependent',
+        'email' => 'dashboard@fund.test',
+        'household_email' => 'dashboard@fund.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($dependent);
+
+    Filament::setCurrentPanel('member');
+    $this->actingAs($this->memberUser, 'tenant');
+
+    $html = $this->get('http://'.$this->domain.'/member')->getContent();
+
+    expect($html)
+        ->toContain(__('Manage household in settings'))
+        ->toContain('/member/settings');
+
+    preg_match(
+        '/Manage household in settings.*?<\/a>/s',
+        $html,
+        $matches,
+    );
+
+    expect($matches[0] ?? '')->not->toContain('wire:navigate');
+});
+
 test('member dashboard renders redesigned zones with quick actions', function () {
     Filament::setCurrentPanel('member');
     $this->actingAs($this->memberUser, 'tenant');

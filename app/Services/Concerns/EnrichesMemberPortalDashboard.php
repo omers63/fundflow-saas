@@ -340,9 +340,7 @@ trait EnrichesMemberPortalDashboard
 
         return [
             'settings_url' => MemberSettingsPage::getUrl(['tab' => 'profile']),
-            'dependents_url' => $member->isParent() && $member->dependents()->exists()
-                ? MyDependentResource::getUrl('index')
-                : null,
+            'dependents_url' => MyDependentResource::getUrl('index'),
             'dependents' => $member->dependents()
                 ->orderBy('name')
                 ->limit(6)

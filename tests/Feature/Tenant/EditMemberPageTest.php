@@ -223,7 +223,6 @@ test('household relation manager exposes dependent row and bulk actions', functi
         ->all();
 
     expect($bulkNames)->toContain(
-        'bulkUpdateDependentAllocations',
         'delete',
     );
 

@@ -357,6 +357,11 @@ class Member extends Model
         return (bool) $this->exclude_from_household_contribution_funding;
     }
 
+    public function isFundedByParent(): bool
+    {
+        return ! $this->excludesHouseholdContributionFunding();
+    }
+
     /**
      * @return array<string, string>
      */

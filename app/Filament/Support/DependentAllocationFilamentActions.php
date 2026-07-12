@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Filament\Member\Resources\MyDependents\Pages\ListMyDependents;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
@@ -12,15 +13,16 @@ use App\Services\AccountingService;
 use App\Services\DependentAllocationService;
 use Closure;
 use Filament\Actions\Action;
-use Filament\Actions\BulkAction;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
-use Illuminate\Database\Eloquent\Collection;
+use Filament\Schemas\Components\Utilities\Get;
 use Illuminate\Support\HtmlString;
 use Livewire\Component;
+use Livewire\Livewire;
 
 final class DependentAllocationFilamentActions
 {
@@ -30,159 +32,45 @@ final class DependentAllocationFilamentActions
     public static function forRow(Closure $resolveParent): array
     {
         return [
-            self::updateAllocation($resolveParent),
+            self::manageFunding($resolveParent),
             self::fundCash($resolveParent),
             self::allocationHistory(),
         ];
     }
 
-    public static function updateAllAllocationsHeaderAction(Closure $resolveParent): Action
-    {
-        return Action::make('updateAllDependentAllocations')
-            ->label(__('Update allocations (all)'))
-            ->icon('heroicon-o-adjustments-horizontal')
-            ->color('primary')
-            ->modalHeading(__('Update dependent allocations'))
-            ->modalDescription(new HtmlString(
-                '<p class="text-sm text-gray-600 dark:text-gray-400">'.e(__('Changed amounts are applied immediately and administrators are notified automatically.')).'</p>'
-            ))
-            ->modalWidth('xl')
-            ->schema(fn (): array => self::bulkAllocationSchema($resolveParent))
-            ->action(function (array $data, Component $livewire) use ($resolveParent): void {
-                $parent = $resolveParent();
-
-                if (! $parent instanceof Member) {
-                    Notification::make()->title(__('Parent member not found.'))->danger()->send();
-
-                    return;
-                }
-
-                $amounts = $data['amounts'] ?? [];
-                $excludes = $data['excludes'] ?? [];
-                $note = is_string($data['note'] ?? null) ? $data['note'] : null;
-
-                if ($amounts === []) {
-                    Notification::make()->title(__('No dependents to update.'))->warning()->send();
-
-                    return;
-                }
-
-                $updates = [];
-                foreach ($amounts as $dependentId => $amount) {
-                    $updates[(int) $dependentId] = [
-                        'amount' => (int) $amount,
-                        'exclude' => (bool) ($excludes[$dependentId] ?? false),
-                    ];
-                }
-
-                $user = auth('tenant')->user();
-                $results = app(DependentAllocationService::class)->changeMultiple(
-                    parent: $parent,
-                    updates: $updates,
-                    note: $note,
-                    changedBy: $user instanceof User ? $user : null,
-                );
-
-                $body = app(DependentAllocationService::class)->buildSummary($results);
-                $updated = collect($results)->filter(fn (array $row): bool => $row['change'] !== null)->count();
-
-                Notification::make()
-                    ->title($updated > 0 ? __('Allocations updated') : __('No changes applied'))
-                    ->body($body)
-                    ->color($updated > 0 ? 'success' : 'info')
-                    ->send();
-
-                self::refreshHouseholdViews($livewire);
-            });
-    }
-
-    public static function bulkUpdateAllocations(Closure $resolveParent): BulkAction
-    {
-        return BulkAction::make('bulkUpdateDependentAllocations')
-            ->label(__('Update allocations'))
-            ->icon('heroicon-o-adjustments-horizontal')
-            ->color('warning')
-            ->modalHeading(__('Update dependent allocations'))
-            ->modalDescription(new HtmlString(
-                '<p class="text-sm text-gray-600 dark:text-gray-400">'.e(__('Changed amounts are recorded in the allocation history.')).'</p>'
-            ))
-            ->modalWidth('xl')
-            ->schema(fn (): array => self::bulkAllocationSchema($resolveParent))
-            ->action(function (Collection $records, array $data, Component $livewire) use ($resolveParent): void {
-                $parent = $resolveParent();
-
-                if (! $parent instanceof Member) {
-                    Notification::make()->title(__('Parent member not found.'))->danger()->send();
-
-                    return;
-                }
-
-                $amounts = $data['amounts'] ?? [];
-                $excludes = $data['excludes'] ?? [];
-                $note = is_string($data['note'] ?? null) ? $data['note'] : null;
-
-                if ($amounts === []) {
-                    Notification::make()->title(__('No dependents to update.'))->warning()->send();
-
-                    return;
-                }
-
-                $updates = [];
-                foreach ($amounts as $dependentId => $amount) {
-                    $updates[(int) $dependentId] = [
-                        'amount' => (int) $amount,
-                        'exclude' => (bool) ($excludes[$dependentId] ?? false),
-                    ];
-                }
-
-                $user = auth('tenant')->user();
-                $results = app(DependentAllocationService::class)->changeMultiple(
-                    parent: $parent,
-                    updates: $updates,
-                    note: $note,
-                    changedBy: $user instanceof User ? $user : null,
-                );
-
-                $body = app(DependentAllocationService::class)->buildSummary($results);
-                $updated = collect($results)->filter(fn (array $row): bool => $row['change'] !== null)->count();
-
-                Notification::make()
-                    ->title($updated > 0 ? __('Allocations updated') : __('No changes applied'))
-                    ->body($body)
-                    ->color($updated > 0 ? 'success' : 'info')
-                    ->send();
-
-                self::refreshHouseholdViews($livewire);
-            });
-    }
-
-    private static function updateAllocation(Closure $resolveParent): Action
+    private static function manageFunding(Closure $resolveParent): Action
     {
         return Action::make('setDependentAllocation')
-            ->label(__('Update allocation'))
+            ->label(__('Manage funding'))
             ->icon('heroicon-o-adjustments-horizontal')
             ->color('warning')
             ->fillForm(fn (Member $record): array => [
+                'funded_by_parent' => $record->isFundedByParent(),
                 'monthly_contribution_amount' => $record->monthly_contribution_amount,
-                'exclude_from_household_contribution_funding' => (bool) $record->exclude_from_household_contribution_funding,
                 'note' => null,
             ])
             ->schema(function (Member $record): array {
                 $currency = Setting::get('general', 'currency', 'USD');
 
                 return [
+                    Toggle::make('funded_by_parent')
+                        ->label(__('Funded by parent'))
+                        ->helperText(__('When enabled, you set the monthly contribution and the parent covers contribution and EMI dues. When disabled, the dependent manages their own contribution amount and pays their own dues.'))
+                        ->default(true)
+                        ->live(),
                     Select::make('monthly_contribution_amount')
                         ->label(__('Monthly contribution amount'))
                         ->options(Member::dependentContributionAmountOptions())
-                        ->required()
-                        ->helperText(__('Current amount: :amount · Cash balance: :cash. Contribution must be 500–3000. EMI exemption still applies while the dependent is in a loan cycle.', [
+                        ->required(fn (Get $get): bool => (bool) $get('funded_by_parent'))
+                        ->visible(fn (Get $get): bool => (bool) $get('funded_by_parent'))
+                        ->helperText(__('Current amount: :amount · Cash balance: :cash', [
                             'amount' => MoneyDisplay::format((float) $record->monthly_contribution_amount, $currency),
                             'cash' => MoneyDisplay::format($record->getCashBalance(), $currency),
                         ])),
-                    Toggle::make('exclude_from_household_contribution_funding')
-                        ->label(__('Do not fund contribution from household'))
-                        ->helperText(__('When enabled, the parent will not transfer cash for this dependent’s contribution dues. EMI may still be funded if they have loan dues. The contribution amount itself stays 500–3000.'))
-                        ->default(false),
+                    Placeholder::make('self_funded_notice')
+                        ->label('')
+                        ->visible(fn (Get $get): bool => ! (bool) $get('funded_by_parent'))
+                        ->content(__('The dependent chooses their own contribution amount in profile settings and is responsible for contribution and EMI payments from their cash account.')),
                     TextInput::make('note')
                         ->label(__('Note / reason (optional)'))
                         ->maxLength(200)
@@ -198,9 +86,12 @@ final class DependentAllocationFilamentActions
                     return;
                 }
 
-                $newAmount = (int) $data['monthly_contribution_amount'];
+                $fundedByParent = (bool) ($data['funded_by_parent'] ?? false);
+                $newAmount = $fundedByParent
+                    ? (int) $data['monthly_contribution_amount']
+                    : (int) $record->monthly_contribution_amount;
 
-                if (! Member::isValidDependentContributionAmount($newAmount)) {
+                if ($fundedByParent && ! Member::isValidDependentContributionAmount($newAmount)) {
                     Notification::make()->title(__('Invalid amount selected.'))->danger()->send();
 
                     return;
@@ -214,11 +105,11 @@ final class DependentAllocationFilamentActions
                         newAmount: $newAmount,
                         note: is_string($data['note'] ?? null) ? $data['note'] : null,
                         changedBy: $user instanceof User ? $user : null,
-                        excludeFromHouseholdContributionFunding: (bool) ($data['exclude_from_household_contribution_funding'] ?? false),
+                        excludeFromHouseholdContributionFunding: ! $fundedByParent,
                     );
                 } catch (\Throwable $exception) {
                     Notification::make()
-                        ->title(__('Could not update allocation'))
+                        ->title(__('Could not update funding'))
                         ->body($exception->getMessage())
                         ->danger()
                         ->send();
@@ -233,8 +124,8 @@ final class DependentAllocationFilamentActions
                 }
 
                 Notification::make()
-                    ->title(__('Allocation updated'))
-                    ->body(__('Allocation was updated successfully for :name.', ['name' => $record->name]))
+                    ->title(__('Funding updated'))
+                    ->body(__('Funding settings were updated for :name.', ['name' => $record->name]))
                     ->success()
                     ->send();
 
@@ -321,63 +212,46 @@ final class DependentAllocationFilamentActions
             ->modalCancelActionLabel(__('Close'));
     }
 
-    /**
-     * @return list<\Filament\Forms\Components\Component>
-     */
-    private static function bulkAllocationSchema(Closure $resolveParent): array
-    {
-        $parent = $resolveParent();
-        $dependents = $parent instanceof Member
-            ? $parent->dependents()->orderBy('member_number')->get()
-            : collect();
-
-        if ($dependents->isEmpty()) {
-            return [
-                Placeholder::make('none')
-                    ->label('')
-                    ->content(__('This household has no dependents.')),
-            ];
-        }
-
-        $currency = Setting::get('general', 'currency', 'USD');
-        $fields = [];
-
-        foreach ($dependents as $dependent) {
-            if (! $dependent instanceof Member) {
-                continue;
-            }
-
-            $fields[] = Select::make("amounts.{$dependent->id}")
-                ->label("{$dependent->member_number} — {$dependent->name}")
-                ->options(Member::dependentContributionAmountOptions())
-                ->default($dependent->monthly_contribution_amount)
-                ->required()
-                ->helperText(__('Current amount: :alloc · Cash: :cash. Contribution must be 500–3000.', [
-                    'alloc' => MoneyDisplay::format((float) $dependent->monthly_contribution_amount, $currency, precision: 0) ?? '',
-                    'cash' => MoneyDisplay::format($dependent->getCashBalance(), $currency) ?? '',
-                ]));
-
-            $fields[] = Toggle::make("excludes.{$dependent->id}")
-                ->label(__('Do not fund contribution from household'))
-                ->helperText(__('EMI may still be funded if they have loan dues.'))
-                ->default((bool) $dependent->exclude_from_household_contribution_funding);
-        }
-
-        $fields[] = TextInput::make('note')
-            ->label(__('Note / reason (optional)'))
-            ->maxLength(200)
-            ->placeholder(__('e.g. Annual review adjustment'))
-            ->columnSpanFull();
-
-        return $fields;
-    }
-
     private static function refreshHouseholdViews(Component $livewire): void
     {
-        MemberResource::dispatchMemberDetailInsightsRefresh($livewire);
-
         if (method_exists($livewire, 'resetTable')) {
             $livewire->resetTable();
         }
+
+        if (Filament::getCurrentPanel()?->getId() === 'member') {
+            self::refreshMemberDependentsInsights($livewire);
+
+            return;
+        }
+
+        MemberResource::dispatchMemberDetailInsightsRefresh($livewire);
+    }
+
+    private static function refreshMemberDependentsInsights(Component $livewire): void
+    {
+        $page = self::resolveMemberDependentsListPage($livewire);
+
+        if ($page instanceof ListMyDependents) {
+            $page->refreshDependentsInsights();
+
+            return;
+        }
+
+        $livewire->dispatch('refresh-member-dependents-insights');
+    }
+
+    private static function resolveMemberDependentsListPage(Component $livewire): ?ListMyDependents
+    {
+        if ($livewire instanceof ListMyDependents) {
+            return $livewire;
+        }
+
+        $current = Livewire::current();
+
+        if ($current instanceof ListMyDependents) {
+            return $current;
+        }
+
+        return null;
     }
 }

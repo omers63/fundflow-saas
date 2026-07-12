@@ -6,6 +6,7 @@ namespace App\Filament\Member\Widgets;
 
 use App\Services\MemberDependentsInsightsService;
 use Filament\Widgets\Widget;
+use Livewire\Attributes\On;
 
 class MemberDependentsInsightsWidget extends Widget
 {
@@ -16,6 +17,12 @@ class MemberDependentsInsightsWidget extends Widget
     protected string $view = 'filament.member.widgets.member-dependents-insights';
 
     protected int|string|array $columnSpan = 'full';
+
+    #[On('refresh-member-dependents-insights')]
+    public function refreshMemberDependentsInsights(): void
+    {
+        //
+    }
 
     /**
      * @return array<string, mixed>

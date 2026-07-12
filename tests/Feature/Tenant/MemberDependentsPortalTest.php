@@ -2,10 +2,10 @@
 
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Member\Resources\MyDependents\Pages\ListMyDependents;
-use App\Filament\Member\Widgets\MyHouseholdRequestsTableWidget;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\MemberDependentsInsightsService;
@@ -88,46 +88,93 @@ test('parent with dependents can access my dependents resource', function () {
         ->and($records->first()->id)->toBe($this->dependent->id);
 });
 
-test('dependent member cannot access my dependents resource', function () {
+test('dependent member can access dependents resource and navigation', function () {
     $this->actingAs($this->dependentUser, 'tenant');
 
-    expect(MyDependentResource::canAccess())->toBeFalse()
-        ->and(MyDependentResource::shouldRegisterNavigation())->toBeFalse();
+    expect(MyDependentResource::canAccess())->toBeTrue()
+        ->and(MyDependentResource::shouldRegisterNavigation())->toBeTrue();
+
+    $records = MyDependentResource::getEloquentQuery()->get();
+
+    expect($records)->toHaveCount(0);
 });
 
-test('parent without dependents does not show navigation', function () {
+test('parent without dependents can access dependents resource and navigation', function () {
     $this->dependent->delete();
     $this->dependentUser->delete();
 
     $this->actingAs($this->parentUser, 'tenant');
 
     expect(MyDependentResource::canAccess())->toBeTrue()
-        ->and(MyDependentResource::shouldRegisterNavigation())->toBeFalse();
+        ->and(MyDependentResource::shouldRegisterNavigation())->toBeTrue();
+
+    expect(MyDependentResource::getEloquentQuery()->get())->toHaveCount(0);
 });
 
 test('parent can list dependents page', function () {
+    BusinessDaySettings::saveFromForm('2026-06-15');
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
     $this->actingAs($this->parentUser, 'tenant');
 
     Livewire::test(ListMyDependents::class)
         ->assertSuccessful()
-        ->assertSet('activeSection', 'dependents')
         ->assertSee('Child Member')
         ->assertSee('MEM-C001')
+        ->assertSee(__('Set contributions'))
+        ->assertSee(__('Cash to transfer'))
         ->assertTableActionDoesNotExist('view')
         ->assertTableActionExists('openDependentPortal');
+
+    Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
 });
 
-test('parent can switch to household requests section', function () {
+test('dependents table exposes household request header actions', function () {
     $this->actingAs($this->parentUser, 'tenant');
 
     Livewire::test(ListMyDependents::class)
-        ->call('setActiveSection', 'requests')
-        ->assertSet('activeSection', 'requests')
-        ->assertSuccessful();
-
-    Livewire::test(MyHouseholdRequestsTableWidget::class)
         ->assertTableActionExists('requestAddDependent')
-        ->assertTableActionExists('requestRemoveDependent');
+        ->assertTableActionExists('requestRemoveDependent')
+        ->assertTableActionExists('applyForDependent');
+});
+
+test('dependent member sees empty dependents table with add action', function () {
+    $this->actingAs($this->dependentUser, 'tenant');
+
+    Livewire::test(ListMyDependents::class)
+        ->assertSuccessful()
+        ->assertTableActionExists('requestAddDependent')
+        ->assertTableActionHidden('requestRemoveDependent')
+        ->assertTableActionHidden('applyForDependent')
+        ->assertSee(__('No dependents'));
+});
+
+test('sponsored dependent can request add dependent with new email and leave household', function () {
+    $this->actingAs($this->dependentUser, 'tenant');
+
+    Livewire::test(ListMyDependents::class)
+        ->callTableAction('requestAddDependent', data: [
+            'new_email' => 'newparent@dependents.test',
+            'details' => 'Please add my child Jane Doe.',
+        ])
+        ->assertHasNoErrors();
+
+    $this->dependent->refresh();
+    $this->dependentUser->refresh();
+
+    expect($this->dependent->parent_member_id)->toBeNull()
+        ->and($this->dependent->email)->toBe('newparent@dependents.test')
+        ->and($this->dependentUser->email)->toBe('newparent@dependents.test');
+
+    $request = MemberRequest::query()
+        ->where('requester_member_id', $this->dependent->id)
+        ->where('type', MemberRequest::TYPE_ADD_DEPENDENT)
+        ->first();
+
+    expect($request)->not->toBeNull()
+        ->and($request->payload['details'])->toBe('Please add my child Jane Doe.')
+        ->and($request->payload['new_email'])->toBe('newparent@dependents.test');
 });
 
 test('dependent table row links to impersonation route', function () {
@@ -149,6 +196,46 @@ test('dependents insights snapshot summarizes household', function () {
     expect($snapshot)->toHaveKeys(['hero', 'kpis', 'open_period', 'dependents_count'])
         ->and($snapshot['dependents_count'])->toBe(1)
         ->and($snapshot['kpis'])->toHaveCount(4);
+});
+
+test('manage funding refreshes dependents insights on the list page', function () {
+    BusinessDaySettings::saveFromForm('2026-06-15');
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $this->parent->update([
+        'joined_at' => Carbon::parse('2026-06-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2026-06-01'),
+    ]);
+    $this->dependent->update([
+        'joined_at' => Carbon::parse('2026-06-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2026-06-01'),
+    ]);
+
+    $this->actingAs($this->parentUser, 'tenant');
+
+    Livewire::test(ListMyDependents::class)
+        ->assertSet('dependentsInsightsVersion', 0)
+        ->callTableAction('setDependentAllocation', $this->dependent, data: [
+            'funded_by_parent' => true,
+            'monthly_contribution_amount' => 1000,
+        ])
+        ->assertHasNoErrors()
+        ->assertSet('dependentsInsightsVersion', 1)
+        ->assertSee(__('Set contributions'));
+
+    expect((int) $this->dependent->fresh()->monthly_contribution_amount)->toBe(1000);
+
+    Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('dependents insights refresh bumps version on list page', function () {
+    $this->actingAs($this->parentUser, 'tenant');
+
+    Livewire::test(ListMyDependents::class)
+        ->assertSet('dependentsInsightsVersion', 0)
+        ->call('refreshDependentsInsights')
+        ->assertSet('dependentsInsightsVersion', 1);
 });
 
 test('parent can switch into dependent portal', function () {

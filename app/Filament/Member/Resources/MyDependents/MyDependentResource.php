@@ -16,6 +16,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Livewire\Component;
 
 class MyDependentResource extends Resource
 {
@@ -25,11 +26,11 @@ class MyDependentResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserGroup;
 
-    protected static ?string $navigationLabel = 'My dependents';
+    protected static ?string $navigationLabel = 'Dependents';
 
     protected static ?string $modelLabel = 'Dependent';
 
-    protected static ?string $pluralModelLabel = 'My dependents';
+    protected static ?string $pluralModelLabel = 'Dependents';
 
     protected static string|\UnitEnum|null $navigationGroup = MemberNavigation::GROUP_SELF_SERVICE;
 
@@ -37,28 +38,24 @@ class MyDependentResource extends Resource
 
     public static function canAccess(): bool
     {
-        $member = CurrentMember::get();
-
-        return $member !== null && $member->isParent();
+        return CurrentMember::get() !== null;
     }
 
     public static function shouldRegisterNavigation(): bool
     {
-        if (! static::canAccess()) {
-            return false;
-        }
-
-        $member = CurrentMember::get();
-
-        return $member !== null && $member->dependents()->exists();
+        return static::canAccess();
     }
 
     public static function getEloquentQuery(): Builder
     {
-        $parentId = CurrentMember::id();
+        $member = CurrentMember::get();
+
+        if ($member === null || !$member->isParent()) {
+            return parent::getEloquentQuery()->whereRaw('1 = 0');
+        }
 
         return parent::getEloquentQuery()
-            ->where('parent_member_id', $parentId)
+            ->where('parent_member_id', $member->id)
             ->with(['user', 'cashAccount', 'fundAccount']);
     }
 
@@ -87,5 +84,20 @@ class MyDependentResource extends Resource
         return [
             'index' => ListMyDependents::route('/'),
         ];
+    }
+
+    public static function dispatchInsightsRefresh(?Component $livewire): void
+    {
+        if ($livewire === null) {
+            return;
+        }
+
+        if ($livewire instanceof ListMyDependents) {
+            $livewire->refreshDependentsInsights();
+
+            return;
+        }
+
+        $livewire->dispatch('refresh-member-dependents-insights');
     }
 }
