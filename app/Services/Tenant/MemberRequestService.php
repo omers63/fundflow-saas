@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Services\Tenant;
 
+use App\Filament\Member\Pages\CommunicationsPage;
+use App\Filament\Member\Resources\MyDependents\MyDependentResource;
+use App\Filament\Support\AdminNotificationActions;
 use App\Filament\Support\MemberDatabaseNotification;
 use App\Filament\Support\MemberFilamentActions;
 use App\Filament\Support\RecipientDatabaseNotification;
@@ -14,6 +17,8 @@ use App\Services\DependentAllocationService;
 use App\Services\MemberStatusService;
 use App\Services\MemberWithdrawalSettlementService;
 use App\Support\MemberUserEmail;
+use App\Support\TenantAbsoluteUrl;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -54,11 +59,14 @@ class MemberRequestService
                             ->title(__('New member request'))
                             ->body(
                                 ($requester->name ?? __('Member'))
-                                . ' — '
-                                . MemberRequest::typeLabel($request->type)
+                                .' — '
+                                .MemberRequest::typeLabel($request->type)
                             )
                             ->icon('heroicon-o-clipboard-document-list')
-                            ->iconColor('warning');
+                            ->iconColor('warning')
+                            ->actions([
+                                AdminNotificationActions::reviewMemberRequest($request),
+                            ]);
                     });
                 });
 
@@ -92,30 +100,14 @@ class MemberRequestService
             ]);
         }
 
-        if (!$requester->isSponsoredDependent()) {
+        if (! $requester->isSponsoredDependent()) {
             return;
         }
 
-        $newEmail = strtolower(trim((string) ($payload['new_email'] ?? '')));
-        $memberUserEmail = app(MemberUserEmail::class);
-
-        if ($newEmail === '') {
-            throw ValidationException::withMessages([
-                'new_email' => __('Enter a unique email for your login before requesting a dependent.'),
-            ]);
-        }
-
-        if (!$memberUserEmail->isDeliverableEmail($newEmail)) {
-            throw ValidationException::withMessages([
-                'new_email' => __('Enter a valid email address.'),
-            ]);
-        }
-
-        if ($memberUserEmail->isTaken($newEmail, $requester->user_id)) {
-            throw ValidationException::withMessages([
-                'new_email' => __('This email is already in use. Choose another.'),
-            ]);
-        }
+        app(MemberUserEmail::class)->validateNewLoginEmail(
+            (string) ($payload['new_email'] ?? ''),
+            $requester->user_id,
+        );
     }
 
     protected function validateRemoveDependent(Member $requester, array $payload): void
@@ -135,6 +127,12 @@ class MemberRequestService
                 'dependent_member_id' => __('Invalid dependent.'),
             ]);
         }
+
+        app(MemberUserEmail::class)->validateNewLoginEmail(
+            (string) ($payload['separated_email'] ?? ''),
+            $dependent->user_id,
+            'separated_email',
+        );
     }
 
     protected function validateOwnAllocation(Member $requester, array $payload): void
@@ -304,7 +302,15 @@ class MemberRequestService
             ]);
         }
 
-        $this->householdMembers->removeFromHousehold($dependent);
+        $separatedEmail = strtolower(trim((string) ($payload['separated_email'] ?? '')));
+
+        if ($separatedEmail === '') {
+            throw ValidationException::withMessages([
+                'separated_email' => __('Enter a unique email for the dependent\'s login.'),
+            ]);
+        }
+
+        $this->householdMembers->establishAsHouseholdParent($dependent, $separatedEmail);
     }
 
     protected function applyOwnAllocation(Member $member, array $payload): void
@@ -415,12 +421,35 @@ class MemberRequestService
             $body .= ': '.$request->admin_note;
         }
 
-        MemberDatabaseNotification::send($user, function (Notification $notification) use ($outcome, $body): void {
+        MemberDatabaseNotification::send($user, function (Notification $notification) use ($outcome, $body, $request): void {
             $notification
                 ->title($outcome === 'approved' ? __('Request approved') : __('Request declined'))
                 ->body($body)
                 ->icon($outcome === 'approved' ? 'heroicon-o-check-circle' : 'heroicon-o-x-circle')
-                ->iconColor($outcome === 'approved' ? 'success' : 'danger');
+                ->iconColor($outcome === 'approved' ? 'success' : 'danger')
+                ->actions([
+                    Action::make('view')
+                        ->label(__('View request'))
+                        ->url(TenantAbsoluteUrl::resolve($this->memberRequestUrlFor($request)))
+                        ->markAsRead(),
+                ]);
         });
+    }
+
+    protected function memberRequestUrlFor(MemberRequest $request): string
+    {
+        if (
+            in_array($request->type, [
+                MemberRequest::TYPE_ADD_DEPENDENT,
+                MemberRequest::TYPE_REMOVE_DEPENDENT,
+            ], true)
+        ) {
+            return MyDependentResource::getUrl('index', panel: 'member');
+        }
+
+        return CommunicationsPage::getUrl([
+            'tab' => 'requests',
+            'section' => 'membership',
+        ], panel: 'member');
     }
 }

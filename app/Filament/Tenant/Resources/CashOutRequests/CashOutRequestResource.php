@@ -74,7 +74,7 @@ class CashOutRequestResource extends Resource
             $parameters['filters'] = $filters;
         }
 
-        return static::getUrl('index', $parameters);
+        return static::getUrl('index', $parameters, panel: 'tenant');
     }
 
     /**

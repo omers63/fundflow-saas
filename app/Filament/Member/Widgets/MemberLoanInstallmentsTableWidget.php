@@ -6,6 +6,7 @@ namespace App\Filament\Member\Widgets;
 
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\LateSettledArrearsTableStyling;
+use App\Filament\Support\LoanInstallmentTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\LoanInstallment;
@@ -50,6 +51,7 @@ class MemberLoanInstallmentsTableWidget extends TableWidget
                 TextColumn::make('installment_number')
                     ->label(__('#'))
                     ->sortable(),
+                LoanInstallmentTableColumns::cycle(),
                 TextColumn::make('due_date')
                     ->label(__('Due'))
                     ->date()

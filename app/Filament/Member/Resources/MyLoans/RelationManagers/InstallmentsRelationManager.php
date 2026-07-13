@@ -8,6 +8,7 @@ use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\LateSettledArrearsTableStyling;
+use App\Filament\Support\LoanInstallmentTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -36,6 +37,7 @@ class InstallmentsRelationManager extends RelationManager
                 TextColumn::make('installment_number')
                     ->label(__('#'))
                     ->sortable(),
+                LoanInstallmentTableColumns::cycle(),
                 TextColumn::make('due_date')
                     ->label(__('Due'))
                     ->date()

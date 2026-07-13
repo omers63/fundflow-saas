@@ -43,6 +43,10 @@ class ContributionCollectionCycleService
                 return;
             }
 
+            if (! $this->memberPeriodEligibleForAutoCollection($member, $month, $year)) {
+                return;
+            }
+
             $amountDue = (float) $member->monthly_contribution_amount;
 
             if ($amountDue <= 0) {

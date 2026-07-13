@@ -59,7 +59,7 @@ test('approving dependent application uses the household email for the member re
         ->and(app(MemberUserEmail::class)->isInternalLoginEmail((string) $child->user?->email))->toBeTrue();
 });
 
-test('admin cannot assign an existing member with a unique email to a household parent', function () {
+test('admin can assign an existing independent member with a unique email to a household parent', function () {
     $parentUser = User::create([
         'name' => 'Household Parent',
         'email' => 'household@example.test',
@@ -87,7 +87,43 @@ test('admin cannot assign an existing member with a unique email to a household 
         'member_number' => 'MEM-L001',
     ], 'LaterPass123');
 
-    expect(fn () => app(HouseholdMemberService::class)->assignToHousehold($member, $parent))
+    $assigned = app(HouseholdMemberService::class)->assignToHousehold($member, $parent);
+
+    expect($assigned->parent_member_id)->toBe($parent->id)
+        ->and($assigned->email)->toBe('household@example.test')
+        ->and($assigned->household_email)->toBe('household@example.test')
+        ->and(app(MemberUserEmail::class)->isInternalLoginEmail((string) $assigned->user?->email))->toBeTrue();
+});
+
+test('assign to household rejects an explicit non household contact email', function () {
+    $parentUser = User::create([
+        'name' => 'Household Parent',
+        'email' => 'household@example.test',
+        'password' => bcrypt('ParentPass123'),
+        'is_admin' => false,
+    ]);
+
+    $parent = Member::create([
+        'user_id' => $parentUser->id,
+        'member_number' => 'MEM-P002',
+        'name' => 'Household Parent',
+        'email' => 'household@example.test',
+        'household_email' => 'household@example.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now(),
+        'status' => 'active',
+    ]);
+
+    $member = app(HouseholdMemberService::class)->createFromAdmin([
+        'name' => 'Later Joiner',
+        'email' => 'later.joiner@example.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now(),
+        'status' => 'active',
+        'member_number' => 'MEM-L002',
+    ], 'LaterPass123');
+
+    expect(fn () => app(HouseholdMemberService::class)->assignToHousehold($member, $parent, 'later.joiner@example.test'))
         ->toThrow(InvalidArgumentException::class);
 });
 

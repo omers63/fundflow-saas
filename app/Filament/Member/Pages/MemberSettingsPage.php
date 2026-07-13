@@ -9,6 +9,7 @@ use App\Filament\Member\Concerns\ManagesMemberProfileForm;
 use App\Filament\Member\Support\MemberNavigation;
 use App\Filament\Member\Support\ReturnToParentPortalAction;
 use App\Filament\Member\Support\SwitchHouseholdProfileAction;
+use App\Filament\Support\AdminNotificationActions;
 use App\Filament\Support\RecipientDatabaseNotification;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberCommunicationPreference;
@@ -199,7 +200,10 @@ class MemberSettingsPage extends Page implements HasForms
                             'new' => number_format($newAmount),
                         ]))
                         ->icon('heroicon-o-adjustments-horizontal')
-                        ->iconColor('info');
+                        ->iconColor('info')
+                        ->actions([
+                            AdminNotificationActions::reviewMember($member),
+                        ]);
                 });
             });
 

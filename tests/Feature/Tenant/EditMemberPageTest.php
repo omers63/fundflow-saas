@@ -76,6 +76,74 @@ test('view member workspace shows inline summary and grouped header actions', fu
         ->assertSee(__('Messages'));
 });
 
+test('edit member can assign household parent for independent member with unique email', function () {
+    $admin = User::create([
+        'name' => 'Household Admin',
+        'email' => 'admin-household-assign@test.com',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $parentUser = User::create([
+        'name' => 'Household Parent',
+        'email' => 'household@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => false,
+    ]);
+
+    $parent = Member::create([
+        'user_id' => $parentUser->id,
+        'member_number' => 'MEM-PARENT',
+        'name' => 'Household Parent',
+        'email' => 'household@fund.test',
+        'household_email' => 'household@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now(),
+        'status' => 'active',
+    ]);
+
+    $memberUser = User::create([
+        'name' => 'Independent Member',
+        'email' => 'independent@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => false,
+    ]);
+
+    $member = Member::create([
+        'user_id' => $memberUser->id,
+        'member_number' => 'MEM-INDEP',
+        'name' => 'Independent Member',
+        'email' => 'independent@fund.test',
+        'household_email' => 'independent@fund.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now(),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($parent);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    Filament::setCurrentPanel('tenant');
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(EditMember::class, ['record' => $member->getRouteKey()])
+        ->fillForm([
+            'parent_member_id' => $parent->id,
+            'monthly_contribution_amount' => 500,
+        ])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    $member->refresh();
+
+    expect($member->parent_member_id)->toBe($parent->id)
+        ->and($member->email)->toBe('household@fund.test')
+        ->and($member->household_email)->toBe('household@fund.test');
+});
+
 test('edit member profile page focuses on form fields and links back to workspace', function () {
     $admin = User::create([
         'name' => 'Profile Admin',

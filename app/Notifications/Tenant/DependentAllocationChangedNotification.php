@@ -9,6 +9,7 @@ use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Support\MoneyDisplay;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\DependentAllocationChange;
+use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Notifications\Concerns\DeliversToMemberChannels;
 use App\Services\Tenant\NotificationPreferenceService;
@@ -165,16 +166,20 @@ class DependentAllocationChangedNotification extends Notification
         return match ($this->role) {
             'dependent' => __('View contribution settings'),
             'parent' => __('View dependents'),
-            default => __('View members'),
+            default => __('Review member'),
         };
     }
 
     protected function actionUrl(): ?string
     {
+        $this->change->loadMissing(['dependent', 'parent']);
+
         $url = match ($this->role) {
             'dependent' => MyContributionSettingsPage::getUrl(panel: 'member'),
             'parent' => MyDependentResource::getUrl('index', panel: 'member'),
-            default => MemberResource::getUrl('index'),
+            default => $this->change->dependent instanceof Member
+                ? MemberResource::getUrl('view', ['record' => $this->change->dependent], panel: 'tenant')
+                : MemberResource::getUrl('index', panel: 'tenant'),
         };
 
         return TenantAbsoluteUrl::resolve($url);

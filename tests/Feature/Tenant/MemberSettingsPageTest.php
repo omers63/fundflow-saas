@@ -178,6 +178,53 @@ test('settings contributions tab save allocation when prior cycles are clear', f
     expect((int) $this->member->fresh()->monthly_contribution_amount)->toBe(1500);
 });
 
+test('settings contributions tab save allocation notifies admins with review link', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+    BusinessDaySettings::saveFromForm('2026-06-15');
+
+    $this->member->update([
+        'joined_at' => Carbon::parse('2024-06-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2024-06-01'),
+    ]);
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $cursor = Carbon::parse('2024-06-01')->startOfMonth();
+    $openStart = Carbon::create($openYear, $openMonth, 1)->startOfMonth();
+
+    while ($cursor->lt($openStart)) {
+        Contribution::create([
+            'member_id' => $this->member->id,
+            'period' => Contribution::periodDate((int) $cursor->month, (int) $cursor->year),
+            'amount' => 1000,
+            'status' => 'posted',
+            'posted_at' => $cursor->copy(),
+        ]);
+        $cursor->addMonthNoOverflow();
+    }
+
+    $admin = User::create([
+        'name' => 'Allocation Admin',
+        'email' => 'allocation-admin@fund.test',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    Filament::setCurrentPanel('member');
+    $this->actingAs($this->memberUser, 'tenant');
+
+    Livewire::test(MemberSettingsPage::class)
+        ->set('activeTab', 'contributions')
+        ->call('selectContributionAmount', 1500)
+        ->call('saveContributionAllocation')
+        ->assertNotified();
+
+    $adminNotification = $admin->fresh()->notifications()->firstOrFail();
+
+    expect($adminNotification->data['title'] ?? null)->toBe(__('Member allocation updated'))
+        ->and($adminNotification->data['actions'] ?? [])->not->toBeEmpty();
+});
+
 test('settings contributions tab shows paid amount for business day open cycle not calendar month', function () {
     Carbon::setTestNow(Carbon::parse('2026-07-05'));
     BusinessDaySettings::saveFromForm('2026-07-05');

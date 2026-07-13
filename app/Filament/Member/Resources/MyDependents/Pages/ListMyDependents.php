@@ -40,7 +40,7 @@ class ListMyDependents extends ListRecords
             return __('Manage funding and cash, then open a dependent’s portal to act on their behalf.');
         }
 
-                return __('Use the actions above to request adding or removing dependents from your household.');
+        return __('Use the actions above to request adding or removing dependents from your household.');
     }
 
     /**
@@ -64,7 +64,7 @@ class ListMyDependents extends ListRecords
 
         if ($this->shouldShowDependentsInsights()) {
             $components[] = SchemaView::make('filament.member.widgets.partials.member-dependents-insights-body')
-                ->viewData(fn(): array => [
+                ->viewData(fn (): array => [
                     'd' => $this->dependentsInsightsSnapshot(),
                     'insightsVersion' => $this->dependentsInsightsVersion,
                 ]);
@@ -73,6 +73,7 @@ class ListMyDependents extends ListRecords
         $components[] = RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE);
         $components[] = EmbeddedTable::make();
         $components[] = RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER);
+        $components[] = SchemaView::make('filament.member.resources.my-dependents.pages.household-requests-panel');
 
         return $schema->components($components);
     }

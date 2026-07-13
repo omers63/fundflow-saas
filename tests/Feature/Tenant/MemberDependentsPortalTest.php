@@ -11,6 +11,7 @@ use App\Services\AccountingService;
 use App\Services\MemberDependentsInsightsService;
 use App\Services\Tenant\HouseholdMemberService;
 use App\Services\Tenant\ImpersonationService;
+use App\Services\Tenant\MemberRequestService;
 use App\Support\BusinessDaySettings;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
@@ -150,6 +151,121 @@ test('dependent member sees empty dependents table with add action', function ()
         ->assertSee(__('No dependents'));
 });
 
+test('parent can request remove dependent with separated email', function () {
+    $this->actingAs($this->parentUser, 'tenant');
+
+    Livewire::test(ListMyDependents::class)
+        ->callTableAction('requestRemoveDependent', data: [
+            'dependent_member_id' => $this->dependent->id,
+            'separated_email' => 'separated.child@dependents.test',
+        ])
+        ->assertHasNoErrors()
+        ->assertNotified(__('Request submitted'));
+
+    $request = MemberRequest::query()
+        ->where('requester_member_id', $this->parent->id)
+        ->where('type', MemberRequest::TYPE_REMOVE_DEPENDENT)
+        ->first();
+
+    expect($request)->not->toBeNull()
+        ->and($request->payload['dependent_member_id'])->toBe($this->dependent->id)
+        ->and($request->payload['separated_email'])->toBe('separated.child@dependents.test');
+
+    expect($this->dependent->fresh()->parent_member_id)->toBe($this->parent->id);
+});
+
+test('parent remove dependent rejects duplicate separated email', function () {
+    $this->actingAs($this->parentUser, 'tenant');
+
+    Livewire::test(ListMyDependents::class)
+        ->callTableAction('requestRemoveDependent', data: [
+            'dependent_member_id' => $this->dependent->id,
+            'separated_email' => 'parent@dependents.test',
+        ])
+        ->assertHasTableActionErrors(['separated_email']);
+
+    expect(MemberRequest::query()->where('type', MemberRequest::TYPE_REMOVE_DEPENDENT)->count())->toBe(0);
+});
+
+test('admin approving remove dependent applies separated email', function () {
+    $admin = User::create([
+        'name' => 'Remove Dependent Admin',
+        'email' => 'remove-dependent-admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $request = app(MemberRequestService::class)->submit($this->parent, MemberRequest::TYPE_REMOVE_DEPENDENT, [
+        'dependent_member_id' => $this->dependent->id,
+        'separated_email' => 'separated.child@dependents.test',
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+    $this->actingAs($admin, 'tenant');
+
+    app(MemberRequestService::class)->approve($request->fresh(), $admin);
+
+    $this->dependent->refresh();
+    $this->dependentUser->refresh();
+
+    expect($this->dependent->parent_member_id)->toBeNull()
+        ->and($this->dependent->email)->toBe('separated.child@dependents.test')
+        ->and($this->dependentUser->email)->toBe('separated.child@dependents.test');
+});
+
+test('dependents page lists household request status', function () {
+    MemberRequest::query()->create([
+        'requester_member_id' => $this->parent->id,
+        'type' => MemberRequest::TYPE_ADD_DEPENDENT,
+        'status' => MemberRequest::STATUS_PENDING,
+        'payload' => ['details' => 'Add cousin to household.'],
+    ]);
+
+    $this->actingAs($this->parentUser, 'tenant');
+
+    Livewire::test(ListMyDependents::class)
+        ->assertSuccessful()
+        ->assertSee(__('Household requests'))
+        ->assertSee(__('Add dependent'))
+        ->assertSee('Add cousin to household.');
+});
+
+test('add dependent request notifies admins and member on review', function () {
+    $admin = User::create([
+        'name' => 'Dependents Admin',
+        'email' => 'dependents-admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $this->actingAs($this->parentUser, 'tenant');
+
+    Livewire::test(ListMyDependents::class)
+        ->callTableAction('requestAddDependent', data: [
+            'details' => 'Please add my cousin.',
+        ])
+        ->assertHasNoErrors();
+
+    $request = MemberRequest::query()->latest('id')->firstOrFail();
+
+    $adminNotification = $admin->fresh()->notifications()->firstOrFail();
+
+    expect($adminNotification->data['title'] ?? null)->toBe(__('New member request'))
+        ->and($adminNotification->data['actions'] ?? [])->not->toBeEmpty();
+
+    Filament::setCurrentPanel('tenant');
+    $this->actingAs($admin, 'tenant');
+
+    app(MemberRequestService::class)->approve($request->fresh(), $admin);
+
+    $memberNotification = $this->parentUser->fresh()->notifications()->firstOrFail();
+
+    expect($memberNotification->data['title'] ?? null)->toBe(__('Request approved'))
+        ->and($memberNotification->data['actions'] ?? [])->not->toBeEmpty();
+});
+
 test('sponsored dependent can request add dependent with new email and leave household', function () {
     $this->actingAs($this->dependentUser, 'tenant');
 
@@ -175,6 +291,74 @@ test('sponsored dependent can request add dependent with new email and leave hou
     expect($request)->not->toBeNull()
         ->and($request->payload['details'])->toBe('Please add my child Jane Doe.')
         ->and($request->payload['new_email'])->toBe('newparent@dependents.test');
+});
+
+test('sponsored dependent add dependent shows notification when duplicate pending request exists', function () {
+    MemberRequest::query()->create([
+        'requester_member_id' => $this->dependent->id,
+        'type' => MemberRequest::TYPE_ADD_DEPENDENT,
+        'status' => MemberRequest::STATUS_PENDING,
+        'payload' => ['details' => 'Earlier request'],
+    ]);
+
+    $this->actingAs($this->dependentUser, 'tenant');
+
+    Livewire::test(ListMyDependents::class)
+        ->callTableAction('requestAddDependent', data: [
+            'new_email' => 'newparent@dependents.test',
+            'details' => 'Second request attempt.',
+        ])
+        ->assertNotified(__('Could not submit'));
+
+    expect(MemberRequest::query()->where('type', MemberRequest::TYPE_ADD_DEPENDENT)->count())->toBe(1);
+});
+
+test('sponsored dependent add dependent rejects duplicate email on form', function () {
+    $this->actingAs($this->dependentUser, 'tenant');
+
+    Livewire::test(ListMyDependents::class)
+        ->callTableAction('requestAddDependent', data: [
+            'new_email' => 'parent@dependents.test',
+            'details' => 'Please add my child Jane Doe.',
+        ])
+        ->assertHasTableActionErrors(['new_email']);
+
+    expect($this->dependent->fresh()->parent_member_id)->toBe($this->parent->id)
+        ->and(MemberRequest::query()->where('type', MemberRequest::TYPE_ADD_DEPENDENT)->count())->toBe(0);
+});
+
+test('sponsored dependent add dependent rejects internal login email on form', function () {
+    $this->actingAs($this->dependentUser, 'tenant');
+
+    Livewire::test(ListMyDependents::class)
+        ->callTableAction('requestAddDependent', data: [
+            'new_email' => 'child@household.members.local',
+            'details' => 'Please add my child Jane Doe.',
+        ])
+        ->assertHasTableActionErrors(['new_email']);
+
+    expect($this->dependent->fresh()->parent_member_id)->toBe($this->parent->id);
+});
+
+test('sponsored dependent add dependent rejects invalid email format on form', function () {
+    $this->actingAs($this->dependentUser, 'tenant');
+
+    Livewire::test(ListMyDependents::class)
+        ->callTableAction('requestAddDependent', data: [
+            'new_email' => 'not-an-email',
+            'details' => 'Please add my child Jane Doe.',
+        ])
+        ->assertHasTableActionErrors(['new_email']);
+});
+
+test('sponsored dependent add dependent requires new email before submit', function () {
+    $this->actingAs($this->dependentUser, 'tenant');
+
+    Livewire::test(ListMyDependents::class)
+        ->callTableAction('requestAddDependent', data: [
+            'details' => 'Please add my child Jane Doe.',
+        ])
+        ->assertHasTableActionErrors(['new_email']);
 });
 
 test('dependent table row links to impersonation route', function () {

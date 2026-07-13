@@ -221,6 +221,29 @@ test('pending members exclude periods before import arrears cut-off', function (
         ->and($this->cycles->pendingMembersQueryForPeriod(11, 2025)->where('id', $member->id)->exists())->toBeTrue();
 });
 
+test('pending members with open ledger rows appear before import arrears cut-off', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-CUTOFF-PEND',
+        'name' => 'Cutoff Pending Member',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2021-02-01'),
+        'contribution_arrears_cutoff_date' => Carbon::parse('2025-11-05'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    Contribution::create([
+        'member_id' => $member->id,
+        'period' => Contribution::periodDate(10, 2025),
+        'amount' => 500,
+        'status' => 'pending',
+        'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
+    ]);
+
+    expect($this->cycles->pendingMembersQueryForPeriod(10, 2025)->where('id', $member->id)->exists())->toBeTrue()
+        ->and($this->cycles->pendingMembersQueryForPeriod(11, 2025)->where('id', $member->id)->exists())->toBeTrue();
+});
+
 test('pending members query can order by member cash account balance', function () {
     Carbon::setTestNow(Carbon::create(2026, 5, 20));
 

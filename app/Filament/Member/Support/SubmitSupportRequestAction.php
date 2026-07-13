@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Member\Support;
 
+use App\Filament\Support\AdminNotificationActions;
 use App\Filament\Support\RecipientDatabaseNotification;
 use App\Models\Tenant\SupportRequest;
 use App\Models\Tenant\User;
@@ -79,7 +80,10 @@ final class SubmitSupportRequestAction
                                     ]))
                                     ->body($body)
                                     ->icon('heroicon-o-chat-bubble-left-right')
-                                    ->iconColor('warning');
+                                    ->iconColor('warning')
+                                    ->actions([
+                                        AdminNotificationActions::reviewSupportRequest($supportRequest),
+                                    ]);
                             });
                         });
 

@@ -64,7 +64,7 @@ final class HouseholdDependentFilamentActions
                         ->label(__('Contact email'))
                         ->email()
                         ->maxLength(255)
-                        ->helperText(__('Optional. Leave blank to keep the member\'s current email.')),
+                        ->helperText(__('Optional. Must match the parent household email when provided; otherwise the member is linked under the household email.')),
                 ];
             })
             ->action(function (array $data, Action $action, Component $livewire) use ($resolveParent): void {

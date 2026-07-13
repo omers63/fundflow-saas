@@ -102,13 +102,14 @@ class HouseholdMemberService
         $this->validateParentAssignment($member, (int) $parent->id);
 
         $parentHouseholdEmail = $this->resolveParentHouseholdEmail($parent);
-        $contact = strtolower(trim($contactEmail ?? (string) ($member->email ?? '')));
 
-        if ($contact === '') {
-            $contact = $parentHouseholdEmail;
+        if ($contactEmail !== null) {
+            $requestedContact = strtolower(trim($contactEmail));
+
+            if ($requestedContact !== '' && $requestedContact !== $parentHouseholdEmail) {
+                throw new InvalidArgumentException(__('Dependents must use the household parent\'s email. Unlink the parent first if this member needs their own email.'));
+            }
         }
-
-        $this->assertDependentUsesHouseholdEmail($parentHouseholdEmail, $contact);
 
         $user = $member->user;
 
@@ -176,7 +177,7 @@ class HouseholdMemberService
 
         $newEmail = strtolower(trim($newEmail));
 
-        if (!$this->memberUserEmail->isDeliverableEmail($newEmail)) {
+        if (! $this->memberUserEmail->isDeliverableEmail($newEmail)) {
             throw new InvalidArgumentException(__('Enter a valid email address.'));
         }
 

@@ -106,7 +106,6 @@ class EditMember extends EditRecord
             return $householdMembers->assignToHousehold(
                 $record->fresh(),
                 $parent,
-                filled($data['email'] ?? null) ? (string) $data['email'] : null,
             );
         }
 

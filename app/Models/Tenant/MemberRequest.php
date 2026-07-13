@@ -167,8 +167,8 @@ class MemberRequest extends Model
         $payload = $this->payload ?? [];
 
         return match ($this->type) {
-            self::TYPE_ADD_DEPENDENT => Str::limit(trim((string) ($payload['details'] ?? '')), 120) ?: __('—'),
-            self::TYPE_REMOVE_DEPENDENT => $this->formatDependentLabel($payload['dependent_member_id'] ?? null),
+            self::TYPE_ADD_DEPENDENT => $this->formatAddDependentPayload($payload),
+            self::TYPE_REMOVE_DEPENDENT => $this->formatRemoveDependentPayload($payload),
             self::TYPE_OWN_ALLOCATION => isset($payload['requested_amount'])
             ? (string) (int) $payload['requested_amount']
             : __('—'),
@@ -197,5 +197,43 @@ class MemberRequest extends Model
         return $member instanceof Member
             ? $member->name.' ('.$member->member_number.')'
             : __('Member #:id', ['id' => $id]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function formatRemoveDependentPayload(array $payload): string
+    {
+        $parts = [$this->formatDependentLabel($payload['dependent_member_id'] ?? null)];
+
+        if (filled($payload['separated_email'] ?? null)) {
+            $parts[] = __('Separated email: :email', ['email' => $payload['separated_email']]);
+        }
+
+        return Str::limit(implode(' · ', $parts), 120);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function formatAddDependentPayload(array $payload): string
+    {
+        $parts = [];
+
+        if (filled($payload['new_email'] ?? null)) {
+            $parts[] = __('New parent email: :email', ['email' => $payload['new_email']]);
+        }
+
+        $details = trim((string) ($payload['details'] ?? ''));
+
+        if ($details !== '') {
+            $parts[] = $details;
+        }
+
+        if ($parts === []) {
+            return __('—');
+        }
+
+        return Str::limit(implode(' · ', $parts), 120);
     }
 }

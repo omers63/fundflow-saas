@@ -97,6 +97,7 @@ class ViewMemberRequest extends ViewRecord
                 ->requiresConfirmation()
                 ->modalHeading(__('Approve this request?'))
                 ->modalDescription(fn (): string => match ($this->record->type) {
+                    MemberRequest::TYPE_ADD_DEPENDENT => __('Review the dependent details (and new parent email if provided), then approve when the household link is complete.'),
                     MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => __('The member will be marked withdrawn and portal access will end.'),
                     MemberRequest::TYPE_FREEZE_MEMBERSHIP => __('The member will be marked inactive until unfrozen.'),
                     MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => __('The member will be set to active. Portal access stays blocked while arrears remain.'),

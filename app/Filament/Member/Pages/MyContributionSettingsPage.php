@@ -7,6 +7,7 @@ namespace App\Filament\Member\Pages;
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Support\AdminNotificationActions;
 use App\Filament\Support\RecipientDatabaseNotification;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
@@ -145,7 +146,10 @@ class MyContributionSettingsPage extends Page
                                         'new' => number_format($newAmount),
                                     ]))
                                     ->icon('heroicon-o-adjustments-horizontal')
-                                    ->iconColor('info');
+                                    ->iconColor('info')
+                                    ->actions([
+                                        AdminNotificationActions::reviewMember($member),
+                                    ]);
                             });
                         });
 

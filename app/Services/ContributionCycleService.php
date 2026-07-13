@@ -270,7 +270,7 @@ class ContributionCycleService
     {
         $policy = app(ContributionExemptionPolicy::class);
 
-        $candidateIds = Member::query()
+        $eligibilityIds = Member::query()
             ->contributionCycleEligible()
             ->collectibleForContributionPeriod($month, $year)
             ->whereDoesntHave('contributions', function (Builder $query) use ($month, $year): Builder {
@@ -282,9 +282,35 @@ class ContributionCycleService
                 return $query->whereNull('joined_at')
                     ->orWhere('joined_at', '<=', $periodStart->copy()->endOfMonth());
             })
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->all();
+
+        $pendingRecordIds = Contribution::query()
+            ->forPeriod($month, $year)
+            ->pending()
+            ->whereHas('member', fn (Builder $query): Builder => $query->contributionCycleEligible())
+            ->pluck('member_id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->all();
+
+        $mergedIds = array_values(array_unique(array_merge($eligibilityIds, $pendingRecordIds)));
+
+        if ($mergedIds === []) {
+            return Member::query()->whereRaw('0 = 1');
+        }
+
+        $candidateIds = Member::query()
+            ->whereIn('id', $mergedIds)
             ->with(['parent', 'cashAccount', 'loans'])
             ->get()
             ->reject(fn (Member $member): bool => $policy->isContributionExemptForCycle($member, $month, $year))
+            ->reject(fn (Member $member): bool => Contribution::query()
+                ->where('member_id', $member->id)
+                ->forPeriod($month, $year)
+                ->posted()
+                ->exists())
             ->pluck('id')
             ->map(fn (mixed $id): int => (int) $id)
             ->all();

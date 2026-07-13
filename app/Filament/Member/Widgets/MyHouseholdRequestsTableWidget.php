@@ -7,22 +7,15 @@ namespace App\Filament\Member\Widgets;
 use App\Filament\Member\Support\ViewMemberRequestAction;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
-use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberRequest;
-use App\Services\Tenant\MemberRequestService;
 use App\Support\Tenant\CurrentMember;
-use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Textarea;
-use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Validation\ValidationException;
 
 class MyHouseholdRequestsTableWidget extends TableWidget
 {
@@ -53,89 +46,10 @@ class MyHouseholdRequestsTableWidget extends TableWidget
 
     public function table(Table $table): Table
     {
-        $service = app(MemberRequestService::class);
-
         return TableRecordActionGroups::apply(
             $table
                 ->heading(__('Household requests'))
-                ->description(__('Ask administration to link a new dependent or remove someone from your household.'))
-                ->headerActions([
-                    Action::make('requestAddDependent')
-                        ->label(__('Add a dependent'))
-                        ->icon('heroicon-o-user-plus')
-                        ->color('success')
-                        ->schema([
-                            Textarea::make('details')
-                                ->label(__('Who should be added?'))
-                                ->required()
-                                ->rows(4)
-                                ->helperText(__('Include name and any details the office needs to link a new or existing member.')),
-                        ])
-                        ->action(function (array $data) use ($service): void {
-                            $member = CurrentMember::get();
-
-                            if ($member === null) {
-                                return;
-                            }
-
-                            try {
-                                $service->submit($member, MemberRequest::TYPE_ADD_DEPENDENT, [
-                                    'details' => $data['details'],
-                                ]);
-                                Notification::make()->title(__('Request submitted'))->success()->send();
-                            } catch (ValidationException $exception) {
-                                $this->validationToNotification($exception);
-                            }
-                        }),
-                    Action::make('applyForDependent')
-                        ->label(__('Apply for a dependent'))
-                        ->icon('heroicon-o-document-plus')
-                        ->color('primary')
-                        ->url(fn (): string => route('tenant.membership', ['on_behalf' => 1]))
-                        ->openUrlInNewTab(),
-                    Action::make('requestRemoveDependent')
-                        ->label(__('Remove a dependent'))
-                        ->icon('heroicon-o-user-minus')
-                        ->color('danger')
-                        ->visible(fn (): bool => CurrentMember::get()?->dependents()->exists() ?? false)
-                        ->schema([
-                            Select::make('dependent_member_id')
-                                ->label(__('Dependent'))
-                                ->options(function (): array {
-                                    $member = CurrentMember::get();
-
-                                    if ($member === null) {
-                                        return [];
-                                    }
-
-                                    return $member->dependents()
-                                        ->orderBy('member_number')
-                                        ->get()
-                                        ->mapWithKeys(fn (Member $dependent): array => [
-                                            $dependent->id => $dependent->member_number.' — '.$dependent->name,
-                                        ])
-                                        ->all();
-                                })
-                                ->required()
-                                ->searchable(),
-                        ])
-                        ->action(function (array $data) use ($service): void {
-                            $member = CurrentMember::get();
-
-                            if ($member === null) {
-                                return;
-                            }
-
-                            try {
-                                $service->submit($member, MemberRequest::TYPE_REMOVE_DEPENDENT, [
-                                    'dependent_member_id' => (int) $data['dependent_member_id'],
-                                ]);
-                                Notification::make()->title(__('Request submitted'))->success()->send();
-                            } catch (ValidationException $exception) {
-                                $this->validationToNotification($exception);
-                            }
-                        }),
-                ])
+                ->description(__('Track add or remove dependent requests submitted to administration.'))
                 ->filters([
                     SelectFilter::make('status')
                         ->options(MemberRequest::statusOptions()),
@@ -167,7 +81,7 @@ class MyHouseholdRequestsTableWidget extends TableWidget
                 ])
                 ->defaultSort('created_at', 'desc')
                 ->emptyStateHeading(__('No household requests'))
-                ->emptyStateDescription(__('Use the actions above to ask for a new dependent or to remove someone from your household.'))
+                ->emptyStateDescription(__('Use the table actions above to ask for a new dependent or to remove someone from your household.'))
                 ->toolbarActions([
                     BulkActionGroup::make([
                         TableToolbar::refreshBulkAction(),
@@ -175,16 +89,5 @@ class MyHouseholdRequestsTableWidget extends TableWidget
                 ]),
             [ViewMemberRequestAction::make()],
         );
-    }
-
-    protected function validationToNotification(ValidationException $exception): void
-    {
-        $message = collect($exception->errors())->flatten()->first() ?? $exception->getMessage();
-
-        Notification::make()
-            ->title(__('Could not submit'))
-            ->body($message)
-            ->danger()
-            ->send();
     }
 }

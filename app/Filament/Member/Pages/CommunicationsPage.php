@@ -64,9 +64,9 @@ class CommunicationsPage extends Page
     {
         return match ($this->activeTab) {
             'requests' => match ($this->requestsSection) {
-                    'membership' => __('Freeze, withdraw, or change your membership status.'),
-                    default => __('Message fund administrators and track responses.'),
-                },
+                'membership' => __('Freeze, withdraw, or change your membership status.'),
+                default => __('Message fund administrators and track responses.'),
+            },
             'alerts' => __('Past alerts and notifications delivered to your account.'),
             'faq' => __('Quick answers about contributions, loans, and account features.'),
             default => __('Inbox messages from fund administrators.'),

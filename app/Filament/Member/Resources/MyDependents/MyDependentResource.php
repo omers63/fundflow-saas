@@ -50,7 +50,7 @@ class MyDependentResource extends Resource
     {
         $member = CurrentMember::get();
 
-        if ($member === null || !$member->isParent()) {
+        if ($member === null || ! $member->isParent()) {
             return parent::getEloquentQuery()->whereRaw('1 = 0');
         }
 
