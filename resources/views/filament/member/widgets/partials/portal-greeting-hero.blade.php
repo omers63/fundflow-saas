@@ -1,7 +1,7 @@
 @php
-    $g = $greeting;
-    $currency = $currency ?? null;
-    $tone = $g['highlight_tone'] ?? 'default';
+        $g = $greeting;
+        $currency = $currency ?? null;
+    $tone = $g['card_tone'] ?? ($g['highlight_tone'] ?? 'emerald');
 @endphp
 
 <div @class([

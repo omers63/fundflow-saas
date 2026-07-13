@@ -72,8 +72,8 @@ $pool = $d['pool_health'];
             </div>
         </div>
     
-        {{-- ── 4 KPI stat cards ── --}}
-        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {{-- ── KPI stat cards ── --}}
+        <div class="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
             @foreach ($d['kpi_stats'] as $stat)
                 @php
     $subColor = match ($stat['sub_tone'] ?? '') {

@@ -15,10 +15,13 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
+use App\Services\AccountingService;
 use App\Services\TenantDashboardService;
 use App\Support\BusinessDay;
+use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
@@ -63,6 +66,65 @@ test('tenant dashboard kpi labels follow the active locale', function () {
     expect($labels)->toContain('تحصيل الدورة')
         ->and($labels)->toContain('أعضاء نشطون')
         ->and($labels)->toContain('استثناءات المطابقة');
+});
+
+test('tenant dashboard kpi includes collection arrears for open cycle', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    Carbon::setTestNow(Carbon::parse('2025-10-15'));
+
+    $user = User::create([
+        'name' => 'Arrears KPI Admin',
+        'email' => 'arrears-kpi-admin@fund.test',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    $member = Member::create([
+        'member_number' => 'ARR-KPI-1',
+        'name' => 'Arrears KPI Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2024-01-01'),
+        'disbursed_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-09-05'),
+        'status' => 'pending',
+    ]);
+
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 1000, 'is_master' => true]);
+    Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 5000, 'is_master' => true]);
+    Account::create(['type' => 'bank', 'name' => 'Master Bank', 'balance' => 2000, 'is_master' => true]);
+
+    $this->actingAs($user, 'tenant');
+
+    $kpis = collect($this->service->snapshot()['kpi_stats'])->keyBy('label');
+    $arrearsKpi = $kpis->get(__('Collection arrears'));
+
+    expect($kpis)->toHaveCount(5)
+        ->and($arrearsKpi)->not->toBeNull()
+        ->and($arrearsKpi['value'])->toBe('1')
+        ->and($arrearsKpi['sub_tone'])->toBe('danger')
+        ->and($arrearsKpi['url'])->toBe(LoanResource::listTabUrl('arrears'));
 });
 
 test('tenant dashboard snapshot includes greeting and workspace links', function () {

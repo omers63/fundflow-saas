@@ -175,6 +175,17 @@ final class ReconciliationSnapshotPresenter
                 'unposted' => number_format((int) ($check['bank_unposted_count'] ?? 0)),
                 'uncleared' => number_format((int) ($check['bank_uncleared_count'] ?? 0)),
             ]),
+            'collection_arrears_catalog' => ($check['severity'] ?? 'ok') === 'ok'
+                ? __(':contrib contrib periods · :emi EMIs before :period', [
+                    'contrib' => number_format((int) ($check['snapshot']['contribution_arrears_periods'] ?? 0)),
+                    'emi' => number_format((int) ($check['snapshot']['emi_arrears_installments'] ?? 0)),
+                    'period' => (string) ($check['period_label'] ?? '—'),
+                ])
+                : trans_choice(
+                    ':count catalog issue|:count catalog issues',
+                    (int) ($check['issue_count'] ?? 0),
+                    ['count' => number_format((int) ($check['issue_count'] ?? 0))],
+                ),
             'active_loans_schedule_vs_ledger', 'approved_loans_disbursement_vs_ledger', 'loan_disbursement_cash_payout_integrity' => trans_choice(
                 ':count loan mismatch|:count loan mismatches',
                 (int) ($check['mismatch_count'] ?? $check['issue_count'] ?? 0),

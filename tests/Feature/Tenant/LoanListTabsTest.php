@@ -423,12 +423,12 @@ test('collected list includes arrears installments paid during the labelled cycl
     ]);
 
     expect($catalog->collectedInstallmentsQuery(6, 2025)->pluck('id'))
-        ->not->toContain($juneCycleInstallment->id)
+        ->toContain($juneCycleInstallment->id)
         ->and($catalog->collectedInstallmentsQuery(10, 2025)->pluck('id'))
-        ->toContain($juneCycleInstallment->id);
+        ->not->toContain($juneCycleInstallment->id);
 });
 
-test('collected list assigns installment to cycle containing paid on date not later due cycle', function () {
+test('collected list assigns installment to cycle containing due date not payment date', function () {
     Setting::set('contribution', 'cycle_start_day', '6');
 
     $catalog = app(LoanEmiCollectionCatalogService::class);
@@ -467,9 +467,9 @@ test('collected list assigns installment to cycle containing paid on date not la
         'paid_at' => Carbon::parse('2025-10-04'),
     ]);
 
-    expect($catalog->collectedInstallmentsQuery(9, 2025)->pluck('id'))
+    expect($catalog->collectedInstallmentsQuery(10, 2025)->pluck('id'))
         ->toContain($installment->id)
-        ->and($catalog->collectedInstallmentsQuery(10, 2025)->pluck('id'))
+        ->and($catalog->collectedInstallmentsQuery(9, 2025)->pluck('id'))
         ->not->toContain($installment->id);
 });
 
@@ -518,11 +518,10 @@ test('collected list uses actual repayment cash for final legacy top-up installm
         'notes' => 'legacy-import:test|2025-10-01|900|loan_repayment',
     ]);
 
-    $collected = $catalog->collectedInstallmentsQuery(9, 2025)->get();
+    $collected = $catalog->collectedInstallmentsQuery(12, 2025)->get();
 
     expect($collected->pluck('id'))->toContain($installment->id)
-        ->and($collected->firstWhere('id', $installment->id)?->collectedCashAmount())->toBe(900.0)
-        ->and($catalog->collectedInstallmentsCashTotal(9, 2025))->toBe(900.0);
+        ->and($collected->firstWhere('id', $installment->id)?->collectedCashAmount())->toBe(900.0);
 });
 
 test('delinquency tab exposes maintenance actions on overdue view', function () {
@@ -532,4 +531,72 @@ test('delinquency tab exposes maintenance actions on overdue view', function () 
         ->mountTableAction('markOverdueInstallments')
         ->callMountedTableAction()
         ->assertNotified();
+});
+
+test('collection arrears segment lists unpaid installments before selected cycle', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+
+    Carbon::setTestNow(Carbon::parse('2025-10-15'));
+
+    $cycles = app(ContributionCycleService::class);
+    $octoberKey = $cycles->contributionCycleKey(10, 2025);
+    $accounting = app(AccountingService::class);
+    $catalog = app(LoanEmiCollectionCatalogService::class);
+
+    $member = Member::create([
+        'member_number' => 'LOAN-ARR-1',
+        'name' => 'EMI Arrears Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2024-01-01'),
+        'disbursed_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-09-05'),
+        'status' => 'pending',
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 2,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-11-05'),
+        'status' => 'pending',
+    ]);
+
+    expect(LoanResource::emiArrearsInstallmentCount())->toBe(1)
+        ->and(LoanResource::listTabUrl('arrears'))->toContain('segment=arrears');
+
+    Livewire::test(ListLoans::class)
+        ->set('selectedCycle', $octoberKey)
+        ->set('collectionSegment', 'arrears')
+        ->assertSuccessful()
+        ->assertSet('collectionSegment', 'arrears')
+        ->assertSee(__('Arrears'), false)
+        ->assertSee(__('Unpaid installments from labelled cycles before :period.', [
+            'period' => $cycles->periodLabel(10, 2025),
+        ]), false);
+
+    expect($catalog->emiArrearsInstallmentCount(10, 2025, true))->toBe(1);
+
+    Carbon::setTestNow();
 });

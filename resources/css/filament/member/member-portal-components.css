@@ -495,12 +495,53 @@
     position: relative;
     overflow: hidden;
     border-radius: var(--ff-panel-radius, 14px);
-    border: 1px solid #9dd9c4;
-    background: linear-gradient(135deg, #1d9e75 0%, #15803d 48%, #0f5132 100%);
     color: #fff;
     padding: 1rem 1.25rem;
     margin-block-end: 0.875rem;
     animation: ff-member-greeting-enter 0.55s ease-out both;
+}
+
+.ff-member-greeting--tone-emerald {
+    border-color: #9dd9c4;
+    background: linear-gradient(135deg, #1d9e75 0%, #15803d 48%, #0f5132 100%);
+}
+
+.ff-member-greeting--tone-amber {
+    border-color: #fcd34d;
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 48%, #b45309 100%);
+}
+
+.ff-member-greeting--tone-amber .ff-member-greeting__shape--two {
+    background: rgb(254 243 199 / 0.2);
+}
+
+.ff-member-greeting--tone-amber .ff-member-greeting__glow {
+    background:
+        radial-gradient(circle at 85% 15%, rgb(255 255 255 / 0.16), transparent 42%),
+        radial-gradient(circle at 15% 85%, rgb(254 243 199 / 0.24), transparent 38%);
+}
+
+.ff-member-greeting--tone-rose {
+    border-color: #fda4af;
+    background: linear-gradient(135deg, #f43f5e 0%, #e11d48 48%, #9f1239 100%);
+}
+
+.ff-member-greeting--tone-rose .ff-member-greeting__shape--two {
+    background: rgb(254 205 211 / 0.2);
+}
+
+.ff-member-greeting--tone-rose .ff-member-greeting__glow {
+    background:
+        radial-gradient(circle at 85% 15%, rgb(255 255 255 / 0.14), transparent 42%),
+        radial-gradient(circle at 15% 85%, rgb(254 205 211 / 0.24), transparent 38%);
+}
+
+.ff-member-greeting--tone-rose .ff-member-greeting__avatar {
+    box-shadow: 0 4px 14px rgb(159 18 57 / 0.28);
+}
+
+.ff-member-greeting--tone-amber .ff-member-greeting__avatar {
+    box-shadow: 0 4px 14px rgb(180 83 9 / 0.28);
 }
 
 @keyframes ff-member-greeting-enter {

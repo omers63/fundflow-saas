@@ -64,6 +64,7 @@ test('reconciliation report includes legacy check keys and control layer', funct
         'loan_installment_flow_integrity',
         'member_cash_transfer_integrity',
         'orphan_loan_accounts',
+        'collection_arrears_catalog',
     ])
         ->and($report['checks']['sms_transaction_posting_integrity']['severity'])->toBe('skipped')
         ->and($report)->toHaveKeys(['coverage_matrix', 'control_layer', 'pipeline', 'verdict'])

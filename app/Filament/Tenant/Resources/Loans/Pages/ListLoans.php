@@ -142,7 +142,10 @@ class ListLoans extends ListRecords
                 'collected' => __('Installments already collected from member cash for :period.', [
                     'period' => LoanResource::resolveListCycleLabel(),
                 ]),
-                default => __('Members with pending EMIs through :period. Apply from cash balance (open period and arrears only).', [
+                'arrears' => __('Unpaid installments from labelled cycles before :period.', [
+                    'period' => LoanResource::resolveListCycleLabel(),
+                ]),
+                default => __('Members with pending EMIs for :period. Apply from cash balance.', [
                     'period' => LoanResource::resolveListCycleLabel(),
                 ]),
             },

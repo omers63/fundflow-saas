@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services\Loans;
 
 use App\Models\Tenant\Contribution;
-use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\ContributionCycleService;
@@ -59,27 +58,11 @@ class LoanEmiCollectionCatalogService
     }
 
     /**
-     * Members with any unpaid EMI due on or before the open cycle end (open period + arrears).
+     * Members with unpaid EMIs assigned to the labelled collection cycle (due date in cycle window).
      */
     public function membersWithCollectableEmisQuery(int $month, int $year): Builder
     {
-        $cycleEnd = $this->cycles->cycleDueEndAt($month, $year)->toDateString();
-
-        return Member::query()
-            ->active()
-            ->whereHas('loans', function (Builder $loan) use ($cycleEnd): void {
-                $loan->whereIn('status', ['active', 'transferred'])
-                    ->whereHas('installments', function (Builder $installment) use ($cycleEnd): void {
-                        $installment
-                            ->whereIn('status', ['pending', 'overdue'])
-                            ->where(function (Builder $query): void {
-                                $query->whereNull('collection_status')
-                                    ->orWhereIn('collection_status', InstallmentCollectionStatus::openCollectionStates());
-                            })
-                            ->whereDate('due_date', '<=', $cycleEnd);
-                    });
-            })
-            ->with(['cashAccount', 'parent']);
+        return $this->membersWithPendingEmisQuery($month, $year);
     }
 
     public function primaryCollectableLoanIdForMember(Member $member, int $month, int $year): ?int
@@ -114,31 +97,7 @@ class LoanEmiCollectionCatalogService
      */
     public function collectableInstallmentsForMember(Member $member, int $month, int $year): Collection
     {
-        $cycleEnd = $this->cycles->cycleDueEndAt($month, $year)->toDateString();
-
-        return LoanInstallment::query()
-            ->whereIn('status', ['pending', 'overdue'])
-            ->where(function (Builder $query): void {
-                $query->whereNull('collection_status')
-                    ->orWhereIn('collection_status', InstallmentCollectionStatus::openCollectionStates());
-            })
-            ->whereHas('loan', function (Builder $loan) use ($member): void {
-                $loan->whereIn('status', ['active', 'transferred'])
-                    ->where('member_id', $member->id);
-            })
-            ->whereDate('due_date', '<=', $cycleEnd)
-            ->orderBy('due_date')
-            ->get()
-            ->filter(function (LoanInstallment $installment) use ($member): bool {
-                if ($installment->due_date === null) {
-                    return false;
-                }
-
-                [$cycleMonth, $cycleYear] = $this->cycles->cyclePeriodForDueDate($installment->due_date);
-
-                return ! Contribution::blocksLoanRepaymentForMemberPeriod($member, $cycleMonth, $cycleYear);
-            })
-            ->values();
+        return $this->collectableInstallmentsForMemberInPeriod($member, $month, $year);
     }
 
     public function pendingInstallmentCountForMember(Member $member, int $month, int $year): int
@@ -175,26 +134,13 @@ class LoanEmiCollectionCatalogService
      */
     public function applyForMember(Member $member, int $month, int $year): string
     {
-        $before = $this->pendingInstallmentCountForMember($member, $month, $year);
+        $results = [
+            'applied' => collect(),
+            'insufficient' => collect(),
+            'skipped' => collect(),
+        ];
 
-        if ($before === 0) {
-            return 'none';
-        }
-
-        $this->installmentCollection->onMemberCashIncreased($member->fresh() ?? $member);
-
-        $after = $this->pendingInstallmentCountForMember($member->fresh() ?? $member, $month, $year);
-        $settled = $before - $after;
-
-        if ($settled === 0) {
-            return 'no_cash';
-        }
-
-        if ($after > 0) {
-            return 'partial';
-        }
-
-        return 'collected';
+        return $this->applyForMemberForPeriod($member, $month, $year, $results);
     }
 
     /**
@@ -351,53 +297,95 @@ class LoanEmiCollectionCatalogService
         return $results;
     }
 
-    public function collectedInstallmentsQuery(int $month, int $year): Builder
+    public function emiArrearsInstallmentCount(int $month, int $year, ?bool $live = null): int
     {
-        [$start, $end] = $this->cycles->cycleDueDateBounds($month, $year);
-        $cycleStart = $this->cycles->cycleStartAt($month, $year);
-        $cycleEnd = $this->cycles->cycleDueEndAt($month, $year);
-        $cycleStartDate = $cycleStart->toDateString();
+        return $this->emiArrearsInstallmentsForPeriod($month, $year, $live)->count();
+    }
+
+    public function emiArrearsMemberCount(int $month, int $year, ?bool $live = null): int
+    {
+        return $this->emiArrearsInstallmentsForPeriod($month, $year, $live)
+            ->map(fn (LoanInstallment $installment): ?int => $installment->loan?->member_id)
+            ->filter()
+            ->unique()
+            ->count();
+    }
+
+    public function emiArrearsInstallmentsQuery(int $month, int $year, ?bool $live = null): Builder
+    {
+        $installmentIds = $this->emiArrearsInstallmentsForPeriod($month, $year, $live)
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->all();
+
+        if ($installmentIds === []) {
+            return LoanInstallment::query()->whereRaw('0 = 1');
+        }
 
         return LoanInstallment::query()
-            ->where('status', 'paid')
-            ->where(function (Builder $query) use ($start, $end, $cycleStart, $cycleEnd): void {
-                $query
-                    ->whereBetween('paid_at', [$cycleStart, $cycleEnd])
-                    ->orWhere(function (Builder $legacyDueInCycle) use ($start, $end): void {
-                        $legacyDueInCycle
-                            ->whereNull('paid_at')
-                            ->whereBetween('due_date', [$start, $end]);
-                    });
-            })
-            ->whereHas('loan', fn (Builder $loan): Builder => $loan
-                ->whereIn('status', ['active', 'transferred', 'completed', 'early_settled'])
-                ->where(fn (Builder $query): Builder => $this->applyRepaymentOverlapsCycleStart($query, $cycleStartDate)))
+            ->whereIn('id', $installmentIds)
             ->with(['loan.member']);
     }
 
     /**
-     * Loans still repaying, or closed on/after the labelled cycle start, belong in that cycle's collected list.
+     * Unpaid installments assigned to labelled cycles before the selected cycle.
+     *
+     * @return Collection<int, LoanInstallment>
      */
-    protected function applyRepaymentOverlapsCycleStart(Builder $query, string $cycleStart): Builder
+    public function emiArrearsInstallmentsForPeriod(int $month, int $year, ?bool $live = null): Collection
     {
-        $loansTable = (new Loan)->getTable();
-        $installmentsTable = (new LoanInstallment)->getTable();
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $live ??= $month === $openMonth && $year === $openYear;
 
-        return $query->where(function (Builder $openOrClosed) use ($cycleStart, $loansTable, $installmentsTable): void {
-            $openOrClosed
-                ->whereIn('status', ['active', 'transferred'])
-                ->orWhere(function (Builder $closed) use ($cycleStart, $loansTable, $installmentsTable): void {
-                    $closed
-                        ->whereIn('status', ['completed', 'early_settled'])
-                        ->whereRaw(
-                            "COALESCE(
-                                DATE({$loansTable}.settled_at),
-                                DATE({$loansTable}.completed_at),
-                                (SELECT MAX(DATE(paid_at)) FROM {$installmentsTable} li WHERE li.loan_id = {$loansTable}.id AND li.paid_at IS NOT NULL)
-                            ) >= ?",
-                            [$cycleStart],
-                        );
-                });
-        });
+        $context = app(LoanDelinquencyService::class)
+            ->contributionArrearsEvaluationContext($month, $year, $live);
+        $asOf = $context['as_of'];
+        $cycleStart = $this->cycles->cycleStartAt($month, $year)->toDateString();
+
+        return LoanInstallment::query()
+            ->whereIn('status', ['pending', 'overdue'])
+            ->where(function (Builder $query): void {
+                $query->whereNull('collection_status')
+                    ->orWhereIn('collection_status', InstallmentCollectionStatus::openCollectionStates());
+            })
+            ->whereDate('due_date', '<', $cycleStart)
+            ->whereHas('loan', function (Builder $loan): void {
+                $loan->whereIn('status', ['active', 'transferred']);
+            })
+            ->with(['loan.member'])
+            ->orderBy('due_date')
+            ->get()
+            ->filter(function (LoanInstallment $installment) use ($asOf): bool {
+                if ($installment->due_date === null) {
+                    return false;
+                }
+
+                [$cycleMonth, $cycleYear] = $this->cycles->cyclePeriodForDueDate($installment->due_date);
+
+                if (! $asOf->greaterThan($this->cycles->deadline($cycleMonth, $cycleYear))) {
+                    return false;
+                }
+
+                $member = $installment->loan?->member;
+
+                if (! $member instanceof Member) {
+                    return false;
+                }
+
+                return ! Contribution::blocksLoanRepaymentForMemberPeriod($member, $cycleMonth, $cycleYear);
+            })
+            ->values();
+    }
+
+    public function collectedInstallmentsQuery(int $month, int $year): Builder
+    {
+        [$start, $end] = $this->cycles->cycleDueDateBounds($month, $year);
+
+        return LoanInstallment::query()
+            ->where('status', 'paid')
+            ->whereBetween('due_date', [$start, $end])
+            ->whereHas('loan', fn (Builder $loan): Builder => $loan
+                ->whereIn('status', ['active', 'transferred', 'completed', 'early_settled']))
+            ->with(['loan.member']);
     }
 }

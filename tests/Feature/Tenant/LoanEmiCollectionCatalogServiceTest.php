@@ -6,6 +6,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Setting;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
@@ -220,4 +221,104 @@ test('collected installment count reflects paid emis in open period', function (
     ]);
 
     expect($this->catalog->collectedInstallmentCount($month, $year))->toBe(1);
+});
+
+test('emi collection lists use labelled cycle from due date not payment window', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+
+    $member = Member::create([
+        'member_number' => 'EMI-CYCLE-4',
+        'name' => 'Cycle Label Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 11_000,
+        'amount_requested' => 11_000,
+        'amount_approved' => 11_000,
+        'amount_disbursed' => 11_000,
+        'interest_rate' => 10,
+        'term_months' => 20,
+        'monthly_repayment' => 5500,
+        'total_repaid' => 5500,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2024-04-08'),
+        'disbursed_at' => Carbon::parse('2024-04-08'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 17,
+        'amount' => 5500,
+        'due_date' => Carbon::parse('2025-10-05'),
+        'status' => 'paid',
+        'paid_at' => Carbon::parse('2025-10-27'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 18,
+        'amount' => 5500,
+        'due_date' => Carbon::parse('2025-11-05'),
+        'status' => 'pending',
+    ]);
+
+    expect($this->catalog->collectedInstallmentsQuery(9, 2025)->whereHas('loan', fn ($q) => $q->where('member_id', $member->id))->exists())->toBeTrue()
+        ->and($this->catalog->collectedInstallmentsQuery(10, 2025)->whereHas('loan', fn ($q) => $q->where('member_id', $member->id))->exists())->toBeFalse()
+        ->and($this->catalog->membersWithCollectableEmisQuery(10, 2025)->where('id', $member->id)->exists())->toBeTrue()
+        ->and($this->catalog->membersWithCollectableEmisQuery(9, 2025)->where('id', $member->id)->exists())->toBeFalse();
+});
+
+test('emi arrears installment count includes unpaid installments before selected cycle only', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+
+    Carbon::setTestNow(Carbon::parse('2025-10-15'));
+
+    $member = Member::create([
+        'member_number' => 'EMI-ARR-1',
+        'name' => 'Arrears Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2024-01-01'),
+        'disbursed_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-09-05'),
+        'status' => 'pending',
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 2,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-11-05'),
+        'status' => 'pending',
+    ]);
+
+    expect($this->catalog->emiArrearsInstallmentCount(10, 2025, true))->toBe(1)
+        ->and($this->catalog->emiArrearsInstallmentsQuery(10, 2025, true)->pluck('installment_number'))->toContain(1)
+        ->and($this->catalog->emiArrearsInstallmentsQuery(10, 2025, true)->pluck('installment_number'))->not->toContain(2);
 });

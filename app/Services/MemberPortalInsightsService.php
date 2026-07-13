@@ -472,6 +472,8 @@ final class MemberPortalInsightsService
             default => 'inactive',
         };
 
+        $cardTone = $this->resolveGreetingCardTone($member, $arrears, $postedThisCycle);
+
         /** @var list<array{label: string, icon: string, url: ?string, tone: string}> $pills */
         $pills = [];
 
@@ -574,6 +576,7 @@ final class MemberPortalInsightsService
             'highlight_cta_label' => $hero['cta_label'],
             'highlight_cta_url' => $hero['cta_url'],
             'highlight_tone' => $hero['tone'],
+            'card_tone' => $cardTone,
             'member_number' => $member->member_number,
             'status' => $member->status,
             'status_label' => Member::statusOptions()[$member->status] ?? $member->status,
@@ -1013,6 +1016,27 @@ final class MemberPortalInsightsService
     {
         return ! $postedThisCycle
             && $member->hasActiveLoanRepaymentObligation();
+    }
+
+    /**
+     * Greeting hero background heatmap: red for arrears, amber for current-cycle dues, green when clear.
+     *
+     * @param  array{has_arrears: bool, is_delinquent: bool}  $arrears
+     */
+    private function resolveGreetingCardTone(Member $member, array $arrears, bool $postedThisCycle): string
+    {
+        if (($arrears['is_delinquent'] ?? false) || ($arrears['has_arrears'] ?? false)) {
+            return 'danger';
+        }
+
+        if (
+            $this->loanRepaymentCycleAttentionApplies($member, $postedThisCycle)
+            || $this->contributionNotPostedApplies($member, $postedThisCycle)
+        ) {
+            return 'amber';
+        }
+
+        return 'emerald';
     }
 
     /**

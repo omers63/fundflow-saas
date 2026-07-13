@@ -289,3 +289,97 @@ test('member dashboard renders arabic labels with western digits for amounts', f
         ->assertSee('ff-sar-symbol__img', false)
         ->assertDontSee('١٬٥٠٠', false);
 });
+
+test('member greeting card uses amber heatmap when current cycle contribution is due', function () {
+    $cycles = app(ContributionCycleService::class);
+    [$month, $year] = $cycles->currentOpenPeriod();
+    $cycleStart = $cycles->cycleStartAt($month, $year);
+
+    Contribution::query()->where('member_id', $this->member->id)->delete();
+    $this->member->update([
+        'joined_at' => $cycleStart,
+        'contribution_arrears_cutoff_date' => $cycleStart->toDateString(),
+    ]);
+
+    Filament::setCurrentPanel('member');
+    app()->setLocale('en');
+
+    $snapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
+
+    expect($snapshot['greeting']['card_tone'])->toBe('amber');
+
+    $this->actingAs($this->memberUser, 'tenant');
+
+    $this->get('http://' . $this->domain . '/member')
+        ->assertSuccessful()
+        ->assertSee('ff-member-greeting--tone-amber', false);
+});
+
+test('member greeting card uses green heatmap when current cycle is posted', function () {
+    $cycles = app(ContributionCycleService::class);
+    [$month, $year] = $cycles->currentOpenPeriod();
+    $cycleStart = $cycles->cycleStartAt($month, $year);
+
+    Contribution::query()->where('member_id', $this->member->id)->delete();
+    $this->member->update([
+        'joined_at' => $cycleStart,
+        'contribution_arrears_cutoff_date' => $cycleStart->toDateString(),
+    ]);
+
+    Contribution::create([
+        'member_id' => $this->member->id,
+        'period' => Contribution::periodDate($month, $year),
+        'amount' => 1000,
+        'status' => 'posted',
+        'posted_at' => now(),
+    ]);
+
+    Filament::setCurrentPanel('member');
+    app()->setLocale('en');
+
+    $snapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
+
+    expect($snapshot['greeting']['card_tone'])->toBe('emerald');
+
+    $this->actingAs($this->memberUser, 'tenant');
+
+    $this->get('http://' . $this->domain . '/member')
+        ->assertSuccessful()
+        ->assertSee('ff-member-greeting--tone-emerald', false);
+});
+
+test('member greeting card uses red heatmap when member has arrears', function () {
+    Loan::query()->create([
+        'member_id' => $this->member->id,
+        'amount' => 5000,
+        'amount_requested' => 5000,
+        'amount_approved' => 5000,
+        'amount_disbursed' => 5000,
+        'interest_rate' => 0,
+        'term_months' => 10,
+        'monthly_repayment' => 500,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(3),
+        'approved_at' => now()->subMonths(3),
+        'disbursed_at' => now()->subMonths(3),
+    ])->installments()->create([
+                'installment_number' => 1,
+                'amount' => 500,
+                'due_date' => now()->subMonth(),
+                'status' => 'overdue',
+            ]);
+
+    Filament::setCurrentPanel('member');
+    app()->setLocale('en');
+
+    $snapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
+
+    expect($snapshot['greeting']['card_tone'])->toBe('danger');
+
+    $this->actingAs($this->memberUser, 'tenant');
+
+    $this->get('http://' . $this->domain . '/member')
+        ->assertSuccessful()
+        ->assertSee('ff-member-greeting--tone-rose', false);
+});

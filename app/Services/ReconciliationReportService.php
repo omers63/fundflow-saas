@@ -1090,6 +1090,24 @@ class ReconciliationReportService
             'accounts' => $orphanLoanAccounts,
         ];
 
+        // --- 5b) Collection arrears catalog (open cycle) ---
+        $arrearsCatalog = app(CollectionArrearsCatalogService::class)->catalogConsistencyIssues();
+        $arrearsCatalogIssues = $arrearsCatalog['issues'];
+
+        if ($arrearsCatalogIssues !== []) {
+            $incrementWarning();
+        }
+
+        $checks['collection_arrears_catalog'] = [
+            'label' => 'Collection arrears — catalog consistency (open cycle)',
+            'severity' => $arrearsCatalogIssues === [] ? 'ok' : 'warning',
+            'period_label' => $arrearsCatalog['period_label'],
+            'snapshot' => $arrearsCatalog['snapshot'],
+            'issue_count' => $arrearsCatalog['issue_count'],
+            'issues' => $arrearsCatalogIssues,
+            'note' => 'Verifies contribution and EMI arrears counts match their table queries and that no installment appears in both To collect and Arrears for the open labelled cycle.',
+        ];
+
         // --- 6) Pipeline ---
         $bankClearing = app(BankClearingMatchService::class);
 
@@ -1183,6 +1201,7 @@ class ReconciliationReportService
                 'loan_installment_flow_integrity' => $checks['loan_installment_flow_integrity']['severity'],
                 'member_cash_transfer_integrity' => $checks['member_cash_transfer_integrity']['severity'],
                 'orphan_loan_accounts' => $checks['orphan_loan_accounts']['severity'],
+                'collection_arrears_catalog' => $checks['collection_arrears_catalog']['severity'],
                 'paired_control_totals' => $checks['paired_control_totals']['severity'],
                 'active_loans' => $checks['active_loans_schedule_vs_ledger']['severity'],
                 'approved_loans' => $checks['approved_loans_disbursement_vs_ledger']['severity'],
@@ -1213,7 +1232,7 @@ class ReconciliationReportService
             $covRow('Bank pipeline: unposted imports / uncleared lines', ['bank_pipeline']),
             $covRow('SMS import rows → ledger posting hygiene', ['sms_transaction_posting_integrity']),
             $covRow('Member portal “post funds” → ledger', ['member_portal_posting_integrity']),
-            $covRow('Contribution cycle: rows vs member fund + master fund legs', ['contribution_flow_integrity']),
+            $covRow('Contribution cycle: rows vs member fund + master fund legs', ['contribution_flow_integrity', 'collection_arrears_catalog']),
             $covRow('Contributions: master fund credits & per-row ledger presence', ['contributions_ledger']),
             $covRow('Membership application subscription fee → cash + master fees', ['membership_application_fee_integrity']),
             $covRow('Annual subscription fee → master fees', ['subscription_fee_integrity']),

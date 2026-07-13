@@ -117,6 +117,18 @@ class LoanResource extends Resource
         return $catalog->collectedInstallmentCount($month, $year);
     }
 
+    public static function emiArrearsInstallmentCount(): int
+    {
+        $catalog = app(LoanEmiCollectionCatalogService::class);
+        [$month, $year] = self::resolveListCycle();
+
+        return $catalog->emiArrearsInstallmentCount(
+            $month,
+            $year,
+            self::isViewingOpenCycle(),
+        );
+    }
+
     public static function listTabUrl(string $tab, array $filters = [], ?string $cycle = null): string
     {
         $cycle ??= self::resolveListCycleKey();
@@ -124,6 +136,7 @@ class LoanResource extends Resource
         return match ($tab) {
             'emi_collect' => static::listUrl('collection', $filters, segment: 'collect', cycle: $cycle),
             'emi_collected' => static::listUrl('collection', $filters, segment: 'collected', cycle: $cycle),
+            'emi_arrears', 'arrears' => static::listUrl('collection', $filters, segment: 'arrears', cycle: $cycle),
             'overdue_installments' => static::listUrl('delinquency', $filters, view: 'overdue', cycle: $cycle),
             'guarantor_exposure' => static::listUrl('delinquency', $filters, view: 'guarantor', cycle: $cycle),
             'eligibility_reviews' => static::listUrl('portfolio', $filters, portfolioView: 'eligibility', cycle: $cycle),
@@ -158,6 +171,7 @@ class LoanResource extends Resource
         $segment ??= match ($tab) {
             'emi_collect', 'collect' => 'collect',
             'emi_collected', 'collected' => 'collected',
+            'emi_arrears', 'arrears' => 'arrears',
             default => null,
         };
 
@@ -324,20 +338,21 @@ class LoanResource extends Resource
         $livewire = Livewire::current();
 
         if ($livewire instanceof ListLoans && filled($livewire->collectionSegment)) {
-            return in_array($livewire->collectionSegment, ['collect', 'collected'], true)
+            return in_array($livewire->collectionSegment, ['collect', 'collected', 'arrears'], true)
                 ? $livewire->collectionSegment
                 : 'collect';
         }
 
         $segment = request()->string('segment')->toString();
 
-        if (in_array($segment, ['collect', 'collected'], true)) {
+        if (in_array($segment, ['collect', 'collected', 'arrears'], true)) {
             return $segment;
         }
 
         return match (request()->string('tab')->toString()) {
             'emi_collected', 'collected' => 'collected',
             'emi_collect', 'collect' => 'collect',
+            'arrears' => 'arrears',
             default => 'collect',
         };
     }
@@ -409,6 +424,7 @@ class LoanResource extends Resource
         return match (self::tableLayoutKey()) {
             'collection|collect' => 'emi_collect',
             'collection|collected' => 'emi_collected',
+            'collection|arrears' => 'emi_arrears',
             'delinquency|overdue', 'delinquency|guarantor' => 'delinquency',
             'portfolio|eligibility' => 'eligibility_reviews',
             default => 'portfolio',
@@ -427,6 +443,7 @@ class LoanResource extends Resource
         return match (self::tableLayoutKey()) {
             'collection|collect' => LoanEmiCollectionTables::configurePendingMembersTable($table),
             'collection|collected' => LoanEmiCollectionTables::configureCollectedTable($table),
+            'collection|arrears' => LoanEmiCollectionTables::configureArrearsTable($table),
             'delinquency|overdue' => LoanDelinquencyTables::configureOverdueInstallmentsTable($table),
             'delinquency|guarantor' => LoanDelinquencyTables::configureGuarantorExposureTable(
                 $table,

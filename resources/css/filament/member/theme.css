@@ -137,9 +137,20 @@
         ff-member-dashboard-glow 8s ease-in-out infinite alternate;
 }
 
-.dark .fi-body.fi-panel-member .ff-member-greeting {
+.dark .fi-body.fi-panel-member .ff-member-greeting--tone-emerald,
+.dark .fi-body.fi-panel-member .ff-member-greeting:not([class*='--tone-']) {
     border-color: rgb(110 201 168 / 0.55);
     background: linear-gradient(135deg, #14532d 0%, #166534 45%, #052e16 100%);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-greeting--tone-amber {
+    border-color: rgb(251 191 36 / 0.45);
+    background: linear-gradient(135deg, #78350f 0%, #92400e 45%, #451a03 100%);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-greeting--tone-rose {
+    border-color: rgb(251 113 133 / 0.45);
+    background: linear-gradient(135deg, #881337 0%, #9f1239 45%, #4c0519 100%);
 }
 
 @keyframes ff-member-dashboard-glow {

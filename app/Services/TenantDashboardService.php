@@ -53,6 +53,7 @@ final class TenantDashboardService
         protected MasterAccountsInsightsService $masterAccounts,
         protected BankAccountsInsightsService $bankAccounts,
         protected LoanDelinquencyService $delinquency,
+        protected CollectionArrearsCatalogService $collectionArrears,
         protected TreasuryForecastService $treasuryForecasts,
     ) {}
 
@@ -86,10 +87,12 @@ final class TenantDashboardService
             ? LoanEligibilityOverrideRequest::pending()->count()
             : 0;
         $openReconciliationCount = $this->openReconciliationCount();
+        $collectionArrears = $this->collectionArrears->openCycleSnapshot();
+        $openCycleArrearsTotal = (int) ($collectionArrears['total_items'] ?? 0);
         $attentionTotal = $pendingContributions + $pendingDeposits + $pendingApplications + $loanQueueCount
             + $pendingEligibilityReviews
             + ($delinquencyCounts['overdue_installments'] ?? 0)
-            + ($delinquencyCounts['contribution_arrears_periods'] ?? 0)
+            + $openCycleArrearsTotal
             + $openReconciliationCount;
 
         [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
@@ -105,6 +108,7 @@ final class TenantDashboardService
                 $collectionGauge,
                 $loanPortfolio,
                 $loanQueueCount,
+                $collectionArrears,
                 $openReconciliationCount,
             ),
             'quick_actions' => $this->quickActions(
@@ -113,6 +117,7 @@ final class TenantDashboardService
                 $pendingApplications,
                 $loanQueueCount,
                 $delinquencyCounts,
+                $collectionArrears,
                 $openPeriodLabel,
             ),
             'balances' => $this->balances($masters, $masterBalance, $currency),
@@ -128,6 +133,7 @@ final class TenantDashboardService
                 $loanQueueCount,
                 $pendingEligibilityReviews,
                 $delinquencyCounts,
+                $collectionArrears,
                 $bankSnapshot,
                 $openReconciliationCount,
             ),
@@ -471,10 +477,11 @@ final class TenantDashboardService
         int $pendingApplications,
         int $loanQueueCount,
         array $delinquencyCounts,
+        array $collectionArrears,
         string $openPeriodLabel,
     ): array {
         $delinquencyTotal = ($delinquencyCounts['overdue_installments'] ?? 0)
-            + ($delinquencyCounts['contribution_arrears_periods'] ?? 0)
+            + (int) ($collectionArrears['total_items'] ?? 0)
             + ($delinquencyCounts['guarantor_at_risk'] ?? 0);
 
         return Lang::formatLabeledRows([
@@ -654,10 +661,31 @@ final class TenantDashboardService
         int $loanQueueCount,
         int $pendingEligibilityReviews,
         array $delinquencyCounts,
+        array $collectionArrears,
         array $bankSnapshot,
         int $openReconciliationCount,
     ): array {
         $cards = [];
+        $arrearsTotal = (int) ($collectionArrears['total_items'] ?? 0);
+        $contribArrears = (int) ($collectionArrears['contribution_arrears_periods'] ?? 0);
+        $emiArrears = (int) ($collectionArrears['emi_arrears_installments'] ?? 0);
+        $periodLabel = (string) ($collectionArrears['period_label'] ?? '');
+
+        if ($arrearsTotal > 0) {
+            $cards[] = [
+                'title' => Lang::ui('Collection arrears'),
+                'body' => Lang::uiText(__('Unpaid items before :period — :contrib contribution period(s) and :emi EMI(s).', [
+                    'period' => $periodLabel,
+                    'contrib' => $contribArrears,
+                    'emi' => $emiArrears,
+                ])),
+                'tone' => 'rose',
+                'icon' => 'heroicon-o-exclamation-triangle',
+                'url' => $contribArrears > 0
+                    ? ContributionResource::listTabUrl('arrears')
+                    : LoanResource::listTabUrl('arrears'),
+            ];
+        }
 
         if ($pendingEligibilityReviews > 0) {
             $cards[] = [
@@ -811,9 +839,36 @@ final class TenantDashboardService
         array $collectionGauge,
         array $loanPortfolio,
         int $loanQueueCount,
+        array $collectionArrears,
         int $openReconciliationCount,
     ): array {
         $activeLoans = (int) ($loanPortfolio['pipeline']['active'] ?? 0);
+        $arrearsTotal = (int) ($collectionArrears['total_items'] ?? 0);
+        $contribArrears = (int) ($collectionArrears['contribution_arrears_periods'] ?? 0);
+        $emiArrears = (int) ($collectionArrears['emi_arrears_installments'] ?? 0);
+        $periodLabel = (string) ($collectionArrears['period_label'] ?? '');
+
+        $arrearsSubParts = [];
+
+        if ($contribArrears > 0) {
+            $arrearsSubParts[] = Lang::uiText(trans_choice(
+                ':n contrib period|:n contrib periods',
+                $contribArrears,
+                ['n' => $contribArrears],
+            ));
+        }
+
+        if ($emiArrears > 0) {
+            $arrearsSubParts[] = Lang::uiText(trans_choice(
+                ':n EMI|:n EMIs',
+                $emiArrears,
+                ['n' => $emiArrears],
+            ));
+        }
+
+        $arrearsUrl = $contribArrears > 0
+            ? ContributionResource::listTabUrl('arrears')
+            : LoanResource::listTabUrl('arrears');
 
         return Lang::formatLabeledRows([
             [
@@ -833,6 +888,16 @@ final class TenantDashboardService
                 'sub_tone' => $collectionGauge['tone'],
                 'icon' => 'heroicon-o-arrow-path-rounded-square',
                 'url' => ContributionResource::listTabUrl('collect'),
+            ],
+            [
+                'label' => Lang::ui('Collection arrears'),
+                'value' => (string) $arrearsTotal,
+                'sub' => $arrearsTotal > 0
+                    ? implode(' · ', $arrearsSubParts)
+                    : Lang::uiText(__('All current through :period', ['period' => $periodLabel])),
+                'sub_tone' => $arrearsTotal > 0 ? 'danger' : 'success',
+                'icon' => 'heroicon-o-exclamation-triangle',
+                'url' => $arrearsUrl,
             ],
             [
                 'label' => Lang::ui('Active loans'),

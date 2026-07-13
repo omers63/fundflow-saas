@@ -8,6 +8,7 @@ use App\Models\Tenant\LoanEligibilityOverrideRequest;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
@@ -207,6 +208,65 @@ test('emi collected snapshot reports paid installments for open period', functio
     expect($snapshot)->toHaveKeys(['hero', 'kpis', 'pipeline', 'open_period'])
         ->and($snapshot['pipeline']['collected_open_period'])->toBe(1)
         ->and($snapshot['hero']['tone'])->toBe('success');
+
+    Carbon::setTestNow();
+});
+
+test('emi arrears snapshot reports unpaid installments before selected cycle', function () {
+    Carbon::setTestNow(Carbon::parse('2025-10-15'));
+
+    Setting::set('contribution', 'cycle_start_day', '6');
+
+    $member = Member::create([
+        'member_number' => 'EMI-INS-ARR',
+        'name' => 'EMI Arrears Insights Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2024-01-01'),
+        'disbursed_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-09-05'),
+        'status' => 'pending',
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 2,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-11-05'),
+        'status' => 'pending',
+    ]);
+
+    $snapshot = $this->service->forContext('emi_arrears');
+
+    expect($snapshot)->toHaveKeys(['hero', 'kpis', 'pipeline', 'open_period'])
+        ->and($snapshot['pipeline']['arrears_installments'])->toBe(1)
+        ->and($snapshot['hero']['tone'])->toBe('danger');
+
+    $html = view('filament.tenant.widgets.loans.emi_arrears', ['d' => $snapshot])->render();
+
+    expect($html)->toContain('ff-app-insights')
+        ->and($html)->toContain((string) $snapshot['pipeline']['arrears_installments']);
 
     Carbon::setTestNow();
 });

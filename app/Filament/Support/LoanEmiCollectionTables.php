@@ -32,7 +32,7 @@ final class LoanEmiCollectionTables
         return TableGrouping::apply(
             $table
                 ->query(fn () => $catalog->membersWithCollectableEmisQuery($month, $year))
-                ->heading(__('To collect – EMIs through :period', [
+                ->heading(__('To collect – :period', [
                     'period' => $catalog->periodLabel($month, $year),
                 ]))
                 ->defaultSort(fn (Builder $query, string $direction): Builder => MemberNumberSettings::applySequenceOrder($query, $direction))
@@ -157,7 +157,7 @@ final class LoanEmiCollectionTables
         return TableGrouping::apply(
             $table
                 ->query(fn () => $catalog->collectedInstallmentsQuery($month, $year))
-                ->heading(__('Collected – EMIs due through :period', [
+                ->heading(__('Collected – :period', [
                     'period' => $catalog->periodLabel($month, $year),
                 ]))
                 ->columns([
@@ -240,6 +240,84 @@ final class LoanEmiCollectionTables
                 ->whereColumn('loans.id', 'loan_installments.loan_id')
                 ->limit(1),
             $direction,
+        );
+    }
+
+    public static function configureArrearsTable(Table $table): Table
+    {
+        $catalog = app(LoanEmiCollectionCatalogService::class);
+        $currency = Setting::get('general', 'currency', 'USD');
+
+        return TableGrouping::apply(
+            $table
+                ->query(function () use ($catalog): Builder {
+                    [$month, $year] = LoanResource::resolveListCycle();
+
+                    return $catalog->emiArrearsInstallmentsQuery(
+                        $month,
+                        $year,
+                        LoanResource::isViewingOpenCycle(),
+                    );
+                })
+                ->heading(__('Arrears – EMIs before :period', [
+                    'period' => $catalog->periodLabel(...LoanResource::resolveListCycle()),
+                ]))
+                ->columns([
+                    TextColumn::make('loan.member.member_number')
+                        ->label(__('Member #'))
+                        ->sortable(query: fn (Builder $query, string $direction): Builder => MemberNumberSettings::applyOrderByLoanInstallmentMember($query, $direction))
+                        ->url(fn (LoanInstallment $record): ?string => MemberTableColumns::resolveMemberUrl(
+                            'loan.member.name',
+                            $record,
+                        )),
+                    TextColumn::make('loan.member.name')
+                        ->label(__('Member'))
+                        ->wrap()
+                        ->sortable(query: fn (Builder $query, string $direction): Builder => self::sortCollectedByMemberName($query, $direction))
+                        ->url(fn (LoanInstallment $record): ?string => MemberTableColumns::resolveMemberUrl(
+                            'loan.member.name',
+                            $record,
+                        )),
+                    LoanInstallmentTableColumns::cycle(),
+                    TextColumn::make('loan_id')
+                        ->label(__('Loan'))
+                        ->formatStateUsing(fn (int $state): string => '#'.$state)
+                        ->sortable()
+                        ->url(fn (LoanInstallment $record): ?string => self::collectedLoanViewUrl($record)),
+                    TextColumn::make('installment_number')
+                        ->label(__('#'))
+                        ->sortable(),
+                    TextColumn::make('due_date')
+                        ->date()
+                        ->sortable(),
+                    TextColumn::make('amount')
+                        ->money($currency),
+                    TextColumn::make('late_fee_amount')
+                        ->label(__('Late fee'))
+                        ->money($currency)
+                        ->placeholder(__('—')),
+                    TextColumn::make('status')
+                        ->badge()
+                        ->formatStateUsing(fn (string $state): string => match ($state) {
+                            'overdue' => __('Overdue'),
+                            default => __('Pending'),
+                        })
+                        ->color(fn (string $state): string => $state === 'overdue' ? 'danger' : 'warning'),
+                ])
+                ->recordAction(null)
+                ->recordUrl(fn (LoanInstallment $record): ?string => self::collectedLoanViewUrl($record))
+                ->recordActions(TableRecordActionGroups::wrap([]))
+                ->toolbarActions([
+                    BulkActionGroup::make([
+                        TableToolbar::refreshBulkAction(),
+                    ]),
+                ])
+                ->defaultSort('due_date')
+                ->emptyStateHeading(__('No EMI arrears'))
+                ->emptyStateDescription(__('Unpaid installments from labelled cycles before :period appear here.', [
+                    'period' => $catalog->periodLabel(...LoanResource::resolveListCycle()),
+                ])),
+            TableGrouping::loanInstallments(includeLoanMember: true),
         );
     }
 }

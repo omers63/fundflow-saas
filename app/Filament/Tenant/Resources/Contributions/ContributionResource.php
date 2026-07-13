@@ -113,7 +113,7 @@ class ContributionResource extends Resource
         return match ($tab) {
             'collect' => static::listUrl('cycle', cycle: $cycle, segment: 'collect'),
             'collected' => static::listUrl('cycle', cycle: $cycle, segment: 'collected'),
-            'arrears' => static::listUrl('ledger', cycle: $cycle, view: 'arrears'),
+            'arrears' => static::listUrl('cycle', cycle: $cycle, segment: 'arrears'),
             'contributions', 'ledger' => static::listUrl('ledger', cycle: $cycle),
             default => static::listUrl($tab, cycle: $cycle),
         };
@@ -181,7 +181,7 @@ class ContributionResource extends Resource
 
     public static function arrearsUrlForMember(int|Member $member): string
     {
-        return static::listUrl('ledger', static::memberFilter($member), view: 'arrears');
+        return static::listUrl('cycle', static::memberFilter($member), segment: 'arrears');
     }
 
     public static function memberFilterFromRequest(): ?int
@@ -258,20 +258,21 @@ class ContributionResource extends Resource
         $livewire = Livewire::current();
 
         if ($livewire instanceof ListContributions && filled($livewire->cycleSegment)) {
-            return in_array($livewire->cycleSegment, ['collect', 'collected'], true)
+            return in_array($livewire->cycleSegment, ['collect', 'collected', 'arrears'], true)
                 ? $livewire->cycleSegment
                 : 'collect';
         }
 
         $segment = request()->string('segment')->toString();
 
-        if (in_array($segment, ['collect', 'collected'], true)) {
+        if (in_array($segment, ['collect', 'collected', 'arrears'], true)) {
             return $segment;
         }
 
         return match (request()->string('tab')->toString()) {
             'collected' => 'collected',
             'collect' => 'collect',
+            'arrears' => 'arrears',
             default => 'collect',
         };
     }
@@ -434,9 +435,13 @@ class ContributionResource extends Resource
     public static function table(Table $table): Table
     {
         if (self::resolvePrimaryTab() === 'cycle') {
-            return self::resolveCycleSegment() === 'collected'
-                ? ContributionCycleTables::configureCollectedTable($table)
-                : ContributionCycleTables::configurePendingMembersTable($table);
+            return match (self::resolveCycleSegment()) {
+                'collected' => ContributionCycleTables::configureCollectedTable($table),
+                'arrears' => LoanDelinquencyTables::configureContributionArrearsTable(
+                    $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Contribution arrears'))),
+                ),
+                default => ContributionCycleTables::configurePendingMembersTable($table),
+            };
         }
 
         if (self::resolveLedgerView() === 'arrears') {

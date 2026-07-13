@@ -52,6 +52,7 @@ final class LoanInsightsService
             'eligibility_reviews' => $this->eligibilityReviewsSnapshot(),
             'emi_collect' => $this->emiCollectSnapshot(),
             'emi_collected' => $this->emiCollectedSnapshot(),
+            'emi_arrears' => $this->emiArrearsSnapshot(),
             default => [],
         };
     }
@@ -511,6 +512,77 @@ final class LoanInsightsService
                 'uncovered_amount' => $metrics['uncovered_amount'],
             ],
             'preview' => $preview,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function emiArrearsSnapshot(): array
+    {
+        $catalog = app(LoanEmiCollectionCatalogService::class);
+        [$month, $year] = LoanResource::resolveListCycle();
+        $currency = Setting::get('general', 'currency', 'USD');
+        $periodLabel = $catalog->periodLabel($month, $year);
+        $live = LoanResource::isViewingOpenCycle();
+        $arrearsCount = $catalog->emiArrearsInstallmentCount($month, $year, $live);
+        $arrearsMembers = $catalog->emiArrearsMemberCount($month, $year, $live);
+        $metrics = $this->aggregateEmiCollectMetrics($catalog, $month, $year);
+        $arrearsUrl = LoanResource::listCollectionSegmentUrl('arrears');
+
+        return [
+            'currency' => $currency,
+            'open_period' => ['label' => $periodLabel],
+            'hero' => [
+                'tone' => $arrearsCount > 0 ? 'danger' : 'success',
+                'title' => $arrearsCount > 0
+                    ? __('EMI arrears need attention')
+                    : __('No EMI arrears'),
+                'subtitle' => $arrearsCount > 0
+                    ? trans_choice(
+                        ':count unpaid installment before :period across :members member(s)|:count unpaid installments before :period across :members member(s)',
+                        $arrearsCount,
+                        ['count' => $arrearsCount, 'period' => $periodLabel, 'members' => $arrearsMembers],
+                    )
+                    : __('All labelled EMI cycles before :period are current.', ['period' => $periodLabel]),
+                'cta_label' => $arrearsCount > 0 ? __('Review arrears') : null,
+                'cta_url' => $arrearsCount > 0 ? $arrearsUrl : null,
+            ],
+            'kpis' => InsightKpi::linkMany([
+                ['key' => 'arrears', 'label' => __('Arrears'), 'value' => (string) $arrearsCount, 'sub' => __('Installments'), 'icon' => 'heroicon-o-calendar-days', 'accent' => 'rose', 'active' => $arrearsCount > 0, 'value_class' => $arrearsCount > 0 ? 'text-rose-600 dark:text-rose-400' : null],
+                ['key' => 'members', 'label' => __('Members'), 'value' => (string) $arrearsMembers, 'sub' => __('With arrears'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $arrearsMembers > 0],
+                ['key' => 'collect', 'label' => __('To collect'), 'value' => (string) $metrics['pending_members'], 'sub' => $periodLabel, 'icon' => 'heroicon-o-arrow-down-tray', 'accent' => 'sky', 'active' => $metrics['pending_members'] > 0],
+                ['key' => 'collected', 'label' => __('Collected'), 'value' => (string) $metrics['collected_count'], 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => $metrics['collected_count'] > 0],
+                ['key' => 'pending_emis', 'label' => __('Pending EMIs'), 'value' => (string) $metrics['total_pending_emis'], 'sub' => $periodLabel, 'icon' => 'heroicon-o-clock', 'accent' => 'violet', 'active' => $metrics['total_pending_emis'] > 0],
+                [
+                    'key' => 'overdue',
+                    'label' => __('Overdue'),
+                    'value' => (string) LoanInstallment::query()
+                        ->where('status', 'overdue')
+                        ->whereHas('loan', fn ($q) => $q->whereIn('status', ['active', 'transferred']))
+                        ->count(),
+                    'sub' => __('Installments'),
+                    'icon' => 'heroicon-o-exclamation-triangle',
+                    'accent' => 'rose',
+                    'active' => true,
+                ],
+            ], [
+                'arrears' => $arrearsUrl,
+                'members' => $arrearsUrl,
+                'collect' => LoanResource::listTabUrl('emi_collect'),
+                'collected' => LoanResource::listTabUrl('emi_collected'),
+                'pending_emis' => LoanResource::listTabUrl('emi_collect'),
+                'overdue' => LoanResource::listTabUrl('overdue_installments'),
+            ]),
+            'pipeline' => [
+                'arrears_installments' => $arrearsCount,
+                'arrears_members' => $arrearsMembers,
+                'missing_open_period' => $metrics['pending_members'],
+                'collected_open_period' => $metrics['collected_count'],
+                'arrears_url' => $arrearsUrl,
+                'collect_url' => LoanResource::listTabUrl('emi_collect'),
+                'collected_url' => LoanResource::listTabUrl('emi_collected'),
+            ],
         ];
     }
 

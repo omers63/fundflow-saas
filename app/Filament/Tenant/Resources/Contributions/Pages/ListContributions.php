@@ -175,6 +175,9 @@ class ListContributions extends ListRecords
             'collected' => __('Contributions already posted for :period.', [
                 'period' => $periodLabel,
             ]),
+            'arrears' => __('Unposted contribution periods before :period (since each member joined).', [
+                'period' => $periodLabel,
+            ]),
             default => __('Members who still owe for :period. Apply from cash balance or post manually on the ledger.', [
                 'period' => $periodLabel,
             ]),
