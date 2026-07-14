@@ -156,10 +156,10 @@ test('emi collect snapshot reports pending members and preview', function () {
 
     $snapshot = $this->service->forContext('emi_collect');
 
-    expect($snapshot)->toHaveKeys(['hero', 'kpis', 'pipeline', 'preview', 'open_period'])
-        ->and($snapshot['pipeline']['missing_open_period'])->toBe(1)
-        ->and($snapshot['preview'])->toHaveCount(1)
-        ->and($snapshot['hero']['tone'])->toBe('amber');
+    expect($snapshot)->toHaveKeys(['hero', 'kpis', 'open_period', 'collection_amounts'])
+        ->and($snapshot['hero']['tone'])->toBe('amber')
+        ->and($snapshot['collection_amounts']['unrecovered_amount'])->toBe(1000.0)
+        ->and($snapshot['collection_amounts']['recovered_amount'])->toBe(0.0);
 
     Carbon::setTestNow();
 });
@@ -205,9 +205,11 @@ test('emi collected snapshot reports paid installments for open period', functio
 
     $snapshot = $this->service->forContext('emi_collected');
 
-    expect($snapshot)->toHaveKeys(['hero', 'kpis', 'pipeline', 'open_period'])
-        ->and($snapshot['pipeline']['collected_open_period'])->toBe(1)
-        ->and($snapshot['hero']['tone'])->toBe('success');
+    expect($snapshot)->toHaveKeys(['hero', 'kpis', 'open_period', 'collection_amounts'])
+        ->and($snapshot['pipeline']['collected_open_period'] ?? null)->toBeNull()
+        ->and($snapshot['hero']['tone'])->toBe('success')
+        ->and($snapshot['collection_amounts']['recovered_amount'])->toBe(1000.0)
+        ->and($snapshot['collection_amounts']['unrecovered_amount'])->toBe(0.0);
 
     Carbon::setTestNow();
 });
@@ -259,14 +261,14 @@ test('emi arrears snapshot reports unpaid installments before selected cycle', f
 
     $snapshot = $this->service->forContext('emi_arrears');
 
-    expect($snapshot)->toHaveKeys(['hero', 'kpis', 'pipeline', 'open_period'])
-        ->and($snapshot['pipeline']['arrears_installments'])->toBe(1)
-        ->and($snapshot['hero']['tone'])->toBe('danger');
+    expect($snapshot)->toHaveKeys(['hero', 'kpis', 'open_period', 'collection_amounts'])
+        ->and($snapshot['hero']['tone'])->toBe('danger')
+        ->and($snapshot['collection_amounts']['arrears_amount'])->toBe(1000.0);
 
     $html = view('filament.tenant.widgets.loans.emi_arrears', ['d' => $snapshot])->render();
 
     expect($html)->toContain('ff-app-insights')
-        ->and($html)->toContain((string) $snapshot['pipeline']['arrears_installments']);
+        ->and($html)->toContain(__('Total arrears amount'));
 
     Carbon::setTestNow();
 });

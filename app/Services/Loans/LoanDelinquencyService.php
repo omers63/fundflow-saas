@@ -548,6 +548,24 @@ class LoanDelinquencyService
             ->count();
     }
 
+    public function contributionArrearsAmountTotal(
+        ?int $memberId = null,
+        ?int $throughMonth = null,
+        ?int $throughYear = null,
+        ?bool $live = null,
+    ): float {
+        if ($throughMonth === null || $throughYear === null) {
+            [$throughMonth, $throughYear] = $this->cycles->currentOpenPeriod();
+            $live ??= true;
+        }
+
+        return round(
+            $this->contributionArrearsTableRecords($memberId, $throughMonth, $throughYear, $live)
+                ->sum(fn (array $row): float => (float) ($row['monthly_contribution_amount'] ?? 0) + (float) ($row['late_fee'] ?? 0)),
+            2,
+        );
+    }
+
     /**
      * @param  array{anchor_month: int, anchor_year: int, as_of: Carbon}  $context
      */

@@ -160,9 +160,13 @@ test('legacy contribution tab urls redirect to cycle and ledger routes', functio
 
 test('contribution actions appear on the correct tabs', function () {
     Livewire::test(ListContributions::class)
-        ->assertActionExists('generateMonthly')
+        ->assertTableActionExists('generateMonthly')
         ->assertTableActionDoesNotExist('importContributions')
         ->assertTableActionDoesNotExist('create');
+
+    Livewire::test(ListContributions::class)
+        ->set('cycleSegment', 'collected')
+        ->assertTableActionDoesNotExist('generateMonthly');
 
     Livewire::test(ListContributions::class)
         ->set('activeTab', 'ledger')
@@ -177,6 +181,14 @@ test('contribution actions appear on the correct tabs', function () {
         ->assertTableActionDoesNotExist('create')
         ->assertTableActionDoesNotExist('generateMonthly')
         ->assertTableActionDoesNotExist('importContributions');
+});
+
+test('collect segment table exposes cycle collection header group', function () {
+    $component = Livewire::test(ListContributions::class)
+        ->set('cycleSegment', 'collect');
+
+    expect($component->instance()->getTable()->getHeaderActions())->toHaveCount(1)
+        ->and($component->instance()->getTable()->getHeaderActions()[0]->getLabel())->toBe(__('Cycle collection'));
 });
 
 test('contribution tab insights use context-specific snapshots', function () {

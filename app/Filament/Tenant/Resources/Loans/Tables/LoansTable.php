@@ -26,6 +26,7 @@ class LoansTable
         $currency = Setting::get('general', 'currency', 'USD');
 
         $table = $table->columnManager(true)
+            ->modifyQueryUsing(fn ($query) => $query->with(['member', 'loanTier', 'fundTier', 'installments']))
             ->columns([
                 TextColumn::make('id')
                     ->label(__('Loan #'))

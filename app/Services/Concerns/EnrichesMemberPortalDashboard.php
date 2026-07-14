@@ -18,6 +18,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\MonthlyStatement;
 use App\Models\Tenant\Transaction;
 use App\Services\ContributionCycleService;
+use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightFormatter;
 use App\Support\MemberDateDisplay;
@@ -53,6 +54,19 @@ trait EnrichesMemberPortalDashboard
         }
 
         if ($member->hasActiveLoanRepaymentObligation()) {
+            $pendingOpenCycleEmi = app(LoanEmiCollectionCatalogService::class)
+                ->pendingInstallmentCountForMemberInPeriod($member, $curMonth, $curYear);
+
+            if ($pendingOpenCycleEmi === 0) {
+                return [
+                    'key' => 'emi_paid',
+                    'label' => __('EMI paid for :period', ['period' => $period]),
+                    'short' => __('Paid'),
+                    'tone' => 'emerald',
+                    'period' => $period,
+                ];
+            }
+
             return [
                 'key' => 'loan_repayment',
                 'label' => __('Under loan repayment'),

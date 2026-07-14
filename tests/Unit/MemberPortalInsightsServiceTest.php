@@ -115,6 +115,8 @@ test('member portal insights snapshot includes greeting and kpis', function () {
             'fund_name',
             'date',
             'subtitle',
+            'card_tone',
+            'card_urgency',
             'avatar_url',
             'initials',
             'profile_url',

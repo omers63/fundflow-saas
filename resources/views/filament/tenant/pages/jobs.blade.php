@@ -26,21 +26,21 @@
     'ff-tenant-tab-pills__item',
     'ff-tenant-tab-pills__item--active' => $jobsTab === 'status',
 ])>
-            {{ __('Status') }}
+            <x-ff-tab-pill-label :label="__('Status')" key="status" />
         </button>
         @if ($this->advancedUi)
-            <button type="button" wire:click="setJobsTab('catalog')" @class([
-        'ff-tenant-tab-pills__item',
-        'ff-tenant-tab-pills__item--active' => $jobsTab === 'catalog',
-    ])>
-                {{ __('Job catalog') }}
-            </button>
-            <button type="button" wire:click="setJobsTab('history')" @class([
-        'ff-tenant-tab-pills__item',
-        'ff-tenant-tab-pills__item--active' => $jobsTab === 'history',
-    ])>
-                {{ __('Run history') }}
-            </button>
+                    <button type="button" wire:click="setJobsTab('catalog')" @class([
+                'ff-tenant-tab-pills__item',
+                'ff-tenant-tab-pills__item--active' => $jobsTab === 'catalog',
+            ])>
+                        <x-ff-tab-pill-label :label="__('Job catalog')" key="catalog" />
+                        </button>
+                        <button type="button" wire:click="setJobsTab('history')" @class([
+                            'ff-tenant-tab-pills__item',
+                            'ff-tenant-tab-pills__item--active' => $jobsTab === 'history',
+                        ])>
+                        <x-ff-tab-pill-label :label="__('Run history')" key="history" />
+                    </button>
         @endif
     </div>
     

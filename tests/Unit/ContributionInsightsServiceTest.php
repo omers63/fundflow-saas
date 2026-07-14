@@ -4,6 +4,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Services\ContributionCycleService;
 use App\Services\ContributionInsightsService;
+use App\Support\Insights\DualProgressTrendBuilder;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
@@ -51,13 +52,33 @@ test('insights snapshot aggregates contribution pipeline metrics', function () {
         ->and($snapshot['failed'])->toBe(1)
         ->and($snapshot['late_count'])->toBe(1)
         ->and($snapshot['open_period']['label'])->not->toBeEmpty()
-        ->and($snapshot['forecast'])->toHaveKeys(['days_remaining', 'projected_close_percent', 'remaining_count', 'required_amount_per_day'])
-        ->and($snapshot['forecast']['remaining_count'])->toBeGreaterThanOrEqual(0)
-        ->and($snapshot['method_breakdown'])->not->toBeEmpty()
-        ->and($snapshot['trend'])->toHaveCount(6)
-        ->and($snapshot['sparkline'])->toHaveCount(8)
-        ->and($snapshot['oldest_pending'])->not->toBeEmpty()
-        ->and($snapshot['oldest_pending'][0])->toHaveKey('amount');
+        ->and($snapshot['pipeline'])->toHaveKeys([
+            'contributions_pending_url',
+            'cycle_url',
+            'arrears_url',
+        ])
+        ->and($snapshot['open_period']['collection_rate'])->toBeInt();
+});
+
+test('collect snapshot exposes cycle collection amount stats', function () {
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+    ]);
+
+    [$month, $year] = app(ContributionCycleService::class)->currentOpenPeriod();
+
+    Contribution::factory()->for($member)->posted()->create([
+        'period' => Contribution::periodDate($month, $year),
+        'amount' => 1500,
+    ]);
+
+    $snapshot = app(ContributionInsightsService::class)->forContext('collect');
+
+    expect($snapshot)->toHaveKeys(['collection_amounts'])
+        ->and($snapshot['collection_amounts']['recovered_amount'])->toBe(1500.0)
+        ->and($snapshot['collection_amounts']['unrecovered_amount'])->toBe(0.0);
 });
 
 test('collected snapshot amount kpi exposes numeric value for stat rendering', function () {
@@ -101,7 +122,7 @@ test('six month trend buckets contributions using normalized period keys', funct
         'status' => 'pending',
     ]);
 
-    $trend = collect(app(ContributionInsightsService::class)->snapshot()['trend']);
+    $trend = collect(DualProgressTrendBuilder::sixMonthFundCollectionTrend(app(ContributionCycleService::class)));
     $postedBucket = $trend->firstWhere('label', $twoMonthsAgo->locale(app()->getLocale())->translatedFormat('M'));
     $pendingBucket = $trend->firstWhere('label', $pendingMonth->locale(app()->getLocale())->translatedFormat('M'));
 
@@ -134,7 +155,7 @@ test('six month trend expresses bars relative to expected collections', function
         'amount' => 1000,
     ]);
 
-    $bucket = collect(app(ContributionInsightsService::class)->snapshot()['trend'])
+    $bucket = collect(DualProgressTrendBuilder::sixMonthFundCollectionTrend(app(ContributionCycleService::class)))
         ->firstWhere('label', Carbon::create($year, $month, 1)->locale(app()->getLocale())->translatedFormat('M'));
 
     expect($bucket)->not->toBeNull()

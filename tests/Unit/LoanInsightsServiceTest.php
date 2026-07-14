@@ -145,13 +145,13 @@ test('fund tiers snapshot reports utilization', function () {
         ->and($snapshot['breakdown'])->toHaveCount(1);
 });
 
-test('emi collected snapshot includes cycle forecast fields', function () {
+test('emi collected snapshot includes collection amount stats', function () {
     $snapshot = $this->service->emiCollectedSnapshot();
 
-    expect($snapshot['forecast'])->toHaveKeys([
-        'projected_close_percent',
-        'days_remaining',
-        'ready_cash_total',
-        'uncovered_amount',
-    ]);
+    expect($snapshot)->toHaveKeys(['collection_amounts', 'hero', 'kpis'])
+        ->and($snapshot['collection_amounts'])->toHaveKeys([
+            'arrears_amount',
+            'recovered_amount',
+            'unrecovered_amount',
+        ]);
 });

@@ -1,11 +1,11 @@
 @php
-    use App\Filament\Tenant\Resources\Contributions\ContributionResource;
-    use App\Services\ContributionCycleService;
+use App\Filament\Tenant\Resources\Contributions\ContributionResource;
+use App\Services\ContributionCycleService;
 
-    $cycles = app(ContributionCycleService::class);
-    $groups = $cycles->contributionCyclePillGroups();
-    $selectedKey = ContributionResource::resolveListCycleKey();
-    $isOpenCycle = ContributionResource::isViewingOpenCycle();
+$cycles = app(ContributionCycleService::class);
+$groups = $cycles->contributionCyclePillGroups();
+$selectedKey = ContributionResource::resolveListCycleKey();
+$isOpenCycle = ContributionResource::isViewingOpenCycle();
 @endphp
 
 <div
@@ -24,17 +24,17 @@
 
             <div class="ff-tenant-tab-pills flex flex-wrap items-center gap-2">
                 @foreach ($groups['visible'] as $key => $label)
-                    <button
-                        type="button"
-                        wire:click="$set('selectedCycle', @js($key))"
-                        wire:loading.attr="disabled"
-                        @class([
-                            'ff-tenant-tab-pills__item',
-                            'ff-tenant-tab-pills__item--active' => $selectedKey === $key,
-                        ])
-                    >
-                        {{ $label }}
-                    </button>
+                                    <button
+                                        type="button"
+                                        wire:click="$set('selectedCycle', @js($key))"
+                                        wire:loading.attr="disabled"
+                                        @class([
+                        'ff-tenant-tab-pills__item',
+                        'ff-tenant-tab-pills__item--active' => $selectedKey === $key,
+                    ])
+                                    >
+                                        <x-ff-tab-pill-label :label="$label" key="period" />
+                                    </button>
                 @endforeach
 
                 @if ($groups['more'] !== [])

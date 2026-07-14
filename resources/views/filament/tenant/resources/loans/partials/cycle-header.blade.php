@@ -1,11 +1,11 @@
 @php
-    use App\Filament\Tenant\Resources\Loans\LoanResource;
-    use App\Services\ContributionCycleService;
+use App\Filament\Tenant\Resources\Loans\LoanResource;
+use App\Services\ContributionCycleService;
 
-    $cycles = app(ContributionCycleService::class);
-    $groups = $cycles->contributionCyclePillGroups();
-    $selectedKey = LoanResource::resolveListCycleKey();
-    $isOpenCycle = LoanResource::isViewingOpenCycle();
+$cycles = app(ContributionCycleService::class);
+$groups = $cycles->contributionCyclePillGroups();
+$selectedKey = LoanResource::resolveListCycleKey();
+$isOpenCycle = LoanResource::isViewingOpenCycle();
 @endphp
 
 <div
@@ -24,12 +24,12 @@
 
             <div class="ff-tenant-tab-pills flex flex-wrap items-center gap-2">
                 @foreach ($groups['visible'] as $key => $label)
-                    <a href="{{ LoanResource::listWithCycle($key) }}" @class([
+                                    <a href="{{ LoanResource::listWithCycle($key) }}" @class([
                         'ff-tenant-tab-pills__item no-underline',
                         'ff-tenant-tab-pills__item--active' => $selectedKey === $key,
                     ])>
-                        {{ $label }}
-                    </a>
+                                        <x-ff-tab-pill-label :label="$label" key="period" />
+                                    </a>
                 @endforeach
 
                 @if ($groups['more'] !== [])

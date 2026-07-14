@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Tenant;
 
 use App\Filament\Member\Pages\CommunicationsPage;
+use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Support\AdminNotificationActions;
 use App\Filament\Support\MemberDatabaseNotification;
@@ -16,6 +17,7 @@ use App\Models\Tenant\User;
 use App\Services\DependentAllocationService;
 use App\Services\MemberStatusService;
 use App\Services\MemberWithdrawalSettlementService;
+use App\Services\OpenCycleContributionOverrideService;
 use App\Support\MemberUserEmail;
 use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
@@ -29,12 +31,17 @@ class MemberRequestService
         private readonly HouseholdMemberService $householdMembers,
         private readonly DependentAllocationService $allocations,
         private readonly MemberStatusService $statuses,
+        private readonly OpenCycleContributionOverrideService $openCycleOverrides,
     ) {}
 
     public function submit(Member $requester, string $type, array $payload): MemberRequest
     {
-        $this->validatePayload($requester, $type, $payload);
-        $this->assertNoPendingDuplicate($requester, $type);
+        if ($type === MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION) {
+            $payload = $this->openCycleOverrides->normalizePayload($requester, $payload);
+        } else {
+            $this->validatePayload($requester, $type, $payload);
+            $this->assertNoPendingDuplicate($requester, $type);
+        }
 
         return DB::transaction(function () use ($requester, $type, $payload): MemberRequest {
             if ($type === MemberRequest::TYPE_ADD_DEPENDENT && $requester->isSponsoredDependent()) {
@@ -88,6 +95,7 @@ class MemberRequestService
             MemberRequest::TYPE_FREEZE_MEMBERSHIP => $this->validateFreezeMembership($requester, $payload),
             MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => $this->validateUnfreezeMembership($requester),
             MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => $this->validateWithdrawMembership($requester, $payload),
+            MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION => null,
             default => throw ValidationException::withMessages(['type' => __('Invalid request type.')]),
         };
     }
@@ -258,6 +266,7 @@ class MemberRequestService
                 MemberRequest::TYPE_FREEZE_MEMBERSHIP => $this->applyFreezeMembership($requester, $payload, $options),
                 MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => $this->applyUnfreezeMembership($requester),
                 MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => $this->applyWithdrawMembership($requester, $payload, $options),
+                MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION => $this->openCycleOverrides->applyApproved($requester, $payload),
                 default => throw ValidationException::withMessages(['type' => __('Unknown request type.')]),
             };
 
@@ -438,13 +447,15 @@ class MemberRequestService
 
     protected function memberRequestUrlFor(MemberRequest $request): string
     {
-        if (
-            in_array($request->type, [
-                MemberRequest::TYPE_ADD_DEPENDENT,
-                MemberRequest::TYPE_REMOVE_DEPENDENT,
-            ], true)
-        ) {
+        if (in_array($request->type, [
+            MemberRequest::TYPE_ADD_DEPENDENT,
+            MemberRequest::TYPE_REMOVE_DEPENDENT,
+        ], true)) {
             return MyDependentResource::getUrl('index', panel: 'member');
+        }
+
+        if ($request->type === MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION) {
+            return MyContributionResource::getUrl('index', panel: 'member');
         }
 
         return CommunicationsPage::getUrl([

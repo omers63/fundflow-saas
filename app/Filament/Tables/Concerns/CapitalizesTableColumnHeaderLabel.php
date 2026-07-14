@@ -25,7 +25,9 @@ trait CapitalizesTableColumnHeaderLabel
             return $label;
         }
 
-        $icon = UiLabelIcons::forColumnName((string) $this->getName());
+        $icon = UiLabelIcons::forColumnName((string) $this->getName())
+            ?? UiLabelIcons::forLabel($string)
+            ?? UiLabelIcons::forKey('default');
 
         return UiLabelIcons::labeledHtml($string, $icon);
     }

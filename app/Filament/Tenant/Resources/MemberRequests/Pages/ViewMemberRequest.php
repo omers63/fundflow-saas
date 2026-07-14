@@ -101,6 +101,7 @@ class ViewMemberRequest extends ViewRecord
                     MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => __('The member will be marked withdrawn and portal access will end.'),
                     MemberRequest::TYPE_FREEZE_MEMBERSHIP => __('The member will be marked inactive until unfrozen.'),
                     MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => __('The member will be set to active. Portal access stays blocked while arrears remain.'),
+                    MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION => __('This cycle’s contribution due will be replaced with the requested amount. The member’s standing monthly allocation stays unchanged.'),
                     default => __('The change will be applied immediately for supported request types.'),
                 })
                 ->schema(function (): array {

@@ -23,6 +23,57 @@ class UiLabelIcons
     private const KEY_ICONS = [
         // List & resource tabs
         'all' => Heroicon::OutlinedSquares2x2,
+        'cycle' => Heroicon::OutlinedCalendarDays,
+        'collection' => Heroicon::OutlinedArrowDownTray,
+        'portfolio' => Heroicon::OutlinedBriefcase,
+        'delinquency' => Heroicon::OutlinedExclamationTriangle,
+        'pending' => Heroicon::OutlinedClock,
+        'approved' => Heroicon::OutlinedCheckCircle,
+        'rejected' => Heroicon::OutlinedXCircle,
+        'active' => Heroicon::OutlinedSignal,
+        'inactive' => Heroicon::OutlinedPauseCircle,
+        'withdrawn' => Heroicon::OutlinedArrowLeftOnRectangle,
+        'migration-pending' => Heroicon::OutlinedArrowPath,
+        'migration' => Heroicon::OutlinedArrowPath,
+        'profile' => Heroicon::OutlinedUser,
+        'eligibility' => Heroicon::OutlinedClipboardDocumentCheck,
+        'eligibility-reviews' => Heroicon::OutlinedClipboardDocumentCheck,
+        'guarantor-exposure' => Heroicon::OutlinedShieldCheck,
+        'overdue-installments' => Heroicon::OutlinedExclamationTriangle,
+        'overview' => Heroicon::OutlinedChartPie,
+        'exceptions' => Heroicon::OutlinedExclamationCircle,
+        'issues' => Heroicon::OutlinedExclamationCircle,
+        'history' => Heroicon::OutlinedClock,
+        'snapshots' => Heroicon::OutlinedCamera,
+        'methodology' => Heroicon::OutlinedBookOpen,
+        'audit' => Heroicon::OutlinedClipboardDocumentList,
+        'maintenance' => Heroicon::OutlinedWrenchScrewdriver,
+        'fiscal' => Heroicon::OutlinedCalendar,
+        'partial' => Heroicon::OutlinedAdjustmentsHorizontal,
+        'complete' => Heroicon::OutlinedCheckBadge,
+        'fund-tiers' => Heroicon::OutlinedRectangleStack,
+        'guarantor-rules' => Heroicon::OutlinedShieldCheck,
+        'fiscal-calendar' => Heroicon::OutlinedCalendarDays,
+        'sms-templates' => Heroicon::OutlinedDevicePhoneMobile,
+        'simple' => Heroicon::OutlinedEye,
+        'advanced' => Heroicon::OutlinedAdjustmentsHorizontal,
+        'status' => Heroicon::OutlinedSignal,
+        'catalog' => Heroicon::OutlinedQueueList,
+        'requests' => Heroicon::OutlinedInbox,
+        'alerts' => Heroicon::OutlinedBellAlert,
+        'faq' => Heroicon::OutlinedQuestionMarkCircle,
+        'support' => Heroicon::OutlinedLifebuoy,
+        'membership' => Heroicon::OutlinedIdentification,
+        'settle' => Heroicon::OutlinedBanknotes,
+        'apply' => Heroicon::OutlinedDocumentPlus,
+        'messages' => Heroicon::OutlinedChatBubbleLeftRight,
+        'automation' => Heroicon::OutlinedCog6Tooth,
+        'reconciliation' => Heroicon::OutlinedShieldCheck,
+        'admin' => Heroicon::OutlinedUserCircle,
+        'overrides' => Heroicon::OutlinedPencilSquare,
+        'recon' => Heroicon::OutlinedShieldCheck,
+        'open-cycle-contribution' => Heroicon::OutlinedArrowTrendingUp,
+        'open_cycle_contribution' => Heroicon::OutlinedArrowTrendingUp,
         'cash' => Heroicon::OutlinedBanknotes,
         'fund' => Heroicon::OutlinedCircleStack,
         'bank' => Heroicon::OutlinedBuildingLibrary,
@@ -107,6 +158,21 @@ class UiLabelIcons
         'late_fee_amount' => Heroicon::OutlinedExclamationCircle,
         'installment_number' => Heroicon::OutlinedHashtag,
         'loan_id' => Heroicon::OutlinedLink,
+        'pending_emis' => Heroicon::OutlinedClock,
+        'total_due' => Heroicon::OutlinedCurrencyDollar,
+        'loan_outstanding' => Heroicon::OutlinedScale,
+        'outstanding' => Heroicon::OutlinedScale,
+        'required' => Heroicon::OutlinedBanknotes,
+        'ready' => Heroicon::OutlinedCheckCircle,
+        'collect' => Heroicon::OutlinedArrowDownTray,
+        'collected' => Heroicon::OutlinedCheckCircle,
+        'arrears' => Heroicon::OutlinedExclamationTriangle,
+        'delinquent' => Heroicon::OutlinedUserMinus,
+        'overdue' => Heroicon::OutlinedExclamationTriangle,
+        'rate' => Heroicon::OutlinedChartPie,
+        'tier' => Heroicon::OutlinedRectangleStack,
+        'queue' => Heroicon::OutlinedQueueList,
+        'default' => Heroicon::OutlinedViewColumns,
         'gate' => Heroicon::OutlinedShieldCheck,
         'reason' => Heroicon::OutlinedChatBubbleLeftEllipsis,
         'paid_by_guarantor' => Heroicon::OutlinedUserPlus,
@@ -165,6 +231,32 @@ class UiLabelIcons
         }
 
         return null;
+    }
+
+    public static function forTab(?string $key = null, string|Htmlable|null $label = null): string|BackedEnum
+    {
+        if (filled($key)) {
+            $icon = self::forKey($key);
+
+            if ($icon !== null) {
+                return $icon;
+            }
+        }
+
+        if ($label !== null) {
+            $icon = self::forLabel($label);
+
+            if ($icon !== null) {
+                return $icon;
+            }
+        }
+
+        return self::forKey('default') ?? Heroicon::OutlinedViewColumns;
+    }
+
+    public static function tabPillHtml(string|Htmlable $label, ?string $key = null): Htmlable
+    {
+        return self::labeledHtml($label, self::forTab($key, $label));
     }
 
     public static function forColumnName(string $name): string|BackedEnum|null

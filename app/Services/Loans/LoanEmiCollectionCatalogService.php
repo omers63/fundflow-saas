@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Loans;
 
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\ContributionCycleService;
@@ -21,6 +22,11 @@ class LoanEmiCollectionCatalogService
         protected ContributionCycleService $cycles,
         protected LoanInstallmentCollectionService $installmentCollection,
     ) {}
+
+    /**
+     * @var array<string, Collection<int, LoanInstallment>>
+     */
+    private array $collectableInstallmentsCache = [];
 
     /**
      * @return array{0: int, 1: int}
@@ -70,6 +76,33 @@ class LoanEmiCollectionCatalogService
         $installment = $this->collectableInstallmentsForMember($member, $month, $year)->first();
 
         return $installment?->loan_id;
+    }
+
+    public function primaryCollectableLoanForMember(Member $member, int $month, int $year): ?Loan
+    {
+        return $this->collectableLoansForMember($member, $month, $year)->first();
+    }
+
+    /**
+     * @return Collection<int, Loan>
+     */
+    public function collectableLoansForMember(Member $member, int $month, int $year): Collection
+    {
+        return $this->collectableInstallmentsForMember($member, $month, $year)
+            ->loadMissing('loan')
+            ->map(fn (LoanInstallment $installment): ?Loan => $installment->loan)
+            ->filter()
+            ->unique('id')
+            ->values();
+    }
+
+    public function outstandingLoanBalanceForMember(Member $member, int $month, int $year): float
+    {
+        return round(
+            $this->collectableLoansForMember($member, $month, $year)
+                ->sum(fn (Loan $loan): float => $loan->getOutstandingBalance()),
+            2,
+        );
     }
 
     public function pendingMemberCount(int $month, int $year): int
@@ -148,9 +181,15 @@ class LoanEmiCollectionCatalogService
      */
     public function collectableInstallmentsForMemberInPeriod(Member $member, int $month, int $year): Collection
     {
+        $cacheKey = $member->id.'|'.$year.'-'.$month;
+
+        if (array_key_exists($cacheKey, $this->collectableInstallmentsCache)) {
+            return $this->collectableInstallmentsCache[$cacheKey];
+        }
+
         [$start, $end] = $this->cycles->cycleDueDateBounds($month, $year);
 
-        return LoanInstallment::query()
+        return $this->collectableInstallmentsCache[$cacheKey] = LoanInstallment::query()
             ->whereIn('status', ['pending', 'overdue'])
             ->where(function (Builder $query): void {
                 $query->whereNull('collection_status')
@@ -161,6 +200,7 @@ class LoanEmiCollectionCatalogService
                     ->where('member_id', $member->id);
             })
             ->whereBetween('due_date', [$start, $end])
+            ->with('loan')
             ->orderBy('due_date')
             ->get()
             ->filter(function (LoanInstallment $installment) use ($member): bool {
@@ -375,6 +415,29 @@ class LoanEmiCollectionCatalogService
                 return ! Contribution::blocksLoanRepaymentForMemberPeriod($member, $cycleMonth, $cycleYear);
             })
             ->values();
+    }
+
+    public function emiArrearsAmountTotal(int $month, int $year, ?bool $live = null): float
+    {
+        return round(
+            $this->emiArrearsInstallmentsForPeriod($month, $year, $live)
+                ->sum(fn (LoanInstallment $installment): float => (float) $installment->amount + (float) ($installment->late_fee_amount ?? 0)),
+            2,
+        );
+    }
+
+    public function collectableInstallmentsAmountTotal(int $month, int $year): float
+    {
+        $total = 0.0;
+
+        $this->membersWithCollectableEmisQuery($month, $year)
+            ->each(function (Member $member) use ($month, $year, &$total): void {
+                foreach ($this->collectableInstallmentsForMemberInPeriod($member, $month, $year) as $installment) {
+                    $total += (float) $installment->amount + (float) ($installment->late_fee_amount ?? 0);
+                }
+            });
+
+        return round($total, 2);
     }
 
     public function collectedInstallmentsQuery(int $month, int $year): Builder

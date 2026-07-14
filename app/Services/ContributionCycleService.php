@@ -266,8 +266,35 @@ class ContributionCycleService
             ->exists();
     }
 
+    /**
+     * @var array<string, list<int>>
+     */
+    private array $pendingMemberIdsByPeriod = [];
+
     public function pendingMembersQueryForPeriod(int $month, int $year): Builder
     {
+        $ids = $this->pendingMemberIdsForPeriod($month, $year);
+
+        if ($ids === []) {
+            return Member::query()->whereRaw('0 = 1');
+        }
+
+        return Member::query()
+            ->whereIn('id', $ids)
+            ->with(['parent', 'cashAccount']);
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function pendingMemberIdsForPeriod(int $month, int $year): array
+    {
+        $cacheKey = sprintf('%04d-%02d', $year, $month);
+
+        if (array_key_exists($cacheKey, $this->pendingMemberIdsByPeriod)) {
+            return $this->pendingMemberIdsByPeriod[$cacheKey];
+        }
+
         $policy = app(ContributionExemptionPolicy::class);
 
         $eligibilityIds = Member::query()
@@ -298,30 +325,31 @@ class ContributionCycleService
         $mergedIds = array_values(array_unique(array_merge($eligibilityIds, $pendingRecordIds)));
 
         if ($mergedIds === []) {
-            return Member::query()->whereRaw('0 = 1');
+            return $this->pendingMemberIdsByPeriod[$cacheKey] = [];
         }
+
+        $postedMemberIds = Contribution::query()
+            ->forPeriod($month, $year)
+            ->posted()
+            ->whereIn('member_id', $mergedIds)
+            ->pluck('member_id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->all();
+        $postedLookup = array_fill_keys($postedMemberIds, true);
 
         $candidateIds = Member::query()
             ->whereIn('id', $mergedIds)
             ->with(['parent', 'cashAccount', 'loans'])
             ->get()
             ->reject(fn (Member $member): bool => $policy->isContributionExemptForCycle($member, $month, $year))
-            ->reject(fn (Member $member): bool => Contribution::query()
-                ->where('member_id', $member->id)
-                ->forPeriod($month, $year)
-                ->posted()
-                ->exists())
+            ->reject(fn (Member $member): bool => isset($postedLookup[$member->id]))
             ->pluck('id')
             ->map(fn (mixed $id): int => (int) $id)
+            ->values()
             ->all();
 
-        if ($candidateIds === []) {
-            return Member::query()->whereRaw('0 = 1');
-        }
-
-        return Member::query()
-            ->whereIn('id', $candidateIds)
-            ->with(['parent', 'cashAccount']);
+        return $this->pendingMemberIdsByPeriod[$cacheKey] = $candidateIds;
     }
 
     public function postedContributionsQueryForPeriod(int $month, int $year): Builder
@@ -486,24 +514,43 @@ class ContributionCycleService
 
     /**
      * Cash required to settle a member's open or not-yet-created contribution for a period.
+     *
+     * @param  bool  $syncLateFees  When false (table/insights paint), skip write-side late-fee sync.
      */
-    public function requiredCollectionCashForMemberPeriod(Member $member, int $month, int $year): float
-    {
+    public function requiredCollectionCashForMemberPeriod(
+        Member $member,
+        int $month,
+        int $year,
+        bool $syncLateFees = true,
+    ): float {
         if ($member->isExemptFromContributions($month, $year) || (float) $member->monthly_contribution_amount <= 0) {
             return 0.0;
         }
 
-        $contribution = Contribution::query()
+        $contribution = null;
+
+        if ($member->relationLoaded('contributions')) {
+            $periodKey = Contribution::periodDate($month, $year);
+            $contribution = $member->contributions->first(
+                fn (Contribution $row): bool => Contribution::normalizePeriodKey($row->period) === $periodKey
+                    && $row->status === 'pending',
+            );
+        }
+
+        $contribution ??= Contribution::query()
             ->where('member_id', $member->id)
             ->forPeriod($month, $year)
             ->where('status', 'pending')
             ->first();
 
         if ($contribution !== null) {
-            app(ContributionCollectionCycleService::class)
-                ->syncContributionLateFeesBeforeCollection($contribution);
+            if ($syncLateFees) {
+                app(ContributionCollectionCycleService::class)
+                    ->syncContributionLateFeesBeforeCollection($contribution);
 
-            $contribution = $contribution->fresh();
+                $contribution = $contribution->fresh() ?? $contribution;
+            }
+
             $principalShortfall = max(
                 0.0,
                 (float) ($contribution->amount_due ?? $contribution->amount) - (float) ($contribution->amount_collected ?? 0),

@@ -233,6 +233,17 @@
     font-weight: inherit;
 }
 
+.fi-body .ff-tenant-tab-pills__item .fi-ff-label-with-icon,
+.fi-body .ff-member-tab-bar__item .fi-ff-label-with-icon {
+    gap: 0.375rem;
+}
+
+.fi-body .ff-member-tab-bar__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
 .fi-body .fi-tabs-item[data-ff-tab-color='primary'] .fi-tabs-item-label {
     background-color: rgb(var(--primary-50));
     color: rgb(var(--primary-700));

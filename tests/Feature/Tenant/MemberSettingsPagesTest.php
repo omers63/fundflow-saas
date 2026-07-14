@@ -1,5 +1,6 @@
 <?php
 
+use App\Filament\Member\Pages\MemberSettingsPage;
 use App\Filament\Member\Pages\MyContributionSettingsPage;
 use App\Filament\Member\Pages\MyNotificationPreferencesPage;
 use App\Filament\Member\Pages\SupportPage;
@@ -59,6 +60,26 @@ test('member can view contribution settings page', function () {
         ->assertSuccessful()
         ->assertSee(__('Monthly Contribution'), false)
         ->assertSee('1,000');
+});
+
+test('member contribution settings shows request larger cycle amount when unpaid for open cycle', function () {
+    app()->setLocale('en');
+
+    Livewire::test(MyContributionSettingsPage::class)
+        ->assertSuccessful()
+        ->assertActionVisible('requestOpenCycleAmount')
+        ->assertSee(__('Request larger cycle amount'), false)
+        ->assertSee(__('Larger amount for this cycle only?'), false);
+});
+
+test('member settings contributions tab exposes request larger cycle amount action', function () {
+    app()->setLocale('en');
+
+    Livewire::test(MemberSettingsPage::class)
+        ->set('activeTab', 'contributions')
+        ->assertSuccessful()
+        ->assertActionVisible('requestOpenCycleAmount')
+        ->assertSee(__('Request larger cycle amount'), false);
 });
 
 test('member can update monthly contribution amount when there are no arrears', function () {

@@ -10,6 +10,7 @@ use App\Filament\Member\Support\MemberNavigation;
 use App\Filament\Member\Support\ReturnToParentPortalAction;
 use App\Filament\Member\Support\SwitchHouseholdProfileAction;
 use App\Filament\Support\AdminNotificationActions;
+use App\Filament\Support\MemberContributionFilamentActions;
 use App\Filament\Support\RecipientDatabaseNotification;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberCommunicationPreference;
@@ -400,7 +401,23 @@ class MemberSettingsPage extends Page implements HasForms
             return [ReturnToParentPortalAction::make($this)];
         }
 
+        if ($this->activeTab === 'contributions') {
+            return [
+                $this->requestOpenCycleAmountAction(),
+            ];
+        }
+
         return [];
+    }
+
+    public function requestOpenCycleAmountAction(): Action
+    {
+        return MemberContributionFilamentActions::requestOpenCycleAmount();
+    }
+
+    public function canRequestLargerCycleAmount(): bool
+    {
+        return MemberContributionFilamentActions::canRequestOpenCycleAmount();
     }
 
     protected function currentMember(): ?Member

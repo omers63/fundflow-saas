@@ -10,7 +10,8 @@ class FundAssertMasterInvariantsCommand extends Command
 {
     use TenantAwareScheduledCommand;
 
-    protected $signature = 'fund:assert-master-invariants';
+    protected $signature = 'fund:assert-master-invariants
+        {--strict : Exit with failure when master pools are imbalanced (CI / manual gates)}';
 
     protected $description = 'Assert master fund/cash equals sum of member accounts';
 
@@ -24,11 +25,13 @@ class FundAssertMasterInvariantsCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->error(__('MASTER_IMBALANCE: fund delta :fund, cash delta :cash', [
+        $this->warn(__('MASTER_IMBALANCE: fund delta :fund, cash delta :cash', [
             'fund' => number_format($result['fund_delta'], 2),
             'cash' => number_format($result['cash_delta'], 2),
         ]));
 
-        return self::FAILURE;
+        // Scheduled runs must exit 0 once the check completed — imbalance is reported via
+        // console output and recon digests, not as a scheduler failure / log ERROR.
+        return $this->option('strict') ? self::FAILURE : self::SUCCESS;
     }
 }

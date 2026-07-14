@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models\Tenant;
 
+use App\Services\ContributionCycleService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
@@ -33,6 +34,8 @@ class MemberRequest extends Model
     public const TYPE_UNFREEZE_MEMBERSHIP = 'unfreeze_membership';
 
     public const TYPE_WITHDRAW_MEMBERSHIP = 'withdraw_membership';
+
+    public const TYPE_OPEN_CYCLE_CONTRIBUTION = 'open_cycle_contribution';
 
     protected $fillable = [
         'requester_member_id',
@@ -78,6 +81,7 @@ class MemberRequest extends Model
             self::TYPE_FREEZE_MEMBERSHIP => __('Freeze membership'),
             self::TYPE_UNFREEZE_MEMBERSHIP => __('Unfreeze membership'),
             self::TYPE_WITHDRAW_MEMBERSHIP => __('Withdraw from fund'),
+            self::TYPE_OPEN_CYCLE_CONTRIBUTION => __('Open-cycle contribution amount'),
             default => $type,
         };
     }
@@ -109,6 +113,7 @@ class MemberRequest extends Model
             self::TYPE_FREEZE_MEMBERSHIP => self::typeLabel(self::TYPE_FREEZE_MEMBERSHIP),
             self::TYPE_UNFREEZE_MEMBERSHIP => self::typeLabel(self::TYPE_UNFREEZE_MEMBERSHIP),
             self::TYPE_WITHDRAW_MEMBERSHIP => self::typeLabel(self::TYPE_WITHDRAW_MEMBERSHIP),
+            self::TYPE_OPEN_CYCLE_CONTRIBUTION => self::typeLabel(self::TYPE_OPEN_CYCLE_CONTRIBUTION),
         ];
     }
 
@@ -180,8 +185,42 @@ class MemberRequest extends Model
             self::TYPE_FREEZE_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Pause membership'),
             self::TYPE_UNFREEZE_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Resume membership'),
             self::TYPE_WITHDRAW_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Voluntary withdrawal'),
+            self::TYPE_OPEN_CYCLE_CONTRIBUTION => $this->formatOpenCycleContributionPayload($payload),
             default => __('—'),
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function formatOpenCycleContributionPayload(array $payload): string
+    {
+        $amount = isset($payload['amount']) ? number_format((float) $payload['amount'], 2) : __('—');
+        $month = (int) ($payload['period_month'] ?? 0);
+        $year = (int) ($payload['period_year'] ?? 0);
+        $period = ($month > 0 && $year > 0)
+            ? app(ContributionCycleService::class)->periodLabel($month, $year)
+            : __('—');
+        $target = $this->formatDependentLabel($payload['target_member_id'] ?? $this->requester_member_id);
+        $standing = isset($payload['standing_amount'])
+            ? number_format((float) $payload['standing_amount'], 2)
+            : null;
+
+        $parts = [
+            __('Period: :period', ['period' => $period]),
+            __('Member: :name', ['name' => $target]),
+            __('Requested: :amount', ['amount' => $amount]),
+        ];
+
+        if ($standing !== null) {
+            $parts[] = __('Standing allocation unchanged: :amount', ['amount' => $standing]);
+        }
+
+        if (filled($payload['note'] ?? null)) {
+            $parts[] = (string) $payload['note'];
+        }
+
+        return implode(' · ', $parts);
     }
 
     protected function formatDependentLabel(mixed $memberId): string

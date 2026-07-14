@@ -7,22 +7,22 @@
                     'notifications' => __('Notifications'),
                 ] as $tab => $label)
 
-                        <button type="button" wire:click="setTab('{{ $tab }}')" @class([
-                            'ff-member-tab-bar__item rounded-lg px-3 py-1.5 text-sm font-semibold transition',
-                            'bg-primary-600 text-white' => $activeTab === $tab,
-                            'bg-gray-100 text-gray-700 hover:bg-gray-200' => $activeTab !== $tab,
-                        ])>
-                                        {{ $label }}
-                            </button>
+                                        <button type="button" wire:click="setTab('{{ $tab }}')" @class([
+                        'ff-member-tab-bar__item rounded-lg px-3 py-1.5 text-sm font-semibold transition',
+                        'bg-primary-600 text-white' => $activeTab === $tab,
+                        'bg-gray-100 text-gray-700 hover:bg-gray-200' => $activeTab !== $tab,
+                    ])>
+                                                        <x-ff-tab-pill-label :label="$label" :key="$tab" />
+                                            </button>
             @endforeach
                 </div>
                 
                 <div wire:show="activeTab === 'profile'" class="ff-member-settings-tab">
                     @include('filament.member.settings.profile-tab', [
-                                            'user' => $profileUser,
-                                            'member' => $profileMember,
-                        'householdProfiles' => $householdProfiles,
-                    ])
+    'user' => $profileUser,
+    'member' => $profileMember,
+    'householdProfiles' => $householdProfiles,
+])
                     </div>
                 
         <div wire:show="activeTab === 'contributions'" class="ff-member-settings-tab">

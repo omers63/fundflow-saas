@@ -7,13 +7,13 @@
                     'alerts' => __('Alerts'),
                     'faq' => __('FAQ'),
                 ] as $tab => $label)
-                    <button type="button" wire:click="setTab('{{ $tab }}')" @class([
+                                    <button type="button" wire:click="setTab('{{ $tab }}')" @class([
                         'ff-member-tab-bar__item rounded-lg px-3 py-1.5 text-sm font-semibold transition',
                         'bg-primary-600 text-white' => $activeTab === $tab,
                         'bg-gray-100 text-gray-700 hover:bg-gray-200' => $activeTab !== $tab,
                     ])>
-                        {{ $label }}
-                    </button>
+                                        <x-ff-tab-pill-label :label="$label" :key="$tab" />
+                                    </button>
             @endforeach
         </div>
 

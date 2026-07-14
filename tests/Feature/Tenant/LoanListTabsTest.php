@@ -212,7 +212,14 @@ test('collected installment table links rows to the loan view', function () {
     $memberUrl = MemberResource::getUrl('view', ['record' => $member]);
 
     expect($table->getColumn('loan.member.member_number')->record($installment)->getUrl())->toBe($memberUrl)
-        ->and($table->getColumn('loan.member.name')->record($installment)->getUrl())->toBe($memberUrl);
+        ->and($table->getColumn('loan.member.name')->record($installment)->getUrl())->toBe($memberUrl)
+        ->and((string) $table->getColumn('outstanding')->getLabel())->toContain(__('Loan outstanding'))
+        ->and((string) $table->getColumn('outstanding')->getLabel())->toContain('fi-ff-label-with-icon');
+
+    $outstandingColumn = $table->getColumn('outstanding')->record($installment->fresh(['loan']));
+    $formattedOutstanding = $outstandingColumn->formatState($outstandingColumn->getState());
+    expect($outstandingColumn->getState())->toBeInstanceOf(Loan::class)
+        ->and((string) $formattedOutstanding)->toContain('ff-loan-outstanding-cell');
 
     Carbon::setTestNow();
 });
@@ -267,7 +274,77 @@ test('to collect table links rows to the member loan not the member profile', fu
     expect($recordUrl)->toBe(LoanResource::getUrl('view', ['record' => $loan->id]))
         ->and($recordUrl)->not->toBe($memberUrl)
         ->and($table->getColumn('member_number')->record($member)->getUrl($member->member_number))->toBe($memberUrl)
-        ->and($table->getColumn('name')->record($member)->getUrl($member->name))->toBe($memberUrl);
+        ->and($table->getColumn('name')->record($member)->getUrl($member->name))->toBe($memberUrl)
+        ->and((string) $table->getColumn('loan_outstanding')->getLabel())->toContain(__('Loan outstanding'))
+        ->and((string) $table->getColumn('loan_outstanding')->getLabel())->toContain('fi-ff-label-with-icon');
+
+    Carbon::setTestNow();
+});
+
+test('collection tabs can sort by loan outstanding column', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $cycles = app(ContributionCycleService::class);
+    [$month, $year] = $cycles->currentOpenPeriod();
+
+    $accounting = app(AccountingService::class);
+    $member = Member::create([
+        'member_number' => 'EMI-SORT-OUT',
+        'name' => 'EMI Outstanding Sort Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::create($year, $month, 10),
+        'status' => 'pending',
+    ]);
+
+    Livewire::test(ListLoans::class)
+        ->set('collectionSegment', 'collect')
+        ->call('sortTable', 'loan_outstanding')
+        ->assertSuccessful();
+
+    LoanInstallment::query()->where('loan_id', $loan->id)->update([
+        'status' => 'paid',
+        'paid_at' => now(),
+    ]);
+
+    Livewire::test(ListLoans::class)
+        ->set('collectionSegment', 'collected')
+        ->call('sortTable', 'outstanding')
+        ->assertSuccessful();
+
+    LoanInstallment::query()->where('loan_id', $loan->id)->update([
+        'status' => 'pending',
+        'paid_at' => null,
+    ]);
+
+    Livewire::test(ListLoans::class)
+        ->set('selectedCycle', $cycles->contributionCycleKey((int) Carbon::create($year, $month, 1)->addMonth()->month, (int) Carbon::create($year, $month, 1)->addMonth()->year))
+        ->set('collectionSegment', 'arrears')
+        ->call('sortTable', 'outstanding')
+        ->assertSuccessful();
 
     Carbon::setTestNow();
 });
@@ -313,6 +390,8 @@ test('collected segment pill shows installment count badge', function () {
         'status' => 'paid',
         'paid_at' => now(),
     ]);
+
+    LoanResource::flushListCountCaches();
 
     expect(LoanResource::collectedEmiInstallmentCount())->toBe($before + 1);
 
@@ -586,7 +665,7 @@ test('collection arrears segment lists unpaid installments before selected cycle
     expect(LoanResource::emiArrearsInstallmentCount())->toBe(1)
         ->and(LoanResource::listTabUrl('arrears'))->toContain('segment=arrears');
 
-    Livewire::test(ListLoans::class)
+    $component = Livewire::test(ListLoans::class)
         ->set('selectedCycle', $octoberKey)
         ->set('collectionSegment', 'arrears')
         ->assertSuccessful()
@@ -595,6 +674,16 @@ test('collection arrears segment lists unpaid installments before selected cycle
         ->assertSee(__('Unpaid installments from labelled cycles before :period.', [
             'period' => $cycles->periodLabel(10, 2025),
         ]), false);
+
+    $arrearsInstallment = $catalog->emiArrearsInstallmentsQuery(10, 2025, true)->first();
+    $arrearsInstallment?->loadMissing('loan');
+
+    $outstandingColumn = $component->instance()->getTable()->getColumn('outstanding')->record($arrearsInstallment);
+    $formattedOutstanding = $outstandingColumn->formatState($outstandingColumn->getState());
+
+    expect($arrearsInstallment)->not->toBeNull()
+        ->and($outstandingColumn->getState())->toBeInstanceOf(Loan::class)
+        ->and((string) $formattedOutstanding)->toContain('ff-loan-outstanding-cell');
 
     expect($catalog->emiArrearsInstallmentCount(10, 2025, true))->toBe(1);
 

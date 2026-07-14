@@ -2,14 +2,22 @@
         $g = $greeting;
         $currency = $currency ?? null;
     $tone = $g['card_tone'] ?? ($g['highlight_tone'] ?? 'emerald');
+    $urgency = isset($g['card_urgency']) ? max(0, min(1, (float) $g['card_urgency'])) : null;
 @endphp
 
-<div @class([
-    'ff-member-greeting ff-member-dashboard-hero',
-    'ff-member-greeting--tone-amber' => $tone === 'amber',
-    'ff-member-greeting--tone-rose' => in_array($tone, ['rose', 'danger'], true),
-    'ff-member-greeting--tone-emerald' => in_array($tone, ['success', 'emerald'], true),
-])>
+<div
+    @class([
+        'ff-member-greeting ff-member-dashboard-hero',
+        'ff-member-greeting--progressive' => $urgency !== null,
+        'ff-member-greeting--tone-amber' => $tone === 'amber',
+        'ff-member-greeting--tone-orange' => $tone === 'orange',
+        'ff-member-greeting--tone-rose' => in_array($tone, ['rose', 'danger'], true),
+        'ff-member-greeting--tone-emerald' => in_array($tone, ['success', 'emerald'], true),
+    ])
+    @if ($urgency !== null)
+        style="--ff-greeting-urgency: {{ number_format($urgency, 4, '.', '') }};"
+    @endif
+>
     <div class="ff-member-greeting__shape ff-member-greeting__shape--one" aria-hidden="true"></div>
     <div class="ff-member-greeting__shape ff-member-greeting__shape--two" aria-hidden="true"></div>
     <div class="ff-member-greeting__glow" aria-hidden="true"></div>

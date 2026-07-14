@@ -433,19 +433,9 @@ final class LoanInsightsService
 
         $pendingMembers = $metrics['pending_members'];
         $collectedCount = $metrics['collected_count'];
-        $collectedAmount = $metrics['collected_amount'];
         $totalPendingEmis = $metrics['total_pending_emis'];
         $readyWithCash = $metrics['ready_with_cash'];
-        $requiredCashTotal = $metrics['required_cash_total'];
         $collectionRate = $metrics['collection_rate'];
-        $cycleForecast = app(CycleForecastService::class)->project(
-            $month,
-            $year,
-            $collectedCount,
-            $collectedCount + $totalPendingEmis,
-            $collectedAmount,
-            $collectedAmount + $requiredCashTotal,
-        );
 
         $overdueInstallments = (int) LoanInstallment::query()
             ->where('status', 'overdue')
@@ -453,12 +443,6 @@ final class LoanInsightsService
             ->count();
 
         $collectUrl = LoanResource::listTabUrl('emi_collect');
-
-        $preview = $catalog->membersWithCollectableEmisQuery($month, $year)
-            ->limit(5)
-            ->get()
-            ->map(fn (Member $member): array => $this->emiCollectPreviewRow($catalog, $member, $month, $year))
-            ->all();
 
         return [
             'currency' => $currency,
@@ -497,21 +481,7 @@ final class LoanInsightsService
                 'ready_cash' => $collectUrl,
                 'overdue' => LoanResource::listTabUrl('overdue_installments'),
             ]),
-            'pipeline' => [
-                'missing_open_period' => $pendingMembers,
-                'collected_open_period' => $collectedCount,
-                'ready_with_cash' => $readyWithCash,
-                'required_cash' => $requiredCashTotal,
-                'overdue_installments' => $overdueInstallments,
-                'collect_url' => $collectUrl,
-                'collected_url' => LoanResource::listTabUrl('emi_collected'),
-                'overdue_url' => LoanResource::listTabUrl('overdue_installments'),
-            ],
-            'forecast' => $cycleForecast + [
-                'ready_cash_total' => $metrics['ready_cash_total'],
-                'uncovered_amount' => $metrics['uncovered_amount'],
-            ],
-            'preview' => $preview,
+            'collection_amounts' => $this->emiCycleCollectionAmounts($catalog, $month, $year),
         ];
     }
 
@@ -574,15 +544,7 @@ final class LoanInsightsService
                 'pending_emis' => LoanResource::listTabUrl('emi_collect'),
                 'overdue' => LoanResource::listTabUrl('overdue_installments'),
             ]),
-            'pipeline' => [
-                'arrears_installments' => $arrearsCount,
-                'arrears_members' => $arrearsMembers,
-                'missing_open_period' => $metrics['pending_members'],
-                'collected_open_period' => $metrics['collected_count'],
-                'arrears_url' => $arrearsUrl,
-                'collect_url' => LoanResource::listTabUrl('emi_collect'),
-                'collected_url' => LoanResource::listTabUrl('emi_collected'),
-            ],
+            'collection_amounts' => $this->emiCycleCollectionAmounts($catalog, $month, $year),
         ];
     }
 
@@ -600,14 +562,6 @@ final class LoanInsightsService
         $collectedCount = $metrics['collected_count'];
         $collectedAmount = $metrics['collected_amount'];
         $pendingMembers = $metrics['pending_members'];
-        $cycleForecast = app(CycleForecastService::class)->project(
-            $month,
-            $year,
-            $collectedCount,
-            $collectedCount + $metrics['total_pending_emis'],
-            $collectedAmount,
-            $collectedAmount + $metrics['required_cash_total'],
-        );
 
         $collectedUrl = LoanResource::listTabUrl('emi_collected');
 
@@ -653,16 +607,7 @@ final class LoanInsightsService
                 'collect' => LoanResource::listTabUrl('emi_collect'),
                 'overdue' => LoanResource::listTabUrl('overdue_installments'),
             ]),
-            'pipeline' => [
-                'collected_open_period' => $collectedCount,
-                'missing_open_period' => $pendingMembers,
-                'collected_url' => $collectedUrl,
-                'collect_url' => LoanResource::listTabUrl('emi_collect'),
-            ],
-            'forecast' => $cycleForecast + [
-                'ready_cash_total' => $metrics['ready_cash_total'],
-                'uncovered_amount' => $metrics['uncovered_amount'],
-            ],
+            'collection_amounts' => $this->emiCycleCollectionAmounts($catalog, $month, $year),
         ];
     }
 
@@ -1175,28 +1120,20 @@ final class LoanInsightsService
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array{arrears_amount: float, recovered_amount: float, unrecovered_amount: float}
      */
-    private function emiCollectPreviewRow(
-        LoanEmiCollectionCatalogService $catalog,
-        Member $member,
-        int $month,
-        int $year,
-    ): array {
-        $pending = $catalog->pendingInstallmentCountForMember($member, $month, $year);
-        $required = $catalog->requiredCashForMember($member, $month, $year);
-
+    private function emiCycleCollectionAmounts(LoanEmiCollectionCatalogService $catalog, int $month, int $year): array
+    {
         return [
-            'member' => $member->name,
-            'pending_emis' => $pending,
-            'required_cash' => $required,
-            'has_cash' => $catalog->memberHasSufficientCash($member, $month, $year),
-            'filter_url' => LoanResource::listTabUrl('emi_collect', [
-                'tableSearch' => $member->name,
-            ]),
+            'arrears_amount' => $catalog->emiArrearsAmountTotal($month, $year, LoanResource::isViewingOpenCycle()),
+            'recovered_amount' => $catalog->collectedInstallmentsCashTotal($month, $year),
+            'unrecovered_amount' => $catalog->collectableInstallmentsAmountTotal($month, $year),
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function eligibilityReviewRow(LoanEligibilityOverrideRequest $request, Carbon $now): array
     {
         $gateLabels = LoanEligibilityGate::labels();

@@ -31,6 +31,7 @@ use App\Models\Tenant\Transaction;
 use App\Services\Concerns\EnrichesMemberPortalDashboard;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanEligibilityOverrideRequestService;
+use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Support\BusinessDay;
 use App\Support\Insights\InsightFormatter;
 use App\Support\LoanSettings;
@@ -452,19 +453,43 @@ final class MemberPortalInsightsService
         $cashKpi = InsightFormatter::moneyKpi($cashBalance);
         $fundKpi = InsightFormatter::moneyKpi($fundBalance);
 
+        $loanRepaymentDueThisCycle = $this->loanRepaymentCycleAttentionApplies($member, $curMonth, $curYear);
+        $contributionDueThisCycle = $this->contributionNotPostedApplies($member, $postedThisCycle);
+        $hasOpenCycleDue = $loanRepaymentDueThisCycle || $contributionDueThisCycle;
+        $hasArrears = ($arrears['has_arrears'] ?? false) || ($arrears['is_delinquent'] ?? false);
+        $cycleProgress = $this->openCycleProgress($cycles, $curMonth, $curYear);
+        $daysRemaining = (int) max(0, BusinessDay::now()->diffInDays($cycles->deadline($curMonth, $curYear), false));
+
+        $cycleAttentionUrgent = $hasOpenCycleDue && $cycleProgress >= 0.4;
+
         $attentionCount = ($unreadMessages > 0 ? 1 : 0)
             + ($pendingDeposits > 0 ? 1 : 0)
-            + ($this->loanRepaymentCycleAttentionApplies($member, $postedThisCycle) ? 1 : 0)
-            + ($this->contributionNotPostedApplies($member, $postedThisCycle) ? 1 : 0)
-            + (($arrears['has_arrears'] ?? false) || ($arrears['is_delinquent'] ?? false) ? 1 : 0);
+            + ($cycleAttentionUrgent ? 1 : 0)
+            + ($hasArrears ? 1 : 0);
 
-        $defaultSubtitle = $attentionCount > 0
-            ? trans_choice(
-                ':count item needs your attention|:count items need your attention',
-                $attentionCount,
-                ['count' => $attentionCount],
-            )
-            : __('Your member portal is up to date — explore your accounts and activity below.');
+        $openCycleObligationLabel = $loanRepaymentDueThisCycle
+            ? __('loan repayment')
+            : __('contribution');
+
+        $cycleAwareSubtitle = $this->resolveOpenCycleGreetingSubtitle(
+            $hasOpenCycleDue,
+            $hasArrears,
+            $cycleProgress,
+            $daysRemaining,
+            $openCycleObligationLabel,
+            $nextEmiAmount,
+            $loanRepaymentDueThisCycle,
+            $nextInstallment,
+        );
+
+        $defaultSubtitle = $cycleAwareSubtitle
+            ?? ($attentionCount > 0
+                ? trans_choice(
+                    ':count item needs your attention|:count items need your attention',
+                    $attentionCount,
+                    ['count' => $attentionCount],
+                )
+                : __('Your member portal is up to date — explore your accounts and activity below.'));
 
         $statusTone = match ($member->status) {
             'active' => 'active',
@@ -472,7 +497,16 @@ final class MemberPortalInsightsService
             default => 'inactive',
         };
 
-        $cardTone = $this->resolveGreetingCardTone($member, $arrears, $postedThisCycle);
+        $cardAppearance = $this->resolveGreetingCardAppearance(
+            $member,
+            $arrears,
+            $postedThisCycle,
+            $cycleProgress,
+            $curMonth,
+            $curYear,
+        );
+        $cardTone = $cardAppearance['tone'];
+        $cardUrgency = $cardAppearance['urgency'];
 
         /** @var list<array{label: string, icon: string, url: ?string, tone: string}> $pills */
         $pills = [];
@@ -511,27 +545,28 @@ final class MemberPortalInsightsService
             ];
         }
 
-        if ($this->loanRepaymentCycleAttentionApplies($member, $postedThisCycle)) {
+                $openCyclePillTone = $this->greetingPillToneForCardTone($cardTone);
+
+                if ($loanRepaymentDueThisCycle) {
             $pills[] = [
-                'label' => __('Loan repayment · :period', [
-                    'period' => $cycles->periodLabel($curMonth, $curYear),
-                ]),
+                'label' => $daysRemaining > 0
+                    ? __('Loan repayment · :count days left', ['count' => $daysRemaining])
+                    : __('Loan repayment · due today'),
                 'icon' => 'heroicon-o-currency-dollar',
                 'url' => MyLoanResource::getUrl('index'),
-                'tone' => 'violet',
+                'tone' => $openCyclePillTone,
             ];
-        } elseif ($this->contributionNotPostedApplies($member, $postedThisCycle)) {
+        } elseif ($contributionDueThisCycle) {
             $pills[] = [
-                'label' => __('Contribution not posted :period', [
-                    'period' => $cycles->periodLabel($curMonth, $curYear),
-                ]),
+                'label' => $daysRemaining > 0
+                    ? __('Contribution · :count days left', ['count' => $daysRemaining])
+                    : __('Contribution · due today'),
                 'icon' => 'heroicon-o-calendar-days',
                 'url' => MyContributionResource::getUrl('index'),
-                'tone' => 'amber',
+                'tone' => $openCyclePillTone,
             ];
         }
 
-        $daysRemaining = (int) max(0, BusinessDay::now()->diffInDays($cycles->deadline($curMonth, $curYear), false));
         $periodLabelShort = $cycles->periodLabel($curMonth, $curYear);
 
         /** @var list<array{label: string, value: string, sub: ?string, url: string, icon: string}> $spotlights */
@@ -539,9 +574,13 @@ final class MemberPortalInsightsService
 
         $spotlights[] = [
             'label' => __('Current cycle'),
-            'value' => $postedThisCycle ? __('Posted') : trans_choice(':count day left|:count days left', $daysRemaining, ['count' => $daysRemaining]),
+            'value' => $hasOpenCycleDue
+                ? trans_choice(':count day left|:count days left', $daysRemaining, ['count' => $daysRemaining])
+                : ($member->hasActiveLoanRepaymentObligation() ? __('Paid') : __('Posted')),
             'sub' => $periodLabelShort,
-            'url' => MyContributionResource::getUrl('index'),
+            'url' => $member->hasActiveLoanRepaymentObligation()
+                ? MyLoanResource::getUrl('index')
+                : MyContributionResource::getUrl('index'),
             'icon' => 'heroicon-o-calendar-days',
         ];
 
@@ -571,12 +610,13 @@ final class MemberPortalInsightsService
             'first_name' => $firstName,
             'fund_name' => PublicPageSettings::fundName(tenant('name')),
             'date' => $now->locale(app()->getLocale())->translatedFormat('l, F j'),
-            'subtitle' => $hero['subtitle'] ?: $defaultSubtitle,
+            'subtitle' => $cycleAwareSubtitle ?: ($hero['subtitle'] ?: $defaultSubtitle),
             'highlight_title' => $hero['title'],
             'highlight_cta_label' => $hero['cta_label'],
             'highlight_cta_url' => $hero['cta_url'],
             'highlight_tone' => $hero['tone'],
             'card_tone' => $cardTone,
+            'card_urgency' => $cardUrgency,
             'member_number' => $member->member_number,
             'status' => $member->status,
             'status_label' => Member::statusOptions()[$member->status] ?? $member->status,
@@ -1012,31 +1052,167 @@ final class MemberPortalInsightsService
             && ! $member->hasActiveLoanRepaymentObligation();
     }
 
-    private function loanRepaymentCycleAttentionApplies(Member $member, bool $postedThisCycle): bool
+    /**
+     * Whether the open cycle still has collectable EMI for this member.
+     * Future pending installments outside the open cycle do not count.
+     */
+    private function loanRepaymentCycleAttentionApplies(Member $member, int $month, int $year): bool
     {
-        return ! $postedThisCycle
-            && $member->hasActiveLoanRepaymentObligation();
+        if (!$member->hasActiveLoanRepaymentObligation()) {
+            return false;
+        }
+
+        return app(LoanEmiCollectionCatalogService::class)
+            ->pendingInstallmentCountForMemberInPeriod($member, $month, $year) > 0;
     }
 
     /**
-     * Greeting hero background heatmap: red for arrears, amber for current-cycle dues, green when clear.
+     * Elapsed fraction of the open contribution cycle (0 at cycle start, 1 at/after deadline).
+     */
+    private function openCycleProgress(ContributionCycleService $cycles, int $month, int $year): float
+    {
+        $start = $cycles->cycleStartAt($month, $year);
+        $end = $cycles->deadline($month, $year);
+        $now = BusinessDay::now();
+        $totalSeconds = max(1, $start->diffInSeconds($end));
+
+        if ($now->lessThanOrEqualTo($start)) {
+            return 0.0;
+        }
+
+        if ($now->greaterThanOrEqualTo($end)) {
+            return 1.0;
+        }
+
+        return min(1.0, max(0.0, $start->diffInSeconds($now) / $totalSeconds));
+    }
+
+    /**
+     * Greeting hero heatmap: arrears → red; clear → green; open-cycle dues → green→red by cycle progress.
      *
      * @param  array{has_arrears: bool, is_delinquent: bool}  $arrears
+     * @return array{tone: string, urgency: float}
      */
-    private function resolveGreetingCardTone(Member $member, array $arrears, bool $postedThisCycle): string
-    {
+    private function resolveGreetingCardAppearance(
+        Member $member,
+        array $arrears,
+        bool $postedThisCycle,
+        float $cycleProgress,
+        int $month,
+        int $year,
+    ): array {
         if (($arrears['is_delinquent'] ?? false) || ($arrears['has_arrears'] ?? false)) {
-            return 'danger';
+            return ['tone' => 'danger', 'urgency' => 1.0];
         }
 
-        if (
-            $this->loanRepaymentCycleAttentionApplies($member, $postedThisCycle)
-            || $this->contributionNotPostedApplies($member, $postedThisCycle)
-        ) {
-            return 'amber';
+        $hasOpenCycleDue = $this->loanRepaymentCycleAttentionApplies($member, $month, $year)
+            || $this->contributionNotPostedApplies($member, $postedThisCycle);
+
+        if (!$hasOpenCycleDue) {
+            return ['tone' => 'emerald', 'urgency' => 0.0];
         }
 
-        return 'emerald';
+        return [
+            'tone' => $this->toneFromCycleUrgency($cycleProgress),
+            'urgency' => $cycleProgress,
+        ];
+    }
+
+    /**
+     * Map cycle progress (0–1) to a discrete greeting tone while CSS interpolates smoothly via urgency.
+     */
+    private function toneFromCycleUrgency(float $urgency): string
+    {
+        return match (true) {
+            $urgency < 0.40 => 'emerald',
+            $urgency < 0.65 => 'amber',
+            $urgency < 0.85 => 'orange',
+            default => 'rose',
+        };
+    }
+
+    private function greetingPillToneForCardTone(string $cardTone): string
+    {
+        return match ($cardTone) {
+            'emerald', 'success' => 'success',
+            'amber' => 'amber',
+            'orange' => 'warning',
+            'rose', 'danger' => 'danger',
+            default => 'amber',
+        };
+    }
+
+    private function resolveOpenCycleGreetingSubtitle(
+        bool $hasOpenCycleDue,
+        bool $hasArrears,
+        float $cycleProgress,
+        int $daysRemaining,
+        string $obligationLabel,
+        float $nextEmiAmount,
+        bool $isLoanRepaymentDueThisCycle,
+        ?LoanInstallment $nextInstallment = null,
+    ): ?string {
+        if ($hasArrears) {
+            return null;
+        }
+
+        if (!$hasOpenCycleDue) {
+            if ($nextInstallment?->due_date !== null) {
+                $dueLabel = MemberDateDisplay::format($nextInstallment->due_date, 'j M Y') ?? '—';
+
+                return __('This cycle’s EMI is paid — next installment due :date.', [
+                    'date' => $dueLabel,
+                ]);
+            }
+
+            return null;
+        }
+
+        if ($isLoanRepaymentDueThisCycle && $nextEmiAmount > 0) {
+            $amount = InsightFormatter::money($nextEmiAmount);
+
+            return match (true) {
+                $daysRemaining === 0 => __('EMI of :amount is due today — please settle your loan repayment.', [
+                    'amount' => $amount,
+                ]),
+                $cycleProgress < 0.40 => __('Good standing — :count days left this cycle to settle your EMI of :amount.', [
+                    'count' => $daysRemaining,
+                    'amount' => $amount,
+                ]),
+                $cycleProgress < 0.65 => __('Halfway through the cycle — :count days left to settle your EMI of :amount.', [
+                    'count' => $daysRemaining,
+                    'amount' => $amount,
+                ]),
+                $cycleProgress < 0.85 => __('Only :count days left this cycle — please settle your EMI of :amount soon.', [
+                    'count' => $daysRemaining,
+                    'amount' => $amount,
+                ]),
+                default => __('Cycle deadline is near — settle your EMI of :amount now.', [
+                    'amount' => $amount,
+                ]),
+            };
+        }
+
+        return match (true) {
+            $daysRemaining === 0 => __('This cycle closes today — please settle your :item.', [
+                'item' => $obligationLabel,
+            ]),
+            $cycleProgress < 0.40 => __('Good standing — :count days left this cycle to settle your :item.', [
+                'count' => $daysRemaining,
+                'item' => $obligationLabel,
+            ]),
+            $cycleProgress < 0.65 => __('Halfway through the cycle — :count days left to settle your :item.', [
+                'count' => $daysRemaining,
+                'item' => $obligationLabel,
+            ]),
+            $cycleProgress < 0.85 => __('Only :count days left this cycle — please settle your :item soon.', [
+                'count' => $daysRemaining,
+                'item' => $obligationLabel,
+            ]),
+            default => __('Cycle deadline is near — settle your :item now.', [
+                'item' => $obligationLabel,
+            ]),
+        };
     }
 
     /**
@@ -1159,7 +1335,7 @@ final class MemberPortalInsightsService
             ];
         }
 
-        if ($this->loanRepaymentCycleAttentionApplies($member, $postedThisCycle)) {
+        if ($this->loanRepaymentCycleAttentionApplies($member, $curMonth, $curYear)) {
             return $this->buildLoanRepaymentCycleNotice($activeLoan, $nextInstallment);
         }
 

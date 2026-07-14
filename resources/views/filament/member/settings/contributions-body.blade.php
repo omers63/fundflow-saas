@@ -42,7 +42,23 @@
             </x-slot>
         </x-filament::section>
     @endif
-    
+
+    @if ($this->canRequestLargerCycleAmount())
+        <x-filament::section class="mb-6" icon="heroicon-o-arrow-trending-up" icon-color="warning">
+            <x-slot name="heading">{{ __('Larger amount for this cycle only?') }}</x-slot>
+            <x-slot name="description">
+                {{ __('Ask administrators to raise this open cycle’s contribution due without changing your standing monthly allocation.') }}
+            </x-slot>
+            <x-filament::button
+                wire:click="mountAction('requestOpenCycleAmount')"
+                color="warning"
+                icon="heroicon-o-arrow-trending-up"
+            >
+                {{ __('Request larger cycle amount') }}
+            </x-filament::button>
+        </x-filament::section>
+    @endif
+
     @if ($isSponsoredDependent)
         <x-filament::section class="mb-6" icon="heroicon-o-information-circle" icon-color="warning">
             <x-slot name="heading">{{ __('Sponsored member') }}</x-slot>

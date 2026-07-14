@@ -6,6 +6,7 @@ namespace App\Filament\Support;
 
 use App\Filament\Tables\Columns\CollectedEmiCashColumn;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
+use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
@@ -59,6 +60,13 @@ final class LoanEmiCollectionTables
                         ->alignEnd()
                         ->searchable(false)
                         ->sortable(false),
+                    TextColumn::make('loan_outstanding')
+                        ->label(__('Loan outstanding'))
+                        ->state(fn (Member $record): float => $catalog->outstandingLoanBalanceForMember($record, $month, $year))
+                        ->money($currency)
+                        ->alignEnd()
+                        ->searchable(false)
+                        ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByLoanOutstanding($direction)),
                     TextColumn::make('available_cash')
                         ->label(__('Cash balance'))
                         ->state(fn (Member $record): float => $record->getCashBalance())
@@ -189,6 +197,11 @@ final class LoanEmiCollectionTables
                         ->sortable(),
                     CollectedEmiCashColumn::make()
                         ->label(__('Amount')),
+                    LoanOutstandingColumn::fromLoanResolver(
+                        fn (LoanInstallment $record): ?Loan => $record->loan,
+                        $currency,
+                        sortQuery: fn (Builder $query, string $direction): Builder => $query->orderByLoanOutstanding($direction),
+                    ),
                     TextColumn::make('late_fee_amount')
                         ->label(__('Late fee'))
                         ->money($currency)
@@ -292,6 +305,11 @@ final class LoanEmiCollectionTables
                         ->sortable(),
                     TextColumn::make('amount')
                         ->money($currency),
+                    LoanOutstandingColumn::fromLoanResolver(
+                        fn (LoanInstallment $record): ?Loan => $record->loan,
+                        $currency,
+                        sortQuery: fn (Builder $query, string $direction): Builder => $query->orderByLoanOutstanding($direction),
+                    ),
                     TextColumn::make('late_fee_amount')
                         ->label(__('Late fee'))
                         ->money($currency)

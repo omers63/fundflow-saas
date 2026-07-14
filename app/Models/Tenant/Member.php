@@ -311,6 +311,21 @@ class Member extends Model
         );
     }
 
+    public function scopeOrderByLoanOutstanding(Builder $query, string $direction = 'desc'): Builder
+    {
+        $direction = strtolower($direction) === 'asc' ? 'asc' : 'desc';
+
+        return $query->orderBy(
+            LoanInstallment::query()
+                ->selectRaw('coalesce(sum(loan_installments.amount), 0)')
+                ->join('loans', 'loans.id', '=', 'loan_installments.loan_id')
+                ->whereColumn('loans.member_id', 'members.id')
+                ->whereIn('loan_installments.status', ['pending', 'overdue'])
+                ->whereIn('loans.status', ['active', 'transferred']),
+            $direction,
+        );
+    }
+
     public static function generateMemberNumber(): string
     {
         return MemberNumberSettings::generate();
@@ -473,6 +488,19 @@ class Member extends Model
 
     public function hasPartiallyDisbursedLoan(): bool
     {
+        if ($this->relationLoaded('loans')) {
+            return $this->loans->contains(function (Loan $loan): bool {
+                if (! in_array($loan->status, ['approved', 'partially_disbursed'], true)) {
+                    return false;
+                }
+
+                $disbursed = (float) ($loan->amount_disbursed ?? 0);
+                $approved = (float) ($loan->amount_approved ?? $loan->amount_requested ?? 0);
+
+                return $disbursed < $approved;
+            });
+        }
+
         return Loan::query()
             ->where('member_id', $this->id)
             ->whereIn('status', ['approved', 'partially_disbursed'])

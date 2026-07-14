@@ -33,6 +33,18 @@ final class ContributionCycleTables
             ->query(fn (): Builder => $cycles->pendingMembersQueryForPeriod($month, $year))
             ->heading(__('To collect – :period', ['period' => $cycles->periodLabel($month, $year)]))
             ->defaultSort(fn (Builder $query, string $direction): Builder => MemberNumberSettings::applySequenceOrder($query, $direction))
+            ->headerActions([
+                ContributionListTableHeaderActions::cycleCollectionGroup(),
+            ])
+            ->modifyQueryUsing(function (Builder $query) use ($month, $year): Builder {
+                return $query->with([
+                    'parent',
+                    'cashAccount',
+                    'contributions' => fn ($contributionQuery) => $contributionQuery
+                        ->forPeriod($month, $year)
+                        ->where('status', 'pending'),
+                ]);
+            })
             ->columns([
                 MemberTableColumns::number(label: __('Member #'))
                     ->searchable(),
@@ -42,6 +54,25 @@ final class ContributionCycleTables
                     ->wrap(),
                 TextColumn::make('monthly_contribution_amount')
                     ->label(__('Required'))
+                    ->state(function (Member $record) use ($month, $year): float {
+                        $contribution = $record->relationLoaded('contributions')
+                            ? $record->contributions->first(
+                                fn (Contribution $contribution): bool => Contribution::normalizePeriodKey($contribution->period)
+                                    === Contribution::periodDate($month, $year)
+                                    && $contribution->status === 'pending',
+                            )
+                            : Contribution::findForMemberPeriod($record->id, $month, $year);
+
+                        if ($contribution !== null && $contribution->status === 'pending') {
+                            return max(
+                                0.0,
+                                (float) ($contribution->amount_due ?? $contribution->amount)
+                                - (float) ($contribution->amount_collected ?? 0),
+                            );
+                        }
+
+                        return (float) $record->monthly_contribution_amount;
+                    })
                     ->sortable()
                     ->money($currency),
                 TextColumn::make('available_cash')
@@ -65,7 +96,12 @@ final class ContributionCycleTables
                 TextColumn::make('coverage')
                     ->label(__('Ready'))
                     ->state(function (Member $record) use ($cycles, $month, $year): string {
-                        $required = $cycles->requiredCashForMemberPeriod($record, $month, $year);
+                        $required = $cycles->requiredCollectionCashForMemberPeriod(
+                            $record,
+                            $month,
+                            $year,
+                            syncLateFees: false,
+                        );
 
                         return $record->getCashBalance() >= $required
                             ? __('Yes')

@@ -13,7 +13,7 @@ class LoanInsightsWidget extends Widget
 {
     protected static bool $isDiscovered = false;
 
-    protected static bool $isLazy = false;
+    protected static bool $isLazy = true;
 
     protected string $view = 'filament.tenant.widgets.loan-insights';
 

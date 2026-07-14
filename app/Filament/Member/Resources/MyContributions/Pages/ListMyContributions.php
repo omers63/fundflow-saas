@@ -47,6 +47,7 @@ class ListMyContributions extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            MemberContributionFilamentActions::requestOpenCycleAmount(),
             MemberContributionFilamentActions::applyOpenPeriodContribution(),
         ];
     }

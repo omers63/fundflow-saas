@@ -20,7 +20,8 @@ class FundReconcileCommand extends Command
         {--realtime : Point-in-time reconciliation as of now}
         {--daily : Calendar-day window (yesterday) plus full ledger checks}
         {--monthly : Previous calendar month window plus full ledger checks}
-        {--no-store : Print summary only; do not write reconciliation_snapshots}';
+        {--no-store : Print summary only; do not write reconciliation_snapshots}
+        {--strict : Exit with failure when the report verdict does not pass (CI / manual gates)}';
 
     protected $description = 'Run financial reconciliation report and optionally store an audit snapshot';
 
@@ -84,6 +85,19 @@ class FundReconcileCommand extends Command
             app(ReconciliationDigestService::class)->notifyAdminsOfReport($mode, $report);
         }
 
-        return $verdict['pass'] ? self::SUCCESS : self::FAILURE;
+        if (! $verdict['pass']) {
+            $this->warn(__('Reconciliation verdict failed (:critical critical, :warnings warnings). Snapshot/digest updated; scheduler will not treat this as a process failure.', [
+                'critical' => $verdict['critical_issues'],
+                'warnings' => $verdict['warnings'],
+            ]));
+        }
+
+        // A completed report (pass or fail) is a successful cron outcome. Only --strict
+        // surfaces a non-zero exit for CI/manual gates, avoiding schedule ERROR noise.
+        if ($this->option('strict') && ! $verdict['pass']) {
+            return self::FAILURE;
+        }
+
+        return self::SUCCESS;
     }
 }

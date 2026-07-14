@@ -49,6 +49,28 @@ class LoanResource extends Resource
     protected static ?int $navigationSort = 1;
 
     /**
+     * @var array<string, int>
+     */
+    private static array $pendingEmiCountCache = [];
+
+    /**
+     * @var array<string, int>
+     */
+    private static array $collectedEmiCountCache = [];
+
+    /**
+     * @var array<string, int>
+     */
+    private static array $emiArrearsCountCache = [];
+
+    /**
+     * @var array<string, int>
+     */
+    private static array $overdueInstallmentsCountCache = [];
+
+    private static ?int $guarantorExposureCountCache = null;
+
+    /**
      * @return list<string>
      */
     public static function primaryTabKeys(): array
@@ -103,30 +125,42 @@ class LoanResource extends Resource
 
     public static function pendingEmiCollectionMemberCount(): int
     {
-        $catalog = app(LoanEmiCollectionCatalogService::class);
         [$month, $year] = self::resolveListCycle();
+        $cacheKey = sprintf('%04d-%02d', $year, $month);
 
-        return $catalog->pendingMemberCount($month, $year);
+        if (array_key_exists($cacheKey, self::$pendingEmiCountCache)) {
+            return self::$pendingEmiCountCache[$cacheKey];
+        }
+
+        return self::$pendingEmiCountCache[$cacheKey] = app(LoanEmiCollectionCatalogService::class)
+            ->pendingMemberCount($month, $year);
     }
 
     public static function collectedEmiInstallmentCount(): int
     {
-        $catalog = app(LoanEmiCollectionCatalogService::class);
         [$month, $year] = self::resolveListCycle();
+        $cacheKey = sprintf('%04d-%02d', $year, $month);
 
-        return $catalog->collectedInstallmentCount($month, $year);
+        if (array_key_exists($cacheKey, self::$collectedEmiCountCache)) {
+            return self::$collectedEmiCountCache[$cacheKey];
+        }
+
+        return self::$collectedEmiCountCache[$cacheKey] = app(LoanEmiCollectionCatalogService::class)
+            ->collectedInstallmentCount($month, $year);
     }
 
     public static function emiArrearsInstallmentCount(): int
     {
-        $catalog = app(LoanEmiCollectionCatalogService::class);
         [$month, $year] = self::resolveListCycle();
+        $live = self::isViewingOpenCycle();
+        $cacheKey = sprintf('%04d-%02d:%d', $year, $month, $live ? 1 : 0);
 
-        return $catalog->emiArrearsInstallmentCount(
-            $month,
-            $year,
-            self::isViewingOpenCycle(),
-        );
+        if (array_key_exists($cacheKey, self::$emiArrearsCountCache)) {
+            return self::$emiArrearsCountCache[$cacheKey];
+        }
+
+        return self::$emiArrearsCountCache[$cacheKey] = app(LoanEmiCollectionCatalogService::class)
+            ->emiArrearsInstallmentCount($month, $year, $live);
     }
 
     public static function listTabUrl(string $tab, array $filters = [], ?string $cycle = null): string
@@ -499,14 +533,33 @@ class LoanResource extends Resource
         ];
     }
 
+    public static function flushListCountCaches(): void
+    {
+        self::$pendingEmiCountCache = [];
+        self::$collectedEmiCountCache = [];
+        self::$emiArrearsCountCache = [];
+        self::$overdueInstallmentsCountCache = [];
+        self::$guarantorExposureCountCache = null;
+    }
+
     public static function overdueInstallmentsCount(): int
     {
-        return LoanDelinquencyTables::overdueInstallmentsQuery()->count();
+        $cacheKey = 'all';
+
+        if (array_key_exists($cacheKey, self::$overdueInstallmentsCountCache)) {
+            return self::$overdueInstallmentsCountCache[$cacheKey];
+        }
+
+        return self::$overdueInstallmentsCountCache[$cacheKey] = LoanDelinquencyTables::overdueInstallmentsQuery()->count();
     }
 
     public static function guarantorExposureCount(): int
     {
-        return (int) app(LoanDelinquencyService::class)->loansAtGuarantorRiskCount();
+        if (self::$guarantorExposureCountCache !== null) {
+            return self::$guarantorExposureCountCache;
+        }
+
+        return self::$guarantorExposureCountCache = (int) app(LoanDelinquencyService::class)->loansAtGuarantorRiskCount();
     }
 
     public static function dispatchInsightsRefresh(?Component $livewire): void
@@ -514,6 +567,8 @@ class LoanResource extends Resource
         if ($livewire === null) {
             return;
         }
+
+        self::flushListCountCaches();
 
         static::refreshLoanPageRecord($livewire);
 

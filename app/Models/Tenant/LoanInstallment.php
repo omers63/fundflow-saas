@@ -131,6 +131,20 @@ class LoanInstallment extends Model
         return $query->where('status', 'pending');
     }
 
+    public function scopeOrderByLoanOutstanding(Builder $query, string $direction = 'desc'): Builder
+    {
+        $direction = strtolower($direction) === 'asc' ? 'asc' : 'desc';
+
+        return $query->orderBy(
+            static::query()
+                ->from('loan_installments as outstanding_installments')
+                ->selectRaw('coalesce(sum(outstanding_installments.amount), 0)')
+                ->whereColumn('outstanding_installments.loan_id', 'loan_installments.loan_id')
+                ->whereIn('outstanding_installments.status', ['pending', 'overdue']),
+            $direction,
+        );
+    }
+
     private function repaymentSumOnPaidDate(): float
     {
         $key = $this->loan_id.'|'.$this->paid_at->toDateString();

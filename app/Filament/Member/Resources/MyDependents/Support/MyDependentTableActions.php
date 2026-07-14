@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyDependents\Support;
 
 use App\Filament\Support\DependentAllocationFilamentActions;
+use App\Filament\Support\MemberContributionFilamentActions;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Models\Tenant\Member;
 use App\Support\Tenant\CurrentMember;
@@ -37,6 +38,7 @@ final class MyDependentTableActions
                     return route('tenant.member.dependents.impersonate', ['dependent' => $record]);
                 })
                 ->visible(fn (Member $record): bool => ! in_array($record->status, Member::PORTAL_BLOCKED_STATUSES, true)),
+            MemberContributionFilamentActions::requestOpenCycleAmountForDependentRow(),
             ...DependentAllocationFilamentActions::forRow($parentResolver),
         ]);
     }

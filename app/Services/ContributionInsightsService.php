@@ -9,12 +9,11 @@ use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Support\BusinessDay;
-use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightKpi;
-use Carbon\Carbon;
 
 final class ContributionInsightsService
 {
@@ -62,10 +61,6 @@ final class ContributionInsightsService
             ->forPeriod($openMonth, $openYear)
             ->pending()
             ->count();
-        $postedAmountOpenPeriod = (float) Contribution::query()
-            ->forPeriod($openMonth, $openYear)
-            ->posted()
-            ->sum('amount');
         $lateOpenPeriod = Contribution::query()
             ->forPeriod($openMonth, $openYear)
             ->pending()
@@ -77,17 +72,7 @@ final class ContributionInsightsService
             ? (int) round(($postedOpenPeriod / $openDenominator) * 100)
             : 0;
 
-        $delinquency = app(LoanDelinquencyService::class);
         $arrearsPeriods = ContributionResource::contributionArrearsPeriodCount();
-        $targets = $this->cycles->expectedCollectionTargetsForPeriod($openMonth, $openYear);
-        $forecast = app(CycleForecastService::class)->project(
-            $openMonth,
-            $openYear,
-            $postedOpenPeriod,
-            (int) ($targets['expected_count'] ?? 0),
-            $postedAmountOpenPeriod,
-            (float) ($targets['expected_amount'] ?? 0.0),
-        );
 
         $collectUrl = ContributionResource::listTabUrl('collect');
 
@@ -138,9 +123,7 @@ final class ContributionInsightsService
                 'arrears_url' => ContributionResource::listTabUrl('arrears'),
                 'ledger_pending_url' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'pending']]),
             ],
-            'forecast' => $forecast + [
-                'expected_amount_remaining' => max(0.0, round((float) ($targets['expected_amount'] ?? 0.0) - $postedAmountOpenPeriod, 2)),
-            ],
+            'collection_amounts' => $this->contributionCycleCollectionAmounts($openMonth, $openYear),
         ];
     }
 
@@ -202,6 +185,7 @@ final class ContributionInsightsService
                 'collected_url' => $collectedUrl,
                 'collect_url' => ContributionResource::listTabUrl('collect'),
             ],
+            'collection_amounts' => $this->contributionCycleCollectionAmounts($openMonth, $openYear),
         ];
     }
 
@@ -223,8 +207,12 @@ final class ContributionInsightsService
         $guarantorAtRisk = $delinquency->loansAtGuarantorRiskCount();
 
         $arrearsUrl = ContributionResource::listTabUrl('arrears');
+        $currency = Setting::get('general', 'currency', 'USD');
+        $periodLabel = $this->cycles->periodLabel($month, $year);
 
         return [
+            'currency' => $currency,
+            'open_period' => ['label' => $periodLabel],
             'hero' => [
                 'tone' => $arrearsPeriods > 0 ? 'danger' : 'success',
                 'title' => $arrearsPeriods > 0
@@ -267,6 +255,7 @@ final class ContributionInsightsService
                 'overdue_url' => LoanResource::listTabUrl('overdue_installments'),
                 'guarantor_url' => LoanResource::listTabUrl('guarantor_exposure'),
             ],
+            'collection_amounts' => $this->contributionCycleCollectionAmounts($month, $year),
         ];
     }
 
@@ -287,16 +276,17 @@ final class ContributionInsightsService
             ->where('status', 'pending')
             ->sum('amount');
 
+        $monthStart = $now->copy()->startOfMonth();
+        $monthEnd = $now->copy()->endOfMonth();
+
         $postedAmountThisMonth = (float) Contribution::query()
             ->where('status', 'posted')
-            ->whereMonth('posted_at', $now->month)
-            ->whereYear('posted_at', $now->year)
+            ->whereBetween('posted_at', [$monthStart, $monthEnd])
             ->sum('amount');
 
         $postedThisMonth = Contribution::query()
             ->where('status', 'posted')
-            ->whereMonth('posted_at', $now->month)
-            ->whereYear('posted_at', $now->year)
+            ->whereBetween('posted_at', [$monthStart, $monthEnd])
             ->count();
 
         $lateCount = Contribution::query()
@@ -313,77 +303,15 @@ final class ContributionInsightsService
             ->forPeriod($openMonth, $openYear)
             ->pending()
             ->count();
-        $postedAmountOpenPeriod = (float) Contribution::query()
-            ->forPeriod($openMonth, $openYear)
-            ->posted()
-            ->sum('amount');
 
         $openDenominator = $postedOpenPeriod + $missingOpenPeriod;
         $collectionRate = $openDenominator > 0
             ? (int) round(($postedOpenPeriod / $openDenominator) * 100)
             : 0;
-        $targets = $this->cycles->expectedCollectionTargetsForPeriod($openMonth, $openYear);
-        $forecast = app(CycleForecastService::class)->project(
-            $openMonth,
-            $openYear,
-            $postedOpenPeriod,
-            (int) ($targets['expected_count'] ?? 0),
-            $postedAmountOpenPeriod,
-            (float) ($targets['expected_amount'] ?? 0.0),
-        );
-
-        $newThisMonth = Contribution::query()
-            ->whereMonth('created_at', $now->month)
-            ->whereYear('created_at', $now->year)
-            ->count();
-
-        $newLastMonth = Contribution::query()
-            ->whereMonth('created_at', $now->copy()->subMonth()->month)
-            ->whereYear('created_at', $now->copy()->subMonth()->year)
-            ->count();
-
-        $oldestPending = Contribution::query()
-            ->with('member:id,name')
-            ->where('status', 'pending')
-            ->orderBy('created_at')
-            ->limit(6)
-            ->get()
-            ->map(fn (Contribution $contribution): array => [
-                'id' => $contribution->id,
-                'name' => $contribution->member?->name ?? __('Unknown member'),
-                'period_label' => $contribution->period !== null
-                    ? Carbon::parse((string) $contribution->period)
-                        ->locale(app()->getLocale())
-                        ->translatedFormat('M Y')
-                    : '—',
-                'amount' => (float) $contribution->amount,
-                'is_late' => (bool) $contribution->is_late,
-                'days_waiting' => (int) Carbon::parse($contribution->created_at)->diffInDays($now),
-                'queue_url' => ContributionResource::listUrl('contributions', array_merge(
-                    ContributionResource::memberFilter((int) $contribution->member_id),
-                    ['status' => ['value' => 'pending']],
-                )),
-            ])
-            ->all();
-
-        $methodCounts = Contribution::query()
-            ->where('status', 'posted')
-            ->whereNotNull('payment_method')
-            ->selectRaw('payment_method, COUNT(*) as total')
-            ->groupBy('payment_method')
-            ->pluck('total', 'payment_method');
-
-        $methodBreakdown = collect(Contribution::paymentMethodOptions())
-            ->map(fn (string $label, string $method): array => [
-                'method' => $method,
-                'label' => $label,
-                'count' => (int) ($methodCounts[$method] ?? 0),
-            ])
-            ->values()
-            ->all();
 
         $currency = Setting::get('general', 'currency', 'USD');
         $contributionsUrl = ContributionResource::listUrl('contributions');
+        $arrearsPeriods = ContributionResource::contributionArrearsPeriodCount();
 
         return [
             'total' => $total,
@@ -394,9 +322,6 @@ final class ContributionInsightsService
             'posted_amount_this_month' => $postedAmountThisMonth,
             'posted_this_month' => $postedThisMonth,
             'late_count' => $lateCount,
-            'new_this_month' => $newThisMonth,
-            'new_last_month' => $newLastMonth,
-            'mom_change' => $this->monthOverMonthChange($newThisMonth, $newLastMonth),
             'open_period' => [
                 'label' => $this->cycles->periodLabel($openMonth, $openYear),
                 'month' => $openMonth,
@@ -407,21 +332,17 @@ final class ContributionInsightsService
                 'missing_members' => $missingOpenPeriod,
                 'collection_rate' => $collectionRate,
             ],
-            'oldest_pending' => $oldestPending,
-            'trend' => DualProgressTrendBuilder::sixMonthFundCollectionTrend($this->cycles),
-            'sparkline' => $this->weeklySparkline(),
-            'method_breakdown' => $methodBreakdown,
             'cycle' => [
                 'currency' => $currency,
                 'pending_total' => $pendingAmountTotal,
                 'late_count' => $lateCount,
                 'collection_rate' => $collectionRate,
             ],
-            'forecast' => $forecast,
             'pipeline' => [
                 'pending_contributions' => $pending,
                 'posted_contributions' => $posted,
                 'missing_open_period' => $missingOpenPeriod,
+                'arrears_periods' => $arrearsPeriods,
                 'contributions_url' => $contributionsUrl,
                 'contributions_pending_url' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'pending']]),
                 'contributions_posted_url' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'posted']]),
@@ -429,50 +350,53 @@ final class ContributionInsightsService
                 'cycle_url' => ContributionResource::listTabUrl('collect'),
                 'members_url' => MemberResource::getUrl('index'),
                 'delinquency_url' => ContributionResource::listTabUrl('arrears'),
+                'arrears_url' => ContributionResource::listTabUrl('arrears'),
             ],
         ];
     }
 
-    private function monthOverMonthChange(int $current, int $previous): ?int
-    {
-        if ($previous === 0) {
-            return $current > 0 ? 100 : null;
-        }
-
-        return (int) round((($current - $previous) / $previous) * 100);
-    }
-
     /**
-     * @return list<int>
+     * @return array{arrears_amount: float, recovered_amount: float, unrecovered_amount: float}
      */
-    private function weeklySparkline(): array
+    private function contributionCycleCollectionAmounts(int $month, int $year): array
     {
-        $now = BusinessDay::now();
-        $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
-        $currentWeekEnd = $now->copy()->endOfWeek();
-        $weekCounts = [];
+        $delinquency = app(LoanDelinquencyService::class);
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $live = $month === $openMonth && $year === $openYear;
 
-        Contribution::query()
-            ->whereBetween('created_at', [$oldestWeekStart, $currentWeekEnd])
-            ->get(['created_at'])
-            ->each(function (Contribution $contribution) use (&$weekCounts): void {
-                $createdAt = $contribution->created_at;
+        $recoveredAmount = (float) Contribution::query()
+            ->forPeriod($month, $year)
+            ->posted()
+            ->selectRaw('COALESCE(SUM(amount + COALESCE(late_fee_amount, 0)), 0) as total')
+            ->value('total');
 
-                if ($createdAt === null) {
-                    return;
-                }
+        $unrecoveredAmount = 0.0;
+        $pendingIds = $this->cycles->pendingMemberIdsForPeriod($month, $year);
 
-                $key = Carbon::parse((string) $createdAt)->startOfWeek()->toDateString();
-                $weekCounts[$key] = ($weekCounts[$key] ?? 0) + 1;
-            });
-
-        $points = [];
-
-        for ($i = 7; $i >= 0; $i--) {
-            $start = $now->copy()->subWeeks($i)->startOfWeek()->toDateString();
-            $points[] = $weekCounts[$start] ?? 0;
+        if ($pendingIds !== []) {
+            Member::query()
+                ->whereIn('id', $pendingIds)
+                ->with([
+                    'cashAccount',
+                    'contributions' => fn ($query) => $query
+                        ->forPeriod($month, $year)
+                        ->where('status', 'pending'),
+                ])
+                ->orderBy('id')
+                ->each(function (Member $member) use ($month, $year, &$unrecoveredAmount): void {
+                    $unrecoveredAmount += $this->cycles->requiredCollectionCashForMemberPeriod(
+                        $member,
+                        $month,
+                        $year,
+                        syncLateFees: false,
+                    );
+                });
         }
 
-        return $points;
+        return [
+            'arrears_amount' => $delinquency->contributionArrearsAmountTotal(null, $month, $year, $live),
+            'recovered_amount' => round($recoveredAmount, 2),
+            'unrecovered_amount' => round($unrecoveredAmount, 2),
+        ];
     }
 }

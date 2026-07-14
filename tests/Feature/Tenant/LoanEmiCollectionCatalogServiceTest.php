@@ -322,3 +322,42 @@ test('emi arrears installment count includes unpaid installments before selected
         ->and($this->catalog->emiArrearsInstallmentsQuery(10, 2025, true)->pluck('installment_number'))->toContain(1)
         ->and($this->catalog->emiArrearsInstallmentsQuery(10, 2025, true)->pluck('installment_number'))->not->toContain(2);
 });
+
+test('primary collectable loan resolver returns loan for outstanding column', function () {
+    [$month, $year] = $this->cycles->currentOpenPeriod();
+
+    $member = Member::create([
+        'member_number' => 'EMI-OUT-1',
+        'name' => 'Outstanding Column Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::create($year, $month, 10),
+        'status' => 'pending',
+    ]);
+
+    expect($this->catalog->primaryCollectableLoanForMember($member, $month, $year)?->is($loan))->toBeTrue()
+        ->and($this->catalog->outstandingLoanBalanceForMember($member, $month, $year))->toBe($loan->getOutstandingBalance());
+});

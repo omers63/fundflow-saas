@@ -521,6 +521,25 @@
         radial-gradient(circle at 15% 85%, rgb(254 243 199 / 0.24), transparent 38%);
 }
 
+.ff-member-greeting--tone-orange {
+    border-color: #fdba74;
+    background: linear-gradient(135deg, #fb923c 0%, #ea580c 48%, #c2410c 100%);
+}
+
+.ff-member-greeting--tone-orange .ff-member-greeting__shape--two {
+    background: rgb(255 237 213 / 0.22);
+}
+
+.ff-member-greeting--tone-orange .ff-member-greeting__glow {
+    background:
+        radial-gradient(circle at 85% 15%, rgb(255 255 255 / 0.14), transparent 42%),
+        radial-gradient(circle at 15% 85%, rgb(255 237 213 / 0.26), transparent 38%);
+}
+
+.ff-member-greeting--tone-orange .ff-member-greeting__avatar {
+    box-shadow: 0 4px 14px rgb(194 65 12 / 0.28);
+}
+
 .ff-member-greeting--tone-rose {
     border-color: #fda4af;
     background: linear-gradient(135deg, #f43f5e 0%, #e11d48 48%, #9f1239 100%);
@@ -542,6 +561,34 @@
 
 .ff-member-greeting--tone-amber .ff-member-greeting__avatar {
     box-shadow: 0 4px 14px rgb(180 83 9 / 0.28);
+}
+
+/* Smooth green→red heatmap driven by open-cycle progress (and arrears at 1). */
+.ff-member-greeting--progressive {
+    --ff-greeting-urgency: 0;
+    border-color: color-mix(
+        in srgb,
+        #9dd9c4 calc((1 - var(--ff-greeting-urgency)) * 100%),
+        #fda4af calc(var(--ff-greeting-urgency) * 100%)
+    );
+    background: linear-gradient(
+        135deg,
+        color-mix(
+            in srgb,
+            #1d9e75 calc((1 - var(--ff-greeting-urgency)) * 100%),
+            #f43f5e calc(var(--ff-greeting-urgency) * 100%)
+        ) 0%,
+        color-mix(
+            in srgb,
+            #15803d calc((1 - var(--ff-greeting-urgency)) * 100%),
+            #e11d48 calc(var(--ff-greeting-urgency) * 100%)
+        ) 48%,
+        color-mix(
+            in srgb,
+            #0f5132 calc((1 - var(--ff-greeting-urgency)) * 100%),
+            #9f1239 calc(var(--ff-greeting-urgency) * 100%)
+        ) 100%
+    );
 }
 
 @keyframes ff-member-greeting-enter {
@@ -954,6 +1001,11 @@
 .ff-member-greeting__pill--danger {
     background: rgb(254 226 226 / 0.16);
     border-color: rgb(252 165 165 / 0.35);
+}
+
+.ff-member-greeting__pill--success {
+    background: rgb(209 250 229 / 0.16);
+    border-color: rgb(110 231 183 / 0.35);
 }
 
 .ff-member-greeting__pill--warning,

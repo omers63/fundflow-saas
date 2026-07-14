@@ -199,23 +199,31 @@ class ListLoans extends ListRecords
 
     public function getTabs(): array
     {
-        $emiPending = LoanResource::pendingEmiCollectionMemberCount();
-        $overdueCount = LoanResource::overdueInstallmentsCount();
-        $guarantorCount = LoanResource::guarantorExposureCount();
-
-        $tabs = [
+        return [
             'collection' => Tab::make(LoanResource::listTabLabel('collection'))
-                ->badge($emiPending > 0 ? (string) $emiPending : null)
+                ->badge(fn (): ?string => $this->collectionPendingBadge())
                 ->badgeColor('warning'),
             'portfolio' => Tab::make(LoanResource::listTabLabel('portfolio'))
                 ->badge(fn (): ?string => $this->portfolioEligibilityBadge())
                 ->badgeColor('warning'),
             'delinquency' => Tab::make(LoanResource::listTabLabel('delinquency'))
-                ->badge($overdueCount + $guarantorCount > 0 ? (string) ($overdueCount + $guarantorCount) : null)
+                ->badge(fn (): ?string => $this->delinquencyBadge())
                 ->badgeColor('danger'),
         ];
+    }
 
-        return $tabs;
+    protected function collectionPendingBadge(): ?string
+    {
+        $pending = LoanResource::pendingEmiCollectionMemberCount();
+
+        return $pending > 0 ? (string) $pending : null;
+    }
+
+    protected function delinquencyBadge(): ?string
+    {
+        $total = LoanResource::overdueInstallmentsCount() + LoanResource::guarantorExposureCount();
+
+        return $total > 0 ? (string) $total : null;
     }
 
     protected function portfolioEligibilityBadge(): ?string

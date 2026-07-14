@@ -290,10 +290,13 @@ test('member dashboard renders arabic labels with western digits for amounts', f
         ->assertDontSee('١٬٥٠٠', false);
 });
 
-test('member greeting card uses amber heatmap when current cycle contribution is due', function () {
+test('member greeting card stays green early in the cycle when contribution is unpaid', function () {
     $cycles = app(ContributionCycleService::class);
     [$month, $year] = $cycles->currentOpenPeriod();
     $cycleStart = $cycles->cycleStartAt($month, $year);
+    $cycleEnd = $cycles->deadline($month, $year);
+
+    Carbon::setTestNow($cycleStart->copy()->addDay()->setTime(10, 0));
 
     Contribution::query()->where('member_id', $this->member->id)->delete();
     $this->member->update([
@@ -306,13 +309,36 @@ test('member greeting card uses amber heatmap when current cycle contribution is
 
     $snapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
 
-    expect($snapshot['greeting']['card_tone'])->toBe('amber');
+    expect($snapshot['greeting']['card_tone'])->toBe('emerald')
+        ->and($snapshot['greeting']['card_urgency'])->toBeLessThan(0.4)
+        ->and($snapshot['greeting']['subtitle'])->toContain('Good standing');
 
     $this->actingAs($this->memberUser, 'tenant');
 
     $this->get('http://' . $this->domain . '/member')
         ->assertSuccessful()
-        ->assertSee('ff-member-greeting--tone-amber', false);
+        ->assertSee('ff-member-greeting--tone-emerald', false)
+        ->assertSee('ff-member-greeting--progressive', false);
+
+    Carbon::setTestNow($cycleStart->copy()->addSeconds(
+        (int) ($cycleStart->diffInSeconds($cycleEnd) * 0.55),
+    )->setTime(10, 0));
+
+    $midSnapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
+
+    expect($midSnapshot['greeting']['card_tone'])->toBe('amber')
+        ->and($midSnapshot['greeting']['card_urgency'])->toBeGreaterThanOrEqual(0.4);
+
+    Carbon::setTestNow($cycleStart->copy()->addSeconds(
+        (int) ($cycleStart->diffInSeconds($cycleEnd) * 0.90),
+    )->setTime(10, 0));
+
+    $lateSnapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
+
+    expect($lateSnapshot['greeting']['card_tone'])->toBe('rose')
+        ->and($lateSnapshot['greeting']['card_urgency'])->toBeGreaterThanOrEqual(0.85);
+
+    Carbon::setTestNow();
 });
 
 test('member greeting card uses green heatmap when current cycle is posted', function () {
@@ -346,6 +372,66 @@ test('member greeting card uses green heatmap when current cycle is posted', fun
     $this->get('http://' . $this->domain . '/member')
         ->assertSuccessful()
         ->assertSee('ff-member-greeting--tone-emerald', false);
+});
+
+test('member greeting card stays green when open-cycle EMI is paid and next EMI is later', function () {
+    app()->setLocale('en');
+    Filament::setCurrentPanel('member');
+
+    $cycles = app(ContributionCycleService::class);
+    Carbon::setTestNow(Carbon::parse('2025-11-05 10:00:00'));
+    BusinessDaySettings::saveFromForm('2025-11-05');
+
+    [$month, $year] = $cycles->currentOpenPeriod();
+    expect([$month, $year])->toBe([10, 2025]);
+
+    $cycleStart = $cycles->cycleStartAt($month, $year);
+    $cycleEnd = $cycles->deadline($month, $year);
+
+    Contribution::query()->where('member_id', $this->member->id)->delete();
+    $this->member->update([
+        'joined_at' => $cycleStart->copy()->subYear(),
+        'contribution_arrears_cutoff_date' => $cycleStart->copy()->subYear()->toDateString(),
+    ]);
+
+    $loan = Loan::query()->create([
+        'member_id' => $this->member->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
+        'interest_rate' => 0,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 2000,
+        'status' => 'active',
+        'applied_at' => $cycleStart->copy()->subMonths(2),
+        'approved_at' => $cycleStart->copy()->subMonths(2),
+        'disbursed_at' => $cycleStart->copy()->subMonths(2),
+    ]);
+
+    $loan->installments()->create([
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => $cycleEnd->toDateString(),
+        'status' => 'paid',
+        'paid_at' => $cycleStart->copy()->addDays(3),
+    ]);
+    $loan->installments()->create([
+        'installment_number' => 2,
+        'amount' => 1000,
+        'due_date' => $cycleEnd->copy()->addMonthsNoOverflow(2)->toDateString(),
+        'status' => 'pending',
+    ]);
+
+    $snapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
+
+    expect($snapshot['greeting']['card_tone'])->toBe('emerald')
+        ->and($snapshot['greeting']['card_urgency'])->toBe(0.0)
+        ->and($snapshot['greeting']['subtitle'])->toContain('EMI is paid');
+
+    Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
 });
 
 test('member greeting card uses red heatmap when member has arrears', function () {
