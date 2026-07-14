@@ -320,7 +320,7 @@ class ContributionService
         }
 
         if ($contribution !== null) {
-            return $contribution;
+            return $this->cycles->syncPendingContributionDueToCurrentStanding($contribution, $member);
         }
 
         $period = Contribution::periodDate($month, $year);

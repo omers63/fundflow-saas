@@ -480,6 +480,9 @@ final class MemberPortalInsightsService
             $nextEmiAmount,
             $loanRepaymentDueThisCycle,
             $nextInstallment,
+            $cycles->periodLabel($curMonth, $curYear),
+            $member->hasActiveLoanRepaymentObligation(),
+            app(LoanEmiCollectionCatalogService::class)->hasPaidInstallmentDueInPeriod($member, $curMonth, $curYear),
         );
 
         $defaultSubtitle = $cycleAwareSubtitle
@@ -545,9 +548,9 @@ final class MemberPortalInsightsService
             ];
         }
 
-                $openCyclePillTone = $this->greetingPillToneForCardTone($cardTone);
+        $openCyclePillTone = $this->greetingPillToneForCardTone($cardTone);
 
-                if ($loanRepaymentDueThisCycle) {
+        if ($loanRepaymentDueThisCycle) {
             $pills[] = [
                 'label' => $daysRemaining > 0
                     ? __('Loan repayment · :count days left', ['count' => $daysRemaining])
@@ -576,7 +579,11 @@ final class MemberPortalInsightsService
             'label' => __('Current cycle'),
             'value' => $hasOpenCycleDue
                 ? trans_choice(':count day left|:count days left', $daysRemaining, ['count' => $daysRemaining])
-                : ($member->hasActiveLoanRepaymentObligation() ? __('Paid') : __('Posted')),
+                : ($member->hasActiveLoanRepaymentObligation()
+                    ? (app(LoanEmiCollectionCatalogService::class)->hasPaidInstallmentDueInPeriod($member, $curMonth, $curYear)
+                        ? __('EMI paid')
+                        : __('No EMI due'))
+                    : __('Posted')),
             'sub' => $periodLabelShort,
             'url' => $member->hasActiveLoanRepaymentObligation()
                 ? MyLoanResource::getUrl('index')
@@ -1058,7 +1065,7 @@ final class MemberPortalInsightsService
      */
     private function loanRepaymentCycleAttentionApplies(Member $member, int $month, int $year): bool
     {
-        if (!$member->hasActiveLoanRepaymentObligation()) {
+        if (! $member->hasActiveLoanRepaymentObligation()) {
             return false;
         }
 
@@ -1108,7 +1115,7 @@ final class MemberPortalInsightsService
         $hasOpenCycleDue = $this->loanRepaymentCycleAttentionApplies($member, $month, $year)
             || $this->contributionNotPostedApplies($member, $postedThisCycle);
 
-        if (!$hasOpenCycleDue) {
+        if (! $hasOpenCycleDue) {
             return ['tone' => 'emerald', 'urgency' => 0.0];
         }
 
@@ -1151,16 +1158,28 @@ final class MemberPortalInsightsService
         float $nextEmiAmount,
         bool $isLoanRepaymentDueThisCycle,
         ?LoanInstallment $nextInstallment = null,
+        ?string $periodLabel = null,
+        bool $underLoanRepayment = false,
+        bool $openCycleEmiPaid = false,
     ): ?string {
         if ($hasArrears) {
             return null;
         }
 
-        if (!$hasOpenCycleDue) {
-            if ($nextInstallment?->due_date !== null) {
+        if (! $hasOpenCycleDue) {
+            if ($underLoanRepayment && $nextInstallment?->due_date !== null) {
                 $dueLabel = MemberDateDisplay::format($nextInstallment->due_date, 'j M Y') ?? '—';
+                $period = $periodLabel ?? __('this cycle');
 
-                return __('This cycle’s EMI is paid — next installment due :date.', [
+                if ($openCycleEmiPaid) {
+                    return __('EMI for :period is paid — next installment due :date. Contribution history stays on My contributions (paused while you repay).', [
+                        'period' => $period,
+                        'date' => $dueLabel,
+                    ]);
+                }
+
+                return __('No EMI due in :period — next installment due :date. Contribution history stays on My contributions (paused while you repay).', [
+                    'period' => $period,
                     'date' => $dueLabel,
                 ]);
             }
@@ -1513,7 +1532,10 @@ final class MemberPortalInsightsService
                 'due_date' => MemberDateDisplay::format($nextInstallment->due_date, 'j M Y'),
             ] : null,
             'view_url' => MyLoanResource::getUrl('view', ['record' => $loan]),
-            'settle_url' => MyLoanResource::getUrl('index', ['hub' => 'settle']),
+            'settle_url' => MyLoanResource::getUrl('index', [
+                'hub' => 'active',
+                'openEarlySettle' => true,
+            ]),
         ];
     }
 

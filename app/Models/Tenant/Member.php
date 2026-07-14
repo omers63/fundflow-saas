@@ -3,6 +3,7 @@
 namespace App\Models\Tenant;
 
 use App\Filament\Support\MoneyDisplay;
+use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\LoanService;
 use App\Services\MemberMonthlyAllocationService;
@@ -86,6 +87,15 @@ class Member extends Model
             }
 
             app(MemberMonthlyAllocationService::class)->assertCanSelfChangeMonthlyContribution($member);
+        });
+
+        static::updated(function (Member $member): void {
+            if (! $member->wasChanged('monthly_contribution_amount')) {
+                return;
+            }
+
+            app(ContributionCycleService::class)
+                ->syncOpenCyclePendingContributionDueToStanding($member);
         });
     }
 
@@ -214,6 +224,15 @@ class Member extends Model
     public function loanEligibilityStartDate(): ?Carbon
     {
         return $this->joined_at;
+    }
+
+    public function lastFullySettledLoan(): ?Loan
+    {
+        return $this->loans()
+            ->whereIn('status', ['early_settled', 'completed'])
+            ->whereNotNull('settled_at')
+            ->orderByDesc('settled_at')
+            ->first();
     }
 
     /**

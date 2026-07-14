@@ -10,14 +10,18 @@ use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Support\MemberLoanFilamentActions;
 use App\Filament\Support\RequestLoanEligibilityOverrideAction;
 use App\Models\Tenant\Loan;
+use App\Services\Loans\LoanRepaymentService;
 use App\Services\LoanService;
 use App\Services\MemberLoansHubService;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\View as SchemaView;
 use Filament\Schemas\Schema;
+use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Url;
 
@@ -31,9 +35,19 @@ class ListMyLoans extends ListRecords
     #[Url(as: 'requestOverride', except: false)]
     public bool $requestOverride = false;
 
+    #[Url(as: 'openEarlySettle', except: false)]
+    public bool $openEarlySettleModal = false;
+
+    public ?int $earlySettleLoanId = null;
+
     public function mount(): void
     {
-        if (! in_array($this->hubTab, ['active', 'history', 'settle', 'apply'], true)) {
+        if ($this->hubTab === 'settle') {
+            $this->hubTab = 'active';
+            $this->openEarlySettleModal = true;
+        }
+
+        if (!in_array($this->hubTab, ['active', 'history', 'apply'], true)) {
             $this->hubTab = 'active';
         }
 
@@ -41,16 +55,81 @@ class ListMyLoans extends ListRecords
 
         if (request()->boolean('requestOverride')) {
             $this->requestOverride = true;
+            $this->hubTab = 'apply';
+        }
+
+        if (request()->boolean('openEarlySettle')) {
+            $this->openEarlySettleModal = true;
+            $this->hubTab = 'active';
         }
 
         $this->openEligibilityReviewWhenRequested();
+        $this->openEarlySettlementWhenRequested();
+        $this->refreshHeaderActions();
     }
 
     public function updatedRequestOverride(bool $value): void
     {
         if ($value) {
+            $this->hubTab = 'apply';
             $this->openEligibilityReviewWhenRequested();
         }
+    }
+
+    public function updatedOpenEarlySettleModal(bool $value): void
+    {
+        if ($value) {
+            $this->hubTab = 'active';
+            $this->openEarlySettlementWhenRequested();
+        }
+    }
+
+    public function openEarlySettlement(?int $loanId = null): void
+    {
+        $loan = $this->resolveEarlySettleLoan($loanId);
+
+        if (!$loan instanceof Loan) {
+            Notification::make()
+                ->title(__('No active loan'))
+                ->body(__('You do not have an active loan to settle right now.'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $this->earlySettleLoanId = $loan->id;
+        unset($this->cachedActions['earlySettle']);
+        $this->cachedMountedActions = null;
+
+        $this->mountAction('earlySettle');
+
+        if ($this->getMountedAction() === null) {
+            Notification::make()
+                ->title(__('Early settlement unavailable'))
+                ->body(__('We could not open the settlement form. Refresh the page and try again.'))
+                ->warning()
+                ->send();
+        }
+    }
+
+    protected function resolveEarlySettleLoan(?int $loanId = null): ?Loan
+    {
+        $member = CurrentMember::get();
+
+        if ($member === null) {
+            return null;
+        }
+
+        if ($loanId !== null) {
+            return Loan::query()
+                ->where('member_id', $member->id)
+                ->whereKey($loanId)
+                ->where('status', 'active')
+                ->first();
+        }
+
+        return $this->getSettleLoan();
     }
 
     protected function openEligibilityReviewWhenRequested(): void
@@ -60,32 +139,102 @@ class ListMyLoans extends ListRecords
         }
 
         $this->requestOverride = false;
+        $this->hubTab = 'apply';
         $this->mountAction('requestEligibilityOverride');
+    }
+
+    protected function openEarlySettlementWhenRequested(): void
+    {
+        if (!$this->openEarlySettleModal) {
+            return;
+        }
+
+        $this->openEarlySettleModal = false;
+        $this->hubTab = 'active';
+        $this->openEarlySettlement();
     }
 
     public function requestEligibilityOverrideAction(): Action
     {
-        return RequestLoanEligibilityOverrideAction::make();
+        return RequestLoanEligibilityOverrideAction::make()
+            ->visible(
+                fn(): bool => $this->hubTab === 'apply'
+                && RequestLoanEligibilityOverrideAction::canRequest(),
+            );
     }
 
     public function eligibilityReviewPendingAction(): Action
     {
-        return RequestLoanEligibilityOverrideAction::pendingReviewAction();
+        return RequestLoanEligibilityOverrideAction::pendingReviewAction()
+            ->visible(
+                fn(): bool => $this->hubTab === 'apply'
+                && RequestLoanEligibilityOverrideAction::hasPendingRequest(),
+            );
+    }
+
+    public function payOpenPeriodRepaymentAction(): Action
+    {
+        $loan = $this->getSettleLoan();
+        $member = CurrentMember::get();
+
+        return MemberLoanFilamentActions::payOpenPeriodRepayment()
+            ->record($loan)
+            ->visible(
+                $this->hubTab === 'active'
+                && $loan instanceof Loan
+                && $member !== null
+                && app(LoanRepaymentService::class)->shouldOfferOpenPeriodRepayment($member),
+            );
+    }
+
+    public function earlySettleAction(): Action
+    {
+        return MemberLoanFilamentActions::earlySettle()
+            ->record(fn(): ?Loan => $this->resolveEarlySettleLoan($this->earlySettleLoanId))
+            ->hidden(fn(): bool => $this->hubTab !== 'active');
     }
 
     public function setHubTab(string $tab): void
     {
-        if (! in_array($tab, ['active', 'history', 'settle', 'apply'], true)) {
+        if ($tab === 'settle') {
+            $tab = 'active';
+        }
+
+        if (!in_array($tab, ['active', 'history', 'apply'], true)) {
             return;
         }
 
         $this->hubTab = $tab;
         $this->resetPage();
+        $this->refreshHeaderActions();
+    }
+
+    protected function refreshHeaderActions(): void
+    {
+        foreach ($this->cachedHeaderActions as $previous) {
+            if ($previous instanceof Action) {
+                unset($this->cachedActions[$previous->getName()]);
+            }
+
+            if ($previous instanceof ActionGroup) {
+                foreach ($previous->getFlatActions() as $flatAction) {
+                    unset($this->cachedActions[$flatAction->getName()]);
+                }
+            }
+        }
+
+        $this->cachedHeaderActions = [];
+        $this->cacheInteractsWithHeaderActions();
     }
 
     public function getSubheading(): ?string
     {
         return __('Track your applications, active loan, and repayment progress.');
+    }
+
+    public function getFooter(): ?View
+    {
+        return view('filament.member.partials.filament-action-modals');
     }
 
     /**
@@ -103,36 +252,12 @@ class ListMyLoans extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        $member = CurrentMember::get();
-        $actions = [
-            $this->requestEligibilityOverrideAction(),
-            $this->eligibilityReviewPendingAction(),
-        ];
-
-        $activeLoan = $this->getSettleLoan();
-
-        if ($activeLoan instanceof Loan && in_array($this->hubTab, ['active', 'settle'], true)) {
-            $actions[] = MemberLoanFilamentActions::payOpenPeriodRepayment()->record($activeLoan);
-            $actions[] = MemberLoanFilamentActions::earlySettle()->record($activeLoan);
-        }
-
-        if ($this->hubTab === 'apply') {
-            $actions[] = Action::make('openCalculator')
-                ->label(__('Loan calculator'))
-                ->icon('heroicon-o-calculator')
-                ->url(LoanCalculatorPage::getUrl());
-        }
-
-        if (in_array($this->hubTab, ['active', 'apply'], true)) {
-            $actions[] = Action::make('applyForLoan')
-                ->label(__('Apply for loan'))
-                ->icon('heroicon-o-plus')
-                ->color('primary')
-                ->url(ApplyForLoan::getUrl())
-                ->visible(fn (): bool => $member !== null && app(LoanService::class)->checkEligibility($member)['eligible']);
-        }
-
-        return $actions;
+        return match ($this->hubTab) {
+            'active' => array_values(array_filter([
+                $this->payOpenPeriodRepaymentAction(),
+            ])),
+            default => [],
+        };
     }
 
     protected function getTableQuery(): Builder
@@ -166,11 +291,13 @@ class ListMyLoans extends ListRecords
             'activeCount' => $member !== null ? $hub->activePipelineCount($member) : 0,
             'historyCount' => $member !== null ? $hub->historyCount($member) : 0,
             'historyLoans' => $member !== null ? $hub->historyLoanCards($member) : [],
-            'settleLoan' => $settleLoan !== null ? $hub->loanCard($settleLoan) : null,
+            'settleLoan' => $settleLoan,
             'applyUrl' => ApplyForLoan::getUrl(),
             'calculatorUrl' => LoanCalculatorPage::getUrl(),
             'eligible' => (bool) ($eligibility['eligible'] ?? false),
             'eligibilityReason' => $eligibility['reason'] ?? ($eligibility['reasons'][0] ?? null),
+            'canRequestEligibilityOverride' => RequestLoanEligibilityOverrideAction::canRequest(),
+            'hasPendingEligibilityReview' => RequestLoanEligibilityOverrideAction::hasPendingRequest(),
         ];
     }
 

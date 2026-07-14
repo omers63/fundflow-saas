@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Services\CollectionSummaryExportService;
 use App\Services\ContributionCycleService;
 use Filament\Actions\Action;
@@ -11,6 +12,7 @@ use Filament\Forms\Components\Component;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
+use Livewire\Component as LivewireComponent;
 
 final class ContributionCycleHeaderActions
 {
@@ -79,7 +81,7 @@ final class ContributionCycleHeaderActions
             ->color('primary')
             ->schema(self::periodFormSchema())
             ->fillForm(fn (): array => self::defaultPeriod())
-            ->action(function (array $data): void {
+            ->action(function (array $data, LivewireComponent $livewire): void {
                 $service = app(ContributionCycleService::class);
                 [$month, $year] = self::resolvePeriodFromForm($data);
                 $results = $service->applyContributions($month, $year);
@@ -93,6 +95,12 @@ final class ContributionCycleHeaderActions
                     ]))
                     ->color($results['insufficient']->count() > 0 ? 'warning' : 'success')
                     ->send();
+
+                ContributionResource::dispatchInsightsRefresh($livewire);
+
+                if (method_exists($livewire, 'resetTable')) {
+                    $livewire->resetTable();
+                }
             });
     }
 

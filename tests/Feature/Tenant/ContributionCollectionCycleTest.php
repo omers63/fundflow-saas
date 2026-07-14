@@ -9,6 +9,7 @@ use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Services\ContributionCollectionCycleService;
 use App\Services\ContributionCycleService;
+use App\Services\DependentAllocationService;
 use App\Services\MemberOpeningBalanceService;
 use App\Support\ContributionCollectionStatus;
 use Carbon\Carbon;
@@ -1363,4 +1364,128 @@ test('self-funded dependent loan emi is excluded from parent cycle allocation', 
         ->and($this->cycles->dependentAllocationShortfallForPeriod($dependent->fresh(), 6, 2026))->toBe(0.0);
 
     Carbon::setTestNow();
+});
+
+test('mid-cycle dependent allocation increase syncs pending due and funds the new amount', function () {
+    Carbon::setTestNow(Carbon::parse('2025-11-10'));
+
+    [$month, $year] = $this->cycles->currentOpenPeriod();
+    $joinedAt = Carbon::create($year, $month, 1)->startOfMonth();
+
+    $parent = Member::create([
+        'member_number' => 'MEM-P-MID',
+        'name' => 'Parent Mid Cycle',
+        'email' => 'parent-mid@example.com',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => $joinedAt,
+        'contribution_arrears_cutoff_date' => $joinedAt,
+        'status' => 'active',
+        'contribution_cycles_active' => false,
+    ]);
+    $this->accounting->createMemberAccounts($parent);
+
+    $dependent = Member::create([
+        'member_number' => 'MEM-D-MID',
+        'name' => 'Dependent Mid Cycle',
+        'email' => 'dependent-mid@example.com',
+        'parent_member_id' => $parent->id,
+        'household_email' => 'parent-mid@example.com',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => $joinedAt,
+        'contribution_arrears_cutoff_date' => $joinedAt,
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($dependent);
+
+    Contribution::create([
+        'member_id' => $dependent->id,
+        'period' => Contribution::periodDate($month, $year),
+        'amount' => 500,
+        'amount_due' => 500,
+        'amount_collected' => 0,
+        'status' => 'pending',
+        'collection_status' => ContributionCollectionStatus::PENDING,
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+    ]);
+
+    AccountingService::withoutMemberCashCollection(fn () => $this->accounting->credit(
+        $parent->cashAccount,
+        2000,
+        'Parent deposit',
+    ));
+
+    app(DependentAllocationService::class)->changeAllocation(
+        parent: $parent,
+        dependent: $dependent,
+        newAmount: 1500,
+    );
+
+    $pending = Contribution::findForMemberPeriod($dependent->id, $month, $year);
+
+    expect((int) $dependent->fresh()->monthly_contribution_amount)->toBe(1500)
+        ->and((float) $pending->amount_due)->toBe(1500.0)
+        ->and((float) $pending->amount)->toBe(1500.0);
+
+    $results = [
+        'applied' => collect(),
+        'insufficient' => collect(),
+        'skipped' => collect(),
+    ];
+
+    $this->collection->applyHouseholdContributionsForPeriod(
+        $parent->fresh(),
+        collect([$dependent->fresh()]),
+        $month,
+        $year,
+        $results,
+    );
+
+    $allocation = DependentCashAllocation::query()
+        ->where('dependent_member_id', $dependent->id)
+        ->where('allocation_month', $month)
+        ->where('allocation_year', $year)
+        ->first();
+
+    $contribution = Contribution::findForMemberPeriod($dependent->id, $month, $year);
+
+    expect($allocation)->not->toBeNull()
+        ->and((float) $allocation->amount)->toBe(1500.0)
+        ->and($contribution->status)->toBe('posted')
+        ->and((float) $contribution->amount_due)->toBe(1500.0)
+        ->and((float) $contribution->amount_collected)->toBe(1500.0);
+
+    Carbon::setTestNow();
+});
+
+test('open-cycle override due above standing is preserved when standing increases', function () {
+    [$month, $year] = $this->cycles->currentOpenPeriod();
+
+    $member = Member::create([
+        'member_number' => 'MEM-OVR',
+        'name' => 'Override Member',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    Contribution::create([
+        'member_id' => $member->id,
+        'period' => Contribution::periodDate($month, $year),
+        'amount' => 5000,
+        'amount_due' => 5000,
+        'amount_collected' => 0,
+        'status' => 'pending',
+        'collection_status' => ContributionCollectionStatus::PENDING,
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+    ]);
+
+    Member::withoutSelfAllocationGuard(fn () => $member->update([
+        'monthly_contribution_amount' => 1500,
+    ]));
+
+    $contribution = Contribution::findForMemberPeriod($member->id, $month, $year);
+
+    expect((float) $contribution->amount_due)->toBe(5000.0)
+        ->and((float) $this->cycles->requiredCollectionCashForMemberPeriod($member->fresh(), $month, $year))->toBe(5000.0);
 });

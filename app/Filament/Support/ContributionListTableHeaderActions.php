@@ -192,6 +192,10 @@ final class ContributionListTableHeaderActions
                     ->send();
 
                 ContributionResource::dispatchInsightsRefresh($livewire);
+
+                if (method_exists($livewire, 'resetTable')) {
+                    $livewire->resetTable();
+                }
             });
     }
 }

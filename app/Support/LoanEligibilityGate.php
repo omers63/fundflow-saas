@@ -19,6 +19,8 @@ final class LoanEligibilityGate
 
     public const DELINQUENCY = 'delinquency';
 
+    public const SETTLEMENT_COOLDOWN = 'settlement_cooldown';
+
     public const OTHER = 'other';
 
     /**
@@ -32,6 +34,7 @@ final class LoanEligibilityGate
             self::MEMBERSHIP_TENURE => __('Membership tenure'),
             self::MIN_FUND_BALANCE => __('Minimum fund balance'),
             self::DELINQUENCY => __('Delinquency / payment history'),
+            self::SETTLEMENT_COOLDOWN => __('Post-settlement waiting period'),
             self::OTHER => __('Other'),
         ];
     }

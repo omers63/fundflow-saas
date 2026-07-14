@@ -54,24 +54,33 @@ trait EnrichesMemberPortalDashboard
         }
 
         if ($member->hasActiveLoanRepaymentObligation()) {
-            $pendingOpenCycleEmi = app(LoanEmiCollectionCatalogService::class)
-                ->pendingInstallmentCountForMemberInPeriod($member, $curMonth, $curYear);
+            $catalog = app(LoanEmiCollectionCatalogService::class);
 
-            if ($pendingOpenCycleEmi === 0) {
+            if ($catalog->hasUnpaidInstallmentDueInPeriod($member, $curMonth, $curYear)) {
+                return [
+                    'key' => 'loan_repayment',
+                    'label' => __('Under loan repayment'),
+                    'short' => __('Loan EMI'),
+                    'tone' => 'violet',
+                    'period' => $period,
+                ];
+            }
+
+            if ($catalog->hasPaidInstallmentDueInPeriod($member, $curMonth, $curYear)) {
                 return [
                     'key' => 'emi_paid',
                     'label' => __('EMI paid for :period', ['period' => $period]),
-                    'short' => __('Paid'),
+                    'short' => __('EMI paid'),
                     'tone' => 'emerald',
                     'period' => $period,
                 ];
             }
 
             return [
-                'key' => 'loan_repayment',
-                'label' => __('Under loan repayment'),
-                'short' => __('Loan EMI'),
-                'tone' => 'violet',
+                'key' => 'no_emi',
+                'label' => __('No EMI due in :period', ['period' => $period]),
+                'short' => __('No EMI'),
+                'tone' => 'emerald',
                 'period' => $period,
             ];
         }

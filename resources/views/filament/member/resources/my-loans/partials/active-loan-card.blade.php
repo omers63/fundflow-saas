@@ -1,8 +1,7 @@
 @php
     $showSchedule = $showSchedule ?? ($loan['show_schedule'] ?? true);
-    $showSettleButton = $loan['show_settle_button'] ?? true;
-    $hasActions = ($showSettleButton && filled($loan['settle_url'] ?? null))
-        || filled($loan['schedule_pdf_url'] ?? null);
+    $canSettle = $canSettle ?? ($loan['show_settle_button'] ?? false);
+    $hasActions = $canSettle || filled($loan['schedule_pdf_url'] ?? null);
 @endphp
 
 <x-member::panel :title="$loan['label']" :link="$loan['view_url']" :link-label="__('Details')"
@@ -49,10 +48,16 @@
                     {{ __('Download schedule PDF') }}
                 </a>
             @endif
-            @if ($showSettleButton && filled($loan['settle_url'] ?? null))
-                <a href="{{ $loan['settle_url'] }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-primary">
-                    {{ __('Settle loan') }}
-                </a>
+            @if ($canSettle)
+                <button
+                    type="button"
+                    wire:click.prevent="openEarlySettlement({{ (int) $loan['id'] }})"
+                    wire:loading.attr="disabled"
+                    wire:target="openEarlySettlement"
+                    class="fi-btn fi-btn-size-sm fi-outlined fi-color-primary"
+                >
+                    {{ __('Early settlement') }}
+                </button>
             @endif
         </x-member::panel-actions>
     @endif

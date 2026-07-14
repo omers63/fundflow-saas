@@ -14,6 +14,7 @@ use App\Services\MemberLatePaymentHistoryEvaluator;
 use App\Support\ContributionCollectionStatus;
 use App\Support\LoanEligibilityGate;
 use App\Support\LoanSettings;
+use Carbon\CarbonInterface;
 
 class LoanEligibilityService
 {
@@ -69,18 +70,18 @@ class LoanEligibilityService
         }
 
         if (! isset($skip[LoanEligibilityGate::MEMBERSHIP_TENURE])) {
-            $start = $member->loanEligibilityStartDate();
-            if ($start === null) {
-                $failed[LoanEligibilityGate::OTHER] = __('Membership start date is not set. Set membership date on the member or application.');
-            } else {
-                $requiredMonths = LoanSettings::eligibilityMonths();
-                $eligibleFrom = $start->copy()->addMonths($requiredMonths);
-                if ($eligibleFrom->isFuture()) {
-                    $failed[LoanEligibilityGate::MEMBERSHIP_TENURE] = __('You are not yet eligible for a loan. Eligibility starts on :date (:months months from membership start).', [
-                        'date' => $eligibleFrom->format('d M Y'),
-                        'months' => $requiredMonths,
-                    ]);
-                }
+            $tenure = $this->membershipTenureStatus($member);
+
+            if ($tenure['blocked']) {
+                $failed[LoanEligibilityGate::MEMBERSHIP_TENURE] = $tenure['message'];
+            }
+        }
+
+        if (! isset($skip[LoanEligibilityGate::SETTLEMENT_COOLDOWN])) {
+            $cooldown = $this->settlementCooldownStatus($member);
+
+            if ($cooldown['blocked']) {
+                $failed[LoanEligibilityGate::SETTLEMENT_COOLDOWN] = $cooldown['message'];
             }
         }
 
@@ -176,10 +177,114 @@ class LoanEligibilityService
             'fund_balance' => $fundBal,
             'max_loan_amount' => $maxAmount,
             'min_fund_balance' => Setting::loanMinFundBalance(),
-            'eligible_from' => $member->loanEligibilityStartDate()
-                ?->copy()
-                ->addMonths(Setting::loanEligibilityMonths())
-                ->format('d M Y') ?? '—',
+            'eligible_from' => $this->nextEligibilityDate($member)?->format('d M Y') ?? '—',
+        ];
+    }
+
+    public function nextEligibilityDate(Member $member): ?CarbonInterface
+    {
+        $candidates = collect([
+            $this->membershipTenureStatus($member)['eligible_from'],
+            $this->settlementCooldownStatus($member)['eligible_from'],
+        ])->filter();
+
+        if ($candidates->isEmpty()) {
+            return null;
+        }
+
+        return $candidates
+            ->sortByDesc(fn (CarbonInterface $date): int => $date->getTimestamp())
+            ->first();
+    }
+
+    /**
+     * @return array{blocked: bool, eligible_from: ?CarbonInterface, message: string}
+     */
+    public function membershipTenureStatus(Member $member): array
+    {
+        $requiredMonths = LoanSettings::eligibilityMonths();
+        $membershipStart = $member->loanEligibilityStartDate();
+
+        if ($membershipStart === null) {
+            return [
+                'blocked' => true,
+                'eligible_from' => null,
+                'message' => __('Membership start date is not set. Set membership date on the member or application.'),
+            ];
+        }
+
+        $eligibleFrom = $membershipStart->copy()->addMonths($requiredMonths);
+
+        if ($eligibleFrom->isFuture()) {
+            return [
+                'blocked' => true,
+                'eligible_from' => $eligibleFrom,
+                'message' => __('You are not yet eligible for a loan. Eligibility starts on :date (:months months from membership start).', [
+                    'date' => $eligibleFrom->format('d M Y'),
+                    'months' => $requiredMonths,
+                ]),
+            ];
+        }
+
+        return [
+            'blocked' => false,
+            'eligible_from' => null,
+            'message' => '',
+        ];
+    }
+
+    /**
+     * @return array{blocked: bool, eligible_from: ?CarbonInterface, message: string, loan: ?Loan, cycles: int}
+     */
+    public function settlementCooldownStatus(Member $member): array
+    {
+        $loan = $member->lastFullySettledLoan();
+
+        if (! $loan instanceof Loan || $loan->settled_at === null) {
+            return [
+                'blocked' => false,
+                'eligible_from' => null,
+                'message' => '',
+                'loan' => null,
+                'cycles' => 0,
+            ];
+        }
+
+        $cycles = $loan->settlementThresholdCooldownCycles();
+
+        if ($cycles <= 0) {
+            return [
+                'blocked' => false,
+                'eligible_from' => null,
+                'message' => '',
+                'loan' => $loan,
+                'cycles' => 0,
+            ];
+        }
+
+        $eligibleFrom = $loan->settled_at->copy()->addMonths($cycles);
+
+        if ($eligibleFrom->isFuture()) {
+            return [
+                'blocked' => true,
+                'eligible_from' => $eligibleFrom,
+                'message' => __('You fully settled loan #:id on :settled. You can apply again on :date after :cycles repayment cycle(s) (settlement threshold waiting period).', [
+                    'id' => $loan->id,
+                    'settled' => $loan->settled_at->format('d M Y'),
+                    'date' => $eligibleFrom->format('d M Y'),
+                    'cycles' => $cycles,
+                ]),
+                'loan' => $loan,
+                'cycles' => $cycles,
+            ];
+        }
+
+        return [
+            'blocked' => false,
+            'eligible_from' => null,
+            'message' => '',
+            'loan' => $loan,
+            'cycles' => $cycles,
         ];
     }
 }

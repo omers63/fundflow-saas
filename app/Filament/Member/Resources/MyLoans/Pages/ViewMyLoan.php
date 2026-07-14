@@ -10,6 +10,7 @@ use App\Models\Tenant\Loan;
 use App\Services\MemberLoansHubService;
 use App\Support\Insights\InsightFormatter;
 use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\View as SchemaView;
 use Filament\Schemas\Schema;
@@ -39,11 +40,49 @@ class ViewMyLoan extends ViewRecord
         ];
 
         if ($this->record->status === 'active') {
-            $actions[] = MemberLoanFilamentActions::payOpenPeriodRepayment();
-            $actions[] = MemberLoanFilamentActions::earlySettle();
+            $actions[] = $this->payOpenPeriodRepaymentAction();
+            $actions[] = $this->earlySettleAction();
         }
 
         return $actions;
+    }
+
+    public function payOpenPeriodRepaymentAction(): Action
+    {
+        return MemberLoanFilamentActions::payOpenPeriodRepayment()
+            ->record($this->getRecord());
+    }
+
+    public function earlySettleAction(): Action
+    {
+        return MemberLoanFilamentActions::earlySettle()
+            ->record($this->getRecord());
+    }
+
+    public function openEarlySettlement(?int $loanId = null): void
+    {
+        if ($this->record->status !== 'active') {
+            Notification::make()
+                ->title(__('No active loan'))
+                ->body(__('You do not have an active loan to settle right now.'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        unset($this->cachedActions['earlySettle']);
+        $this->cachedMountedActions = null;
+
+        $this->mountAction('earlySettle');
+
+        if ($this->getMountedAction() === null) {
+            Notification::make()
+                ->title(__('Early settlement unavailable'))
+                ->body(__('We could not open the settlement form. Refresh the page and try again.'))
+                ->warning()
+                ->send();
+        }
     }
 
     public function content(Schema $schema): Schema

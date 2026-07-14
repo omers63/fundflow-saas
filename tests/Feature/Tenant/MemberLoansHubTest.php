@@ -80,8 +80,7 @@ test('loans hub renders tab shell and active loan card', function () {
     $this->get('http://'.$this->domain.'/member/my-loans')
         ->assertSuccessful()
         ->assertSee('ff-member-loans-hub', false)
-        ->assertSee('ff-member-panel-actions', false)
-        ->assertSee(__('Active loans'), false)
+        ->assertSee(__('Active'), false)
         ->assertSee(__('Repayment schedule'), false)
         ->assertSee(__('Loan #:id', ['id' => $this->loan->id]), false);
 });
@@ -110,30 +109,32 @@ test('loans hub history tab shows completed loan cards', function () {
     Livewire::test(ListMyLoans::class)
         ->call('setHubTab', 'history')
         ->assertSet('hubTab', 'history')
-        ->assertSee(__('Loan history'), false)
-        ->assertSee(__('Loan #:id', ['id' => $completed->id]), false);
+        ->assertSee(__('History'), false)
+        ->assertSee(__('Loan #:id', ['id' => $completed->id]), false)
+        ->assertActionHidden('earlySettle');
 });
 
-test('loans hub active and settle tabs expose early settlement header action', function () {
+test('active tab exposes early settlement on loan card not header', function () {
     Filament::setCurrentPanel('member');
     $this->actingAs($this->memberUser, 'tenant');
 
-    Livewire::test(ListMyLoans::class)
+    $component = Livewire::test(ListMyLoans::class)
         ->assertSet('hubTab', 'active')
-        ->assertActionVisible('earlySettle');
+        ->assertSee(__('Early settlement'), false);
 
-    Livewire::test(ListMyLoans::class)
-        ->call('setHubTab', 'settle')
-        ->assertActionVisible('earlySettle');
+    $headerNames = collect($component->instance()->getCachedHeaderActions())
+        ->map(fn ($action) => $action->getName())
+        ->all();
+
+    expect($headerNames)->not->toContain('earlySettle');
 });
 
-test('loans hub settle tab shows active loan settlement panel', function () {
+test('legacy settle hub url opens repayment on active tab', function () {
     Filament::setCurrentPanel('member');
     $this->actingAs($this->memberUser, 'tenant');
 
     $this->get('http://'.$this->domain.'/member/my-loans?hub=settle')
         ->assertSuccessful()
-        ->assertSee(__('Settle loan'), false)
         ->assertSee(__('Loan #:id', ['id' => $this->loan->id]), false)
-        ->assertSee(__('Use the actions above to pay'), false);
+        ->assertSee(__('Use Pay this period above or Early settlement on your loan card to repay from your cash balance.'), false);
 });

@@ -17,6 +17,7 @@ uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
+    app()->setLocale('en');
     $this->accounting = app(AccountingService::class);
     $this->service = app(LoanService::class);
 
@@ -229,6 +230,102 @@ test('member with three consecutive late cycles is not eligible', function () {
 
     expect($result['eligible'])->toBeFalse()
         ->and($result['reasons'][0])->toContain('consecutive late');
+
+    Carbon::setTestNow();
+});
+
+test('loan settlement threshold cooldown cycles round up threshold slice over emi', function () {
+    $loan = Loan::make([
+        'amount' => 10000,
+        'amount_approved' => 10000,
+        'monthly_repayment' => 1000,
+        'settlement_threshold' => 0.16,
+    ]);
+
+    expect($loan->settlementThresholdCooldownCycles())->toBe(2);
+});
+
+test('member remains ineligible until settlement threshold waiting period ends', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+
+    $member = Member::create([
+        'member_number' => 'MEM-EARLY-SETTLE-'.uniqid(),
+        'name' => 'Recent Early Settler',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => Carbon::create(2020, 1, 1),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+    $member->fundAccount()->update(['balance' => 20000]);
+    seedPostedContributionsThroughOpenPeriod($member);
+
+    Loan::create([
+        'member_id' => $member->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
+        'interest_rate' => 0,
+        'term_months' => 10,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 10000,
+        'settlement_threshold' => 0.16,
+        'status' => 'early_settled',
+        'applied_at' => Carbon::create(2025, 1, 1),
+        'approved_at' => Carbon::create(2025, 1, 2),
+        'disbursed_at' => Carbon::create(2025, 1, 3),
+        'settled_at' => Carbon::create(2026, 4, 15),
+    ]);
+
+    $result = $this->service->checkEligibility($member->fresh());
+
+    expect($result['eligible'])->toBeFalse()
+        ->and($result['reasons'][0])->toContain('settlement threshold waiting period');
+
+    Carbon::setTestNow(Carbon::create(2026, 6, 20));
+    seedPostedContributionsThroughOpenPeriod($member->fresh());
+
+    $resultAfterCooldown = $this->service->checkEligibility($member->fresh());
+
+    expect($resultAfterCooldown['eligible'])->toBeTrue();
+
+    Carbon::setTestNow();
+});
+
+test('member with active loan after partial early settlement remains ineligible', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+
+    $member = Member::create([
+        'member_number' => 'MEM-PARTIAL-SETTLE-'.uniqid(),
+        'name' => 'Partial Early Settler',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => Carbon::create(2020, 1, 1),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+    $member->fundAccount()->update(['balance' => 20000]);
+    seedPostedContributionsThroughOpenPeriod($member);
+
+    Loan::create([
+        'member_id' => $member->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
+        'interest_rate' => 0,
+        'term_months' => 10,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 1000,
+        'status' => 'active',
+        'applied_at' => Carbon::create(2025, 1, 1),
+        'approved_at' => Carbon::create(2025, 1, 2),
+        'disbursed_at' => Carbon::create(2025, 1, 3),
+    ]);
+
+    $result = $this->service->checkEligibility($member->fresh());
+
+    expect($result['eligible'])->toBeFalse()
+        ->and($result['reasons'][0])->toContain('loan(s) in progress');
 
     Carbon::setTestNow();
 });

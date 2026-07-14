@@ -221,6 +221,42 @@ class LoanEmiCollectionCatalogService
     }
 
     /**
+     * All installments whose due date falls in the labelled cycle window (any status).
+     *
+     * @return Collection<int, LoanInstallment>
+     */
+    public function installmentsDueInPeriodForMember(Member $member, int $month, int $year): Collection
+    {
+        [$start, $end] = $this->cycles->cycleDueDateBounds($month, $year);
+
+        return LoanInstallment::query()
+            ->whereHas('loan', function (Builder $loan) use ($member): void {
+                $loan->whereIn('status', ['active', 'transferred'])
+                    ->where('member_id', $member->id);
+            })
+            ->whereBetween('due_date', [$start, $end])
+            ->orderBy('due_date')
+            ->get();
+    }
+
+    /**
+     * Whether any installment due in this labelled cycle is still unpaid.
+     */
+    public function hasUnpaidInstallmentDueInPeriod(Member $member, int $month, int $year): bool
+    {
+        return $this->pendingInstallmentCountForMemberInPeriod($member, $month, $year) > 0;
+    }
+
+    /**
+     * Whether the labelled cycle had an EMI that is already fully paid.
+     */
+    public function hasPaidInstallmentDueInPeriod(Member $member, int $month, int $year): bool
+    {
+        return $this->installmentsDueInPeriodForMember($member, $month, $year)
+            ->contains(fn (LoanInstallment $installment): bool => $installment->status === 'paid');
+    }
+
+    /**
      * Collect EMIs due in one cycle period from member cash (manual batch / cycle run).
      *
      * @param  array{applied: Collection, insufficient: Collection, skipped: Collection}  $results

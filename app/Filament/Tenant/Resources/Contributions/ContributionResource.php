@@ -380,6 +380,12 @@ class ContributionResource extends Resource
             ->count();
     }
 
+    public static function flushPeriodCountCaches(): void
+    {
+        self::$pendingCountCache = [];
+        self::$arrearsPeriodCountCache = [];
+    }
+
     public static function collectedContributionCount(): int
     {
         [$month, $year] = self::resolveListCycle();
@@ -390,12 +396,10 @@ class ContributionResource extends Resource
 
     public static function openCyclePendingCount(): int
     {
-        return once(function (): int {
-            $cycles = app(ContributionCycleService::class);
-            [$month, $year] = $cycles->currentOpenPeriod();
+        $cycles = app(ContributionCycleService::class);
+        [$month, $year] = $cycles->currentOpenPeriod();
 
-            return self::pendingCountForPeriod($month, $year);
-        });
+        return self::pendingCountForPeriod($month, $year);
     }
 
     public static function tableLayoutKey(): string
@@ -464,6 +468,8 @@ class ContributionResource extends Resource
 
     public static function dispatchInsightsRefresh(?Component $livewire): void
     {
+        self::flushPeriodCountCaches();
+
         if ($livewire === null) {
             return;
         }

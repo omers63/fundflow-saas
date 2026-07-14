@@ -315,7 +315,7 @@ test('member greeting card stays green early in the cycle when contribution is u
 
     $this->actingAs($this->memberUser, 'tenant');
 
-    $this->get('http://' . $this->domain . '/member')
+    $this->get('http://'.$this->domain.'/member')
         ->assertSuccessful()
         ->assertSee('ff-member-greeting--tone-emerald', false)
         ->assertSee('ff-member-greeting--progressive', false);
@@ -369,7 +369,7 @@ test('member greeting card uses green heatmap when current cycle is posted', fun
 
     $this->actingAs($this->memberUser, 'tenant');
 
-    $this->get('http://' . $this->domain . '/member')
+    $this->get('http://'.$this->domain.'/member')
         ->assertSuccessful()
         ->assertSee('ff-member-greeting--tone-emerald', false);
 });
@@ -428,7 +428,8 @@ test('member greeting card stays green when open-cycle EMI is paid and next EMI 
 
     expect($snapshot['greeting']['card_tone'])->toBe('emerald')
         ->and($snapshot['greeting']['card_urgency'])->toBe(0.0)
-        ->and($snapshot['greeting']['subtitle'])->toContain('EMI is paid');
+        ->and($snapshot['greeting']['subtitle'])->toContain('EMI for')
+        ->and($snapshot['greeting']['spotlights'][0]['value'])->toBe(__('EMI paid'));
 
     Carbon::setTestNow();
     BusinessDaySettings::saveFromForm(null);
@@ -450,11 +451,11 @@ test('member greeting card uses red heatmap when member has arrears', function (
         'approved_at' => now()->subMonths(3),
         'disbursed_at' => now()->subMonths(3),
     ])->installments()->create([
-                'installment_number' => 1,
-                'amount' => 500,
-                'due_date' => now()->subMonth(),
-                'status' => 'overdue',
-            ]);
+        'installment_number' => 1,
+        'amount' => 500,
+        'due_date' => now()->subMonth(),
+        'status' => 'overdue',
+    ]);
 
     Filament::setCurrentPanel('member');
     app()->setLocale('en');
@@ -465,7 +466,7 @@ test('member greeting card uses red heatmap when member has arrears', function (
 
     $this->actingAs($this->memberUser, 'tenant');
 
-    $this->get('http://' . $this->domain . '/member')
+    $this->get('http://'.$this->domain.'/member')
         ->assertSuccessful()
         ->assertSee('ff-member-greeting--tone-rose', false);
 });

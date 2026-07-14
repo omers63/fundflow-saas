@@ -513,6 +513,68 @@ class ContributionCycleService
     }
 
     /**
+     * When standing allocation rises mid-cycle, raise unpaid pending dues to match.
+     * Leaves dues above standing alone (open-cycle override). Does not lower dues.
+     */
+    public function syncPendingContributionDueToCurrentStanding(
+        Contribution $contribution,
+        ?Member $member = null,
+    ): Contribution {
+        if ($contribution->status !== 'pending') {
+            return $contribution;
+        }
+
+        $member ??= $contribution->relationLoaded('member')
+            ? $contribution->member
+            : $contribution->member()->first();
+
+        if ($member === null) {
+            return $contribution;
+        }
+
+        $standing = round((float) $member->monthly_contribution_amount, 2);
+
+        if ($standing <= 0) {
+            return $contribution;
+        }
+
+        $due = round((float) ($contribution->amount_due ?? $contribution->amount), 2);
+        $collected = round((float) ($contribution->amount_collected ?? 0), 2);
+
+        if ($due >= $standing - 0.0001) {
+            return $contribution;
+        }
+
+        $newDue = max($standing, $collected);
+
+        if (abs($due - $newDue) <= 0.0001 && abs(round((float) $contribution->amount, 2) - $newDue) <= 0.0001) {
+            return $contribution;
+        }
+
+        $contribution->update([
+            'amount' => $newDue,
+            'amount_due' => $newDue,
+        ]);
+
+        return $contribution->fresh() ?? $contribution;
+    }
+
+    /**
+     * Sync the open-cycle pending contribution (if any) after standing allocation changes.
+     */
+    public function syncOpenCyclePendingContributionDueToStanding(Member $member): ?Contribution
+    {
+        [$month, $year] = $this->currentOpenPeriod();
+        $contribution = Contribution::findForMemberPeriod($member->id, $month, $year);
+
+        if ($contribution === null) {
+            return null;
+        }
+
+        return $this->syncPendingContributionDueToCurrentStanding($contribution, $member);
+    }
+
+    /**
      * Cash required to settle a member's open or not-yet-created contribution for a period.
      *
      * @param  bool  $syncLateFees  When false (table/insights paint), skip write-side late-fee sync.
@@ -544,6 +606,19 @@ class ContributionCycleService
             ->first();
 
         if ($contribution !== null) {
+            $contribution = $this->syncPendingContributionDueToCurrentStanding($contribution, $member);
+
+            if ($member->relationLoaded('contributions')) {
+                $member->setRelation(
+                    'contributions',
+                    $member->contributions->map(
+                        fn (Contribution $row): Contribution => (int) $row->id === (int) $contribution->id
+                        ? $contribution
+                        : $row,
+                    ),
+                );
+            }
+
             if ($syncLateFees) {
                 app(ContributionCollectionCycleService::class)
                     ->syncContributionLateFeesBeforeCollection($contribution);

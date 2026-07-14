@@ -187,7 +187,10 @@ final class MemberLoansHubService
             'schedule_pdf_url' => $loan->status === 'active'
                 ? route('tenant.member.loan.schedule.pdf', ['loan' => $loan])
                 : null,
-            'settle_url' => MyLoanResource::getUrl('index', ['hub' => 'settle']),
+            'settle_url' => MyLoanResource::getUrl('index', [
+                'hub' => 'active',
+                'openEarlySettle' => true,
+            ]),
             'show_settle_button' => $loan->status === 'active',
             'show_schedule' => in_array($loan->status, ['active', 'approved', 'partially_disbursed', 'pending'], true),
         ];

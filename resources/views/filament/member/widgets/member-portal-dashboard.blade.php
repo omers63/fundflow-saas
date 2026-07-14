@@ -151,11 +151,8 @@ $currency = $currency ?? null;
                                 @endif
                                 @if (filled($loan['settle_url'] ?? null))
                                     <x-member::panel-actions>
-                                        <a href="{{ $loan['settle_url'] }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-gray">
-                                            {{ __('Partial settle') }}
-                                        </a>
                                         <a href="{{ $loan['settle_url'] }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-primary">
-                                            {{ __('Full settle') }}
+                                            {{ __('Early settlement') }}
                                         </a>
                                     </x-member::panel-actions>
                                 @endif

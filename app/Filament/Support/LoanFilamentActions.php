@@ -18,6 +18,7 @@ use App\Services\Loans\LoanSplitExcessFundCashOutService;
 use App\Services\Loans\LoanThresholdInstallmentWaiverService;
 use App\Services\LoanService;
 use App\Support\BusinessDay;
+use App\Support\Lang;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Filament\Actions\Action;
@@ -332,10 +333,20 @@ final class LoanFilamentActions
             ->icon('heroicon-o-check-badge')
             ->color('success')
             ->visible(fn (Loan $record): bool => $record->status === 'active')
-            ->fillForm(fn (Loan $record): array => [
-                'amount' => app(LoanEarlySettlementService::class)->requiredCash($record),
-                'option' => 'roll_up',
-            ])
+            ->fillForm(function (Loan $record): array {
+                $settlement = app(LoanEarlySettlementService::class);
+                $required = $settlement->requiredCash($record);
+                $record->loadMissing('member');
+                $record->member->unsetRelation('accounts');
+                $balance = $record->member->getCashBalance();
+
+                return [
+                    'amount' => $balance + 0.00001 >= $required
+                        ? $required
+                        : max(0.01, round($balance, 2)),
+                    'option' => 'roll_up',
+                ];
+            })
             ->schema(fn (Loan $record): array => self::earlySettlementFormSchema($record))
             ->action(function (Loan $record, array $data, Action $action, LoanService $service): void {
                 if (
@@ -372,9 +383,15 @@ final class LoanFilamentActions
             })
             ->fillForm(function () use ($resolveLoan): array {
                 $record = $resolveLoan();
+                $required = app(LoanEarlySettlementService::class)->requiredCash($record);
+                $record->loadMissing('member');
+                $record->member->unsetRelation('accounts');
+                $balance = $record->member->getCashBalance();
 
                 return [
-                    'amount' => app(LoanEarlySettlementService::class)->requiredCash($record),
+                    'amount' => $balance + 0.00001 >= $required
+                        ? $required
+                        : max(0.01, round($balance, 2)),
                     'option' => 'roll_up',
                 ];
             })
@@ -491,30 +508,43 @@ final class LoanFilamentActions
         $record->loadMissing('member');
         $record->member->unsetRelation('accounts');
         $balance = $record->member->getCashBalance();
+        $currency = Setting::get('general', 'currency', 'USD');
+        $requiredLabel = MoneyDisplay::format($required, $currency) ?? number_format($required, 2);
+        $balanceLabel = MoneyDisplay::format($balance, $currency) ?? number_format($balance, 2);
+        $cashCoversFullPayoff = $balance + 0.00001 >= $required;
 
         return [
             Placeholder::make('settlement_summary')
                 ->label(__('Settlement summary'))
                 ->content(new HtmlString(
                     __('Full payoff requires :required. Member cash balance: :balance.', [
-                        'required' => '<strong>'.number_format($required, 2).'</strong>',
-                        'balance' => '<strong>'.number_format($balance, 2).'</strong>',
+                        'required' => '<strong>'.e($requiredLabel).'</strong>',
+                        'balance' => '<strong>'.e($balanceLabel).'</strong>',
                     ])
+                    .($cashCoversFullPayoff ? '' : '<p class="mt-2 text-sm text-warning-600 dark:text-warning-400">'
+                        .e(__('Cash is short of a full payoff. Enter an amount up to your cash balance, or deposit more first.'))
+                        .'</p>')
                 )),
             TextInput::make('amount')
                 ->label(__('Amount'))
                 ->numeric()
                 ->required()
                 ->minValue(0.01)
-                ->maxValue(max(0.01, $balance))
-                ->default($required)
-                ->helperText(__('Enter the full payoff amount or a smaller lump sum.')),
+                ->default($cashCoversFullPayoff ? $required : max(0.01, $balance))
+                ->helperText(
+                    $cashCoversFullPayoff
+                    ? __('Enter the full payoff amount or a smaller lump sum.')
+                    : __('Maximum you can settle now from cash: :balance. Full payoff needs :required.', [
+                        'balance' => $balanceLabel,
+                        'required' => $requiredLabel,
+                    ])
+                ),
             Select::make('option')
                 ->label(__('Schedule option'))
-                ->options([
-                    'roll_up' => __('Roll remaining into last installment'),
-                    'skip_future' => __('Skip future installments'),
-                ])
+                ->options(Lang::transOptions([
+                    'roll_up' => 'Roll remaining into last installment',
+                    'skip_future' => 'Skip future installments',
+                ]))
                 ->default('roll_up')
                 ->required()
                 ->visible(fn (Get $get): bool => (float) ($get('amount') ?? 0) < $required - 0.00001)

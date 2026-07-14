@@ -3,5 +3,6 @@
         'loan' => $loan,
         'currency' => $currency,
         'showSchedule' => $showSchedule,
+        'canSettle' => ($loan['status'] ?? null) === 'active',
     ])
 </div>

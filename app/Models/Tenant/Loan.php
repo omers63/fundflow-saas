@@ -300,6 +300,23 @@ class Loan extends Model
     }
 
     /**
+     * Repayment cycles a member must wait after fully settling this loan before applying again.
+     * ceil((settlement_threshold × loan_amount) / monthly_installment)
+     */
+    public function settlementThresholdCooldownCycles(): int
+    {
+        $loanAmount = (float) ($this->amount_approved ?: $this->amount);
+        $thresholdPct = (float) ($this->settlement_threshold ?? LoanSettings::settlementThreshold());
+        $monthlyInstallment = (float) ($this->monthly_repayment ?: $this->representativeEmiAmount());
+
+        if ($loanAmount <= 0 || $thresholdPct <= 0 || $monthlyInstallment <= 0) {
+            return 0;
+        }
+
+        return (int) ceil(($loanAmount * $thresholdPct) / $monthlyInstallment);
+    }
+
+    /**
      * Sum of principal collected on paid installments (cash debits / amount_collected).
      */
     public function totalPrincipalCollected(): float
