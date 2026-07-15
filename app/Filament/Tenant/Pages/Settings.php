@@ -23,6 +23,7 @@ use App\Support\FiscalSettings;
 use App\Support\ImportDateFormats;
 use App\Support\Lang;
 use App\Support\LedgerSettings;
+use App\Support\LoanQueueProjectionSettings;
 use App\Support\LoanSettings;
 use App\Support\LocalizationSettings;
 use App\Support\MemberNumberSettings;
@@ -229,6 +230,7 @@ class Settings extends Page implements HasForms
             'loan_late_payment_consecutive' => $loan['late_payment_consecutive_threshold'] ?? 3,
             'loan_late_payment_rolling' => $loan['late_payment_rolling_threshold'] ?? 15,
             'loan_late_payment_lookback_months' => $loan['late_payment_lookback_months'] ?? 60,
+            ...LoanQueueProjectionSettings::allForForm(),
             ...ContributionPolicySettings::allForForm(),
             ...StatementSettings::allForForm(),
             ...CommunicationSettings::allForForm(),
@@ -803,6 +805,75 @@ class Settings extends Page implements HasForms
                                 return new HtmlString($html.'</tbody></table></div>');
                             }),
                     ]),
+                Section::make(__('Queue projection'))
+                    ->description(__('Controls projected approval (intake) and projected disbursement (process queue) estimates shown on the loan workbench and member loan cards.'))
+                    ->schema([
+                        Fieldset::make(__('Demand ahead (shortfall)'))
+                            ->schema([
+                                Select::make('lqp_queued_demand_scope')
+                                    ->label(__('Approved / partial loans ahead'))
+                                    ->options(Lang::transOptions(LoanQueueProjectionSettings::queuedDemandScopeOptions()))
+                                    ->required()
+                                    ->helperText(__('Whether queued demand in front of a loan is counted within its fund tier only or across every tier.')),
+                                Select::make('lqp_pending_demand_scope')
+                                    ->label(__('Pending applications ahead (intake)'))
+                                    ->options(Lang::transOptions(LoanQueueProjectionSettings::pendingDemandScopeOptions()))
+                                    ->required()
+                                    ->helperText(__('Whether other pending applications ahead in line are limited to the same expected fund tier or counted fund-wide.')),
+                            ])
+                            ->columns(2),
+                        Fieldset::make(__('Forward-looking monthly inflow'))
+                            ->schema([
+                                Toggle::make('lqp_use_forward_inflow')
+                                    ->label(__('Use forward-looking estimate'))
+                                    ->helperText(__('Primary projection based on expected collections and loan repayments due soon.')),
+                                Toggle::make('lqp_include_open_contributions')
+                                    ->label(__('Include open-period contribution targets'))
+                                    ->helperText(__('Expected member contributions for the current collection period.'))
+                                    ->visible(fn (Get $get): bool => (bool) ($get('lqp_use_forward_inflow') ?? true)),
+                                Toggle::make('lqp_include_contribution_arrears')
+                                    ->label(__('Include outstanding contribution arrears'))
+                                    ->helperText(__('Adds unpaid contribution and late-fee arrears to the forward inflow estimate.'))
+                                    ->visible(fn (Get $get): bool => (bool) ($get('lqp_use_forward_inflow') ?? true)),
+                                TextInput::make('lqp_emi_forecast_months')
+                                    ->label(__('EMI forecast window (months)'))
+                                    ->numeric()
+                                    ->minValue(1)
+                                    ->maxValue(24)
+                                    ->required()
+                                    ->helperText(__('Loan installments due in the next N months are summed and averaged to one monthly EMI inflow figure.'))
+                                    ->visible(fn (Get $get): bool => (bool) ($get('lqp_use_forward_inflow') ?? true)),
+                            ])
+                            ->columns(2),
+                        Fieldset::make(__('Historical monthly inflow'))
+                            ->schema([
+                                Toggle::make('lqp_use_historical_inflow')
+                                    ->label(__('Use historical estimate'))
+                                    ->helperText(__('Secondary band based on recent net master-fund ledger growth.')),
+                                TextInput::make('lqp_historical_lookback_months')
+                                    ->label(__('Historical lookback (months)'))
+                                    ->numeric()
+                                    ->minValue(1)
+                                    ->maxValue(36)
+                                    ->required()
+                                    ->visible(fn (Get $get): bool => (bool) ($get('lqp_use_historical_inflow') ?? true)),
+                            ])
+                            ->columns(2),
+                        Fieldset::make(__('Allocation & display'))
+                            ->schema([
+                                Toggle::make('lqp_apply_tier_allocation')
+                                    ->label(__('Apply fund tier allocation %'))
+                                    ->helperText(__('When off, the full master-fund inflow is used for every tier (useful when tiers overlap at 100%).')),
+                                TextInput::make('lqp_max_months_display')
+                                    ->label(__('Maximum months on badge'))
+                                    ->numeric()
+                                    ->minValue(1)
+                                    ->maxValue(24)
+                                    ->required()
+                                    ->helperText(__('Projections longer than this show as “> N months” or “N+ months”.')),
+                            ])
+                            ->columns(2),
+                    ]),
             ],
             'reconciliation::tab' => [
                 Section::make(__('Bank vs book'))
@@ -1279,6 +1350,8 @@ class Settings extends Page implements HasForms
             'include_year' => (bool) ($state['member_number_include_year'] ?? $memberNumber['include_year']),
         ]);
         Setting::set('contribution', 'cycle_start_day', $state['cycle_start_day']);
+
+        LoanQueueProjectionSettings::saveFromForm($state);
 
         LoanSettings::save([
             'eligibility_months' => (int) $state['loan_eligibility_months'],

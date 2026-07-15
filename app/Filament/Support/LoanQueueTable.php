@@ -7,7 +7,9 @@ namespace App\Filament\Support;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Setting;
+use App\Services\Loans\LoanQueueProjectionService;
 use App\Services\Loans\LoanQueueService;
+use App\Support\WaitingDuration;
 use Filament\Actions\BulkActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -34,11 +36,7 @@ final class LoanQueueTable
             ? self::processColumns($currency, $queue)
             : self::intakeColumns($currency);
 
-        $columns[] = TextColumn::make('projected_wait')
-            ->label(__('Projected approval'))
-            ->state(fn (Loan $record): string => $projections->labelFor($record))
-            ->badge()
-            ->color(fn (Loan $record): string => $projections->projectionFor($record)['ready_now'] ? 'success' : 'info');
+        $columns[] = self::projectedColumn($queueTab, $projections);
 
         $table = $queueTab === 'process'
             ? $table->defaultSort('queue_position')
@@ -87,6 +85,45 @@ final class LoanQueueTable
             ->defaultPaginationPageOption(25), TableGrouping::loanQueue());
     }
 
+    private static function projectedColumn(string $queueTab, LoanQueueProjectionService $projections): TextColumn
+    {
+        $column = TextColumn::make('projected_wait')
+            ->label($queueTab === 'process' ? __('Projected disbursement') : __('Projected approval'))
+            ->state(fn (Loan $record): string => $projections->labelFor($record))
+            ->badge()
+            ->color(fn (Loan $record): string => $projections->projectionFor($record)['ready_now'] ? 'success' : 'info');
+
+        if ($queueTab === 'process') {
+            return $column->sortable(query: function (Builder $query, string $direction): Builder {
+                $dir = strtolower($direction) === 'desc' ? 'desc' : 'asc';
+
+                if (! self::queryHasFundTiersJoin($query)) {
+                    $query->leftJoin('fund_tiers', 'fund_tiers.id', '=', 'loans.fund_tier_id');
+                }
+
+                return $query
+                    ->orderBy('fund_tiers.tier_number', $dir)
+                    ->orderByRaw('loans.queue_position IS NULL, loans.queue_position '.$dir);
+            });
+        }
+
+        return $column->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBy(
+            'applied_at',
+            strtolower($direction) === 'asc' ? 'desc' : 'asc',
+        ));
+    }
+
+    private static function queryHasFundTiersJoin(Builder $query): bool
+    {
+        foreach ($query->getQuery()->joins ?? [] as $join) {
+            if ($join->table === 'fund_tiers') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * @return array<int, TextColumn>
      */
@@ -104,15 +141,13 @@ final class LoanQueueTable
                 ->sortable(),
             TextColumn::make('waiting_days')
                 ->label(__('Waiting'))
-                ->state(fn (Loan $record): string => $record->applied_at
-                    ? $record->applied_at->diffInDays(now()).'d'
-                    : '—')
+                ->state(fn (Loan $record): string => WaitingDuration::format($record->applied_at))
                 ->badge()
                 ->color(fn (Loan $record): string => match (true) {
                     $record->is_emergency => 'danger',
                     ! $record->applied_at => 'gray',
-                    $record->applied_at->diffInDays(now()) >= 7 => 'danger',
-                    $record->applied_at->diffInDays(now()) >= 3 => 'warning',
+                    WaitingDuration::days($record->applied_at) >= 7 => 'danger',
+                    WaitingDuration::days($record->applied_at) >= 3 => 'warning',
                     default => 'success',
                 })
                 ->sortable(query: fn ($query, string $direction) => $query->orderBy('applied_at', $direction === 'asc' ? 'desc' : 'asc')),
@@ -154,6 +189,10 @@ final class LoanQueueTable
             TextColumn::make('fundTier.label')
                 ->label(__('Fund tier'))
                 ->placeholder('—'),
+            TextColumn::make('amount_requested')
+                ->label(__('Requested'))
+                ->money($currency)
+                ->sortable(),
             TextColumn::make('amount_approved')
                 ->label(__('Approved'))
                 ->money($currency)

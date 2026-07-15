@@ -325,6 +325,13 @@ final class LoanLifecycleService
         }
 
         $memberFundBalanceBefore = (float) ($loan->member->fundAccount?->balance ?? 0);
+        $hadPriorDisbursements = (float) $loan->amount_disbursed > 0.01;
+        $memberFundBalanceForActivation = filled($loan->member_fund_balance_at_disbursement)
+            ? (float) $loan->member_fund_balance_at_disbursement
+            : $memberFundBalanceBefore;
+        $strategy = LoanFundingStrategy::normalize($loan->funding_strategy);
+        $skipMemberFundSufficiencyCheck = $strategy === LoanFundingStrategy::SPLIT_PERCENTAGE
+            || $hadPriorDisbursements;
         $at = $disbursedAt ?? BusinessDay::now();
         $disbursement = LoanDisbursement::create([
             'loan_id' => $loan->id,
@@ -336,15 +343,40 @@ final class LoanLifecycleService
             'notes' => $notes,
         ]);
 
+        $activated = false;
+
         try {
-            $this->ledger->postPartialLoanDisbursement(
-                $loan,
-                $amount,
-                $disbursement,
-                $at,
-                $allowNegativeMasterFundBalance,
-                $memberFundBalanceBefore,
-            );
+            DB::transaction(function () use ($loan, $amount, $disbursement, $at, $allowNegativeMasterFundBalance, $memberFundBalanceBefore, $memberFundBalanceForActivation, $skipMemberFundSufficiencyCheck, &$activated): void {
+                $this->ledger->postPartialLoanDisbursement(
+                    $loan,
+                    $amount,
+                    $disbursement,
+                    $at,
+                    $allowNegativeMasterFundBalance,
+                    $memberFundBalanceBefore,
+                );
+
+                $loan->refresh();
+
+                if ($loan->isFullyDisbursed()) {
+                    $this->activateAfterFullDisbursement(
+                        $loan,
+                        $at,
+                        $memberFundBalanceForActivation,
+                        $skipMemberFundSufficiencyCheck,
+                    );
+                    $activated = true;
+
+                    return;
+                }
+
+                $loan->update([
+                    'status' => 'partially_disbursed',
+                    'lifecycle_stage' => 'partially_disbursed',
+                    'member_fund_balance_at_disbursement' => $loan->member_fund_balance_at_disbursement
+                        ?? round($memberFundBalanceBefore, 2),
+                ]);
+            });
         } catch (Throwable $e) {
             $disbursement->delete();
 
@@ -353,14 +385,7 @@ final class LoanLifecycleService
 
         $loan->refresh();
 
-        if ($loan->isFullyDisbursed()) {
-            $this->activateAfterFullDisbursement($loan, $at, $memberFundBalanceBefore);
-        } else {
-            $loan->update([
-                'status' => 'partially_disbursed',
-                'lifecycle_stage' => 'partially_disbursed',
-            ]);
-
+        if (! $activated) {
             $this->notifyMember($loan, new LoanPartialDisbursementNotification(
                 disbursement: $disbursement,
                 totalDisbursed: (float) $loan->amount_disbursed,
@@ -373,10 +398,52 @@ final class LoanLifecycleService
         }
     }
 
+    /**
+     * Activate a loan whose cash disbursements are complete but activation failed mid-flow.
+     */
+    public function completeStuckFullDisbursement(Loan $loan): void
+    {
+        $loan->loadMissing(['member.accounts', 'loanTier', 'disbursements']);
+
+        if ($loan->status !== 'partially_disbursed' || ! $loan->isFullyDisbursed()) {
+            throw new InvalidArgumentException(__('Loan is not stuck awaiting activation after full disbursement.'));
+        }
+
+        $lastDisbursement = $loan->disbursements()->latest('id')->first();
+
+        if ($lastDisbursement === null) {
+            throw new InvalidArgumentException(__('No disbursement records found for this loan.'));
+        }
+
+        $memberFundBalanceForActivation = filled($loan->member_fund_balance_at_disbursement)
+            ? (float) $loan->member_fund_balance_at_disbursement
+            : (float) ($loan->member->fundAccount?->balance ?? 0)
+            + (float) $loan->disbursements()->sum('member_portion')
+            + (LoanFundingStrategy::normalize($loan->funding_strategy) === LoanFundingStrategy::SPLIT_PERCENTAGE
+                ? (float) LoanSettings::resolveFundingPortions(
+                    (float) $loan->amount_approved,
+                    0,
+                    $loan->funding_strategy,
+                )['master_portion']
+                : 0.0);
+
+        $this->activateAfterFullDisbursement(
+            $loan,
+            Carbon::parse($lastDisbursement->disbursed_at),
+            $memberFundBalanceForActivation,
+            skipMemberFundSufficiencyCheck: true,
+        );
+
+        if ($loan->fund_tier_id) {
+            LoanQueueOrderingService::resequenceFundTier($loan->fund_tier_id);
+        }
+    }
+
     private function activateAfterFullDisbursement(
         Loan $loan,
         CarbonInterface $disbursedAt,
         float $memberFundBalanceBefore,
+        bool $skipMemberFundSufficiencyCheck = false,
     ): void {
         $amountApproved = (float) $loan->amount_approved;
         $minInstall = (float) ($loan->loanTier?->min_monthly_installment ?? 1000);
@@ -393,8 +460,11 @@ final class LoanLifecycleService
 
         $totalToRepay = round($masterPortion + ($amountApproved * $threshold), 2);
 
-        DB::transaction(function () use ($loan, $disbursedAt, $exemption, $count, $minInstall, $memberPortion, $masterPortion, $memberFundBalanceBefore, $totalToRepay): void {
-            if ($memberPortion > $memberFundBalanceBefore + 0.01) {
+        DB::transaction(function () use ($loan, $disbursedAt, $exemption, $count, $minInstall, $memberPortion, $masterPortion, $memberFundBalanceBefore, $totalToRepay, $skipMemberFundSufficiencyCheck): void {
+            if (
+                ! $skipMemberFundSufficiencyCheck
+                && $memberPortion > $memberFundBalanceBefore + 0.01
+            ) {
                 throw new InvalidArgumentException(__(
                     'Member fund balance (:balance) is insufficient for the member portion (:portion).',
                     [

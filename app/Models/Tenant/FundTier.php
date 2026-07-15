@@ -120,8 +120,9 @@ class FundTier extends Model
     }
 
     /**
-     * Pool that can actually be paid out to queued loans right now:
-     * allocated minus already-active exposure, capped by the master fund balance on hand.
+     * Per-tier lending headroom (policy cap for this band only — not additive across tiers).
+     * Overlapping tier percentages share one master fund; use {@see LoanQueueService::masterFundDisbursableNow()}
+     * for the fund-wide ceiling.
      */
     public function getDisbursablePoolAttribute(): float
     {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Loans;
 
 use App\Filament\Tenant\Resources\Loans\LoanResource;
+use App\Models\Tenant\Account;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use Illuminate\Database\Eloquent\Builder;
@@ -14,7 +15,8 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
  * Builds the three loan-queue stages:
  *  1. Intake     — pending applications, FIFO with emergencies pinned first.
  *  2. Tier queues — approved/partially disbursed loans stacked per fund tier by queue_position.
- *  3. Process queue — loans the tier pools can fund now (fully or partially), ready for disbursement.
+ *  3. Process queue — approved / partially disbursed loans with remaining balance, ordered by tier
+ *     and queue position. {@see processCoverage()} marks which rows are fundable now vs waiting on pool.
  */
 class LoanQueueService
 {
@@ -49,16 +51,15 @@ class LoanQueueService
     }
 
     /**
-     * Loans the tier pools can fund now, in tier + queue-position order.
+     * All loans awaiting disbursement, in tier + queue-position order.
      */
     public function processQuery(): Builder
     {
-        $ids = array_keys($this->processCoverage());
-
         return Loan::query()
             ->with(['member', 'loanTier', 'fundTier'])
             ->select('loans.*')
-            ->whereIn('loans.id', $ids === [] ? [0] : $ids)
+            ->whereIn('loans.status', ['approved', 'partially_disbursed'])
+            ->whereRaw('COALESCE(loans.amount_disbursed, 0) < COALESCE(loans.amount_approved, loans.amount_requested, 0)')
             ->leftJoin('fund_tiers', 'fund_tiers.id', '=', 'loans.fund_tier_id')
             ->orderBy('fund_tiers.tier_number')
             ->orderByRaw('loans.queue_position IS NULL, loans.queue_position')
@@ -78,12 +79,13 @@ class LoanQueueService
         }
 
         $coverage = [];
+        $globalRemaining = $this->masterFundDisbursableNow();
 
         foreach ($this->activeTiers() as $tier) {
-            $pool = (float) $tier->disbursable_pool;
+            $tierPolicyPool = max(0.0, (float) $tier->allocated_amount - $tier->activeLoanExposure());
 
             foreach ($this->queuedLoansForTier($tier) as $loan) {
-                if ($pool < 0.01) {
+                if ($globalRemaining < 0.01 || $tierPolicyPool < 0.01) {
                     break;
                 }
 
@@ -92,16 +94,23 @@ class LoanQueueService
                     continue;
                 }
 
-                $amount = min($remaining, $pool);
+                $amount = min($remaining, $tierPolicyPool, $globalRemaining);
                 $coverage[(int) $loan->id] = [
                     'amount' => round($amount, 2),
                     'full' => $amount + 0.01 >= $remaining,
                 ];
-                $pool -= $amount;
+                $tierPolicyPool -= $amount;
+                $globalRemaining -= $amount;
             }
         }
 
         return $this->coverage = $coverage;
+    }
+
+    /** Master fund on hand — the shared ceiling when tier allocations overlap. */
+    public function masterFundDisbursableNow(): float
+    {
+        return max(0.0, (float) (Account::masterFund()?->balance ?? 0));
     }
 
     /**
@@ -164,11 +173,9 @@ class LoanQueueService
     {
         $queuedDemand = 0.0;
         $queuedCount = 0;
-        $disbursable = 0.0;
 
         foreach ($this->activeTiers() as $tier) {
             $queuedDemand += $tier->queuedRemainingExposure();
-            $disbursable += (float) $tier->disbursable_pool;
             $queuedCount += Loan::query()
                 ->where('fund_tier_id', $tier->id)
                 ->whereIn('status', ['approved', 'partially_disbursed'])
@@ -179,7 +186,7 @@ class LoanQueueService
             'intake' => Loan::query()->needsDecision()->count(),
             'queued' => $queuedCount,
             'queued_demand' => round($queuedDemand, 2),
-            'disbursable' => round($disbursable, 2),
+            'disbursable' => round($this->masterFundDisbursableNow(), 2),
             'process' => count($this->processCoverage()),
             'emergency' => Loan::query()->inQueue()->where('is_emergency', true)->count(),
             'running' => Loan::query()->where('status', 'active')->count(),

@@ -103,6 +103,7 @@
     ":count day left in cycle|:count days left in cycle": ":count يوم متبقٍ في الدورة|:count أيام متبقية في الدورة",
     ":count day open|:count days open": ":count يوم مفتوح|:count أيام مفتوحة",
     ":count day|:count days": "يوم واحد|:count أيام",
+    ":months, :days": ":months، :days",
     ":count delinquent": ":count متعثر",
     ":count delinquent|:count delinquent": ":count متعثر|:count متعثر",
     ":count dependent needs attention|:count dependents need attention": ":count تابع يحتاج انتباهاً|:count تابعون يحتاجون انتباهاً",

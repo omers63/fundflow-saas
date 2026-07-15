@@ -9,6 +9,7 @@ use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Services\Loans\LoanQueueProjectionService;
+use App\Support\LoanQueueProjectionSettings;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -139,4 +140,51 @@ test('pending loans wait behind queued demand in the same tier', function () {
 
     expect($queuedProjection['months_min'])->toBe(1)
         ->and($pendingProjection['months_min'])->toBe(2);
+});
+
+test('pending projection counts queued demand across tiers when configured', function () {
+    $loanTierB = LoanTier::query()->firstOrCreate(
+        ['tier_number' => 2],
+        ['label' => 'Loan Tier 2', 'min_amount' => 0, 'max_amount' => 50_000, 'min_monthly_installment' => 0, 'is_active' => true],
+    );
+    $fundTierB = FundTier::query()->firstOrCreate(
+        ['tier_number' => 2],
+        ['label' => 'Fund Tier 2'],
+    );
+    $fundTierB->update(['loan_tier_id' => $loanTierB->id, 'percentage' => 100, 'is_active' => true]);
+
+    makeProjectionMember(5000);
+    $member = makeProjectionMember(0);
+
+    makeProjectionLoan($member, $this->fundTier, [
+        'amount_requested' => 5000,
+        'amount_approved' => 5000,
+        'queue_position' => 1,
+    ]);
+
+    $pending = makeProjectionLoan($member, $fundTierB, [
+        'status' => 'pending',
+        'amount_requested' => 5000,
+        'amount_approved' => null,
+        'approved_at' => null,
+        'fund_tier_id' => null,
+        'loan_tier_id' => $loanTierB->id,
+    ]);
+
+    LoanQueueProjectionSettings::saveFromForm([
+        'lqp_queued_demand_scope' => LoanQueueProjectionSettings::SCOPE_ACROSS_ALL_TIERS,
+        'lqp_pending_demand_scope' => LoanQueueProjectionSettings::SCOPE_PENDING_WITHIN_TIER,
+        'lqp_include_open_contributions' => true,
+        'lqp_include_contribution_arrears' => false,
+        'lqp_emi_forecast_months' => 3,
+        'lqp_use_forward_inflow' => true,
+        'lqp_use_historical_inflow' => false,
+        'lqp_historical_lookback_months' => 3,
+        'lqp_apply_tier_allocation' => true,
+        'lqp_max_months_display' => 6,
+    ]);
+
+    $projection = app(LoanQueueProjectionService::class)->projectionFor($pending);
+
+    expect($projection['months_min'])->toBe(2);
 });

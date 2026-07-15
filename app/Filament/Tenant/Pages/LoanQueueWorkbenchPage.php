@@ -89,8 +89,20 @@ class LoanQueueWorkbenchPage extends Page implements HasTable
         $this->queueTab = $tab;
 
         if ($tab !== 'tiers') {
+            $this->cachedDefaultTableColumnState = null;
+            $this->tableColumns = [];
             $this->resetTable();
         }
+    }
+
+    public function getTableColumnsSessionKey(): string
+    {
+        return 'tables.' . md5(static::class . '|' . $this->queueTab) . '_columns';
+    }
+
+    public function getHasReorderedTableColumnsSessionKey(): string
+    {
+        return 'tables.' . md5(static::class . '|' . $this->queueTab) . '_has_reordered_columns';
     }
 
     /** Map legacy tab keys (deep links, insights URLs) to the new stage tabs. */

@@ -85,6 +85,65 @@ function makeWorkbenchLoan(Member $member, FundTier $fundTier, array $overrides 
     ], $overrides));
 }
 
+test('intake and process queues use separate column manager session keys', function () {
+    $intakeKey = Livewire::test(LoanQueueWorkbenchPage::class)
+        ->instance()
+        ->getTableColumnsSessionKey();
+
+    $processKey = Livewire::test(LoanQueueWorkbenchPage::class, ['queueTab' => 'process'])
+        ->instance()
+        ->getTableColumnsSessionKey();
+
+    expect($intakeKey)->not->toBe($processKey);
+});
+
+test('switching queue tabs reloads the correct table columns', function () {
+    makeWorkbenchLoan($this->member, $this->fundTier);
+
+    $intakeColumns = [
+        'is_emergency',
+        'applied_at',
+        'waiting_days',
+        'member.name',
+        'amount_requested',
+        'loanTier.label',
+        'expected_fund_tier',
+        'projected_wait',
+    ];
+
+    $processColumns = [
+        'queue_position',
+        'member.name',
+        'fundTier.label',
+        'amount_requested',
+        'amount_approved',
+        'remaining_to_disburse',
+        'coverage',
+        'is_emergency',
+        'status',
+        'projected_wait',
+    ];
+
+    $component = Livewire::test(LoanQueueWorkbenchPage::class);
+
+    foreach ($intakeColumns as $column) {
+        $component->assertTableColumnVisible($column);
+    }
+
+    $component
+        ->call('setQueueTab', 'process');
+
+    foreach ($processColumns as $column) {
+        $component->assertTableColumnVisible($column);
+    }
+
+    $component->call('setQueueTab', 'intake');
+
+    foreach ($intakeColumns as $column) {
+        $component->assertTableColumnVisible($column);
+    }
+});
+
 test('workbench defaults to intake and normalizes legacy tab keys', function () {
     Livewire::test(LoanQueueWorkbenchPage::class)
         ->assertSuccessful()
@@ -153,6 +212,67 @@ test('process queue surfaces fundable loans including partially disbursed with d
         ->assertCanSeeTableRecords([$approved, $partial])
         ->assertTableActionVisible('disburse', $approved)
         ->assertTableActionVisible('disburse', $partial);
+});
+
+test('process queue lists loans waiting on pool when tier headroom is exhausted', function () {
+    Loan::query()->create([
+        'member_id' => $this->member->id,
+        'amount' => 200_000,
+        'amount_requested' => 200_000,
+        'amount_approved' => 200_000,
+        'amount_disbursed' => 200_000,
+        'interest_rate' => 0,
+        'term_months' => 12,
+        'monthly_repayment' => 16_667,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(3),
+        'approved_at' => now()->subMonths(3),
+        'disbursed_at' => now()->subMonths(3),
+        'loan_tier_id' => $this->fundTier->loan_tier_id,
+        'fund_tier_id' => $this->fundTier->id,
+    ]);
+
+    $waiting = makeWorkbenchLoan($this->member, $this->fundTier, [
+        'status' => 'partially_disbursed',
+        'amount_approved' => 20_000,
+        'amount_disbursed' => 6_600,
+        'approved_at' => now()->subDay(),
+        'fund_tier_id' => $this->fundTier->id,
+        'queue_position' => 1,
+    ]);
+
+    Livewire::test(LoanQueueWorkbenchPage::class)
+        ->call('setQueueTab', 'process')
+        ->assertSuccessful()
+        ->assertCanSeeTableRecords([$waiting])
+        ->assertSee(__('Waiting on pool'));
+});
+
+test('process queue can sort by projected disbursement without sql errors', function () {
+    $first = makeWorkbenchLoan($this->member, $this->fundTier, [
+        'status' => 'approved',
+        'amount_approved' => 10_000,
+        'amount_disbursed' => 0,
+        'approved_at' => now()->subDay(),
+        'fund_tier_id' => $this->fundTier->id,
+        'queue_position' => 2,
+    ]);
+    $second = makeWorkbenchLoan($this->member, $this->fundTier, [
+        'status' => 'partially_disbursed',
+        'amount_approved' => 10_000,
+        'amount_disbursed' => 4_000,
+        'approved_at' => now()->subDays(2),
+        'fund_tier_id' => $this->fundTier->id,
+        'queue_position' => 1,
+    ]);
+
+    Livewire::test(LoanQueueWorkbenchPage::class)
+        ->call('setQueueTab', 'process')
+        ->assertSuccessful()
+        ->sortTable('projected_wait')
+        ->assertSuccessful()
+        ->assertCanSeeTableRecords([$second, $first], inOrder: true);
 });
 
 test('tier queues tab renders pool figures, queued loans, and running loans with progress', function () {

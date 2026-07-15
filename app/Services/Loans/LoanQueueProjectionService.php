@@ -11,35 +11,43 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Transaction;
 use App\Services\ContributionCycleService;
 use App\Support\BusinessDay;
+use App\Support\LoanQueueProjectionSettings;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
  * Projects how long a queued or pending loan will wait before it can be funded.
  *
  * Primary estimate: expected monthly inflows (open-period contribution targets +
- * EMI repayments falling due), allocated to the loan's fund tier by its percentage.
- * Sanity band: trailing 3-month net master-fund growth, allocated the same way.
+ * optional arrears + EMI repayments due), optionally allocated to the loan's fund tier.
+ * Sanity band: trailing net master-fund growth over a configurable lookback window.
  *
  * Results are memoized per service instance — reuse one instance per request.
  */
 class LoanQueueProjectionService
 {
-    private const MAX_MONTHS_DISPLAY = 6;
-
     /** @var array<int, FundTier> */
     private array $tiers = [];
 
     /** @var array<int, list<array{id: int, need: float}>> Queued (approved/partial) remaining per tier, in queue order. */
     private array $queuedByTier = [];
 
+    /** @var list<array{id: int, need: float}>|null */
+    private ?array $queuedGlobal = null;
+
     /** @var array<int, list<array{id: int, need: float}>> Pending intake per expected tier, emergencies first then FIFO. */
     private array $pendingByTier = [];
+
+    /** @var list<array{id: int, need: float}>|null */
+    private ?array $pendingGlobal = null;
 
     private ?float $expectedMonthlyInflow = null;
 
     private ?float $historicalMonthlyInflow = null;
 
-    public function __construct(private ContributionCycleService $cycles) {}
+    public function __construct(
+        private ContributionCycleService $cycles,
+        private LoanDelinquencyService $delinquency,
+    ) {}
 
     /**
      * @return array{ready_now: bool, months_min: int|null, months_max: int|null, label: string}
@@ -59,15 +67,22 @@ class LoanQueueProjectionService
         }
 
         $months = [];
+        $tierFactor = LoanQueueProjectionSettings::applyTierAllocationPercent()
+            ? ((float) $tier->percentage / 100)
+            : 1.0;
 
-        $primary = $this->expectedMonthlyInflow() * ((float) $tier->percentage / 100);
-        if ($primary >= 0.01) {
-            $months[] = (int) ceil($shortfall / $primary);
+        if (LoanQueueProjectionSettings::useForwardInflow()) {
+            $primary = $this->expectedMonthlyInflow() * $tierFactor;
+            if ($primary >= 0.01) {
+                $months[] = (int) ceil($shortfall / $primary);
+            }
         }
 
-        $band = $this->historicalMonthlyInflow() * ((float) $tier->percentage / 100);
-        if ($band >= 0.01) {
-            $months[] = (int) ceil($shortfall / $band);
+        if (LoanQueueProjectionSettings::useHistoricalInflow()) {
+            $band = $this->historicalMonthlyInflow() * $tierFactor;
+            if ($band >= 0.01) {
+                $months[] = (int) ceil($shortfall / $band);
+            }
         }
 
         if ($months === []) {
@@ -90,12 +105,18 @@ class LoanQueueProjectionService
         $pool = (float) $tier->disbursable_pool;
 
         $ahead = 0.0;
-        $queued = $this->queuedForTier($tier);
+        $queued = LoanQueueProjectionSettings::queuedDemandScope() === LoanQueueProjectionSettings::SCOPE_ACROSS_ALL_TIERS
+            ? $this->queuedGlobally()
+            : $this->queuedForTier($tier);
 
         if ($loan->status === 'pending') {
             $ahead += array_sum(array_column($queued, 'need'));
 
-            foreach ($this->pendingForTier($tier) as $row) {
+            $pending = LoanQueueProjectionSettings::pendingDemandScope() === LoanQueueProjectionSettings::SCOPE_PENDING_ACROSS_ALL
+                ? $this->pendingGlobally()
+                : $this->pendingForTier($tier);
+
+            foreach ($pending as $row) {
                 if ($row['id'] === (int) $loan->id) {
                     break;
                 }
@@ -152,6 +173,26 @@ class LoanQueueProjectionService
     /**
      * @return list<array{id: int, need: float}>
      */
+    private function queuedGlobally(): array
+    {
+        if ($this->queuedGlobal !== null) {
+            return $this->queuedGlobal;
+        }
+
+        $rows = [];
+
+        foreach (FundTier::query()->where('is_active', true)->orderBy('tier_number')->get() as $tier) {
+            foreach ($this->queuedForTier($tier) as $row) {
+                $rows[] = $row;
+            }
+        }
+
+        return $this->queuedGlobal = $rows;
+    }
+
+    /**
+     * @return list<array{id: int, need: float}>
+     */
     private function pendingForTier(FundTier $tier): array
     {
         if (! array_key_exists($tier->id, $this->pendingByTier)) {
@@ -186,8 +227,25 @@ class LoanQueueProjectionService
     }
 
     /**
-     * Expected monthly inflow into the master fund: open-period contribution
-     * targets plus EMI repayments due over the next 3 months (averaged).
+     * @return list<array{id: int, need: float}>
+     */
+    private function pendingGlobally(): array
+    {
+        return $this->pendingGlobal ??= Loan::query()
+            ->where('status', 'pending')
+            ->orderByDesc('is_emergency')
+            ->orderBy('applied_at')
+            ->orderBy('id')
+            ->get(['id', 'amount_requested', 'amount_approved'])
+            ->map(fn (Loan $loan): array => [
+                'id' => (int) $loan->id,
+                'need' => (float) ($loan->amount_approved ?? $loan->amount_requested),
+            ])
+            ->all();
+    }
+
+    /**
+     * Expected monthly inflow into the master fund.
      */
     private function expectedMonthlyInflow(): float
     {
@@ -195,21 +253,30 @@ class LoanQueueProjectionService
             return $this->expectedMonthlyInflow;
         }
 
-        [$month, $year] = $this->cycles->currentOpenPeriod();
-        $contributions = (float) ($this->cycles->expectedCollectionTargetsForPeriod($month, $year)['expected_amount'] ?? 0);
+        $contributions = 0.0;
 
+        if (LoanQueueProjectionSettings::includeOpenPeriodContributions()) {
+            [$month, $year] = $this->cycles->currentOpenPeriod();
+            $contributions += (float) ($this->cycles->expectedCollectionTargetsForPeriod($month, $year)['expected_amount'] ?? 0);
+        }
+
+        if (LoanQueueProjectionSettings::includeContributionArrears()) {
+            $contributions += $this->delinquency->contributionArrearsAmountTotal();
+        }
+
+        $forecastMonths = LoanQueueProjectionSettings::emiForecastMonths();
         $now = BusinessDay::now();
         $emiMonthly = ((float) LoanInstallment::query()
             ->whereIn('status', ['pending', 'overdue'])
             ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
-            ->whereBetween('due_date', [$now, $now->copy()->addMonths(3)])
-            ->sum('amount')) / 3;
+            ->whereBetween('due_date', [$now, $now->copy()->addMonths($forecastMonths)])
+            ->sum('amount')) / $forecastMonths;
 
         return $this->expectedMonthlyInflow = $contributions + $emiMonthly;
     }
 
     /**
-     * Trailing 3-month average net growth of the master fund ledger.
+     * Trailing average net growth of the master fund ledger.
      */
     private function historicalMonthlyInflow(): float
     {
@@ -223,7 +290,8 @@ class LoanQueueProjectionService
             return $this->historicalMonthlyInflow = 0.0;
         }
 
-        $since = BusinessDay::now()->copy()->subMonths(3);
+        $lookbackMonths = LoanQueueProjectionSettings::historicalLookbackMonths();
+        $since = BusinessDay::now()->copy()->subMonths($lookbackMonths);
 
         $credits = (float) Transaction::query()
             ->where('account_id', $masterFund->id)
@@ -236,7 +304,7 @@ class LoanQueueProjectionService
             ->where('transacted_at', '>=', $since)
             ->sum('amount');
 
-        return $this->historicalMonthlyInflow = max(0.0, ($credits - $debits) / 3);
+        return $this->historicalMonthlyInflow = max(0.0, ($credits - $debits) / $lookbackMonths);
     }
 
     /**
@@ -262,17 +330,19 @@ class LoanQueueProjectionService
             return __('No projected inflow');
         }
 
-        if ($min > self::MAX_MONTHS_DISPLAY) {
-            return __('> :count months', ['count' => self::MAX_MONTHS_DISPLAY]);
+        $cap = LoanQueueProjectionSettings::maxMonthsDisplay();
+
+        if ($min > $cap) {
+            return __('> :count months', ['count' => $cap]);
         }
 
-        $max = min($max, self::MAX_MONTHS_DISPLAY + 1);
+        $max = min($max, $cap + 1);
 
         if ($min === $max) {
             return trans_choice('~:count month|~:count months', $min, ['count' => $min]);
         }
 
-        if ($max > self::MAX_MONTHS_DISPLAY) {
+        if ($max > $cap) {
             return __(':min+ months', ['min' => $min]);
         }
 

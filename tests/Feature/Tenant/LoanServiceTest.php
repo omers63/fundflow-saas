@@ -5,6 +5,7 @@ use App\Filament\Tenant\Pages\LoanQueueWorkbenchPage;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanDisbursement;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
@@ -12,6 +13,8 @@ use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanLifecycleService;
 use App\Services\LoanService;
 use App\Support\ContributionCollectionStatus;
+use App\Support\LoanFundingStrategy;
+use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
 
@@ -183,6 +186,77 @@ test('partial disbursement sets partially_disbursed status', function () {
 
     expect($loan->status)->toBe('partially_disbursed')
         ->and((float) $loan->amount_disbursed)->toBe(5000.0);
+});
+
+test('split percentage loan activates after the final partial disbursement tranche', function () {
+    LoanSettings::save(['member_funding_split_pct' => 50]);
+
+    $member = createEligibleLoanMember($this->accounting, 170_000);
+    Account::masterFund()->update(['balance' => 500_000]);
+    Account::masterCash()->update(['balance' => 500_000]);
+
+    $lifecycle = app(LoanLifecycleService::class);
+    $loan = $lifecycle->applyForLoan(
+        $member,
+        20_000,
+        'Renovation',
+        fundingStrategy: LoanFundingStrategy::SPLIT_PERCENTAGE,
+    );
+    $this->service->approveLoan($loan, 20_000);
+
+    $lifecycle->disbursePartial($loan, 8_000);
+    $loan->refresh();
+
+    expect($loan->status)->toBe('partially_disbursed');
+
+    $member->fundAccount()->update(['balance' => 9_000]);
+
+    $lifecycle->disbursePartial($loan->fresh(), 12_000);
+    $loan->refresh();
+
+    expect($loan->status)->toBe('active')
+        ->and($loan->isFullyDisbursed())->toBeTrue()
+        ->and($loan->installments()->count())->toBeGreaterThan(0)
+        ->and((float) $loan->member_portion)->toBe(10_000.0);
+});
+
+test('stuck fully disbursed loan can be completed after a failed activation', function () {
+    LoanSettings::save(['member_funding_split_pct' => 50]);
+
+    $member = createEligibleLoanMember($this->accounting, 170_000);
+    Account::masterFund()->update(['balance' => 500_000]);
+    Account::masterCash()->update(['balance' => 500_000]);
+
+    $lifecycle = app(LoanLifecycleService::class);
+    $loan = $lifecycle->applyForLoan(
+        $member,
+        20_000,
+        'Bridge',
+        fundingStrategy: LoanFundingStrategy::SPLIT_PERCENTAGE,
+    );
+    $this->service->approveLoan($loan, 20_000);
+    $lifecycle->disbursePartial($loan, 8_000);
+
+    $loan->refresh();
+    LoanDisbursement::query()->create([
+        'loan_id' => $loan->id,
+        'amount' => 12_000,
+        'member_portion' => 6_000,
+        'master_portion' => 6_000,
+        'disbursed_at' => now(),
+    ]);
+    $loan->update([
+        'amount_disbursed' => 20_000,
+        'status' => 'partially_disbursed',
+        'member_fund_balance_at_disbursement' => 170_000,
+    ]);
+
+    $lifecycle->completeStuckFullDisbursement($loan->fresh());
+
+    $loan->refresh();
+
+    expect($loan->status)->toBe('active')
+        ->and($loan->installments()->count())->toBeGreaterThan(0);
 });
 
 test('pending loan can be rejected with reason', function () {
