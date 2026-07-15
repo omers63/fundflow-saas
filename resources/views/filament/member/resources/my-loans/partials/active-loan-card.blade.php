@@ -11,6 +11,12 @@
             <p class="ff-member-dashboard-meta mb-2">{{ $loan['meta'] }}</p>
         @endif
 
+        @if (filled($loan['projected_funding_label'] ?? null))
+            <p class="ff-member-dashboard-meta mb-2">
+                {{ __('Estimated funding') }}: <span class="font-semibold">{{ $loan['projected_funding_label'] }}</span>
+            </p>
+        @endif
+
         <div class="ff-member-loan-card__header-row">
             <div class="ff-member-loan-card__header-main">
                 <x-member::amount :value="$loan['outstanding']" :currency="$currency" class="text-xl font-bold" />

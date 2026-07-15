@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Filament\Tenant\Pages\JobsPage;
+use App\Filament\Tenant\Pages\LoanQueueWorkbenchPage;
 use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Filament\Tenant\Pages\Settings;
 use App\Filament\Tenant\Resources\Accounts\AccountResource;
@@ -35,10 +36,12 @@ use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Services\Loans\LoanQueueService;
 use App\Support\BusinessDay;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Lang;
 use App\Support\PublicPageSettings;
+use App\Support\TenantRuntimeCache;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -48,19 +51,27 @@ final class TenantDashboardService
 {
     public function __construct(
         protected ContributionCycleService $cycles,
-        protected ContributionInsightsService $contributionInsights,
         protected LoanInsightsService $loanInsights,
         protected MasterAccountsInsightsService $masterAccounts,
         protected BankAccountsInsightsService $bankAccounts,
         protected LoanDelinquencyService $delinquency,
         protected CollectionArrearsCatalogService $collectionArrears,
         protected TreasuryForecastService $treasuryForecasts,
+        protected LoanQueueService $loanQueue,
     ) {}
 
     /**
      * @return array<string, mixed>
      */
     public function snapshot(): array
+    {
+        return TenantRuntimeCache::remember('tenant_dashboard_snapshot', 60, fn(): array => $this->buildSnapshot());
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildSnapshot(): array
     {
         $now = BusinessDay::now();
         $currency = InsightFormatter::currency();
@@ -70,13 +81,12 @@ final class TenantDashboardService
         $masters = Account::master()->get()->keyBy('type');
         $masterBalance = fn (string $type): float => (float) ($masters->get($type)?->balance ?? 0);
 
-        $loanPortfolio = $this->loanInsights->portfolioSnapshot();
-        $loanEmiForecast = $this->loanInsights->emiCollectSnapshot()['forecast'] ?? [];
-        $masterSnapshot = $this->masterAccounts->snapshot();
-        $bankSnapshot = $this->bankAccounts->snapshot();
-        $contributionForecast = $this->contributionInsights->collectSnapshot()['forecast'] ?? [];
+        $loanPortfolio = $this->loanInsights->dashboardPortfolioSlice();
+        $masterSnapshot = $this->masterAccounts->dashboardGaugeSlice();
+        $bankSnapshot = $this->bankAccounts->dashboardPostGaugeSlice();
         $treasuryForecast = $this->treasuryForecasts->snapshot();
         $delinquencyCounts = $this->delinquency->digestCounts();
+        $queueKpis = $this->loanQueue->kpis();
 
         $activeMembers = Member::active()->count();
         $pendingContributions = Contribution::pending()->count();
@@ -139,12 +149,12 @@ final class TenantDashboardService
             ),
             'contribution_trend' => $this->contributionTrend($now),
             'loan_trend' => $this->loanInsights->sixMonthLoanVolumeTrend(),
-            'loan_pipeline' => $loanPortfolio['pipeline'] ?? [],
-            'loan_portfolio' => $this->loanPortfolioSummary($loanPortfolio),
+            'loan_pipeline' => $this->loanQueuePipelineSummary($loanPortfolio, $queueKpis),
+            'loan_portfolio' => $this->loanPortfolioSummary($loanPortfolio, $queueKpis),
             'forecast_summary' => $this->forecastSummary(
-                $contributionForecast,
+                [],
                 $loanPortfolio['forecast'] ?? [],
-                $loanEmiForecast,
+                [],
                 $treasuryForecast,
             ),
             'lifetime_fund_activity' => $this->lifetimeFundActivity(),
@@ -152,10 +162,11 @@ final class TenantDashboardService
             'sparkline' => $masterSnapshot['sparkline'] ?? [],
             'sparkline_max' => $masterSnapshot['sparkline_max'] ?? 1,
             'open_period_label' => $openPeriodLabel,
-            'loan_queue_preview' => $this->loanQueuePreview(),
+            'loan_queue_preview' => $this->loanQueue->actionPreview(5),
+            'loan_running_preview' => $this->loanQueue->runningLoansPreview(5),
             'recent_activity' => $this->recentActivity(),
             'collection_breakdown' => $this->collectionBreakdown($openMonth, $openYear, $activeMembers, $delinquencyCounts),
-            'fund_tier_utilisation' => $this->fundTierUtilisation(),
+            'fund_tier_utilisation' => $this->fundTierUtilisation($masterBalance('fund')),
             'pool_health' => $this->poolHealth($masterBalance),
         ];
     }
@@ -254,10 +265,12 @@ final class TenantDashboardService
             ->where('amount_disbursed', '>', 0)
             ->sum('amount_disbursed');
 
-        $contributionsTotal = (float) Contribution::query()
+        $collectionTotals = Contribution::query()
             ->posted()
-            ->sum('amount');
+            ->selectRaw('COALESCE(SUM(amount), 0) as contributions_total')
+            ->value('contributions_total');
 
+        $contributionsTotal = (float) $collectionTotals;
         $repaymentsTotal = (float) LoanRepayment::query()->sum('amount');
         $collectionsTotal = $contributionsTotal + $repaymentsTotal;
 
@@ -277,10 +290,10 @@ final class TenantDashboardService
      * @param  array<string, mixed>  $loanPortfolio
      * @return array<string, mixed>
      */
-    private function loanPortfolioSummary(array $loanPortfolio): array
+    private function loanPortfolioSummary(array $loanPortfolio, array $queueKpis): array
     {
         $pipeline = $loanPortfolio['pipeline'] ?? [];
-        $queueCount = (int) ($pipeline['needs_decision'] ?? 0) + (int) ($pipeline['ready_to_disburse'] ?? 0);
+        $queueCount = $queueKpis['intake'] + $queueKpis['queued'] + $queueKpis['process'];
 
         return [
             'active_count' => (int) ($pipeline['active'] ?? 0),
@@ -288,11 +301,41 @@ final class TenantDashboardService
             'outstanding_total' => (float) ($pipeline['outstanding_total'] ?? 0),
             'overdue_installments' => (int) ($pipeline['overdue_installments'] ?? 0),
             'queue_count' => $queueCount,
+            'running_count' => $queueKpis['running'],
             'loans_url' => $pipeline['loans_url'] ?? LoanResource::getUrl('index'),
             'active_loans_url' => $pipeline['loans_active_url'] ?? LoanResource::listUrl('portfolio', ['status' => ['value' => 'active']]),
             'outstanding_url' => LoanResource::listUrl(),
             'overdue_url' => LoanResource::listTabUrl('overdue_installments'),
-            'queue_url' => $pipeline['queue_url'] ?? LoanResource::queueUrl(),
+            'queue_url' => LoanResource::queueUrl(),
+            'queue_tiers_url' => LoanQueueWorkbenchPage::getUrl(['tab' => 'tiers']),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $loanPortfolio
+     * @return array<string, mixed>
+     */
+    private function loanQueuePipelineSummary(array $loanPortfolio, array $queueKpis): array
+    {
+        $pipeline = $loanPortfolio['pipeline'] ?? [];
+
+        return [
+            'intake' => $queueKpis['intake'],
+            'queued' => $queueKpis['queued'],
+            'process' => $queueKpis['process'],
+            'running' => $queueKpis['running'],
+            'completed' => (int) ($pipeline['completed'] ?? 0),
+            'needs_decision' => $queueKpis['intake'],
+            'ready_to_disburse' => $queueKpis['process'],
+            'active' => $queueKpis['running'],
+            'queue_url' => LoanResource::queueUrl(),
+            'queue_intake_url' => LoanResource::queueUrl('intake'),
+            'queue_tiers_url' => LoanQueueWorkbenchPage::getUrl(['tab' => 'tiers']),
+            'queue_process_url' => LoanResource::queueUrl('process'),
+            'queue_needs_decision_url' => LoanResource::queueUrl('intake'),
+            'queue_ready_to_disburse_url' => LoanResource::queueUrl('process'),
+            'loans_active_url' => $pipeline['loans_active_url'] ?? LoanResource::listUrl('portfolio', ['status' => ['value' => 'active']]),
+            'loans_completed_url' => $pipeline['loans_completed_url'] ?? LoanResource::listUrl('portfolio', ['status' => ['value' => 'completed']]),
         ];
     }
 
@@ -363,23 +406,17 @@ final class TenantDashboardService
         }
 
         /** @var array<string, float> $dailyNet */
-        $dailyNet = [];
-
-        Transaction::query()
+        $dailyNet = Transaction::query()
             ->whereIn('account_id', $accountIds)
             ->where('transacted_at', '>=', $windowStart)
-            ->get(['type', 'amount', 'transacted_at'])
-            ->each(function (Transaction $transaction) use (&$dailyNet): void {
-                if ($transaction->transacted_at === null) {
-                    return;
-                }
-
-                $day = Carbon::parse((string) $transaction->transacted_at)->toDateString();
-                $signed = $transaction->type === 'credit'
-                    ? (float) $transaction->amount
-                    : -(float) $transaction->amount;
-                $dailyNet[$day] = ($dailyNet[$day] ?? 0.0) + $signed;
-            });
+            ->selectRaw("
+                DATE(transacted_at) as day,
+                SUM(CASE WHEN type = 'credit' THEN amount ELSE -amount END) as net
+            ")
+            ->groupBy('day')
+            ->pluck('net', 'day')
+            ->map(fn($net): float => (float) $net)
+            ->all();
 
         $values = [];
         $pool = $currentPoolTotal;
@@ -788,32 +825,26 @@ final class TenantDashboardService
     private function contributionTrend(Carbon $now): array
     {
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
-        $monthTotals = [];
-
-        Contribution::query()
+        $monthTotals = Contribution::query()
             ->where('status', 'posted')
             ->whereBetween('posted_at', [$oldestMonth, $now->copy()->endOfMonth()])
-            ->get(['posted_at', 'amount'])
-            ->each(function (Contribution $contribution) use (&$monthTotals): void {
-                $postedAt = $contribution->posted_at;
-
-                if ($postedAt === null) {
-                    return;
-                }
-
-                $key = Carbon::parse((string) $postedAt)->startOfMonth()->format('Y-m');
-                $monthTotals[$key] ??= ['amount' => 0.0, 'count' => 0];
-                $monthTotals[$key]['amount'] += (float) $contribution->amount;
-                $monthTotals[$key]['count']++;
-            });
+            ->selectRaw('
+                DATE_FORMAT(posted_at, "%Y-%m") as month_key,
+                COALESCE(SUM(amount), 0) as amount,
+                COUNT(*) as count
+            ')
+            ->groupBy('month_key')
+            ->get()
+            ->keyBy('month_key');
 
         $trend = [];
 
         for ($i = 5; $i >= 0; $i--) {
             $month = $now->copy()->subMonths($i)->startOfMonth();
             $key = $month->format('Y-m');
-            $posted = (float) ($monthTotals[$key]['amount'] ?? 0.0);
-            $count = (int) ($monthTotals[$key]['count'] ?? 0);
+            $row = $monthTotals->get($key);
+            $posted = (float) ($row->amount ?? 0.0);
+            $count = (int) ($row->count ?? 0);
 
             $trend[] = [
                 'label' => $month->locale(app()->getLocale())->translatedFormat('M'),
@@ -925,40 +956,6 @@ final class TenantDashboardService
     /**
      * @return list<array<string, mixed>>
      */
-    private function loanQueuePreview(): array
-    {
-        return Loan::query()
-            ->inQueue()
-            ->with('member')
-            ->orderByDesc('is_emergency')
-            ->orderBy('queue_position')
-            ->limit(5)
-            ->get()
-            ->map(function (Loan $loan): array {
-                $member = $loan->member;
-
-                return [
-                    'id' => $loan->id,
-                    'member_name' => $member?->name ?? '—',
-                    'member_initials' => $member ? mb_strtoupper(
-                        collect(explode(' ', $member->name))
-                            ->filter()
-                            ->map(fn (string $w): string => mb_substr($w, 0, 1))
-                            ->take(2)
-                            ->implode('')
-                    ) : '??',
-                    'amount' => (float) $loan->amount_requested,
-                    'is_emergency' => $loan->is_emergency,
-                    'queue_position' => $loan->queue_position ?? 0,
-                    'url' => LoanResource::getUrl('view', ['record' => $loan]),
-                ];
-            })
-            ->all();
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
     private function recentActivity(): array
     {
         return FundAuditLog::query()
@@ -1037,9 +1034,18 @@ final class TenantDashboardService
         $failed = (int) ($statusCounts['failed'] ?? 0);
         $waived = (int) ($statusCounts['waived'] ?? 0);
 
-        $tier1 = (int) Contribution::query()->where('period', $periodDate)->where('late_fee_tier', 1)->count();
-        $tier2 = (int) Contribution::query()->where('period', $periodDate)->where('late_fee_tier', 2)->count();
-        $tier3 = (int) Contribution::query()->where('period', $periodDate)->where('late_fee_tier', '>=', 3)->count();
+        $tierCounts = Contribution::query()
+            ->where('period', $periodDate)
+            ->selectRaw('
+                SUM(CASE WHEN late_fee_tier = 1 THEN 1 ELSE 0 END) as tier1,
+                SUM(CASE WHEN late_fee_tier = 2 THEN 1 ELSE 0 END) as tier2,
+                SUM(CASE WHEN late_fee_tier >= 3 THEN 1 ELSE 0 END) as tier3
+            ')
+            ->first();
+
+        $tier1 = (int) ($tierCounts->tier1 ?? 0);
+        $tier2 = (int) ($tierCounts->tier2 ?? 0);
+        $tier3 = (int) ($tierCounts->tier3 ?? 0);
 
         $total = max(1, $activeMembers);
 
@@ -1062,16 +1068,36 @@ final class TenantDashboardService
     /**
      * @return list<array<string, mixed>>
      */
-    private function fundTierUtilisation(): array
+    private function fundTierUtilisation(float $masterFundBalance): array
     {
         $tiers = FundTier::query()
             ->where('is_active', true)
             ->orderBy('tier_number')
             ->get();
 
-        return $tiers->map(function (FundTier $tier): array {
-            $allocated = $tier->allocated_amount;
-            $exposure = $tier->active_exposure;
+                if ($tiers->isEmpty()) {
+                    return [];
+                }
+
+                $tierIds = $tiers->pluck('id')->all();
+
+                $activeExposureByTier = Loan::query()
+                    ->whereIn('fund_tier_id', $tierIds)
+                    ->where('status', 'active')
+                    ->selectRaw('fund_tier_id, COALESCE(SUM(amount_approved), 0) as exposure')
+                    ->groupBy('fund_tier_id')
+                    ->pluck('exposure', 'fund_tier_id');
+
+                $queuedExposureByTier = Loan::query()
+                    ->whereIn('fund_tier_id', $tierIds)
+                    ->whereIn('status', ['approved', 'partially_disbursed'])
+                    ->selectRaw('fund_tier_id, COALESCE(SUM(GREATEST(0, COALESCE(amount_approved, 0) - COALESCE(amount_disbursed, 0))), 0) as exposure')
+                    ->groupBy('fund_tier_id')
+                    ->pluck('exposure', 'fund_tier_id');
+
+                return $tiers->map(function (FundTier $tier) use ($masterFundBalance, $activeExposureByTier, $queuedExposureByTier): array {
+                    $allocated = $masterFundBalance * ((float) $tier->percentage / 100);
+                    $exposure = (float) ($activeExposureByTier[$tier->id] ?? 0) + (float) ($queuedExposureByTier[$tier->id] ?? 0);
             $pct = $allocated > 0 ? min(100, round(($exposure / $allocated) * 100)) : 0;
 
             $tone = match (true) {
@@ -1091,7 +1117,7 @@ final class TenantDashboardService
                 'pct' => $pct,
                 'bar_color' => $bar,
                 'tone' => $tone,
-                'available_amount' => (float) $tier->available_amount,
+                'available_amount' => max(0, $allocated - $exposure),
                 'url' => FundTierResource::getUrl('index'),
             ];
         })->all();

@@ -1,14 +1,15 @@
 @php
-$d = $this->getData();
-$breakdown = $d['collection_breakdown'];
-$loanQueue = $d['loan_queue_preview'];
-$activity = $d['recent_activity'];
-$pipeline = $d['loan_pipeline'];
-$loanPortfolio = $d['loan_portfolio'];
-$lifetime = $d['lifetime_fund_activity'];
-$forecast = $d['forecast_summary'];
-$greeting = $d['greeting'];
-$pool = $d['pool_health'];
+    $d = $this->getData();
+    $breakdown = $d['collection_breakdown'];
+    $loanQueue = $d['loan_queue_preview'];
+    $loanRunning = $d['loan_running_preview'] ?? [];
+    $activity = $d['recent_activity'];
+    $pipeline = $d['loan_pipeline'];
+    $loanPortfolio = $d['loan_portfolio'];
+    $lifetime = $d['lifetime_fund_activity'];
+    $forecast = $d['forecast_summary'];
+    $greeting = $d['greeting'];
+    $pool = $d['pool_health'];
 @endphp
     
     <div class="w-full max-w-none space-y-3 pb-6">
@@ -346,64 +347,121 @@ $pool = $d['pool_health'];
 
         {{-- Loan queue preview table --}}
         <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900 lg:col-span-3">
-            <div class="flex items-center justify-between border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
                 <div class="flex items-center gap-2">
                     <x-heroicon-o-queue-list class="h-4 w-4 text-amber-500" />
-                    <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Loan queue') }} — {{ __('top requests') }}</span>
+                    <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Loan queue') }}</span>
                 </div>
-                <a href="{{ \App\Filament\Tenant\Pages\LoanQueueWorkbenchPage::getUrl() }}"
-                    class="text-[11px] font-medium text-sky-600 hover:underline dark:text-sky-400">{{ __('View all →') }}</a>
+                <div class="flex flex-wrap items-center gap-2 text-[10px]">
+                    @foreach ([
+    ['label' => __('Intake'), 'count' => $pipeline['intake'] ?? 0, 'url' => $pipeline['queue_intake_url'] ?? '#', 'tone' => 'amber'],
+    ['label' => __('Queued'), 'count' => $pipeline['queued'] ?? 0, 'url' => $pipeline['queue_tiers_url'] ?? '#', 'tone' => 'sky'],
+    ['label' => __('Process'), 'count' => $pipeline['process'] ?? 0, 'url' => $pipeline['queue_process_url'] ?? '#', 'tone' => 'emerald'],
+    ['label' => __('Running'), 'count' => $pipeline['running'] ?? 0, 'url' => $pipeline['queue_tiers_url'] ?? '#', 'tone' => 'teal'],
+] as $stage)
+                        <a href="{{ $stage['url'] }}" @class([
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold transition hover:opacity-80',
+        'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => $stage['tone'] === 'amber',
+        'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' => $stage['tone'] === 'sky',
+        'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' => $stage['tone'] === 'emerald',
+        'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200' => $stage['tone'] === 'teal',
+    ])>
+                            {{ $stage['label'] }} <span class="tabular-nums">{{ $stage['count'] }}</span>
+                        </a>
+                    @endforeach
+                    <a href="{{ \App\Filament\Tenant\Pages\LoanQueueWorkbenchPage::getUrl() }}"
+                        class="ms-1 text-[11px] font-medium text-sky-600 hover:underline dark:text-sky-400">{{ __('Open workbench →') }}</a>
+                </div>
             </div>
-            @if (count($loanQueue) > 0)
-                <div class="overflow-x-auto">
-                    <table class="w-full text-[12px]">
-                        <thead>
-                            <tr class="border-b border-gray-100 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/60">
-                                <th class="px-4 py-2 text-start text-[10px] font-semibold uppercase tracking-wide text-gray-400">#</th>
-                                <th class="px-4 py-2 text-start text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Member') }}</th>
-                                <th class="px-4 py-2 text-start text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Amount') }}</th>
-                                <th class="px-4 py-2 text-start text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Type') }}</th>
-                                <th class="px-4 py-2 text-start text-[10px] font-semibold uppercase tracking-wide text-gray-400"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach ($loanQueue as $i => $loan)
-                                <tr class="border-b border-gray-50 transition last:border-0 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/40">
-                                    <td class="px-4 py-2.5 text-gray-400">{{ $i + 1 }}</td>
-                                    <td class="px-4 py-2.5">
-                                        <div class="flex items-center gap-2">
-                                            <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-50 text-[9px] font-bold text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+            @if (count($loanQueue) > 0 || count($loanRunning) > 0)
+                @if (count($loanQueue) > 0)
+                    <div class="overflow-x-auto border-b border-gray-100 dark:border-gray-700">
+                        <table class="w-full text-[12px]">
+                            <thead>
+                                <tr class="border-b border-gray-100 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/60">
+                                    <th class="px-4 py-2 text-start text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Stage') }}</th>
+                                    <th class="px-4 py-2 text-start text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Member') }}</th>
+                                    <th class="px-4 py-2 text-start text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Amount') }}</th>
+                                    <th class="px-4 py-2 text-start text-[10px] font-semibold uppercase tracking-wide text-gray-400"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($loanQueue as $loan)
+                                    <tr class="border-b border-gray-50 transition last:border-0 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/40">
+                                        <td class="px-4 py-2.5">
+                                            @if (($loan['stage'] ?? '') === 'process')
+                                                <span class="inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">{{ __('Process') }}</span>
+                                            @else
+                                                <span class="inline-block rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">{{ __('Intake') }}</span>
+                                            @endif
+                                            @if ($loan['is_emergency'] ?? false)
+                                                <span class="ms-1 inline-block rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-950/40 dark:text-red-400">{{ __('Emergency') }}</span>
+                                            @endif
+                                        </td>
+                                        <td class="px-4 py-2.5">
+                                            <div class="flex items-center gap-2">
+                                                <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-50 text-[9px] font-bold text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+                                                    {{ $loan['member_initials'] }}
+                                                </div>
+                                                <span class="font-medium text-gray-800 dark:text-gray-200">{{ $loan['member_name'] }}</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-2.5 font-semibold text-gray-800 dark:text-gray-200">
+                                            <x-member::amount :value="$loan['amount']" />
+                                        </td>
+                                        <td class="px-4 py-2.5">
+                                            <a href="{{ $loan['url'] }}"
+                                                class="ff-tenant-btn inline-flex items-center gap-1 px-3 py-1 text-[11px]">
+                                                {{ __('Review') }}
+                                            </a>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
+
+                @if (count($loanRunning) > 0)
+                    <div class="px-4 py-2">
+                        <p class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-teal-600 dark:text-teal-400">{{ __('Running loans') }}</p>
+                        <ul class="m-0 list-none divide-y divide-gray-50 p-0 dark:divide-gray-800">
+                            @foreach ($loanRunning as $loan)
+                                <li class="py-2.5">
+                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                        <div class="flex min-w-0 items-center gap-2">
+                                            <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal-50 text-[9px] font-bold text-teal-700 dark:bg-teal-900/40 dark:text-teal-300">
                                                 {{ $loan['member_initials'] }}
                                             </div>
-                                            <span class="font-medium text-gray-800 dark:text-gray-200">{{ $loan['member_name'] }}</span>
+                                            <div class="min-w-0">
+                                                <a href="{{ $loan['url'] }}" class="text-[12px] font-semibold text-gray-800 hover:underline dark:text-gray-200">{{ $loan['member_name'] }}</a>
+                                                @if (filled($loan['fund_tier'] ?? null))
+                                                    <p class="m-0 text-[10px] text-gray-400">{{ $loan['fund_tier'] }}</p>
+                                                @endif
+                                            </div>
                                         </div>
-                                    </td>
-                                    <td class="px-4 py-2.5 font-semibold text-gray-800 dark:text-gray-200">
-                                        <x-member::amount :value="$loan['amount']" />
-                                    </td>
-                                    <td class="px-4 py-2.5">
-                                        @if ($loan['is_emergency'])
-                                            <span class="inline-block rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-950/40 dark:text-red-400">{{ __('Emergency') }}</span>
-                                        @else
-                                            <span class="inline-block rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:bg-sky-950/40 dark:text-sky-400">{{ __('Standard') }}</span>
-                                        @endif
-                                    </td>
-                                    <td class="px-4 py-2.5">
-                                        <a href="{{ $loan['url'] }}"
-                                            class="ff-tenant-btn inline-flex items-center gap-1 px-3 py-1 text-[11px]">
-                                            {{ __('Review') }}
-                                        </a>
-                                    </td>
-                                </tr>
+                                        <span class="text-[11px] font-semibold text-gray-600 dark:text-gray-300">
+                                            <x-member::amount :value="$loan['outstanding']" /> {{ __('outstanding') }}
+                                        </span>
+                                    </div>
+                                    <div class="mt-2 flex items-center gap-2 ps-8">
+                                        <div class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
+                                            <div class="h-full rounded-full bg-teal-500" style="width: {{ max(3, $loan['repay_percent']) }}%"></div>
+                                        </div>
+                                        <span class="shrink-0 text-[10px] font-semibold tabular-nums text-teal-700 dark:text-teal-300">
+                                            {{ $loan['repay_percent'] }}%
+                                        </span>
+                                    </div>
+                                </li>
                             @endforeach
-                        </tbody>
-                    </table>
-                </div>
+                        </ul>
+                    </div>
+                @endif
             @else
                 <div class="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
                     <x-heroicon-o-check-circle class="h-8 w-8 text-emerald-400" />
                     <p class="text-[12px] font-medium text-gray-500">{{ __('Queue clear') }}</p>
-                    <p class="text-[11px] text-gray-400">{{ __('No loans awaiting review') }}</p>
+                    <p class="text-[11px] text-gray-400">{{ __('No loans awaiting action or in repayment') }}</p>
                 </div>
             @endif
         </div>
@@ -618,26 +676,27 @@ $lateFeeTiers = [
                 <x-heroicon-o-funnel class="h-4 w-4 text-sky-500" />
                 <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Loan pipeline') }}</span>
             </div>
-            <div class="grid grid-cols-4 divide-x divide-gray-100 dark:divide-gray-700">
-                <a href="{{ $pipeline['queue_needs_decision_url'] ?? '#' }}"
+            <div class="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-4">
+                <a href="{{ $pipeline['queue_intake_url'] ?? '#' }}"
                     class="flex flex-col items-center py-3 transition hover:bg-amber-50/60 dark:hover:bg-amber-950/20">
-                    <span class="text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ $pipeline['needs_decision'] ?? 0 }}</span>
-                    <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Decision') }}</span>
+                    <span class="text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ $pipeline['intake'] ?? 0 }}</span>
+                    <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Intake') }}</span>
                 </a>
-                <a href="{{ $pipeline['queue_ready_to_disburse_url'] ?? '#' }}"
+                <a href="{{ $pipeline['queue_tiers_url'] ?? '#' }}"
                     class="flex flex-col items-center py-3 transition hover:bg-sky-50/60 dark:hover:bg-sky-950/20">
-                    <span class="text-lg font-bold tabular-nums text-sky-600 dark:text-sky-400">{{ $pipeline['ready_to_disburse'] ?? 0 }}</span>
-                    <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Disburse') }}</span>
+                    <span
+                        class="text-lg font-bold tabular-nums text-sky-600 dark:text-sky-400">{{ $pipeline['queued'] ?? 0 }}</span>
+                    <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Tier queues') }}</span>
                 </a>
-                <a href="{{ $pipeline['loans_active_url'] ?? '#' }}"
+                <a href="{{ $pipeline['queue_process_url'] ?? '#' }}"
                     class="flex flex-col items-center py-3 transition hover:bg-emerald-50/60 dark:hover:bg-emerald-950/20">
-                    <span class="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{{ $pipeline['active'] ?? 0 }}</span>
-                    <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Active') }}</span>
+                    <span class="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{{ $pipeline['process'] ?? 0 }}</span>
+                    <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Process') }}</span>
                 </a>
-                <a href="{{ $pipeline['loans_completed_url'] ?? '#' }}"
-                    class="flex flex-col items-center py-3 transition hover:bg-gray-50 dark:hover:bg-gray-800">
-                    <span class="text-lg font-bold tabular-nums text-gray-500 dark:text-gray-300">{{ $pipeline['completed'] ?? 0 }}</span>
-                    <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Closed') }}</span>
+                <a href="{{ $pipeline['queue_tiers_url'] ?? '#' }}"
+                    class="flex flex-col items-center py-3 transition hover:bg-teal-50/60 dark:hover:bg-teal-950/20">
+                    <span class="text-lg font-bold tabular-nums text-teal-600 dark:text-teal-400">{{ $pipeline['running'] ?? 0 }}</span>
+                    <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Running') }}</span>
                 </a>
             </div>
         </div>

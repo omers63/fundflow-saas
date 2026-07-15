@@ -91,7 +91,7 @@ test('overdue installments view loads on loans list', function () {
 
     $this->get('http://'.$this->domain.$path.($query ? '?'.$query : ''))
         ->assertSuccessful()
-        ->assertSee(__('Overdue installments'), false);
+        ->assertSee(Lang::formatUiLabel(__('Overdue installments')), false);
 });
 
 test('contribution arrears tab loads without summary sql errors', function () {

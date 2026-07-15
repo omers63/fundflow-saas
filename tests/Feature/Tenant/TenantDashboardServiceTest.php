@@ -345,6 +345,84 @@ test('tenant dashboard loan portfolio summarizes active loan count value and out
         ->toContain(__('Outstanding'));
 });
 
+test('tenant dashboard loan queue preview includes pipeline stages and running loans', function () {
+    $user = User::create([
+        'name' => 'Queue Preview Admin',
+        'email' => 'queue-preview-admin@fund.test',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    $member = Member::create([
+        'member_number' => 'MEM-QUEUE-PREV',
+        'name' => 'Queue Preview Borrower',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    Loan::query()->create([
+        'member_id' => $member->id,
+        'amount' => 8000,
+        'amount_requested' => 8000,
+        'interest_rate' => 0,
+        'term_months' => 8,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'pending',
+        'applied_at' => now()->subDay(),
+    ]);
+
+    $activeLoan = Loan::query()->create([
+        'member_id' => $member->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 0,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(3),
+        'approved_at' => now()->subMonths(3),
+        'disbursed_at' => now()->subMonths(3),
+    ]);
+
+    LoanInstallment::query()->create([
+        'loan_id' => $activeLoan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => now()->subMonth(),
+        'status' => 'paid',
+    ]);
+    LoanInstallment::query()->create([
+        'loan_id' => $activeLoan->id,
+        'installment_number' => 2,
+        'amount' => 1000,
+        'due_date' => now()->addMonth(),
+        'status' => 'pending',
+    ]);
+
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 1000, 'is_master' => true]);
+    Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 5000, 'is_master' => true]);
+
+    $this->actingAs($user, 'tenant');
+
+    $snapshot = $this->service->snapshot();
+
+    expect($snapshot['loan_pipeline'])->toHaveKeys(['intake', 'queued', 'process', 'running', 'queue_intake_url', 'queue_tiers_url', 'queue_process_url'])
+        ->and($snapshot['loan_pipeline']['intake'])->toBeGreaterThanOrEqual(1)
+        ->and($snapshot['loan_pipeline']['running'])->toBe(1)
+        ->and($snapshot['loan_running_preview'])->not->toBeEmpty()
+        ->and($snapshot['loan_running_preview'][0]['repay_percent'])->toBe(50);
+
+    Livewire::test(TenantDashboardWidget::class)
+        ->assertSuccessful()
+        ->assertSee(__('Running loans'))
+        ->assertSee('Queue Preview Borrower');
+});
+
 test('tenant dashboard lifetime fund activity summarizes loans contributions and collections', function () {
     $user = User::create([
         'name' => 'Lifetime Admin',

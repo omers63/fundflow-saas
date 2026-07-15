@@ -9,6 +9,7 @@ use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Support\BusinessDay;
@@ -18,6 +19,49 @@ use Carbon\Carbon;
 
 final class MasterAccountsInsightsService
 {
+    /**
+     * Fund coverage gauge inputs for the tenant dashboard.
+     *
+     * @return array{
+     *     coverage_percent: float,
+     *     fund_health: string,
+     *     active_loan_count: int,
+     *     urls: array{index: string},
+     *     sparkline: list<int>,
+     *     sparkline_max: int|float,
+     * }
+     */
+    public function dashboardGaugeSlice(): array
+    {
+        $masters = Account::query()->where('is_master', true)->get()->keyBy('type');
+        $masterFund = (float) ($masters->get('fund')?->balance ?? 0);
+
+        $loanExposure = $this->activeLoanLedgerExposure();
+        $activeLoanCount = Loan::active()->count();
+        $coverage = $loanExposure > 0.01 ? round($masterFund / $loanExposure, 2) : null;
+        $coveragePercent = $coverage !== null ? min(100, round($coverage * 100, 1)) : 100;
+
+        $fundHealth = match (true) {
+            $loanExposure <= 0 => 'healthy',
+            $coverage !== null && $coverage >= 1 => 'healthy',
+            $coverage !== null && $coverage >= 0.85 => 'monitor',
+            default => 'action',
+        };
+
+        $indexUrl = MasterAccountResource::getUrl('index');
+
+        return [
+            'coverage_percent' => $coveragePercent,
+            'fund_health' => $fundHealth,
+            'active_loan_count' => $activeLoanCount,
+            'urls' => [
+                'index' => $indexUrl,
+            ],
+            'sparkline' => [],
+            'sparkline_max' => 1,
+        ];
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -33,9 +77,7 @@ final class MasterAccountsInsightsService
         $masterExpense = $balance('expense');
         $masterInvest = $balance('invest');
 
-        $loanExposure = (float) Loan::active()->get()->sum(
-            fn (Loan $loan): float => $loan->getOutstandingBalance()
-        );
+        $loanExposure = $this->activeLoanLedgerExposure();
         $activeLoanCount = Loan::active()->count();
         $coverage = $loanExposure > 0.01 ? round($masterFund / $loanExposure, 2) : null;
         $coveragePercent = $coverage !== null ? min(100, round($coverage * 100, 1)) : 100;
@@ -159,6 +201,27 @@ final class MasterAccountsInsightsService
                 $indexUrl,
             ),
         ];
+    }
+
+    private function activeLoanLedgerExposure(): float
+    {
+        $fromInstallments = (float) LoanInstallment::query()
+            ->join('loans', 'loans.id', '=', 'loan_installments.loan_id')
+            ->where('loans.status', 'active')
+            ->whereIn('loan_installments.status', ['pending', 'overdue'])
+            ->where(function ($query): void {
+                $query->whereNull('loans.master_portion')
+                    ->orWhere('loans.master_portion', '<=', 0.01);
+            })
+            ->sum('loan_installments.amount');
+
+        $fromMasterPortion = (float) Loan::query()
+            ->where('status', 'active')
+            ->where('master_portion', '>', 0.01)
+            ->selectRaw('COALESCE(SUM(GREATEST(0, COALESCE(master_portion, 0) - COALESCE(repaid_to_master, 0))), 0) as total')
+            ->value('total');
+
+        return $fromInstallments + $fromMasterPortion;
     }
 
     /**

@@ -14,7 +14,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * Loan queue display and persisted queue_position follow business rules:
  * emergencies first (FIFO by applied_at), then by fund tier priority, loan tier 1 before higher tiers (FIFO),
- * and within each fund tier bucket a capacity-aware pass (requests that fit available slack first, preserving relative order).
+ * and within each fund tier bucket a capacity-aware pass (requests that fit the tier's currently
+ * disbursable pool first, preserving relative order). Queued = approved or partially disbursed.
  */
 class LoanQueueOrderingService
 {
@@ -75,7 +76,7 @@ class LoanQueueOrderingService
 
             $avail = $key === 'none'
                 ? PHP_FLOAT_MAX
-                : (float) ($fundTiers->get((int) $key)?->available_amount ?? 0);
+                : (float) ($fundTiers->get((int) $key)?->disbursable_pool ?? 0);
 
             $out = $out->concat(self::applyCapacityBucket(
                 $sorted,
@@ -98,12 +99,14 @@ class LoanQueueOrderingService
             return $c;
         }
 
-        $available = (float) $fundTier->available_amount;
+        $available = (float) $fundTier->disbursable_pool;
 
         [$emergency, $rest] = $c->partition(fn (Loan $l) => (bool) $l->is_emergency);
         $out = $emergency->sort(fn (Loan $a, Loan $b) => $a->applied_at <=> $b->applied_at)->values();
 
-        [$approved, $active] = $rest->partition(fn (Loan $l) => $l->status === 'approved');
+        [$approved, $active] = $rest->partition(
+            fn (Loan $l) => in_array($l->status, ['approved', 'partially_disbursed'], true),
+        );
 
         $approvedSorted = $approved->sort(function (Loan $a, Loan $b) {
             $da = self::effectiveLoanTierNumber($a);
@@ -137,7 +140,7 @@ class LoanQueueOrderingService
 
         $loans = Loan::query()
             ->where('fund_tier_id', $fundTierId)
-            ->whereIn('status', ['approved', 'active'])
+            ->whereIn('status', ['approved', 'partially_disbursed', 'active'])
             ->with(['loanTier'])
             ->orderBy('id')
             ->get();

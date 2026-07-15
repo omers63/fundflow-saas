@@ -94,9 +94,24 @@ class FundTier extends Model
 
     public function getActiveExposureAttribute(): float
     {
+        return $this->activeLoanExposure() + $this->queuedRemainingExposure();
+    }
+
+    /** Fully disbursed (active) loans still committed against this pool. */
+    public function activeLoanExposure(): float
+    {
         return (float) Loan::where('fund_tier_id', $this->id)
-            ->whereIn('status', ['approved', 'active'])
+            ->where('status', 'active')
             ->sum('amount_approved');
+    }
+
+    /** Remaining (approved − disbursed) of loans queued for disbursement in this pool. */
+    public function queuedRemainingExposure(): float
+    {
+        return max(0.0, (float) Loan::where('fund_tier_id', $this->id)
+            ->whereIn('status', ['approved', 'partially_disbursed'])
+            ->selectRaw('COALESCE(SUM(COALESCE(amount_approved, 0) - COALESCE(amount_disbursed, 0)), 0) as total')
+            ->value('total'));
     }
 
     public function getAvailableAmountAttribute(): float
@@ -104,10 +119,21 @@ class FundTier extends Model
         return max(0, $this->allocated_amount - $this->active_exposure);
     }
 
+    /**
+     * Pool that can actually be paid out to queued loans right now:
+     * allocated minus already-active exposure, capped by the master fund balance on hand.
+     */
+    public function getDisbursablePoolAttribute(): float
+    {
+        $masterBalance = (float) (Account::masterFund()?->balance ?? 0);
+
+        return max(0.0, min($this->allocated_amount - $this->activeLoanExposure(), $masterBalance));
+    }
+
     public function getActiveLoansCountAttribute(): int
     {
         return Loan::where('fund_tier_id', $this->id)
-            ->whereIn('status', ['approved', 'active'])
+            ->whereIn('status', ['approved', 'partially_disbursed', 'active'])
             ->count();
     }
 

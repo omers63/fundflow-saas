@@ -8,6 +8,7 @@ use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Support\LoanQueueTable;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\Loan;
+use App\Services\Loans\LoanQueueService;
 use BackedEnum;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -38,12 +39,21 @@ class LoanQueueWorkbenchPage extends Page implements HasTable
 
     protected string $view = 'filament.tenant.pages.loan-queue-workbench';
 
+    public const TABS = ['intake', 'tiers', 'process'];
+
     #[Url(as: 'tab')]
-    public string $queueTab = 'needs_decision';
+    public string $queueTab = 'intake';
+
+    protected ?LoanQueueService $queueService = null;
 
     public static function canAccess(): bool
     {
         return auth()->guard('tenant')->check();
+    }
+
+    public function mount(): void
+    {
+        $this->queueTab = self::normalizeTab($this->queueTab);
     }
 
     public function getTitle(): string|Htmlable
@@ -53,7 +63,7 @@ class LoanQueueWorkbenchPage extends Page implements HasTable
 
     public function getSubheading(): ?string
     {
-        return __('Review applications and disburse approved loans.');
+        return __('Triage applications, track tier queues, and disburse fundable loans.');
     }
 
     public static function getNavigationBadge(): ?string
@@ -70,24 +80,69 @@ class LoanQueueWorkbenchPage extends Page implements HasTable
 
     public function setQueueTab(string $tab): void
     {
-        if (! in_array($tab, ['needs_decision', 'ready_to_disburse'], true)) {
-            return;
-        }
+        $tab = self::normalizeTab($tab);
 
         if ($this->queueTab === $tab) {
             return;
         }
 
         $this->queueTab = $tab;
-        $this->resetTable();
+
+        if ($tab !== 'tiers') {
+            $this->resetTable();
+        }
+    }
+
+    /** Map legacy tab keys (deep links, insights URLs) to the new stage tabs. */
+    public static function normalizeTab(string $tab): string
+    {
+        return match ($tab) {
+            'needs_decision' => 'intake',
+            'ready_to_disburse' => 'process',
+            default => in_array($tab, self::TABS, true) ? $tab : 'intake',
+        };
     }
 
     public function table(Table $table): Table
     {
         return LoanQueueTable::configure(
-            $table->query(fn (): Builder => LoanQueueTable::queueQuery($this->queueTab)),
+            $table->query(fn (): Builder => LoanQueueTable::queueQuery($this->queueTab, $this->queue())),
             $this->queueTab,
+            $this->queue(),
         );
+    }
+
+    /**
+     * @return array{intake: int, queued: int, queued_demand: float, disbursable: float, process: int, emergency: int}
+     */
+    public function getQueueKpis(): array
+    {
+        return $this->queue()->kpis();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function getTierQueues(): array
+    {
+        return $this->queue()->tierQueues();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function getTabLabels(): array
+    {
+        return [
+            'intake' => __('Intake'),
+            'tiers' => __('Tier queues'),
+            'process' => __('Process queue'),
+        ];
+    }
+
+    protected function queue(): LoanQueueService
+    {
+        return $this->queueService ??= app(LoanQueueService::class);
     }
 
     /**

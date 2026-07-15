@@ -58,6 +58,55 @@ final class LoanInsightsService
     }
 
     /**
+     * Lightweight loan portfolio metrics for the tenant dashboard (avoids full portfolioSnapshot).
+     *
+     * @return array{pipeline: array<string, mixed>, forecast: array<string, mixed>}
+     */
+    public function dashboardPortfolioSlice(): array
+    {
+        $now = BusinessDay::now();
+
+        $active = Loan::query()->where('status', 'active')->count();
+        $completed = Loan::query()->whereIn('status', ['completed', 'early_settled'])->count();
+
+        $outstanding = (float) LoanInstallment::query()
+            ->whereIn('status', ['pending', 'overdue'])
+            ->whereHas('loan', fn($query) => $query->where('status', 'active'))
+            ->sum('amount');
+
+        $overdueCount = (int) LoanInstallment::query()
+            ->where('status', 'overdue')
+            ->whereHas('loan', fn($query) => $query->where('status', 'active'))
+            ->count();
+
+        $activeAmountTotal = (float) Loan::query()
+            ->where('status', 'active')
+            ->selectRaw('COALESCE(SUM(COALESCE(amount_approved, amount_requested, amount, 0)), 0) as total')
+            ->value('total');
+
+        $next30DaysCount = (int) LoanInstallment::query()
+            ->whereIn('status', ['pending', 'overdue'])
+            ->whereBetween('due_date', [$now->copy()->startOfDay(), $now->copy()->addDays(30)->endOfDay()])
+            ->whereHas('loan', fn($query) => $query->whereIn('status', ['active', 'transferred']))
+            ->count();
+
+        return [
+            'pipeline' => [
+                'active' => $active,
+                'completed' => $completed,
+                'active_amount_total' => $activeAmountTotal,
+                'outstanding_total' => $outstanding,
+                'overdue_installments' => $overdueCount,
+                'loans_active_url' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'active']]),
+                'loans_completed_url' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'completed']]),
+            ],
+            'forecast' => [
+                'next_30_days_count' => $next30DaysCount,
+            ],
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function portfolioSnapshot(): array
@@ -616,6 +665,12 @@ final class LoanInsightsService
      */
     public function queueSnapshot(string $activeTab): array
     {
+        $activeTab = match ($activeTab) {
+            'intake' => 'needs_decision',
+            'process', 'tiers' => 'ready_to_disburse',
+            default => $activeTab,
+        };
+
         $now = BusinessDay::now();
         $currency = Setting::get('general', 'currency', 'USD');
 
@@ -648,8 +703,8 @@ final class LoanInsightsService
             'hero' => [
                 'tone' => $total > 0 ? 'amber' : 'success',
                 'title' => match ($activeTab) {
-                    'ready_to_disburse' => __('Loans ready to disburse'),
-                    default => __('Applications awaiting decision'),
+                    'ready_to_disburse' => __('Loans ready to process'),
+                    default => __('Applications in intake'),
                 },
                 'subtitle' => trans_choice(
                     ':count in this tab · :total total in queue',
@@ -679,8 +734,8 @@ final class LoanInsightsService
             ],
             'preview' => $preview,
             'tab_labels' => [
-                'needs_decision' => __('Needs decision'),
-                'ready_to_disburse' => __('Ready to disburse'),
+                'needs_decision' => __('Intake'),
+                'ready_to_disburse' => __('Process queue'),
             ],
         ];
     }
@@ -1212,41 +1267,26 @@ final class LoanInsightsService
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
         $monthTotals = [];
 
-        Loan::query()
+        $rows = Loan::query()
             ->whereBetween('applied_at', [$oldestMonth, $now->copy()->endOfMonth()])
-            ->get(['status', 'applied_at'])
-            ->each(function (Loan $loan) use (&$monthTotals): void {
-                $appliedAt = $loan->applied_at;
+            ->selectRaw("
+                DATE_FORMAT(applied_at, '%Y-%m') as month_key,
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+                SUM(CASE WHEN status IN ('completed', 'early_settled') THEN 1 ELSE 0 END) as completed
+            ")
+            ->groupBy('month_key')
+            ->get();
 
-                if ($appliedAt === null) {
-                    return;
-                }
-
-                $key = Carbon::parse((string) $appliedAt)->startOfMonth()->format('Y-m');
-                $monthTotals[$key] ??= [
-                    'total' => 0,
-                    'pending' => 0,
-                    'active' => 0,
-                    'completed' => 0,
-                ];
-                $monthTotals[$key]['total']++;
-
-                if ($loan->status === 'pending') {
-                    $monthTotals[$key]['pending']++;
-
-                    return;
-                }
-
-                if ($loan->status === 'active') {
-                    $monthTotals[$key]['active']++;
-
-                    return;
-                }
-
-                if (in_array($loan->status, ['completed', 'early_settled'], true)) {
-                    $monthTotals[$key]['completed']++;
-                }
-            });
+        foreach ($rows as $row) {
+            $monthTotals[(string) $row->month_key] = [
+                'total' => (int) $row->total,
+                'pending' => (int) $row->pending,
+                'active' => (int) $row->active,
+                'completed' => (int) $row->completed,
+            ];
+        }
 
         $trend = [];
 

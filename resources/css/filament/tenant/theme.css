@@ -1411,8 +1411,8 @@ html.fi.fi-panel-tenant #nprogress .peg {
     color: #fdba74 !important;
 }
 
-/* ── Loan queue: compact inline action buttons ── */
-.fi-body.fi-panel-tenant.fi-page-loan-queue .fi-ta-actions .fi-btn {
+/* ── Loan queue: compact row-actions trigger (dropdown items use grouped list styling) ── */
+.fi-body.fi-panel-tenant.fi-page-loan-queue .fi-ta-actions .fi-ac-btn-group {
     font-size: 0.6875rem;
     padding-inline: 0.5rem;
     padding-block: 0.25rem;

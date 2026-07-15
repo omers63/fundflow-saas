@@ -244,6 +244,23 @@ class Loan extends Model
         return max(0.0, (float) $this->amount_approved - (float) $this->amount_disbursed);
     }
 
+    /**
+     * Whether this queued loan's fund tier can pay at least a minimal tranche right now.
+     * Ignores loans ahead in the queue — use LoanQueueService coverage for position-aware checks.
+     */
+    public function isFundableNow(): bool
+    {
+        if (! in_array($this->status, ['approved', 'partially_disbursed'], true)) {
+            return false;
+        }
+
+        if ($this->remainingToDisburse() < 0.01) {
+            return false;
+        }
+
+        return (float) ($this->fundTier?->disbursable_pool ?? 0) >= 0.01;
+    }
+
     // -----------------------------------------------------------------------
     // Guarantor helpers
     // -----------------------------------------------------------------------

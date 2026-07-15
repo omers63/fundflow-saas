@@ -6,9 +6,11 @@ use App\Filament\Member\Resources\MyLoans\Pages\ListMyLoans;
 use App\Models\Central\Tenant;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\MemberLoansHubService;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
@@ -127,6 +129,35 @@ test('active tab exposes early settlement on loan card not header', function () 
         ->all();
 
     expect($headerNames)->not->toContain('earlySettle');
+});
+
+test('pending loan card shows a projected funding estimate', function () {
+    $pending = Loan::query()->create([
+        'member_id' => $this->member->id,
+        'amount' => 5000,
+        'amount_requested' => 5000,
+        'interest_rate' => 0,
+        'term_months' => 5,
+        'monthly_repayment' => 0,
+        'total_repaid' => 0,
+        'status' => 'pending',
+        'applied_at' => now()->subDay(),
+        'loan_tier_id' => LoanTier::forAmount(5000)?->id,
+    ]);
+
+    $card = app(MemberLoansHubService::class)->loanCard($pending);
+    $activeCard = app(MemberLoansHubService::class)->loanCard($this->loan);
+
+    expect($card['projected_funding_label'])->not->toBeNull()
+        ->and($activeCard['projected_funding_label'])->toBeNull();
+
+    Filament::setCurrentPanel('member');
+    $this->actingAs($this->memberUser, 'tenant');
+
+    Livewire::test(ListMyLoans::class)
+        ->assertSet('hubTab', 'active')
+        ->assertSee(__('Estimated funding'), false)
+        ->assertSee($card['projected_funding_label'], false);
 });
 
 test('legacy settle hub url opens repayment on active tab', function () {

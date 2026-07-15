@@ -112,6 +112,41 @@ final class LoanFilamentActions
             });
     }
 
+    /** Triage: keep or drop the emergency flag on a pending application before approval. */
+    public static function changeToStandard(): Action
+    {
+        return Action::make('changeToStandard')
+            ->label(__('Change to standard'))
+            ->icon('heroicon-o-arrow-down-circle')
+            ->color('warning')
+            ->visible(fn (Loan $record): bool => $record->status === 'pending' && (bool) $record->is_emergency)
+            ->requiresConfirmation()
+            ->modalHeading(__('Change to standard loan'))
+            ->modalDescription(__('The loan will leave the emergency lane and queue in the fund tier matching its amount.'))
+            ->action(function (Loan $record): void {
+                $record->update(['is_emergency' => false]);
+
+                Notification::make()->title(__('Moved to standard queue'))->success()->send();
+            });
+    }
+
+    public static function markAsEmergency(): Action
+    {
+        return Action::make('markAsEmergency')
+            ->label(__('Mark as emergency'))
+            ->icon('heroicon-o-bolt')
+            ->color('danger')
+            ->visible(fn (Loan $record): bool => $record->status === 'pending' && ! $record->is_emergency)
+            ->requiresConfirmation()
+            ->modalHeading(__('Mark as emergency'))
+            ->modalDescription(__('The loan will be pushed to the front of intake and use the emergency fund tier.'))
+            ->action(function (Loan $record): void {
+                $record->update(['is_emergency' => true]);
+
+                Notification::make()->title(__('Marked as emergency'))->success()->send();
+            });
+    }
+
     public static function reject(): Action
     {
         return Action::make('reject')
@@ -170,7 +205,7 @@ final class LoanFilamentActions
             ->label(fn (Loan $record): string => $record->isFullyDisbursed() ? __('Fully disbursed') : __('Disburse'))
             ->icon('heroicon-o-banknotes')
             ->color('primary')
-            ->visible(fn (Loan $record): bool => $record->status === 'approved')
+            ->visible(fn (Loan $record): bool => in_array($record->status, ['approved', 'partially_disbursed'], true))
             ->disabled(fn (Loan $record): bool => $record->remainingToDisburse() <= 0.01)
             ->modalWidth('lg')
             ->schema(function (Loan $record): array {
@@ -181,6 +216,9 @@ final class LoanFilamentActions
                 $declaredPool = $fundTier ? max(0.0, (float) $fundTier->allocated_amount) : $remaining;
                 $policyMax = min($remaining, $declaredPool);
                 $masterMax = min($remaining, $masterBal);
+                $suggested = $fundTier
+                    ? min($remaining, max(0.0, (float) $fundTier->disbursable_pool))
+                    : $policyMax;
 
                 return [
                     Placeholder::make('info')
@@ -201,7 +239,8 @@ final class LoanFilamentActions
                         ->numeric()
                         ->minValue(0.01)
                         ->maxValue(fn (Get $get): float => $get('force') ? $masterMax : max(0.01, $policyMax))
-                        ->default($policyMax > 0.01 ? $policyMax : null)
+                        ->default($suggested > 0.01 ? round($suggested, 2) : ($policyMax > 0.01 ? $policyMax : null))
+                        ->helperText(__('Suggested tranche is capped by the tier pool that can be paid out now.'))
                         ->required(),
                     Textarea::make('notes')
                         ->label(__('Notes'))
@@ -672,25 +711,38 @@ final class LoanFilamentActions
     /**
      * @return array<int, Action>
      */
-    public static function queueTableActions(): array
+    public static function queueTableActions(string $tab = 'intake'): array
     {
+        $actions = $tab === 'process'
+            ? [
+                self::disburse(),
+                self::reviewLink(),
+            ]
+            : [
+                self::approve(),
+                self::reject(),
+                self::changeToStandard(),
+                self::markAsEmergency(),
+                self::reviewLink(),
+            ];
+
         return array_map(
             fn (Action $action): Action => self::withInsightsRefresh($action),
-            [
-                self::approve()->button(),
-                self::reject()->button(),
-                self::disburse()->button(),
-                Action::make('review')
-                    ->label(fn (Loan $record): string => $record->status === 'pending'
-                        ? __('Review application')
-                        : __('View loan'))
-                    ->icon('heroicon-o-eye')
-                    ->color('gray')
-                    ->url(fn (Loan $record): string => $record->status === 'pending'
-                        ? LoanResource::getUrl('edit', ['record' => $record])
-                        : LoanResource::getUrl('view', ['record' => $record])),
-            ],
+            $actions,
         );
+    }
+
+    private static function reviewLink(): Action
+    {
+        return Action::make('review')
+            ->label(fn (Loan $record): string => $record->status === 'pending'
+                ? __('Review application')
+                : __('View loan'))
+            ->icon('heroicon-o-eye')
+            ->color('gray')
+            ->url(fn (Loan $record): string => $record->status === 'pending'
+                ? LoanResource::getUrl('edit', ['record' => $record])
+                : LoanResource::getUrl('view', ['record' => $record]));
     }
 
     /**

@@ -22,6 +22,37 @@ use Carbon\Carbon;
 final class BankAccountsInsightsService
 {
     /**
+     * Bank post gauge inputs for the tenant dashboard.
+     *
+     * @return array{post_rate: float, pending_post: int}
+     */
+    public function dashboardPostGaugeSlice(): array
+    {
+        $bankClearing = app(BankClearingMatchService::class);
+        $statementLineQuery = $bankClearing->applyRealBankStatementLinesScope(BankTransaction::query());
+
+        $statusCounts = (clone $statementLineQuery)
+            ->selectRaw('status, COUNT(*) as cnt')
+            ->groupBy('status')
+            ->pluck('cnt', 'status');
+
+        $imported = (int) ($statusCounts['imported'] ?? 0);
+        $mirrored = (int) ($statusCounts['mirrored'] ?? 0);
+        $posted = (int) ($statusCounts['posted'] ?? 0);
+        $duplicate = (int) ($statusCounts['duplicate'] ?? 0);
+        $ignored = (int) ($statusCounts['ignored'] ?? 0);
+        $totalTx = $imported + $mirrored + $posted + $duplicate + $ignored;
+
+        $pendingPost = $imported + $mirrored;
+        $postRate = $totalTx > 0 ? round((($posted + $mirrored) / $totalTx) * 100, 1) : 0.0;
+
+        return [
+            'post_rate' => $postRate,
+            'pending_post' => $pendingPost,
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function snapshot(): array

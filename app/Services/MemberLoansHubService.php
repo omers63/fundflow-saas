@@ -8,6 +8,7 @@ use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Services\Loans\LoanQueueProjectionService;
 use App\Support\Insights\InsightFormatter;
 use App\Support\MemberDateDisplay;
 use Illuminate\Database\Eloquent\Collection;
@@ -193,6 +194,19 @@ final class MemberLoansHubService
             ]),
             'show_settle_button' => $loan->status === 'active',
             'show_schedule' => in_array($loan->status, ['active', 'approved', 'partially_disbursed', 'pending'], true),
+            'projected_funding_label' => $this->projectedFundingLabel($loan),
         ];
+    }
+
+    /**
+     * Estimated funding wait for loans still moving through the queue.
+     */
+    private function projectedFundingLabel(Loan $loan): ?string
+    {
+        if (! in_array($loan->status, ['pending', 'approved', 'partially_disbursed'], true)) {
+            return null;
+        }
+
+        return app(LoanQueueProjectionService::class)->labelFor($loan);
     }
 }
