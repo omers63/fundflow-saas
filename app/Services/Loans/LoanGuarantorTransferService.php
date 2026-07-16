@@ -7,8 +7,11 @@ namespace App\Services\Loans;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Notifications\Tenant\LoanGuarantorTransferAdminNotification;
+use App\Notifications\Tenant\LoanGuarantorTransferNotification;
 use App\Services\FundAuditLogService;
 use App\Services\MemberStatusService;
+use App\Services\OperationalReviewWorkflowService;
 use App\Support\BusinessDay;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -69,6 +72,28 @@ class LoanGuarantorTransferService
             'original_borrower_id' => $borrower->id,
             'guarantor_id' => $guarantor->id,
         ]);
+
+        $loan = $loan->fresh();
+        $this->notifyTransferParties($loan, $borrower, $guarantor);
+    }
+
+    protected function notifyTransferParties(Loan $loan, Member $borrower, Member $guarantor): void
+    {
+        try {
+            $borrower->loadMissing('user');
+            $guarantor->loadMissing('user');
+
+            $borrower->user?->notify(new LoanGuarantorTransferNotification($loan, $borrower, $guarantor, 'borrower'));
+            $guarantor->user?->notify(new LoanGuarantorTransferNotification($loan, $borrower, $guarantor, 'guarantor'));
+
+            app(OperationalReviewWorkflowService::class)
+                ->notifyAdmins(new LoanGuarantorTransferAdminNotification($loan, $borrower, $guarantor));
+        } catch (\Throwable $e) {
+            logger()->warning('LoanGuarantorTransferService: notification failed', [
+                'loan_id' => $loan->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

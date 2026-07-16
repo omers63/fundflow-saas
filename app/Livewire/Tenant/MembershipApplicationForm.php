@@ -3,6 +3,7 @@
 namespace App\Livewire\Tenant;
 
 use App\Models\Tenant\MembershipApplication;
+use App\Services\Tenant\MembershipApplicationNotificationService;
 use Illuminate\View\View;
 use Livewire\Component;
 
@@ -35,13 +36,15 @@ class MembershipApplicationForm extends Component
     {
         $this->validate();
 
-        MembershipApplication::create([
+        $application = MembershipApplication::create([
             'name' => $this->name,
             'email' => $this->email,
             'phone' => $this->phone,
             'message' => $this->message,
             'status' => 'pending',
         ]);
+
+        app(MembershipApplicationNotificationService::class)->notifyAdminsOfSubmission($application);
 
         $this->submitted = true;
     }

@@ -12,16 +12,25 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\SupportRequest;
 use App\Models\Tenant\User;
+use App\Notifications\Tenant\NewMemberRequestNotification;
+use App\Notifications\Tenant\NewSupportRequestNotification;
 use App\Services\AccountingService;
 use App\Services\Tenant\MemberRequestService;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
+use NotificationChannels\WebPush\WebPushChannel;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
+
+    config([
+        'webpush.vapid.public_key' => 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U',
+        'webpush.vapid.private_key' => 'UUxI4O8-FbRqjAihg6f42nd_pmTQj2vmanuelys70Ho',
+    ]);
 
     MemberRequest::query()->delete();
     SupportRequest::query()->delete();
@@ -89,6 +98,8 @@ test('tenant admin can list member and support requests', function () {
 });
 
 test('member can submit support request and household request from support page', function () {
+    Notification::fake();
+
     Filament::setCurrentPanel('member');
     $this->actingAs($this->memberUser, 'tenant');
 
@@ -105,6 +116,13 @@ test('member can submit support request and household request from support page'
 
     expect(SupportRequest::query()->count())->toBe(1);
 
+    Notification::assertSentTo(
+        $this->admin,
+        NewSupportRequestNotification::class,
+        fn (NewSupportRequestNotification $notification, array $channels): bool => in_array('database', $channels, true)
+            && in_array(WebPushChannel::class, $channels, true),
+    );
+
     Livewire::test(MyMemberRequestsTableWidget::class)
         ->mountTableAction('requestFreezeMembership')
         ->setTableActionData(['reason' => 'Traveling abroad for six months.'])
@@ -113,6 +131,13 @@ test('member can submit support request and household request from support page'
 
     expect(MemberRequest::query()->count())->toBe(1)
         ->and(MemberRequest::query()->first()->type)->toBe(MemberRequest::TYPE_FREEZE_MEMBERSHIP);
+
+    Notification::assertSentTo(
+        $this->admin,
+        NewMemberRequestNotification::class,
+        fn (NewMemberRequestNotification $notification, array $channels): bool => in_array('database', $channels, true)
+            && in_array(WebPushChannel::class, $channels, true),
+    );
 });
 
 test('membership requests table description reflects household link', function () {

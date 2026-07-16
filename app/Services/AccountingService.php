@@ -11,6 +11,7 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\SmsTransaction;
 use App\Models\Tenant\Transaction;
+use App\Notifications\Tenant\AccountTransactionReversedNotification;
 use App\Services\FiscalClose\FiscalClosePeriodResolver;
 use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
@@ -627,7 +628,7 @@ class AccountingService
         ]);
 
         if (! $account->is_master && $account->type === 'cash') {
-            return $counterType === 'credit'
+            $reversal = $counterType === 'credit'
                 ? $this->creditMemberCashWithMasterMirror(
                     $account,
                     $amount,
@@ -646,10 +647,14 @@ class AccountingService
                     $transactedAt,
                     $original->member_id,
                 );
+
+            $this->notifyMemberOfLedgerReversal($original, $trimmed);
+
+            return $reversal;
         }
 
         if (! $account->is_master && $account->type === 'fund') {
-            return $counterType === 'credit'
+            $reversal = $counterType === 'credit'
                 ? $this->creditMemberFundWithMasterMirror(
                     $account,
                     $amount,
@@ -668,13 +673,42 @@ class AccountingService
                     $transactedAt,
                     $original->member_id,
                 );
+
+            $this->notifyMemberOfLedgerReversal($original, $trimmed);
+
+            return $reversal;
         }
 
         $reversal = $counterType === 'credit'
             ? $this->credit($account, $amount, $description, $original, $transactedAt, $original->member_id)
             : $this->debit($account, $amount, $description, $original, $transactedAt, $original->member_id);
 
+        $this->notifyMemberOfLedgerReversal($original, $trimmed);
+
         return $reversal;
+    }
+
+    private function notifyMemberOfLedgerReversal(Transaction $original, string $reason): void
+    {
+        if ($original->member_id === null || $original->account?->is_master) {
+            return;
+        }
+
+        try {
+            $original->loadMissing('member.user');
+            $member = $original->member;
+
+            if ($member === null) {
+                return;
+            }
+
+            $member->user?->notify(new AccountTransactionReversedNotification($original, $reason));
+        } catch (\Throwable $e) {
+            logger()->warning('AccountingService: reversal notification failed', [
+                'transaction_id' => $original->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -1941,7 +1975,7 @@ class AccountingService
 
             $tx->update([
                 'member_id' => $member->id,
-                'posted_at' => now(),
+                'posted_at' => BusinessDay::now(),
                 'posted_by' => auth('tenant')->id(),
             ]);
         });

@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Exceptions\InsufficientMemberCashForCollectionException;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
+use App\Notifications\Tenant\ContributionLateFeeAppliedNotification;
 use App\Services\Loans\LateFeeService;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
@@ -750,6 +751,13 @@ class ContributionCollectionCycleService
                 'is_late' => $days > ContributionPolicySettings::lateFeeReminderDays(),
             ]);
         });
+
+        $contribution->refresh()->loadMissing('member.user');
+        $contribution->member?->user?->notify(new ContributionLateFeeAppliedNotification(
+            $contribution,
+            $newFee,
+            $newTier,
+        ));
 
         return true;
     }

@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Services\Tenant\HouseholdMemberService;
+use App\Services\Tenant\MembershipApplicationNotificationService;
 use App\Support\BusinessDay;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
@@ -18,6 +19,7 @@ class MembershipApplicationApprovalService
         private readonly HouseholdMemberService $householdMembers,
         private readonly MembershipSubscriptionFeeService $subscriptionFees,
         private readonly MembershipApprovalPostingPipeline $approvalPostingPipeline,
+        private readonly MembershipApplicationNotificationService $applicationNotifications,
     ) {}
 
     public function approve(MembershipApplication $application): Member
@@ -70,6 +72,20 @@ class MembershipApplicationApprovalService
             'members' => $members,
             'failures' => $failures,
         ];
+    }
+
+    public function reject(MembershipApplication $application, ?string $reason = null): void
+    {
+        if ($application->status !== 'pending') {
+            throw new InvalidArgumentException(__('This application has already been reviewed.'));
+        }
+
+        $application->update([
+            'status' => 'rejected',
+            'reviewed_at' => BusinessDay::now(),
+        ]);
+
+        $this->applicationNotifications->notifyApplicantRejected($application->fresh(), $reason);
     }
 
     private function approveParent(MembershipApplication $application): Member

@@ -1,10 +1,12 @@
 <?php
 
 use App\Models\Tenant\Account;
+use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
+use App\Notifications\Tenant\CashOutBankClearedNotification;
 use App\Services\AccountingService;
 use App\Services\LoanService;
 use App\Services\MemberCashOutService;
@@ -211,4 +213,43 @@ test('fund cash-out rejects payout frozen members', function () {
 
     expect(fn () => $this->service->submitFundBalanceCashOut($this->member->fresh()))
         ->toThrow(InvalidArgumentException::class);
+});
+
+test('clearing an accepted cash-out notifies the member', function () {
+    AccountingService::withoutMemberCashCollection(function (): void {
+        $this->accounting->creditMemberCashWithMasterMirror(
+            $this->member->cashAccount,
+            5000,
+            'Seed cash for withdrawal',
+            '(mirror)',
+            null,
+            null,
+            $this->member->id,
+        );
+    });
+    $this->member->refresh();
+
+    $request = $this->service->submit($this->member, 2000, 'Need transfer');
+    $this->service->accept($request, $this->admin->id);
+
+    $unclearedTxn = $request->fresh()->bankTransaction;
+    expect($unclearedTxn)->not->toBeNull()
+        ->and($unclearedTxn->is_cleared)->toBeFalse();
+
+    $importedTxn = BankTransaction::create([
+        'bank_statement_id' => $unclearedTxn->bank_statement_id,
+        'transaction_date' => $unclearedTxn->transaction_date,
+        'description' => 'Bank import cash-out match',
+        'amount' => -2000,
+        'status' => 'imported',
+        'hash' => md5('cashout-imported-match-'.microtime()),
+        'is_cleared' => true,
+        'cleared_at' => now(),
+    ]);
+
+    $this->service->clearTransaction($unclearedTxn, $importedTxn);
+
+    expect($unclearedTxn->fresh()->is_cleared)->toBeTrue();
+
+    Notification::assertSentTo($this->memberUser, CashOutBankClearedNotification::class);
 });

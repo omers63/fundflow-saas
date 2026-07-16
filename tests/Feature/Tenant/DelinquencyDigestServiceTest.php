@@ -12,6 +12,7 @@ use App\Services\AccountingService;
 use App\Services\Loans\DelinquencyDigestService;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Notification;
+use NotificationChannels\WebPush\WebPushChannel;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -20,6 +21,11 @@ beforeEach(function () {
     $this->initializeTenancy();
     Filament::setCurrentPanel('tenant');
     $this->digest = app(DelinquencyDigestService::class);
+
+    config([
+        'webpush.vapid.public_key' => 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U',
+        'webpush.vapid.private_key' => 'UUxI4O8-FbRqjAihg6f42nd_pmTQj2vmanuelys70Ho',
+    ]);
 
     Account::query()->delete();
     Member::query()->delete();
@@ -31,7 +37,7 @@ beforeEach(function () {
 function createMemberForDigest(AccountingService $accounting, array $overrides = []): Member
 {
     $member = Member::create(array_merge([
-        'member_number' => 'MEM-' . uniqid(),
+        'member_number' => 'MEM-'.uniqid(),
         'name' => 'Digest Member',
         'monthly_contribution_amount' => 5000,
         'joined_at' => now()->subYear(),
@@ -90,6 +96,7 @@ test('delinquency digest notifies admins via database and mail when email is set
 
             return in_array('database', $channels, true)
                 && in_array('mail', $channels, true)
+                && in_array(WebPushChannel::class, $channels, true)
                 && ($databasePayload['format'] ?? null) === 'filament'
                 && (
                     str_starts_with($notification->delinquencyUrl, '/')
@@ -143,7 +150,7 @@ test('delinquency digest database payload appears in filament notification bell 
     )->toBe(1);
 });
 
-test('delinquency digest uses database only when admin has no email', function () {
+test('delinquency digest omits mail when admin has no email', function () {
     Notification::fake();
 
     $admin = User::create([
@@ -183,8 +190,10 @@ test('delinquency digest uses database only when admin has no email', function (
     Notification::assertSentTo(
         $admin,
         DelinquencyDigestNotification::class,
-        fn(DelinquencyDigestNotification $notification, array $channels): bool => $channels === ['database']
-        && ($notification->toDatabase($admin)['format'] ?? null) === 'filament',
+        fn (DelinquencyDigestNotification $notification, array $channels): bool => in_array('database', $channels, true)
+            && in_array(WebPushChannel::class, $channels, true)
+            && ! in_array('mail', $channels, true)
+            && ($notification->toDatabase($admin)['format'] ?? null) === 'filament',
     );
 });
 

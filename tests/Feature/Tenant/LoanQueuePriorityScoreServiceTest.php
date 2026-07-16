@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanQueuePriorityScoreService;
+use App\Support\BusinessDaySettings;
+use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -94,4 +96,30 @@ test('priority sort orders higher scores first for pending loans', function () {
         ->all();
 
     expect($ordered[0])->toBe($higher->id);
+});
+
+test('queue wait bonus uses configured business day not calendar date', function () {
+    BusinessDaySettings::saveFromForm('2026-06-15');
+
+    $member = Member::factory()->create([
+        'joined_at' => Carbon::parse('2020-01-01'),
+        'status' => 'active',
+    ]);
+
+    $loan = Loan::factory()->create([
+        'member_id' => $member->id,
+        'is_emergency' => false,
+        'applied_at' => Carbon::parse('2026-06-01'),
+        'status' => 'pending',
+    ]);
+
+    $scoreOnBusinessDay = app(LoanQueuePriorityScoreService::class)->calculate($loan->fresh());
+
+    BusinessDaySettings::saveFromForm('2026-06-01');
+
+    $scoreEarlierBusinessDay = app(LoanQueuePriorityScoreService::class)->calculate($loan->fresh());
+
+    expect($scoreOnBusinessDay)->toBeGreaterThan($scoreEarlierBusinessDay);
+
+    BusinessDaySettings::saveFromForm(null);
 });

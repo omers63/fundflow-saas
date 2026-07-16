@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Tenant\Account;
 use App\Models\Tenant\ReconciliationException;
+use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
 use InvalidArgumentException;
 
@@ -60,14 +61,14 @@ class ReconciliationSuspenseService
 
         $exception->update([
             'exception_type' => 'timing_difference',
-            'deferred_until' => now()->addHours($hours),
+            'deferred_until' => BusinessDay::now()->addHours($hours),
             'auto_resolve_reason' => __('Deferred :hours hours for in-flight match', ['hours' => $hours]),
         ]);
     }
 
     public function isDeferred(ReconciliationException $exception): bool
     {
-        return $exception->deferred_until !== null && now()->lt($exception->deferred_until);
+        return $exception->deferred_until !== null && BusinessDay::now()->lt($exception->deferred_until);
     }
 
     public function escalateDeferredExceptions(): int
@@ -79,12 +80,12 @@ class ReconciliationSuspenseService
             ->open()
             ->where('exception_type', 'timing_difference')
             ->whereNotNull('deferred_until')
-            ->where('deferred_until', '<', now()->subHours($hours))
+            ->where('deferred_until', '<', BusinessDay::now()->subHours($hours))
             ->each(function (ReconciliationException $exception) use (&$escalated): void {
                 $exception->update([
                     'severity' => 'high',
                     'deferred_until' => null,
-                    'sla_deadline' => now()->endOfDay(),
+                    'sla_deadline' => BusinessDay::now()->endOfDay(),
                 ]);
                 $escalated++;
             });

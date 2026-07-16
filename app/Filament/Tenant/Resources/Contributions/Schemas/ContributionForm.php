@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Resources\Contributions\Schemas;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Support\BusinessDay;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -40,7 +41,7 @@ class ContributionForm
                             )),
                         DatePicker::make('period')
                             ->required()
-                            ->default(now()->startOfMonth())
+                            ->default(BusinessDay::today()->startOfMonth())
                             ->disabled(! $coreEditable)
                             ->dehydrated($coreEditable),
                         TextInput::make('amount')

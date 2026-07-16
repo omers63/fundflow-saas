@@ -8,7 +8,7 @@ use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Services\ReconciliationDigestService;
 use App\Services\ReconciliationReportService;
-use Carbon\Carbon;
+use App\Support\BusinessDay;
 use Filament\Facades\Filament;
 use Illuminate\Console\Command;
 
@@ -29,8 +29,7 @@ class FundReconcileCommand extends Command
     {
         @set_time_limit(0);
 
-        $tz = config('app.timezone');
-        $now = Carbon::now($tz);
+        $now = BusinessDay::now();
 
         if ($this->option('realtime')) {
             $mode = ReconciliationSnapshot::MODE_REALTIME;

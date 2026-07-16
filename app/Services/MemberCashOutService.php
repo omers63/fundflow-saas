@@ -10,6 +10,7 @@ use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Notifications\Tenant\CashOutBankClearedNotification;
 use App\Notifications\Tenant\CashOutRequestAcceptedNotification;
 use App\Notifications\Tenant\CashOutRequestRejectedNotification;
 use App\Notifications\Tenant\NewCashOutRequestNotification;
@@ -300,6 +301,12 @@ final class MemberCashOutService
             $imported,
             $this->clearanceLinkageResolver->forCashOut($uncleared),
         );
+
+        $cashOutRequest = $uncleared->cashOutRequest()->with('member.user')->first();
+        $memberUser = $cashOutRequest?->member?->user;
+        if ($memberUser !== null) {
+            $memberUser->notify(new CashOutBankClearedNotification($cashOutRequest));
+        }
     }
 
     public function reject(CashOutRequest $request, ?int $reviewedBy = null, ?string $remarks = null): void

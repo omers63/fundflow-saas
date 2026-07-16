@@ -14,6 +14,7 @@ use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\Transaction;
+use App\Notifications\Tenant\ReconciliationExceptionRaisedNotification;
 use App\Services\Loans\LateFeeService;
 use App\Services\Loans\LoanLedgerService;
 use App\Support\BatchPostingGate;
@@ -1503,7 +1504,7 @@ class ReconciliationService
             default => BusinessDay::now()->addDays(7),
         };
 
-        return ReconciliationException::create([
+        $exception = ReconciliationException::create([
             'exception_code' => $code,
             'domain' => $domain,
             'severity' => $severity,
@@ -1513,6 +1514,20 @@ class ReconciliationService
             'sla_deadline' => $sla,
             'raised_at' => BusinessDay::now(),
         ]);
+
+        if (in_array($severity, ['critical', 'high'], true)) {
+            try {
+                app(OperationalReviewWorkflowService::class)
+                    ->notifyAdmins(new ReconciliationExceptionRaisedNotification($exception));
+            } catch (\Throwable $e) {
+                logger()->warning('ReconciliationService: exception notification failed', [
+                    'exception_id' => $exception->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $exception;
     }
 
     protected function fingerprint(ReconciliationException $exception): string

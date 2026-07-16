@@ -8,6 +8,7 @@ use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
 use App\Filament\Tenant\Widgets\MonthlyStatementInsightsWidget;
 use App\Models\Tenant\Member;
 use App\Services\MonthlyStatementService;
+use App\Support\BusinessDay;
 use App\Support\StatementSettings;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
@@ -35,7 +36,7 @@ class ListMonthlyStatements extends ListRecords
                 ->requiresConfirmation()
                 ->modalHeading(__('Generate statements for previous month?'))
                 ->modalDescription(function (): string {
-                    $period = now()->subMonthNoOverflow()->format('Y-m');
+                    $period = BusinessDay::today()->subMonthNoOverflow()->format('Y-m');
                     $autoEmail = StatementSettings::autoEmail()
                         ? __('Auto-email is enabled in settings.')
                         : __('Auto-email is disabled in settings.');
@@ -46,7 +47,7 @@ class ListMonthlyStatements extends ListRecords
                     ]);
                 })
                 ->action(function (Component $livewire): void {
-                    $period = now()->subMonthNoOverflow()->format('Y-m');
+                    $period = BusinessDay::today()->subMonthNoOverflow()->format('Y-m');
                     $notify = StatementSettings::autoEmail();
                     $count = app(MonthlyStatementService::class)->generateForAllMembers($period, $notify);
 
@@ -66,7 +67,7 @@ class ListMonthlyStatements extends ListRecords
                     TextInput::make('period')
                         ->label(__('Period (YYYY-MM)'))
                         ->required()
-                        ->placeholder(now()->subMonthNoOverflow()->format('Y-m'))
+                        ->placeholder(BusinessDay::today()->subMonthNoOverflow()->format('Y-m'))
                         ->regex('/^\d{4}-\d{2}$/'),
                     Toggle::make('send_notification')
                         ->label(__('Email members after generation'))

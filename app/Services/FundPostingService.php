@@ -10,6 +10,7 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Notifications\Tenant\FundPostingAcceptedNotification;
+use App\Notifications\Tenant\FundPostingBankClearedNotification;
 use App\Notifications\Tenant\FundPostingRejectedNotification;
 use App\Notifications\Tenant\NewFundPostingNotification;
 use Illuminate\Support\Facades\DB;
@@ -22,8 +23,7 @@ class FundPostingService
         private OperationalReviewWorkflowService $reviewWorkflow,
         private SyntheticBankStatementFactory $syntheticStatements,
         private BankClearanceLinkageResolver $clearanceLinkageResolver,
-    ) {
-    }
+    ) {}
 
     /**
      * Submit a fund posting request from a member.
@@ -220,5 +220,11 @@ class FundPostingService
             $imported,
             $this->clearanceLinkageResolver->forFundPosting($uncleared),
         );
+
+        $fundPosting = $uncleared->fundPosting()->with('member.user')->first();
+        $memberUser = $fundPosting?->member?->user;
+        if ($memberUser !== null) {
+            $memberUser->notify(new FundPostingBankClearedNotification($fundPosting));
+        }
     }
 }

@@ -8,6 +8,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\FundPostingAcceptedNotification;
+use App\Notifications\Tenant\FundPostingBankClearedNotification;
 use App\Notifications\Tenant\FundPostingRejectedNotification;
 use App\Notifications\Tenant\NewFundPostingNotification;
 use App\Services\AccountingService;
@@ -423,10 +424,18 @@ test('accepted deposit notification reports contribution settlement applied', fu
     );
 });
 
-test('clear transaction matches uncleared with imported', function () {
+test('clear transaction matches uncleared with imported and notifies member', function () {
     Notification::fake();
 
+    $memberUser = User::create([
+        'name' => 'John Doe',
+        'email' => 'john-clear@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => false,
+    ]);
+
     $member = Member::create([
+        'user_id' => $memberUser->id,
         'member_number' => 'MEM-0001',
         'name' => 'John Doe',
         'monthly_contribution_amount' => 5000,
@@ -458,4 +467,6 @@ test('clear transaction matches uncleared with imported', function () {
     expect($unclearedTxn->fresh()->cleared_at)->not->toBeNull();
     expect($importedTxn->fresh()->is_cleared)->toBeTrue();
     expect($importedTxn->fresh()->fund_posting_id)->toBe($posting->id);
+
+    Notification::assertSentTo($memberUser, FundPostingBankClearedNotification::class);
 });

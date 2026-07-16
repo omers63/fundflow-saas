@@ -7,7 +7,6 @@ namespace App\Filament\Support;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Models\Tenant\MembershipApplication;
 use App\Services\MembershipApplicationApprovalService;
-use App\Support\BusinessDay;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Notifications\Notification;
@@ -57,10 +56,7 @@ final class MembershipApplicationFilamentActions
             ->requiresConfirmation()
             ->visible(fn (MembershipApplication $record): bool => $record->status === 'pending')
             ->action(function (MembershipApplication $record, Component $livewire): void {
-                $record->update([
-                    'status' => 'rejected',
-                    'reviewed_at' => BusinessDay::now(),
-                ]);
+                app(MembershipApplicationApprovalService::class)->reject($record);
 
                 Notification::make()->title(__('Application rejected'))->warning()->send();
 
@@ -132,10 +128,7 @@ final class MembershipApplicationFilamentActions
                         continue;
                     }
 
-                    $record->update([
-                        'status' => 'rejected',
-                        'reviewed_at' => BusinessDay::now(),
-                    ]);
+                    app(MembershipApplicationApprovalService::class)->reject($record);
                     $rejected++;
                 }
 

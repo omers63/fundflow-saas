@@ -14,6 +14,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\GuarantorLoanApplicationNotification;
 use App\Notifications\Tenant\LoanApprovedNotification;
+use App\Notifications\Tenant\LoanCancelledNotification;
 use App\Notifications\Tenant\LoanDisbursedNotification;
 use App\Notifications\Tenant\LoanPartialDisbursementNotification;
 use App\Notifications\Tenant\LoanRejectedNotification;
@@ -247,6 +248,7 @@ final class LoanLifecycleService
             'approved_at' => $at,
             'approved_by_id' => $approvedById ?? auth()->id(),
             'settlement_threshold' => $threshold,
+            'monthly_repayment' => (float) $loanTier->min_monthly_installment,
             'has_grace_cycle' => $hasGraceCycle,
             'grace_cycles' => LoanSettings::clampGraceCycles($graceCycles ?? ($hasGraceCycle ? 1 : 0)),
         ]);
@@ -288,6 +290,8 @@ final class LoanLifecycleService
             'cancellation_reason' => $reason,
             'cancelled_at' => BusinessDay::now(),
         ]);
+
+        $this->notifyMember($loan, new LoanCancelledNotification($loan, $reason));
     }
 
     public function disbursePartial(
@@ -483,6 +487,7 @@ final class LoanLifecycleService
                 'member_portion' => $memberPortion,
                 'master_portion' => $masterPortion,
                 'member_fund_balance_at_disbursement' => round($memberFundBalanceBefore, 2),
+                'monthly_repayment' => $minInstall,
             ] + $exemption);
 
             try {

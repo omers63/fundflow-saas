@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models\Tenant;
 
+use App\Support\BusinessDay;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -84,7 +85,7 @@ class SupportRequest extends Model
 
     public function daysOpen(): int
     {
-        return (int) $this->created_at?->startOfDay()->diffInDays(now()->startOfDay());
+        return (int) $this->created_at?->startOfDay()->diffInDays(BusinessDay::today());
     }
 
     /**

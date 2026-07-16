@@ -7,6 +7,7 @@ namespace App\Services\Tenant;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\User;
+use App\Support\BusinessDay;
 
 final class MemberMembershipProfileService
 {
@@ -77,7 +78,7 @@ final class MemberMembershipProfileService
             'mobile_phone' => $member->phone,
             'status' => 'approved',
             'application_type' => 'new',
-            'reviewed_at' => now(),
+            'reviewed_at' => BusinessDay::now(),
             'membership_date' => $member->joined_at,
         ]);
     }

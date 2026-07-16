@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\LegacyMigration;
 
 use App\Models\Tenant\Loan;
+use App\Support\BusinessDay;
 use App\Support\LoanRepaymentWindowPolicy;
 use Carbon\Carbon;
 
@@ -44,7 +45,7 @@ final readonly class LegacyLoanRepaymentWindow
             );
         }
 
-        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? now()->startOfDay();
+        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? BusinessDay::today();
         $graceCycles = $loan->grace_cycles ?? ($loan->has_grace_cycle ? 1 : $defaultGraceCycles);
 
         return self::firstRepaymentAtForDisbursement($disbursedAt, (int) $graceCycles);

@@ -12,6 +12,7 @@ use App\Services\ContributionService;
 use App\Services\Loans\LoanImportService;
 use App\Services\MemberImportService;
 use App\Support\AssociativeCsv;
+use App\Support\BusinessDay;
 use App\Support\LegacyMigrationFundingStrategySettings;
 use App\Support\LegacyMigrationGraceCycleSettings;
 use App\Support\LegacyMigrationSettlementThresholdSettings;
@@ -324,7 +325,7 @@ final class LegacyMigrationOrchestrator
             'members_path' => is_string($membersPath) && $membersPath !== '' ? $membersPath : null,
             'loans_path' => $loansPath,
             'payments_path' => $paymentsPath,
-            'classified_at' => now()->toIso8601String(),
+            'classified_at' => BusinessDay::now()->toIso8601String(),
             'loans_header' => AssociativeCsv::headers($loansPath),
         ], JSON_THROW_ON_ERROR));
 

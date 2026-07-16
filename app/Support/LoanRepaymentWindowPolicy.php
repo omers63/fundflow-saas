@@ -43,7 +43,7 @@ final class LoanRepaymentWindowPolicy
             );
         }
 
-        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? now()->startOfDay();
+        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? BusinessDay::today();
         $graceCycles = (int) ($loan->grace_cycles ?? ($loan->has_grace_cycle ? 1 : 0));
 
         return $this->firstRepaymentCycleStartForDisbursement($disbursedAt, $graceCycles);

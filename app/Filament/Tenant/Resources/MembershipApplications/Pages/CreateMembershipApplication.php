@@ -6,6 +6,7 @@ use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationRe
 use App\Filament\Tenant\Resources\MembershipApplications\Schemas\MembershipApplicationForm;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
+use App\Services\Tenant\MembershipApplicationNotificationService;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Schemas\Schema;
@@ -65,7 +66,11 @@ class CreateMembershipApplication extends CreateRecord
 
     protected function handleRecordCreation(array $data): MembershipApplication
     {
-        return MembershipApplication::create($data);
+        $application = MembershipApplication::create($data);
+
+        app(MembershipApplicationNotificationService::class)->notifyAdminsOfSubmission($application);
+
+        return $application;
     }
 
     protected function getCreatedNotification(): ?Notification

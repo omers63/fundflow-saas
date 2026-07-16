@@ -271,7 +271,7 @@ final class LegacyImportedLoanScheduleSyncService
         array &$touchedLoanIds,
         array &$pendingInstallmentPoolByLoanId,
     ): float {
-        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? now()->startOfDay();
+        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? BusinessDay::today();
         $loanKey = LegacyLoanRepaymentWindow::loanKey((string) $member->member_number, $disbursedAt, (int) $loan->id);
         $cumulative = $cumulativeRepaidByLoanKey[$loanKey] ?? 0.0;
         $target = LegacyLoanRepaymentTarget::forLoan($loan);

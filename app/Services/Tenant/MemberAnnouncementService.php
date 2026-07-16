@@ -9,6 +9,7 @@ use App\Models\Tenant\MemberAnnouncement;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\MemberAnnouncementNotification;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Support\BusinessDay;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Notification;
@@ -52,7 +53,7 @@ final class MemberAnnouncementService
             'scheduled_for' => $payload['scheduled_for'] ?? null,
         ]);
 
-        if ($announcement->scheduled_for !== null && $announcement->scheduled_for->isFuture()) {
+        if ($announcement->scheduled_for !== null && $announcement->scheduled_for->isAfter(BusinessDay::now())) {
             return $announcement;
         }
 
@@ -66,7 +67,7 @@ final class MemberAnnouncementService
         MemberAnnouncement::query()
             ->whereNull('sent_at')
             ->whereNotNull('scheduled_for')
-            ->where('scheduled_for', '<=', now())
+            ->where('scheduled_for', '<=', BusinessDay::now())
             ->orderBy('scheduled_for')
             ->each(function (MemberAnnouncement $announcement) use (&$dispatched): void {
                 $admin = $announcement->createdBy;
@@ -100,7 +101,7 @@ final class MemberAnnouncementService
         $announcement->update([
             'recipient_count' => $members->count(),
             'delivered_count' => $delivered,
-            'sent_at' => now(),
+            'sent_at' => BusinessDay::now(),
         ]);
 
         return $announcement->fresh();

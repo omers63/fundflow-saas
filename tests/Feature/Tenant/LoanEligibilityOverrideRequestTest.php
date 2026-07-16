@@ -20,6 +20,7 @@ use App\Support\LoanEligibilityGate;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
+use NotificationChannels\WebPush\WebPushChannel;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -28,6 +29,11 @@ beforeEach(function () {
     $this->initializeTenancy();
     app()->setLocale('en');
     Filament::setCurrentPanel('member');
+
+    config([
+        'webpush.vapid.public_key' => 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U',
+        'webpush.vapid.private_key' => 'UUxI4O8-FbRqjAihg6f42nd_pmTQj2vmanuelys70Ho',
+    ]);
 
     Account::query()->delete();
     LoanEligibilityOverride::query()->delete();
@@ -161,6 +167,7 @@ test('ineligible member can submit eligibility override request and notify admin
             $payload = $notification->toDatabase($admin);
 
             return in_array('database', $channels, true)
+                && in_array(WebPushChannel::class, $channels, true)
                 && ($payload['format'] ?? null) === 'filament';
         },
     );

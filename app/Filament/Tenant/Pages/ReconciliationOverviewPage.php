@@ -20,6 +20,7 @@ use App\Services\BankClearingMatchService;
 use App\Services\ReconciliationPdfService;
 use App\Services\ReconciliationReportService;
 use App\Services\ReconciliationService;
+use App\Support\BusinessDay;
 use App\Support\Reconciliation\ReconciliationHealthSummary;
 use BackedEnum;
 use Carbon\Carbon;
@@ -806,8 +807,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
         try {
             @set_time_limit(0);
 
-            $tz = config('app.timezone');
-            $now = Carbon::now($tz);
+            $now = BusinessDay::now();
             $service = app(ReconciliationReportService::class);
 
             if ($mode === ReconciliationSnapshot::MODE_REALTIME) {

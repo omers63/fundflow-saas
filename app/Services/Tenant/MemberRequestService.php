@@ -7,17 +7,18 @@ namespace App\Services\Tenant;
 use App\Filament\Member\Pages\CommunicationsPage;
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
-use App\Filament\Support\AdminNotificationActions;
 use App\Filament\Support\MemberDatabaseNotification;
 use App\Filament\Support\MemberFilamentActions;
-use App\Filament\Support\RecipientDatabaseNotification;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\User;
+use App\Notifications\Tenant\NewMemberRequestNotification;
 use App\Services\DependentAllocationService;
 use App\Services\MemberStatusService;
 use App\Services\MemberWithdrawalSettlementService;
 use App\Services\OpenCycleContributionOverrideService;
+use App\Services\OperationalReviewWorkflowService;
+use App\Support\BusinessDay;
 use App\Support\MemberUserEmail;
 use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
@@ -32,6 +33,7 @@ class MemberRequestService
         private readonly DependentAllocationService $allocations,
         private readonly MemberStatusService $statuses,
         private readonly OpenCycleContributionOverrideService $openCycleOverrides,
+        private readonly OperationalReviewWorkflowService $reviewWorkflow,
     ) {}
 
     public function submit(Member $requester, string $type, array $payload): MemberRequest
@@ -58,24 +60,7 @@ class MemberRequestService
                 'payload' => $payload,
             ]);
 
-            User::query()
-                ->where('is_admin', true)
-                ->each(function (User $admin) use ($request, $requester): void {
-                    RecipientDatabaseNotification::send($admin, function (Notification $notification) use ($request, $requester): void {
-                        $notification
-                            ->title(__('New member request'))
-                            ->body(
-                                ($requester->name ?? __('Member'))
-                                .' — '
-                                .MemberRequest::typeLabel($request->type)
-                            )
-                            ->icon('heroicon-o-clipboard-document-list')
-                            ->iconColor('warning')
-                            ->actions([
-                                AdminNotificationActions::reviewMemberRequest($request),
-                            ]);
-                    });
-                });
+            $this->reviewWorkflow->notifyAdmins(new NewMemberRequestNotification($request, $requester));
 
             return $request;
         });
@@ -273,7 +258,7 @@ class MemberRequestService
             $request->update([
                 'status' => MemberRequest::STATUS_APPROVED,
                 'reviewed_by_user_id' => $admin->id,
-                'reviewed_at' => now(),
+                'reviewed_at' => BusinessDay::now(),
             ]);
         });
 
@@ -294,7 +279,7 @@ class MemberRequestService
             'status' => MemberRequest::STATUS_REJECTED,
             'admin_note' => $note,
             'reviewed_by_user_id' => $admin->id,
-            'reviewed_at' => now(),
+            'reviewed_at' => BusinessDay::now(),
         ]);
 
         $this->notifyRequester($requester, $request, 'rejected');

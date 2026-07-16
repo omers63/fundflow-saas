@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Filament\Tenant\Support\SmsClearingTabRegistry;
 use App\Models\Tenant\SmsTransaction;
+use App\Support\BusinessDay;
 
 final class SmsClearingInsightsService
 {
@@ -21,7 +22,7 @@ final class SmsClearingInsightsService
         $counts = $this->queue->counts();
         $postedToday = SmsTransaction::query()
             ->whereNotNull('posted_at')
-            ->whereDate('posted_at', today())
+            ->whereDate('posted_at', BusinessDay::today())
             ->count();
 
         return [

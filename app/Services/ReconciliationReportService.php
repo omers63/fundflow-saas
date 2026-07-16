@@ -20,6 +20,7 @@ use App\Models\Tenant\ReconciliationSnapshot;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Services\Loans\LoanLedgerService;
+use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
 use App\Support\LoanFundingStrategy;
 use Carbon\Carbon;
@@ -63,7 +64,7 @@ class ReconciliationReportService
     ): array {
         @set_time_limit(0);
 
-        $asOf = $asOf ? Carbon::parse($asOf) : now();
+        $asOf = $asOf ? Carbon::parse($asOf) : BusinessDay::now();
 
         $declaredBank = isset($options['declared_bank_balance']) && $options['declared_bank_balance'] !== null && $options['declared_bank_balance'] !== ''
             ? (float) $options['declared_bank_balance']

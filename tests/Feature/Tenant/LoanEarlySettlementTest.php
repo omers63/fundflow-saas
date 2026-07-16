@@ -10,6 +10,7 @@ use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanEarlySettlementService;
 use App\Services\LoanService;
 use App\Support\ContributionCollectionStatus;
+use App\Support\LoanRepaymentNote;
 use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
 
@@ -73,9 +74,9 @@ function createSettlementEligibleMember(AccountingService $accounting, float $fu
     return $member->fresh()->load(['fundAccount', 'cashAccount']);
 }
 
-function createActiveLoanForSettlement(LoanService $service, AccountingService $accounting, float $amount = 15000): Loan
+function createActiveLoanForSettlement(LoanService $service, AccountingService $accounting, float $amount = 15000, float $fundBalance = 30000): Loan
 {
-    $member = createSettlementEligibleMember($accounting, 30000);
+    $member = createSettlementEligibleMember($accounting, $fundBalance);
     Account::masterFund()->update(['balance' => 100000]);
     Account::masterCash()->update(['balance' => 100000]);
 
@@ -100,7 +101,9 @@ test('unified settle with full amount marks loan early settled', function () {
 
     expect($loan->status)->toBe('early_settled')
         ->and($loan->settled_at)->not->toBeNull()
-        ->and($loan->installments()->whereIn('status', ['pending', 'overdue'])->count())->toBe(0);
+        ->and($loan->installments()->whereIn('status', ['pending', 'overdue'])->count())->toBe(0)
+        ->and($loan->repayments()->count())->toBe(1)
+        ->and($loan->repayments()->first()->notes)->toBe(LoanRepaymentNote::fullEarlySettlement());
 });
 
 test('unified settle with partial amount keeps loan active and adjusts schedule', function () {
@@ -114,7 +117,9 @@ test('unified settle with partial amount keeps loan active and adjusts schedule'
     $firstInstallment->refresh();
 
     expect($loan->status)->toBe('active')
-        ->and($firstInstallment->status)->toBe('paid');
+        ->and($firstInstallment->status)->toBe('paid')
+        ->and($loan->repayments()->count())->toBe(1)
+        ->and(LoanRepaymentNote::isSettlement($loan->repayments()->first()->notes))->toBeTrue();
 });
 
 test('settle rejects zero amount via partial path', function () {
@@ -130,4 +135,60 @@ test('settle rejects amount above member cash balance', function () {
 
     expect(fn () => $this->service->settleLoan($loan, 500))
         ->toThrow(RuntimeException::class);
+});
+
+test('roll up partial settlement compresses the schedule tail', function () {
+    $loan = createActiveLoanForSettlement($this->service, $this->accounting, 25000);
+    $pendingBefore = $loan->installments()->whereIn('status', ['pending', 'overdue'])->count();
+    $emi = (float) $loan->installments()->orderBy('due_date')->value('amount');
+    $required = $this->settlement->requiredCash($loan);
+
+    expect($required)->toBeGreaterThan($emi * 2);
+
+    $this->service->settleLoan($loan, $emi * 2, 'roll_up');
+
+    $loan->refresh();
+
+    expect($loan->status)->toBe('active')
+        ->and($loan->installments()->where('status', 'paid')->count())->toBe(2)
+        ->and($loan->installments()->whereIn('status', ['pending', 'overdue'])->count())->toBe($pendingBefore - 4);
+});
+
+test('skip cycles partial settlement keeps schedule length', function () {
+    $loan = createActiveLoanForSettlement($this->service, $this->accounting, 25000);
+    $totalBefore = $loan->installments()->count();
+    $emi = (float) $loan->installments()->orderBy('due_date')->value('amount');
+    $required = $this->settlement->requiredCash($loan);
+
+    expect($required)->toBeGreaterThan($emi * 2);
+
+    $this->service->settleLoan($loan, $emi * 2, 'skip_future');
+
+    $loan->refresh();
+
+    expect($loan->status)->toBe('active')
+        ->and($loan->installments()->count())->toBe($totalBefore)
+        ->and($loan->installments()->where('status', 'waived')->count())->toBe(2)
+        ->and($loan->installments()->whereIn('status', ['pending', 'overdue'])->count())->toBe($totalBefore - 2);
+});
+
+test('loan does not auto complete until settlement threshold is collected', function () {
+    $loan = createActiveLoanForSettlement($this->service, $this->accounting, 25000);
+    $installments = $loan->installments()->orderBy('installment_number')->get();
+    $last = $installments->last();
+
+    foreach ($installments->slice(0, -1) as $installment) {
+        $installment->update([
+            'status' => 'paid',
+            'paid_at' => now(),
+            'amount_collected' => (float) $installment->amount,
+        ]);
+    }
+
+    $loan->refresh();
+    $loan->syncPaidOffStatusFromInstallments();
+
+    expect($loan->status)->toBe('active')
+        ->and($last->fresh()->status)->toBe('pending')
+        ->and($loan->totalPrincipalCollected())->toBeLessThan($loan->fullRepaymentThreshold());
 });

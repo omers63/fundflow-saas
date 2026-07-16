@@ -19,6 +19,7 @@ use App\Models\Tenant\MemberAnnouncement;
 use App\Models\Tenant\User;
 use App\Services\Tenant\DirectMessagingService;
 use App\Services\Tenant\MemberAnnouncementService;
+use App\Support\BusinessDay;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
@@ -426,7 +427,7 @@ class MessagesInboxPage extends Page implements HasTable
             DateTimePicker::make('scheduled_for')
                 ->label(__('Schedule for'))
                 ->native(false)
-                ->minDate(now())
+                ->minDate(BusinessDay::now())
                 ->helperText(__('Leave empty to send immediately.')),
         ];
     }

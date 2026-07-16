@@ -98,8 +98,8 @@ class MonthlyStatementsTable
                 SelectFilter::make('period_year')
                     ->label(__('Year'))
                     ->options(array_combine(
-                        range((int) now()->year, (int) now()->year - 15),
-                        range((int) now()->year, (int) now()->year - 15),
+                        range((int) BusinessDay::today()->year, (int) BusinessDay::today()->year - 15),
+                        range((int) BusinessDay::today()->year, (int) BusinessDay::today()->year - 15),
                     ))
                     ->query(fn (Builder $query, array $data): Builder => filled($data['value'] ?? null)
                         ? $query->where('period', 'like', $data['value'].'-%')

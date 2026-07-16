@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Tenant\MembershipApplication;
+use App\Services\Tenant\MembershipApplicationNotificationService;
 use App\Support\PublicPageSettings;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
@@ -78,7 +79,7 @@ class MembershipEnrollmentService
             $feeReceiptPath = $data['membership_fee_receipt']->storeAs('applications/receipts', $filename, 'public');
         }
 
-        return MembershipApplication::create([
+        $application = MembershipApplication::create([
             'name' => $data['name'],
             'email' => $data['email'],
             'household_email' => $data['household_email'] ?? null,
@@ -121,5 +122,9 @@ class MembershipEnrollmentService
             'membership_fee_receipt_path' => $feeAmount > 0 ? $feeReceiptPath : null,
             'status' => 'pending',
         ]);
+
+        app(MembershipApplicationNotificationService::class)->notifyAdminsOfSubmission($application);
+
+        return $application;
     }
 }

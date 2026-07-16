@@ -5,6 +5,7 @@ namespace App\Models\Tenant;
 use App\Services\Loans\LoanEarlySettlementService;
 use App\Services\Loans\LoanThresholdInstallmentWaiverService;
 use App\Support\BusinessDay;
+use App\Support\ContributionPolicySettings;
 use App\Support\LoanRepaymentWindowPolicy;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
@@ -186,6 +187,21 @@ class Loan extends Model
         return $this->hasMany(LoanRepayment::class);
     }
 
+    /**
+     * Installments with cash posted (live repayments, early settlement, skip cycles).
+     */
+    public function actualRepaymentInstallments(): HasMany
+    {
+        return $this->hasMany(LoanInstallment::class)
+            ->where(function (Builder $query): void {
+                $query->where('status', 'paid')
+                    ->orWhere(function (Builder $inner): void {
+                        $inner->where('status', 'waived')
+                            ->where('amount_collected', '>', 0);
+                    });
+            });
+    }
+
     // -----------------------------------------------------------------------
     // Status helpers
     // -----------------------------------------------------------------------
@@ -324,9 +340,13 @@ class Loan extends Model
     {
         $loanAmount = (float) ($this->amount_approved ?: $this->amount);
         $thresholdPct = (float) ($this->settlement_threshold ?? LoanSettings::settlementThreshold());
-        $monthlyInstallment = (float) ($this->monthly_repayment ?: $this->representativeEmiAmount());
+        $monthlyInstallment = (float) $this->monthly_repayment;
 
-        if ($loanAmount <= 0 || $thresholdPct <= 0 || $monthlyInstallment <= 0) {
+        if ($monthlyInstallment <= 0.00001) {
+            $monthlyInstallment = $this->representativeEmiAmount();
+        }
+
+        if ($loanAmount <= 0 || $thresholdPct <= 0 || $monthlyInstallment <= 0.00001) {
             return 0;
         }
 
@@ -339,7 +359,7 @@ class Loan extends Model
     public function totalPrincipalCollected(): float
     {
         return (float) $this->installments()
-            ->where('status', 'paid')
+            ->whereIn('status', ['paid', 'waived'])
             ->get()
             ->sum(fn (LoanInstallment $installment): float => (float) ($installment->amount_collected > 0
                 ? $installment->amount_collected
@@ -414,6 +434,17 @@ class Loan extends Model
             ->exists();
 
         if ($hasUnpaid) {
+            return;
+        }
+
+        $tolerance = ContributionPolicySettings::reconTolerance();
+        $threshold = $this->fullRepaymentThreshold();
+        $collected = $this->totalPrincipalCollected();
+
+        if (
+            $collected < $threshold - $tolerance
+            && $this->threshold_waived_at === null
+        ) {
             return;
         }
 
@@ -656,7 +687,7 @@ class Loan extends Model
         $policy = app(LoanRepaymentWindowPolicy::class);
 
         if ($legacyMigration) {
-            $disbursedAt = $this->disbursed_at?->copy()->startOfDay() ?? now()->startOfDay();
+            $disbursedAt = $this->disbursed_at?->copy()->startOfDay() ?? BusinessDay::today();
 
             return $policy->legacyMigrationWindowOpensAt($disbursedAt);
         }

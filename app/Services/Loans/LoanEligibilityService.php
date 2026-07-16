@@ -11,6 +11,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\ContributionCycleService;
 use App\Services\MemberLatePaymentHistoryEvaluator;
+use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
 use App\Support\LoanEligibilityGate;
 use App\Support\LoanSettings;
@@ -215,7 +216,7 @@ class LoanEligibilityService
 
         $eligibleFrom = $membershipStart->copy()->addMonths($requiredMonths);
 
-        if ($eligibleFrom->isFuture()) {
+        if ($eligibleFrom->isAfter(BusinessDay::today())) {
             return [
                 'blocked' => true,
                 'eligible_from' => $eligibleFrom,
@@ -264,7 +265,7 @@ class LoanEligibilityService
 
         $eligibleFrom = $loan->settled_at->copy()->addMonths($cycles);
 
-        if ($eligibleFrom->isFuture()) {
+        if ($eligibleFrom->isAfter(BusinessDay::now())) {
             return [
                 'blocked' => true,
                 'eligible_from' => $eligibleFrom,

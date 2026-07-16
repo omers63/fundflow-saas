@@ -5,11 +5,14 @@ declare(strict_types=1);
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\LoanService;
+use App\Support\BusinessDaySettings;
 use App\Support\ContributionCollectionStatus;
+use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
 
@@ -245,8 +248,27 @@ test('loan settlement threshold cooldown cycles round up threshold slice over em
     expect($loan->settlementThresholdCooldownCycles())->toBe(2);
 });
 
+test('loan settlement threshold cooldown falls back to schedule emi when monthly repayment is zero', function () {
+    $loan = Loan::factory()->create([
+        'amount' => 50000,
+        'amount_approved' => 50000,
+        'monthly_repayment' => 0,
+        'settlement_threshold' => 0.16,
+    ]);
+
+    LoanInstallment::query()->create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1500,
+        'due_date' => now()->addMonth(),
+        'status' => 'pending',
+    ]);
+
+    expect($loan->fresh()->settlementThresholdCooldownCycles())->toBe(6);
+});
+
 test('member remains ineligible until settlement threshold waiting period ends', function () {
-    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+    BusinessDaySettings::saveFromForm('2026-05-20');
 
     $member = Member::create([
         'member_number' => 'MEM-EARLY-SETTLE-'.uniqid(),
@@ -282,14 +304,73 @@ test('member remains ineligible until settlement threshold waiting period ends',
     expect($result['eligible'])->toBeFalse()
         ->and($result['reasons'][0])->toContain('settlement threshold waiting period');
 
-    Carbon::setTestNow(Carbon::create(2026, 6, 20));
+    BusinessDaySettings::saveFromForm('2026-06-20');
     seedPostedContributionsThroughOpenPeriod($member->fresh());
 
     $resultAfterCooldown = $this->service->checkEligibility($member->fresh());
 
     expect($resultAfterCooldown['eligible'])->toBeTrue();
 
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('settlement cooldown uses configured business day not calendar date', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-BIZ-DAY-'.uniqid(),
+        'name' => 'Business Day Cooldown Member',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => Carbon::create(2020, 1, 1),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+    $member->fundAccount()->update(['balance' => 20000]);
+    seedPostedContributionsThroughOpenPeriod($member);
+
+    Loan::create([
+        'member_id' => $member->id,
+        'amount' => 50000,
+        'amount_requested' => 50000,
+        'amount_approved' => 50000,
+        'amount_disbursed' => 50000,
+        'interest_rate' => 0,
+        'term_months' => 18,
+        'monthly_repayment' => 0,
+        'total_repaid' => 50000,
+        'settlement_threshold' => 0.16,
+        'status' => 'early_settled',
+        'applied_at' => Carbon::create(2025, 6, 1),
+        'approved_at' => Carbon::create(2025, 6, 2),
+        'disbursed_at' => Carbon::create(2025, 6, 3),
+        'settled_at' => Carbon::create(2025, 12, 22),
+    ]);
+
+    LoanInstallment::query()->create([
+        'loan_id' => $member->lastFullySettledLoan()->id,
+        'installment_number' => 1,
+        'amount' => 1500,
+        'due_date' => Carbon::create(2025, 7, 1),
+        'status' => 'pending',
+    ]);
+
+    expect($member->lastFullySettledLoan()->fresh()->settlementThresholdCooldownCycles())->toBe(6);
+
+    Carbon::setTestNow(Carbon::create(2026, 7, 14));
+    BusinessDaySettings::saveFromForm('2025-12-22');
+
+    $blockedOnBusinessDay = $this->service->checkEligibility($member->fresh());
+
+    expect($blockedOnBusinessDay['eligible'])->toBeFalse()
+        ->and($blockedOnBusinessDay['reasons'][0])->toContain('settlement threshold waiting period');
+
+    BusinessDaySettings::saveFromForm('2026-06-23');
+    seedPostedContributionsThroughOpenPeriod($member->fresh());
+
+    $eligibleAfterBusinessDay = $this->service->checkEligibility($member->fresh());
+
+    expect($eligibleAfterBusinessDay['eligible'])->toBeTrue();
+
     Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
 });
 
 test('member with active loan after partial early settlement remains ineligible', function () {
@@ -328,4 +409,38 @@ test('member with active loan after partial early settlement remains ineligible'
         ->and($result['reasons'][0])->toContain('loan(s) in progress');
 
     Carbon::setTestNow();
+});
+
+test('membership tenure eligibility uses configured business day not calendar date', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-TENURE-'.uniqid(),
+        'name' => 'Tenure Business Day Member',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => Carbon::create(2025, 1, 1),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+    $member->fundAccount()->update(['balance' => 20000]);
+    seedPostedContributionsThroughOpenPeriod($member);
+
+    $requiredMonths = LoanSettings::eligibilityMonths();
+    $eligibleFrom = Carbon::create(2025, 1, 1)->addMonths($requiredMonths);
+
+    Carbon::setTestNow(Carbon::create(2026, 7, 14));
+    BusinessDaySettings::saveFromForm($eligibleFrom->copy()->subMonth()->toDateString());
+
+    $blocked = $this->service->checkEligibility($member->fresh());
+
+    expect($blocked['eligible'])->toBeFalse()
+        ->and($blocked['reasons'][0])->toContain('not yet eligible');
+
+    BusinessDaySettings::saveFromForm($eligibleFrom->toDateString());
+    seedPostedContributionsThroughOpenPeriod($member->fresh());
+
+    $eligible = $this->service->checkEligibility($member->fresh());
+
+    expect($eligible['eligible'])->toBeTrue();
+
+    Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
 });

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\LegacyMigration;
 
 use App\Models\Tenant\Loan;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 
 /**
@@ -21,7 +22,7 @@ final readonly class LegacyMemberLoanWindow
 
     public static function fromLoan(Loan $loan, string $memberNumber): self
     {
-        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? now()->startOfDay();
+        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? BusinessDay::today();
 
         return new self(
             loanKey: LegacyLoanRepaymentWindow::loanKey($memberNumber, $disbursedAt, (int) $loan->id),

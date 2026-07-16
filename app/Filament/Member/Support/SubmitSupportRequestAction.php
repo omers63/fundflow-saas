@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace App\Filament\Member\Support;
 
-use App\Filament\Support\AdminNotificationActions;
-use App\Filament\Support\RecipientDatabaseNotification;
 use App\Models\Tenant\SupportRequest;
-use App\Models\Tenant\User;
+use App\Notifications\Tenant\NewSupportRequestNotification;
+use App\Services\OperationalReviewWorkflowService;
 use App\Support\Tenant\CurrentMember;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -62,30 +61,13 @@ final class SubmitSupportRequestAction
                         ? "{$user->name} (#{$member->member_number})"
                         : $user->name;
 
-                    User::query()
-                        ->where('is_admin', true)
-                        ->each(function (User $admin) use ($data, $memberInfo, $supportRequest): void {
-                            RecipientDatabaseNotification::send($admin, function (Notification $notification) use ($data, $memberInfo, $supportRequest): void {
-                                $body = __('Request #:id from :from', [
-                                    'id' => $supportRequest->id,
-                                    'from' => $memberInfo,
-                                ])
-                                    ."\n".__('Category: :category', ['category' => SupportRequest::categoryLabel($data['category'])])
-                                    ."\n\n".$data['message'];
-
-                                $notification
-                                    ->title(__('Support request #:id: :subject', [
-                                        'id' => $supportRequest->id,
-                                        'subject' => $data['subject'],
-                                    ]))
-                                    ->body($body)
-                                    ->icon('heroicon-o-chat-bubble-left-right')
-                                    ->iconColor('warning')
-                                    ->actions([
-                                        AdminNotificationActions::reviewSupportRequest($supportRequest),
-                                    ]);
-                            });
-                        });
+                    app(OperationalReviewWorkflowService::class)->notifyAdmins(
+                        new NewSupportRequestNotification(
+                            $supportRequest,
+                            $memberInfo,
+                            SupportRequest::categoryLabel($data['category']),
+                        ),
+                    );
 
                     Notification::make()
                         ->title(__('Request submitted'))

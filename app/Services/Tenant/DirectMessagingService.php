@@ -9,6 +9,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\AdminDirectMessageNotification;
 use App\Notifications\Tenant\MemberDirectMessageNotification;
+use App\Support\BusinessDay;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -106,7 +107,7 @@ final class DirectMessagingService
             ->where('from_user_id', $member->user_id)
             ->where('to_user_id', $adminUserId)
             ->whereNull('read_at')
-            ->update(['read_at' => now()]);
+            ->update(['read_at' => BusinessDay::now()]);
 
         return DirectMessage::query()
             ->where(function (Builder $q) use ($member): void {
@@ -269,7 +270,7 @@ final class DirectMessagingService
             })
             ->where('to_user_id', $memberUserId)
             ->whereNull('read_at')
-            ->update(['read_at' => now()]);
+            ->update(['read_at' => BusinessDay::now()]);
     }
 
     public function purgeConversationForMember(Member $member): int

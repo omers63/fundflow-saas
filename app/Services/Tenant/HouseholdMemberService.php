@@ -8,6 +8,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Support\BusinessDay;
 use App\Support\MemberMembershipPolicy;
 use App\Support\MemberUserEmail;
 use Illuminate\Support\Carbon;
@@ -35,7 +36,7 @@ class HouseholdMemberService
             householdEmail: $householdEmail,
             password: (string) $application->password,
             phone: $application->mobile_phone ?? $application->phone,
-            joinedAt: $application->membership_date ?? now(),
+            joinedAt: $application->membership_date ?? BusinessDay::today(),
             parentMember: $parentMember,
         );
     }
@@ -82,7 +83,7 @@ class HouseholdMemberService
             householdEmail: $householdEmail,
             password: $password,
             phone: $attributes['phone'] ?? null,
-            joinedAt: $attributes['joined_at'] ?? now(),
+            joinedAt: $attributes['joined_at'] ?? BusinessDay::today(),
             parentMember: $parentMember,
             memberNumber: $attributes['member_number'] ?? null,
             portalPin: $attributes['portal_pin'] ?? null,

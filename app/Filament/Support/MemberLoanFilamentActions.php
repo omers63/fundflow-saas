@@ -276,15 +276,15 @@ final class MemberLoanFilamentActions
             Select::make('option')
                 ->label(__('Schedule option'))
                 ->options(Lang::transOptions([
-                    'roll_up' => 'Roll remaining into last installment',
-                    'skip_future' => 'Skip future installments',
+                    'roll_up' => 'Roll-up (compress) — shorten remaining schedule',
+                    'skip_future' => 'Skip cycles — keep schedule length',
                 ]))
                 ->default('roll_up')
                 ->required()
                 ->visible(fn (Get $get): bool => $hasCash
                     && ($get('payment_mode') ?? 'partial') === 'partial'
                     && (float) ($get('amount') ?? 0) < $required - 0.00001)
-                ->helperText(__('Choose how to adjust the remaining schedule when paying less than the full balance.')),
+                ->helperText(__('Roll-up marks covered EMIs paid and removes the same count from the end of the schedule. Skip marks covered cycles as skipped while keeping the original term.')),
         ];
     }
 }

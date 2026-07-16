@@ -13,6 +13,7 @@ use App\Models\Tenant\MonthlyStatement;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Notifications\Tenant\MonthlyStatementNotification;
+use App\Support\BusinessDay;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -47,7 +48,7 @@ class MonthlyStatementService
             'total_contributions' => $details['total_contributions'],
             'total_repayments' => $details['total_repayments'],
             'closing_balance' => $details['closing_balance'],
-            'generated_at' => now(),
+            'generated_at' => BusinessDay::now(),
             'details' => $details,
             'notified_at' => null,
         ]);
@@ -70,7 +71,7 @@ class MonthlyStatementService
 
         try {
             $user->notify(new MonthlyStatementNotification($statement));
-            $statement->update(['notified_at' => now()]);
+            $statement->update(['notified_at' => BusinessDay::now()]);
         } catch (\Throwable $e) {
             Log::error("MonthlyStatementService: notification failed for statement {$statement->id}: ".$e->getMessage());
         }
@@ -170,7 +171,7 @@ class MonthlyStatementService
             'period' => $period,
             'period_label' => Carbon::create($year, $month, 1)->translatedFormat('F Y'),
             'currency' => $currency,
-            'generated_at' => now()->toDateTimeString(),
+            'generated_at' => BusinessDay::now()->toDateTimeString(),
             'cash_opening' => $openingCash,
             'fund_opening' => $openingFund,
             'cash_closing' => $cashAtEnd,

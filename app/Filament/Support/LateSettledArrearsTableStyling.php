@@ -74,6 +74,7 @@ final class LateSettledArrearsTableStyling
             'pending' => __('Pending'),
             'paid' => __('Paid'),
             'overdue' => __('Overdue'),
+            'waived' => $installment->amount_collected > 0 ? __('Skipped') : __('Waived'),
             default => ucfirst((string) $installment->status),
         };
     }
@@ -87,6 +88,7 @@ final class LateSettledArrearsTableStyling
         return match ($installment->status) {
             'paid' => 'success',
             'overdue' => 'danger',
+            'waived' => 'info',
             default => 'warning',
         };
     }

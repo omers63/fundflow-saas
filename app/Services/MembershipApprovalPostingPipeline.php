@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
+use App\Services\Tenant\MembershipApplicationNotificationService;
 use App\Support\BusinessDay;
 use Carbon\CarbonInterface;
 
@@ -14,6 +15,7 @@ final class MembershipApprovalPostingPipeline
     public function __construct(
         private readonly MembershipSubscriptionFeeService $subscriptionFees,
         private readonly MembershipApplicationImportCutoffService $importCutoffs,
+        private readonly MembershipApplicationNotificationService $applicationNotifications,
     ) {}
 
     public function run(
@@ -26,6 +28,8 @@ final class MembershipApprovalPostingPipeline
         $this->prepareImportCutoffIfNeeded($approvedApplication, $member);
         $this->postSubscriptionFee($approvedApplication, $member);
         $this->postOpeningBalances($approvedApplication, $member);
+
+        $this->applicationNotifications->notifyApplicantApproved($approvedApplication, $member);
 
         return $member->fresh();
     }

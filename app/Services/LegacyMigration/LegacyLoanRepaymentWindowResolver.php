@@ -6,6 +6,7 @@ namespace App\Services\LegacyMigration;
 
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
+use App\Support\BusinessDay;
 use App\Support\LegacyMigrationGraceCycleSettings;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -80,7 +81,7 @@ final class LegacyLoanRepaymentWindowResolver
 
     public function recordRepayment(Loan $loan, Member $member, float $amount, array &$cumulativeRepaidByLoanKey): void
     {
-        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? now()->startOfDay();
+        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? BusinessDay::today();
         $loanKey = LegacyLoanRepaymentWindow::loanKey((string) $member->member_number, $disbursedAt, (int) $loan->id);
 
         $cumulativeRepaidByLoanKey[$loanKey] = round(
@@ -123,7 +124,7 @@ final class LegacyLoanRepaymentWindowResolver
     private function buildDatabaseWindow(Member $member, Loan $loan): LegacyLoanRepaymentWindow
     {
         $approved = (float) ($loan->amount_approved ?? $loan->amount);
-        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? now()->startOfDay();
+        $disbursedAt = $loan->disbursed_at?->copy()->startOfDay() ?? BusinessDay::today();
         $defaultGraceCycles = LegacyMigrationGraceCycleSettings::graceCycles();
 
         $graceCycles = (int) ($loan->grace_cycles ?? ($loan->has_grace_cycle ? 1 : $defaultGraceCycles));

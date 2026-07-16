@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Tenant\Member;
+use App\Notifications\Tenant\MemberStatusChangedNotification;
 use App\Support\BusinessDay;
 use App\Support\MemberMembershipPolicy;
 use Carbon\CarbonInterface;
@@ -206,6 +207,63 @@ final class MemberStatusService
             'previous_status' => $previousStatus,
             'reason' => trim($reason),
         ]);
+
+        $this->notifyMemberOfStatusChange($member->fresh(), $auditEvent, trim($reason));
+    }
+
+    private function notifyMemberOfStatusChange(Member $member, string $auditEvent, string $reason): void
+    {
+        $payload = match ($auditEvent) {
+            'MEMBER_FROZEN' => [
+                __('Membership frozen'),
+                filled($reason)
+                ? $reason
+                : __('Your membership has been frozen. Contact the administrator for details.'),
+            ],
+            'MEMBER_UNFROZEN' => [
+                __('Membership unfrozen'),
+                __('Your membership has been reactivated and contribution cycles are open again.'),
+            ],
+            'MEMBER_WITHDRAWN' => [
+                __('Membership withdrawn'),
+                filled($reason)
+                ? $reason
+                : __('Your membership withdrawal has been processed.'),
+            ],
+            'MEMBER_REINSTATED' => [
+                __('Membership reinstated'),
+                __('Your membership has been reinstated. Welcome back.'),
+            ],
+            'MEMBER_SUSPENDED_GUARANTOR_TRANSFER' => [
+                __('Membership suspended'),
+                __('Your membership was suspended after a loan was transferred to your guarantor.'),
+            ],
+            'MEMBER_RESTORED' => [
+                __('Membership restored'),
+                __('Your membership hold has been lifted.'),
+            ],
+            default => null,
+        };
+
+        if ($payload === null) {
+            return;
+        }
+
+        try {
+            $member->loadMissing('user');
+            $member->user?->notify(new MemberStatusChangedNotification(
+                $member,
+                (string) $member->status,
+                $payload[0],
+                $payload[1],
+            ));
+        } catch (\Throwable $e) {
+            logger()->warning('MemberStatusService: status notification failed', [
+                'member_id' => $member->id,
+                'event' => $auditEvent,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function resetMembershipBalances(Member $member): void

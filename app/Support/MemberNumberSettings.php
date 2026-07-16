@@ -143,7 +143,7 @@ final class MemberNumberSettings
             return (string) $sequence;
         }
 
-        $at ??= now();
+        $at ??= BusinessDay::now();
 
         $parts = [
             $this->prefix,
@@ -169,7 +169,7 @@ final class MemberNumberSettings
 
     private function maxMatchingSequence(?Carbon $at = null): int
     {
-        $at ??= now();
+        $at ??= BusinessDay::now();
 
         if ($this->format === self::FORMAT_SEQUENTIAL) {
             return (int) (Member::query()
@@ -198,7 +198,7 @@ final class MemberNumberSettings
             return (int) $matches[1];
         }
 
-        $at ??= now();
+        $at ??= BusinessDay::now();
         $pattern = $this->matchingPattern($at);
 
         if (! preg_match($pattern, $memberNumber, $matches)) {

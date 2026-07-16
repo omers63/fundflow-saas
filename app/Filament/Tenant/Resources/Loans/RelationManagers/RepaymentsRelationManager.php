@@ -12,7 +12,10 @@ use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Setting;
+use App\Services\Loans\LoanRepaymentLogService;
+use App\Support\LoanRepaymentNote;
 use Filament\Actions\BulkActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -28,8 +31,13 @@ class RepaymentsRelationManager extends RelationManager
 
     public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
     {
-        return $ownerRecord instanceof Loan
-            && $ownerRecord->repayments()->exists();
+        if (! $ownerRecord instanceof Loan) {
+            return false;
+        }
+
+        app(LoanRepaymentLogService::class)->backfillSettlementRepaymentIfMissing($ownerRecord);
+
+        return $ownerRecord->repayments()->exists();
     }
 
     public function table(Table $table): Table
@@ -41,11 +49,23 @@ class RepaymentsRelationManager extends RelationManager
             ->columns([
                 TextColumn::make('paid_at')
                     ->label(__('Paid at'))
-                    ->date()
+                    ->dateTime()
                     ->sortable(),
                 TextColumn::make('amount')
                     ->money($currency)
                     ->sortable(),
+                TextColumn::make('repayment_type')
+                    ->label(__('Type'))
+                    ->state(fn (LoanRepayment $record): string => LoanRepaymentNote::label($record->notes))
+                    ->badge()
+                    ->color(fn (LoanRepayment $record): string => LoanRepaymentNote::isSettlement($record->notes) ? 'success' : 'gray'),
+                TextColumn::make('notes')
+                    ->label(__('Notes'))
+                    ->formatStateUsing(fn (?string $state): ?string => LoanRepaymentNote::isSettlement($state) || str_starts_with((string) $state, LoanRepaymentNote::PREFIX)
+                        ? null
+                        : $state)
+                    ->placeholder(__('—'))
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 DateColumnRangeFilter::make('paid_at', __('Paid at')),
@@ -60,7 +80,7 @@ class RepaymentsRelationManager extends RelationManager
                     TableToolbar::refreshBulkAction(),
                 ]),
             ])
-            ->emptyStateHeading(__('No manual repayment rows'))
-            ->emptyStateDescription(__('Scheduled repayments post via installments when marked paid.')), TableGrouping::loanRepayments());
+            ->emptyStateHeading(__('No repayments posted yet'))
+            ->emptyStateDescription(__('Settlements appear as one line each; EMI repayments are logged individually.')), TableGrouping::loanRepayments());
     }
 }

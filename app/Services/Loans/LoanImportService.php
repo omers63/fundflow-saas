@@ -14,6 +14,7 @@ use App\Models\Tenant\MembershipApplication;
 use App\Services\LegacyMigration\LegacyMigrationLoanFundingSimulator;
 use App\Services\MemberCashOutService;
 use App\Support\AssociativeCsv;
+use App\Support\BusinessDay;
 use App\Support\LegacyLoanCsvIdentity;
 use App\Support\LegacyMemberIdentifierResolver;
 use App\Support\LoanFundingStrategy;
@@ -176,7 +177,7 @@ class LoanImportService
         $isEmergency = $this->parseBool($this->cell($row, 'is_emergency'));
         $loanTier = $this->resolveLoanTierOptional($row, $amountRequested, $isEmergency);
         $installmentsCount = $this->parseOptionalPositiveInt($this->cell($row, 'installments_count'), 12);
-        $appliedAt = $this->parseOptionalDateTime($this->cell($row, 'applied_at')) ?? now();
+        $appliedAt = $this->parseOptionalDateTime($this->cell($row, 'applied_at')) ?? BusinessDay::now();
 
         $this->createLoanRecord([
             'member_id' => $member->id,
@@ -217,7 +218,7 @@ class LoanImportService
         $minInstall = (float) ($loanTier?->min_monthly_installment ?? 1000);
         $count = $this->resolveInstallmentsCountForApproved($row, $amount, $member, $minInstall, $threshold);
         $amountRequested = $this->parseOptionalMoney($this->cell($row, 'amount_requested'), 'amount_requested') ?? $amount;
-        $approvedAt = $this->parseOptionalDateTime($this->cell($row, 'approved_at')) ?? now();
+        $approvedAt = $this->parseOptionalDateTime($this->cell($row, 'approved_at')) ?? BusinessDay::now();
         $appliedAt = $this->parseOptionalDateTime($this->cell($row, 'applied_at')) ?? $approvedAt;
 
         $this->createLoanRecord([
@@ -686,9 +687,9 @@ class LoanImportService
             $raw = trim((string) ($row['disbursed_at'] ?? ''));
 
             try {
-                $at = $raw !== '' ? $this->parseDisbursedAt($raw) : now()->addYears(100);
+                $at = $raw !== '' ? $this->parseDisbursedAt($raw) : BusinessDay::now()->addYears(100);
             } catch (Throwable) {
-                $at = now()->addYears(100);
+                $at = BusinessDay::now()->addYears(100);
             }
 
             $withDates[] = [
@@ -766,7 +767,7 @@ class LoanImportService
     private function parseDisbursedAt(string $value): Carbon
     {
         if ($value === '') {
-            return now();
+            return BusinessDay::now();
         }
 
         try {

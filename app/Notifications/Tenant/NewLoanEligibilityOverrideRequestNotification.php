@@ -6,28 +6,35 @@ namespace App\Notifications\Tenant;
 
 use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\LoanEligibilityOverrideRequestResource;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
+use App\Notifications\Concerns\DeliversToAdminChannels;
 use App\Support\LoanEligibilityGate;
 use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
-use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushMessage;
 
 class NewLoanEligibilityOverrideRequestNotification extends Notification
 {
-    use Queueable;
+    use DeliversToAdminChannels;
 
     public function __construct(
         public LoanEligibilityOverrideRequest $request,
-    ) {
-    }
+    ) {}
 
-    /**
-     * @return list<string>
-     */
-    public function via(object $notifiable): array
+    public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        return ['database'];
+        $this->request->loadMissing('member');
+
+        return $this->buildAdminWebPushFor(
+            $notifiable,
+            __('Loan eligibility review requested'),
+            __(':name requested an eligibility review.', [
+                'name' => $this->request->member?->name ?? __('Member'),
+            ]),
+            $this->reviewUrl(),
+            'loan-eligibility-override-'.$this->request->getKey(),
+        );
     }
 
     /**

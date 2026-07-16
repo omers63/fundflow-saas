@@ -8,6 +8,8 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\SupportRequest;
 use App\Models\Tenant\SupportRequestReply;
 use App\Models\Tenant\User;
+use App\Notifications\Tenant\SupportRequestStatusNotification;
+use App\Support\BusinessDay;
 use Illuminate\Support\Facades\DB;
 
 final class SupportRequestWorkflowService
@@ -18,10 +20,11 @@ final class SupportRequestWorkflowService
 
     public function updateStatus(SupportRequest $request, string $status, ?User $actor = null): SupportRequest
     {
+        $previousStatus = $request->status;
         $request->status = $status;
 
         if (in_array($status, [SupportRequest::STATUS_RESOLVED, SupportRequest::STATUS_CLOSED], true)) {
-            $request->resolved_at ??= now();
+            $request->resolved_at ??= BusinessDay::now();
         } else {
             $request->resolved_at = null;
         }
@@ -32,12 +35,16 @@ final class SupportRequestWorkflowService
 
         $request->save();
 
+        if ($previousStatus !== $status) {
+            $this->notifyMemberOfStatusChange($request->fresh(['member.user']), $status);
+        }
+
         return $request->fresh(['member.user', 'replies.user', 'assignedTo']);
     }
 
     public function escalate(SupportRequest $request): SupportRequest
     {
-        $request->escalated_at = now();
+        $request->escalated_at = BusinessDay::now();
         $request->save();
 
         return $request->fresh(['member.user', 'replies.user', 'assignedTo']);
@@ -89,5 +96,22 @@ final class SupportRequestWorkflowService
         $days = $request->daysOpen();
 
         return trans_choice(':count day open|:count days open', $days, ['count' => $days]);
+    }
+
+    private function notifyMemberOfStatusChange(SupportRequest $request, string $status): void
+    {
+        if (! in_array($status, [SupportRequest::STATUS_RESOLVED, SupportRequest::STATUS_CLOSED, SupportRequest::STATUS_IN_PROGRESS], true)) {
+            return;
+        }
+
+        try {
+            $request->loadMissing('member.user');
+            $request->member?->user?->notify(new SupportRequestStatusNotification($request, $status));
+        } catch (\Throwable $e) {
+            logger()->warning('SupportRequestWorkflowService: status notification failed', [
+                'support_request_id' => $request->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

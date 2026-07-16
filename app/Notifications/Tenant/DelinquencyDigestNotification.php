@@ -5,16 +5,18 @@ declare(strict_types=1);
 namespace App\Notifications\Tenant;
 
 use App\Models\Tenant\User;
+use App\Notifications\Concerns\DeliversToAdminChannels;
+use App\Support\AdminNotificationChannels;
 use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
-use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushMessage;
 
 class DelinquencyDigestNotification extends Notification
 {
-    use Queueable;
+    use DeliversToAdminChannels;
 
     /**
      * @param  array<string, int>  $counts
@@ -22,21 +24,39 @@ class DelinquencyDigestNotification extends Notification
     public function __construct(
         public array $counts,
         public string $delinquencyUrl,
-    ) {
-    }
+    ) {}
 
     /**
-     * @return list<string>
+     * @return list<string|class-string>
      */
     public function via(object $notifiable): array
     {
-        $channels = ['database'];
+        $channels = AdminNotificationChannels::resolve();
 
         if ($notifiable instanceof User && filled($notifiable->email)) {
             $channels[] = 'mail';
         }
 
         return $channels;
+    }
+
+    public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
+    {
+        $overdue = $this->counts['overdue_installments'] ?? 0;
+        $arrears = $this->counts['contribution_arrears_periods'] ?? 0;
+        $delinquent = $this->counts['delinquent_members'] ?? 0;
+
+        return $this->buildAdminWebPushFor(
+            $notifiable,
+            __('Delinquency digest'),
+            __(':overdue overdue installment(s) · :arrears contribution period(s) in arrears · :delinquent delinquent member(s).', [
+                'overdue' => $overdue,
+                'arrears' => $arrears,
+                'delinquent' => $delinquent,
+            ]),
+            $this->absoluteDelinquencyUrl(),
+            'delinquency-digest',
+        );
     }
 
     public function toMail(object $notifiable): MailMessage
