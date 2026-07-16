@@ -242,7 +242,7 @@ test('clearing an accepted cash-out notifies the member', function () {
         'description' => 'Bank import cash-out match',
         'amount' => -2000,
         'status' => 'imported',
-        'hash' => md5('cashout-imported-match-'.microtime()),
+        'hash' => md5('cashout-imported-match-' . microtime()),
         'is_cleared' => true,
         'cleared_at' => now(),
     ]);

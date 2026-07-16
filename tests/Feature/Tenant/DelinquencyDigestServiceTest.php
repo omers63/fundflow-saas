@@ -37,7 +37,7 @@ beforeEach(function () {
 function createMemberForDigest(AccountingService $accounting, array $overrides = []): Member
 {
     $member = Member::create(array_merge([
-        'member_number' => 'MEM-'.uniqid(),
+        'member_number' => 'MEM-' . uniqid(),
         'name' => 'Digest Member',
         'monthly_contribution_amount' => 5000,
         'joined_at' => now()->subYear(),
@@ -190,10 +190,10 @@ test('delinquency digest omits mail when admin has no email', function () {
     Notification::assertSentTo(
         $admin,
         DelinquencyDigestNotification::class,
-        fn (DelinquencyDigestNotification $notification, array $channels): bool => in_array('database', $channels, true)
-            && in_array(WebPushChannel::class, $channels, true)
-            && ! in_array('mail', $channels, true)
-            && ($notification->toDatabase($admin)['format'] ?? null) === 'filament',
+        fn(DelinquencyDigestNotification $notification, array $channels): bool => in_array('database', $channels, true)
+        && in_array(WebPushChannel::class, $channels, true)
+        && !in_array('mail', $channels, true)
+        && ($notification->toDatabase($admin)['format'] ?? null) === 'filament',
     );
 });
 

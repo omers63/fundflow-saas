@@ -119,8 +119,8 @@ test('member can submit support request and household request from support page'
     Notification::assertSentTo(
         $this->admin,
         NewSupportRequestNotification::class,
-        fn (NewSupportRequestNotification $notification, array $channels): bool => in_array('database', $channels, true)
-            && in_array(WebPushChannel::class, $channels, true),
+        fn(NewSupportRequestNotification $notification, array $channels): bool => in_array('database', $channels, true)
+        && in_array(WebPushChannel::class, $channels, true),
     );
 
     Livewire::test(MyMemberRequestsTableWidget::class)
@@ -135,8 +135,8 @@ test('member can submit support request and household request from support page'
     Notification::assertSentTo(
         $this->admin,
         NewMemberRequestNotification::class,
-        fn (NewMemberRequestNotification $notification, array $channels): bool => in_array('database', $channels, true)
-            && in_array(WebPushChannel::class, $channels, true),
+        fn(NewMemberRequestNotification $notification, array $channels): bool => in_array('database', $channels, true)
+        && in_array(WebPushChannel::class, $channels, true),
     );
 });
 
