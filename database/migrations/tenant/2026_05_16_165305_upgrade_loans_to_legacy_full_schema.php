@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\DefaultFundAndLoanTiers;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -21,33 +22,6 @@ return new class extends Migration
                 $table->timestamps();
                 $table->softDeletes();
             });
-
-            $now = now();
-            $rows = [
-                [0, 'Loan Tier 0 - (1->5K: 500)', 0, 5000, 500],
-                [1, 'Loan Tier 1 - (6K->30K: 1K)', 6000, 30000, 1000],
-                [2, 'Loan Tier 2 - (31K->60K: 1.5K)', 31000, 60000, 1500],
-                [3, 'Loan Tier 3 - (61K->90K: 2K)', 61000, 90000, 2000],
-                [4, 'Loan Tier 4 - (91K->120K: 2.5K)', 91000, 120000, 2500],
-                [5, 'Loan Tier 5 - (121K->150K: 3K)', 121000, 150000, 3000],
-                [6, 'Loan Tier 6 - (151K->180K: 3.5K)', 151000, 180000, 3500],
-                [7, 'Loan Tier 7 - (181K->210K: 4K)', 181000, 210000, 4000],
-                [8, 'Loan Tier 8 - (211K->240K: 4.5K)', 211000, 240000, 4500],
-                [9, 'Loan Tier 9 - (241K->270K: 5K)', 241000, 270000, 5000],
-                [10, 'Loan Tier 10 - (271K->300K: 5.5K)', 271000, 300000, 5500],
-            ];
-            foreach ($rows as [$num, $label, $min, $max, $installment]) {
-                DB::table('loan_tiers')->insert([
-                    'tier_number' => $num,
-                    'label' => $label,
-                    'min_amount' => $min,
-                    'max_amount' => $max,
-                    'min_monthly_installment' => $installment,
-                    'is_active' => true,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
-            }
         }
 
         if (! Schema::hasTable('fund_tiers')) {
@@ -55,40 +29,24 @@ return new class extends Migration
                 $table->id();
                 $table->unsignedTinyInteger('tier_number')->unique();
                 $table->string('label', 100)->nullable();
-                $table->foreignId('loan_tier_id')->nullable()->constrained('loan_tiers')->nullOnDelete();
                 $table->decimal('percentage', 5, 2)->default(100);
                 $table->boolean('is_active')->default(true);
                 $table->timestamps();
                 $table->softDeletes();
             });
-
-            $now = now();
-            DB::table('fund_tiers')->insert([
-                'tier_number' => 0,
-                'label' => 'Fund Tier - Emergency',
-                'loan_tier_id' => null,
-                'percentage' => 100,
-                'is_active' => true,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
-
-            /** @var array<int, int> $loanTierIdsByNumber */
-            $loanTierIdsByNumber = DB::table('loan_tiers')->pluck('id', 'tier_number')->all();
-
-            for ($i = 1; $i <= 11; $i++) {
-                $loanTierNumber = $i - 1;
-                DB::table('fund_tiers')->insert([
-                    'tier_number' => $i,
-                    'label' => "Fund Tier {$i} - Loan Tier {$loanTierNumber}",
-                    'loan_tier_id' => $loanTierIdsByNumber[$loanTierNumber] ?? null,
-                    'percentage' => 100,
-                    'is_active' => true,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
-            }
         }
+
+        if (Schema::hasTable('loan_tiers') && Schema::hasTable('fund_tiers') && ! Schema::hasColumn('loan_tiers', 'fund_tier_id')) {
+            Schema::table('loan_tiers', function (Blueprint $table): void {
+                $table->foreignId('fund_tier_id')
+                    ->nullable()
+                    ->after('is_active')
+                    ->constrained('fund_tiers')
+                    ->nullOnDelete();
+            });
+        }
+
+        DefaultFundAndLoanTiers::seedIfEmpty();
 
         Schema::table('loans', function (Blueprint $table) {
             if (! Schema::hasColumn('loans', 'amount_requested')) {

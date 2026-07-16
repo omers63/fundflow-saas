@@ -12,11 +12,12 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 
 /**
- * Builds the three loan-queue stages:
- *  1. Intake     — pending applications, FIFO with emergencies pinned first.
- *  2. Tier queues — approved/partially disbursed loans stacked per fund tier by queue_position.
- *  3. Process queue — approved / partially disbursed loans with remaining balance, ordered by tier
+ * Builds the loan-queue stages:
+ *  1. Intake — pending applications, FIFO with emergencies pinned first.
+ *  2. Process queue — approved / partially disbursed loans with remaining balance, ordered by tier
  *     and queue position. {@see processCoverage()} marks which rows are fundable now vs waiting on pool.
+ *  3. Active queues — approved/partially disbursed and running loans stacked per fund tier.
+ *  4. Completed — repaid / early-settled loans ordered by settlement date.
  */
 class LoanQueueService
 {
@@ -64,6 +65,23 @@ class LoanQueueService
             ->orderBy('fund_tiers.tier_number')
             ->orderByRaw('loans.queue_position IS NULL, loans.queue_position')
             ->orderBy('loans.applied_at');
+    }
+
+    /**
+     * Fully repaid loans (completed / early settled), newest settlement first.
+     */
+    public function completedQuery(): Builder
+    {
+        return Loan::query()
+            ->with([
+                'member',
+                'loanTier',
+                'fundTier' => fn($query) => $query->withTrashed(),
+            ])
+            ->select('loans.*')
+            ->whereIn('loans.status', ['completed', 'early_settled'])
+            ->orderByDesc('loans.settled_at')
+            ->orderByDesc('loans.id');
     }
 
     /**

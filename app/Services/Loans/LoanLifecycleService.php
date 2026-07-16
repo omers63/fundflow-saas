@@ -221,7 +221,13 @@ final class LoanLifecycleService
             : FundTier::forLoanTier($loanTier->id);
 
         if ($fundTier === null) {
-            throw new InvalidArgumentException(__('No active fund tier is configured for this loan.'));
+            throw new InvalidArgumentException(
+                $isEmergency
+                ? __('No active emergency fund tier is configured.')
+                : __('Loan tier ":tier" is not linked to an active fund pool. Link it on Fund tiers before approving.', [
+                    'tier' => $loanTier->label,
+                ]),
+            );
         }
 
         $fundBal = (float) ($loan->member->fundAccount?->balance ?? 0);

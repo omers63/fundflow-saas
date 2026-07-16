@@ -18,7 +18,12 @@ The answer is expressed as **Ready now** or an approximate number of **months**.
 
 ## Step 1 — Can it be funded right now?
 
-For each loan, the service resolves its **fund tier** (assigned tier for approved/partial loans; expected tier for pending intake).
+For each loan, the service resolves its **fund tier**:
+
+- **Assigned** `fund_tier_id` for approved / partially disbursed loans
+- **Expected** pool for pending intake: emergency flag → emergency pool; otherwise the fund pool linked to the loan’s EMI band (`loan_tiers.fund_tier_id`), including when the band is inferred from the requested amount
+
+One fund pool may cover **several** loan amount bands. Demand ahead and disbursable pool are always scoped by **fund tier**, not by individual loan tier.
 
 It then computes a **shortfall**:
 

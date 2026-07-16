@@ -54,8 +54,12 @@ class LoansTable
                     ->label(__('Queue'))
                     ->placeholder(__('—')),
                 TextColumn::make('loanTier.label')
-                    ->label(__('Tier'))
+                    ->label(__('Loan tier'))
                     ->placeholder(__('—')),
+                TextColumn::make('fundTier.label')
+                    ->label(__('Fund tier'))
+                    ->placeholder(__('—'))
+                    ->toggleable(),
                 LoanOutstandingColumn::make($currency),
                 TextColumn::make('status')
                     ->badge()

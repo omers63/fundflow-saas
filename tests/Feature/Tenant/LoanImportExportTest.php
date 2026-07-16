@@ -80,15 +80,14 @@ beforeEach(function () {
     $this->fundTier = FundTier::create([
         'tier_number' => min(254, $nextTierNumber + 1),
         'label' => 'Pool A',
-        'loan_tier_id' => $this->loanTier->id,
         'percentage' => 25,
         'is_active' => true,
     ]);
+    $this->loanTier->update(['fund_tier_id' => $this->fundTier->id]);
 
     FundTier::create([
         'tier_number' => 0,
         'label' => 'Emergency',
-        'loan_tier_id' => null,
         'percentage' => 0,
         'is_active' => true,
     ]);
@@ -279,13 +278,13 @@ test('loan import derives installment count from split repayment formula when po
         'is_active' => true,
     ]);
 
-    FundTier::create([
+    $fundTier = FundTier::create([
         'tier_number' => min(254, $tierNumber + 1),
         'label' => 'Pool legacy 72K',
-        'loan_tier_id' => $tier->id,
         'percentage' => 25,
         'is_active' => true,
     ]);
+    $tier->update(['fund_tier_id' => $fundTier->id]);
 
     $member = createLoanImportMember($this->accounting, 'legacy-72k-installments@example.test', 0);
 
@@ -782,10 +781,10 @@ test('portfolio loans table can filter by loan tier and fund tier', function () 
     $otherFundTier = FundTier::create([
         'tier_number' => $this->fundTier->tier_number + 50,
         'label' => 'Filter pool B',
-        'loan_tier_id' => $otherLoanTier->id,
         'percentage' => 25,
         'is_active' => true,
     ]);
+    $otherLoanTier->update(['fund_tier_id' => $otherFundTier->id]);
 
     $matchingLoan = Loan::create([
         'member_id' => $memberA->id,

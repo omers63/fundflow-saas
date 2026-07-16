@@ -78,7 +78,7 @@ test('contribution collection uses settling status during partial payment', func
     ]);
 
     app(AccountingService::class)->createMemberAccounts($member);
-    AccountingService::withoutMemberCashCollection(fn() => app(AccountingService::class)->credit(
+    AccountingService::withoutMemberCashCollection(fn () => app(AccountingService::class)->credit(
         $member->cashAccount,
         300,
         'Test deposit',
@@ -223,7 +223,7 @@ test('correction service reverses a linked transaction', function () {
     ]);
 
     app(AccountingService::class)->createMemberAccounts($member);
-    AccountingService::withoutMemberCashCollection(fn() => app(AccountingService::class)->credit($member->cashAccount, 50, 'Seed cash'));
+    AccountingService::withoutMemberCashCollection(fn () => app(AccountingService::class)->credit($member->cashAccount, 50, 'Seed cash'));
 
     $original = Transaction::query()->where('type', 'credit')->first();
 
@@ -356,10 +356,10 @@ test('nightly reconciliation does not raise fund tier over committed', function 
     $fundTier = FundTier::create([
         'tier_number' => 99,
         'label' => 'Test pool',
-        'loan_tier_id' => $loanTier->id,
         'percentage' => 10,
         'is_active' => true,
     ]);
+    $loanTier->update(['fund_tier_id' => $fundTier->id]);
 
     $member = Member::create([
         'member_number' => 'FT-001',
@@ -945,7 +945,7 @@ test('reconciliation does not flag legacy imported contributions collected durin
         'completed_at' => $loanPeriod->copy()->addMonths(3),
     ]);
 
-    ContributionService::withoutLiveCollectionGuards(fn() => Contribution::create([
+    ContributionService::withoutLiveCollectionGuards(fn () => Contribution::create([
         'member_id' => $member->id,
         'period' => $loanPeriod,
         'amount' => 500,
@@ -995,7 +995,7 @@ test('reconciliation still flags live contributions collected during loan exempt
         'disbursed_at' => $loanPeriod->copy()->subMonth(),
     ]);
 
-    $contribution = ContributionService::withoutLiveCollectionGuards(fn() => Contribution::create([
+    $contribution = ContributionService::withoutLiveCollectionGuards(fn () => Contribution::create([
         'member_id' => $member->id,
         'period' => $loanPeriod,
         'amount' => 500,

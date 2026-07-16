@@ -34,12 +34,18 @@ $money = fn($amount) => \App\Filament\Support\MoneyDisplay::format((float) $amou
     </div>
 
     @if ($queueTab === 'tiers')
+        @php
+            $tierCards = $this->getTierQueues();
+            $tierSummary = $this->getTierQueueSummary($tierCards);
+        @endphp
         <div class="space-y-3">
-            @forelse ($this->getTierQueues() as $card)
+            @forelse ($tierCards as $card)
                         @php
                 $tier = $card['tier'];
                 $allocated = max(0.0, (float) $card['allocated']);
                 $committedPercent = $allocated > 0 ? min(100, (int) round(($card['committed'] / $allocated) * 100)) : 0;
+                $cardQueuedRemaining = array_sum(array_column($card['loans'], 'remaining'));
+                $cardRunningOutstanding = array_sum(array_column($card['running'], 'outstanding'));
                         @endphp
                         <details
                             class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
@@ -146,6 +152,20 @@ $money = fn($amount) => \App\Filament\Support\MoneyDisplay::format((float) $amou
                                         @endforeach
                                     </ul>
                                 @endif
+
+                                @if (count($card['loans']) > 0 || count($card['running']) > 0)
+                                    <div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-2 text-xs font-semibold dark:border-gray-700">
+                                        <span class="text-gray-500">{{ __('Tier total') }}</span>
+                                        <span class="flex flex-wrap gap-3 tabular-nums">
+                                            @if (count($card['loans']) > 0)
+                                                <span>{{ __('Queued remaining :amount', ['amount' => $money($cardQueuedRemaining)]) }}</span>
+                                            @endif
+                                            @if (count($card['running']) > 0)
+                                                <span class="text-teal-700 dark:text-teal-300">{{ __('Running outstanding :amount', ['amount' => $money($cardRunningOutstanding)]) }}</span>
+                                            @endif
+                                        </span>
+                                    </div>
+                                @endif
                             </div>
                         </details>
             @empty
@@ -153,6 +173,16 @@ $money = fn($amount) => \App\Filament\Support\MoneyDisplay::format((float) $amou
                     {{ __('No active fund tiers configured. Set up fund tiers to build per-tier loan queues.') }}
                 </div>
             @endforelse
+
+            @if (count($tierCards) > 0)
+                <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-200/80 bg-gray-50 px-3 py-2.5 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900/40">
+                    <span class="font-semibold text-gray-700 dark:text-gray-200">{{ __('All tiers') }}</span>
+                    <span class="flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold tabular-nums text-gray-600 dark:text-gray-300">
+                        <span>{{ trans_choice(':count queued|:count queued', $tierSummary['queued_count'], ['count' => $tierSummary['queued_count']]) }} · {{ $money($tierSummary['queued_remaining']) }}</span>
+                        <span class="text-teal-700 dark:text-teal-300">{{ trans_choice(':count running|:count running', $tierSummary['running_count'], ['count' => $tierSummary['running_count']]) }} · {{ $money($tierSummary['running_outstanding']) }}</span>
+                    </span>
+                </div>
+            @endif
         </div>
     @else
         {{ $this->table }}

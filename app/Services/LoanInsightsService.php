@@ -71,12 +71,12 @@ final class LoanInsightsService
 
         $outstanding = (float) LoanInstallment::query()
             ->whereIn('status', ['pending', 'overdue'])
-            ->whereHas('loan', fn($query) => $query->where('status', 'active'))
+            ->whereHas('loan', fn ($query) => $query->where('status', 'active'))
             ->sum('amount');
 
         $overdueCount = (int) LoanInstallment::query()
             ->where('status', 'overdue')
-            ->whereHas('loan', fn($query) => $query->where('status', 'active'))
+            ->whereHas('loan', fn ($query) => $query->where('status', 'active'))
             ->count();
 
         $activeAmountTotal = (float) Loan::query()
@@ -87,7 +87,7 @@ final class LoanInsightsService
         $next30DaysCount = (int) LoanInstallment::query()
             ->whereIn('status', ['pending', 'overdue'])
             ->whereBetween('due_date', [$now->copy()->startOfDay(), $now->copy()->addDays(30)->endOfDay()])
-            ->whereHas('loan', fn($query) => $query->whereIn('status', ['active', 'transferred']))
+            ->whereHas('loan', fn ($query) => $query->whereIn('status', ['active', 'transferred']))
             ->count();
 
         return [
@@ -809,7 +809,7 @@ final class LoanInsightsService
 
         $tiers = FundTier::query()
             ->where('is_active', true)
-            ->with('loanTier')
+            ->with('loanTiers')
             ->orderBy('tier_number')
             ->get();
 
@@ -826,7 +826,10 @@ final class LoanInsightsService
 
             return [
                 'label' => $tier->label,
-                'loan_tier' => $tier->loanTier?->label,
+                'loan_tier' => $tier->loanTiers
+                    ->sortBy('tier_number')
+                    ->map(fn ($loanTier) => $loanTier->label)
+                    ->implode(', ') ?: null,
                 'percentage' => (float) $tier->percentage,
                 'allocated' => $allocated,
                 'exposure' => $exposure,

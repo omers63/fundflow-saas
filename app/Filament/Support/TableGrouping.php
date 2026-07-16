@@ -698,7 +698,7 @@ final class TableGrouping
             Group::make('fundTier.label')
                 ->label(__('Fund tier'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn (Loan $record): string => $record->fundTier?->label ?? __('—')),
+                ->getTitleFromRecordUsing(fn (Loan $record): string => FundTier::resolveForLoan($record)?->label ?? __('—')),
         ];
     }
 

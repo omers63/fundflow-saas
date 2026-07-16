@@ -30,11 +30,11 @@ beforeEach(function () {
         'status' => 'active',
     ]);
 
-    $loanTierA = LoanTier::query()->firstOrCreate(
+    $this->loanTierA = LoanTier::query()->firstOrCreate(
         ['tier_number' => 1],
         ['label' => 'Loan Tier 1', 'min_amount' => 0, 'max_amount' => 20_000, 'min_monthly_installment' => 0, 'is_active' => true],
     );
-    $loanTierB = LoanTier::query()->firstOrCreate(
+    $this->loanTierB = LoanTier::query()->firstOrCreate(
         ['tier_number' => 2],
         ['label' => 'Loan Tier 2', 'min_amount' => 20_001, 'max_amount' => 50_000, 'min_monthly_installment' => 0, 'is_active' => true],
     );
@@ -42,17 +42,17 @@ beforeEach(function () {
     $this->fundTierA = FundTier::create([
         'tier_number' => 1,
         'label' => 'Fund Tier A',
-        'loan_tier_id' => $loanTierA->id,
         'percentage' => 100,
         'is_active' => true,
     ]);
     $this->fundTierB = FundTier::create([
         'tier_number' => 2,
         'label' => 'Fund Tier B',
-        'loan_tier_id' => $loanTierB->id,
         'percentage' => 100,
         'is_active' => true,
     ]);
+    $this->loanTierA->update(['fund_tier_id' => $this->fundTierA->id]);
+    $this->loanTierB->update(['fund_tier_id' => $this->fundTierB->id]);
 
     $this->queue = app(LoanQueueService::class);
 });
@@ -77,7 +77,7 @@ test('process coverage shares one master fund pool across overlapping tiers', fu
         'status' => 'approved',
         'applied_at' => now()->subDays(3),
         'approved_at' => now()->subDay(),
-        'loan_tier_id' => $this->fundTierA->loan_tier_id,
+        'loan_tier_id' => $this->loanTierA->id,
         'fund_tier_id' => $this->fundTierA->id,
         'queue_position' => 1,
     ]);
@@ -103,7 +103,7 @@ test('process coverage shares one master fund pool across overlapping tiers', fu
         'status' => 'approved',
         'applied_at' => now()->subDays(2),
         'approved_at' => now()->subDay(),
-        'loan_tier_id' => $this->fundTierB->loan_tier_id,
+        'loan_tier_id' => $this->loanTierB->id,
         'fund_tier_id' => $this->fundTierB->id,
         'queue_position' => 1,
     ]);
@@ -132,7 +132,7 @@ test('process query lists all loans awaiting disbursement even when tier headroo
         'applied_at' => now()->subMonths(3),
         'approved_at' => now()->subMonths(3),
         'disbursed_at' => now()->subMonths(3),
-        'loan_tier_id' => $this->fundTierA->loan_tier_id,
+        'loan_tier_id' => $this->loanTierA->id,
         'fund_tier_id' => $this->fundTierA->id,
     ]);
 
@@ -149,7 +149,7 @@ test('process query lists all loans awaiting disbursement even when tier headroo
         'status' => 'partially_disbursed',
         'applied_at' => now()->subDays(2),
         'approved_at' => now()->subDay(),
-        'loan_tier_id' => $this->fundTierA->loan_tier_id,
+        'loan_tier_id' => $this->loanTierA->id,
         'fund_tier_id' => $this->fundTierA->id,
         'queue_position' => 1,
     ]);

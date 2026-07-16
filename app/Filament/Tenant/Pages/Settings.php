@@ -4,10 +4,10 @@ namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Support\SmsImportTemplateFieldsets;
-use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
-use App\Filament\Tenant\Resources\LoanTiers\LoanTierResource;
 use App\Filament\Tenant\Support\SettingsTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
+use App\Filament\Tenant\Widgets\FundTiersManageTableWidget;
+use App\Filament\Tenant\Widgets\LoanTiersManageTableWidget;
 use App\Models\Tenant\BankTemplate;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Setting;
@@ -49,6 +49,7 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Fieldset;
+use Filament\Schemas\Components\Livewire;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
@@ -105,13 +106,16 @@ class Settings extends Page implements HasForms
     public function getFundTierRows(): array
     {
         return FundTier::query()
-            ->with('loanTier')
+            ->with('loanTiers')
             ->orderBy('tier_number')
             ->get()
             ->map(fn (FundTier $tier): array => [
                 'label' => $tier->label,
                 'percentage' => number_format((float) $tier->percentage, 2).'%',
-                'loan_tier' => $tier->loanTier?->name ?? __('—'),
+                'loan_tier' => $tier->loanTiers
+                    ->sortBy('tier_number')
+                    ->map(fn ($loanTier) => $loanTier->label)
+                    ->implode(', ') ?: __('—'),
                 'active' => (bool) $tier->is_active,
             ])
             ->all();
@@ -763,47 +767,20 @@ class Settings extends Page implements HasForms
                             ->helperText(__('Members and admins may choose 0 up to this many grace cycles before the first EMI.')),
                     ]),
                 Section::make(__('Loan tiers'))
-                    ->description(__('Interest rates are managed in the loan tiers resource.'))
+                    ->description(__('Amount bands and installment floors. Edit inline below — each band may link to one fund pool.'))
                     ->schema([
-                        Placeholder::make('loan_tiers_link')
-                            ->label(__('Loan tiers'))
-                            ->content(fn (): HtmlString => new HtmlString(
-                                '<a class="font-semibold text-sky-600 hover:underline dark:text-sky-400" href="'
-                                .e(LoanTierResource::getUrl('index')).'">'.e(__('Open loan tiers')).'</a>'
-                            )),
+                        Livewire::make(LoanTiersManageTableWidget::class)
+                            ->columnSpanFull()
+                            ->lazy(),
                     ]),
             ],
             'fund-tiers::tab' => [
                 Section::make(__('Fund tier allocations'))
-                    ->description(__('Tier percentages control how much of the master fund each loan tier may commit. Edit tiers in the loans cluster or below.'))
+                    ->description(__('Tier percentages control how much of the master fund each pool may commit. One fund tier may cover several loan amount bands. Edit inline below.'))
                     ->schema([
-                        Placeholder::make('fund_tiers_manage')
-                            ->label(__('Manage tiers'))
-                            ->content(fn (): HtmlString => new HtmlString(
-                                '<a class="font-semibold text-sky-600 hover:underline dark:text-sky-400" href="'
-                                .e(FundTierResource::getUrl('index')).'">'.e(__('Open fund tiers')).'</a>'
-                            )),
-                        Placeholder::make('fund_tiers_summary')
-                            ->label(__('Current tiers'))
+                        Livewire::make(FundTiersManageTableWidget::class)
                             ->columnSpanFull()
-                            ->content(function (): HtmlString {
-                                $rows = $this->getFundTierRows();
-
-                                if ($rows === []) {
-                                    return new HtmlString('<p class="text-sm text-gray-500">'.e(__('No fund tiers configured.')).'</p>');
-                                }
-
-                                $html = '<div class="overflow-x-auto"><table class="w-full min-w-[24rem] text-start text-sm"><thead class="border-b text-xs uppercase text-gray-500"><tr><th class="py-2 pe-3">'.e(__('Tier')).'</th><th class="py-2 pe-3">'.e(__('Allocation')).'</th><th class="py-2 pe-3">'.e(__('Loan tier')).'</th><th class="py-2">'.e(__('Status')).'</th></tr></thead><tbody>';
-
-                                foreach ($rows as $row) {
-                                    $status = $row['active']
-                                        ? '<span class="text-emerald-600">'.e(__('Active')).'</span>'
-                                        : '<span class="text-gray-400">'.e(__('Inactive')).'</span>';
-                                    $html .= '<tr class="border-b border-gray-100 dark:border-white/10"><td class="py-2 pe-3 font-medium">'.e($row['label']).'</td><td class="py-2 pe-3 tabular-nums">'.e($row['percentage']).'</td><td class="py-2 pe-3">'.e($row['loan_tier']).'</td><td class="py-2">'.$status.'</td></tr>';
-                                }
-
-                                return new HtmlString($html.'</tbody></table></div>');
-                            }),
+                            ->lazy(),
                     ]),
                 Section::make(__('Queue projection'))
                     ->description(__('Controls projected approval (intake) and projected disbursement (process queue) estimates shown on the loan workbench and member loan cards.'))

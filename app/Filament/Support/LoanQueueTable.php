@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Filament\Tables\Columns\Summarizers\LoanRemainingToDisburseSum;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Setting;
@@ -11,6 +12,7 @@ use App\Services\Loans\LoanQueueProjectionService;
 use App\Services\Loans\LoanQueueService;
 use App\Support\WaitingDuration;
 use Filament\Actions\BulkActionGroup;
+use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
@@ -23,6 +25,7 @@ final class LoanQueueTable
     {
         return match ($tab) {
             'process' => $queue->processQuery(),
+            'completed' => $queue->completedQuery(),
             default => $queue->intakeQuery(),
         };
     }
@@ -32,57 +35,157 @@ final class LoanQueueTable
         $currency = Setting::get('general', 'currency', 'USD');
         $projections = $queue->projections();
 
-        $columns = $queueTab === 'process'
-            ? self::processColumns($currency, $queue)
-            : self::intakeColumns($currency);
+        $columns = match ($queueTab) {
+            'process' => self::processColumns($currency, $queue),
+            'completed' => self::completedColumns($currency),
+            default => self::intakeColumns($currency),
+        };
 
-        $columns[] = self::projectedColumn($queueTab, $projections);
+        if ($queueTab !== 'completed') {
+            $columns[] = self::projectedColumn($queueTab, $projections);
+        }
 
-        $table = $queueTab === 'process'
-            ? $table->defaultSort('queue_position')
-            : $table->defaultSort(
+        $table = match ($queueTab) {
+            'process' => $table->defaultSort('queue_position'),
+            'completed' => $table->defaultSort('settled_at', 'desc'),
+            default => $table->defaultSort(
                 fn (Builder $query, string $direction): Builder => $query
                     ->orderByDesc('loans.is_emergency')
                     ->orderBy('loans.applied_at', $direction),
-            );
+            ),
+        };
+
+        $filters = $queueTab === 'completed'
+            ? self::completedFilters()
+            : self::activeQueueFilters();
+
+        $bulkActions = $queueTab === 'completed'
+            ? [TableToolbar::refreshBulkAction()]
+            : LoanFilamentActions::bulkActions();
 
         return TableGrouping::apply($table
             ->headerActions(LoanListTableHeaderActions::queue())
             ->columnManager(true)
             ->columns($columns)
-            ->filters([
-                SelectFilter::make('queue_kind')
-                    ->label(__('Loan kind'))
-                    ->options([
-                        'emergency' => __('Emergency'),
-                        'standard' => __('Standard'),
-                        'partial' => __('Partial disbursement'),
-                    ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        return match ($data['value'] ?? null) {
-                            'emergency' => $query->where('loans.is_emergency', true),
-                            'standard' => $query->where('loans.is_emergency', false),
-                            'partial' => $query->where('loans.status', 'partially_disbursed'),
-                            default => $query,
-                        };
-                    }),
-                SelectFilter::make('fund_tier_id')
-                    ->label(__('Fund tier'))
-                    ->options(fn (): array => FundTier::query()
-                        ->where('is_active', true)
-                        ->orderBy('tier_number')
-                        ->pluck('label', 'id')
-                        ->all()),
-                TernaryFilter::make('is_emergency')
-                    ->label(__('Emergency')),
-                DateColumnRangeFilter::make('applied_at', __('Applied')),
-            ])
+            ->filters($filters)
             ->recordActions(TableRecordActionGroups::wrap(LoanFilamentActions::queueTableActions($queueTab)))
             ->toolbarActions([
-                BulkActionGroup::make(LoanFilamentActions::bulkActions()),
+                BulkActionGroup::make($bulkActions),
             ])
             ->paginated([10, 25, 50])
             ->defaultPaginationPageOption(25), TableGrouping::loanQueue());
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    private static function activeQueueFilters(): array
+    {
+        return [
+            SelectFilter::make('queue_kind')
+                ->label(__('Loan kind'))
+                ->options([
+                    'emergency' => __('Emergency'),
+                    'standard' => __('Standard'),
+                    'partial' => __('Partial disbursement'),
+                ])
+                ->query(function (Builder $query, array $data): Builder {
+                    return match ($data['value'] ?? null) {
+                        'emergency' => $query->where('loans.is_emergency', true),
+                        'standard' => $query->where('loans.is_emergency', false),
+                        'partial' => $query->where('loans.status', 'partially_disbursed'),
+                        default => $query,
+                    };
+                }),
+            SelectFilter::make('fund_tier_id')
+                ->label(__('Fund tier'))
+                ->options(fn(): array => FundTier::query()
+                    ->where('is_active', true)
+                    ->orderBy('tier_number')
+                    ->pluck('label', 'id')
+                    ->all())
+                ->query(function (Builder $query, array $data): Builder {
+                    $raw = $data['value'] ?? null;
+                    if ($raw === null || $raw === '') {
+                        return $query;
+                    }
+
+                    $tierId = (int) $raw;
+                    $emergencyId = FundTier::emergency()?->id;
+
+                    return $query->where(function (Builder $outer) use ($tierId, $emergencyId): void {
+                        $outer->where('loans.fund_tier_id', $tierId)
+                            ->orWhere(function (Builder $expected) use ($tierId, $emergencyId): void {
+                                $expected->whereNull('loans.fund_tier_id');
+
+                                if ($emergencyId !== null && $emergencyId === $tierId) {
+                                    $expected->where('loans.is_emergency', true);
+
+                                    return;
+                                }
+
+                                $expected->where('loans.is_emergency', false)
+                                    ->where(function (Builder $match) use ($tierId): void {
+                                        $match->whereHas(
+                                            'loanTier',
+                                            fn(Builder $q) => $q->where('fund_tier_id', $tierId),
+                                        )->orWhere(function (Builder $byAmount) use ($tierId): void {
+                                            $byAmount->whereNull('loans.loan_tier_id')
+                                                ->whereExists(function ($sub) use ($tierId): void {
+                                                    $sub->selectRaw('1')
+                                                        ->from('loan_tiers')
+                                                        ->whereColumn('loan_tiers.min_amount', '<=', 'loans.amount_requested')
+                                                        ->whereColumn('loan_tiers.max_amount', '>=', 'loans.amount_requested')
+                                                        ->where('loan_tiers.is_active', true)
+                                                        ->where('loan_tiers.fund_tier_id', $tierId)
+                                                        ->whereNull('loan_tiers.deleted_at');
+                                                });
+                                        });
+                                    });
+                            });
+                    });
+                }),
+            TernaryFilter::make('is_emergency')
+                ->label(__('Emergency')),
+            DateColumnRangeFilter::make('applied_at', __('Applied')),
+        ];
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    private static function completedFilters(): array
+    {
+        return [
+            SelectFilter::make('status')
+                ->label(__('Settlement'))
+                ->options([
+                    'completed' => __('Repaid'),
+                    'early_settled' => __('Repaid early'),
+                ]),
+            SelectFilter::make('fund_tier_id')
+                ->label(__('Fund tier'))
+                ->options(fn(): array => FundTier::withTrashed()
+                    ->orderBy('tier_number')
+                    ->get()
+                    ->mapWithKeys(fn(FundTier $tier): array => [
+                        $tier->id => $tier->trashed()
+                            ? __(':label (archived)', ['label' => $tier->label])
+                            : $tier->label,
+                    ])
+                    ->all())
+                ->query(function (Builder $query, array $data): Builder {
+                    $raw = $data['value'] ?? null;
+                    if ($raw === null || $raw === '') {
+                        return $query;
+                    }
+
+                    return $query->where('loans.fund_tier_id', (int) $raw);
+                }),
+            TernaryFilter::make('is_emergency')
+                ->label(__('Emergency')),
+            DateColumnRangeFilter::make('settled_at', __('Completed')),
+        ];
     }
 
     private static function projectedColumn(string $queueTab, LoanQueueProjectionService $projections): TextColumn
@@ -125,6 +228,21 @@ final class LoanQueueTable
     }
 
     /**
+     * @return array<int, Sum>
+     */
+    private static function moneySum(string $currency, string $label): array
+    {
+        return [
+            Sum::make()
+                ->label(fn(): string => $label)
+                ->formatStateUsing(
+                    fn($state): ?string => MoneyDisplay::tableSummaryHtml($state, $currency)
+                )
+                ->html(),
+        ];
+    }
+
+    /**
      * @return array<int, TextColumn>
      */
     private static function intakeColumns(string $currency): array
@@ -158,7 +276,8 @@ final class LoanQueueTable
             TextColumn::make('amount_requested')
                 ->label(__('Requested'))
                 ->money($currency)
-                ->sortable(),
+                ->sortable()
+                ->summarize(self::moneySum($currency, __('Requested'))),
             TextColumn::make('loanTier.label')
                 ->label(__('Loan tier'))
                 ->placeholder('—'),
@@ -192,15 +311,25 @@ final class LoanQueueTable
             TextColumn::make('amount_requested')
                 ->label(__('Requested'))
                 ->money($currency)
-                ->sortable(),
+                ->sortable()
+                ->summarize(self::moneySum($currency, __('Requested'))),
             TextColumn::make('amount_approved')
                 ->label(__('Approved'))
                 ->money($currency)
-                ->placeholder('—'),
+                ->placeholder('—')
+                ->summarize(self::moneySum($currency, __('Approved'))),
             TextColumn::make('remaining_to_disburse')
                 ->label(__('Remaining'))
                 ->state(fn (Loan $record): float => $record->remainingToDisburse())
-                ->money($currency),
+                ->money($currency)
+                ->summarize([
+                    LoanRemainingToDisburseSum::make()
+                        ->label(fn(): string => __('Remaining'))
+                        ->formatStateUsing(
+                            fn($state): ?string => MoneyDisplay::tableSummaryHtml($state, $currency)
+                        )
+                        ->html(),
+                ]),
             TextColumn::make('coverage')
                 ->label(__('Coverage'))
                 ->state(function (Loan $record) use ($coverage, $currency): string {
@@ -235,6 +364,72 @@ final class LoanQueueTable
                 ->badge()
                 ->formatStateUsing(fn (string $state): string => Loan::statusOptions()[$state] ?? $state)
                 ->color(fn (string $state): string => Loan::statusColor($state)),
+        ];
+    }
+
+    /**
+     * @return array<int, TextColumn>
+     */
+    private static function completedColumns(string $currency): array
+    {
+        return [
+            TextColumn::make('settled_at')
+                ->label(__('Completed'))
+                ->dateTime()
+                ->sortable(),
+            TextColumn::make('status')
+                ->label(__('Settlement'))
+                ->badge()
+                ->formatStateUsing(fn(string $state): string => Loan::statusOptions()[$state] ?? $state)
+                ->color(fn(string $state): string => Loan::statusColor($state)),
+            TextColumn::make('member.name')
+                ->label(__('Member'))
+                ->searchable()
+                ->wrap(),
+            TextColumn::make('amount_approved')
+                ->label(__('Approved'))
+                ->money($currency)
+                ->placeholder('—')
+                ->summarize(self::moneySum($currency, __('Approved'))),
+            TextColumn::make('amount_disbursed')
+                ->label(__('Disbursed'))
+                ->money($currency)
+                ->summarize(self::moneySum($currency, __('Disbursed'))),
+            TextColumn::make('fund_tier_label')
+                ->label(__('Fund tier'))
+                ->state(function (Loan $record): string {
+                    $tier = $record->relationLoaded('fundTier')
+                        ? $record->fundTier
+                        : ($record->fund_tier_id !== null
+                            ? FundTier::withTrashed()->find($record->fund_tier_id)
+                            : null);
+
+                    if ($tier !== null) {
+                        return $tier->label;
+                    }
+
+                    return FundTier::resolveForLoan($record)?->label ?? '—';
+                })
+                ->placeholder('—')
+                ->badge(),
+            TextColumn::make('loanTier.label')
+                ->label(__('Loan tier'))
+                ->placeholder('—'),
+            TextColumn::make('is_emergency')
+                ->label(__('Lane'))
+                ->badge()
+                ->formatStateUsing(fn(bool $state): string => $state ? __('Emergency') : __('Standard'))
+                ->color(fn(bool $state): string => $state ? 'danger' : 'gray'),
+            TextColumn::make('disbursed_at')
+                ->label(__('Disbursed at'))
+                ->dateTime()
+                ->placeholder('—')
+                ->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('applied_at')
+                ->label(__('Applied'))
+                ->dateTime()
+                ->placeholder('—')
+                ->toggleable(isToggledHiddenByDefault: true),
         ];
     }
 }

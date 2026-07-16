@@ -2,10 +2,11 @@
 
 namespace App\Models\Tenant;
 
+use App\Services\Loans\LoanQueueOrderingService;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class FundTier extends Model
 {
@@ -14,7 +15,6 @@ class FundTier extends Model
     protected $fillable = [
         'tier_number',
         'label',
-        'loan_tier_id',
         'percentage',
         'is_active',
     ];
@@ -27,9 +27,27 @@ class FundTier extends Model
         ];
     }
 
-    public function loanTier(): BelongsTo
+    protected static function booted(): void
     {
-        return $this->belongsTo(LoanTier::class);
+        static::deleting(function (FundTier $tier): bool {
+            if ($tier->isEmergency()) {
+                return false;
+            }
+
+            // Reassign stamped loans while loan-tier → fund links still resolve to another pool.
+            LoanQueueOrderingService::reassignLoansFromFundTier((int) $tier->id);
+
+            LoanTier::query()
+                ->where('fund_tier_id', $tier->id)
+                ->update(['fund_tier_id' => null]);
+
+            return true;
+        });
+    }
+
+    public function loanTiers(): HasMany
+    {
+        return $this->hasMany(LoanTier::class);
     }
 
     public function loans(): HasMany
@@ -44,7 +62,98 @@ class FundTier extends Model
 
     public function isEmergency(): bool
     {
-        return $this->tier_number === 0;
+        return (int) $this->tier_number === 0;
+    }
+
+    /** Next non-emergency tier number for a newly created fund tier. */
+    public static function nextTierNumber(): int
+    {
+        $max = (int) static::query()->where('tier_number', '>', 0)->max('tier_number');
+
+        return max(1, $max + 1);
+    }
+
+    /**
+     * Attach the given loan tiers to this fund tier and detach any previously linked ones
+     * that are no longer selected. Loan tiers already owned by another fund tier are skipped.
+     *
+     * @param  list<int|string>  $loanTierIds
+     */
+    public function syncLoanTiers(array $loanTierIds): void
+    {
+        if ($this->isEmergency()) {
+            $previouslyLinked = LoanTier::query()
+                ->where('fund_tier_id', $this->id)
+                ->pluck('id')
+                ->all();
+
+            LoanTier::query()
+                ->where('fund_tier_id', $this->id)
+                ->update(['fund_tier_id' => null]);
+
+            LoanQueueOrderingService::realignLoansToCurrentFundMapping(
+                array_map('intval', $previouslyLinked),
+            );
+
+            return;
+        }
+
+        $ids = collect($loanTierIds)
+            ->map(fn (int|string $id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        DB::transaction(function () use ($ids): void {
+            $previouslyLinked = LoanTier::query()
+                ->where('fund_tier_id', $this->id)
+                ->pluck('id')
+                ->all();
+
+            LoanTier::query()
+                ->where('fund_tier_id', $this->id)
+                ->when($ids !== [], fn ($query) => $query->whereNotIn('id', $ids))
+                ->update(['fund_tier_id' => null]);
+
+            if ($ids !== []) {
+                LoanTier::query()
+                    ->whereIn('id', $ids)
+                    ->where(function ($query): void {
+                        $query->whereNull('fund_tier_id')
+                            ->orWhere('fund_tier_id', $this->id);
+                    })
+                    ->update(['fund_tier_id' => $this->id]);
+            }
+
+            $affectedLoanTier = array_values(array_unique([
+                ...array_map('intval', $previouslyLinked),
+                ...$ids,
+            ]));
+
+            $resequencedFundTier = LoanQueueOrderingService::realignLoansToCurrentFundMapping($affectedLoanTier);
+
+            $affectedFundTier = collect([$this->id])
+                ->merge($resequencedFundTier)
+                ->merge(
+                    LoanTier::query()
+                        ->whereIn('id', $affectedLoanTier)
+                        ->whereNotNull('fund_tier_id')
+                        ->pluck('fund_tier_id'),
+                )
+                ->map(fn ($id): int => (int) $id)
+                ->unique()
+                ->filter()
+                ->all();
+
+            foreach ($affectedFundTier as $fundTierId) {
+                if (in_array($fundTierId, $resequencedFundTier, true)) {
+                    continue;
+                }
+
+                LoanQueueOrderingService::resequenceFundTier($fundTierId);
+            }
+        });
     }
 
     /** Return the active emergency fund tier. */
@@ -55,12 +164,20 @@ class FundTier extends Model
 
     /**
      * Return the active fund tier linked to the given loan tier.
-     * Falls back to emergency if no specific fund tier is configured.
+     * Returns null when the loan tier is unassigned or its fund pool is inactive.
      */
     public static function forLoanTier(int $loanTierId): ?self
     {
-        return static::where('loan_tier_id', $loanTierId)->where('is_active', true)->first()
-            ?? static::emergency();
+        $loanTier = LoanTier::query()->find($loanTierId);
+
+        if ($loanTier?->fund_tier_id === null) {
+            return null;
+        }
+
+        return static::query()
+            ->whereKey($loanTier->fund_tier_id)
+            ->where('is_active', true)
+            ->first();
     }
 
     /**
@@ -75,10 +192,17 @@ class FundTier extends Model
         }
 
         if ($loan->loan_tier_id) {
-            return static::forLoanTier($loan->loan_tier_id);
+            return static::forLoanTier((int) $loan->loan_tier_id);
         }
 
-        return null;
+        $amount = (float) ($loan->amount_approved ?? $loan->amount_requested ?? 0);
+        if ($amount <= 0) {
+            return null;
+        }
+
+        $loanTier = LoanTier::forAmount($amount);
+
+        return $loanTier !== null ? static::forLoanTier($loanTier->id) : null;
     }
 
     /**

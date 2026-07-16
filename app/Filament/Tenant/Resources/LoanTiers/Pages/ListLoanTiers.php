@@ -3,7 +3,9 @@
 namespace App\Filament\Tenant\Resources\LoanTiers\Pages;
 
 use App\Filament\Tenant\Resources\LoanTiers\LoanTierResource;
+use App\Filament\Tenant\Resources\LoanTiers\Schemas\LoanTierForm;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
+use App\Models\Tenant\LoanTier;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
@@ -14,7 +16,13 @@ class ListLoanTiers extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
+            CreateAction::make()
+                ->schema(fn (): array => LoanTierForm::components())
+                ->using(function (array $data): LoanTier {
+                    $data['tier_number'] = LoanTier::nextTierNumber();
+
+                    return LoanTier::query()->create($data);
+                }),
         ];
     }
 
@@ -43,6 +51,6 @@ class ListLoanTiers extends ListRecords
 
     public function getSubheading(): ?string
     {
-        return __('Configure amount bands, installment floors, and how loans map to fund pools.');
+        return __('Configure amount bands and installment floors. Link each band to a fund pool (or leave unassigned).');
     }
 }

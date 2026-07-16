@@ -993,7 +993,7 @@ class LoanImportService
 
         $fundTier = FundTier::forLoanTier($loanTier->id);
         if ($fundTier === null) {
-            throw new \InvalidArgumentException(__('No active fund tier for this loan tier; set fund_tier_number.'));
+            throw new \InvalidArgumentException(__('Loan tier is not linked to an active fund pool; set fund_tier_number or link the loan tier on Fund tiers.'));
         }
 
         return $fundTier;

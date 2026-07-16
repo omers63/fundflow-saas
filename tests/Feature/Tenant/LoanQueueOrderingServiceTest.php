@@ -8,6 +8,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanQueueOrderingService;
+use App\Services\Loans\LoanQueueService;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -40,7 +41,8 @@ beforeEach(function () {
         ['tier_number' => 1],
         ['label' => 'Fund Tier 1'],
     );
-    $this->fundTier->update(['loan_tier_id' => $loanTier->id, 'percentage' => 100, 'is_active' => true]);
+    $this->fundTier->update(['percentage' => 100, 'is_active' => true]);
+    $loanTier->update(['fund_tier_id' => $this->fundTier->id]);
 });
 
 function makeQueueOrderingLoan(Member $member, FundTier $fundTier, array $overrides = []): Loan
@@ -59,7 +61,7 @@ function makeQueueOrderingLoan(Member $member, FundTier $fundTier, array $overri
         'is_emergency' => false,
         'applied_at' => now()->subDays(5),
         'approved_at' => now()->subDay(),
-        'loan_tier_id' => $fundTier->loan_tier_id,
+        'loan_tier_id' => $fundTier->loanTiers()->value('id'),
         'fund_tier_id' => $fundTier->id,
     ], $overrides));
 }
@@ -128,6 +130,123 @@ test('resequence assigns queue positions to partially disbursed loans', function
     expect((int) $approved->fresh()->queue_position)->toBe(1)
         ->and((int) $partial->fresh()->queue_position)->toBe(2)
         ->and((int) $active->fresh()->queue_position)->toBe(3);
+});
+
+test('remapping a loan tier moves queued and active loans onto the new fund pool', function () {
+    $loanTierId = (int) $this->fundTier->loanTiers()->value('id');
+
+    $fundB = FundTier::query()->create([
+        'tier_number' => FundTier::nextTierNumber(),
+        'label' => 'Fund Tier B',
+        'percentage' => 40,
+        'is_active' => true,
+    ]);
+
+    $approved = makeQueueOrderingLoan($this->member, $this->fundTier, [
+        'queue_position' => 1,
+    ]);
+    $partial = makeQueueOrderingLoan($this->member, $this->fundTier, [
+        'status' => 'partially_disbursed',
+        'amount_disbursed' => 2500,
+        'queue_position' => 2,
+    ]);
+    $active = makeQueueOrderingLoan($this->member, $this->fundTier, [
+        'status' => 'active',
+        'amount_disbursed' => 10_000,
+        'queue_position' => 3,
+    ]);
+    $emergency = makeQueueOrderingLoan($this->member, $this->fundTier, [
+        'is_emergency' => true,
+        'queue_position' => 4,
+    ]);
+    $pending = makeQueueOrderingLoan($this->member, $this->fundTier, [
+        'status' => 'pending',
+        'amount_approved' => null,
+        'fund_tier_id' => null,
+        'queue_position' => null,
+    ]);
+
+    $this->fundTier->syncLoanTiers([]);
+    $fundB->syncLoanTiers([$loanTierId]);
+
+    expect($approved->fresh()->fund_tier_id)->toBe($fundB->id)
+        ->and($partial->fresh()->fund_tier_id)->toBe($fundB->id)
+        ->and($active->fresh()->fund_tier_id)->toBe($fundB->id)
+        ->and($emergency->fresh()->fund_tier_id)->toBe($this->fundTier->id)
+        ->and($pending->fresh()->fund_tier_id)->toBeNull()
+        ->and((int) $approved->fresh()->queue_position)->toBe(1)
+        ->and((int) $partial->fresh()->queue_position)->toBe(2)
+        ->and((int) $active->fresh()->queue_position)->toBe(3)
+        ->and(Loan::query()->where('fund_tier_id', $this->fundTier->id)->whereKeyNot($emergency->id)->whereIn('status', ['approved', 'partially_disbursed', 'active'])->count())->toBe(0);
+});
+
+test('editing a loan tier fund pool realigns stamped loan fund tiers', function () {
+    $loanTier = LoanTier::query()->findOrFail($this->fundTier->loanTiers()->value('id'));
+    $fundB = FundTier::query()->create([
+        'tier_number' => FundTier::nextTierNumber(),
+        'label' => 'Pool B',
+        'percentage' => 25,
+        'is_active' => true,
+    ]);
+
+    $loan = makeQueueOrderingLoan($this->member, $this->fundTier, [
+        'queue_position' => 1,
+    ]);
+
+    $previousFundTierId = (int) $loanTier->fund_tier_id;
+    $loanTier->update(['fund_tier_id' => $fundB->id]);
+    $resequenced = LoanQueueOrderingService::realignLoansToCurrentFundMapping([(int) $loanTier->id]);
+    LoanQueueOrderingService::resequenceFundTier($previousFundTierId);
+
+    expect($loan->fresh()->fund_tier_id)->toBe($fundB->id)
+        ->and($resequenced)->toContain($fundB->id)
+        ->and($resequenced)->toContain($previousFundTierId);
+});
+
+test('deleting a fund tier reassigns active loans onto the band current pool', function () {
+    $loanTier = LoanTier::query()->findOrFail($this->fundTier->loanTiers()->value('id'));
+
+    $survivor = FundTier::query()->create([
+        'tier_number' => FundTier::nextTierNumber(),
+        'label' => 'Survivor pool',
+        'percentage' => 50,
+        'is_active' => true,
+    ]);
+
+    $doomed = FundTier::query()->create([
+        'tier_number' => FundTier::nextTierNumber(),
+        'label' => 'Doomed pool',
+        'percentage' => 25,
+        'is_active' => true,
+    ]);
+
+    $loanTier->update(['fund_tier_id' => $survivor->id]);
+
+    $active = makeQueueOrderingLoan($this->member, $this->fundTier, [
+        'status' => 'active',
+        'amount_disbursed' => 10_000,
+        'fund_tier_id' => $doomed->id,
+        'loan_tier_id' => $loanTier->id,
+    ]);
+    $queued = makeQueueOrderingLoan($this->member, $this->fundTier, [
+        'status' => 'approved',
+        'fund_tier_id' => $doomed->id,
+        'loan_tier_id' => $loanTier->id,
+    ]);
+
+    expect($doomed->delete())->toBeTrue()
+        ->and($doomed->fresh()->trashed())->toBeTrue()
+        ->and($active->fresh()->fund_tier_id)->toBe($survivor->id)
+        ->and($queued->fresh()->fund_tier_id)->toBe($survivor->id);
+
+    $running = app(LoanQueueService::class)->tierQueues();
+    $survivorCard = collect($running)->first(
+        fn (array $card): bool => (int) $card['tier']->id === (int) $survivor->id,
+    );
+
+    expect($survivorCard)->not->toBeNull()
+        ->and(collect($survivorCard['running'])->pluck('loan.id')->all())->toContain($active->id)
+        ->and(collect($survivorCard['loans'])->pluck('loan.id')->all())->toContain($queued->id);
 });
 
 test('fund tier availability accounts for partially disbursed remaining amounts', function () {

@@ -35,7 +35,8 @@ beforeEach(function () {
         ['tier_number' => 1],
         ['label' => 'Fund Tier 1'],
     );
-    $this->fundTier->update(['loan_tier_id' => $loanTier->id, 'percentage' => 100, 'is_active' => true]);
+    $this->fundTier->update(['percentage' => 100, 'is_active' => true]);
+    $loanTier->update(['fund_tier_id' => $this->fundTier->id]);
 });
 
 function makeProjectionMember(float $monthlyContribution): Member
@@ -65,7 +66,7 @@ function makeProjectionLoan(Member $member, FundTier $fundTier, array $overrides
         'is_emergency' => false,
         'applied_at' => now()->subDays(3),
         'approved_at' => now()->subDay(),
-        'loan_tier_id' => $fundTier->loan_tier_id,
+        'loan_tier_id' => $fundTier->loanTiers()->value('id'),
         'fund_tier_id' => $fundTier->id,
     ], $overrides));
 }
@@ -151,7 +152,8 @@ test('pending projection counts queued demand across tiers when configured', fun
         ['tier_number' => 2],
         ['label' => 'Fund Tier 2'],
     );
-    $fundTierB->update(['loan_tier_id' => $loanTierB->id, 'percentage' => 100, 'is_active' => true]);
+    $fundTierB->update(['percentage' => 100, 'is_active' => true]);
+    $loanTierB->update(['fund_tier_id' => $fundTierB->id]);
 
     makeProjectionMember(5000);
     $member = makeProjectionMember(0);

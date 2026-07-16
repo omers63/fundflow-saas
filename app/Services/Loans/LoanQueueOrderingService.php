@@ -147,7 +147,7 @@ class LoanQueueOrderingService
 
         $ordered = self::orderTierQueue($loans, $fundTier);
 
-        DB::transaction(function () use ($ordered) {
+        DB::transaction(function () use ($ordered): void {
             foreach ($ordered->values() as $idx => $loan) {
                 $pos = $idx + 1;
                 if ((int) $loan->queue_position !== $pos) {
@@ -155,6 +155,127 @@ class LoanQueueOrderingService
                 }
             }
         });
+    }
+
+    /**
+     * Move non-emergency queued/active loans onto the fund pool currently linked to their
+     * loan amount band, then resequence every pool that gained or lost loans.
+     *
+     * Pending intake already resolves the pool from the live mapping; approved/process/tiers
+     * queues use stamped {@see Loan::$fund_tier_id}, so remapping must update those rows.
+     *
+     * @param  list<int>  $loanTierIds  Empty list = all loan tiers that currently have a fund pool.
+     * @return list<int> Fund tier ids that were resequenced
+     */
+    public static function realignLoansToCurrentFundMapping(array $loanTierIds = []): array
+    {
+        $loanTierIds = collect($loanTierIds)
+            ->map(fn (int|string $id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        $mapQuery = LoanTier::query()->whereNotNull('fund_tier_id');
+        if ($loanTierIds !== []) {
+            $mapQuery->whereIn('id', $loanTierIds);
+        }
+
+        /** @var Collection<int, int> $loanTierToFundTier */
+        $loanTierToFundTier = $mapQuery->pluck('fund_tier_id', 'id')
+            ->map(fn ($fundTierId): int => (int) $fundTierId);
+
+        $loansQuery = Loan::query()
+            ->whereIn('status', ['approved', 'partially_disbursed', 'active'])
+            ->where('is_emergency', false)
+            ->whereNotNull('loan_tier_id');
+
+        if ($loanTierIds !== []) {
+            $loansQuery->whereIn('loan_tier_id', $loanTierIds);
+        }
+
+        $loans = $loansQuery->get(['id', 'loan_tier_id', 'fund_tier_id']);
+        $affectedFundTier = collect();
+
+        DB::transaction(function () use ($loans, $loanTierToFundTier, $affectedFundTier): void {
+            foreach ($loans as $loan) {
+                $loanTierId = (int) $loan->loan_tier_id;
+                if (! $loanTierToFundTier->has($loanTierId)) {
+                    continue;
+                }
+
+                $newFundTierId = (int) $loanTierToFundTier->get($loanTierId);
+                $oldFundTierId = $loan->fund_tier_id !== null ? (int) $loan->fund_tier_id : null;
+
+                if ($oldFundTierId === $newFundTierId) {
+                    continue;
+                }
+
+                if ($oldFundTierId !== null) {
+                    $affectedFundTier->push($oldFundTierId);
+                }
+                $affectedFundTier->push($newFundTierId);
+
+                Loan::query()->whereKey($loan->id)->update([
+                    'fund_tier_id' => $newFundTierId,
+                    'queue_position' => null,
+                ]);
+            }
+        });
+
+        $fundTierIds = $affectedFundTier->unique()->filter()->values()->all();
+
+        foreach ($fundTierIds as $fundTierId) {
+            self::resequenceFundTier((int) $fundTierId);
+        }
+
+        return array_map('intval', $fundTierIds);
+    }
+
+    /**
+     * Move queued/active loans off a fund pool that is being removed onto the pool resolved
+     * from their loan amount band (or the emergency pool). Used before soft-deleting a fund tier.
+     *
+     * @return list<int> Destination fund tier ids that were resequenced
+     */
+    public static function reassignLoansFromFundTier(int $fundTierId): array
+    {
+        $loans = Loan::query()
+            ->where('fund_tier_id', $fundTierId)
+            ->whereIn('status', ['approved', 'partially_disbursed', 'active'])
+            ->get();
+
+        if ($loans->isEmpty()) {
+            return [];
+        }
+
+        $affectedFundTier = collect();
+
+        DB::transaction(function () use ($loans, $fundTierId, $affectedFundTier): void {
+            foreach ($loans as $loan) {
+                $target = FundTier::resolveForLoan($loan);
+                $newFundTierId = $target !== null ? (int) $target->id : null;
+
+                if ($newFundTierId === null || $newFundTierId === $fundTierId) {
+                    continue;
+                }
+
+                Loan::query()->whereKey($loan->id)->update([
+                    'fund_tier_id' => $newFundTierId,
+                    'queue_position' => null,
+                ]);
+
+                $affectedFundTier->push($newFundTierId);
+            }
+        });
+
+        $fundTierIds = $affectedFundTier->unique()->filter()->values()->all();
+
+        foreach ($fundTierIds as $id) {
+            self::resequenceFundTier((int) $id);
+        }
+
+        return array_map('intval', $fundTierIds);
     }
 
     /**
@@ -198,7 +319,7 @@ class LoanQueueOrderingService
             return null;
         }
 
-        return FundTier::query()->where('loan_tier_id', $lt->id)->where('is_active', true)->first();
+        return FundTier::forLoanTier((int) $lt->id);
     }
 
     protected static function effectiveLoanTier(Loan $loan): ?LoanTier

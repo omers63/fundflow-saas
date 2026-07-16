@@ -9,6 +9,7 @@ use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Support\ContributionPolicySettings;
+use App\Support\DefaultFundAndLoanTiers;
 use App\Support\PublicPageSettings;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -41,6 +42,8 @@ class TenantDatabaseSeeder extends Seeder
 
         // Permanent master ledger accounts (includes Master Suspense for reconciliation).
         Account::ensureDefaultMasterAccounts();
+
+        DefaultFundAndLoanTiers::seedIfEmpty();
 
         BankTemplate::firstOrCreate(
             ['name' => 'Generic CSV'],

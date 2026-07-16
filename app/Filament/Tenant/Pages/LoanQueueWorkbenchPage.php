@@ -39,7 +39,7 @@ class LoanQueueWorkbenchPage extends Page implements HasTable
 
     protected string $view = 'filament.tenant.pages.loan-queue-workbench';
 
-    public const TABS = ['intake', 'tiers', 'process'];
+    public const TABS = ['intake', 'process', 'tiers', 'completed'];
 
     #[Url(as: 'tab')]
     public string $queueTab = 'intake';
@@ -63,7 +63,7 @@ class LoanQueueWorkbenchPage extends Page implements HasTable
 
     public function getSubheading(): ?string
     {
-        return __('Triage applications, track tier queues, and disburse fundable loans.');
+        return __('Triage applications, disburse fundable loans, track active queues, and review completed history.');
     }
 
     public static function getNavigationBadge(): ?string
@@ -97,12 +97,12 @@ class LoanQueueWorkbenchPage extends Page implements HasTable
 
     public function getTableColumnsSessionKey(): string
     {
-        return 'tables.' . md5(static::class . '|' . $this->queueTab) . '_columns';
+        return 'tables.'.md5(static::class.'|'.$this->queueTab).'_columns';
     }
 
     public function getHasReorderedTableColumnsSessionKey(): string
     {
-        return 'tables.' . md5(static::class . '|' . $this->queueTab) . '_has_reordered_columns';
+        return 'tables.'.md5(static::class.'|'.$this->queueTab).'_has_reordered_columns';
     }
 
     /** Map legacy tab keys (deep links, insights URLs) to the new stage tabs. */
@@ -141,14 +141,48 @@ class LoanQueueWorkbenchPage extends Page implements HasTable
     }
 
     /**
+     * Footer totals across fund-tier queue cards (waiting + running).
+     *
+     * @param  list<array<string, mixed>>|null  $cards
+     * @return array{
+     *     queued_count: int,
+     *     queued_remaining: float,
+     *     running_count: int,
+     *     running_outstanding: float
+     * }
+     */
+    public function getTierQueueSummary(?array $cards = null): array
+    {
+        $queuedCount = 0;
+        $queuedRemaining = 0.0;
+        $runningCount = 0;
+        $runningOutstanding = 0.0;
+
+        foreach ($cards ?? $this->getTierQueues() as $card) {
+            $queuedCount += count($card['loans']);
+            $queuedRemaining += array_sum(array_column($card['loans'], 'remaining'));
+            $runningCount += count($card['running']);
+            $runningOutstanding += array_sum(array_column($card['running'], 'outstanding'));
+        }
+
+        return [
+            'queued_count' => $queuedCount,
+            'queued_remaining' => round($queuedRemaining, 2),
+            'running_count' => $runningCount,
+            'running_outstanding' => round($runningOutstanding, 2),
+        ];
+    }
+
+    /**
      * @return array<string, string>
      */
     public function getTabLabels(): array
     {
         return [
             'intake' => __('Intake'),
-            'tiers' => __('Tier queues'),
             'process' => __('Process queue'),
+            'tiers' => __('Active queues'),
+            'completed' => __('Completed'),
         ];
     }
 

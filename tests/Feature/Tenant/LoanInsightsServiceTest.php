@@ -319,13 +319,13 @@ test('fund tiers snapshot reports utilization', function () {
         'is_active' => true,
     ]);
 
-    FundTier::create([
+    $fundTier = FundTier::create([
         'tier_number' => 99,
         'label' => 'Pool A',
-        'loan_tier_id' => $tier->id,
         'percentage' => 25,
         'is_active' => true,
     ]);
+    $tier->update(['fund_tier_id' => $fundTier->id]);
 
     $snapshot = $this->service->fundTiersSnapshot();
 

@@ -528,7 +528,6 @@ test('tenant dashboard fund tier utilisation uses fund tier labels from database
     FundTier::create([
         'tier_number' => 2,
         'label' => 'Growth pool',
-        'loan_tier_id' => null,
         'percentage' => 50,
         'is_active' => true,
     ]);

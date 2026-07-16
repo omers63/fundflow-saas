@@ -3,7 +3,9 @@
 namespace App\Filament\Tenant\Resources\FundTiers\Pages;
 
 use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
+use App\Filament\Tenant\Resources\FundTiers\Schemas\FundTierForm;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
+use App\Models\Tenant\FundTier;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
@@ -14,7 +16,17 @@ class ListFundTiers extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
+            CreateAction::make()
+                ->schema(fn (): array => FundTierForm::components())
+                ->using(function (array $data): FundTier {
+                    [$attributes, $loanTierIds] = FundTierForm::extractLoanTierIds($data);
+                    $attributes['tier_number'] = FundTier::nextTierNumber();
+
+                    $record = FundTier::query()->create($attributes);
+                    $record->syncLoanTiers($loanTierIds);
+
+                    return $record;
+                }),
         ];
     }
 
@@ -43,6 +55,6 @@ class ListFundTiers extends ListRecords
 
     public function getSubheading(): ?string
     {
-        return __('Track master-fund pool allocation, deployment, and headroom per lending band.');
+        return __('Track master-fund pool allocation, deployment, and headroom per lending band. One fund tier may cover several loan amount bands.');
     }
 }

@@ -248,7 +248,7 @@ test('loan calculator intro renders fund balance as text not raw html', function
 });
 
 test('loan calculator shows repayment estimate when tier matches', function () {
-    LoanTier::query()->delete();
+    LoanTier::query()->forceDelete();
     LoanTier::create([
         'tier_number' => 1,
         'label' => 'Standard',

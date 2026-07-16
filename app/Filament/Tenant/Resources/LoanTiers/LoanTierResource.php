@@ -4,8 +4,6 @@ namespace App\Filament\Tenant\Resources\LoanTiers;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Tenant\Clusters\LoansCluster;
-use App\Filament\Tenant\Resources\LoanTiers\Pages\CreateLoanTier;
-use App\Filament\Tenant\Resources\LoanTiers\Pages\EditLoanTier;
 use App\Filament\Tenant\Resources\LoanTiers\Pages\ListLoanTiers;
 use App\Filament\Tenant\Resources\LoanTiers\Schemas\LoanTierForm;
 use App\Filament\Tenant\Resources\LoanTiers\Tables\LoanTiersTable;
@@ -47,17 +45,13 @@ class LoanTierResource extends Resource
 
     public static function getRelations(): array
     {
-        return [
-            //
-        ];
+        return [];
     }
 
     public static function getPages(): array
     {
         return [
             'index' => ListLoanTiers::route('/'),
-            'create' => CreateLoanTier::route('/create'),
-            'edit' => EditLoanTier::route('/{record}/edit'),
         ];
     }
 }

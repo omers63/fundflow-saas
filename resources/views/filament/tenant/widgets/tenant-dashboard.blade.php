@@ -1,15 +1,15 @@
 @php
-    $d = $this->getData();
-    $breakdown = $d['collection_breakdown'];
-    $loanQueue = $d['loan_queue_preview'];
-    $loanRunning = $d['loan_running_preview'] ?? [];
-    $activity = $d['recent_activity'];
-    $pipeline = $d['loan_pipeline'];
-    $loanPortfolio = $d['loan_portfolio'];
-    $lifetime = $d['lifetime_fund_activity'];
-    $forecast = $d['forecast_summary'];
-    $greeting = $d['greeting'];
-    $pool = $d['pool_health'];
+$d = $this->getData();
+$breakdown = $d['collection_breakdown'];
+$loanQueue = $d['loan_queue_preview'];
+$loanRunning = $d['loan_running_preview'] ?? [];
+$activity = $d['recent_activity'];
+$pipeline = $d['loan_pipeline'];
+$loanPortfolio = $d['loan_portfolio'];
+$lifetime = $d['lifetime_fund_activity'];
+$forecast = $d['forecast_summary'];
+$greeting = $d['greeting'];
+$pool = $d['pool_health'];
 @endphp
     
     <div class="w-full max-w-none space-y-3 pb-6">
@@ -686,7 +686,7 @@ $lateFeeTiers = [
                     class="flex flex-col items-center py-3 transition hover:bg-sky-50/60 dark:hover:bg-sky-950/20">
                     <span
                         class="text-lg font-bold tabular-nums text-sky-600 dark:text-sky-400">{{ $pipeline['queued'] ?? 0 }}</span>
-                    <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Tier queues') }}</span>
+                    <span class="mt-0.5 text-[9px] font-medium text-gray-400">{{ __('Active queues') }}</span>
                 </a>
                 <a href="{{ $pipeline['queue_process_url'] ?? '#' }}"
                     class="flex flex-col items-center py-3 transition hover:bg-emerald-50/60 dark:hover:bg-emerald-950/20">

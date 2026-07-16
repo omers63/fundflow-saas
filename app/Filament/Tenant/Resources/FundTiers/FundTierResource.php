@@ -4,8 +4,6 @@ namespace App\Filament\Tenant\Resources\FundTiers;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Tenant\Clusters\LoansCluster;
-use App\Filament\Tenant\Resources\FundTiers\Pages\CreateFundTier;
-use App\Filament\Tenant\Resources\FundTiers\Pages\EditFundTier;
 use App\Filament\Tenant\Resources\FundTiers\Pages\ListFundTiers;
 use App\Filament\Tenant\Resources\FundTiers\Schemas\FundTierForm;
 use App\Filament\Tenant\Resources\FundTiers\Tables\FundTiersTable;
@@ -54,8 +52,6 @@ class FundTierResource extends Resource
     {
         return [
             'index' => ListFundTiers::route('/'),
-            'create' => CreateFundTier::route('/create'),
-            'edit' => EditFundTier::route('/{record}/edit'),
         ];
     }
 }

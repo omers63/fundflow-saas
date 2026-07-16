@@ -43,6 +43,16 @@ final class LoanApprovalPreview
             ? FundTier::emergency()
             : FundTier::forLoanTier($loanTier->id);
 
+        if ($fundTier === null && ! $isEmergency) {
+            return new HtmlString(
+                '<div class="rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-800 dark:border-warning-500/30 dark:bg-warning-500/10 dark:text-warning-400">'
+                .e(__('Loan tier ":tier" is not linked to an active fund pool. Link it on Fund tiers before approving.', [
+                    'tier' => $loanTier->label,
+                ]))
+                .'</div>'
+            );
+        }
+
         $fundTierLabel = $fundTier
             ? $fundTier->label.' ('.number_format((float) $fundTier->available_amount, 2).' '.__('available').')'
             : __('No matching fund tier');

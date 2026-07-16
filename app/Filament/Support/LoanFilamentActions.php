@@ -713,18 +713,22 @@ final class LoanFilamentActions
      */
     public static function queueTableActions(string $tab = 'intake'): array
     {
-        $actions = $tab === 'process'
-            ? [
+        $actions = match ($tab) {
+            'process' => [
                 self::disburse(),
                 self::reviewLink(),
-            ]
-            : [
+            ],
+            'completed' => [
+                self::reviewLink(),
+            ],
+            default => [
                 self::approve(),
                 self::reject(),
                 self::changeToStandard(),
                 self::markAsEmergency(),
                 self::reviewLink(),
-            ];
+            ],
+        };
 
         return array_map(
             fn (Action $action): Action => self::withInsightsRefresh($action),

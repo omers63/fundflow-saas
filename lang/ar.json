@@ -5446,5 +5446,8 @@
     "••••••••": "••••••••",
     "…and :count more.": "…و :count أخرى.",
     "≥90%": "≥90%",
-    "✓ Saved at :time": "✓ حُفظ في :time"
+    "✓ Saved at :time": "✓ حُفظ في :time",
+    "Active queues": "الطوابير النشطة",
+    "Triage applications, disburse fundable loans, track active queues, and review completed history.": "فرز الطلبات، وصرف القروض القابلة للتمويل، ومتابعة الطوابير النشطة، ومراجعة السجل المكتمل.",
+    ":label (archived)": ":label (مؤرشف)"
 }

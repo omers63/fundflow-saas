@@ -4,6 +4,7 @@ namespace App\Models\Tenant;
 
 use App\Filament\Support\MoneyDisplay;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -18,6 +19,7 @@ class LoanTier extends Model
         'max_amount',
         'min_monthly_installment',
         'is_active',
+        'fund_tier_id',
     ];
 
     protected function casts(): array
@@ -35,9 +37,17 @@ class LoanTier extends Model
         return $this->hasMany(Loan::class);
     }
 
-    public function fundTiers(): HasMany
+    public function fundTier(): BelongsTo
     {
-        return $this->hasMany(FundTier::class);
+        return $this->belongsTo(FundTier::class);
+    }
+
+    /** Next tier number for a newly created loan amount band. */
+    public static function nextTierNumber(): int
+    {
+        $max = (int) static::query()->max('tier_number');
+
+        return max(0, $max + 1);
     }
 
     /** Find the tier that covers the given loan amount. Returns null if out of range. */
