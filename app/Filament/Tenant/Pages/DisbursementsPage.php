@@ -141,7 +141,16 @@ class DisbursementsPage extends Page implements HasTable
                     ->label(__('Remaining'))
                     ->state(fn (Loan $record): float => $record->remainingToDisburse())
                     ->money($currency)
-                    ->color('warning'),
+                    ->color('warning')
+                    ->searchable(false)
+                    ->sortable(query: function (Builder $query, string $direction): Builder {
+                        $dir = strtolower($direction) === 'desc' ? 'desc' : 'asc';
+                        $table = $query->getModel()->getTable();
+
+                        return $query->orderByRaw(
+                            "GREATEST(0, COALESCE({$table}.amount_approved, 0) - COALESCE({$table}.amount_disbursed, 0)) {$dir}",
+                        );
+                    }),
                 TextColumn::make('status')
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => Loan::statusOptions()[$state] ?? $state)

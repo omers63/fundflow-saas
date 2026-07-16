@@ -87,6 +87,7 @@ final class TransactionsTable
                         ->label(__('Transaction type'))
                         ->state(fn (Transaction $record): string => TransactionBusinessTypeCatalog::labelFor($record))
                         ->searchable(false)
+                        ->sortable(false)
                         ->badge()
                         ->toggleable(),
                     TextColumn::make('account.name')

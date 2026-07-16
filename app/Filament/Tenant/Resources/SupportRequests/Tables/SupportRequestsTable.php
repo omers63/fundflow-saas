@@ -60,7 +60,9 @@ final class SupportRequestsTable
                         ->label(__('SLA'))
                         ->badge()
                         ->state(fn (SupportRequest $record): string => trans_choice(':count day|:count days', $record->daysOpen(), ['count' => $record->daysOpen()]))
-                        ->color(fn (SupportRequest $record): string => SupportRequest::slaColor($record->daysOpen())),
+                        ->color(fn(SupportRequest $record): string => SupportRequest::slaColor($record->daysOpen()))
+                        ->searchable(false)
+                        ->sortable(false),
                     TextColumn::make('escalated_at')
                         ->label(__('Escalated'))
                         ->dateTime()

@@ -171,7 +171,9 @@ final class LoanDelinquencyTables
                         return Setting::loanDefaultGraceCycles() <= $record->late_repayment_count
                             ? 'danger'
                             : 'gray';
-                    }),
+                    })
+                    ->searchable(false)
+                    ->sortable(false),
                 TextColumn::make('late_repayment_count')
                     ->label(__('Late count'))
                     ->numeric(),

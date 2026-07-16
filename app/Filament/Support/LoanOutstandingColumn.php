@@ -46,6 +46,8 @@ final class LoanOutstandingColumn
 
         if ($sortQuery !== null) {
             $column->sortable(query: $sortQuery);
+        } else {
+            $column->sortable(false);
         }
 
         return $column;

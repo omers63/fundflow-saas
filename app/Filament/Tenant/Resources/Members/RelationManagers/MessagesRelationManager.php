@@ -141,7 +141,9 @@ class MessagesRelationManager extends RelationManager
                             ? __('Member → Admin')
                             : __('Admin → Member');
                     })
-                    ->color(fn (string $state): string => $state === __('Member → Admin') ? 'info' : 'success'),
+                    ->color(fn(string $state): string => $state === __('Member → Admin') ? 'info' : 'success')
+                    ->searchable(false)
+                    ->sortable(false),
                 TextColumn::make('subject')
                     ->formatStateUsing(fn (?string $state): string => filled($state) ? $state : __('No subject'))
                     ->searchable(),

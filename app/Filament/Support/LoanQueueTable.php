@@ -194,7 +194,8 @@ final class LoanQueueTable
             ->label($queueTab === 'process' ? __('Projected disbursement') : __('Projected approval'))
             ->state(fn (Loan $record): string => $projections->labelFor($record))
             ->badge()
-            ->color(fn (Loan $record): string => $projections->projectionFor($record)['ready_now'] ? 'success' : 'info');
+            ->color(fn(Loan $record): string => $projections->projectionFor($record)['ready_now'] ? 'success' : 'info')
+            ->searchable(false);
 
         if ($queueTab === 'process') {
             return $column->sortable(query: function (Builder $query, string $direction): Builder {
@@ -268,6 +269,7 @@ final class LoanQueueTable
                     WaitingDuration::days($record->applied_at) >= 3 => 'warning',
                     default => 'success',
                 })
+                ->searchable(false)
                 ->sortable(query: fn ($query, string $direction) => $query->orderBy('applied_at', $direction === 'asc' ? 'desc' : 'asc')),
             TextColumn::make('member.name')
                 ->label(__('Member'))
@@ -285,7 +287,9 @@ final class LoanQueueTable
                 ->label(__('Fund tier'))
                 ->state(fn (Loan $record): string => FundTier::resolveForLoan($record)?->label ?? '—')
                 ->badge()
-                ->color(fn (Loan $record): string => $record->is_emergency ? 'danger' : 'gray'),
+                ->color(fn(Loan $record): string => $record->is_emergency ? 'danger' : 'gray')
+                ->searchable(false)
+                ->sortable(false),
         ];
     }
 
@@ -322,6 +326,8 @@ final class LoanQueueTable
                 ->label(__('Remaining'))
                 ->state(fn (Loan $record): float => $record->remainingToDisburse())
                 ->money($currency)
+                ->searchable(false)
+                ->sortable(query: self::remainingToDisburseSortQuery())
                 ->summarize([
                     LoanRemainingToDisburseSum::make()
                         ->label(fn(): string => __('Remaining'))
@@ -354,7 +360,9 @@ final class LoanQueueTable
                         $entry['full'] => 'success',
                         default => 'warning',
                     };
-                }),
+                })
+                ->searchable(false)
+                ->sortable(false),
             TextColumn::make('is_emergency')
                 ->label(__('Lane'))
                 ->badge()
@@ -411,7 +419,19 @@ final class LoanQueueTable
                     return FundTier::resolveForLoan($record)?->label ?? '—';
                 })
                 ->placeholder('—')
-                ->badge(),
+                ->badge()
+                ->searchable(false)
+                ->sortable(query: function (Builder $query, string $direction): Builder {
+                    $dir = strtolower($direction) === 'desc' ? 'desc' : 'asc';
+
+                    if (!self::queryHasFundTiersJoin($query)) {
+                        $query->leftJoin('fund_tiers', 'fund_tiers.id', '=', 'loans.fund_tier_id');
+                    }
+
+                    return $query
+                        ->orderBy('fund_tiers.label', $dir)
+                        ->orderBy('loans.id', $dir);
+                }),
             TextColumn::make('loanTier.label')
                 ->label(__('Loan tier'))
                 ->placeholder('—'),
@@ -431,5 +451,20 @@ final class LoanQueueTable
                 ->placeholder('—')
                 ->toggleable(isToggledHiddenByDefault: true),
         ];
+    }
+
+    /**
+     * @return \Closure(Builder, string): Builder
+     */
+    private static function remainingToDisburseSortQuery(): \Closure
+    {
+        return function (Builder $query, string $direction): Builder {
+            $dir = strtolower($direction) === 'desc' ? 'desc' : 'asc';
+            $table = $query->getModel()->getTable();
+
+            return $query->orderByRaw(
+                "GREATEST(0, COALESCE({$table}.amount_approved, 0) - COALESCE({$table}.amount_disbursed, 0)) {$dir}",
+            );
+        };
     }
 }

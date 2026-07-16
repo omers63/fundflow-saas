@@ -68,7 +68,9 @@ class MyMemberRequestsTableWidget extends TableWidget
                         ->label(__('Details'))
                         ->visibleFrom('md')
                         ->getStateUsing(fn (MemberRequest $record): string => $record->describePayload())
-                        ->wrap(),
+                        ->wrap()
+                        ->searchable(false)
+                        ->sortable(false),
                     TextColumn::make('status')
                         ->label(__('Status'))
                         ->badge()

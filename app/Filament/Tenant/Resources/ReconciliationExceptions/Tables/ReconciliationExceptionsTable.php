@@ -133,12 +133,16 @@ class ReconciliationExceptionsTable
                 ->state(fn (ReconciliationException $record): string => ReconciliationExceptionPresenter::recommendedAction($record))
                 ->wrap()
                 ->limit(90)
+                ->searchable(false)
+                ->sortable(false)
                 ->toggleable();
             $columns[] = TextColumn::make('context_preview')
                 ->label(__('Context'))
                 ->state(fn (ReconciliationException $record): string => implode(' · ', ReconciliationExceptionPresenter::contextPreview($record)))
                 ->placeholder(__('—'))
                 ->wrap()
+                ->searchable(false)
+                ->sortable(false)
                 ->toggleable(isToggledHiddenByDefault: true);
         }
 

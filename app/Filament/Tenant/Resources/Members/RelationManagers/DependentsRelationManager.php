@@ -58,6 +58,7 @@ class DependentsRelationManager extends RelationManager
                 TextColumn::make('household_funding')
                     ->label(__('Funding'))
                     ->badge()
+                    ->searchable(false)
                     ->sortable(false)
                     ->state(fn (Member $record): string => $record->isFundedByParent()
                         ? __('Funded')

@@ -40,22 +40,27 @@ class FundTiersTable
                         ->sortBy('tier_number')
                         ->map(fn ($tier) => $tier->label)
                         ->implode(', ') ?: __('—'))
-                    ->wrap(),
+                    ->wrap()
+                    ->searchable(false)
+                    ->sortable(false),
                 TextColumn::make('percentage')
                     ->suffix('%'),
                 TextColumn::make('declared_pool')
                     ->label(__('Declared pool'))
                     ->state(fn (FundTier $record): float => $record->allocated_amount)
                     ->money($currency)
+                    ->searchable(false)
                     ->sortable(false),
                 TextColumn::make('tier_available')
                     ->label(__('Available'))
                     ->state(fn (FundTier $record): float => $record->available_amount)
                     ->money($currency)
+                    ->searchable(false)
                     ->sortable(false),
                 TextColumn::make('active_loans_count')
                     ->label(__('Active loans'))
                     ->state(fn (FundTier $record): int => $record->active_loans_count)
+                    ->searchable(false)
                     ->sortable(false),
                 ToggleColumn::make('is_active')
                     ->label(__('Active')),

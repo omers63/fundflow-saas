@@ -57,7 +57,9 @@ final class MemberRequestsTable
                             ->label(__('Details'))
                             ->getStateUsing(fn (MemberRequest $record): string => $record->describePayload())
                             ->wrap()
-                            ->limit(80),
+                            ->limit(80)
+                            ->searchable(false)
+                            ->sortable(false),
                         TextColumn::make('status')
                             ->badge()
                             ->formatStateUsing(fn (string $state): string => MemberRequest::statusOptions()[$state] ?? $state)

@@ -105,7 +105,9 @@ class GuarantorExposureRelationManager extends RelationManager
                         ->label(__('Exposure risk'))
                         ->badge()
                         ->state(fn (Loan $record): string => $exposureService->exposureRiskLabel($record))
-                        ->color(fn (Loan $record): string => $exposureService->loanHasExposureRisk($record) ? 'danger' : 'success'),
+                        ->color(fn(Loan $record): string => $exposureService->loanHasExposureRisk($record) ? 'danger' : 'success')
+                        ->searchable(false)
+                        ->sortable(false),
                 ])
                 ->filters([
                     SelectFilter::make('status')

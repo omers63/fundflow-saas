@@ -58,7 +58,9 @@ class RepaymentsRelationManager extends RelationManager
                     ->label(__('Type'))
                     ->state(fn (LoanRepayment $record): string => LoanRepaymentNote::label($record->notes))
                     ->badge()
-                    ->color(fn (LoanRepayment $record): string => LoanRepaymentNote::isSettlement($record->notes) ? 'success' : 'gray'),
+                    ->color(fn(LoanRepayment $record): string => LoanRepaymentNote::isSettlement($record->notes) ? 'success' : 'gray')
+                    ->searchable(false)
+                    ->sortable(false),
                 TextColumn::make('notes')
                     ->label(__('Notes'))
                     ->formatStateUsing(fn (?string $state): ?string => LoanRepaymentNote::isSettlement($state) || str_starts_with((string) $state, LoanRepaymentNote::PREFIX)

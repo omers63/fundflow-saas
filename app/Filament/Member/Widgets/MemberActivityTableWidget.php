@@ -65,7 +65,9 @@ class MemberActivityTableWidget extends TableWidget
                             'fund' => 'primary',
                             'cash' => 'success',
                             default => 'gray',
-                        }),
+                        })
+                        ->searchable(false)
+                        ->sortable(false),
                     TextColumn::make('description')
                         ->label(__('Description'))
                         ->state(fn (Transaction $record): string => $record->memberFacingDescription())
@@ -77,17 +79,35 @@ class MemberActivityTableWidget extends TableWidget
                         ->label(__('Credit'))
                         ->state(fn (Transaction $record): ?float => $record->type === 'credit' ? (float) $record->amount : null)
                         ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
-                        ->placeholder(__('—')),
+                        ->placeholder(__('—'))
+                        ->searchable(false)
+                        ->sortable(query: function (Builder $query, string $direction): Builder {
+                            $dir = strtolower($direction) === 'desc' ? 'desc' : 'asc';
+
+                            return $query->orderByRaw(
+                                "CASE WHEN type = 'credit' THEN amount ELSE NULL END {$dir}",
+                            );
+                        }),
                     TextColumn::make('debit')
                         ->label(__('Debit'))
                         ->state(fn (Transaction $record): ?float => $record->type === 'debit' ? (float) $record->amount : null)
                         ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
-                        ->placeholder(__('—')),
+                        ->placeholder(__('—'))
+                        ->searchable(false)
+                        ->sortable(query: function (Builder $query, string $direction): Builder {
+                            $dir = strtolower($direction) === 'desc' ? 'desc' : 'asc';
+
+                            return $query->orderByRaw(
+                                "CASE WHEN type = 'debit' THEN amount ELSE NULL END {$dir}",
+                            );
+                        }),
                     TextColumn::make('category')
                         ->label(__('Type'))
                         ->state(fn (Transaction $record): string => $record->memberActivityCategoryLabel())
                         ->badge()
-                        ->color(fn (Transaction $record): string => $record->type === 'credit' ? 'success' : 'danger'),
+                        ->color(fn(Transaction $record): string => $record->type === 'credit' ? 'success' : 'danger')
+                        ->searchable(false)
+                        ->sortable(false),
                 ])
                 ->filters([
                     DateColumnRangeFilter::make('transacted_at', __('Date')),

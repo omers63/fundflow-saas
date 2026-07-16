@@ -441,7 +441,10 @@ test('completed queue shows fund tier labels for soft-deleted pools', function (
     Livewire::test(LoanQueueWorkbenchPage::class, ['queueTab' => 'completed'])
         ->assertSuccessful()
         ->assertCanSeeTableRecords([$loan])
-        ->assertSee('Archived pool');
+        ->assertSee('Archived pool')
+        ->sortTable('fund_tier_label')
+        ->assertSuccessful()
+        ->assertCanSeeTableRecords([$loan]);
 });
 
 test('tier queues tab shows per-tier and all-tiers summary footers', function () {
