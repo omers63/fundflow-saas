@@ -222,12 +222,19 @@ final class MoneyDisplay
 
     /**
      * Marked-up amount for DomPDF: uses an embedded riyal glyph image when DejaVu cannot render U+20C1.
+     *
+     * @param  'credit'|'debit'|'success'|'danger'|null  $tone  Force credit (green) / debit (red) coloring.
+     * @param  bool  $colorBySign  When true (and $tone is null), positive amounts are green and negatives red.
+     * @param  string|null  $symbolFill  Optional SVG/currency symbol fill (e.g. white on red pills).
      */
     public static function pdfHtml(
         float|int|string|null $amount,
         ?string $currency = null,
         int $precision = 2,
         bool $signed = false,
+        ?string $tone = null,
+        bool $colorBySign = false,
+        ?string $symbolFill = null,
     ): ?HtmlString {
         $digits = self::amount($amount, $precision);
 
@@ -235,9 +242,10 @@ final class MoneyDisplay
             return null;
         }
 
+        $value = (float) $amount;
+
         if ($signed) {
-            $value = (float) $amount;
-            $digits = ($value > 0 ? '+' : ($value < 0 ? '−' : '')) . $digits;
+            $digits = ($value > 0 ? '+' : ($value < 0 ? '−' : '')).$digits;
         }
 
         $currencyCode = $currency ?? Setting::get('general', 'currency', 'USD');
@@ -245,22 +253,43 @@ final class MoneyDisplay
 
         if ($currencyCode === 'SAR' || str_contains($symbol, "\u{20C1}")) {
             $symbolMarkup = self::usesSvgSymbol($currencyCode)
-                ? self::sarSymbolImageMarkup('currency-symbol', width: 12, height: 12)
+                ? self::sarSymbolImageMarkup('currency-symbol', width: 12, height: 12, fill: $symbolFill)
                 : '<span class="currency-code">SAR</span>';
         } else {
             $symbolMarkup = '<span class="currency-code">'.e($symbol).'</span>';
         }
 
+        $toneClass = match ($tone) {
+            'credit', 'success' => 'amount--success',
+            'debit', 'danger' => 'amount--danger',
+            default => null,
+        };
+
+        if ($toneClass === null && $colorBySign) {
+            $toneClass = match (true) {
+                $value < 0 => 'amount--danger',
+                $value > 0 => 'amount--success',
+                default => null,
+            };
+        }
+
+        $amountClass = 'amount'.($toneClass !== null ? ' '.$toneClass : '');
+        $digitColor = match ($toneClass) {
+            'amount--success' => 'color:#047857;',
+            'amount--danger' => 'color:#b91c1c;',
+            default => '',
+        };
+
         return new HtmlString(
-            '<table class="amount" dir="ltr" border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-spacing:0;direction:ltr;vertical-align:middle;">'
-            . '<tr>'
-            . '<td class="amount-symbol" style="border:0;padding:0 6px 0 0;margin:0;vertical-align:middle;line-height:0;background:transparent;">'
-            . $symbolMarkup
-            . '</td>'
-            . '<td class="amount-digits" style="border:0;padding:0;margin:0;vertical-align:middle;font-weight:700;font-size:12px;line-height:12px;white-space:nowrap;background:transparent;">'
-            . $digits
-            . '</td>'
-            . '</tr></table>'
+            '<table class="'.$amountClass.'" dir="ltr" border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-spacing:0;direction:ltr;vertical-align:middle;">'
+            .'<tr>'
+            .'<td class="amount-symbol" style="border:0;padding:0 6px 0 0;margin:0;vertical-align:middle;line-height:0;background:transparent;'.$digitColor.'">'
+            .$symbolMarkup
+            .'</td>'
+            .'<td class="amount-digits" style="border:0;padding:0;margin:0;vertical-align:middle;font-weight:700;font-size:12px;line-height:12px;white-space:nowrap;background:transparent;'.$digitColor.'">'
+            .$digits
+            .'</td>'
+            .'</tr></table>'
         );
     }
 
@@ -415,6 +444,7 @@ final class MoneyDisplay
         string $class = 'ff-sar-symbol__img',
         ?int $width = null,
         ?int $height = null,
+        ?string $fill = null,
     ): string {
         $sizeAttributes = '';
 
@@ -422,6 +452,6 @@ final class MoneyDisplay
             $sizeAttributes = ' width="'.$width.'" height="'.$height.'"';
         }
 
-        return '<img src="'.PdfAssets::sarSymbolDataUri().'" alt="" class="'.e($class).'"'.$sizeAttributes.' decoding="async" />';
+        return '<img src="'.PdfAssets::sarSymbolDataUri($fill ?? '#334155').'" alt="" class="'.e($class).'"'.$sizeAttributes.' decoding="async" />';
     }
 }

@@ -9,6 +9,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FeeDeduction;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\MonthlyStatement;
@@ -148,7 +149,7 @@ class MonthlyStatementService
         $profile = app(MemberMembershipProfileService::class)->findForMember($member);
         $allLoans = $this->loanSummaries($member);
         $yearlyHistory = $this->yearlyHistory($member, $membershipStart, $year, $month);
-        $currentYearMonths = $this->currentYearMonths($member, $year, $month);
+        $currentYearMonths = $this->activityMonths($member, $year, $month, window: 6);
         $lifetime = $this->lifetimeStats($member, $asOf, $cashAtEnd, $fundAtEnd, $allLoans, $profile);
         $fees = $this->feeBreakdown($member, $asOf);
 
@@ -160,6 +161,8 @@ class MonthlyStatementService
         $maxMonthActivity = max(1.0, (float) collect($currentYearMonths)->max(
             fn (array $row): float => max((float) $row['contributions'], (float) $row['repayments']),
         ));
+        $activityFrom = $currentYearMonths[0] ?? null;
+        $activityTo = $currentYearMonths[array_key_last($currentYearMonths)] ?? null;
 
         return [
             'opening_balance' => $opening,
@@ -199,6 +202,13 @@ class MonthlyStatementService
             'current_year_months' => $currentYearMonths,
             'current_year_totals' => [
                 'year' => $year,
+                'month_count' => count($currentYearMonths),
+                'from_period' => $activityFrom['period'] ?? null,
+                'to_period' => $activityTo['period'] ?? null,
+                'from_year' => $activityFrom['year'] ?? null,
+                'from_month' => $activityFrom['month'] ?? null,
+                'to_year' => $activityTo['year'] ?? null,
+                'to_month' => $activityTo['month'] ?? null,
                 'contributions' => round($yearContribTotal, 2),
                 'repayments' => round($yearRepayTotal, 2),
                 'max_activity' => round($maxMonthActivity, 2),
@@ -271,7 +281,7 @@ class MonthlyStatementService
     }
 
     /**
-     * @return list<array{year: int, contributions: float, repayments: float}>
+     * @return list<array{year: int, contributions: float, repayments: float, cash_balance: float, fund_balance: float}>
      */
     private function yearlyHistory(Member $member, Carbon $membershipStart, int $statementYear, int $statementMonth): array
     {
@@ -305,6 +315,8 @@ class MonthlyStatementService
                 'year' => $year,
                 'contributions' => round($contrib, 2),
                 'repayments' => round($repay, 2),
+                'cash_balance' => $this->balanceAtDate($member, 'cash', $yearEnd),
+                'fund_balance' => $this->balanceAtDate($member, 'fund', $yearEnd),
             ];
         }
 
@@ -312,16 +324,22 @@ class MonthlyStatementService
     }
 
     /**
-     * @return list<array{month: int, label_key: string, contributions: float, repayments: float, contribution_dates: list<string>, repayment_dates: list<string>}>
+     * Rolling window of monthly contribution / repayment activity ending at the statement period.
+     *
+     * @return list<array{month: int, year: int, period: string, contributions: float, repayments: float, contribution_dates: list<string>, repayment_dates: list<string>}>
      */
-    private function currentYearMonths(Member $member, int $year, int $throughMonth): array
+    private function activityMonths(Member $member, int $year, int $throughMonth, int $window = 6): array
     {
+        $end = Carbon::create($year, $throughMonth, 1)->startOfMonth();
+        $start = $end->copy()->subMonthsNoOverflow(max(1, $window) - 1);
         $rows = [];
 
-        for ($month = 1; $month <= $throughMonth; $month++) {
-            $periodDate = Contribution::periodDate($month, $year);
-            $start = Carbon::create($year, $month, 1)->startOfDay();
-            $end = (clone $start)->endOfMonth();
+        for ($cursor = $start->copy(); $cursor->lte($end); $cursor->addMonthNoOverflow()) {
+            $month = (int) $cursor->month;
+            $rowYear = (int) $cursor->year;
+            $periodDate = Contribution::periodDate($month, $rowYear);
+            $monthStart = $cursor->copy()->startOfDay();
+            $monthEnd = $cursor->copy()->endOfMonth();
 
             $contribs = Contribution::query()
                 ->where('member_id', $member->id)
@@ -332,12 +350,13 @@ class MonthlyStatementService
             $repayments = LoanInstallment::query()
                 ->whereHas('loan', fn ($q) => $q->where('member_id', $member->id))
                 ->where('status', 'paid')
-                ->whereBetween('paid_at', [$start, $end])
+                ->whereBetween('paid_at', [$monthStart, $monthEnd])
                 ->get(['amount', 'paid_at', 'late_fee_amount']);
 
             $rows[] = [
                 'month' => $month,
-                'period' => sprintf('%04d-%02d', $year, $month),
+                'year' => $rowYear,
+                'period' => sprintf('%04d-%02d', $rowYear, $month),
                 'contributions' => round((float) $contribs->sum('amount'), 2),
                 'repayments' => round((float) $repayments->sum(
                     fn (LoanInstallment $i): float => (float) $i->amount + (float) ($i->late_fee_amount ?? 0),
@@ -375,8 +394,14 @@ class MonthlyStatementService
             ->where('status', 'posted')
             ->sum('amount');
 
+        $lifetimeRepayments = (float) LoanRepayment::query()
+            ->whereHas('loan', fn($q) => $q->where('member_id', $member->id))
+            ->sum('amount');
+
         $loanCount = count($loans);
         $loanAmount = (float) collect($loans)->sum('amount_approved');
+        $lifetimeContributions = round($lifetimeContributions, 2);
+        $lifetimeRepayments = round($lifetimeRepayments, 2);
 
         return [
             'as_of' => $asOf->toDateString(),
@@ -384,7 +409,9 @@ class MonthlyStatementService
             'membership_years' => $member->joined_at
                 ? max(0, (int) $member->joined_at->diffInYears($asOf))
                 : 0,
-            'total_contributions' => round($lifetimeContributions, 2),
+            'total_contributions' => $lifetimeContributions,
+            'total_repayments' => $lifetimeRepayments,
+            'collection_total' => round($lifetimeContributions + $lifetimeRepayments, 2),
             'loan_count' => $loanCount,
             'loan_amount' => round($loanAmount, 2),
             'cash_balance' => round($cashBalance, 2),

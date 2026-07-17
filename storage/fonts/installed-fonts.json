@@ -1,6 +1,9 @@
 {
     "amiri": {
         "normal": "\/var\/www\/fundflow-saas\/storage\/fonts\/amiri_normal_bbb7aa50db395c70b9436a747b21b1f0",
-        "bold": "amiri_bold_bbb7aa50db395c70b9436a747b21b1f0"
+        "bold": "\/var\/www\/fundflow-saas\/storage\/fonts\/amiri_bold_bbb7aa50db395c70b9436a747b21b1f0",
+        "500": "\/var\/www\/fundflow-saas\/storage\/fonts\/amiri_500_bbb7aa50db395c70b9436a747b21b1f0",
+        "600": "\/var\/www\/fundflow-saas\/storage\/fonts\/amiri_600_bbb7aa50db395c70b9436a747b21b1f0",
+        "800": "amiri_800_bbb7aa50db395c70b9436a747b21b1f0"
     }
 }

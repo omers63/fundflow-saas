@@ -84,7 +84,9 @@ final class DomPdfFactory
         $metrics = $dompdf->getFontMetrics();
         $fileUri = 'file://'.$amiri;
 
-        foreach (['normal', 'bold'] as $weight) {
+        // DomPDF falls back to Helvetica (Arabic → ????) when a requested weight
+        // is not registered for Amiri — cover common numeric/named weights.
+        foreach (['normal', 'bold', '400', '500', '600', '700', '800'] as $weight) {
             $metrics->registerFont(
                 [
                     'family' => 'Amiri',

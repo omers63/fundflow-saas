@@ -11,12 +11,15 @@ use Illuminate\Support\Facades\Storage;
 
 final class PdfAssets
 {
-    private static ?string $sarSymbolDataUri = null;
+    /** @var array<string, string> */
+    private static array $sarSymbolDataUris = [];
 
-    public static function sarSymbolDataUri(): string
+    public static function sarSymbolDataUri(string $fill = '#334155'): string
     {
-        if (self::$sarSymbolDataUri !== null) {
-            return self::$sarSymbolDataUri;
+        $fill = strtolower(trim($fill));
+
+        if (isset(self::$sarSymbolDataUris[$fill])) {
+            return self::$sarSymbolDataUris[$fill];
         }
 
         // Cropped viewBox so the glyph sits optically centered in DomPDF image boxes.
@@ -26,7 +29,10 @@ final class PdfAssets
             $path = resource_path('pdf/assets/sar-symbol.svg');
         }
 
-        return self::$sarSymbolDataUri = self::fileDataUri($path, 'image/svg+xml');
+        $svg = (string) file_get_contents($path);
+        $svg = preg_replace('/fill="#[^"]+"/i', 'fill="'.e($fill).'"', $svg) ?? $svg;
+
+        return self::$sarSymbolDataUris[$fill] = 'data:image/svg+xml;base64,'.base64_encode($svg);
     }
 
     /**

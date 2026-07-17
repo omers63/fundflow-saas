@@ -5,12 +5,72 @@
 @endphp
 <style>
     .stmt-body {
-        font-size: 10.5px;
+        font-size: {{ $isArabic ? '13px' : '10px' }};
+        line-height: {{ $isArabic ? '1.35' : '1.25' }};
+        padding-bottom: 18px;
+    }
+
+    .stmt-body .section-title {
+        font-size: {{ $isArabic ? '18px' : '15px' }};
+        font-weight: 700;
+        margin: 10px 0 6px;
+        padding-bottom: 3px;
+        text-align: center;
+        letter-spacing: 0.02em;
+        page-break-after: avoid;
+    }
+
+    .stmt-body .section-title__meta {
+        display: inline;
+        margin: 0 6px;
+        font-size: {{ $isArabic ? '14px' : '11px' }};
+        font-weight: 600;
+        color: #64748b;
+        letter-spacing: 0;
+        text-transform: none;
+    }
+
+    .stmt-body .data-table th,
+    .stmt-body .data-table td {
+        text-align: center !important;
+        padding: 3px 6px;
+        line-height: 1.2;
+        vertical-align: middle;
+    }
+
+    .stmt-body .data-table th {
+        font-size: {{ $isArabic ? '13px' : '11px' }};
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        padding: 5px 6px;
+    }
+
+    .stmt-body .data-table .amount,
+    .stmt-body .stmt-kpi__value .amount {
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .stmt-body .data-table td.stmt-progress-cell {
+        vertical-align: middle !important;
+    }
+
+    .stmt-body .data-table td.stmt-progress-cell .stmt-progress {
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .stmt-body .stmt-kpi__value {
+        text-align: center;
+    }
+
+    .stmt-body .stmt-kpi__value .amount td {
+        text-align: center;
     }
 
     .stmt-hero {
-        margin: 0 0 14px;
-        padding: 14px 16px;
+        margin: 0 0 8px;
+        padding: 8px 12px;
         border: 2px solid
             {{ $accent }}
         ;
@@ -49,43 +109,75 @@
     }
 
     .stmt-hero__eyebrow {
-        font-size: 9px;
+        font-size: {{ $isArabic ? '13px' : '11px' }};
         font-weight: 700;
-        letter-spacing: 0.08em;
+        letter-spacing: {{ $isArabic ? '0.04em' : '0.08em' }};
         text-transform: uppercase;
         color:
             {{ $accent }}
         ;
-        margin-bottom: 4px;
+        margin-bottom: 5px;
         text-align:
             {{ $align }}
         ;
     }
 
     .stmt-hero__fund {
-        font-size: 20px;
+        font-size: {{ $isArabic ? '22px' : '20px' }};
         font-weight: 700;
         color: #0f172a;
         line-height: 1.2;
-        margin-bottom: 4px;
+        margin-bottom: 6px;
         text-align:
             {{ $align }}
         ;
     }
 
-    .stmt-hero__period {
-        color: #64748b;
-        font-size: 11px;
-        text-align:
-            {{ $align }}
-        ;
+    .stmt-hero__meta {
+        width: auto;
+        border-collapse: collapse;
+        margin: 0;
+        {{ $isArabic ? 'margin-left: auto; margin-right: 0;' : '' }}
+    }
+
+    .stmt-hero__meta td {
+        border: 0;
+        padding: 2px 0;
+        vertical-align: middle;
+        color: #334155;
+        font-size: {{ $isArabic ? '14px' : '12px' }};
+        line-height: 1.35;
+    }
+
+    .stmt-hero__meta-label {
+        white-space: nowrap;
+        font-weight: 700;
+        text-align: {{ $align }};
+        padding-{{ $isArabic ? 'left' : 'right' }}: 8px;
+        width: 1%;
+    }
+
+    .stmt-hero__meta-value {
+        white-space: nowrap;
+        font-weight: 700;
+        text-align: {{ $align }};
+    }
+
+    .txn-type--credit {
+        color: #047857;
+        font-weight: 700;
+    }
+
+    .txn-type--debit {
+        color: #b91c1c;
+        font-weight: 700;
     }
 
     .stmt-kpis {
         width: 100%;
         border-collapse: separate;
-        border-spacing: 6px 0;
-        margin: 0 0 8px;
+        border-spacing: 4px 0;
+        margin: 0 0 6px;
         direction: ltr;
     }
 
@@ -93,12 +185,14 @@
         width: 25%;
         background: #f8fafc;
         border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 10px 8px;
+        border-radius: 6px;
+        padding: 6px 6px;
         vertical-align: top;
-        text-align:
-            {{ $align }}
-        ;
+        text-align: center;
+    }
+
+    .stmt-kpis--lifetime .stmt-kpi {
+        width: 16.66%;
     }
 
     .stmt-kpi--accent {
@@ -116,32 +210,85 @@
         color: #ffffff;
     }
 
+    .stmt-kpi-pill {
+        display: inline-block;
+        background: #e2e8f0;
+        color: #334155;
+        font-size: 9px;
+        font-weight: 700;
+        padding: 1px 7px;
+        border-radius: 999px;
+        vertical-align: middle;
+        line-height: 1.3;
+        text-align: center;
+        text-transform: none;
+        letter-spacing: 0;
+    }
+
+    .stmt-balance-pill {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 999px;
+        vertical-align: middle;
+        line-height: 1.2;
+        background: #e2e8f0;
+        text-align: center;
+    }
+
+    .stmt-balance-pill--success {
+        background: #047857;
+    }
+
+    .stmt-balance-pill--danger {
+        background: #b91c1c;
+    }
+
+    .stmt-balance-pill--success .amount td.amount-digits,
+    .stmt-balance-pill--success .amount td.amount-symbol,
+    .stmt-balance-pill--success .currency-code,
+    .stmt-balance-pill--danger .amount td.amount-digits,
+    .stmt-balance-pill--danger .amount td.amount-symbol,
+    .stmt-balance-pill--danger .currency-code {
+        color: #ffffff !important;
+    }
+
+    .stmt-balance-pill .amount {
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .stmt-balance-pill .amount td.amount-digits,
+    .stmt-balance-pill .amount td.amount-symbol {
+        text-align: center !important;
+    }
+
+    .stmt-balance-pill .amount td.amount-digits {
+        font-size: 11px;
+        line-height: 11px;
+    }
+
     .stmt-kpi__label {
-        font-size: 8px;
+        font-size: {{ $isArabic ? '12px' : '10px' }};
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.03em;
         color: #64748b;
-        margin-bottom: 4px;
-        text-align:
-            {{ $align }}
-        ;
+        margin-bottom: 3px;
+        text-align: center;
     }
 
     .stmt-kpi__value {
-        font-size: 12px;
+        font-size: {{ $isArabic ? '14px' : '12px' }};
         font-weight: 700;
         color: #0f172a;
-        text-align:
-            {{ $align }}
-        ;
+        text-align: center;
     }
 
     .stmt-two-col {
         width: 100%;
         border-collapse: separate;
-        border-spacing: 8px 0;
-        margin-bottom: 4px;
+        border-spacing: 6px 0;
+        margin-bottom: 2px;
         direction: ltr;
     }
 
@@ -154,8 +301,8 @@
 
     .stmt-card {
         border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 10px 12px;
+        border-radius: 6px;
+        padding: 6px 8px;
         background: #ffffff;
         text-align:
             {{ $align }}
@@ -163,17 +310,15 @@
     }
 
     .stmt-card__title {
-        font-size: 10px;
+        font-size: {{ $isArabic ? '14px' : '11px' }};
         font-weight: 700;
         color:
             {{ $accent }}
         ;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
-        margin-bottom: 8px;
-        text-align:
-            {{ $align }}
-        ;
+        letter-spacing: 0.03em;
+        margin-bottom: 4px;
+        text-align: center;
     }
 
     .stmt-meta {
@@ -184,22 +329,47 @@
 
     .stmt-meta td {
         border: 0;
-        padding: 3px 0;
+        padding: 1px 0;
         vertical-align: middle;
-        text-align:
-            {{ $align }}
-        ;
+        line-height: 1.2;
     }
 
     .stmt-meta__label {
         width: 42%;
         color: #64748b;
-        font-size: 9px;
+        font-size: {{ $isArabic ? '12px' : '9px' }};
+        font-weight: {{ $isArabic ? '700' : '400' }};
     }
 
     .stmt-meta__value {
-        font-weight: 600;
+        width: 58%;
+        font-weight: 700;
         color: #0f172a;
+        font-size: {{ $isArabic ? '13px' : 'inherit' }};
+    }
+
+    .stmt-meta--en .stmt-meta__label {
+        text-align: left;
+        padding-right: 10px !important;
+    }
+
+    .stmt-meta--en .stmt-meta__value {
+        text-align: left;
+    }
+
+    .stmt-meta--ar .stmt-meta__label {
+        text-align: right;
+        padding-left: 10px !important;
+    }
+
+    .stmt-meta--ar .stmt-meta__value {
+        text-align: right;
+    }
+
+    .stmt-meta--ar .stmt-meta__value .amount,
+    .stmt-meta--ar .stmt-meta__value .stmt-balance-pill {
+        margin-left: auto !important;
+        margin-right: 0 !important;
     }
 
     .stmt-meta__value .amount {
@@ -207,123 +377,8 @@
     }
 
     .stmt-note {
-        margin: -4px 0 8px;
-        font-size: 9px;
-        text-align:
-            {{ $align }}
-        ;
-    }
-
-    .stmt-year-chart {
-        width: 100%;
-        border-collapse: collapse;
-        margin-bottom: 6px;
-        direction: ltr;
-    }
-
-    .stmt-year-chart td {
-        border-bottom: 1px solid #f1f5f9;
-        padding: 7px 0;
-        vertical-align: middle;
-        text-align:
-            {{ $align }}
-        ;
-    }
-
-    .stmt-year-chart__label {
-        width: 48px;
-        font-weight: 700;
-        color: #334155;
-        padding-{{ $isArabic ? 'left' : 'right' }}: 8px !important;
-        text-align:
-            {{ $align }}
-        ;
-    }
-
-    .stmt-bar-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-bottom: 3px;
-        direction: ltr;
-    }
-
-    .stmt-bar-table td {
-        border: 0 !important;
-        padding: 1px 0 !important;
-        vertical-align: middle;
-    }
-
-    .stmt-bar-caption {
-        width: 96px;
+        margin: -2px 0 4px;
         font-size: 8px;
-        color: #64748b;
-        white-space: nowrap;
-        text-align:
-            {{ $align }}
-        ;
-        padding-{{ $isArabic ? 'left' : 'right' }}: 6px !important;
-    }
-
-    .stmt-bar-track-cell {
-        width: auto;
-    }
-
-    .stmt-bar-track {
-        width: 100%;
-        height: 8px;
-        background: #e2e8f0;
-        border-radius: 999px;
-        overflow: hidden;
-    }
-
-    .stmt-bar-fill {
-        height: 8px;
-        border-radius: 999px;
-    }
-
-    .stmt-bar-track--end {
-        text-align: right;
-    }
-
-    .stmt-bar-track--end .stmt-bar-fill {
-        float: right;
-    }
-
-    .stmt-bar-fill--repay {
-        background: #0ea5e9;
-    }
-
-    .stmt-bar-amount {
-        width: 92px;
-        font-size: 9px;
-        font-weight: 700;
-        white-space: nowrap;
-        text-align:
-            {{ $isArabic ? 'left' : 'right' }}
-        ;
-        padding-{{ $isArabic ? 'right' : 'left' }}: 6px !important;
-    }
-
-    .stmt-bar-dates {
-        font-size: 8px;
-        margin-top: 2px;
-        text-align:
-            {{ $align }}
-        ;
-    }
-
-    .stmt-inline-totals {
-        width: 100%;
-        margin: 4px 0 8px;
-        border-collapse: collapse;
-        direction: ltr;
-    }
-
-    .stmt-inline-totals td {
-        border: 0;
-        padding: 4px 0;
-        font-size: 10px;
-        color: #334155;
         text-align:
             {{ $align }}
         ;
@@ -331,37 +386,95 @@
 
     .stmt-mini-track {
         display: inline-block;
-        width: 54px;
-        height: 6px;
+        width: 72px;
+        height: 10px;
         background: #e2e8f0;
         border-radius: 999px;
         overflow: hidden;
         vertical-align: middle;
+        line-height: 10px;
     }
 
     .stmt-mini-track--end {
+        direction: rtl;
         text-align: right;
     }
 
-    .stmt-mini-track--end .stmt-mini-fill {
-        float: right;
+    .stmt-mini-fill {
+        display: inline-block;
+        height: 10px;
+        border-radius: 999px;
+        vertical-align: top;
+        line-height: 10px;
     }
 
-    .stmt-mini-fill {
-        height: 6px;
-        border-radius: 999px;
+    .stmt-body .data-table td.stmt-progress-cell {
+        vertical-align: middle !important;
+        padding-top: 4px;
+        padding-bottom: 4px;
+    }
+
+    .stmt-progress {
+        border-collapse: collapse;
+        border-spacing: 0;
+        margin: 0 auto;
+        direction: ltr;
+        vertical-align: middle;
+        line-height: 1;
+    }
+
+    .stmt-progress td,
+    .stmt-progress__cell,
+    .data-table .stmt-progress td,
+    .data-table .stmt-progress__cell {
+        border: 0 !important;
+        margin: 0;
+        padding: 0 !important;
+        background: transparent !important;
+        vertical-align: middle !important;
+        text-align: center;
+        white-space: nowrap;
+        line-height: 12px;
     }
 
     .stmt-mini-pct {
         display: inline-block;
-        margin-{{ $isArabic ? 'right' : 'left' }}: 4px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #334155;
+        vertical-align: middle;
+        line-height: 12px;
+        padding: 0 4px;
+    }
+
+    .stmt-tfoot-label,
+    .stmt-tfoot-pill {
         font-size: 8px;
         font-weight: 700;
-        color: #475569;
-        vertical-align: middle;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin: 0 auto 4px;
+        text-align: center;
+    }
+
+    .stmt-tfoot-pill {
+        display: inline-block;
+        background: #e2e8f0;
+        color: #334155;
+        padding: 2px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+        text-align: center;
+    }
+
+    .stmt-body .doc-footer {
+        text-align: center;
+        margin-top: 16px;
+        padding-top: 8px;
     }
 
     .amount-col {
         white-space: nowrap;
+        text-align: center;
     }
 </style>

@@ -5,7 +5,7 @@ $logoDataUri = $logoDataUri ?? null;
 @endphp
 <style>
     @page {
-        margin: 28px 32px 36px;
+        margin: 28px 32px 56px;
     }
 
     * {
@@ -18,8 +18,8 @@ $logoDataUri = $logoDataUri ?? null;
 
     body {
         font-family: {{ $pdfFont ?? 'DejaVu Sans' }}, sans-serif;
-        font-size: 11px;
-        line-height: 1.45;
+        font-size: {{ $isArabic ? '13.5px' : '10.5px' }};
+        line-height: {{ $isArabic ? '1.4' : '1.3' }};
         color: #1e293b;
         margin: 0;
         direction: {{ $isArabic ? 'rtl' : 'ltr' }};
@@ -80,11 +80,11 @@ $logoDataUri = $logoDataUri ?? null;
     }
 
     .section-title {
-        font-size: 13px;
+        font-size: 14px;
         font-weight: 700;
         color: {{ $accent }};
-        margin: 22px 0 10px;
-        padding-bottom: 5px;
+        margin: 14px 0 6px;
+        padding-bottom: 3px;
         border-bottom: 1px solid #e2e8f0;
         text-align: {{ $isArabic ? 'right' : 'left' }};
     }
@@ -161,9 +161,38 @@ $logoDataUri = $logoDataUri ?? null;
     .data-table th,
     .data-table td {
         border: 1px solid #e2e8f0;
-        padding: 7px 9px;
+        padding: 4px 6px;
         text-align: {{ $isArabic ? 'right' : 'left' }};
         vertical-align: middle;
+        line-height: 1.2;
+    }
+
+    .data-table thead {
+        display: table-header-group;
+    }
+
+    .data-table tfoot {
+        display: table-footer-group;
+    }
+
+    .data-table thead tr,
+    .data-table tbody tr {
+        page-break-inside: avoid;
+    }
+
+    /* DomPDF: orphan thead at page bottom — avoid break after the header row itself. */
+    .data-table > thead:first-of-type > tr:last-child {
+        page-break-after: avoid;
+    }
+
+    .section-title + .data-table,
+    .section-title + .stmt-kpis,
+    .stmt-card__title + .data-table {
+        page-break-before: avoid;
+    }
+
+    .stmt-section--keep {
+        page-break-inside: avoid;
     }
 
     .data-table th {
@@ -171,10 +200,11 @@ $logoDataUri = $logoDataUri ?? null;
             {{ $accent }}
         ;
         color: #ffffff;
-        font-size: 9px;
+        font-size: {{ $isArabic ? '13px' : '10px' }};
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
+        letter-spacing: {{ $isArabic ? '0' : '0.03em' }};
+        text-align: center;
     }
 
     .data-table tbody tr:nth-child(even) td {
@@ -197,11 +227,38 @@ $logoDataUri = $logoDataUri ?? null;
         border-top: 1px solid #e2e8f0;
         color: #94a3b8;
         font-size: 9px;
-        text-align: {{ $isArabic ? 'right' : 'left' }};
+        text-align: center;
+    }
+
+    .stmt-font-warmup {
+        position: absolute;
+        left: -10000px;
+        top: 0;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        font-family: Amiri, {{ $pdfFont ?? 'DejaVu Sans' }}, sans-serif;
+        font-weight: normal;
+        font-size: 8px;
+        line-height: 1;
+        color: transparent;
+    }
+
+    .stmt-page-footer {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: -42px;
+        height: 28px;
+        text-align: center;
+        font-family: {{ $pageFooterFont ?? $pdfFont ?? 'DejaVu Sans' }}, sans-serif;
+        font-size: {{ $isArabic ? '10px' : '9px' }};
+        font-weight: normal;
+        color: #64748b;
+        line-height: 1.3;
     }
 
     .amount {
-        display: inline-table;
         border-collapse: collapse;
         border-spacing: 0;
         direction: ltr;
@@ -212,9 +269,7 @@ $logoDataUri = $logoDataUri ?? null;
     .amount td,
     .stmt-meta .amount td,
     .stmt-kpi .amount td,
-    .data-table .amount td,
-    .stmt-bar-amount .amount td,
-    .stmt-inline-totals .amount td {
+    .data-table .amount td {
         border: 0 !important;
         margin: 0;
         vertical-align: middle !important;
@@ -258,6 +313,18 @@ $logoDataUri = $logoDataUri ?? null;
         letter-spacing: 0.04em;
         vertical-align: middle;
         line-height: 12px;
+    }
+
+    .amount--success td.amount-digits,
+    .amount--success td.amount-symbol,
+    .amount--success .currency-code {
+        color: #047857 !important;
+    }
+
+    .amount--danger td.amount-digits,
+    .amount--danger td.amount-symbol,
+    .amount--danger .currency-code {
+        color: #b91c1c !important;
     }
 
     .muted {

@@ -51,9 +51,11 @@ class StatementPdfController extends Controller
     {
         $locale = app()->getLocale();
         $details = $statement->details ?? [];
+        $fundNameEn = trim((string) ($details['fund_name_en'] ?? PublicPageSettings::fundName(locale: 'en')));
+        $fundNameAr = trim((string) ($details['fund_name_ar'] ?? PublicPageSettings::fundName(locale: 'ar')));
         $fundName = $locale === 'ar'
-            ? (string) ($details['fund_name_ar'] ?? PublicPageSettings::fundName(locale: 'ar'))
-            : (string) ($details['fund_name_en'] ?? PublicPageSettings::fundName(locale: 'en'));
+            ? ($fundNameAr !== '' ? $fundNameAr : $fundNameEn)
+            : ($fundNameEn !== '' ? $fundNameEn : $fundNameAr);
 
         if ($fundName === '') {
             $fundName = PublicPageSettings::fundName(locale: $locale);
@@ -68,6 +70,8 @@ class StatementPdfController extends Controller
             'include_txns' => StatementSettings::includeTransactions(),
             'include_loan' => StatementSettings::includeLoanSection(),
             'fund_name' => $fundName,
+            'fund_name_en' => $fundNameEn,
+            'fund_name_ar' => $fundNameAr,
         ];
 
         $pdf = DomPdfFactory::loadView('pdf.monthly-statement', [

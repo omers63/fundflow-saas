@@ -1,9 +1,6 @@
 <?php
 
 use App\Filament\Support\MoneyDisplay;
-use Tests\TestCase;
-
-uses(TestCase::class);
 
 it('formats negative amounts without a minus sign', function (): void {
     app()->setLocale('en');
@@ -180,6 +177,22 @@ it('renders signed pdf amounts with an explicit plus or minus prefix', function 
         ->toContain('>0.00<')
         ->not->toContain('+0.00')
         ->not->toContain('−0.00');
+});
+
+it('colors pdf amounts by credit debit tone and balance sign', function (): void {
+    app()->setLocale('en');
+
+    expect(MoneyDisplay::pdfHtml(100, 'USD', tone: 'credit')?->toHtml())
+        ->toContain('amount--success')
+        ->and(MoneyDisplay::pdfHtml(100, 'USD', tone: 'debit')?->toHtml())
+        ->toContain('amount--danger')
+        ->and(MoneyDisplay::pdfHtml(250, 'USD', colorBySign: true)?->toHtml())
+        ->toContain('amount--success')
+        ->and(MoneyDisplay::pdfHtml(-250, 'USD', colorBySign: true)?->toHtml())
+        ->toContain('amount--danger')
+        ->and(MoneyDisplay::pdfHtml(0, 'USD', colorBySign: true)?->toHtml())
+        ->not->toContain('amount--success')
+        ->not->toContain('amount--danger');
 });
 
 it('formats compact amounts with symbol before digits in arabic', function (): void {

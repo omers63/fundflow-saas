@@ -1362,6 +1362,9 @@
     "Current tiers": "الشرائح الحالية",
     "Current view": "العرض الحالي",
     "Current year activity": "نشاط السنة الحالية",
+    ":count-Month Activity": "نشاط :count أشهر",
+    ":count-Month contributions": "مساهمات :count أشهر",
+    ":count-Month repayments": "سداد :count أشهر",
     "Currently active": "نشط حالياً",
     "Custom :format export for :type is not fully wired yet. Use the report cards above for live exports.": "تصدير :format مخصّص لـ :type غير مكتمل بعد. استخدم بطاقات التقارير أعلاه للتصدير الفعلي.",
     "Custom journal": "قيد مخصص",
@@ -2432,7 +2435,7 @@
     "Liability transferred to you": "الالتزام منقول إليك",
     "Liable periods not posted": "فترات مستحقة غير مُرحَّلة",
     "Lifetime": "طوال المدة",
-    "Lifetime contributions": "إجمالي المساهمات مدى الحياة",
+    "Lifetime contributions": "المساهمات مدى الحياة",
     "Lifetime cumulative": "الإجمالي التراكمي",
     "Lifetime disbursed": "إجمالي المصروف مدى الحياة",
     "Lifetime repaid": "إجمالي المسدد مدى الحياة",
@@ -4823,6 +4826,7 @@
     "Top up cash for :period": "تعبئة النقد لـ :period",
     "Top up your cash account": "زِد رصيد حساب النقد",
     "Top-up needed": "يلزم شحن الرصيد",
+    "to": "إلى",
     "Total": "الإجمالي",
     "Total Contributed": "إجمالي المُساهَم",
     "Total EMI count when known": "إجمالي عدد الأقساط عند المعرفة",
@@ -5200,6 +5204,7 @@
     "YYYY-MM-DD or YYYY-MM-DD HH:MM:SS. Aliases: transaction_date, date": "YYYY-MM-DD أو YYYY-MM-DD HH:MM:SS. أسماء بديلة: transaction_date، date",
     "Year contributions": "مساهمات السنة",
     "Year repayments": "سداد السنة",
+    "Year": "السنة",
     "Year-by-year summary": "ملخص حسب السنة",
     "Year-end close": "إغلاق نهاية السنة",
     "Yes": "نعم",
@@ -5486,5 +5491,6 @@
     "••••••••": "••••••••",
     "…and :count more.": "…و :count أخرى.",
     "≥90%": "≥90%",
-    "✓ Saved at :time": "✓ حُفظ في :time"
+    "✓ Saved at :time": "✓ حُفظ في :time",
+    "Summary as of": "الملخص حتى تاريخ"
 }

@@ -6,6 +6,7 @@ use App\Models\Central\Tenant;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
@@ -75,6 +76,17 @@ beforeEach(function () {
     Setting::set(PublicPageSettings::GROUP, 'fund_name_ar', 'صندوق السمان العائلي');
 });
 
+test('monthly statement blade markup is not corrupted', function () {
+    $blade = file_get_contents(resource_path('views/pdf/monthly-statement.blade.php'));
+
+    expect($blade)
+        ->toContain('<thead>')
+        ->toContain('section-title')
+        ->not->toMatch('/<the\s+ad>/')
+        ->not->toMatch('/secti\s+on/')
+        ->not->toMatch('/class\s{2,}=/');
+});
+
 test('member can download monthly statement pdf', function () {
     $statement = app(MonthlyStatementService::class)->generateForMember($this->member, '2026-05');
 
@@ -98,7 +110,11 @@ test('arabic statement pdf download uses configured amiri font family', function
     $response->assertSuccessful()
         ->assertHeader('content-type', 'application/pdf');
 
-    expect($response->getContent())->toContain('Amiri');
+    $pdf = $response->getContent();
+
+    expect($pdf)
+        ->toContain('Amiri')
+        ->not->toContain('????');
 });
 
 test('member cannot download another members statement pdf', function () {
@@ -186,6 +202,18 @@ test('monthly statement details include fund names profile loans and yearly hist
         'status' => 'pending',
     ]);
 
+    // Lifetime repayments come from LoanRepayment rows (same source as the member portal), not installments.
+    LoanRepayment::query()->create([
+        'loan_id' => $loan->id,
+        'amount' => 1000,
+        'paid_at' => '2026-04-02',
+    ]);
+    LoanRepayment::query()->create([
+        'loan_id' => $loan->id,
+        'amount' => 1000,
+        'paid_at' => '2026-05-03',
+    ]);
+
     $statement = app(MonthlyStatementService::class)->generateForMember($this->member, '2026-05');
     $details = $statement->details;
 
@@ -199,6 +227,9 @@ test('monthly statement details include fund names profile loans and yearly hist
         ->and($details['yearly_history'])->not->toBeEmpty()
         ->and($details['current_year_months'])->not->toBeEmpty()
         ->and($details['lifetime']['loan_count'])->toBe(1)
+        ->and($details['lifetime']['total_contributions'])->toEqual(1000.0)
+        ->and($details['lifetime']['total_repayments'])->toEqual(2000.0)
+        ->and($details['lifetime']['collection_total'])->toEqual(3000.0)
         ->and($details['fees']['total'])->toBeGreaterThanOrEqual(500);
 });
 
@@ -227,11 +258,24 @@ test('monthly statement pdf prefers member locale and shapes arabic names in eng
     expect($html)
         ->toContain('dir="ltr"')
         ->toContain('Samman Family Fund')
+        ->toContain('صندوق السمان العائلي')
+        ->toContain('stmt-page-footer')
+        ->toContain('stmt-font-warmup')
+        ->toContain('font-family: Amiri')
+        ->toContain('position: fixed')
         ->toContain('أحمد المحمود')
         ->toContain('Lifetime summary')
+        ->toContain('Loan repayments')
+        ->toContain('Collection')
+        ->toContain('Contributions')
         ->toContain('Year-by-year summary')
+        ->not->toContain('Lifetime contributions')
+        ->not->toContain('Loan Repayments Total')
+        ->not->toContain('Collection Total')
+        ->not->toContain('Total lifetime contributions')
         ->toContain('Total')
-        ->toContain('Net')
+        ->toContain('Cash balance')
+        ->toContain('Fund balance')
         ->toContain('SA0380000000608010167519');
 
     $shaped = DomPdfFactory::shapeArabicHtml($html);
@@ -239,12 +283,12 @@ test('monthly statement pdf prefers member locale and shapes arabic names in eng
     expect(preg_match('/[\x{FE70}-\x{FEFF}\x{FB50}-\x{FDFF}]/u', $shaped))->toBe(1);
 });
 
-test('year-by-year summary includes total and signed net columns', function () {
+test('year-by-year summary includes total cash and fund balance columns', function () {
     $statement = app(MonthlyStatementService::class)->generateForMember($this->member, '2026-05');
     $details = $statement->details ?? [];
     $details['yearly_history'] = [
-        ['year' => 2026, 'contributions' => 1000.0, 'repayments' => 250.0],
-        ['year' => 2025, 'contributions' => 100.0, 'repayments' => 400.0],
+        ['year' => 2026, 'contributions' => 1000.0, 'repayments' => 250.0, 'cash_balance' => 120.0, 'fund_balance' => 900.0],
+        ['year' => 2025, 'contributions' => 100.0, 'repayments' => 400.0, 'cash_balance' => 50.0, 'fund_balance' => 700.0],
     ];
     $statement->details = $details;
 
@@ -267,10 +311,212 @@ test('year-by-year summary includes total and signed net columns', function () {
 
     expect($html)
         ->toContain('>Total<')
-        ->toContain('>Net<')
-        ->toContain('+750.00')
-        ->toContain('−300.00')
-        ->toContain('1,250.00');
+        ->toContain('>Cash balance<')
+        ->toContain('>Fund balance<')
+        ->not->toContain('>Net<')
+        ->toContain('1,250.00')
+        ->toContain('120.00')
+        ->toContain('900.00');
+});
+
+test('activity table uses rolling six-month window with date column', function () {
+    $statement = app(MonthlyStatementService::class)->generateForMember($this->member, '2026-05');
+    $details = $statement->details ?? [];
+
+    expect($details['current_year_months'])->toHaveCount(6)
+        ->and($details['current_year_totals']['month_count'])->toBe(6)
+        ->and($details['current_year_totals']['from_period'])->toBe('2025-12')
+        ->and($details['current_year_totals']['to_period'])->toBe('2026-05')
+        ->and($details['yearly_history'][0])->toHaveKeys(['cash_balance', 'fund_balance']);
+
+    $details['current_year_months'] = [
+        [
+            'month' => 5,
+            'year' => 2026,
+            'period' => '2026-05',
+            'contributions' => 1000,
+            'repayments' => 250,
+            'contribution_dates' => ['2026-05-10'],
+            'repayment_dates' => ['2026-05-03'],
+        ],
+    ];
+    $details['current_year_totals'] = [
+        'year' => 2026,
+        'month_count' => 6,
+        'from_period' => '2025-12',
+        'to_period' => '2026-05',
+        'from_year' => 2025,
+        'from_month' => 12,
+        'to_year' => 2026,
+        'to_month' => 5,
+        'contributions' => 1000,
+        'repayments' => 250,
+    ];
+    $details['fund_closing'] = 1500.25;
+    $statement->details = $details;
+
+    $html = MemberLocale::usingPreferred($this->memberUser, function () use ($statement): string {
+        return view('pdf.monthly-statement', [
+            'statement' => $statement,
+            'cfg' => [
+                'brand' => 'Samman Family Fund',
+                'fund_name' => 'Samman Family Fund',
+                'tagline' => StatementSettings::tagline(),
+                'accent_color' => StatementSettings::accentColor(),
+                'footer_disclaimer' => StatementSettings::footerDisclaimer(),
+                'signature_line' => StatementSettings::signatureLine(),
+                'include_txns' => false,
+                'include_loan' => true,
+            ],
+            'logoDataUri' => null,
+        ])->render();
+    });
+
+    expect($html)
+        ->toContain('6-Month Activity')
+        ->toContain('Dec-2025')
+        ->toContain('May-2026')
+        ->toContain(' to ')
+        ->toContain('stmt-tfoot-pill')
+        ->toContain('stmt-kpi-pill')
+        ->toContain('stmt-balance-pill--success')
+        ->toContain('Fund at period end')
+        ->toContain('.stmt-balance-pill')
+        ->toContain('text-align: center')
+        ->toContain('section-title__meta')
+        ->toContain('Since membership year')
+        ->toContain('Summary as of')
+        ->not->toContain('[Summary as of')
+        ->toContain('table-header-group')
+        ->toContain('stmt-section--keep')
+        ->toContain('page-break-after: avoid')
+        ->toContain('>Date<')
+        ->toContain('2026-05-10')
+        ->toContain('6-Month contributions')
+        ->toContain('6-Month repayments')
+        ->toContain('stmt-progress')
+        ->toContain('stmt-progress__cell')
+        ->toContain('stmt-mini-track')
+        ->toContain('stmt-mini-pct');
+
+    // Green/red pills force a white SAR glyph when the Arabic SVG symbol is used.
+    if (preg_match('/stmt-balance-pill--success[^>]*>[\s\S]*?currency-symbol/', $html) === 1) {
+        expect($html)->toContain(App\Support\Pdf\PdfAssets::sarSymbolDataUri('#ffffff'));
+    }
+    $details['fund_closing'] = -75.5;
+    $statement->details = $details;
+    $negativeHtml = MemberLocale::usingPreferred($this->memberUser, function () use ($statement): string {
+        return view('pdf.monthly-statement', [
+            'statement' => $statement,
+            'cfg' => [
+                'brand' => 'Samman Family Fund',
+                'fund_name' => 'Samman Family Fund',
+                'tagline' => StatementSettings::tagline(),
+                'accent_color' => StatementSettings::accentColor(),
+                'footer_disclaimer' => StatementSettings::footerDisclaimer(),
+                'signature_line' => StatementSettings::signatureLine(),
+                'include_txns' => false,
+                'include_loan' => false,
+            ],
+            'logoDataUri' => null,
+        ])->render();
+    });
+
+    expect($negativeHtml)->toContain('stmt-balance-pill--danger');
+
+    // Arabic SAR uses an SVG img — assert the white glyph data-uri when present in the danger pill.
+    if (preg_match('/stmt-balance-pill--danger[^>]*>[\s\S]*?currency-symbol/', $negativeHtml) === 1) {
+        expect($negativeHtml)->toContain(PdfAssets::sarSymbolDataUri('#ffffff'));
+    }
+});
+
+test('period transactions table includes account column for debit and credit', function () {
+    $statement = app(MonthlyStatementService::class)->generateForMember($this->member, '2026-05');
+    $details = $statement->details ?? [];
+    $details['period_transactions'] = [
+        [
+            'date' => '2026-05-10 12:00:00',
+            'description' => 'Member deposit',
+            'type' => 'credit',
+            'amount' => 500,
+            'account_type' => 'cash',
+        ],
+        [
+            'date' => '2026-05-12 09:00:00',
+            'description' => 'Contribution transfer',
+            'type' => 'debit',
+            'amount' => 250,
+            'account_type' => 'fund',
+        ],
+    ];
+    $statement->details = $details;
+
+    $html = MemberLocale::usingPreferred($this->memberUser, function () use ($statement): string {
+        return view('pdf.monthly-statement', [
+            'statement' => $statement,
+            'cfg' => [
+                'brand' => 'Samman Family Fund',
+                'fund_name' => 'Samman Family Fund',
+                'tagline' => StatementSettings::tagline(),
+                'accent_color' => StatementSettings::accentColor(),
+                'footer_disclaimer' => StatementSettings::footerDisclaimer(),
+                'signature_line' => StatementSettings::signatureLine(),
+                'include_txns' => true,
+                'include_loan' => false,
+            ],
+            'logoDataUri' => null,
+        ])->render();
+    });
+
+    expect($html)
+        ->toContain('Period transactions')
+        ->toContain('>Account<')
+        ->toContain('Cash')
+        ->toContain('Fund')
+        ->toContain('txn-type--credit')
+        ->toContain('txn-type--debit')
+        ->toContain('amount--success')
+        ->toContain('amount--danger')
+        ->toContain('Credit')
+        ->toContain('Debit');
+});
+
+test('monthly statement pdf renders with loans and activity without dompdf table errors', function () {
+    $statement = app(MonthlyStatementService::class)->generateForMember($this->member, '2026-05');
+    $details = $statement->details ?? [];
+    $details['loans'] = [
+        [
+            'id' => 99,
+            'status' => 'active',
+            'amount_approved' => 12000,
+            'amount_disbursed' => 12000,
+            'emi_amount' => 1000,
+            'disbursed_at' => '2026-01-15',
+            'repay_percent' => 33,
+            'installments_total' => 12,
+            'installments_paid' => 4,
+            'outstanding' => 8000,
+        ],
+    ];
+    $statement->details = $details;
+
+    $pdf = DomPdfFactory::loadView('pdf.monthly-statement', [
+        'statement' => $statement,
+        'cfg' => [
+            'brand' => 'Samman Family Fund',
+            'fund_name' => 'Samman Family Fund',
+            'tagline' => StatementSettings::tagline(),
+            'accent_color' => StatementSettings::accentColor(),
+            'footer_disclaimer' => StatementSettings::footerDisclaimer(),
+            'signature_line' => StatementSettings::signatureLine(),
+            'include_txns' => false,
+            'include_loan' => true,
+        ],
+        'logoDataUri' => null,
+        'pdfFont' => StatementSettings::pdfFontFamily('en'),
+    ]);
+
+    expect($pdf->output())->not->toBeEmpty();
 });
 
 test('monthly statement pdf view renders arabic labels for arabic members', function () {
@@ -282,6 +528,8 @@ test('monthly statement pdf view renders arabic labels for arabic members', func
     $details['current_year_months'] = [
         [
             'month' => 5,
+            'year' => 2026,
+            'period' => '2026-05',
             'contributions' => 1000,
             'repayments' => 250,
             'contribution_dates' => ['2026-05-10'],
@@ -290,12 +538,19 @@ test('monthly statement pdf view renders arabic labels for arabic members', func
     ];
     $details['current_year_totals'] = [
         'year' => 2026,
+        'month_count' => 6,
+        'from_period' => '2025-12',
+        'to_period' => '2026-05',
+        'from_year' => 2025,
+        'from_month' => 12,
+        'to_year' => 2026,
+        'to_month' => 5,
         'contributions' => 1000,
         'repayments' => 250,
         'max_activity' => 1000,
     ];
     $details['yearly_history'] = [
-        ['year' => 2026, 'contributions' => 1000, 'repayments' => 250],
+                ['year' => 2026, 'contributions' => 1000, 'repayments' => 250, 'cash_balance' => 100, 'fund_balance' => 800],
     ];
     $statement->details = $details;
 
@@ -322,20 +577,65 @@ test('monthly statement pdf view renders arabic labels for arabic members', func
         ->toContain('direction: rtl')
         ->toContain('text-align: right')
         ->toContain('font-family: Amiri')
+        ->toContain('font-size: 13.5px')
+        ->toContain('font-size: 18px')
+        ->toContain('font-size: 14px')
+        ->toContain('stmt-hero__meta-label')
+        ->toContain('font-weight: 700')
         ->toContain('stmt-hero__copy')
-        ->toContain('stmt-bar-track--end')
+        ->toContain('stmt-hero__meta')
+        ->toContain('stmt-hero__meta-label')
+        ->toContain('stmt-meta--ar')
+        ->toContain('margin-left: auto')
         ->toContain('width="12"')
-        ->toContain('<span dir="ltr">2026</span> — ')
-        ->toContain(' : الفترة')
+        ->toContain('الفترة:')
+        ->toContain('اعتباراً من:')
         ->toContain('كشف حساب شهري')
         ->toContain('صندوق السمان العائلي')
-        ->toContain('ملخص مدى الحياة');
+        ->toContain('ملخص مدى الحياة')
+        ->toContain('الملخص حتى تاريخ')
+        ->toContain('سداد القروض')
+        ->toContain('التحصيل')
+        ->toContain('المساهمات')
+        ->not->toContain('المساهمات مدى الحياة')
+        ->not->toContain('إجمالي سداد القروض')
+        ->not->toContain('إجمالي التحصيل')
+        ->toContain('ملخص حسب السنة')
+        ->toContain('منذ سنة الانتساب')
+        ->not->toContain('[الملخص حتى تاريخ');
 
-    expect(strpos($html, '<span dir="ltr">2026</span> — '))->toBeLessThan(strpos($html, 'نشاط السنة الحالية'));
-    expect(strpos($html, '<span dir="ltr">2026</span>'))->toBeLessThan(strpos($html, ' : الفترة'));
+    expect(strpos($html, '<span dir="ltr">'))->toBeGreaterThan(0);
+    $lifetimeTitlePos = strpos($html, 'ملخص مدى الحياة');
+    $summaryAsOfPos = strpos($html, 'الملخص حتى تاريخ');
+    expect($lifetimeTitlePos)->toBeGreaterThan(0)
+        ->and($summaryAsOfPos)->toBeGreaterThan(0)
+        ->and($summaryAsOfPos)->toBeLessThan($lifetimeTitlePos);
+    expect(preg_match('/<span dir="ltr">\d{4}-\d{2}-\d{2}<\/span> : الملخص حتى تاريخ/', $html))->toBe(1);
+    expect(strpos($html, 'section-title__meta'))->toBeLessThan(strpos($html, 'ملخص حسب السنة'));
+    expect(strpos($html, 'منذ سنة الانتساب'))->toBeLessThan(strpos($html, 'ملخص حسب السنة'));
+    expect($html)->not->toContain('[[ASOF]]')
+        ->toContain('data-table')
+        ->toContain('اعتباراً من')
+        ->toContain('رقم العضو')
+        ->toContain('نشاط 6 أشهر')
+        ->toContain('السنة')
+        ->toContain('إلى')
+        ->toContain('مساهمات 6 أشهر')
+        ->toContain('سداد 6 أشهر')
+        ->not->toContain('stmt-bar-track')
+        ->not->toContain('stmt-inline-totals')
+        ->not->toContain('stmt-year-chart');
+
+    $heroCopyPos = strpos($html, 'stmt-hero__copy');
+    expect($heroCopyPos)->toBeGreaterThan(0);
+    expect(strpos($html, 'stmt-hero__meta-value', $heroCopyPos))
+        ->toBeLessThan(strpos($html, 'الفترة:', $heroCopyPos));
+    expect(strpos($html, '<span dir="ltr">2026</span>', $heroCopyPos))
+        ->toBeLessThan(strpos($html, 'الفترة:', $heroCopyPos));
+    expect(strpos($html, 'نشاط 6 أشهر'))->toBeGreaterThan(0);
 
     expect(strpos($html, 'رصيد الإغلاق'))->toBeLessThan(strpos($html, 'الرصيد الافتتاحي'));
-    expect(strpos($html, 'class="stmt-bar-amount"'))->toBeLessThan(strpos($html, 'class="stmt-bar-caption"'));
+    expect(strpos($html, 'class="stmt-meta__value"'))->toBeLessThan(strpos($html, 'class="stmt-meta__label"'));
 
     $shaped = DomPdfFactory::shapeArabicHtml($html);
 
