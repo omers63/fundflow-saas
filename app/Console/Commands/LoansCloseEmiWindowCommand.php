@@ -23,8 +23,8 @@ class LoansCloseEmiWindowCommand extends Command
         LoanInstallmentCollectionCycleService $emiCycles,
         ContributionCycleService $cycles,
     ): int {
-        if ($this->ensureBatchPostingAllowed() !== self::SUCCESS) {
-            return self::FAILURE;
+        if (! $this->ensureBatchPostingAllowed()) {
+            return self::SUCCESS;
         }
 
         [$month, $year] = $this->resolvePeriod($cycles);

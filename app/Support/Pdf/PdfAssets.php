@@ -19,7 +19,12 @@ final class PdfAssets
             return self::$sarSymbolDataUri;
         }
 
-        $path = resource_path('pdf/assets/sar-symbol.svg');
+        // Cropped viewBox so the glyph sits optically centered in DomPDF image boxes.
+        $path = resource_path('pdf/assets/sar-symbol-pdf.svg');
+
+        if (! is_file($path)) {
+            $path = resource_path('pdf/assets/sar-symbol.svg');
+        }
 
         return self::$sarSymbolDataUri = self::fileDataUri($path, 'image/svg+xml');
     }

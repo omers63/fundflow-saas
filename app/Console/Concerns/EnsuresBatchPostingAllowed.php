@@ -8,16 +8,25 @@ use App\Support\BatchPostingGate;
 
 trait EnsuresBatchPostingAllowed
 {
-    protected function ensureBatchPostingAllowed(): int
+    /**
+     * Whether batch posting may proceed for the current tenant.
+     *
+     * When halted, logs a warning and returns false so callers can soft-skip
+     * with SUCCESS (avoids multi-tenant schedule failures for frozen tenants).
+     */
+    protected function ensureBatchPostingAllowed(): bool
     {
         try {
             app(BatchPostingGate::class)->assertAllowed();
         } catch (\InvalidArgumentException $exception) {
-            $this->error($exception->getMessage());
+            $this->warn($exception->getMessage());
+            $this->warn(__('Skipping :command — batch posting is halted for this tenant.', [
+                'command' => $this->getName() ?? 'command',
+            ]));
 
-            return self::FAILURE;
+            return false;
         }
 
-        return self::SUCCESS;
+        return true;
     }
 }

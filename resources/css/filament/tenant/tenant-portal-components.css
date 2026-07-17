@@ -1285,3 +1285,246 @@ html[dir='rtl'] .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-he
     border-color: rgb(255 255 255 / 0.1);
     background: rgb(255 255 255 / 0.04);
 }
+
+/* ── Loan queue: per-tier cumulative heat meter ── */
+.fi-body.fi-panel-tenant .ff-tier-heat-summary {
+    outline: none;
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__badge--ok {
+    background: color-mix(in oklab, #10b981 16%, white);
+    color: #047857;
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__badge--warning {
+    background: color-mix(in oklab, #f59e0b 18%, white);
+    color: #b45309;
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__badge--danger {
+    background: color-mix(in oklab, #ef4444 18%, white);
+    color: #b91c1c;
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__badge--repaid {
+    background: color-mix(in oklab, #14b8a6 16%, white);
+    color: #0f766e;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-tier-heat__badge--ok {
+    background: rgb(16 185 129 / 0.18);
+    color: #6ee7b7;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-tier-heat__badge--warning {
+    background: rgb(245 158 11 / 0.2);
+    color: #fcd34d;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-tier-heat__badge--danger {
+    background: rgb(239 68 68 / 0.22);
+    color: #fda4af;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-tier-heat__badge--repaid {
+    background: rgb(20 184 166 / 0.2);
+    color: #5eead4;
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__track {
+    position: relative;
+    display: flex;
+    width: 100%;
+    height: 0.7rem;
+    overflow: hidden;
+    border-radius: 9999px;
+    background:
+        linear-gradient(180deg, rgb(255 255 255 / 0.45), transparent 55%),
+        #e5e7eb;
+    box-shadow:
+        inset 0 1px 2px rgb(15 23 42 / 0.08),
+        0 0 0 1px rgb(15 23 42 / 0.04);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-tier-heat__track {
+    background:
+        linear-gradient(180deg, rgb(255 255 255 / 0.06), transparent 55%),
+        #1f2937;
+    box-shadow:
+        inset 0 1px 2px rgb(0 0 0 / 0.35),
+        0 0 0 1px rgb(255 255 255 / 0.05);
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__seg {
+    height: 100%;
+    min-width: 0;
+    transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__seg--running {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(90deg, #fb7185, #ef4444 55%, #dc2626);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.28);
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__repay-fill {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    background: linear-gradient(90deg, #5eead4, #14b8a6 50%, #0d9488);
+    box-shadow:
+        inset 0 1px 0 rgb(255 255 255 / 0.35),
+        1px 0 0 rgb(15 23 42 / 0.08);
+    transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__seg--queued {
+    background: linear-gradient(90deg, #fbbf24, #f59e0b 60%, #d97706);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.28);
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__seg--headroom {
+    background: linear-gradient(90deg, #6ee7b7, #34d399 45%, #10b981);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat[data-tone='danger'] .ff-tier-heat__seg--running,
+.fi-body.fi-panel-tenant .ff-tier-heat[data-tone='danger'] .ff-tier-heat__seg--queued {
+    filter: saturate(1.15);
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__overheat {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+        110deg,
+        transparent 0%,
+        rgb(255 255 255 / 0.18) 40%,
+        transparent 70%
+    );
+    animation: ff-tier-heat-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes ff-tier-heat-pulse {
+    0%,
+    100% {
+        opacity: 0.35;
+    }
+
+    50% {
+        opacity: 0.85;
+    }
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem 0.75rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    min-width: 0;
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    color: #6b7280;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-tier-heat__chip {
+    color: #9ca3af;
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__swatch {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    flex-shrink: 0;
+    align-self: center;
+    box-shadow: 0 0 0 1px rgb(15 23 42 / 0.08);
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__swatch--allocated {
+    background: linear-gradient(135deg, #94a3b8, #64748b);
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__swatch--committed {
+    background: linear-gradient(135deg, #fb7185, #f59e0b);
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__swatch--headroom {
+    background: linear-gradient(135deg, #6ee7b7, #10b981);
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__swatch--repaid {
+    background: linear-gradient(135deg, #5eead4, #0d9488);
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__swatch--outstanding {
+    background: linear-gradient(135deg, #fb7185, #dc2626);
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__chip-label {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.625rem;
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__chip-value {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #111827;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-tier-heat__chip-value {
+    color: #f3f4f6;
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__chip--progress .ff-tier-heat__chip-value {
+    color: #0369a1;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-tier-heat__chip--progress .ff-tier-heat__chip-value {
+    color: #7dd3fc;
+}
+
+.fi-body.fi-panel-tenant .ff-tier-heat__chip--repaid .ff-tier-heat__chip-value {
+    color: #0f766e;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-tier-heat__chip--repaid .ff-tier-heat__chip-value {
+    color: #5eead4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fi-body.fi-panel-tenant .ff-tier-heat__seg,
+    .fi-body.fi-panel-tenant .ff-tier-heat__repay-fill {
+        transition: none;
+    }
+
+    .fi-body.fi-panel-tenant .ff-tier-heat__overheat {
+        animation: none;
+    }
+}

@@ -67,6 +67,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
     /** @var list<int> */
     public array $snapshotBulkSelection = [];
 
+    #[Url(as: 'exception')]
     public ?int $selectedExceptionId = null;
 
     #[Url(as: 'queueDomain')]

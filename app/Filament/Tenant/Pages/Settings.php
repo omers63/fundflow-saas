@@ -1020,6 +1020,23 @@ class Settings extends Page implements HasForms
                             ->label(__('Authorized signature line'))
                             ->maxLength(100),
                     ]),
+                Section::make(__('Statement fonts'))
+                    ->description(__('Typefaces used when generating member statement PDFs. DomPDF embeds the selected font.'))
+                    ->columns(2)
+                    ->schema([
+                        Select::make('statement_font_en')
+                            ->label(__('English statement font'))
+                            ->options(StatementSettings::englishFontOptions())
+                            ->required()
+                            ->native(false)
+                            ->helperText(__('Used when the member preferred language is English.')),
+                        Select::make('statement_font_ar')
+                            ->label(__('Arabic statement font'))
+                            ->options(StatementSettings::arabicFontOptions())
+                            ->required()
+                            ->native(false)
+                            ->helperText(__('Used when the member preferred language is Arabic.')),
+                    ]),
                 Section::make(__('Delivery & content'))
                     ->columns(2)
                     ->schema([

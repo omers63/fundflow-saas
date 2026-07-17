@@ -60,14 +60,14 @@ final class MemberFilamentActions
     }
 
     /**
-     * Grouped header actions on the member edit workspace.
+     * Grouped header actions on the member view workspace.
      *
      * @return list<ActionGroup>
      */
-    public static function forMemberEditHeader(): array
+    public static function forMemberEditHeader(?Action $treasuryLeadingAction = null): array
     {
         return [
-            self::treasuryActionGroup(),
+            self::treasuryActionGroup($treasuryLeadingAction),
             self::communicationsActionGroup(),
             self::membershipStatusActionGroup(),
             self::delinquencyAndAdminActionGroup(),
@@ -150,15 +150,21 @@ final class MemberFilamentActions
         ];
     }
 
-    public static function treasuryActionGroup(): ActionGroup
+    public static function treasuryActionGroup(?Action $leadingAction = null): ActionGroup
     {
-        return ActionGroup::make([
+        $actions = [
             self::contribute(),
             self::repayment(),
             self::adjustCash(),
             self::adjustFund(),
             self::cashOutFund(),
-        ])
+        ];
+
+        if ($leadingAction !== null) {
+            array_unshift($actions, $leadingAction);
+        }
+
+        return ActionGroup::make($actions)
             ->label(__('Treasury'))
             ->icon('heroicon-o-banknotes')
             ->color('success');

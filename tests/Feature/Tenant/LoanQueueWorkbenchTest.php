@@ -327,6 +327,15 @@ test('tier queues tab renders pool figures, queued loans, and running loans with
         ->assertSee($this->member->name)
         ->assertSee('Running Borrower')
         ->assertSee(__('Running — in repayment'))
+        ->assertSee(__('Allocated'))
+        ->assertSee(__('Committed'))
+        ->assertSee(__('Headroom'))
+        ->assertSee(__('Progress'))
+        ->assertSee(__('Repaid'))
+        ->assertSee(__('Outstanding'))
+        ->assertSee(__(':percent% repaid', ['percent' => 50]))
+        ->assertSeeHtml('ff-tier-heat')
+        ->assertSeeHtml('ff-tier-heat__repay-fill')
         ->assertSeeHtml('bg-teal-500');
 });
 
@@ -346,7 +355,7 @@ test('intake and process queue tables expose money column summary footers', func
 
     $intake = Livewire::test(LoanQueueWorkbenchPage::class)->assertSuccessful();
     $requested = collect($intake->instance()->getTable()->getColumns())
-        ->first(fn($column) => $column->getName() === 'amount_requested');
+        ->first(fn ($column) => $column->getName() === 'amount_requested');
 
     expect($requested)->not->toBeNull()
         ->and($requested->getSummarizers())->toHaveCount(1)
@@ -357,8 +366,8 @@ test('intake and process queue tables expose money column summary footers', func
         ->assertSuccessful();
 
     $columns = collect($process->instance()->getTable()->getColumns());
-    $approved = $columns->first(fn($column) => $column->getName() === 'amount_approved');
-    $remaining = $columns->first(fn($column) => $column->getName() === 'remaining_to_disburse');
+    $approved = $columns->first(fn ($column) => $column->getName() === 'amount_approved');
+    $remaining = $columns->first(fn ($column) => $column->getName() === 'remaining_to_disburse');
 
     expect($approved->getSummarizers())->toHaveCount(1)
         ->and($approved->getSummarizers()[0]->getLabel())->toBe(__('Approved'))

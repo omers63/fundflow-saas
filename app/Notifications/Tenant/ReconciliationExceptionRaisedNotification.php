@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Notifications\Tenant;
 
-use App\Filament\Tenant\Resources\ReconciliationExceptions\ReconciliationExceptionResource;
+use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Models\Tenant\ReconciliationException;
 use App\Notifications\Concerns\DeliversToAdminChannels;
 use App\Support\TenantAbsoluteUrl;
@@ -62,7 +62,10 @@ class ReconciliationExceptionRaisedNotification extends Notification
 
     protected function reviewUrl(): string
     {
-        $url = ReconciliationExceptionResource::getUrl('edit', ['record' => $this->exception], panel: 'tenant');
+        $url = ReconciliationOverviewPage::getUrl([
+            'sideTab' => 'exceptions',
+            'exception' => $this->exception->getKey(),
+        ], panel: 'tenant');
 
         return TenantAbsoluteUrl::resolve($url);
     }

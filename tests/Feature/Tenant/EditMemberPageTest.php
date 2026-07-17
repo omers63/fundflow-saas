@@ -18,6 +18,8 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\MemberWorkspaceSummaryService;
+use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
@@ -74,6 +76,82 @@ test('view member workspace shows inline summary and grouped header actions', fu
         ->assertSee(__('Edit profile'))
         ->assertSee(__('Loans'))
         ->assertSee(__('Messages'));
+});
+
+test('view member places allocate as the first treasury header action', function () {
+    $admin = User::create([
+        'name' => 'Allocate Header Admin',
+        'email' => 'admin-allocate-header@test.com',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $parent = Member::create([
+        'user_id' => User::create([
+            'name' => 'Allocate Parent',
+            'email' => 'allocate-parent@fund.test',
+            'password' => bcrypt('password'),
+            'email_verified_at' => now(),
+            'is_admin' => false,
+        ])->id,
+        'member_number' => 'MEM-ALLOC-HEAD',
+        'name' => 'Allocate Parent',
+        'email' => 'allocate-parent@fund.test',
+        'household_email' => 'allocate-parent@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    Member::create([
+        'parent_member_id' => $parent->id,
+        'member_number' => 'MEM-ALLOC-DEP',
+        'name' => 'Allocate Dependent',
+        'email' => 'allocate-parent@fund.test',
+        'household_email' => 'allocate-parent@fund.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($parent);
+
+    Filament::setCurrentPanel('tenant');
+
+    $component = Livewire::actingAs($admin, 'tenant')
+        ->test(ViewMember::class, ['record' => $parent->getRouteKey()])
+        ->assertSuccessful();
+
+    $headerActions = collect($component->instance()->getCachedHeaderActions());
+
+    $topLevelActionNames = $headerActions
+        ->filter(fn ($action): bool => $action instanceof Action)
+        ->map(fn (Action $action): string => $action->getName())
+        ->all();
+
+    expect($topLevelActionNames)->not->toContain('allocateDependents');
+
+    $treasury = $headerActions->first(
+        fn ($action) => $action instanceof ActionGroup
+            && $action->getLabel() === __('Treasury'),
+    );
+
+    expect($treasury)->not->toBeNull();
+
+    $treasuryNames = collect($treasury->getActions())
+        ->map(fn (Action $action): string => $action->getName())
+        ->values()
+        ->all();
+
+    expect($treasuryNames[0])->toBe('allocateDependents')
+        ->and($treasuryNames)->toContain(
+            'contributeMember',
+            'memberLoanRepayment',
+            'adjustMemberCash',
+            'adjustMemberFund',
+            'cashOutMemberFund',
+        );
 });
 
 test('edit member can assign household parent for independent member with unique email', function () {

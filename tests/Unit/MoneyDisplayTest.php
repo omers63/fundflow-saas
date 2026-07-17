@@ -169,6 +169,19 @@ it('renders pdf amounts with embedded sar glyph image in arabic', function (): v
         ->toContain('1,500.00');
 });
 
+it('renders signed pdf amounts with an explicit plus or minus prefix', function (): void {
+    app()->setLocale('en');
+
+    expect(MoneyDisplay::pdfHtml(1250.5, 'SAR', signed: true)?->toHtml())
+        ->toContain('+1,250.50')
+        ->and(MoneyDisplay::pdfHtml(-1250.5, 'SAR', signed: true)?->toHtml())
+        ->toContain('−1,250.50')
+        ->and(MoneyDisplay::pdfHtml(0, 'SAR', signed: true)?->toHtml())
+        ->toContain('>0.00<')
+        ->not->toContain('+0.00')
+        ->not->toContain('−0.00');
+});
+
 it('formats compact amounts with symbol before digits in arabic', function (): void {
     app()->setLocale('ar');
 

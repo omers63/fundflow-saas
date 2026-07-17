@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Support\Pdf;
 
+use App\Support\StatementSettings;
 use ArPHP\I18N\Arabic;
 use Barryvdh\DomPDF\Facade\Pdf as PdfFacade;
 use Barryvdh\DomPDF\PDF as DomPdfDocument;
+use Dompdf\Dompdf;
 
 final class DomPdfFactory
 {
@@ -21,11 +23,13 @@ final class DomPdfFactory
     ): DomPdfDocument {
         $html = view($view, $data)->render();
 
-        if (app()->getLocale() === 'ar') {
-            $html = self::shapeArabicHtml($html);
-        }
+        // Always shape Arabic glyphs when present — English PDFs may still include Arabic names.
+        $html = self::shapeArabicHtml($html);
 
-        return PdfFacade::loadHTML($html)->setPaper($paper, $orientation);
+        $pdf = PdfFacade::loadHTML($html)->setPaper($paper, $orientation);
+        self::ensureCustomFontsRegistered($pdf->getDomPDF());
+
+        return $pdf;
     }
 
     public static function shapeArabicHtml(string $html): string
@@ -67,5 +71,28 @@ final class DomPdfFactory
         }
 
         return $html;
+    }
+
+    public static function ensureCustomFontsRegistered(Dompdf $dompdf): void
+    {
+        $amiri = StatementSettings::customFontPath(StatementSettings::FONT_AMIRI);
+
+        if ($amiri === null) {
+            return;
+        }
+
+        $metrics = $dompdf->getFontMetrics();
+        $fileUri = 'file://'.$amiri;
+
+        foreach (['normal', 'bold'] as $weight) {
+            $metrics->registerFont(
+                [
+                    'family' => 'Amiri',
+                    'style' => 'normal',
+                    'weight' => $weight,
+                ],
+                $fileUri,
+            );
+        }
     }
 }

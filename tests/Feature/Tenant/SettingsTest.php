@@ -76,6 +76,8 @@ test('statement and communication settings persist from form state', function ()
         'statement_include_transactions' => false,
         'statement_include_loan_section' => true,
         'statement_include_compliance' => false,
+        'statement_font_en' => StatementSettings::FONT_DEJAVU_SERIF,
+        'statement_font_ar' => StatementSettings::FONT_AMIRI,
     ]);
 
     CommunicationSettings::saveFromForm([
@@ -86,6 +88,10 @@ test('statement and communication settings persist from form state', function ()
     expect(StatementSettings::brandName())->toBe('Acme Fund')
         ->and(StatementSettings::autoEmail())->toBeTrue()
         ->and(StatementSettings::includeTransactions())->toBeFalse()
+        ->and(StatementSettings::englishFont())->toBe(StatementSettings::FONT_DEJAVU_SERIF)
+        ->and(StatementSettings::arabicFont())->toBe(StatementSettings::FONT_AMIRI)
+        ->and(StatementSettings::pdfFontFamily('en'))->toBe('DejaVu Serif')
+        ->and(StatementSettings::pdfFontFamily('ar'))->toBe('Amiri')
         ->and(CommunicationSettings::inAppEnabled())->toBeFalse()
         ->and(CommunicationSettings::emailEnabled())->toBeTrue();
 });

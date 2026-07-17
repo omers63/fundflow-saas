@@ -116,8 +116,9 @@ class ViewMember extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            $this->buildMemberAllocateDependentsAction(),
-            ...MemberFilamentActions::forMemberEditHeader(),
+            ...MemberFilamentActions::forMemberEditHeader(
+                $this->buildMemberAllocateDependentsAction(),
+            ),
             EditAction::make()
                 ->label(__('Edit profile')),
         ];

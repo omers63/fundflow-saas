@@ -1,7 +1,7 @@
 @php
-    $isArabic = $isArabic ?? app()->getLocale() === 'ar';
-    $accent = $accent ?? '#534ab7';
-    $logoDataUri = $logoDataUri ?? null;
+$isArabic = $isArabic ?? app()->getLocale() === 'ar';
+$accent = $accent ?? '#534ab7';
+$logoDataUri = $logoDataUri ?? null;
 @endphp
 <style>
     @page {
@@ -12,18 +12,18 @@
         box-sizing: border-box;
     }
 
+    html {
+        direction: {{ $isArabic ? 'rtl' : 'ltr' }};
+    }
+
     body {
-        font-family: DejaVu Sans, sans-serif;
+        font-family: {{ $pdfFont ?? 'DejaVu Sans' }}, sans-serif;
         font-size: 11px;
         line-height: 1.45;
         color: #1e293b;
         margin: 0;
-        direction:
-            {{ $isArabic ? 'rtl' : 'ltr' }}
-        ;
-        text-align:
-            {{ $isArabic ? 'right' : 'left' }}
-        ;
+        direction: {{ $isArabic ? 'rtl' : 'ltr' }};
+        text-align: {{ $isArabic ? 'right' : 'left' }};
     }
 
     .doc-header {
@@ -82,12 +82,11 @@
     .section-title {
         font-size: 13px;
         font-weight: 700;
-        color:
-            {{ $accent }}
-        ;
+        color: {{ $accent }};
         margin: 22px 0 10px;
         padding-bottom: 5px;
         border-bottom: 1px solid #e2e8f0;
+        text-align: {{ $isArabic ? 'right' : 'left' }};
     }
 
     .member-line {
@@ -156,18 +155,14 @@
         width: 100%;
         border-collapse: collapse;
         margin-top: 4px;
-        direction:
-            {{ $isArabic ? 'rtl' : 'ltr' }}
-        ;
+        direction: ltr;
     }
 
     .data-table th,
     .data-table td {
         border: 1px solid #e2e8f0;
         padding: 7px 9px;
-        text-align:
-            {{ $isArabic ? 'right' : 'left' }}
-        ;
+        text-align: {{ $isArabic ? 'right' : 'left' }};
         vertical-align: middle;
     }
 
@@ -202,38 +197,67 @@
         border-top: 1px solid #e2e8f0;
         color: #94a3b8;
         font-size: 9px;
-        text-align:
-            {{ $isArabic ? 'right' : 'left' }}
-        ;
+        text-align: {{ $isArabic ? 'right' : 'left' }};
     }
 
     .amount {
+        display: inline-table;
+        border-collapse: collapse;
+        border-spacing: 0;
         direction: ltr;
-        unicode-bidi: isolate;
-        display: inline-block;
+        vertical-align: middle;
+        line-height: 1;
+    }
+
+    .amount td,
+    .stmt-meta .amount td,
+    .stmt-kpi .amount td,
+    .data-table .amount td,
+    .stmt-bar-amount .amount td,
+    .stmt-inline-totals .amount td {
+        border: 0 !important;
+        margin: 0;
+        vertical-align: middle !important;
+        background: transparent !important;
+    }
+
+    .amount td.amount-symbol,
+    .stmt-meta .amount td.amount-symbol,
+    .stmt-kpi .amount td.amount-symbol,
+    .data-table .amount td.amount-symbol {
+        padding: 0 6px 0 0 !important;
+        line-height: 0 !important;
+        width: 1%;
         white-space: nowrap;
     }
 
-    .amount-inner {
-        display: inline-block;
-        direction: ltr;
-        unicode-bidi: isolate;
+    .amount td.amount-digits,
+    .stmt-meta .amount td.amount-digits,
+    .stmt-kpi .amount td.amount-digits,
+    .data-table .amount td.amount-digits {
+        padding: 0 !important;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+        line-height: 12px;
+        white-space: nowrap;
     }
 
     .currency-symbol {
-        vertical-align: -1px;
-        margin-{{ $isArabic ? 'left' : 'right' }}: 1px;
+        display: block;
+        width: 12px;
+        height: 12px;
+        margin: 0;
+        padding: 0;
+        vertical-align: middle;
     }
 
     .currency-code {
-        font-size: 9px;
+        font-size: 11px;
         font-weight: 700;
         letter-spacing: 0.04em;
-    }
-
-    .amount-digits {
-        font-weight: 700;
-        font-variant-numeric: tabular-nums;
+        vertical-align: middle;
+        line-height: 12px;
     }
 
     .muted {

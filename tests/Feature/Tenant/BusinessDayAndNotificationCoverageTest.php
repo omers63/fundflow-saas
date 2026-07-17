@@ -91,7 +91,7 @@ test('critical reconciliation exceptions notify admins immediately', function ()
         'is_admin' => true,
     ]);
 
-    app(ReconciliationService::class)->raise(
+    $exception = app(ReconciliationService::class)->raise(
         'MASTER_CASH_POOL_DRIFT',
         'master_cash',
         'critical',
@@ -99,7 +99,19 @@ test('critical reconciliation exceptions notify admins immediately', function ()
         ['member_id' => 1],
     );
 
-    Notification::assertSentTo($admin, ReconciliationExceptionRaisedNotification::class);
+    Notification::assertSentTo($admin, ReconciliationExceptionRaisedNotification::class, function (ReconciliationExceptionRaisedNotification $notification) use ($exception): bool {
+        $payload = $notification->toDatabase($notification->exception->assignee ?? new User);
+        $actions = $payload['actions'] ?? [];
+        $url = collect($actions)->first()['url'] ?? null;
+
+        expect($url)
+            ->toBeString()
+            ->toContain('reconciliation')
+            ->toContain('sideTab=exceptions')
+            ->toContain('exception='.$exception->id);
+
+        return true;
+    });
 });
 
 test('support request days open uses configured business day', function () {

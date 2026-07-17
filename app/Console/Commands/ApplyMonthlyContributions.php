@@ -21,8 +21,8 @@ class ApplyMonthlyContributions extends Command
 
     public function handle(ContributionCycleService $cycles): int
     {
-        if ($this->ensureBatchPostingAllowed() !== self::SUCCESS) {
-            return self::FAILURE;
+        if (! $this->ensureBatchPostingAllowed()) {
+            return self::SUCCESS;
         }
         $month = $this->option('month') ? (int) $this->option('month') : null;
         $year = $this->option('year') ? (int) $this->option('year') : null;

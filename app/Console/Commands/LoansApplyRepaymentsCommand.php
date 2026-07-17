@@ -21,8 +21,8 @@ class LoansApplyRepaymentsCommand extends Command
 
     public function handle(LoanRepaymentService $repayments, ContributionCycleService $cycle): int
     {
-        if ($this->ensureBatchPostingAllowed() !== self::SUCCESS) {
-            return self::FAILURE;
+        if (! $this->ensureBatchPostingAllowed()) {
+            return self::SUCCESS;
         }
         if ($this->option('month') && $this->option('year')) {
             $month = (int) $this->option('month');

@@ -10,6 +10,14 @@ final class StatementSettings
 {
     public const GROUP = 'statement';
 
+    public const FONT_DEJAVU_SANS = 'dejavu_sans';
+
+    public const FONT_DEJAVU_SERIF = 'dejavu_serif';
+
+    public const FONT_DEJAVU_SANS_MONO = 'dejavu_sans_mono';
+
+    public const FONT_AMIRI = 'amiri';
+
     /**
      * @return array<string, mixed>
      */
@@ -25,6 +33,36 @@ final class StatementSettings
             'include_transactions' => true,
             'include_loan_section' => true,
             'include_compliance' => false,
+            'font_en' => self::FONT_DEJAVU_SANS,
+            'font_ar' => self::FONT_DEJAVU_SANS,
+        ];
+    }
+
+    /**
+     * DomPDF-safe English statement typefaces.
+     *
+     * @return array<string, string>
+     */
+    public static function englishFontOptions(): array
+    {
+        return [
+            self::FONT_DEJAVU_SANS => __('DejaVu Sans (default)'),
+            self::FONT_DEJAVU_SERIF => __('DejaVu Serif'),
+            self::FONT_DEJAVU_SANS_MONO => __('DejaVu Sans Mono'),
+        ];
+    }
+
+    /**
+     * DomPDF-safe Arabic statement typefaces (Unicode + glyph shaping).
+     *
+     * @return array<string, string>
+     */
+    public static function arabicFontOptions(): array
+    {
+        return [
+            self::FONT_DEJAVU_SANS => __('DejaVu Sans (default)'),
+            self::FONT_DEJAVU_SERIF => __('DejaVu Serif'),
+            self::FONT_AMIRI => __('Amiri (traditional Arabic)'),
         ];
     }
 
@@ -53,6 +91,8 @@ final class StatementSettings
             'statement_include_transactions' => (bool) ($all['include_transactions'] ?? true),
             'statement_include_loan_section' => (bool) ($all['include_loan_section'] ?? true),
             'statement_include_compliance' => (bool) ($all['include_compliance'] ?? false),
+            'statement_font_en' => self::englishFont(),
+            'statement_font_ar' => self::arabicFont(),
         ];
     }
 
@@ -101,6 +141,59 @@ final class StatementSettings
         return (bool) self::get('include_compliance', false);
     }
 
+    public static function englishFont(): string
+    {
+        $font = (string) self::get('font_en', self::FONT_DEJAVU_SANS);
+
+        return array_key_exists($font, self::englishFontOptions())
+            ? $font
+            : self::FONT_DEJAVU_SANS;
+    }
+
+    public static function arabicFont(): string
+    {
+        $font = (string) self::get('font_ar', self::FONT_DEJAVU_SANS);
+
+        return array_key_exists($font, self::arabicFontOptions())
+            ? $font
+            : self::FONT_DEJAVU_SANS;
+    }
+
+    /**
+     * CSS font-family for DomPDF body text for the given (or current) locale.
+     */
+    public static function pdfFontFamily(?string $locale = null): string
+    {
+        $locale ??= app()->getLocale();
+        $key = $locale === 'ar' ? self::arabicFont() : self::englishFont();
+
+        return self::fontFamilyCss($key);
+    }
+
+    public static function fontFamilyCss(string $fontKey): string
+    {
+        return match ($fontKey) {
+            self::FONT_DEJAVU_SERIF => 'DejaVu Serif',
+            self::FONT_DEJAVU_SANS_MONO => 'DejaVu Sans Mono',
+            self::FONT_AMIRI => 'Amiri',
+            default => 'DejaVu Sans',
+        };
+    }
+
+    /**
+     * Absolute path to a custom TTF when DomPDF must register it, otherwise null.
+     */
+    public static function customFontPath(string $fontKey): ?string
+    {
+        if ($fontKey !== self::FONT_AMIRI) {
+            return null;
+        }
+
+        $path = resource_path('fonts/pdf/Amiri-Regular.ttf');
+
+        return is_file($path) ? $path : null;
+    }
+
     /**
      * @param  array<string, mixed>  $state
      */
@@ -120,6 +213,20 @@ final class StatementSettings
         Setting::set(self::GROUP, 'include_transactions', (bool) ($state['statement_include_transactions'] ?? true));
         Setting::set(self::GROUP, 'include_loan_section', (bool) ($state['statement_include_loan_section'] ?? true));
         Setting::set(self::GROUP, 'include_compliance', (bool) ($state['statement_include_compliance'] ?? false));
+
+        $fontEn = (string) ($state['statement_font_en'] ?? self::FONT_DEJAVU_SANS);
+        Setting::set(
+            self::GROUP,
+            'font_en',
+            array_key_exists($fontEn, self::englishFontOptions()) ? $fontEn : self::FONT_DEJAVU_SANS,
+        );
+
+        $fontAr = (string) ($state['statement_font_ar'] ?? self::FONT_DEJAVU_SANS);
+        Setting::set(
+            self::GROUP,
+            'font_ar',
+            array_key_exists($fontAr, self::arabicFontOptions()) ? $fontAr : self::FONT_DEJAVU_SANS,
+        );
     }
 
     private static function get(string $key, mixed $default): mixed

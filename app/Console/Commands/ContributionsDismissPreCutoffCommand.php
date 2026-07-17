@@ -19,8 +19,8 @@ class ContributionsDismissPreCutoffCommand extends Command
 
     public function handle(ContributionCollectionCycleService $collection): int
     {
-        if ($this->ensureBatchPostingAllowed() !== self::SUCCESS) {
-            return self::FAILURE;
+        if (! $this->ensureBatchPostingAllowed()) {
+            return self::SUCCESS;
         }
 
         $memberId = $this->argument('member_id');

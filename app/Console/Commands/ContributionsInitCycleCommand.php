@@ -19,8 +19,8 @@ class ContributionsInitCycleCommand extends Command
 
     public function handle(ContributionCollectionCycleService $collection, ContributionCycleService $cycles): int
     {
-        if ($this->ensureBatchPostingAllowed() !== self::SUCCESS) {
-            return self::FAILURE;
+        if (! $this->ensureBatchPostingAllowed()) {
+            return self::SUCCESS;
         }
         [$month, $year] = $this->resolvePeriod($cycles);
         $created = $collection->initializeOpenPeriod($month, $year);

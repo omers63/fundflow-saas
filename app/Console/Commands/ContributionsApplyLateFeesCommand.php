@@ -19,8 +19,8 @@ class ContributionsApplyLateFeesCommand extends Command
 
     public function handle(ContributionCollectionCycleService $collection): int
     {
-        if ($this->ensureBatchPostingAllowed() !== self::SUCCESS) {
-            return self::FAILURE;
+        if (! $this->ensureBatchPostingAllowed()) {
+            return self::SUCCESS;
         }
         $contributions = $collection->applyNightlyLateFees();
         $installments = app(LoanInstallmentLateFeeService::class)->applyNightlyLateFees();

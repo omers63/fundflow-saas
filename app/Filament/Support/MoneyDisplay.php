@@ -227,6 +227,7 @@ final class MoneyDisplay
         float|int|string|null $amount,
         ?string $currency = null,
         int $precision = 2,
+        bool $signed = false,
     ): ?HtmlString {
         $digits = self::amount($amount, $precision);
 
@@ -234,21 +235,32 @@ final class MoneyDisplay
             return null;
         }
 
+        if ($signed) {
+            $value = (float) $amount;
+            $digits = ($value > 0 ? '+' : ($value < 0 ? '−' : '')) . $digits;
+        }
+
         $currencyCode = $currency ?? Setting::get('general', 'currency', 'USD');
         $symbol = self::symbol($currencyCode);
 
         if ($currencyCode === 'SAR' || str_contains($symbol, "\u{20C1}")) {
             $symbolMarkup = self::usesSvgSymbol($currencyCode)
-                ? self::sarSymbolImageMarkup('currency-symbol', width: 11, height: 11)
+                ? self::sarSymbolImageMarkup('currency-symbol', width: 12, height: 12)
                 : '<span class="currency-code">SAR</span>';
         } else {
             $symbolMarkup = '<span class="currency-code">'.e($symbol).'</span>';
         }
 
         return new HtmlString(
-            '<span class="amount" dir="ltr"><span class="amount-inner">'
-            .$symbolMarkup.' <span class="amount-digits">'.$digits.'</span>'
-            .'</span></span>'
+            '<table class="amount" dir="ltr" border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-spacing:0;direction:ltr;vertical-align:middle;">'
+            . '<tr>'
+            . '<td class="amount-symbol" style="border:0;padding:0 6px 0 0;margin:0;vertical-align:middle;line-height:0;background:transparent;">'
+            . $symbolMarkup
+            . '</td>'
+            . '<td class="amount-digits" style="border:0;padding:0;margin:0;vertical-align:middle;font-weight:700;font-size:12px;line-height:12px;white-space:nowrap;background:transparent;">'
+            . $digits
+            . '</td>'
+            . '</tr></table>'
         );
     }
 

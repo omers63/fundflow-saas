@@ -18,8 +18,8 @@ class BankAutoMatchCommand extends Command
 
     public function handle(BankClearingMatchService $matching): int
     {
-        if ($this->ensureBatchPostingAllowed() !== self::SUCCESS) {
-            return self::FAILURE;
+        if (! $this->ensureBatchPostingAllowed()) {
+            return self::SUCCESS;
         }
         $stats = $matching->autoMatchImportedLines();
 
