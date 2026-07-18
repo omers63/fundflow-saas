@@ -72,13 +72,14 @@ test('member contribution settings shows request larger cycle amount when unpaid
         ->assertSee(__('Larger amount for this cycle only?'), false);
 });
 
-test('member settings contributions tab exposes request larger cycle amount action', function () {
+test('member settings contributions tab offers larger cycle amount in the tab body not the header', function () {
     app()->setLocale('en');
 
     Livewire::test(MemberSettingsPage::class)
         ->set('activeTab', 'contributions')
         ->assertSuccessful()
-        ->assertActionVisible('requestOpenCycleAmount')
+        ->assertActionExists('requestOpenCycleAmount')
+        ->assertSee(__('Larger amount for this cycle only?'), false)
         ->assertSee(__('Request larger cycle amount'), false);
 });
 

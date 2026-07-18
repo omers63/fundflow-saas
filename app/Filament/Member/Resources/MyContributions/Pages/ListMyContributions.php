@@ -5,10 +5,15 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyContributions\Pages;
 
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
-use App\Filament\Member\Widgets\MyContributionsInsightsWidget;
 use App\Filament\Support\MemberContributionFilamentActions;
+use App\Services\MemberContributionInsightsService;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\RenderHook;
+use Filament\Schemas\Components\View as SchemaView;
+use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
+use Filament\View\PanelsRenderHook;
 
 class ListMyContributions extends ListRecords
 {
@@ -29,19 +34,17 @@ class ListMyContributions extends ListRecords
         return __('Track your monthly cycles, posting status, cash readiness, and payment history.');
     }
 
-    /**
-     * @return array<class-string>
-     */
-    protected function getHeaderWidgets(): array
+    public function content(Schema $schema): Schema
     {
-        return [
-            MyContributionsInsightsWidget::class,
-        ];
-    }
-
-    public function getHeaderWidgetsColumns(): int|array
-    {
-        return 1;
+        return $schema->components([
+            SchemaView::make('filament.member.partials.my-contributions-stats')
+                ->viewData(fn (): array => [
+                    'cards' => app(MemberContributionInsightsService::class)->statCards(),
+                ]),
+            RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
+            EmbeddedTable::make(),
+            RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
+        ]);
     }
 
     protected function getHeaderActions(): array

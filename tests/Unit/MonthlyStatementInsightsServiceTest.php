@@ -5,9 +5,8 @@ use App\Models\Tenant\MonthlyStatement;
 use App\Services\MonthlyStatementInsightsService;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
@@ -49,6 +48,8 @@ test('insights snapshot aggregates monthly statement delivery metrics', function
         ->and($snapshot['pending_notify'])->toBe(1)
         ->and($snapshot['notified'])->toBe(1)
         ->and($snapshot['latest_period']['count'])->toBe(2)
+        ->and($snapshot['latest_period']['notify_rate'])->toBe(50)
+        ->and($snapshot['filter_urls']['unsent'])->toContain('notified')
         ->and($snapshot['trend'])->toHaveCount(6)
         ->and($snapshot['sparkline'])->toHaveCount(8)
         ->and($snapshot['unnotified_queue'])->not->toBeEmpty();

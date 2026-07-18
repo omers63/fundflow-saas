@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\MemberRequests\Pages;
 
+use App\Filament\Concerns\RefreshesResourceRecord;
 use App\Filament\Support\MemberFilamentActions;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Tenant\Resources\MemberRequests\MemberRequestResource;
@@ -23,6 +24,8 @@ use Illuminate\Validation\ValidationException;
 
 class ViewMemberRequest extends ViewRecord
 {
+    use RefreshesResourceRecord;
+
     protected static string $resource = MemberRequestResource::class;
 
     public function getTitle(): string

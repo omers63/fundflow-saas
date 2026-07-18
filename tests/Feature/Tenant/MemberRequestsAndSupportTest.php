@@ -119,7 +119,7 @@ test('member can submit support request and household request from support page'
     Notification::assertSentTo(
         $this->admin,
         NewSupportRequestNotification::class,
-        fn(NewSupportRequestNotification $notification, array $channels): bool => in_array('database', $channels, true)
+        fn (NewSupportRequestNotification $notification, array $channels): bool => in_array('database', $channels, true)
         && in_array(WebPushChannel::class, $channels, true),
     );
 
@@ -135,7 +135,7 @@ test('member can submit support request and household request from support page'
     Notification::assertSentTo(
         $this->admin,
         NewMemberRequestNotification::class,
-        fn(NewMemberRequestNotification $notification, array $channels): bool => in_array('database', $channels, true)
+        fn (NewMemberRequestNotification $notification, array $channels): bool => in_array('database', $channels, true)
         && in_array(WebPushChannel::class, $channels, true),
     );
 });
@@ -244,4 +244,24 @@ test('member requests list opens view page on row click without row actions colu
         ->assertSuccessful()
         ->assertSee(__('Approve'))
         ->assertSee('Add dependent from list test.');
+});
+
+test('view member request reject action refreshes the record without error', function () {
+    $request = MemberRequest::query()->create([
+        'requester_member_id' => $this->member->id,
+        'type' => MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION,
+        'status' => MemberRequest::STATUS_PENDING,
+        'payload' => ['amount' => 5000],
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+
+    Livewire::actingAs($this->admin, 'tenant')
+        ->test(ViewMemberRequest::class, ['record' => $request->getRouteKey()])
+        ->assertSuccessful()
+        ->callAction('reject', ['admin_note' => 'Not this cycle.'])
+        ->assertNotified();
+
+    expect($request->fresh()->status)->toBe(MemberRequest::STATUS_REJECTED)
+        ->and($request->fresh()->admin_note)->toBe('Not this cycle.');
 });

@@ -10,7 +10,9 @@ use Filament\Http\Middleware\AuthenticateSession as FilamentAuthenticateSession;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -37,6 +39,23 @@ return Application::configure(basePath: dirname(__DIR__))
         }
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->redirectGuestsTo(function (Request $request): string {
+            if (function_exists('tenancy') && tenancy()->initialized) {
+                if ($request->is('admin', 'admin/*')) {
+                    return Route::has('filament.tenant.auth.login')
+                        ? route('filament.tenant.auth.login')
+                        : url('/admin/login');
+                }
+
+                return Route::has('filament.member.auth.login')
+                    ? route('filament.member.auth.login')
+                    : url('/member/login');
+            }
+
+            return Route::has('filament.admin.auth.login')
+                ? route('filament.admin.auth.login')
+                : url('/admin/login');
+        });
         $middleware->prepend(InitializeTenancyByDomainEarly::class);
         $middleware->web(replace: [
             StartSession::class => StartWallClockSession::class,

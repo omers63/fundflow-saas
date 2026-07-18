@@ -6,7 +6,6 @@ use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Member\Resources\MyContributions\Pages\ListMyContributions;
 use App\Filament\Member\Resources\MyContributions\Tables\MyContributionsTable;
 use App\Filament\Member\Support\MemberNavigation;
-use App\Filament\Member\Widgets\MyContributionsInsightsWidget;
 use App\Models\Tenant\Contribution;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -78,13 +77,7 @@ class MyContributionResource extends Resource
             return;
         }
 
-        $targetName = json_encode(
-            app('livewire.factory')->resolveComponentName(MyContributionsInsightsWidget::class),
-            JSON_THROW_ON_ERROR
-        );
-
-        $livewire->js(
-            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
-        );
+        // Stats render in the list page header (not a nested Livewire widget), so refresh the page.
+        $livewire->js('setTimeout(() => $wire.$refresh(), 0)');
     }
 }

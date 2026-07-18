@@ -20,8 +20,15 @@ class MonthlyStatementNotification extends Notification
     use DeliversToMemberChannels;
     use Queueable;
 
+    public const DELIVERY_DEFAULT = 'default';
+
+    public const DELIVERY_NOTIFY = 'notify';
+
+    public const DELIVERY_EMAIL = 'email';
+
     public function __construct(
         public MonthlyStatement $statement,
+        public string $delivery = self::DELIVERY_DEFAULT,
     ) {}
 
     /**
@@ -30,6 +37,17 @@ class MonthlyStatementNotification extends Notification
     public function via(object $notifiable): array
     {
         $channels = MemberNotificationChannels::resolve($notifiable);
+
+        if ($this->delivery === self::DELIVERY_EMAIL) {
+            return in_array('mail', $channels, true) ? ['mail'] : [];
+        }
+
+        if ($this->delivery === self::DELIVERY_NOTIFY) {
+            return array_values(array_filter(
+                $channels,
+                fn (string $channel): bool => $channel !== 'mail',
+            ));
+        }
 
         if (! StatementSettings::autoEmail()) {
             return array_values(array_filter(

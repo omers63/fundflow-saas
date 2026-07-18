@@ -35,6 +35,8 @@ test('landing page shows shared public navigation and footer', function () {
         ->assertSee(__('Monthly Statements', locale: 'ar'), false)
         ->assertSee(__('Smart Notifications', locale: 'ar'), false)
         ->assertSee(__('Admin dashboard & transparent accounting', locale: 'ar'), false)
+        ->assertDontSee('Managed in', false)
+        ->assertDontSee('يُدار بـ', false)
         ->assertDontSee('>Transparent Accounting<', false);
 });
 

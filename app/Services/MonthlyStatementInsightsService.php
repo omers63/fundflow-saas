@@ -54,9 +54,31 @@ final class MonthlyStatementInsightsService
             ->selectRaw('
                 COALESCE(SUM(total_contributions), 0) as contrib_sum,
                 COALESCE(SUM(total_repayments), 0) as repay_sum,
-                COALESCE(AVG(closing_balance), 0) as avg_closing
+                COALESCE(AVG(closing_balance), 0) as avg_closing,
+                SUM(CASE WHEN notified_at IS NULL THEN 1 ELSE 0 END) as unsent_count,
+                SUM(CASE WHEN notified_at IS NOT NULL THEN 1 ELSE 0 END) as sent_count
             ')
             ->first();
+
+        $latestPeriodUnsent = (int) ($latestPeriodStats->unsent_count ?? 0);
+        $latestPeriodSent = (int) ($latestPeriodStats->sent_count ?? 0);
+        $latestPeriodNotifyRate = $latestPeriodCount > 0
+            ? (int) round(($latestPeriodSent / $latestPeriodCount) * 100)
+            : 0;
+
+        $unsentUrl = $this->statementsFilterUrl([
+            'notified' => ['value' => '0'],
+        ]);
+        $sentUrl = $this->statementsFilterUrl([
+            'notified' => ['value' => '1'],
+        ]);
+        $latestPeriodUrl = $this->statementsFilterUrl([
+            'period' => ['period' => $latestPeriod],
+        ]);
+        $latestPeriodUnsentUrl = $this->statementsFilterUrl([
+            'period' => ['period' => $latestPeriod],
+            'notified' => ['value' => '0'],
+        ]);
 
         $unnotifiedQueue = MonthlyStatement::query()
             ->with('member:id,name,member_number')
@@ -64,7 +86,7 @@ final class MonthlyStatementInsightsService
             ->orderBy('generated_at')
             ->limit(6)
             ->get()
-            ->map(fn (MonthlyStatement $statement): array => $this->queueRow($statement, $now))
+            ->map(fn (MonthlyStatement $statement): array => $this->queueRow($statement, $now, $unsentUrl))
             ->all();
 
         return [
@@ -82,9 +104,13 @@ final class MonthlyStatementInsightsService
                 'count' => $latestPeriodCount,
                 'missing' => $missingLatest,
                 'coverage_rate' => $coverageRate,
+                'notify_rate' => $latestPeriodNotifyRate,
+                'unsent' => $latestPeriodUnsent,
                 'contrib_sum' => (float) ($latestPeriodStats->contrib_sum ?? 0),
                 'repay_sum' => (float) ($latestPeriodStats->repay_sum ?? 0),
                 'avg_closing' => (float) ($latestPeriodStats->avg_closing ?? 0),
+                'url' => $latestPeriodUrl,
+                'unsent_url' => $latestPeriodUnsentUrl,
             ],
             'unnotified_queue' => $unnotifiedQueue,
             'trend' => $this->sixMonthTrend(),
@@ -101,8 +127,18 @@ final class MonthlyStatementInsightsService
                 'pending_notify' => $pendingNotify,
                 'missing_latest' => $missingLatest,
                 'statements_url' => $statementsUrl,
+                'unsent_url' => $unsentUrl,
+                'sent_url' => $sentUrl,
+                'latest_period_url' => $latestPeriodUrl,
                 'members_url' => MemberResource::getUrl('index'),
                 'latest_period' => $latestPeriod,
+            ],
+            'filter_urls' => [
+                'all' => $statementsUrl,
+                'unsent' => $unsentUrl,
+                'sent' => $sentUrl,
+                'latest_period' => $latestPeriodUrl,
+                'latest_period_unsent' => $latestPeriodUnsentUrl,
             ],
         ];
     }
@@ -181,17 +217,33 @@ final class MonthlyStatementInsightsService
     }
 
     /**
+     * @param  array<string, array<string, mixed>>  $filters
+     */
+    private function statementsFilterUrl(array $filters = []): string
+    {
+        $url = MonthlyStatementResource::getUrl('index');
+
+        if ($filters === []) {
+            return $url;
+        }
+
+        return $url.'?'.http_build_query(['tableFilters' => $filters]);
+    }
+
+    /**
      * @return array{id: int, name: string, period_label: string, closing_display: string, days_waiting: int, queue_url: string, pdf_url: string|null}
      */
-    private function queueRow(MonthlyStatement $statement, Carbon $now): array
+    private function queueRow(MonthlyStatement $statement, Carbon $now, string $unsentUrl): array
     {
+        $search = $statement->member?->name;
+
         return [
             'id' => $statement->id,
             'name' => $statement->member?->name ?? __('Unknown member'),
             'period_label' => $this->periodLabel($statement->period),
             'closing_display' => InsightFormatter::money((float) $statement->closing_balance),
             'days_waiting' => (int) Carbon::parse($statement->generated_at)->diffInDays($now),
-            'queue_url' => MonthlyStatementResource::getUrl('index').'?tableSearch='.$statement->member?->name,
+            'queue_url' => $unsentUrl.(filled($search) ? '&'.http_build_query(['tableSearch' => $search]) : ''),
             'pdf_url' => Route::has('tenant.admin.statement.pdf')
                 ? route('tenant.admin.statement.pdf', $statement)
                 : null,

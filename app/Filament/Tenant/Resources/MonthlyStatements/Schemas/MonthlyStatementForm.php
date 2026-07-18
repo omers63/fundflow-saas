@@ -36,8 +36,10 @@ class MonthlyStatementForm
                     ->required()
                     ->regex('/^\d{4}-\d{2}$/'),
                 TextInput::make('opening_balance')
+                    ->label(__('Opening fund balance'))
                     ->numeric()
                     ->prefix($currency)
+                    ->helperText(__('Member fund ledger balance immediately before the period starts.'))
                     ->required(),
                 TextInput::make('total_contributions')
                     ->numeric()
@@ -48,8 +50,10 @@ class MonthlyStatementForm
                     ->prefix($currency)
                     ->required(),
                 TextInput::make('closing_balance')
+                    ->label(__('Closing fund balance'))
                     ->numeric()
                     ->prefix($currency)
+                    ->helperText(__('Member fund ledger balance at the end of the period.'))
                     ->required(),
             ]);
     }

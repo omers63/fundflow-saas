@@ -17,7 +17,7 @@ final class BusinessDay
             return Carbon::now();
         }
 
-        $clock = Carbon::createFromTimestamp(time());
+        $clock = Carbon::now();
 
         return $date->copy()->setTime(
             $clock->hour,

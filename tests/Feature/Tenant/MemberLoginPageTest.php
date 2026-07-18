@@ -145,3 +145,27 @@ test('/login redirects to member login', function () {
     $this->get('http://'.$domain.'/login')
         ->assertRedirect('/member/login');
 });
+
+test('guest hitting auth tenant member route redirects to member login without route login error', function () {
+    $tenant = Tenant::find('testing');
+    $domain = 'testing.localhost';
+
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
+        $tenant->domains()->create(['domain' => $domain]);
+    }
+
+    $this->get('http://'.$domain.'/member/statements/1/pdf')
+        ->assertRedirect(route('filament.member.auth.login'));
+});
+
+test('guest hitting auth tenant admin route redirects to tenant admin login', function () {
+    $tenant = Tenant::find('testing');
+    $domain = 'testing.localhost';
+
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
+        $tenant->domains()->create(['domain' => $domain]);
+    }
+
+    $this->get('http://'.$domain.'/admin/statements/1/pdf')
+        ->assertRedirect(route('filament.tenant.auth.login'));
+});

@@ -1,10 +1,10 @@
 @php
-    use App\Support\PublicPageSettings;
+use App\Support\PublicPageSettings;
 
-    $fundName = PublicPageSettings::fundName(tenant('name'));
-    $termsDownloadUrl = PublicPageSettings::termsAndConditionsDownloadUrl();
-    $contactEmail = PublicPageSettings::contactEmail();
-    $contactPhone = PublicPageSettings::contactPhone();
+$fundName = PublicPageSettings::fundName(tenant('name'));
+$termsDownloadUrl = PublicPageSettings::termsAndConditionsDownloadUrl();
+$contactEmail = PublicPageSettings::contactEmail();
+$contactPhone = PublicPageSettings::contactPhone();
 @endphp
 
 <footer class="tenant-public-footer mt-auto" aria-label="{{ __('Site footer') }}">
@@ -69,8 +69,6 @@
 
         <div class="tenant-public-footer__bar">
             <p>{{ __(':year © :fund. All rights reserved.', ['year' => date('Y'), 'fund' => $fundName]) }}</p>
-            <p>{!! __('Managed in :currency (Saudi Riyal)', ['currency' => \App\Filament\Support\MoneyDisplay::symbolHtml()->toHtml()]) !!}
-            </p>
         </div>
     </div>
 </footer>

@@ -92,7 +92,7 @@ test('member can download monthly statement pdf', function () {
 
     $this->actingAs($this->memberUser, 'tenant');
 
-    $this->get('http://' . $this->domain . '/member/statements/' . $statement->id . '/pdf')
+    $this->get('http://'.$this->domain.'/member/statements/'.$statement->id.'/pdf')
         ->assertSuccessful()
         ->assertHeader('content-type', 'application/pdf');
 });
@@ -105,7 +105,7 @@ test('arabic statement pdf download uses configured amiri font family', function
 
     $this->actingAs($this->memberUser->fresh(), 'tenant');
 
-    $response = $this->get('http://' . $this->domain . '/member/statements/' . $statement->id . '/pdf');
+    $response = $this->get('http://'.$this->domain.'/member/statements/'.$statement->id.'/pdf');
 
     $response->assertSuccessful()
         ->assertHeader('content-type', 'application/pdf');
@@ -353,6 +353,7 @@ test('activity table uses rolling six-month window with date column', function (
         'repayments' => 250,
     ];
     $details['fund_closing'] = 1500.25;
+    $details['cash_closing'] = 420.5;
     $statement->details = $details;
 
     $html = MemberLocale::usingPreferred($this->memberUser, function () use ($statement): string {
@@ -381,6 +382,8 @@ test('activity table uses rolling six-month window with date column', function (
         ->toContain('stmt-kpi-pill')
         ->toContain('stmt-balance-pill--success')
         ->toContain('Fund at period end')
+        ->toContain('Cash at period end')
+        ->toContain('Monthly contribution')
         ->toContain('.stmt-balance-pill')
         ->toContain('text-align: center')
         ->toContain('section-title__meta')
@@ -550,7 +553,7 @@ test('monthly statement pdf view renders arabic labels for arabic members', func
         'max_activity' => 1000,
     ];
     $details['yearly_history'] = [
-                ['year' => 2026, 'contributions' => 1000, 'repayments' => 250, 'cash_balance' => 100, 'fund_balance' => 800],
+        ['year' => 2026, 'contributions' => 1000, 'repayments' => 250, 'cash_balance' => 100, 'fund_balance' => 800],
     ];
     $statement->details = $details;
 
@@ -634,7 +637,7 @@ test('monthly statement pdf view renders arabic labels for arabic members', func
         ->toBeLessThan(strpos($html, 'الفترة:', $heroCopyPos));
     expect(strpos($html, 'نشاط 6 أشهر'))->toBeGreaterThan(0);
 
-    expect(strpos($html, 'رصيد الإغلاق'))->toBeLessThan(strpos($html, 'الرصيد الافتتاحي'));
+    expect(strpos($html, 'رصيد الصندوق في نهاية الفترة'))->toBeLessThan(strpos($html, 'رصيد الصندوق في بداية الفترة'));
     expect(strpos($html, 'class="stmt-meta__value"'))->toBeLessThan(strpos($html, 'class="stmt-meta__label"'));
 
     $shaped = DomPdfFactory::shapeArabicHtml($html);

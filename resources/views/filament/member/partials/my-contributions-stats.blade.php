@@ -1,11 +1,12 @@
 @php
     use App\Support\Insights\InsightFormatter;
 
-    $cards = $this->getData();
+    /** @var list<array{label: string, value?: string, amount?: float, hint: ?string}> $cards */
+    $cards = $cards ?? [];
     $currency = InsightFormatter::currency();
 @endphp
 
-@if (empty($cards))
+@if ($cards === [])
     <div
         class="rounded-xl border border-dashed border-gray-200 px-4 py-4 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
         {{ __('Loading contribution summary…') }}

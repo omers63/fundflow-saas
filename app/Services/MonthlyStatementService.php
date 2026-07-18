@@ -66,20 +66,32 @@ class MonthlyStatementService
         return $statement;
     }
 
-    public function sendNotification(MonthlyStatement $statement): void
-    {
+    public function sendNotification(
+        MonthlyStatement $statement,
+        string $delivery = MonthlyStatementNotification::DELIVERY_DEFAULT,
+    ): bool {
         $statement->load('member.user');
         $user = $statement->member?->user;
 
         if ($user === null) {
-            return;
+            return false;
+        }
+
+        $notification = new MonthlyStatementNotification($statement, $delivery);
+
+        if ($notification->via($user) === []) {
+            return false;
         }
 
         try {
-            $user->notify(new MonthlyStatementNotification($statement));
+            $user->notify($notification);
             $statement->update(['notified_at' => BusinessDay::now()]);
+
+            return true;
         } catch (\Throwable $e) {
             Log::error("MonthlyStatementService: notification failed for statement {$statement->id}: ".$e->getMessage());
+
+            return false;
         }
     }
 
@@ -88,26 +100,29 @@ class MonthlyStatementService
      */
     public function buildDetails(Member $member, string $period, int $month, int $year): array
     {
-        $lastStatement = MonthlyStatement::query()
-            ->where('member_id', $member->id)
-            ->where('period', '<', $period)
-            ->orderByDesc('period')
-            ->first();
+        $asOf = BusinessDay::now();
+        $asOfEnd = $asOf->copy()->endOfDay();
+        $periodStart = Carbon::create($year, $month, 1)->startOfDay();
+        $periodEnd = $this->observationEnd(
+            (clone $periodStart)->endOfMonth(),
+            $asOfEnd,
+        );
 
-        $openingCash = (float) ($lastStatement?->details['cash_closing'] ?? $member->getCashBalance());
-        $openingFund = (float) ($lastStatement?->details['fund_closing'] ?? $member->getFundBalance());
-        $opening = (float) ($lastStatement?->closing_balance ?? 0);
+        $openingCutoff = $periodStart->copy()->subSecond();
+        $openingCash = $this->balanceAtDate($member, 'cash', $openingCutoff);
+        $openingFund = $this->balanceAtDate($member, 'fund', $openingCutoff);
 
         $periodDate = Contribution::periodDate($month, $year);
-        $periodStart = Carbon::create($year, $month, 1)->startOfDay();
-        $periodEnd = (clone $periodStart)->endOfMonth();
-        $asOf = BusinessDay::now();
         $membershipStart = $member->joined_at?->copy()->startOfDay() ?? $periodStart->copy();
 
         $periodContribs = Contribution::query()
             ->where('member_id', $member->id)
             ->where('period', $periodDate)
             ->where('status', 'posted')
+            ->where(function ($query) use ($asOfEnd): void {
+                $query->whereNull('paid_at')
+                    ->orWhere('paid_at', '<=', $asOfEnd);
+            })
             ->get();
 
         $totalContributions = (float) $periodContribs->sum('amount');
@@ -148,12 +163,11 @@ class MonthlyStatementService
 
         $profile = app(MemberMembershipProfileService::class)->findForMember($member);
         $allLoans = $this->loanSummaries($member);
-        $yearlyHistory = $this->yearlyHistory($member, $membershipStart, $year, $month);
-        $currentYearMonths = $this->activityMonths($member, $year, $month, window: 6);
-        $lifetime = $this->lifetimeStats($member, $asOf, $cashAtEnd, $fundAtEnd, $allLoans, $profile);
-        $fees = $this->feeBreakdown($member, $asOf);
+        $yearlyHistory = $this->yearlyHistory($member, $membershipStart, $year, $month, $asOfEnd);
+        $currentYearMonths = $this->activityMonths($member, $year, $month, $asOfEnd, window: 6);
+        $lifetime = $this->lifetimeStats($member, $asOf, $asOfEnd, $cashAtEnd, $fundAtEnd, $allLoans, $profile);
+        $fees = $this->feeBreakdown($member, $asOfEnd);
 
-        $closing = $opening + $totalContributions - $totalRepayments;
         $currency = Setting::get('general', 'currency', 'USD');
 
         $yearContribTotal = (float) collect($currentYearMonths)->sum('contributions');
@@ -165,10 +179,10 @@ class MonthlyStatementService
         $activityTo = $currentYearMonths[array_key_last($currentYearMonths)] ?? null;
 
         return [
-            'opening_balance' => $opening,
+            'opening_balance' => $openingFund,
             'total_contributions' => $totalContributions,
             'total_repayments' => $totalRepayments,
-            'closing_balance' => $closing,
+            'closing_balance' => $fundAtEnd,
             'period' => $period,
             'period_label' => Carbon::create($year, $month, 1)->format('Y-m'),
             'currency' => $currency,
@@ -283,15 +297,19 @@ class MonthlyStatementService
     /**
      * @return list<array{year: int, contributions: float, repayments: float, cash_balance: float, fund_balance: float}>
      */
-    private function yearlyHistory(Member $member, Carbon $membershipStart, int $statementYear, int $statementMonth): array
+    private function yearlyHistory(Member $member, Carbon $membershipStart, int $statementYear, int $statementMonth, Carbon $asOfEnd): array
     {
-        $end = Carbon::create($statementYear, $statementMonth, 1)->endOfMonth();
+        $statementMonthStart = Carbon::create($statementYear, $statementMonth, 1)->startOfMonth();
+        $asOfMonthStart = $asOfEnd->copy()->startOfMonth();
+        $through = $statementMonthStart->gt($asOfMonthStart) ? $asOfMonthStart : $statementMonthStart;
+        $end = $this->observationEnd($through->copy()->endOfMonth(), $asOfEnd);
         $startYear = (int) $membershipStart->year;
+        $throughYear = (int) $through->year;
         $rows = [];
 
-        for ($year = $startYear; $year <= $statementYear; $year++) {
+        for ($year = $startYear; $year <= $throughYear; $year++) {
             $yearStart = Carbon::create($year, 1, 1)->startOfDay();
-            $yearEnd = $year === $statementYear
+            $yearEnd = $year === $throughYear
                 ? $end->copy()
                 : Carbon::create($year, 12, 31)->endOfDay();
 
@@ -299,10 +317,18 @@ class MonthlyStatementService
                 $yearStart = $membershipStart->copy();
             }
 
+            if ($yearEnd->lt($yearStart)) {
+                continue;
+            }
+
             $contrib = (float) Contribution::query()
                 ->where('member_id', $member->id)
                 ->where('status', 'posted')
                 ->whereBetween('period', [$yearStart->toDateString(), $yearEnd->toDateString()])
+                ->where(function ($query) use ($asOfEnd): void {
+                    $query->whereNull('paid_at')
+                        ->orWhere('paid_at', '<=', $asOfEnd);
+                })
                 ->sum('amount');
 
             $repay = (float) LoanInstallment::query()
@@ -324,13 +350,16 @@ class MonthlyStatementService
     }
 
     /**
-     * Rolling window of monthly contribution / repayment activity ending at the statement period.
+     * Rolling window of monthly contribution / repayment activity ending at the statement period
+     * (or the business-day month when that is earlier).
      *
      * @return list<array{month: int, year: int, period: string, contributions: float, repayments: float, contribution_dates: list<string>, repayment_dates: list<string>}>
      */
-    private function activityMonths(Member $member, int $year, int $throughMonth, int $window = 6): array
+    private function activityMonths(Member $member, int $year, int $throughMonth, Carbon $asOfEnd, int $window = 6): array
     {
-        $end = Carbon::create($year, $throughMonth, 1)->startOfMonth();
+        $statementEnd = Carbon::create($year, $throughMonth, 1)->startOfMonth();
+        $asOfMonth = $asOfEnd->copy()->startOfMonth();
+        $end = $statementEnd->gt($asOfMonth) ? $asOfMonth : $statementEnd;
         $start = $end->copy()->subMonthsNoOverflow(max(1, $window) - 1);
         $rows = [];
 
@@ -339,12 +368,16 @@ class MonthlyStatementService
             $rowYear = (int) $cursor->year;
             $periodDate = Contribution::periodDate($month, $rowYear);
             $monthStart = $cursor->copy()->startOfDay();
-            $monthEnd = $cursor->copy()->endOfMonth();
+            $monthEnd = $this->observationEnd($cursor->copy()->endOfMonth(), $asOfEnd);
 
             $contribs = Contribution::query()
                 ->where('member_id', $member->id)
                 ->where('period', $periodDate)
                 ->where('status', 'posted')
+                ->where(function ($query) use ($asOfEnd): void {
+                    $query->whereNull('paid_at')
+                        ->orWhere('paid_at', '<=', $asOfEnd);
+                })
                 ->get(['amount', 'paid_at']);
 
             $repayments = LoanInstallment::query()
@@ -384,18 +417,27 @@ class MonthlyStatementService
     private function lifetimeStats(
         Member $member,
         Carbon $asOf,
+        Carbon $asOfEnd,
         float $cashBalance,
         float $fundBalance,
         array $loans,
         ?MembershipApplication $profile,
     ): array {
+        $asOfPeriod = $asOfEnd->copy()->startOfMonth()->toDateString();
+
         $lifetimeContributions = (float) Contribution::query()
             ->where('member_id', $member->id)
             ->where('status', 'posted')
+            ->where('period', '<=', $asOfPeriod)
+            ->where(function ($query) use ($asOfEnd): void {
+                $query->whereNull('paid_at')
+                    ->orWhere('paid_at', '<=', $asOfEnd);
+            })
             ->sum('amount');
 
         $lifetimeRepayments = (float) LoanRepayment::query()
-            ->whereHas('loan', fn($q) => $q->where('member_id', $member->id))
+            ->whereHas('loan', fn ($q) => $q->where('member_id', $member->id))
+            ->where('paid_at', '<=', $asOfEnd)
             ->sum('amount');
 
         $loanCount = count($loans);
@@ -424,27 +466,45 @@ class MonthlyStatementService
     /**
      * @return array{total: float, groups: list<array{key: string, label_key: string, amount: float}>}
      */
-    private function feeBreakdown(Member $member, Carbon $asOf): array
+    private function feeBreakdown(Member $member, Carbon $asOfEnd): array
     {
         $contributionLateFees = (float) Contribution::query()
             ->where('member_id', $member->id)
             ->where('status', 'posted')
             ->where('late_fee_amount', '>', 0)
+            ->where(function ($query) use ($asOfEnd): void {
+                $query->whereNull('paid_at')
+                    ->orWhere('paid_at', '<=', $asOfEnd);
+            })
             ->sum('late_fee_amount');
 
         $repaymentLateFees = (float) LoanInstallment::query()
             ->whereHas('loan', fn ($q) => $q->where('member_id', $member->id))
             ->where('late_fee_amount', '>', 0)
+            ->where(function ($query) use ($asOfEnd): void {
+                $query->where('paid_at', '<=', $asOfEnd)
+                    ->orWhere(function ($inner) use ($asOfEnd): void {
+                        $inner->whereNull('paid_at')
+                            ->where('due_date', '<=', $asOfEnd->toDateString());
+                    });
+            })
             ->sum('late_fee_amount');
 
         $manualFees = (float) FeeDeduction::query()
             ->where('member_id', $member->id)
-            ->where('transacted_at', '<=', $asOf)
+            ->where('transacted_at', '<=', $asOfEnd)
             ->sum('amount');
 
         $subscriptionFees = (float) MembershipApplication::query()
             ->where('member_id', $member->id)
             ->where('status', 'approved')
+            ->where(function ($query) use ($asOfEnd): void {
+                $query->where('reviewed_at', '<=', $asOfEnd)
+                    ->orWhere(function ($inner) use ($asOfEnd): void {
+                        $inner->whereNull('reviewed_at')
+                            ->where('membership_date', '<=', $asOfEnd->toDateString());
+                    });
+            })
             ->sum('membership_fee_amount');
 
         $groups = [
@@ -462,6 +522,11 @@ class MonthlyStatementService
         ];
     }
 
+    private function observationEnd(Carbon $candidateEnd, Carbon $asOfEnd): Carbon
+    {
+        return $candidateEnd->gt($asOfEnd) ? $asOfEnd->copy() : $candidateEnd->copy();
+    }
+
     private function balanceAtDate(Member $member, string $accountType, Carbon $date): float
     {
         $accountId = Account::query()
@@ -473,16 +538,18 @@ class MonthlyStatementService
             return 0.0;
         }
 
+        $asOf = $date->copy()->endOfDay();
+
         $credits = (float) Transaction::query()
             ->where('account_id', $accountId)
             ->where('type', 'credit')
-            ->where('transacted_at', '<=', $date->copy()->endOfDay())
+            ->where('transacted_at', '<=', $asOf)
             ->sum('amount');
 
         $debits = (float) Transaction::query()
             ->where('account_id', $accountId)
             ->where('type', 'debit')
-            ->where('transacted_at', '<=', $date->copy()->endOfDay())
+            ->where('transacted_at', '<=', $asOf)
             ->sum('amount');
 
         return round($credits - $debits, 2);

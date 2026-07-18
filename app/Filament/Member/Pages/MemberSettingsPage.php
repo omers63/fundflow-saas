@@ -401,12 +401,6 @@ class MemberSettingsPage extends Page implements HasForms
             return [ReturnToParentPortalAction::make($this)];
         }
 
-        if ($this->activeTab === 'contributions') {
-            return [
-                $this->requestOpenCycleAmountAction(),
-            ];
-        }
-
         return [];
     }
 

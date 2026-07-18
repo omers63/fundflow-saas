@@ -14,7 +14,6 @@ use App\Filament\Tenant\Resources\MonthlyStatements\Tables\MonthlyStatementsTabl
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Filament\Tenant\Widgets\MonthlyStatementInsightsWidget;
 use App\Models\Tenant\MonthlyStatement;
-use App\Support\BusinessDay;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -43,7 +42,6 @@ class MonthlyStatementResource extends Resource
     {
         $count = MonthlyStatement::query()
             ->whereNull('notified_at')
-            ->where('generated_at', '>=', BusinessDay::now()->subDays(7))
             ->count();
 
         return $count > 0 ? (string) $count : null;
