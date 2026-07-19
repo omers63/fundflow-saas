@@ -13,7 +13,9 @@ class ListTenants extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make()->visible(fn () => auth()->user()->hasRole('super_admin')),
+            CreateAction::make()
+                ->icon('heroicon-o-plus-circle')
+                ->visible(fn() => auth()->user()->hasRole('super_admin')),
         ];
     }
 }

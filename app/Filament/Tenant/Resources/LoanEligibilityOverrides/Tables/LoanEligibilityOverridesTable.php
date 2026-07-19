@@ -24,6 +24,7 @@ class LoanEligibilityOverridesTable
     public static function createAction(): CreateAction
     {
         return CreateAction::make()
+            ->icon('heroicon-o-plus-circle')
             ->schema([
                 Select::make('member_id')
                     ->relationship('member', 'name')

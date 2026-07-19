@@ -2,12 +2,9 @@
 
 namespace App\Filament\Tenant\Resources\Members\Pages;
 
-use App\Filament\Tenant\Resources\MemberRequests\MemberRequestResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
-use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Filament\Tenant\Widgets\MemberInsightsWidget;
 use App\Services\Tenant\MemberListTabService;
-use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\RenderHook;
@@ -42,26 +39,6 @@ class ListMembers extends ListRecords
     public function getHeaderWidgetsColumns(): int|array
     {
         return 1;
-    }
-
-    protected function getHeaderActions(): array
-    {
-        return [
-            Action::make('pending_applications')
-                ->label(__('Applications'))
-                ->icon('heroicon-o-clipboard-document-list')
-                ->color('gray')
-                ->badge(MembershipApplicationResource::getNavigationBadge())
-                ->badgeColor(MembershipApplicationResource::getNavigationBadgeColor())
-                ->url(MembershipApplicationResource::listTabUrl('pending')),
-            Action::make('member_requests')
-                ->label(__('Requests'))
-                ->icon('heroicon-o-inbox')
-                ->color('gray')
-                ->badge(MemberRequestResource::getNavigationBadge())
-                ->badgeColor(MemberRequestResource::getNavigationBadgeColor())
-                ->url(MemberRequestResource::listTabUrl('pending')),
-        ];
     }
 
     public function content(Schema $schema): Schema

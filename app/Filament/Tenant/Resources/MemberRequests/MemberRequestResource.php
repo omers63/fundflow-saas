@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\MemberRequests;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
-use App\Filament\Tenant\Concerns\HidesFromTenantSidebar;
 use App\Filament\Tenant\Resources\MemberRequests\Pages\ListMemberRequests;
 use App\Filament\Tenant\Resources\MemberRequests\Pages\ViewMemberRequest;
 use App\Filament\Tenant\Resources\MemberRequests\Tables\MemberRequestsTable;
@@ -19,17 +18,17 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Livewire\Component;
 use Livewire\Livewire;
+use UnitEnum;
 
 class MemberRequestResource extends Resource
 {
-    use HidesFromTenantSidebar;
     use TranslatesFilamentNavigationLabels;
 
     protected static ?string $model = MemberRequest::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;
 
-    protected static string|\UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
+    protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
 
     protected static ?string $navigationLabel = 'Requests';
 

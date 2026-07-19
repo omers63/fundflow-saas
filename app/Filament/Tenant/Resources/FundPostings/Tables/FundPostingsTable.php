@@ -13,6 +13,7 @@ use App\Services\FundPostingService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
+use Filament\Actions\CreateAction;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
@@ -28,6 +29,12 @@ class FundPostingsTable
     {
         return TableGrouping::apply(
             ViewFundPostingAction::configure($table)
+                ->headerActions([
+                    CreateAction::make()
+                        ->label(__('New deposit'))
+                        ->icon('heroicon-o-plus-circle')
+                        ->url(FundPostingResource::getUrl('create')),
+                ])
                 ->columns([
                     TextColumn::make('member.name')
                         ->searchable()
@@ -172,7 +179,7 @@ class FundPostingsTable
 
                                 FundPostingResource::dispatchInsightsRefresh($livewire);
                             }),
-                    ]),
+                    ])->icon('heroicon-o-ellipsis-vertical'),
                 ])
                 ->defaultSort('created_at', 'desc'),
             TableGrouping::fundPostings()

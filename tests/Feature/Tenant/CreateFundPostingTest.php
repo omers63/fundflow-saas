@@ -49,11 +49,22 @@ beforeEach(function () {
     app(AccountingService::class)->createMemberAccounts($this->member);
 });
 
-test('deposits list shows new deposit header action', function () {
-    Livewire::actingAs($this->admin, 'tenant')
+test('deposits list shows new deposit as a table header action', function () {
+    $component = Livewire::actingAs($this->admin, 'tenant')
         ->test(ListFundPostings::class)
         ->assertSuccessful()
         ->assertSee(__('New deposit'));
+
+    $pageHeaderNames = collect($component->instance()->getCachedHeaderActions())
+        ->map(fn($action) => $action->getName())
+        ->all();
+
+    $tableHeaderActionNames = collect($component->instance()->getTable()->getHeaderActions())
+        ->map(fn($action) => $action->getName())
+        ->all();
+
+    expect($pageHeaderNames)->not->toContain('create')
+        ->and($tableHeaderActionNames)->toContain('create');
 });
 
 test('admin can create and auto-approve a deposit for any member', function () {

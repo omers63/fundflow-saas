@@ -13,7 +13,8 @@ class ListNotificationLogs extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
+            CreateAction::make()
+                ->icon('heroicon-o-plus-circle'),
         ];
     }
 }

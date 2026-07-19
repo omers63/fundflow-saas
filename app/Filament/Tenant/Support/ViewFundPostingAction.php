@@ -14,6 +14,7 @@ final class ViewFundPostingAction
     {
         return TenantPortalViewModal::apply(
             ViewAction::make()
+                ->icon('heroicon-o-eye')
                 ->modalHeading(fn (FundPosting $record): string => __('Deposit — :name', [
                     'name' => $record->member->name,
                 ]))

@@ -20,6 +20,7 @@ final class SwitchHouseholdProfileAction
     {
         return Action::make('switchHouseholdProfile')
             ->label(__('Switch'))
+            ->icon('heroicon-o-arrows-right-left')
             ->modalHeading(__('Verify profile access'))
             ->modalDescription(__("Enter this member's portal password to continue."))
             ->modalSubmitActionLabel(__('Continue'))

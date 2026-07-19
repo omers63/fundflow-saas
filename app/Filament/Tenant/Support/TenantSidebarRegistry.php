@@ -40,8 +40,6 @@ final class TenantSidebarRegistry
         return [
             AccountResource::class,
             MasterAccountResource::class,
-            MemberRequestResource::class,
-            MembershipApplicationResource::class,
             MessagesInboxPage::class,
             MonthlyStatementResource::class,
             SupportRequestResource::class,
@@ -57,6 +55,8 @@ final class TenantSidebarRegistry
     {
         return [
             MemberResource::class,
+            MembershipApplicationResource::class,
+            MemberRequestResource::class,
             LoansCluster::class,
             LoanQueueWorkbenchPage::class,
             ContributionResource::class,
@@ -79,6 +79,8 @@ final class TenantSidebarRegistry
     {
         return [
             Lang::formatUiLabel(__('Members')),
+            Lang::formatUiLabel(__('Applications')),
+            Lang::formatUiLabel(__('Requests')),
             Lang::formatUiLabel(__('Loans')),
             Lang::formatUiLabel(__('Loan queue')),
             Lang::formatUiLabel(__('Contributions')),

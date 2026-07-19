@@ -7,9 +7,6 @@ use App\Filament\Tenant\Pages\JobsPage;
 use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Filament\Tenant\Support\TenantSidebarRegistry;
 use Illuminate\Support\Facades\App;
-use Tests\TestCase;
-
-uses(TestCase::class);
 
 test('consolidated sidebar hides moved operational and finance items', function () {
     foreach (TenantSidebarRegistry::hiddenFromSidebar() as $class) {
@@ -33,8 +30,11 @@ test('consolidated sidebar label catalogue matches plan in english locale', func
 
     expect(TenantSidebarRegistry::consolidatedNavigationLabels())->toBe([
         'Members',
+        'Applications',
+        'Requests',
         'Loans',
-        'Collections',
+        'Loan Queue',
+        'Contributions',
         'Disbursements',
         'Deposits',
         'Cash Outs',

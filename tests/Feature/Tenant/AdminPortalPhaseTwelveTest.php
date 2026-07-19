@@ -217,7 +217,7 @@ test('tenant admin redesign livewire pages render without error', function (stri
     AuditSystemPage::class,
     Settings::class,
     MessagesInboxPage::class,
-            CollectionCalendarPage::class,
+    CollectionCalendarPage::class,
 ]);
 
 test('consolidated sidebar registry matches live navigation labels in english', function () {
@@ -232,7 +232,7 @@ test('consolidated sidebar registry matches live navigation labels in english', 
         ->values()
         ->all();
 
-    expect($labels)->toHaveCount(15);
+    expect($labels)->toHaveCount(17);
 
     foreach (TenantSidebarRegistry::consolidatedNavigationLabels() as $label) {
         expect($labels)->toContain($label);

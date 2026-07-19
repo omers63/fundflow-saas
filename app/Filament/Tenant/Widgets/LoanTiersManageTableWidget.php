@@ -34,6 +34,7 @@ class LoanTiersManageTableWidget extends TableWidget
             CreateAction::make()
                 ->model(LoanTier::class)
                 ->label(__('New loan tier'))
+                ->icon('heroicon-o-plus-circle')
                 ->schema(fn (): array => LoanTierForm::components())
                 ->using(function (array $data): LoanTier {
                     $data['tier_number'] = LoanTier::nextTierNumber();

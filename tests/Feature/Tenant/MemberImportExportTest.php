@@ -447,14 +447,14 @@ test('admin override row action creates standing eligibility override', function
         ->exists())->toBeTrue();
 });
 
-test('members list create action is on table header and page links applications', function () {
+test('members list create action is on table header and page has no applications shortcut', function () {
     $component = Livewire::test(ListMembers::class);
 
     $pageHeaderNames = collect($component->instance()->getCachedHeaderActions())
         ->map(fn ($action) => $action->getName())
         ->all();
 
-    expect($pageHeaderNames)->toContain('pending_applications', 'member_requests');
+    expect($pageHeaderNames)->not->toContain('pending_applications', 'member_requests');
 
     $tableHeaderActionNames = collect($component->instance()->getTable()->getHeaderActions())
         ->map(fn ($action) => $action->getName())

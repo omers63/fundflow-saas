@@ -89,12 +89,17 @@ test('tenant admin can list member and support requests', function () {
         ->assertSuccessful()
         ->assertSee('Help needed');
 
-    Livewire::actingAs($this->admin, 'tenant')
+    $requestsPage = Livewire::actingAs($this->admin, 'tenant')
         ->test(ListMemberRequests::class)
         ->assertSuccessful()
         ->assertSee('Add my spouse as dependent.');
 
-    expect(MemberRequestResource::getNavigationBadge())->toBe('1');
+    $requestHeaderNames = collect($requestsPage->instance()->getCachedHeaderActions())
+        ->map(fn ($action) => $action->getName())
+        ->all();
+
+    expect($requestHeaderNames)->not->toContain('backToMembers')
+        ->and(MemberRequestResource::getNavigationBadge())->toBe('1');
 });
 
 test('member can submit support request and household request from support page', function () {

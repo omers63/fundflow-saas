@@ -30,7 +30,8 @@ final class ContributionListTableHeaderActions
             self::importContributionsAction(),
             self::exportContributionsAction(),
             CreateAction::make()
-                ->label(__('New contribution')),
+                ->label(__('New contribution'))
+                ->icon('heroicon-o-plus-circle'),
         ];
     }
 

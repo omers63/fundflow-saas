@@ -34,6 +34,7 @@ class FundTiersManageTableWidget extends TableWidget
             CreateAction::make()
                 ->model(FundTier::class)
                 ->label(__('New fund tier'))
+                ->icon('heroicon-o-plus-circle')
                 ->schema(fn (): array => FundTierForm::components())
                 ->using(function (array $data): FundTier {
                     [$attributes, $loanTierIds] = FundTierForm::extractLoanTierIds($data);

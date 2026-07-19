@@ -5,10 +5,8 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\MemberRequests\Pages;
 
 use App\Filament\Tenant\Resources\MemberRequests\MemberRequestResource;
-use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Widgets\MemberRequestInsightsWidget;
 use App\Models\Tenant\MemberRequest;
-use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
 use Illuminate\Database\Eloquent\Builder;
@@ -35,17 +33,6 @@ class ListMemberRequests extends ListRecords
         return [
             ...parent::getPageClasses(),
             'ff-tenant-member-requests-workspace',
-        ];
-    }
-
-    protected function getHeaderActions(): array
-    {
-        return [
-            Action::make('backToMembers')
-                ->label(__('Members'))
-                ->icon('heroicon-o-users')
-                ->color('gray')
-                ->url(MemberResource::getUrl('index')),
         ];
     }
 

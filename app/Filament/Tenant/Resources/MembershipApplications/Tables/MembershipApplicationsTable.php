@@ -4,6 +4,7 @@ namespace App\Filament\Tenant\Resources\MembershipApplications\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MembershipApplicationFilamentActions;
+use App\Filament\Support\MembershipApplicationListTableHeaderActions;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -23,6 +24,7 @@ class MembershipApplicationsTable
         return TableRecordActionGroups::apply(
             TableGrouping::apply(
                 $table
+                    ->headerActions(MembershipApplicationListTableHeaderActions::all())
                     ->columns([
                         TextColumn::make('name')
                             ->searchable()

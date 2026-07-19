@@ -87,6 +87,7 @@ final class ViewFundPostingAction
     public static function make(): ViewAction
     {
         return ViewAction::make()
+            ->icon('heroicon-o-eye')
             ->modalWidth('lg')
             ->modalHeading(fn (FundPosting $record): string => __('Deposit — :name', [
                 'name' => $record->member->name,
@@ -101,6 +102,7 @@ final class ViewFundPostingAction
     {
         return MemberPortalViewModal::apply(
             ViewAction::make()
+                ->icon('heroicon-o-eye')
                 ->modalHeading(fn (FundPosting $record): string => __('Deposit request'))
                 ->modalContent(fn (FundPosting $record) => MemberPortalViewModal::content(
                     self::memberPortalSections($record),

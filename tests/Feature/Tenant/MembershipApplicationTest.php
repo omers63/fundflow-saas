@@ -94,7 +94,7 @@ test('applications navigation badge is hidden when there are no pending applicat
     expect(MembershipApplicationResource::getNavigationBadge())->toBeNull();
 });
 
-test('applications list shows purpose subheading and header actions for admin', function () {
+test('applications list shows purpose subheading and table header actions for admin', function () {
     $admin = User::create([
         'name' => 'Fund Admin',
         'email' => 'admin@fund.test',
@@ -112,7 +112,7 @@ test('applications list shows purpose subheading and header actions for admin', 
         'status' => 'pending',
     ]);
 
-    Livewire::actingAs($admin, 'tenant')
+    $component = Livewire::actingAs($admin, 'tenant')
         ->test(ListMembershipApplications::class)
         ->assertSuccessful()
         ->assertSee(__('Review new membership applications and manage the onboarding pipeline.'))
@@ -120,6 +120,17 @@ test('applications list shows purpose subheading and header actions for admin', 
         ->assertSee(__('New Application'))
         ->assertSee(__('Applications need your attention'))
         ->assertSee(__('Review queue'));
+
+    $pageHeaderNames = collect($component->instance()->getCachedHeaderActions())
+        ->map(fn ($action) => $action->getName())
+        ->all();
+
+    $tableHeaderActionNames = collect($component->instance()->getTable()->getHeaderActions())
+        ->map(fn ($action) => $action->getName())
+        ->all();
+
+    expect($pageHeaderNames)->not->toContain('importApplications', 'create')
+        ->and($tableHeaderActionNames)->toContain('importApplications', 'create');
 });
 
 test('admin can create application from tenant panel', function () {

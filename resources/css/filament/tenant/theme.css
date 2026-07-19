@@ -10,6 +10,9 @@
 @source '../../../../resources/views/filament/**/*';
 @source '../../../../resources/views/components/**/*.blade.php';
 
+/* Balance-card gradient bands are defined in TenantDashboardService (not scanned as a source). */
+@source inline("bg-gradient-to-r from-sky-500 to-blue-600 from-emerald-500 to-teal-600 from-indigo-500 to-violet-600");
+
 /* ── Admin portal design tokens (sky-blue primary) ── */
 .fi-body.fi-panel-tenant {
     --ff-primary:        #0284c7;

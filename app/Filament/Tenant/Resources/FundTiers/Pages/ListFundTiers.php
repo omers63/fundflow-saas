@@ -17,6 +17,7 @@ class ListFundTiers extends ListRecords
     {
         return [
             CreateAction::make()
+                ->icon('heroicon-o-plus-circle')
                 ->schema(fn (): array => FundTierForm::components())
                 ->using(function (array $data): FundTier {
                     [$attributes, $loanTierIds] = FundTierForm::extractLoanTierIds($data);

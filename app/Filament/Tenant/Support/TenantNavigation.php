@@ -22,6 +22,10 @@ final class TenantNavigation
     /** Consolidated sidebar — Operations */
     public const SORT_MEMBERS = 10;
 
+    public const SORT_APPLICATIONS = 11;
+
+    public const SORT_MEMBER_REQUESTS = 12;
+
     public const SORT_LOANS = 20;
 
     public const SORT_LOAN_QUEUE = 21;
@@ -52,10 +56,6 @@ final class TenantNavigation
 
     /** Hidden from sidebar (legacy sort constants). */
     public const SORT_MESSAGES = -1;
-
-    public const SORT_APPLICATIONS = 901;
-
-    public const SORT_MEMBER_REQUESTS = 902;
 
     public const SORT_SUPPORT_REQUESTS = 903;
 

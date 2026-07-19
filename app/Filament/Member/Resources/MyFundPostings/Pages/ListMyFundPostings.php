@@ -19,7 +19,8 @@ class ListMyFundPostings extends ListRecords
     {
         return [
             CreateAction::make()
-                ->label(__('New deposit')),
+                ->label(__('New deposit'))
+                ->icon('heroicon-o-plus-circle'),
         ];
     }
 }

@@ -15,7 +15,8 @@ class ListCashOutRequests extends ListRecords
     {
         return [
             CreateAction::make()
-                ->label(__('New cash out')),
+                ->label(__('New cash out'))
+                ->icon('heroicon-o-plus-circle'),
         ];
     }
 

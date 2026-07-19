@@ -3,7 +3,6 @@
 namespace App\Filament\Tenant\Resources\MembershipApplications;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
-use App\Filament\Tenant\Concerns\HidesFromTenantSidebar;
 use App\Filament\Tenant\Resources\MembershipApplications\Pages\CreateMembershipApplication;
 use App\Filament\Tenant\Resources\MembershipApplications\Pages\EditMembershipApplication;
 use App\Filament\Tenant\Resources\MembershipApplications\Pages\ListMembershipApplications;
@@ -19,17 +18,17 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Livewire\Component;
 use Livewire\Livewire;
+use UnitEnum;
 
 class MembershipApplicationResource extends Resource
 {
-    use HidesFromTenantSidebar;
     use TranslatesFilamentNavigationLabels;
 
     protected static ?string $model = MembershipApplication::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;
 
-    protected static string|\UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
+    protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_FUND_MANAGEMENT;
 
     protected static ?int $navigationSort = TenantNavigation::SORT_APPLICATIONS;
 

@@ -21,6 +21,7 @@ final class AdminNotificationActions
     {
         return Action::make($name)
             ->label($label)
+            ->icon('heroicon-o-arrow-top-right-on-square')
             ->url(TenantAbsoluteUrl::resolve($url))
             ->markAsRead();
     }

@@ -17,6 +17,7 @@ class ListLoanTiers extends ListRecords
     {
         return [
             CreateAction::make()
+                ->icon('heroicon-o-plus-circle')
                 ->schema(fn (): array => LoanTierForm::components())
                 ->using(function (array $data): LoanTier {
                     $data['tier_number'] = LoanTier::nextTierNumber();
