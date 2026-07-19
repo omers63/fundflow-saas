@@ -105,11 +105,11 @@ test('portfolio tab exposes import and export header actions', function () {
     $component = Livewire::test(ListLoans::class)
         ->set('activeTab', 'portfolio');
 
-    $names = LoanListTableHeaderActions::flattenActionNames(
-        $component->instance()->getTable()->getHeaderActions(),
-    );
+    $headerActions = $component->instance()->getTable()->getHeaderActions();
+    $names = LoanListTableHeaderActions::flattenActionNames($headerActions);
 
-    expect($names)->toContain('importLoans', 'exportLoans', 'importRepayments', 'exportRepayments');
+    expect($names)->toContain('create', 'importLoans', 'exportLoans', 'importRepayments', 'exportRepayments')
+        ->and(collect($headerActions)->first(fn($action) => $action->getName() === 'create'))->not->toBeNull();
 });
 
 test('collection tab exposes cycle selector and drives selected period', function () {

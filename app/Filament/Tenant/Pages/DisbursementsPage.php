@@ -118,6 +118,9 @@ class DisbursementsPage extends Page implements HasTable
 
         return TableGrouping::apply($table
             ->query(fn (): Builder => $this->disbursementQuery())
+            ->headerActions([
+                LoanFilamentActions::newDisbursementHeaderAction(),
+            ])
             ->columns([
                 TextColumn::make('member.name')
                     ->label(__('Member'))

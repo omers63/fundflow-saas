@@ -13,6 +13,7 @@ use App\Services\MemberCashOutService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
+use Filament\Actions\CreateAction;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
@@ -27,6 +28,12 @@ class CashOutRequestsTable
     {
         return TableGrouping::apply(
             $table
+                ->headerActions([
+                    CreateAction::make()
+                        ->label(__('New cash out'))
+                        ->icon('heroicon-o-plus-circle')
+                        ->url(CashOutRequestResource::getUrl('create')),
+                ])
                 ->columns([
                     TextColumn::make('id')
                         ->label(__('Request #'))

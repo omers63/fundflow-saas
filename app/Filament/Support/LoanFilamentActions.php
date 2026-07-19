@@ -278,6 +278,99 @@ final class LoanFilamentActions
             });
     }
 
+    public static function newDisbursementHeaderAction(): Action
+    {
+        return Action::make('newDisbursement')
+            ->label(__('New disbursement'))
+            ->icon('heroicon-o-plus-circle')
+            ->color('primary')
+            ->modalHeading(__('New disbursement'))
+            ->modalWidth('lg')
+            ->schema(function (): array {
+                $loans = Loan::query()
+                    ->readyToDisburse()
+                    ->with(['member:id,name,member_number'])
+                    ->orderByDesc('approved_at')
+                    ->get();
+
+                return [
+                    Select::make('loan_id')
+                        ->label(__('Loan'))
+                        ->options($loans->mapWithKeys(function (Loan $loan): array {
+                            $member = $loan->member;
+                            $label = ($member?->member_number ?? '—') . ' — ' . ($member?->name ?? __('Unknown member'));
+                            $remaining = number_format($loan->remainingToDisburse(), 2);
+
+                            return [$loan->id => "{$label} ({$remaining})"];
+                        })->all())
+                        ->searchable()
+                        ->required()
+                        ->live(),
+                    TextInput::make('amount')
+                        ->label(__('Amount to disburse'))
+                        ->numeric()
+                        ->minValue(0.01)
+                        ->required()
+                        ->helperText(function (Get $get) use ($loans): ?string {
+                            $loan = $loans->firstWhere('id', (int) ($get('loan_id') ?? 0));
+
+                            return $loan
+                                ? __('Remaining: :amount', ['amount' => number_format($loan->remainingToDisburse(), 2)])
+                                : null;
+                        }),
+                    Textarea::make('notes')
+                        ->label(__('Notes'))
+                        ->rows(2)
+                        ->maxLength(500),
+                    DateTimePicker::make('disbursed_at')
+                        ->label(__('Disbursement date'))
+                        ->seconds(false)
+                        ->native(false)
+                        ->default(BusinessDay::now())
+                        ->required(),
+                    Checkbox::make('force')
+                        ->label(__('Force'))
+                        ->helperText(__('Override tier pool cap (still limited by master fund and remaining approved).')),
+                ];
+            })
+            ->action(function (array $data, Action $action, LoanLifecycleService $lifecycle, Component $livewire): void {
+                $loan = Loan::query()->find((int) ($data['loan_id'] ?? 0));
+
+                if ($loan === null || !in_array($loan->status, ['approved', 'partially_disbursed'], true)) {
+                    Notification::make()
+                        ->title(__('Disbursement failed'))
+                        ->body(__('Select a loan that is ready to disburse.'))
+                        ->danger()
+                        ->send();
+
+                    return;
+                }
+
+                if (
+                    !ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn() => $lifecycle->disbursePartial(
+                            $loan,
+                            (float) $data['amount'],
+                            filled($data['notes'] ?? null) ? (string) $data['notes'] : null,
+                            isset($data['disbursed_at']) ? Carbon::parse((string) $data['disbursed_at']) : BusinessDay::now(),
+                            (bool) ($data['force'] ?? false),
+                        ),
+                        __('Disbursement failed'),
+                    )
+                ) {
+                    return;
+                }
+
+                $livewire->resetTable();
+
+                Notification::make()
+                    ->title($loan->fresh()->isFullyDisbursed() ? __('Loan fully disbursed') : __('Partial disbursement recorded'))
+                    ->success()
+                    ->send();
+            });
+    }
+
     public static function cashOutSplitExcessFund(): Action
     {
         return Action::make('cashOutSplitExcessFund')

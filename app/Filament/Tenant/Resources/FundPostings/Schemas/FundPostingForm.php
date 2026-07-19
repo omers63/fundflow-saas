@@ -24,6 +24,7 @@ class FundPostingForm
         return $schema
             ->components([
                 Section::make(__('Deposit details'))
+                    ->columnSpanFull()
                     ->columns(2)
                     ->schema([
                         Select::make('member_id')

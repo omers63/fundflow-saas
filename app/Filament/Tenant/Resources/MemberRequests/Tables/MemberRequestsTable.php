@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\MemberRequests\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberRequestListTableHeaderActions;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -32,6 +33,7 @@ final class MemberRequestsTable
         return TableRecordActionGroups::apply(
             TableGrouping::apply(
                 $table
+                    ->headerActions(MemberRequestListTableHeaderActions::all())
                     ->modifyQueryUsing(
                         fn (Builder $query): Builder => $query->with([
                             'requester',

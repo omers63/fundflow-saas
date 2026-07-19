@@ -31,6 +31,7 @@ final class LoanListTableHeaderActions
     public static function portfolio(): array
     {
         return [
+            self::createLoanAction(),
             self::portfolioGroup(),
         ];
     }
@@ -72,7 +73,6 @@ final class LoanListTableHeaderActions
             self::exportLoansAction(asGroupItem: true),
             self::importRepaymentsAction(asGroupItem: true),
             self::exportRepaymentsAction(asGroupItem: true),
-            self::createLoanAction(asGroupItem: true),
         ])
             ->label(__('Portfolio'))
             ->icon(Heroicon::OutlinedBriefcase)

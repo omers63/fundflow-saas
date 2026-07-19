@@ -88,13 +88,9 @@ test('member accounts loans tab exposes loan import export actions with create l
 
     expect($names)
         ->toContain('importLoans', 'exportLoans', 'importRepayments', 'exportRepayments', 'create')
-        ->and($actions)->toHaveCount(1)
-        ->and($actions[0])->toBeInstanceOf(ActionGroup::class);
-
-    $create = collect(LoanListTableHeaderActions::flattenActionNames($actions))
-        ->contains('create');
-
-    expect($create)->toBeTrue();
+        ->and($actions)->toHaveCount(2)
+        ->and(collect($actions)->first(fn($action) => $action->getName() === 'create'))->not->toBeNull()
+        ->and(collect($actions)->first(fn($action) => $action instanceof ActionGroup))->not->toBeNull();
 });
 
 test('member account export includes roster columns and respects account type filter', function () {

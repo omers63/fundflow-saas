@@ -11,6 +11,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use Filament\Facades\Filament;
+use Filament\Support\Enums\Width;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
@@ -56,11 +57,11 @@ test('deposits list shows new deposit as a table header action', function () {
         ->assertSee(__('New deposit'));
 
     $pageHeaderNames = collect($component->instance()->getCachedHeaderActions())
-        ->map(fn($action) => $action->getName())
+        ->map(fn ($action) => $action->getName())
         ->all();
 
     $tableHeaderActionNames = collect($component->instance()->getTable()->getHeaderActions())
-        ->map(fn($action) => $action->getName())
+        ->map(fn ($action) => $action->getName())
         ->all();
 
     expect($pageHeaderNames)->not->toContain('create')
@@ -104,4 +105,12 @@ test('create deposit page prefills member from query string', function () {
         ->assertFormSet([
             'member_id' => $this->member->id,
         ]);
+});
+
+test('create deposit page uses full content width', function () {
+    $component = Livewire::actingAs($this->admin, 'tenant')
+        ->test(CreateFundPosting::class)
+        ->assertSuccessful();
+
+    expect($component->instance()->getMaxContentWidth())->toBe(Width::Full);
 });

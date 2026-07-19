@@ -98,7 +98,12 @@ test('tenant admin can list member and support requests', function () {
         ->map(fn ($action) => $action->getName())
         ->all();
 
+    $tableHeaderActionNames = collect($requestsPage->instance()->getTable()->getHeaderActions())
+        ->map(fn($action) => $action->getName())
+        ->all();
+
     expect($requestHeaderNames)->not->toContain('backToMembers')
+        ->and($tableHeaderActionNames)->toContain('newRequest')
         ->and(MemberRequestResource::getNavigationBadge())->toBe('1');
 });
 

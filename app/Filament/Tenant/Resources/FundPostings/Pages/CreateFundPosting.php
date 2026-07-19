@@ -9,11 +9,14 @@ use App\Models\Tenant\Member;
 use App\Services\FundPostingService;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
+use Filament\Support\Enums\Width;
 use Illuminate\Database\Eloquent\Model;
 
 class CreateFundPosting extends CreateRecord
 {
     protected static string $resource = FundPostingResource::class;
+
+    protected Width|string|null $maxContentWidth = Width::Full;
 
     public function mount(): void
     {

@@ -31,7 +31,8 @@ final class ContributionListTableHeaderActions
             self::exportContributionsAction(),
             CreateAction::make()
                 ->label(__('New contribution'))
-                ->icon('heroicon-o-plus-circle'),
+                ->icon('heroicon-o-plus-circle')
+                ->url(ContributionResource::getUrl('create')),
         ];
     }
 

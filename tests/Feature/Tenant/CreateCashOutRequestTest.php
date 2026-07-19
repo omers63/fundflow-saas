@@ -60,12 +60,23 @@ beforeEach(function () {
     $this->member->refresh();
 });
 
-test('cash outs list shows new cash out header action', function () {
-    Livewire::actingAs($this->admin, 'tenant')
+test('cash outs list shows new cash out as a table header action', function () {
+    $component = Livewire::actingAs($this->admin, 'tenant')
         ->test(ListCashOutRequests::class)
         ->assertSuccessful()
         ->assertSee(__('New cash out'))
         ->assertTableColumnExists('id');
+
+    $pageHeaderNames = collect($component->instance()->getCachedHeaderActions())
+        ->map(fn ($action) => $action->getName())
+        ->all();
+
+    $tableHeaderActionNames = collect($component->instance()->getTable()->getHeaderActions())
+        ->map(fn ($action) => $action->getName())
+        ->all();
+
+    expect($pageHeaderNames)->not->toContain('create')
+        ->and($tableHeaderActionNames)->toContain('create');
 });
 
 test('admin can create and auto-approve a cash out for any member', function () {
