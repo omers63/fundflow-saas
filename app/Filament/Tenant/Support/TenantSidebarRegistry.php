@@ -54,15 +54,15 @@ final class TenantSidebarRegistry
     public static function consolidatedNavigation(): array
     {
         return [
-            MemberResource::class,
             MembershipApplicationResource::class,
-            MemberRequestResource::class,
+            MemberResource::class,
+            FundPostingResource::class,
+            ContributionResource::class,
             LoansCluster::class,
             LoanQueueWorkbenchPage::class,
-            ContributionResource::class,
             DisbursementsPage::class,
-            FundPostingResource::class,
             CashOutRequestResource::class,
+            MemberRequestResource::class,
             BankAccountsResource::class,
             TransactionResource::class,
             ReconciliationOverviewPage::class,
@@ -78,15 +78,15 @@ final class TenantSidebarRegistry
     public static function consolidatedNavigationLabels(): array
     {
         return [
-            Lang::formatUiLabel(__('Members')),
             Lang::formatUiLabel(__('Applications')),
-            Lang::formatUiLabel(__('Requests')),
+            Lang::formatUiLabel(__('Members')),
+            Lang::formatUiLabel(__('Deposits')),
+            Lang::formatUiLabel(__('Contributions')),
             Lang::formatUiLabel(__('Loans')),
             Lang::formatUiLabel(__('Loan queue')),
-            Lang::formatUiLabel(__('Contributions')),
             Lang::formatUiLabel(__('Disbursements')),
-            Lang::formatUiLabel(__('Deposits')),
             Lang::formatUiLabel(__('Cash outs')),
+            Lang::formatUiLabel(__('Requests')),
             Lang::formatUiLabel(__('Bank clearing')),
             Lang::formatUiLabel(__('Transactions')),
             Lang::formatUiLabel(__('Reconciliation')),

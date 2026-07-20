@@ -29,15 +29,15 @@ test('consolidated sidebar label catalogue matches plan in english locale', func
     App::setLocale('en');
 
     expect(TenantSidebarRegistry::consolidatedNavigationLabels())->toBe([
-        'Members',
         'Applications',
-        'Requests',
+        'Members',
+        'Deposits',
+        'Contributions',
         'Loans',
         'Loan Queue',
-        'Contributions',
         'Disbursements',
-        'Deposits',
         'Cash Outs',
+        'Requests',
         'Bank Clearing',
         'Transactions',
         'Reconciliation',

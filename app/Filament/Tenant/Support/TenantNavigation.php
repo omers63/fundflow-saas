@@ -14,29 +14,29 @@ final class TenantNavigation
     /** Finance group (bank, master accounts, reconciliation, reports). */
     public const GROUP_ACCOUNTS = 'Finance';
 
-    /** Operations group (members, loans, collections, deposits, applications). */
+    /** Operations group (applications, members, deposits, contributions, loans, cash outs, requests). */
     public const GROUP_FUND_MANAGEMENT = 'Operations';
 
     public const GROUP_SYSTEM = 'System';
 
     /** Consolidated sidebar — Operations */
-    public const SORT_MEMBERS = 10;
+    public const SORT_APPLICATIONS = 10;
 
-    public const SORT_APPLICATIONS = 11;
+    public const SORT_MEMBERS = 11;
 
-    public const SORT_MEMBER_REQUESTS = 12;
+    public const SORT_DEPOSITS = 12;
 
-    public const SORT_LOANS = 20;
+    public const SORT_CONTRIBUTIONS = 13;
 
-    public const SORT_LOAN_QUEUE = 21;
+    public const SORT_LOANS = 14;
 
-    public const SORT_CONTRIBUTIONS = 30;
+    public const SORT_LOAN_QUEUE = 15;
 
-    public const SORT_DISBURSEMENTS = 40;
+    public const SORT_DISBURSEMENTS = 16;
 
-    public const SORT_DEPOSITS = 42;
+    public const SORT_CASH_OUTS = 17;
 
-    public const SORT_CASH_OUTS = 45;
+    public const SORT_MEMBER_REQUESTS = 18;
 
     /** Consolidated sidebar — Finance */
     public const SORT_BANK_CLEARING = 10;
