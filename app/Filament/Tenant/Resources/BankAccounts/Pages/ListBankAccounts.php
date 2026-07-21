@@ -91,7 +91,7 @@ class ListBankAccounts extends ListRecords
         // already selected a non-default slice (deep links, legacy tabs, Livewire params).
         if (
             $this->activeTab === BankClearingTabRegistry::TAB_QUEUE
-            && ! $hasExplicitQueueFilter
+            && !$hasExplicitQueueFilter
             && $legacyQueueFilter === null
             && $this->queueFilter === BankClearingTabRegistry::FILTER_ALL
         ) {
@@ -225,12 +225,12 @@ class ListBankAccounts extends ListRecords
 
     public function getTableColumnsSessionKey(): string
     {
-        return 'tables.'.md5(static::class.'|'.$this->activeTab).'_columns';
+        return 'tables.' . md5(static::class . '|' . $this->activeTab) . '_columns';
     }
 
     public function getHasReorderedTableColumnsSessionKey(): string
     {
-        return 'tables.'.md5(static::class.'|'.$this->activeTab).'_has_reordered_columns';
+        return 'tables.' . md5(static::class . '|' . $this->activeTab) . '_has_reordered_columns';
     }
 
     protected function applySortingToTableQuery(Builder $query): Builder
