@@ -9,6 +9,7 @@ use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableStandards;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Filament\Tenant\Support\ViewBankTransactionAction;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
@@ -86,13 +87,12 @@ final class PendingOperationalClearanceTable
                 ->recordUrl(fn (): ?string => null)
                 ->recordAction(ViewAction::getDefaultName())
                 ->emptyStateDescription(__('Accepted deposits, cash-outs, and disbursements awaiting bank evidence. Match pairs an imported CSV line; clear closes the row when no import line is available.'))
-                ->recordActions(TableRecordActionGroups::wrap(BankClearingQueueActions::groupedRecordActions()))
+                ->recordActions(BankClearingQueueActions::groupedRecordActions(BankClearingTabRegistry::FILTER_OPERATIONS))
                 ->toolbarActions([
-                    BulkActionGroup::make([
-                        BankClearingQueueActions::matchAllUniqueBulk(),
-                        BankClearingQueueActions::matchSelectedBulk(),
-                        TableToolbar::refreshBulkAction(),
-                    ]),
+                    BulkActionGroup::make(
+                        BankClearingQueueActions::toolbarBulkActions(BankClearingTabRegistry::FILTER_OPERATIONS),
+                    ),
+                    TableToolbar::refreshBulkAction(),
                 ])
                 ->defaultSort('transaction_date', 'desc'),
             TableGrouping::bankTransactions()

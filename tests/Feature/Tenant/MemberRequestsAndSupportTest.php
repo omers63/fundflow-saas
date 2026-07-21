@@ -99,7 +99,7 @@ test('tenant admin can list member and support requests', function () {
         ->all();
 
     $tableHeaderActionNames = collect($requestsPage->instance()->getTable()->getHeaderActions())
-        ->map(fn($action) => $action->getName())
+        ->map(fn ($action) => $action->getName())
         ->all();
 
     expect($requestHeaderNames)->not->toContain('backToMembers')
@@ -156,7 +156,7 @@ test('membership requests table description reflects household link', function (
 
     Livewire::test(MyMemberRequestsTableWidget::class)
         ->assertSuccessful()
-        ->assertSee(__('Freeze, unfreeze, or withdraw from the fund.'), false);
+        ->assertSee(__('Freeze or leave the fund while you have portal access. Unfreeze, reinstate, and payout-release requests can be submitted from the sign-in page when portal access is blocked.'), false);
 
     $parentUser = User::create([
         'name' => 'Household Parent',
@@ -181,7 +181,7 @@ test('membership requests table description reflects household link', function (
 
     Livewire::test(MyMemberRequestsTableWidget::class)
         ->assertSuccessful()
-        ->assertSee(__('Freeze, unfreeze, withdraw, or request independence from your household parent.'), false)
+        ->assertSee(__('Freeze, leave the fund, or request independence from your household parent. Unfreeze, reinstate, and payout-release requests can also be submitted from the sign-in page when portal access is blocked.'), false)
         ->assertDontSee(__('My dependents page'), false);
 });
 

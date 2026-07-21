@@ -6,6 +6,7 @@ use App\Filament\Tenant\Resources\BankAccounts\Pages\ListBankAccounts;
 use App\Filament\Tenant\Resources\SmsClearing\Pages\ListSmsClearing;
 use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Models\Tenant\User;
+use App\Support\Lang;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\App;
 use Livewire\Livewire;
@@ -38,9 +39,9 @@ it('renders bank clearing workspace shell in each locale', function (string $loc
     Livewire::actingAs($this->admin, 'tenant')
         ->test(ListBankAccounts::class)
         ->assertSuccessful()
-        ->assertSee(__('Work queue'))
-        ->assertSee(__('Bank ledger'))
-        ->assertSee(__('Import history'))
+        ->assertSee(Lang::formatUiLabel(__('Work queue')))
+        ->assertSee(Lang::formatUiLabel(__('Bank ledger')))
+        ->assertSee(Lang::formatUiLabel(__('Import history')))
         ->assertSee(__('Bank clearing workspace'))
         ->assertDontSee(__('SMS clearing workspace'));
 })->with('bank clearing locales');
@@ -77,7 +78,7 @@ it('renders sms clearing page in each locale', function (string $locale) {
         ->test(ListSmsClearing::class)
         ->assertSuccessful()
         ->assertSee(__('SMS clearing workspace'))
-        ->assertSee(__('Work queue'))
-        ->assertSee(__('Posted ledger'))
-        ->assertSee(__('Import history'));
+        ->assertSee(Lang::formatUiLabel(__('Work queue')))
+        ->assertSee(Lang::formatUiLabel(__('Posted ledger')))
+        ->assertSee(Lang::formatUiLabel(__('Import history')));
 })->with('bank clearing locales');

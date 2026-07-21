@@ -35,6 +35,10 @@ class MemberRequest extends Model
 
     public const TYPE_WITHDRAW_MEMBERSHIP = 'withdraw_membership';
 
+    public const TYPE_REINSTATE_MEMBERSHIP = 'reinstate_membership';
+
+    public const TYPE_RELEASE_PAYOUT = 'release_payout';
+
     public const TYPE_OPEN_CYCLE_CONTRIBUTION = 'open_cycle_contribution';
 
     protected $fillable = [
@@ -80,10 +84,38 @@ class MemberRequest extends Model
             self::TYPE_REQUEST_INDEPENDENCE => __('Become independent'),
             self::TYPE_FREEZE_MEMBERSHIP => __('Freeze membership'),
             self::TYPE_UNFREEZE_MEMBERSHIP => __('Unfreeze membership'),
-            self::TYPE_WITHDRAW_MEMBERSHIP => __('Withdraw from fund'),
+            self::TYPE_WITHDRAW_MEMBERSHIP => __('Leave fund'),
+            self::TYPE_REINSTATE_MEMBERSHIP => __('Reinstate membership'),
+            self::TYPE_RELEASE_PAYOUT => __('Release payout'),
             self::TYPE_OPEN_CYCLE_CONTRIBUTION => __('Open-cycle contribution amount'),
             default => $type,
         };
+    }
+
+    /**
+     * Request types a portal-blocked member may submit from the login surface
+     * after credentials are verified (no portal session is created).
+     *
+     * @return list<string>
+     */
+    public static function loginSurfaceTypesFor(Member $member): array
+    {
+        if ($member->status === 'inactive' && $member->frozen_at !== null) {
+            return [self::TYPE_UNFREEZE_MEMBERSHIP];
+        }
+
+        if ($member->status === 'withdrawn') {
+            if ($member->payout_frozen_at !== null) {
+                return [
+                    self::TYPE_RELEASE_PAYOUT,
+                    self::TYPE_REINSTATE_MEMBERSHIP,
+                ];
+            }
+
+            return [self::TYPE_REINSTATE_MEMBERSHIP];
+        }
+
+        return [];
     }
 
     /**
@@ -113,6 +145,8 @@ class MemberRequest extends Model
             self::TYPE_FREEZE_MEMBERSHIP => self::typeLabel(self::TYPE_FREEZE_MEMBERSHIP),
             self::TYPE_UNFREEZE_MEMBERSHIP => self::typeLabel(self::TYPE_UNFREEZE_MEMBERSHIP),
             self::TYPE_WITHDRAW_MEMBERSHIP => self::typeLabel(self::TYPE_WITHDRAW_MEMBERSHIP),
+            self::TYPE_REINSTATE_MEMBERSHIP => self::typeLabel(self::TYPE_REINSTATE_MEMBERSHIP),
+            self::TYPE_RELEASE_PAYOUT => self::typeLabel(self::TYPE_RELEASE_PAYOUT),
             self::TYPE_OPEN_CYCLE_CONTRIBUTION => self::typeLabel(self::TYPE_OPEN_CYCLE_CONTRIBUTION),
         ];
     }
@@ -184,7 +218,9 @@ class MemberRequest extends Model
             self::TYPE_REQUEST_INDEPENDENCE => __('Unlink from household parent'),
             self::TYPE_FREEZE_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Pause membership'),
             self::TYPE_UNFREEZE_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Resume membership'),
-            self::TYPE_WITHDRAW_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Voluntary withdrawal'),
+            self::TYPE_WITHDRAW_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Voluntary leave'),
+            self::TYPE_REINSTATE_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Request to rejoin'),
+            self::TYPE_RELEASE_PAYOUT => trim((string) ($payload['reason'] ?? '')) ?: __('Request payout release'),
             self::TYPE_OPEN_CYCLE_CONTRIBUTION => $this->formatOpenCycleContributionPayload($payload),
             default => __('—'),
         };

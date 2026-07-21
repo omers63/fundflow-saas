@@ -149,7 +149,7 @@ final class BankTransactionTableActions
 
     public static function deletePendingOperationalClearance(): DeleteAction
     {
-        return DeleteAction::make()
+        return DeleteAction::make('deletePendingOperational')
             ->visible(fn (BankTransaction $record): bool => PendingOperationalClearanceDeletionService::canDelete($record))
             ->modalHeading(__('Remove pending bank match'))
             ->modalDescription(fn (BankTransaction $record): string => PendingOperationalClearanceDeletionService::modalDescription($record))

@@ -58,14 +58,14 @@ final class BankClearingQueuePresenter
         $matching = app(BankClearingMatchService::class);
 
         if ($matching->findUniqueCandidate($record) !== null) {
-            return __('Match automatically');
+            return __('Auto-match');
         }
 
         return match (app(BankClearingQueueService::class)->primaryActionForRecord($record)) {
-            'matchToBankLine' => __('Match to bank line'),
-            'mirrorToCash' => __('Post to cash'),
-            'postToMember' => __('Post to member'),
-            'clearWithoutEvidence' => __('Clear without evidence'),
+            'matchToBankLine' => __('Match'),
+            'mirrorToCash' => __('Post cash'),
+            'postToMember' => __('Post member'),
+            'clearWithoutEvidence' => __('Clear'),
             default => null,
         };
     }

@@ -10,13 +10,5 @@
         @endforeach
     </div>
 
-    @if (in_array($ledgerTab, ['cash', 'fund'], true) && auth('tenant')->user()?->is_admin && count($this->getTable()->getHeaderActions()) > 0)
-        <div class="ff-ledger-header-actions mb-3 flex flex-wrap gap-2">
-            @foreach ($this->getTable()->getHeaderActions() as $action)
-                {{ $action }}
-            @endforeach
-        </div>
-    @endif
-
     {{ $this->table }}
 </div>

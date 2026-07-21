@@ -1,8 +1,8 @@
 # Member status & membership lifecycle specification
 
-**Version:** 2.0  
+**Version:** 2.1  
 **Status:** Approved for implementation  
-**Scope:** Tenant member `status`, contribution-cycle flag, member requests, admin workflows, portal gating.
+**Scope:** Tenant member `status`, contribution-cycle flag, member requests, admin workflows, portal gating, pre-portal login requests.
 
 ---
 
@@ -48,10 +48,25 @@
 | Admin: Contribute | ✅ | ✅ | ✅* | ❌ |
 | Member: cash-out request | ✅ | ❌ | ❌ | ✅† |
 | Payout / settlement | ✅ | ❌ | ❌ | ✅‡ |
+| Pre-portal status request (login) | — | — | ✅§ | ✅¶ |
 
 \* When `contribution_cycles_active` is true.  
-† Voluntary withdrawal settlement.  
-‡ `payout_frozen_at` blocks payout until **Release payout** or **Reinstate**.
+† Voluntary leave-fund settlement may create a pending **cash-out** (separate product).  
+‡ `payout_frozen_at` blocks payout until **Release payout** or **Reinstate**.  
+§ Frozen inactive (`frozen_at` set): **Request unfreeze** from the member sign-in page after credentials are verified (no portal session). Non-frozen inactive stays admin **Restore inactive** only.  
+¶ Withdrawn: **Request reinstate**; if `payout_frozen_at` set, also **Request release payout**. Admins still apply the change via `MemberRequest` approval.
+
+**Leave fund vs cash-out:** Leaving the fund ends membership (`withdraw`). Cash-out pays bank money from cash while (usually) remaining a member. Settlement after leave-fund may compose a cash-out; the two flows are not merged in the UI.
+
+### Member request types (membership lifecycle)
+
+| Type | Who can submit | On approve |
+|------|----------------|------------|
+| `freeze_membership` | Active member (portal) | `freeze()` |
+| `unfreeze_membership` | Frozen inactive (login surface; portal action if somehow accessible) | `unfreeze()` |
+| `withdraw_membership` | Active / inactive (portal) — labelled **Leave fund** | `withdraw(holdPayout: false)` |
+| `reinstate_membership` | Withdrawn (login surface) | `reinstate()` |
+| `release_payout` | Withdrawn with `payout_frozen_at` (login surface) | `releasePayoutReview()` |
 
 ---
 

@@ -107,7 +107,7 @@ final class AccountTransactionManualAdjustmentHeaderActions
             ->icon(Heroicon::OutlinedArrowUturnLeft)
             ->color('warning')
             ->visible(function () use ($resolveAccount): bool {
-                if (! (bool) Auth::guard('tenant')->user()?->is_admin) {
+                if (! self::manualCreditDebitVisible()) {
                     return false;
                 }
 

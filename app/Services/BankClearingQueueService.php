@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\Tenant\BankTransaction;
 use App\Support\BankClearing\BankClearingQueueFilter;
 use App\Support\BankClearing\BankClearingQueueKind;
+use App\Support\BankStatementBuckets;
 use App\Support\BankTransactionWorkflow;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -44,7 +45,8 @@ final class BankClearingQueueService
      */
     public function openItemsQuery(BankClearingQueueFilter|string|null $filter = null): Builder
     {
-        return $this->applyOpenItemsScope(BankTransaction::query(), $filter);
+        return $this->applyOpenItemsScope(BankTransaction::query(), $filter)
+            ->with(['member', 'bankStatement']);
     }
 
     /**
@@ -69,6 +71,14 @@ final class BankClearingQueueService
 
     public function isBankFileItem(BankTransaction $record): bool
     {
+        if ($record->relationLoaded('bankStatement')) {
+            $filename = $record->bankStatement?->filename;
+
+            return in_array($record->status, ['imported', 'mirrored'], true)
+                && $filename !== null
+                && ! in_array($filename, BankStatementBuckets::SYNTHETIC_OPERATIONAL, true);
+        }
+
         return $this->matching
             ->applyBankLinesAwaitingPostingScope(BankTransaction::query()->whereKey($record->getKey()))
             ->exists();
@@ -76,6 +86,14 @@ final class BankClearingQueueService
 
     public function isOperationsItem(BankTransaction $record): bool
     {
+        if ($record->relationLoaded('bankStatement')) {
+            $filename = $record->bankStatement?->filename;
+
+            return $filename !== null
+                && in_array($filename, BankStatementBuckets::OPERATIONAL_CLEARANCE, true)
+                && $this->matching->isPendingClearance($record);
+        }
+
         return $this->matching
             ->applyPendingOperationalClearanceScope(BankTransaction::query()->whereKey($record->getKey()))
             ->exists();

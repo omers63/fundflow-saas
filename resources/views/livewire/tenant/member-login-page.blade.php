@@ -12,6 +12,13 @@
         </div>
 
         <div class="member-login-card__body">
+            @if ($statusType === 'inactive')
+                <div class="member-login-alert member-login-alert--amber">
+                    <p class="member-login-alert__title">{{ __('Membership frozen') }}</p>
+                    <p class="member-login-alert__text">{{ $statusMessage }}</p>
+                </div>
+            @endif
+
             @if ($statusType === 'suspended')
                 <div class="member-login-alert member-login-alert--rose">
                     <p class="member-login-alert__title">{{ __('Membership suspended') }}</p>
@@ -21,7 +28,7 @@
 
             @if ($statusType === 'withdrawn')
                 <div class="member-login-alert member-login-alert--slate">
-                    <p class="member-login-alert__title">{{ __('Membership withdrawn') }}</p>
+                    <p class="member-login-alert__title">{{ __('Membership ended') }}</p>
                     <p class="member-login-alert__text">{{ $statusMessage }}</p>
                 </div>
             @endif
@@ -46,8 +53,65 @@
                     <p class="member-login-alert__text">{{ $statusMessage }}</p>
                 </div>
             @endif
-            
-            @if ($statusType !== 'maintenance' && !$showProfilePicker)
+
+            @if ($statusRequestSuccess)
+                <div class="member-login-alert member-login-alert--teal">
+                    <p class="member-login-alert__title">{{ __('Request received') }}</p>
+                    <p class="member-login-alert__text">{{ $statusRequestSuccess }}</p>
+                </div>
+            @endif
+
+            @if ($showStatusRequestForm)
+                <form wire:submit="submitStatusRequest" class="member-login-form">
+                    <p class="member-login-profile-picker__heading">{{ __('Request from fund administration') }}</p>
+                    <p class="member-login-profile-picker__hint">
+                        {{ __('Submit a request without opening the portal. An administrator must approve before your access changes.') }}
+                    </p>
+
+                    @if (count($availableStatusRequestTypes) > 1)
+                        <div>
+                            <label class="member-login-label" for="member-status-request-type">{{ __('Request type') }}</label>
+                            <select id="member-status-request-type" wire:model="statusRequestType"
+                                class="member-login-input @error('statusRequestType') member-login-input--error @enderror">
+                                @foreach ($availableStatusRequestTypes as $type)
+                                    <option value="{{ $type }}">{{ \App\Models\Tenant\MemberRequest::typeLabel($type) }}</option>
+                                @endforeach
+                            </select>
+                            @error('statusRequestType')
+                                <p class="member-login-error">{{ $message }}</p>
+                            @enderror
+                        </div>
+                    @endif
+
+                    @if ($statusRequestType === \App\Models\Tenant\MemberRequest::TYPE_REINSTATE_MEMBERSHIP)
+                        <p class="member-login-profile-picker__hint">
+                            {{ __('Reinstatement reopens membership and clears cash and fund balances to zero.') }}
+                        </p>
+                    @endif
+
+                    <div>
+                        <label class="member-login-label" for="member-status-request-reason">{{ __('Reason (optional)') }}</label>
+                        <textarea id="member-status-request-reason" wire:model="statusRequestReason" rows="3"
+                            maxlength="500"
+                            class="member-login-input @error('statusRequestReason') member-login-input--error @enderror"
+                            placeholder="{{ __('Briefly explain your request') }}"></textarea>
+                        @error('statusRequestReason')
+                            <p class="member-login-error">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div class="member-login-profile-actions">
+                        <button type="button" wire:click="clearBlockedStatusRequest" class="member-login-profile-back">
+                            {{ __('Back to sign in') }}
+                        </button>
+                        <button type="submit" wire:loading.attr="disabled"
+                            class="member-login-submit member-login-submit--compact">
+                            <span wire:loading.remove wire:target="submitStatusRequest">{{ __('Submit request') }}</span>
+                            <span wire:loading wire:target="submitStatusRequest">{{ __('Submitting...') }}</span>
+                        </button>
+                    </div>
+                </form>
+            @elseif ($statusType !== 'maintenance' && !$showProfilePicker)
                 <form wire:submit="login" class="member-login-form">
                     <div>
                         <label class="member-login-label" for="member-login-email">{{ __('Email address') }}</label>

@@ -11,7 +11,6 @@ use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Resources\SmsClearing\SmsClearingResource;
 use App\Filament\Tenant\Support\BankClearingTabRegistry;
-use App\Filament\Tenant\Widgets\BankAccountsInsightsWidget;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Transaction;
 use App\Services\BankAccountsInsightsService;
@@ -69,11 +68,15 @@ class ListBankAccounts extends ListRecords
         parent::mount();
 
         $legacyTab = request()->string('tab')->toString();
+        $queueFilterFromQuery = request()->query('queueFilter');
+        $hasExplicitQueueFilter = filled($queueFilterFromQuery);
+        $legacyQueueFilter = null;
 
         if (filled($legacyTab)) {
             $this->activeTab = BankClearingTabRegistry::normalizeTab($legacyTab);
 
             if ($legacyFilter = BankClearingTabRegistry::legacyTabQueueFilter($legacyTab)) {
+                $legacyQueueFilter = $legacyFilter;
                 $this->queueFilter = $legacyFilter;
             }
         }
@@ -83,6 +86,20 @@ class ListBankAccounts extends ListRecords
         }
 
         $this->queueFilter = BankClearingTabRegistry::normalizeQueueFilter($this->queueFilter);
+
+        // Smart Source default only when the URL omitted queueFilter and nothing else
+        // already selected a non-default slice (deep links, legacy tabs, Livewire params).
+        if (
+            $this->activeTab === BankClearingTabRegistry::TAB_QUEUE
+            && ! $hasExplicitQueueFilter
+            && $legacyQueueFilter === null
+            && $this->queueFilter === BankClearingTabRegistry::FILTER_ALL
+        ) {
+            $this->queueFilter = BankClearingTabRegistry::defaultQueueFilter(
+                app(BankClearingQueueService::class)->counts(),
+            );
+        }
+
         $this->historySection = BankClearingTabRegistry::normalizeHistorySection($this->historySection);
         $this->showClosedHistoryLines = $this->historySection === BankClearingTabRegistry::HISTORY_CLOSED;
 
@@ -155,6 +172,7 @@ class ListBankAccounts extends ListRecords
 
         $this->activeTab = $tab;
         $this->tableSort = null;
+        $this->cachedHeaderWidgetsSchemaComponents = [];
         $this->reconfigureTableForActiveTab();
         $this->resetTable();
     }
@@ -194,10 +212,25 @@ class ListBankAccounts extends ListRecords
 
         $this->cacheSchema('tableFiltersForm', $this->getTableFiltersForm(...));
 
+        // Column manager keeps Livewire + session state keyed by page class. Queue, ledger,
+        // and history define different columns; without a reset, names missing from the prior
+        // tab's state are treated as hidden until a full page remount.
+        $this->tableColumns = [];
+        $this->cachedDefaultTableColumnState = null;
         $this->initTableColumnManager();
 
         $this->tableFilters = [];
         $this->getTableFiltersForm()->fill([]);
+    }
+
+    public function getTableColumnsSessionKey(): string
+    {
+        return 'tables.'.md5(static::class.'|'.$this->activeTab).'_columns';
+    }
+
+    public function getHasReorderedTableColumnsSessionKey(): string
+    {
+        return 'tables.'.md5(static::class.'|'.$this->activeTab).'_has_reordered_columns';
     }
 
     protected function applySortingToTableQuery(Builder $query): Builder
@@ -225,22 +258,38 @@ class ListBankAccounts extends ListRecords
     }
 
     /**
+     * Header widgets are not used: Filament caches them across tabs, and nested widgets
+     * cannot reliably read the page activeTab. Tab-specific KPIs live in the workspace blade;
+     * the full dashboard is only behind Work queue → Show balances & trends.
+     *
      * @return array<int, class-string>
      */
     protected function getHeaderWidgets(): array
     {
-        if (BankAccountsResource::resolveListBankAccountsTab() === BankClearingTabRegistry::TAB_QUEUE) {
-            return [];
-        }
-
-        return [
-            BankAccountsInsightsWidget::class,
-        ];
+        return [];
     }
 
     public function getHeaderWidgetsColumns(): int|array
     {
         return 1;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function getLedgerInsightKpis(): array
+    {
+        return app(BankAccountsInsightsService::class)
+            ->snapshot(BankClearingTabRegistry::TAB_LEDGER)['ledger_kpis'] ?? [];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function getHistoryInsightKpis(): array
+    {
+        return app(BankAccountsInsightsService::class)
+            ->snapshot(BankClearingTabRegistry::TAB_HISTORY)['history_kpis'] ?? [];
     }
 
     protected function getHeaderActions(): array

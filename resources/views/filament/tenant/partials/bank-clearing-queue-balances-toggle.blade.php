@@ -7,7 +7,9 @@
 
     @if ($this->showQueueBalances)
         <div class="mt-3" wire:key="bank-clearing-full-insights">
-            @livewire(\App\Filament\Tenant\Widgets\BankAccountsInsightsWidget::class)
+            @livewire(\App\Filament\Tenant\Widgets\BankAccountsInsightsWidget::class, [
+                'activeTab' => \App\Filament\Tenant\Support\BankClearingTabRegistry::TAB_QUEUE,
+            ], key('bank-clearing-queue-balances'))
         </div>
     @endif
 </div>

@@ -3,10 +3,12 @@
 namespace App\Livewire\Tenant;
 
 use App\Models\Tenant\Member;
+use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\User;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Tenant\HouseholdProfileVerificationService;
 use App\Services\Tenant\MemberHouseholdLoginService;
+use App\Services\Tenant\MemberRequestService;
 use App\Support\MemberMembershipPolicy;
 use App\Support\MemberPortalMaintenance;
 use Filament\Facades\Filament;
@@ -23,6 +25,8 @@ use Livewire\Component;
 #[Title('Sign in')]
 class MemberLoginPage extends Component
 {
+    public const STATUS_REQUEST_SESSION_KEY = 'member_login_status_request';
+
     public string $email = '';
 
     public string $password = '';
@@ -43,6 +47,17 @@ class MemberLoginPage extends Component
     public ?string $statusMessage = null;
 
     public ?string $statusType = null;
+
+    public bool $showStatusRequestForm = false;
+
+    public string $statusRequestType = '';
+
+    public string $statusRequestReason = '';
+
+    public ?string $statusRequestSuccess = null;
+
+    /** @var list<string> */
+    public array $availableStatusRequestTypes = [];
 
     public function mount(): void
     {
@@ -83,17 +98,19 @@ class MemberLoginPage extends Component
             $this->statusMessage = __('Your member portal access is currently suspended. Please contact fund administration for support.');
         } elseif (session()->pull('member_inactive_notice')) {
             $this->statusType = 'inactive';
-            $this->statusMessage = __('Your membership is inactive (frozen). Member portal access is paused until fund administration unfreezes your account.');
+            $this->statusMessage = __('Your membership is inactive (frozen). Sign in below to request an unfreeze, or contact fund administration.');
         } elseif (session()->pull('member_withdrawn_notice')) {
             $this->statusType = 'withdrawn';
-            $this->statusMessage = __('Your membership has been withdrawn. Member portal access is no longer available. Please contact fund administration for support.');
+            $this->statusMessage = __('Your membership has ended. Sign in below to request reinstatement, or contact fund administration.');
         } elseif (session()->pull('member_delinquent_notice')) {
             $this->statusType = 'delinquent';
             $this->statusMessage = __('Your membership is marked delinquent. Member portal access is restricted until fund administration resolves outstanding items.');
         } elseif (session()->pull('member_terminated_notice')) {
             $this->statusType = 'terminated';
-            $this->statusMessage = __('Your membership has been terminated. Member portal access is no longer available. Please contact fund administration for support.');
+            $this->statusMessage = __('Your membership was terminated with payout on hold. Sign in below to request payout release or reinstatement, or contact fund administration.');
         }
+
+        $this->restoreStatusRequestSession();
     }
 
     /**
@@ -111,6 +128,7 @@ class MemberLoginPage extends Component
     {
         $this->validate();
         $this->resetErrorBag();
+        $this->clearStatusRequestUi();
 
         $this->email = app(MemberHouseholdLoginService::class)->normalizeEmail($this->email);
 
@@ -146,7 +164,7 @@ class MemberLoginPage extends Component
         if ($householdParent === null) {
             $memberUser = $loginService->resolveMemberUserByCredentials($this->email, $this->password);
 
-            if ($memberUser !== null && $memberUser->canAccessPanel(Filament::getPanel('member'))) {
+            if ($memberUser !== null) {
                 RateLimiter::clear($this->throttleKey('login'));
                 $this->completeLogin($memberUser, $memberUser->member);
 
@@ -243,9 +261,11 @@ class MemberLoginPage extends Component
         }
 
         if (! app(HouseholdProfileVerificationService::class)->memberCanUsePortal($selected)) {
-            $this->addError('selectedMemberId', __('This profile is not available for portal access.'));
+            if (! in_array($selected->status, Member::PORTAL_BLOCKED_STATUSES, true)) {
+                $this->addError('selectedMemberId', __('This profile is not available for portal access.'));
 
-            return;
+                return;
+            }
         }
 
         if ($selected->user === null) {
@@ -284,6 +304,94 @@ class MemberLoginPage extends Component
         session()->forget('active_member_id');
     }
 
+    public function clearBlockedStatusRequest(): void
+    {
+        $this->clearStatusRequestUi();
+        session()->forget(self::STATUS_REQUEST_SESSION_KEY);
+        $this->statusType = null;
+        $this->statusMessage = null;
+        $this->password = '';
+    }
+
+    public function submitStatusRequest(): void
+    {
+        $this->resetErrorBag();
+        $this->statusRequestSuccess = null;
+
+        $session = session(self::STATUS_REQUEST_SESSION_KEY);
+
+        if (! is_array($session) || ! isset($session['member_id'], $session['user_id'])) {
+            $this->addError('statusRequestReason', __('Sign in again to submit a membership request.'));
+
+            return;
+        }
+
+        $member = Member::query()->find((int) $session['member_id']);
+
+        if (
+            ! $member instanceof Member
+            || (int) $member->user_id !== (int) $session['user_id']
+        ) {
+            session()->forget(self::STATUS_REQUEST_SESSION_KEY);
+            $this->clearStatusRequestUi();
+            $this->addError('statusRequestReason', __('Sign in again to submit a membership request.'));
+
+            return;
+        }
+
+        $allowed = MemberRequest::loginSurfaceTypesFor($member);
+
+        if ($allowed === []) {
+            $this->addError('statusRequestReason', __('No membership request is available for your account status.'));
+
+            return;
+        }
+
+        $type = $this->statusRequestType !== '' ? $this->statusRequestType : $allowed[0];
+
+        if (! in_array($type, $allowed, true)) {
+            $this->addError('statusRequestType', __('Choose a valid request type.'));
+
+            return;
+        }
+
+        $this->validate([
+            'statusRequestReason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        try {
+            app(MemberRequestService::class)->submit($member, $type, [
+                'reason' => $this->statusRequestReason,
+            ]);
+        } catch (ValidationException $exception) {
+            $message = collect($exception->errors())->flatten()->first() ?? $exception->getMessage();
+            $this->addError('statusRequestReason', $message);
+
+            return;
+        }
+
+        $this->statusRequestSuccess = __('Request submitted. Fund administration will review it shortly.');
+        $this->statusRequestReason = '';
+
+        $this->availableStatusRequestTypes = array_values(array_filter(
+            MemberRequest::loginSurfaceTypesFor($member->fresh() ?? $member),
+            function (string $availableType) use ($member): bool {
+                return ! MemberRequest::query()
+                    ->where('requester_member_id', $member->id)
+                    ->where('type', $availableType)
+                    ->where('status', MemberRequest::STATUS_PENDING)
+                    ->exists();
+            },
+        ));
+
+        if ($this->availableStatusRequestTypes === []) {
+            $this->showStatusRequestForm = false;
+            $this->statusRequestType = '';
+        } else {
+            $this->statusRequestType = $this->availableStatusRequestTypes[0];
+        }
+    }
+
     public function render(): View
     {
         return view('livewire.tenant.member-login-page');
@@ -320,7 +428,7 @@ class MemberLoginPage extends Component
             }
 
             if (! app(MemberMembershipPolicy::class)->canAccessPortal($member)) {
-                $this->applyPortalBlockedStatus($member);
+                $this->applyPortalBlockedStatus($member, $user);
 
                 return;
             }
@@ -330,6 +438,7 @@ class MemberLoginPage extends Component
             session()->put('locale', $user->preferredLocale());
             session()->put('active_member_id', $member->id);
             MemberPortalMaintenance::syncSessionEpoch();
+            session()->forget(self::STATUS_REQUEST_SESSION_KEY);
 
             $this->redirectIntended($memberPanel->getUrl());
 
@@ -351,18 +460,25 @@ class MemberLoginPage extends Component
         ]);
     }
 
-    protected function applyPortalBlockedStatus(Member $member): void
+    protected function applyPortalBlockedStatus(Member $member, ?User $user = null): void
     {
+        $this->password = '';
+        $this->showProfilePicker = false;
+        $this->verificationSecret = '';
+
         if ($member->status === 'inactive') {
             if ($member->frozen_at !== null) {
                 $this->statusType = 'inactive';
-                $this->statusMessage = __('Your membership is inactive (frozen). Member portal access is paused until fund administration unfreezes your account.');
+                $this->statusMessage = __('Your membership is inactive (frozen). Member portal access is paused until your account is unfrozen.');
+                $this->enableStatusRequestForm($member, $user);
 
                 return;
             }
 
             $this->statusType = 'suspended';
             $this->statusMessage = __('Your member portal access is currently suspended. Please contact fund administration for support.');
+            $this->clearStatusRequestUi();
+            session()->forget(self::STATUS_REQUEST_SESSION_KEY);
 
             return;
         }
@@ -370,13 +486,15 @@ class MemberLoginPage extends Component
         if ($member->status === 'withdrawn') {
             if ($member->payout_frozen_at !== null) {
                 $this->statusType = 'terminated';
-                $this->statusMessage = __('Your membership has been terminated. Member portal access is no longer available. Please contact fund administration for support.');
+                $this->statusMessage = __('Your membership was terminated with payout on hold. You can request payout release or reinstatement below.');
+                $this->enableStatusRequestForm($member, $user);
 
                 return;
             }
 
             $this->statusType = 'withdrawn';
-            $this->statusMessage = __('Your membership has been withdrawn. Member portal access is no longer available. Please contact fund administration for support.');
+            $this->statusMessage = __('Your membership has ended. You can request reinstatement below, or contact fund administration.');
+            $this->enableStatusRequestForm($member, $user);
 
             return;
         }
@@ -384,7 +502,77 @@ class MemberLoginPage extends Component
         if (app(LoanDelinquencyService::class)->isDelinquent($member)) {
             $this->statusType = 'delinquent';
             $this->statusMessage = __('Your membership is marked delinquent. Member portal access is restricted until fund administration resolves outstanding items.');
+            $this->clearStatusRequestUi();
+            session()->forget(self::STATUS_REQUEST_SESSION_KEY);
         }
+    }
+
+    protected function enableStatusRequestForm(Member $member, ?User $user = null): void
+    {
+        $types = array_values(array_filter(
+            MemberRequest::loginSurfaceTypesFor($member),
+            function (string $type) use ($member): bool {
+                return ! MemberRequest::query()
+                    ->where('requester_member_id', $member->id)
+                    ->where('type', $type)
+                    ->where('status', MemberRequest::STATUS_PENDING)
+                    ->exists();
+            },
+        ));
+
+        if ($types === [] || $user === null) {
+            $this->clearStatusRequestUi();
+            session()->forget(self::STATUS_REQUEST_SESSION_KEY);
+
+            return;
+        }
+
+        session([
+            self::STATUS_REQUEST_SESSION_KEY => [
+                'member_id' => $member->id,
+                'user_id' => $user->id,
+            ],
+        ]);
+
+        $this->availableStatusRequestTypes = $types;
+        $this->statusRequestType = $types[0];
+        $this->statusRequestReason = '';
+        $this->statusRequestSuccess = null;
+        $this->showStatusRequestForm = true;
+    }
+
+    protected function restoreStatusRequestSession(): void
+    {
+        $session = session(self::STATUS_REQUEST_SESSION_KEY);
+
+        if (! is_array($session) || ! isset($session['member_id'], $session['user_id'])) {
+            return;
+        }
+
+        $member = Member::query()->find((int) $session['member_id']);
+
+        if (
+            ! $member instanceof Member
+            || (int) $member->user_id !== (int) $session['user_id']
+        ) {
+            session()->forget(self::STATUS_REQUEST_SESSION_KEY);
+
+            return;
+        }
+
+        if (! app(MemberMembershipPolicy::class)->canAccessPortal($member)) {
+            $user = User::query()->find((int) $session['user_id']);
+            $this->applyPortalBlockedStatus($member, $user instanceof User ? $user : null);
+        }
+    }
+
+    protected function clearStatusRequestUi(): void
+    {
+        $this->showStatusRequestForm = false;
+        $this->statusRequestType = '';
+        $this->statusRequestReason = '';
+        $this->statusRequestSuccess = null;
+        $this->availableStatusRequestTypes = [];
     }
 
     protected function applyMaintenanceStatus(): void
@@ -397,6 +585,8 @@ class MemberLoginPage extends Component
         $this->availableProfiles = [];
         $this->verificationSecret = '';
         $this->password = '';
+        $this->clearStatusRequestUi();
+        session()->forget(self::STATUS_REQUEST_SESSION_KEY);
     }
 
     protected function resolveAdminUser(): ?User

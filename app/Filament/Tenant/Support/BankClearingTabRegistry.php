@@ -86,6 +86,31 @@ final class BankClearingTabRegistry
         };
     }
 
+    /**
+     * Smart Work queue Source default when the URL has no queueFilter.
+     *
+     * @param  array{bank_file?: int, operations?: int, all?: int}  $counts
+     */
+    public static function defaultQueueFilter(array $counts): string
+    {
+        $bankFile = (int) ($counts['bank_file'] ?? 0);
+        $operations = (int) ($counts['operations'] ?? 0);
+
+        if ($bankFile > 0 && $operations === 0) {
+            return self::FILTER_BANK_FILE;
+        }
+
+        if ($operations > 0 && $bankFile === 0) {
+            return self::FILTER_OPERATIONS;
+        }
+
+        if ($bankFile > 0 && $operations > 0) {
+            return self::FILTER_BANK_FILE;
+        }
+
+        return self::FILTER_ALL;
+    }
+
     public static function normalizeHistorySection(?string $section): string
     {
         return match ($section) {

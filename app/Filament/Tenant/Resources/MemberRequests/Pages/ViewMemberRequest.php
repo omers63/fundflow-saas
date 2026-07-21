@@ -101,9 +101,11 @@ class ViewMemberRequest extends ViewRecord
                 ->modalHeading(__('Approve this request?'))
                 ->modalDescription(fn (): string => match ($this->record->type) {
                     MemberRequest::TYPE_ADD_DEPENDENT => __('Review the dependent details (and new parent email if provided), then approve when the household link is complete.'),
-                    MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => __('The member will be marked withdrawn and portal access will end.'),
+                    MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => __('The member will leave the fund and portal access will end. Settlement may create a pending cash-out.'),
                     MemberRequest::TYPE_FREEZE_MEMBERSHIP => __('The member will be marked inactive until unfrozen.'),
                     MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => __('The member will be set to active. Portal access stays blocked while arrears remain.'),
+                    MemberRequest::TYPE_REINSTATE_MEMBERSHIP => __('The member will return to active membership. Cash and fund balances will be cleared to zero.'),
+                    MemberRequest::TYPE_RELEASE_PAYOUT => __('Clears the payout hold only. Membership stays withdrawn until reinstated.'),
                     MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION => __('This cycle’s contribution due will be replaced with the requested amount. The member’s standing monthly allocation stays unchanged.'),
                     default => __('The change will be applied immediately for supported request types.'),
                 })

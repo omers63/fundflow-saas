@@ -3,12 +3,12 @@
 namespace App\Filament\Tenant\Resources\BankAccounts\Tables;
 
 use App\Filament\Support\BankClearingQueueActions;
-use App\Filament\Support\BankTransactionTableActions;
 use App\Filament\Support\BankWorkspaceImportTableHeaderActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableStandards;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Filament\Tenant\Support\ViewBankTransactionAction;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
@@ -33,19 +33,14 @@ class BankTransactionsTable
             ? TableRecordActionGroups::wrap([
                 ViewBankTransactionAction::make(),
             ])
-            : TableRecordActionGroups::wrap(BankClearingQueueActions::groupedRecordActions());
+            : BankClearingQueueActions::groupedRecordActions(BankClearingTabRegistry::FILTER_BANK_FILE);
 
         $toolbarActions = $auditMode
             ? TableStandards::defaultToolbarActions()
             : [
-                BulkActionGroup::make([
-                    BankClearingQueueActions::matchAllUniqueBulk(),
-                    BankClearingQueueActions::matchSelectedBulk(),
-                    BankClearingQueueActions::postToCashBulk(),
-                    BankTransactionTableActions::postToMemberBulk(),
-                    BankClearingQueueActions::ignoreBulk(),
-                    BankTransactionTableActions::deleteBulk(),
-                ]),
+                BulkActionGroup::make(
+                    BankClearingQueueActions::toolbarBulkActions(BankClearingTabRegistry::FILTER_BANK_FILE),
+                ),
             ];
 
         $table = TableGrouping::apply(

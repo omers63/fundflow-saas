@@ -119,6 +119,8 @@ class CommunicationsPage extends Page
                     MemberRequest::TYPE_FREEZE_MEMBERSHIP,
                     MemberRequest::TYPE_UNFREEZE_MEMBERSHIP,
                     MemberRequest::TYPE_WITHDRAW_MEMBERSHIP,
+                    MemberRequest::TYPE_REINSTATE_MEMBERSHIP,
+                    MemberRequest::TYPE_RELEASE_PAYOUT,
                     MemberRequest::TYPE_REQUEST_INDEPENDENCE,
                 ])
                 ->count();

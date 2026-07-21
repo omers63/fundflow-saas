@@ -21,6 +21,7 @@ use App\Filament\Tenant\Resources\Members\Concerns\SuppressesMemberWorkspaceTabB
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -70,6 +71,27 @@ class MemberTransactionsTabsRelationManager extends RelationManager
             })
             ->columns([
                 TextColumn::make('transacted_at')->dateTime()->sortable(),
+                TextColumn::make('account_scope')
+                    ->label(__('Scope'))
+                    ->state(fn (Transaction $record): string => $record->account?->is_master
+                        ? __('Master')
+                        : __('Member'))
+                    ->badge()
+                    ->color(fn (Transaction $record): string => $record->account?->is_master ? 'primary' : 'gray')
+                    ->searchable(false)
+                    ->sortable(query: function (Builder $query, string $direction): Builder {
+                        $transactionTable = $query->getModel()->getTable();
+                        $accountTable = (new Account)->getTable();
+
+                        return $query->orderBy(
+                            Account::query()
+                                ->select('is_master')
+                                ->whereColumn($accountTable.'.id', $transactionTable.'.account_id')
+                                ->limit(1),
+                            $direction,
+                        );
+                    })
+                    ->toggleable(),
                 AccountTransactionAmountColumn::make(),
                 AccountTransactionDescriptionColumn::make(),
                 AccountTransactionLinkedSourceColumn::make(),
@@ -83,6 +105,19 @@ class MemberTransactionsTabsRelationManager extends RelationManager
                     ->sortable(),
             ])
             ->filters([
+                SelectFilter::make('account_class')
+                    ->label(__('Scope'))
+                    ->options([
+                        'member' => __('Member'),
+                        'master' => __('Master'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return match ($data['value'] ?? null) {
+                            'master' => $query->whereHas('account', fn (Builder $accountQuery): Builder => $accountQuery->where('is_master', true)),
+                            'member' => $query->whereHas('account', fn (Builder $accountQuery): Builder => $accountQuery->where('is_master', false)),
+                            default => $query,
+                        };
+                    }),
                 SelectFilter::make('type')
                     ->options(AccountTransactionTypeFilter::options()),
                 DateColumnRangeFilter::make('transacted_at', __('Date')),

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Widgets;
 
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Services\BankAccountsInsightsService;
 use Filament\Widgets\Widget;
 
@@ -19,6 +20,9 @@ class BankAccountsInsightsWidget extends Widget
 
     protected ?string $pollingInterval = '30s';
 
+    /** Forced by the Work queue balances toggle; ignores request/Livewire parent resolution. */
+    public string $activeTab = BankClearingTabRegistry::TAB_QUEUE;
+
     public function getPollingInterval(): ?string
     {
         return $this->pollingInterval;
@@ -29,6 +33,6 @@ class BankAccountsInsightsWidget extends Widget
      */
     public function getData(): array
     {
-        return app(BankAccountsInsightsService::class)->snapshot();
+        return app(BankAccountsInsightsService::class)->snapshot($this->activeTab);
     }
 }

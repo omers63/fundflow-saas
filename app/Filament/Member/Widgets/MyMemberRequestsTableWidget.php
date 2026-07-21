@@ -43,6 +43,8 @@ class MyMemberRequestsTableWidget extends TableWidget
                 MemberRequest::TYPE_FREEZE_MEMBERSHIP,
                 MemberRequest::TYPE_UNFREEZE_MEMBERSHIP,
                 MemberRequest::TYPE_WITHDRAW_MEMBERSHIP,
+                MemberRequest::TYPE_REINSTATE_MEMBERSHIP,
+                MemberRequest::TYPE_RELEASE_PAYOUT,
                 MemberRequest::TYPE_REQUEST_INDEPENDENCE,
             ]);
     }
@@ -53,8 +55,8 @@ class MyMemberRequestsTableWidget extends TableWidget
             $table
                 ->heading(__('Membership requests'))
                 ->description(fn (): string => CurrentMember::get()?->parent_member_id !== null
-                    ? __('Freeze, unfreeze, withdraw, or request independence from your household parent.')
-                    : __('Freeze, unfreeze, or withdraw from the fund.'))
+                    ? __('Freeze, leave the fund, or request independence from your household parent. Unfreeze, reinstate, and payout-release requests can also be submitted from the sign-in page when portal access is blocked.')
+                    : __('Freeze or leave the fund while you have portal access. Unfreeze, reinstate, and payout-release requests can be submitted from the sign-in page when portal access is blocked.'))
                 ->headerActions(MemberRequestFilamentActions::membershipHeaderActions())
                 ->filters([
                     SelectFilter::make('status')

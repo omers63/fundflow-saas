@@ -317,8 +317,8 @@ class Settings extends Page implements HasForms
                     ->description(__('Controls optional admin tools on account transaction tables.'))
                     ->schema([
                         Toggle::make('ledger_show_manual_credit_debit')
-                            ->label(__('Show manual credit and debit'))
-                            ->helperText(__('When enabled, tenant admins see Credit and Debit header actions on master and member ledger tables.'))
+                            ->label(__('Show manual credit, debit, and refund'))
+                            ->helperText(__('When enabled, tenant admins see Credit and Debit header actions on master and member ledger tables, and Refund on member cash ledgers.'))
                             ->default(false),
                         Toggle::make('ledger_show_split_reverse')
                             ->label(__('Show split and reverse'))

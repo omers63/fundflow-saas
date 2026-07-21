@@ -12,9 +12,8 @@ use App\Services\FundPostingService;
 use App\Services\MasterExpenseDisbursementService;
 use App\Support\BankClearing\BankClearingQueueFilter;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();

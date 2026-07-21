@@ -87,6 +87,39 @@ test('member cash ledger registers manual credit and debit header actions for ad
         ->toContain('manualCredit', 'manualDebit');
 });
 
+test('member ledger exposes a toggleable scope column and filter', function () {
+    $admin = User::create([
+        'name' => 'Ledger Scope Admin',
+        'email' => 'ledger-scope-admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $member = Member::factory()->create();
+
+    $component = Livewire::actingAs($admin, 'tenant')
+        ->test(MemberTransactionsTabsRelationManager::class, [
+            'ownerRecord' => $member,
+            'pageClass' => EditMember::class,
+        ])
+        ->assertSuccessful();
+
+    $table = $component->instance()->getTable();
+    $columns = collect($table->getColumns())->map(fn ($column) => $column->getName())->all();
+    $filters = collect($table->getFilters())->map(fn ($filter) => $filter->getName())->all();
+
+    expect($columns)->toContain('account_scope');
+    expect($filters)->toContain('account_class');
+
+    $scopeColumn = collect($table->getColumns())->first(
+        fn ($column) => $column->getName() === 'account_scope',
+    );
+
+    expect($scopeColumn)->not->toBeNull();
+    expect($scopeColumn->isToggleable())->toBeTrue();
+});
+
 test('master account ledger registers manual credit and debit header actions for admins', function () {
     $admin = User::create([
         'name' => 'Master Ledger Admin',

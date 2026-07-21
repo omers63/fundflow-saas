@@ -78,11 +78,18 @@ test('unified work queue lists bank file and operational rows together', functio
     expect(app(BankClearingQueueService::class)->openCount())->toBe(2);
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(ListBankAccounts::class)
+        ->withQueryParams(['queueFilter' => 'all'])
+        ->test(ListBankAccounts::class, [
+            'activeTab' => 'queue',
+            'queueFilter' => 'all',
+        ])
         ->assertSuccessful()
         ->assertCanSeeTableRecords(
             app(BankClearingQueueService::class)->openItemsQuery()->get(),
-        );
+        )
+        ->assertSee('Unified queue import')
+        ->assertSee(__('From bank file'))
+        ->assertSee(__('Show balances & trends'));
 });
 
 test('navigation badge matches actionable open queue count', function () {
@@ -192,6 +199,7 @@ test('work queue can match operational row to bank line with evidence', function
     ]);
 
     Livewire::actingAs($this->admin, 'tenant')
+        ->withQueryParams(['queueFilter' => 'operations'])
         ->test(ListBankAccounts::class, [
             'channel' => 'bank',
             'activeTab' => 'queue',

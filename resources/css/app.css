@@ -417,6 +417,12 @@
         color: #92400e;
     }
 
+    .member-login-alert--teal {
+        border-color: #99f6e4;
+        background-color: #f0fdfa;
+        color: #115e59;
+    }
+
     .member-login-alert__title {
         font-weight: 600;
     }

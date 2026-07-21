@@ -41,10 +41,10 @@ final class MemberRequestListTableHeaderActions
             ->schema([
                 Select::make('requester_member_id')
                     ->label(__('Member'))
-                    ->options(fn(): array => Member::query()
+                    ->options(fn (): array => Member::query()
                         ->orderBy('member_number')
                         ->get(['id', 'member_number', 'name'])
-                        ->mapWithKeys(fn(Member $member): array => [
+                        ->mapWithKeys(fn (Member $member): array => [
                             $member->id => "{$member->member_number} — {$member->name}",
                         ])
                         ->all())
@@ -56,6 +56,8 @@ final class MemberRequestListTableHeaderActions
                         MemberRequest::TYPE_FREEZE_MEMBERSHIP => MemberRequest::typeLabel(MemberRequest::TYPE_FREEZE_MEMBERSHIP),
                         MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => MemberRequest::typeLabel(MemberRequest::TYPE_UNFREEZE_MEMBERSHIP),
                         MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => MemberRequest::typeLabel(MemberRequest::TYPE_WITHDRAW_MEMBERSHIP),
+                        MemberRequest::TYPE_REINSTATE_MEMBERSHIP => MemberRequest::typeLabel(MemberRequest::TYPE_REINSTATE_MEMBERSHIP),
+                        MemberRequest::TYPE_RELEASE_PAYOUT => MemberRequest::typeLabel(MemberRequest::TYPE_RELEASE_PAYOUT),
                         MemberRequest::TYPE_REQUEST_INDEPENDENCE => MemberRequest::typeLabel(MemberRequest::TYPE_REQUEST_INDEPENDENCE),
                         MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION => MemberRequest::typeLabel(MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION),
                     ])
@@ -65,16 +67,18 @@ final class MemberRequestListTableHeaderActions
                     ->label(__('Requested amount'))
                     ->numeric()
                     ->minValue(0.01)
-                    ->visible(fn(Get $get): bool => $get('type') === MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION)
-                    ->required(fn(Get $get): bool => $get('type') === MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION),
+                    ->visible(fn (Get $get): bool => $get('type') === MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION)
+                    ->required(fn (Get $get): bool => $get('type') === MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION),
                 Textarea::make('reason')
                     ->label(__('Reason (optional)'))
                     ->rows(3)
                     ->maxLength(500)
-                    ->visible(fn(Get $get): bool => in_array($get('type'), [
+                    ->visible(fn (Get $get): bool => in_array($get('type'), [
                         MemberRequest::TYPE_FREEZE_MEMBERSHIP,
                         MemberRequest::TYPE_UNFREEZE_MEMBERSHIP,
                         MemberRequest::TYPE_WITHDRAW_MEMBERSHIP,
+                        MemberRequest::TYPE_REINSTATE_MEMBERSHIP,
+                        MemberRequest::TYPE_RELEASE_PAYOUT,
                         MemberRequest::TYPE_REQUEST_INDEPENDENCE,
                     ], true)),
             ])

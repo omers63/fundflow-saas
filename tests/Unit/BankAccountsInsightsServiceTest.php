@@ -74,3 +74,14 @@ it('includes treasury forecast in snapshot', function () {
         'tone',
     ]);
 });
+
+it('exposes slim ledger and history kpi strips', function () {
+    $snapshot = app(BankAccountsInsightsService::class)->snapshot();
+
+    expect($snapshot['ledger_kpis'])->toHaveCount(3)
+        ->and(collect($snapshot['ledger_kpis'])->pluck('key')->all())
+        ->toBe(['master_bank', 'master_cash', 'open_queue'])
+        ->and($snapshot['history_kpis'])->toHaveCount(4)
+        ->and(collect($snapshot['history_kpis'])->pluck('key')->all())
+        ->toBe(['statements', 'failed', 'dupes', 'processing']);
+});

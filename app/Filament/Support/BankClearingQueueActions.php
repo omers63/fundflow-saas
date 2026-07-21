@@ -29,33 +29,96 @@ use Throwable;
 final class BankClearingQueueActions
 {
     /**
+     * Single Actions dropdown; children are slice-scoped and visibility-gated per row.
+     *
      * @return array<int, ActionGroup>
      */
-    public static function groupedRecordActions(): array
+    public static function groupedRecordActions(?string $queueFilter = null): array
+    {
+        return TableRecordActionGroups::wrap(self::recordActions($queueFilter));
+    }
+
+    /**
+     * @return array<int, Action>
+     */
+    public static function recordActions(?string $queueFilter = null): array
+    {
+        $filter = BankClearingTabRegistry::normalizeQueueFilter($queueFilter);
+        $includeBankFile = in_array($filter, [BankClearingTabRegistry::FILTER_ALL, BankClearingTabRegistry::FILTER_BANK_FILE], true);
+        $includeOperations = in_array($filter, [BankClearingTabRegistry::FILTER_ALL, BankClearingTabRegistry::FILTER_OPERATIONS], true);
+        $actions = [];
+
+        if ($includeBankFile) {
+            array_push($actions, ...self::bankFileResolveActions());
+        }
+
+        if ($includeOperations) {
+            if (! $includeBankFile) {
+                $actions[] = self::autoMatch();
+            }
+
+            $actions[] = self::matchToBankLine();
+            $actions[] = self::clearWithoutEvidence();
+        }
+
+        $actions[] = self::view();
+
+        if ($includeBankFile) {
+            array_push($actions, ...self::bankFileRemoveActions());
+        }
+
+        if ($includeOperations) {
+            array_push($actions, ...self::operationsRemoveActions());
+        }
+
+        return $actions;
+    }
+
+    /**
+     * @return array<int, BulkAction|DeleteBulkAction>
+     */
+    public static function toolbarBulkActions(?string $queueFilter = null): array
+    {
+        $filter = BankClearingTabRegistry::normalizeQueueFilter($queueFilter);
+
+        $actions = [
+            self::matchAllUniqueBulk(),
+            self::matchSelectedBulk(),
+        ];
+
+        if (in_array($filter, [BankClearingTabRegistry::FILTER_ALL, BankClearingTabRegistry::FILTER_OPERATIONS], true)) {
+            $actions[] = self::clearWithoutEvidenceBulk();
+        }
+
+        if (in_array($filter, [BankClearingTabRegistry::FILTER_ALL, BankClearingTabRegistry::FILTER_BANK_FILE], true)) {
+            $actions[] = self::postToCashBulk();
+            $actions[] = self::postToMemberBulk();
+            $actions[] = self::ignoreBulk();
+        }
+
+        $actions[] = self::deleteBulk();
+
+        return $actions;
+    }
+
+    /**
+     * @return array<int, Action>
+     */
+    public static function bankFileResolveActions(): array
     {
         return [
-            ActionGroup::make(self::resolveActions())
-                ->label(__('Resolve'))
-                ->icon('heroicon-o-check-circle'),
-            ActionGroup::make([
-                self::view(),
-            ])
-                ->label(__('Review'))
-                ->icon('heroicon-o-eye'),
-            ActionGroup::make(self::removeActions())
-                ->label(__('Remove'))
-                ->icon('heroicon-o-trash'),
+            self::postToCash(),
+            self::postToMember(),
+            self::autoMatch(),
         ];
     }
 
     /**
      * @return array<int, Action>
      */
-    public static function resolveActions(): array
+    public static function operationsResolveActions(): array
     {
         return [
-            self::postToCash(),
-            BankTransactionTableActions::postToMember(),
             self::autoMatch(),
             self::matchToBankLine(),
             self::clearWithoutEvidence(),
@@ -65,12 +128,21 @@ final class BankClearingQueueActions
     /**
      * @return array<int, Action>
      */
-    public static function removeActions(): array
+    public static function bankFileRemoveActions(): array
     {
         return [
             self::ignore(),
-            self::deletePendingOperational(),
             self::delete(),
+        ];
+    }
+
+    /**
+     * @return array<int, Action>
+     */
+    public static function operationsRemoveActions(): array
+    {
+        return [
+            self::deletePendingOperational(),
         ];
     }
 
@@ -89,6 +161,7 @@ final class BankClearingQueueActions
     public static function view(): Action
     {
         return ViewBankTransactionAction::make()
+            ->label(__('View'))
             ->modalContent(fn (BankTransaction $record) => TenantPortalViewModal::content(
                 BankClearingQueuePresenter::modalSections($record),
             ));
@@ -97,7 +170,7 @@ final class BankClearingQueueActions
     public static function postToCash(): Action
     {
         return Action::make('mirrorToCash')
-            ->label(__('Post to cash'))
+            ->label(__('Post cash'))
             ->icon('heroicon-o-arrow-right')
             ->color('info')
             ->requiresConfirmation()
@@ -109,10 +182,22 @@ final class BankClearingQueueActions
             });
     }
 
+    public static function postToMember(): Action
+    {
+        return BankTransactionTableActions::postToMember()
+            ->label(__('Post member'));
+    }
+
+    public static function postToMemberBulk(): BulkAction
+    {
+        return BankTransactionTableActions::postToMemberBulk()
+            ->label(__('Post member'));
+    }
+
     public static function autoMatch(): Action
     {
         return Action::make('autoMatch')
-            ->label(__('Match automatically'))
+            ->label(__('Auto-match'))
             ->icon('heroicon-o-bolt')
             ->color('success')
             ->requiresConfirmation()
@@ -136,20 +221,13 @@ final class BankClearingQueueActions
     public static function matchToBankLine(): Action
     {
         return Action::make('matchToBankLine')
-            ->label(__('Match to bank line'))
+            ->label(__('Match'))
             ->icon('heroicon-o-link')
             ->color('primary')
             ->requiresConfirmation()
             ->modalHeading(__('Match to bank line'))
             ->modalDescription(__('Pair this row with a specific imported bank statement line as evidence.'))
-            ->visible(function (BankTransaction $record, BankClearingMatchService $matching, BankClearingQueueService $queue): bool {
-                if ($queue->isOperationsItem($record)) {
-                    return true;
-                }
-
-                return $matching->isPendingClearance($record)
-                    && ! $matching->isSyntheticOperationalStatement($record);
-            })
+            ->visible(fn (BankTransaction $record, BankClearingQueueService $queue): bool => $queue->isOperationsItem($record))
             ->form([
                 Select::make('imported_transaction_id')
                     ->label(__('Bank statement line'))
@@ -186,7 +264,7 @@ final class BankClearingQueueActions
     public static function clearWithoutEvidence(): Action
     {
         return Action::make('clearWithoutEvidence')
-            ->label(__('Clear without evidence'))
+            ->label(__('Clear'))
             ->icon('heroicon-o-check')
             ->color('gray')
             ->requiresConfirmation()
@@ -225,19 +303,23 @@ final class BankClearingQueueActions
     public static function delete(): Action
     {
         return BankTransactionTableActions::delete()
-            ->visible(fn (BankTransaction $record, BankClearingQueueService $queue): bool => $queue->isBankFileItem($record));
+            ->label(__('Delete'))
+            ->visible(fn (BankTransaction $record, BankClearingQueueService $queue): bool => $queue->isBankFileItem($record)
+                && BankTransactionDeletion::canDelete($record));
     }
 
     public static function deletePendingOperational(): Action
     {
         return BankTransactionTableActions::deletePendingOperationalClearance()
-            ->visible(fn (BankTransaction $record, BankClearingQueueService $queue): bool => $queue->isOperationsItem($record));
+            ->label(__('Delete'))
+            ->visible(fn (BankTransaction $record, BankClearingQueueService $queue): bool => $queue->isOperationsItem($record)
+                && PendingOperationalClearanceDeletionService::canDelete($record));
     }
 
     public static function matchSelectedBulk(): BulkAction
     {
         return BulkAction::make('matchSelected')
-            ->label(__('Match to bank line'))
+            ->label(__('Match'))
             ->icon('heroicon-o-link')
             ->color('primary')
             ->requiresConfirmation()
@@ -261,7 +343,7 @@ final class BankClearingQueueActions
     public static function matchAllUniqueBulk(): BulkAction
     {
         return BulkAction::make('matchAllUnique')
-            ->label(__('Match automatically'))
+            ->label(__('Auto-match'))
             ->icon('heroicon-o-bolt')
             ->color('success')
             ->requiresConfirmation()
@@ -276,7 +358,7 @@ final class BankClearingQueueActions
     public static function clearWithoutEvidenceBulk(): BulkAction
     {
         return BulkAction::make('clearWithoutEvidenceBulk')
-            ->label(__('Clear without evidence'))
+            ->label(__('Clear'))
             ->icon('heroicon-o-check')
             ->color('gray')
             ->requiresConfirmation()
@@ -339,7 +421,7 @@ final class BankClearingQueueActions
     public static function postToCashBulk(): BulkAction
     {
         return BulkAction::make('mirrorSelectedToCash')
-            ->label(__('Post to cash'))
+            ->label(__('Post cash'))
             ->icon('heroicon-o-arrow-right')
             ->color('info')
             ->requiresConfirmation()

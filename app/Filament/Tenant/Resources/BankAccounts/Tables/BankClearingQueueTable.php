@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\BankAccounts\Tables;
 
 use App\Filament\Support\BankClearingQueueActions;
-use App\Filament\Support\BankTransactionTableActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
-use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
+use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
 use App\Services\BankClearingQueueService;
@@ -20,12 +20,13 @@ use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
 
 final class BankClearingQueueTable
 {
     public static function configure(Table $table): Table
     {
+        $queueFilter = BankAccountsResource::resolveQueueFilter();
+
         return TableGrouping::apply(
             $table
                 ->columns([
@@ -80,20 +81,10 @@ final class BankClearingQueueTable
                         ->toggleable(isToggledHiddenByDefault: true),
                 ])
                 ->filters([
-                    SelectFilter::make('queue_slice')
-                        ->label(__('Source'))
-                        ->options(BankClearingQueueService::sliceFilterOptions())
-                        ->query(function (Builder $query, array $data): Builder {
-                            if (blank($data['value'] ?? null)) {
-                                return $query;
-                            }
-
-                            return app(BankClearingQueueService::class)->applySliceFilter($query, (string) $data['value']);
-                        }),
                     SelectFilter::make('queue_kind')
                         ->label(__('Kind'))
                         ->options(BankClearingQueueKind::filterOptions())
-                        ->query(function (Builder $query, array $data): Builder {
+                        ->query(function ($query, array $data) {
                             if (blank($data['value'] ?? null)) {
                                 return $query;
                             }
@@ -109,22 +100,26 @@ final class BankClearingQueueTable
                 ])
                 ->recordUrl(fn (): ?string => null)
                 ->recordAction(ViewAction::getDefaultName())
-                ->emptyStateDescription(__('Open bank file lines and operational rows that need posting or bank matching. Match pairs an imported CSV line; clear closes operational rows without bank evidence.'))
-                ->recordActions(TableRecordActionGroups::wrap(BankClearingQueueActions::groupedRecordActions()))
+                ->emptyStateDescription(self::emptyStateDescription($queueFilter))
+                ->recordActions(BankClearingQueueActions::groupedRecordActions($queueFilter))
                 ->toolbarActions([
-                    BulkActionGroup::make([
-                        BankClearingQueueActions::matchAllUniqueBulk(),
-                        BankClearingQueueActions::matchSelectedBulk(),
-                        BankClearingQueueActions::clearWithoutEvidenceBulk(),
-                        BankClearingQueueActions::postToCashBulk(),
-                        BankTransactionTableActions::postToMemberBulk(),
-                        BankClearingQueueActions::ignoreBulk(),
-                        BankClearingQueueActions::deleteBulk(),
-                    ]),
+                    BulkActionGroup::make(
+                        BankClearingQueueActions::toolbarBulkActions($queueFilter),
+                    ),
                     TableToolbar::refreshBulkAction(),
                 ])
+                ->modifyQueryUsing(fn ($query) => $query->with(['member', 'bankStatement']))
                 ->defaultSort('transaction_date', 'desc'),
             TableGrouping::bankTransactions()
         );
+    }
+
+    public static function emptyStateDescription(string $queueFilter): string
+    {
+        return match (BankClearingTabRegistry::normalizeQueueFilter($queueFilter)) {
+            BankClearingTabRegistry::FILTER_BANK_FILE => __('No bank file lines awaiting posting. Import a statement, then use Post cash or Post member.'),
+            BankClearingTabRegistry::FILTER_OPERATIONS => __('No operational rows awaiting bank evidence. Use Match or Clear when a deposit, cash-out, or disbursement is waiting.'),
+            default => __('Open bank file lines and operational rows that need posting or bank matching. Match pairs an imported CSV line; clear closes operational rows without bank evidence.'),
+        };
     }
 }

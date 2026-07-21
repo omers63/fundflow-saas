@@ -80,6 +80,8 @@ class MemberRequestService
             MemberRequest::TYPE_FREEZE_MEMBERSHIP => $this->validateFreezeMembership($requester, $payload),
             MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => $this->validateUnfreezeMembership($requester),
             MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => $this->validateWithdrawMembership($requester, $payload),
+            MemberRequest::TYPE_REINSTATE_MEMBERSHIP => $this->validateReinstateMembership($requester),
+            MemberRequest::TYPE_RELEASE_PAYOUT => $this->validateReleasePayout($requester),
             MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION => null,
             default => throw ValidationException::withMessages(['type' => __('Invalid request type.')]),
         };
@@ -191,9 +193,33 @@ class MemberRequestService
 
     protected function validateUnfreezeMembership(Member $requester): void
     {
-        if ($requester->status !== 'inactive') {
+        if ($requester->status !== 'inactive' || $requester->frozen_at === null) {
             throw ValidationException::withMessages([
-                'member' => __('Only inactive members can request to unfreeze membership.'),
+                'member' => __('Only frozen members can request to unfreeze membership.'),
+            ]);
+        }
+    }
+
+    protected function validateReinstateMembership(Member $requester): void
+    {
+        if ($requester->status !== 'withdrawn') {
+            throw ValidationException::withMessages([
+                'member' => __('Only withdrawn members can request reinstatement.'),
+            ]);
+        }
+    }
+
+    protected function validateReleasePayout(Member $requester): void
+    {
+        if ($requester->status !== 'withdrawn') {
+            throw ValidationException::withMessages([
+                'member' => __('Payout release applies only to withdrawn members.'),
+            ]);
+        }
+
+        if ($requester->payout_frozen_at === null) {
+            throw ValidationException::withMessages([
+                'member' => __('Payout is not frozen for this member.'),
             ]);
         }
     }
@@ -251,6 +277,8 @@ class MemberRequestService
                 MemberRequest::TYPE_FREEZE_MEMBERSHIP => $this->applyFreezeMembership($requester, $payload, $options),
                 MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => $this->applyUnfreezeMembership($requester),
                 MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => $this->applyWithdrawMembership($requester, $payload, $options),
+                MemberRequest::TYPE_REINSTATE_MEMBERSHIP => $this->applyReinstateMembership($requester, $payload),
+                MemberRequest::TYPE_RELEASE_PAYOUT => $this->applyReleasePayout($requester, $payload),
                 MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION => $this->openCycleOverrides->applyApproved($requester, $payload),
                 default => throw ValidationException::withMessages(['type' => __('Unknown request type.')]),
             };
@@ -384,7 +412,13 @@ class MemberRequestService
 
     protected function applyUnfreezeMembership(Member $member): void
     {
-        $this->statuses->unfreeze($member);
+        try {
+            $this->statuses->unfreeze($member);
+        } catch (\InvalidArgumentException $exception) {
+            throw ValidationException::withMessages([
+                'member' => $exception->getMessage(),
+            ]);
+        }
     }
 
     protected function applyWithdrawMembership(Member $member, array $payload, array $options = []): void
@@ -399,6 +433,28 @@ class MemberRequestService
             holdPayout: false,
             withdrawDate: $withdrawDate,
         );
+    }
+
+    protected function applyReinstateMembership(Member $member, array $payload): void
+    {
+        try {
+            $this->statuses->reinstate($member, (string) ($payload['reason'] ?? ''));
+        } catch (\InvalidArgumentException $exception) {
+            throw ValidationException::withMessages([
+                'member' => $exception->getMessage(),
+            ]);
+        }
+    }
+
+    protected function applyReleasePayout(Member $member, array $payload): void
+    {
+        try {
+            $this->statuses->releasePayoutReview($member, (string) ($payload['reason'] ?? ''));
+        } catch (\InvalidArgumentException $exception) {
+            throw ValidationException::withMessages([
+                'member' => $exception->getMessage(),
+            ]);
+        }
     }
 
     protected function notifyRequester(Member $requester, MemberRequest $request, string $outcome): void

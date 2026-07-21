@@ -64,7 +64,8 @@ final class MemberRequestFilamentActions
             ->label(__('Unfreeze membership'))
             ->icon('heroicon-o-play-circle')
             ->color('success')
-            ->visible(fn (): bool => CurrentMember::get()?->status === 'inactive')
+            ->visible(fn (): bool => CurrentMember::get()?->status === 'inactive'
+                && CurrentMember::get()?->frozen_at !== null)
             ->schema([
                 Textarea::make('reason')
                     ->label(__('Reason (optional)'))
@@ -80,7 +81,7 @@ final class MemberRequestFilamentActions
     private static function withdrawMembershipAction(MemberRequestService $service): Action
     {
         return Action::make('requestWithdrawMembership')
-            ->label(__('Withdraw from fund'))
+            ->label(__('Leave fund'))
             ->icon('heroicon-o-arrow-right-on-rectangle')
             ->color('danger')
             ->visible(fn (): bool => in_array(CurrentMember::get()?->status, ['active', 'inactive'], true))
@@ -91,8 +92,8 @@ final class MemberRequestFilamentActions
                     ->maxLength(500),
             ])
             ->requiresConfirmation()
-            ->modalHeading(__('Request withdrawal'))
-            ->modalDescription(__('Voluntary exit from the fund. Administration will review before your membership is closed.'))
+            ->modalHeading(__('Request to leave the fund'))
+            ->modalDescription(__('Voluntary exit from the fund. Administration will review before your membership is closed. This is separate from a cash-out of your balance while remaining a member.'))
             ->action(fn (array $data) => self::submit($service, MemberRequest::TYPE_WITHDRAW_MEMBERSHIP, [
                 'reason' => $data['reason'] ?? '',
             ]));

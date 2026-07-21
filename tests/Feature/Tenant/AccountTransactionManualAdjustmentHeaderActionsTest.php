@@ -200,7 +200,9 @@ test('manual credit can use a custom transaction datetime', function () {
     expect($txn->transacted_at->format('Y-m-d H:i:s'))->toBe('2024-06-15 14:30:00');
 });
 
-test('refund header action is visible only on member cash accounts', function () {
+test('refund header action is visible only on member cash accounts when manual ledger setting is enabled', function () {
+    LedgerSettings::saveFromForm(['ledger_show_manual_credit_debit' => true]);
+
     $admin = User::create([
         'name' => 'Admin',
         'email' => 'admin-refund-visible-'.uniqid('', true).'@test.com',
@@ -223,6 +225,21 @@ test('refund header action is visible only on member cash accounts', function ()
         ->and($cashActions[2]->isHidden())->toBeFalse()
         ->and(collect($fundActions)->first(fn ($action) => $action->getName() === 'refundMemberCash')->isHidden())->toBeTrue()
         ->and(collect($masterActions)->first(fn ($action) => $action->getName() === 'refundMemberCash')->isHidden())->toBeTrue();
+});
+
+test('refund header action stays hidden on member cash when manual ledger setting is disabled', function () {
+    $admin = User::create([
+        'name' => 'Admin',
+        'email' => 'admin-refund-hidden-'.uniqid('', true).'@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+    $this->actingAs($admin, 'tenant');
+
+    $memberCash = Account::factory()->cash()->create();
+    $actions = AccountTransactionManualAdjustmentHeaderActions::make(fn () => $memberCash);
+
+    expect(collect($actions)->first(fn ($action) => $action->getName() === 'refundMemberCash')->isHidden())->toBeTrue();
 });
 
 test('refund debits member cash and master cash', function () {

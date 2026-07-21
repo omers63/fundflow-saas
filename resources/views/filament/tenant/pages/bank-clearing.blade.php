@@ -1,8 +1,8 @@
 @php
-    use App\Filament\Tenant\Support\BankClearingTabRegistry;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
 
-    $bankTab = $bankTab ?? BankClearingTabRegistry::TAB_QUEUE;
-    $queueFilter = $queueFilter ?? BankClearingTabRegistry::FILTER_ALL;
+$bankTab = $bankTab ?? BankClearingTabRegistry::TAB_QUEUE;
+$queueFilter = $queueFilter ?? BankClearingTabRegistry::FILTER_ALL;
 @endphp
 
 <section
@@ -15,12 +15,12 @@
     </header>
 
     @include('filament.tenant.partials.audit-system.workspace-actions', [
-        'class' => 'ff-audit-workspace-actions ff-bank-clearing-workspace-actions mb-4',
-    ])
+    'class' => 'ff-audit-workspace-actions ff-bank-clearing-workspace-actions mb-4',
+])
 
     @include('filament.tenant.partials.bank-clearing-tab-pills', [
-        'bankTab' => $bankTab,
-    ])
+    'bankTab' => $bankTab,
+])
 
     <div class="min-w-0 space-y-4" wire:key="bank-clearing-workspace-{{ $bankTab }}-{{ $queueFilter }}">
         @if ($bankTab === BankClearingTabRegistry::TAB_QUEUE)
@@ -28,9 +28,16 @@
             @include('filament.tenant.partials.bank-clearing-queue-balances-toggle')
             @include('filament.tenant.partials.bank-clearing-workspace-shortcuts')
             @include('filament.tenant.partials.bank-clearing-queue-filters', [
-                'queueFilter' => $queueFilter,
+        'queueFilter' => $queueFilter,
+    ])
+        @elseif ($bankTab === BankClearingTabRegistry::TAB_LEDGER)
+            @include('filament.tenant.widgets.partials.insights-kpi-strip', [
+                'kpis' => $this->getLedgerInsightKpis(),
             ])
         @elseif ($bankTab === BankClearingTabRegistry::TAB_HISTORY)
+            @include('filament.tenant.widgets.partials.insights-kpi-strip', [
+                'kpis' => $this->getHistoryInsightKpis(),
+            ])
             @include('filament.tenant.partials.bank-clearing-history-combined')
         @endif
     </div>

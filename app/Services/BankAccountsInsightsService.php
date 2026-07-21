@@ -55,10 +55,12 @@ final class BankAccountsInsightsService
     /**
      * @return array<string, mixed>
      */
-    public function snapshot(): array
+    public function snapshot(?string $activeTab = null): array
     {
         $currency = InsightFormatter::currency();
-        $activeTab = BankAccountsResource::resolveListBankAccountsTab();
+        $activeTab = BankClearingTabRegistry::normalizeTab(
+            $activeTab ?? BankAccountsResource::resolveListBankAccountsTab(),
+        );
         $now = BusinessDay::now();
         $bankClearing = app(BankClearingMatchService::class);
 
@@ -226,6 +228,82 @@ final class BankAccountsInsightsService
                     ),
                 ],
             ],
+            'ledger_kpis' => InsightKpi::linkMany([
+                [
+                    'key' => 'master_bank',
+                    'label' => __('Master bank'),
+                    ...InsightKpi::moneyValue($masterBank, $currency),
+                    'sub' => __('Ledger balance'),
+                    'icon' => 'heroicon-o-building-library',
+                    'accent' => 'indigo',
+                ],
+                [
+                    'key' => 'master_cash',
+                    'label' => __('Master cash'),
+                    ...InsightKpi::moneyValue($masterCash, $currency),
+                    'sub' => __('Cash pool'),
+                    'icon' => 'heroicon-o-banknotes',
+                    'accent' => 'sky',
+                ],
+                [
+                    'key' => 'open_queue',
+                    'label' => __('Open queue'),
+                    ...InsightKpi::countValue($unmatched),
+                    'sub' => __('Needs clearing'),
+                    'icon' => 'heroicon-o-inbox',
+                    'accent' => $unmatched > 0 ? 'amber' : 'emerald',
+                ],
+            ], [
+                'master_bank' => Account::masterBank()
+                    ? MasterAccountResource::getUrl('view', ['record' => Account::masterBank()])
+                    : MasterAccountResource::getUrl('index', ['tab' => 'bank']),
+                'master_cash' => Account::masterCash()
+                    ? MasterAccountResource::getUrl('view', ['record' => Account::masterCash()])
+                    : MasterAccountResource::getUrl('index', ['tab' => 'cash']),
+                'open_queue' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_QUEUE),
+            ]),
+            'history_kpis' => InsightKpi::linkMany([
+                [
+                    'key' => 'statements',
+                    'label' => __('Imports'),
+                    ...InsightKpi::countValue($statementsThisMonth),
+                    'sub' => __('This month'),
+                    'icon' => 'heroicon-o-arrow-up-tray',
+                    'accent' => 'violet',
+                ],
+                [
+                    'key' => 'failed',
+                    'label' => __('Failed'),
+                    ...InsightKpi::countValue($failedStatements),
+                    'sub' => __('Import batches'),
+                    'icon' => 'heroicon-o-exclamation-triangle',
+                    'accent' => $failedStatements > 0 ? 'rose' : 'gray',
+                ],
+                [
+                    'key' => 'dupes',
+                    'label' => __('Duplicates'),
+                    ...InsightKpi::countValue($duplicate),
+                    'sub' => InsightFormatter::percent($dupeRate),
+                    'icon' => 'heroicon-o-document-duplicate',
+                    'accent' => $duplicate > 0 ? 'rose' : 'teal',
+                ],
+                [
+                    'key' => 'processing',
+                    'label' => __('Processing'),
+                    ...InsightKpi::countValue($processingStatements),
+                    'sub' => __('In progress'),
+                    'icon' => 'heroicon-o-arrow-path',
+                    'accent' => $processingStatements > 0 ? 'amber' : 'gray',
+                ],
+            ], [
+                'statements' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_HISTORY),
+                'failed' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_HISTORY),
+                'dupes' => BankAccountsResource::listUrl(
+                    BankClearingTabRegistry::TAB_HISTORY,
+                    historySection: BankClearingTabRegistry::HISTORY_CLOSED,
+                ),
+                'processing' => BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_HISTORY),
+            ]),
             'currency' => $currency,
             'active_tab' => $activeTab,
             'active_tab_label' => match ($activeTab) {
