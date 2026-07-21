@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\MonthlyStatements\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberSelect;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
-use App\Models\Tenant\Member;
 use App\Models\Tenant\MonthlyStatement;
 use App\Models\Tenant\Setting;
 use App\Notifications\Tenant\MonthlyStatementNotification;
@@ -84,16 +84,7 @@ class MonthlyStatementsTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                SelectFilter::make('member_id')
-                    ->label(__('Member'))
-                    ->searchable()
-                    ->options(fn (): array => Member::query()
-                        ->orderBy('member_number')
-                        ->get()
-                        ->mapWithKeys(fn (Member $member): array => [
-                            $member->id => "{$member->member_number} — {$member->name}",
-                        ])
-                        ->all()),
+                MemberSelect::filter('member_id'),
                 Filter::make('period')
                     ->schema([
                         TextInput::make('period')->placeholder(__('YYYY-MM')),

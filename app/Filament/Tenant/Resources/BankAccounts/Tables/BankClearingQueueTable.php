@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\BankAccounts\Tables;
 
 use App\Filament\Support\BankClearingQueueActions;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberSelect;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
@@ -91,11 +92,7 @@ final class BankClearingQueueTable
 
                             return app(BankClearingQueueService::class)->applyKindFilter($query, (string) $data['value']);
                         }),
-                    SelectFilter::make('member_id')
-                        ->label(__('Member'))
-                        ->relationship('member', 'name')
-                        ->searchable()
-                        ->preload(),
+                    MemberSelect::filter('member_id'),
                     DateColumnRangeFilter::make('transaction_date', __('Transaction date')),
                 ])
                 ->recordUrl(fn (): ?string => null)

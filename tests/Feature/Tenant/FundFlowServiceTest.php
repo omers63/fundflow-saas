@@ -5,6 +5,7 @@ use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
 use App\Services\ContributionService;
@@ -206,6 +207,33 @@ test('ensure mirrored and post to member mirrors imported lines first', function
         ->and($txn->member_id)->toBe($member->id)
         ->and($member->cashAccount->fresh()->balance)->toBe('2500.00')
         ->and(Account::masterCash()->balance)->toBe('2500.00');
+});
+
+test('ensure mirrored and post to member does not raise realtime pool or member cash drift', function () {
+    ReconciliationException::query()->delete();
+
+    $member = Member::create([
+        'member_number' => 'MEM-NO-DRIFT',
+        'name' => 'No Drift Member',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $txn = createBankTransaction(['amount' => 3, 'status' => 'imported', 'description' => 'Small deposit']);
+
+    AccountingService::withoutMemberCashCollection(
+        fn() => $this->service->ensureMirroredAndPostToMember($txn, $member),
+    );
+
+    expect(ReconciliationException::query()
+        ->whereIn('exception_code', ['MASTER_CASH_POOL_DRIFT', 'MEMBER_CASH_DRIFT'])
+        ->open()
+        ->exists())->toBeFalse()
+        ->and($txn->fresh()->status)->toBe('posted')
+        ->and((float) $member->cashAccount->fresh()->balance)->toBe(3.0)
+        ->and((float) Account::masterCash()->fresh()->balance)->toBe(3.0);
 });
 
 test('post to member credits member cash account', function () {

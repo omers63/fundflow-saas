@@ -98,20 +98,18 @@ final class LoanDelinquencyTables
             ])
             ->defaultSort('due_date')
             ->filters([
-                SelectFilter::make('member_id')
-                    ->label(__('Member'))
-                    ->options(fn (): array => Member::query()->orderBy('name')->pluck('name', 'id')->all())
-                    ->searchable()
-                    ->query(function (Builder $query, array $data): Builder {
-                        if (blank($data['value'] ?? null)) {
-                            return $query;
-                        }
+                MemberSelect::configureFilter(
+                    SelectFilter::make('member_id')->label(__('Member')),
+                )->query(function (Builder $query, array $data): Builder {
+                    if (blank($data['value'] ?? null)) {
+                        return $query;
+                    }
 
-                        return $query->whereHas(
-                            'loan',
-                            fn (Builder $loan): Builder => $loan->where('member_id', (int) $data['value']),
-                        );
-                    }),
+                    return $query->whereHas(
+                        'loan',
+                        fn (Builder $loan): Builder => $loan->where('member_id', (int) $data['value']),
+                    );
+                }),
             ])
             ->recordActions(TableRecordActionGroups::wrap([
                 self::viewLoanInstallmentAction(),
@@ -294,28 +292,10 @@ final class LoanDelinquencyTables
                 ])
                 ->defaultSort('year', 'desc')
                 ->filters([
-                    SelectFilter::make('member_id')
-                        ->label(__('Member'))
-                        ->searchable()
-                        ->getSearchResultsUsing(function (string $search): array {
-                            $needle = trim($search);
-
-                            if ($needle === '') {
-                                return [];
-                            }
-
-                            return Member::query()
-                                ->where('status', 'active')
-                                ->where(function ($query) use ($needle): void {
-                                    $query->where('name', 'like', "%{$needle}%")
-                                        ->orWhere('member_number', 'like', "%{$needle}%");
-                                })
-                                ->orderBy('name')
-                                ->limit(50)
-                                ->pluck('name', 'id')
-                                ->all();
-                        })
-                        ->getOptionLabelUsing(fn ($value): ?string => Member::query()->find($value)?->name),
+                    MemberSelect::configureFilter(
+                        SelectFilter::make('member_id')->label(__('Member')),
+                        activeOnly: true,
+                    ),
                 ])
                 ->recordActions(TableRecordActionGroups::wrap([
                     self::applyContributionArrearsAction(),

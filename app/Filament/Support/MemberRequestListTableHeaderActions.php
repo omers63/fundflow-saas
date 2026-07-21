@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Support;
 
 use App\Filament\Tenant\Resources\MemberRequests\MemberRequestResource;
-use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberRequest;
 use App\Services\Tenant\MemberRequestService;
 use Filament\Actions\Action;
@@ -39,17 +38,10 @@ final class MemberRequestListTableHeaderActions
             ->modalDescription(__('File a membership request on behalf of a member. The member is notified after review.'))
             ->modalSubmitActionLabel(__('Submit request'))
             ->schema([
-                Select::make('requester_member_id')
-                    ->label(__('Member'))
-                    ->options(fn (): array => Member::query()
-                        ->orderBy('member_number')
-                        ->get(['id', 'member_number', 'name'])
-                        ->mapWithKeys(fn (Member $member): array => [
-                            $member->id => "{$member->member_number} — {$member->name}",
-                        ])
-                        ->all())
-                    ->searchable()
-                    ->required(),
+                MemberSelect::configure(
+                    Select::make('requester_member_id')->label(__('Member')),
+                    activeOnly: false,
+                )->required(),
                 Select::make('type')
                     ->label(__('Request'))
                     ->options([

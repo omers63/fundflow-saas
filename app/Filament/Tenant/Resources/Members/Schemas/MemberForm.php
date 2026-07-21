@@ -2,6 +2,8 @@
 
 namespace App\Filament\Tenant\Resources\Members\Schemas;
 
+use App\Filament\Support\MemberSelect;
+use App\Filament\Support\MemberSelectOptions;
 use App\Models\Tenant\Member;
 use App\Services\MemberMonthlyAllocationService;
 use App\Support\BusinessDay;
@@ -75,16 +77,25 @@ class MemberForm
                                 ? (string) $record->status_reason
                                 : '—')
                             ->visible(fn (?Member $record): bool => $record !== null && filled($record->status_reason)),
-                        Select::make('parent_member_id')
-                            ->label(__('Parent member'))
-                            ->options(fn (?Member $record) => Member::query()
-                                ->whereNull('parent_member_id')
-                                ->when($record !== null, fn ($query) => $query->whereKeyNot($record->getKey()))
-                                ->orderBy('name')
-                                ->pluck('name', 'id'))
-                            ->searchable()
-                            ->nullable()
-                            ->helperText(__('Only fund administrators can link a member to a household parent. Dependents must use the parent\'s household email.')),
+                        MemberSelect::configure(
+                            Select::make('parent_member_id')
+                                ->label(__('Parent member'))
+                                ->nullable()
+                                ->helperText(__('Only fund administrators can link a member to a household parent. Dependents must use the parent\'s household email.')),
+                            activeOnly: false,
+                        )
+                            ->options(fn (?Member $record): array => MemberSelectOptions::options(
+                                query: Member::query()
+                                    ->whereNull('parent_member_id')
+                                    ->when($record !== null, fn ($query) => $query->whereKeyNot($record->getKey())),
+                                limit: 75,
+                            ))
+                            ->getSearchResultsUsing(fn (string $search, ?Member $record): array => MemberSelectOptions::search(
+                                $search,
+                                query: Member::query()
+                                    ->whereNull('parent_member_id')
+                                    ->when($record !== null, fn ($query) => $query->whereKeyNot($record->getKey())),
+                            )),
                         TextInput::make('portal_password')
                             ->label(__('Portal password'))
                             ->password()

@@ -14,7 +14,6 @@ use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
-use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Collection;
 use Throwable;
@@ -33,10 +32,7 @@ final class BankTransactionTableActions
                 ? __('Posts this line to the master cash pool, then credits or debits the member cash account.')
                 : __('Credits or debits the member cash account for this statement line.'))
             ->form([
-                Select::make('member_id')
-                    ->label(__('Member'))
-                    ->options(fn (): array => Member::active()->pluck('name', 'id')->all())
-                    ->searchable()
+                MemberSelect::make('member_id')
                     ->required(),
             ])
             ->action(function (BankTransaction $record, array $data, Action $action, FundFlowService $service): void {
@@ -68,10 +64,7 @@ final class BankTransactionTableActions
             ->requiresConfirmation()
             ->modalDescription(__('Post statement lines to the same member. Imported lines are posted to master cash first.'))
             ->form([
-                Select::make('member_id')
-                    ->label(__('Member'))
-                    ->options(fn (): array => Member::active()->pluck('name', 'id')->all())
-                    ->searchable()
+                MemberSelect::make('member_id')
                     ->required(),
             ])
             ->action(function (BulkAction $action, Collection $records, array $data, FundFlowService $service): void {

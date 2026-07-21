@@ -16,6 +16,7 @@ use App\Services\PendingOperationalClearanceDeletionService;
 use App\Support\BankClearing\BankClearingQueuePresenter;
 use App\Support\BankTransactionDeletion;
 use App\Support\BankTransactionWorkflow;
+use App\Support\ContributionPolicySettings;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
@@ -232,15 +233,30 @@ final class BankClearingQueueActions
                 Select::make('imported_transaction_id')
                     ->label(__('Bank statement line'))
                     ->options(function (BankTransaction $record, BankClearingMatchService $matching): array {
-                        return $matching->findImportedCandidates($record)
+                        return $matching->findManualImportedCandidates($record)
                             ->mapWithKeys(fn (BankTransaction $txn): array => [
                                 $txn->id => $matching->formatMatchOptionLabel($txn),
                             ])
                             ->all();
                     })
                     ->searchable()
+                    ->preload()
                     ->required()
-                    ->helperText(__('Only real CSV statement lines within amount and date tolerance are listed.')),
+                    ->helperText(function (): string {
+                        $manualDays = ContributionPolicySettings::bankMatchManualDateRangeDays();
+                        $autoDays = ContributionPolicySettings::bankMatchDateRangeDays();
+
+                        if ($manualDays > 0) {
+                            return __('CSV lines within ±:manual days and the same amount (Settings → Reconciliation). Auto-match uses ±:auto days.', [
+                                'manual' => $manualDays,
+                                'auto' => $autoDays,
+                            ]);
+                        }
+
+                        return __('CSV lines with the same amount are listed (closest dates first). Configure windows in Settings → Reconciliation. Auto-match uses ±:auto days.', [
+                            'auto' => $autoDays,
+                        ]);
+                    }),
             ])
             ->action(function (BankTransaction $record, array $data, Action $action, BankClearingMatchService $matching): void {
                 $imported = BankTransaction::findOrFail($data['imported_transaction_id']);

@@ -74,16 +74,21 @@ class FundFlowService
             throw new InvalidArgumentException(__('This statement line is for bank matching only; posting was already recorded via the deposit or cash-out request.'));
         }
 
-        if ($bankTransaction->status === 'imported') {
-            $this->mirrorToCash([$bankTransaction->id]);
-            $bankTransaction->refresh();
-        }
+        // Mirror then member credit are one economic event for the bank-file path.
+        // Realtime pool/member checks mid-way would false-positive (master cash moves
+        // before member cash; member cash moves before the bank line is marked posted).
+        ReconciliationService::withoutRealtimeChecks(function () use ($bankTransaction, $member): void {
+            if ($bankTransaction->status === 'imported') {
+                $this->mirrorToCash([$bankTransaction->id]);
+                $bankTransaction->refresh();
+            }
 
-        if ($bankTransaction->status !== 'mirrored') {
-            throw new InvalidArgumentException(__('This statement line cannot be posted to a member.'));
-        }
+            if ($bankTransaction->status !== 'mirrored') {
+                throw new InvalidArgumentException(__('This statement line cannot be posted to a member.'));
+            }
 
-        $this->postToMember($bankTransaction, $member);
+            $this->postToMember($bankTransaction, $member);
+        });
     }
 
     /**
@@ -97,25 +102,28 @@ class FundFlowService
             throw new InvalidArgumentException(__('This statement line is for bank matching only; posting was already recorded via the deposit or cash-out request.'));
         }
 
-        DB::transaction(function () use ($bankTransaction, $member) {
-            $memberCash = $member->cashAccount;
-            $amount = (float) $bankTransaction->amount;
-            $description = self::postedToMemberLedgerDescription($bankTransaction);
+        ReconciliationService::withoutRealtimeChecks(function () use ($bankTransaction, $member): void {
+            DB::transaction(function () use ($bankTransaction, $member): void {
+                $memberCash = $member->cashAccount;
+                $amount = (float) $bankTransaction->amount;
+                $description = self::postedToMemberLedgerDescription($bankTransaction);
 
-            // Do not attach BankTransaction as reference — the bank leg already holds it for §5.12.
-            if ($amount >= 0) {
-                $this->accounting->credit($memberCash, $amount, $description, null, null, $member->id);
-            } else {
-                $this->accounting->debit($memberCash, abs($amount), $description, null, null, $member->id);
-            }
+                // Mark the bank line posted before the member cash leg so §5.13
+                // direct_bank_imports_posted includes this amount if checks run.
+                $bankTransaction->update([
+                    'status' => 'posted',
+                    'member_id' => $member->id,
+                    'is_cleared' => true,
+                    'cleared_at' => BusinessDay::now(),
+                ]);
 
-            $bankTransaction->update([
-                'status' => 'posted',
-                'member_id' => $member->id,
-                'is_cleared' => true,
-                'cleared_at' => BusinessDay::now(),
-            ]);
-
+                // Do not attach BankTransaction as reference — the bank leg already holds it for §5.12.
+                if ($amount >= 0) {
+                    $this->accounting->credit($memberCash, $amount, $description, null, null, $member->id);
+                } else {
+                    $this->accounting->debit($memberCash, abs($amount), $description, null, null, $member->id);
+                }
+            });
         });
     }
 

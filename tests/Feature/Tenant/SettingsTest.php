@@ -65,6 +65,26 @@ test('contribution policy settings persist delinquency and late fees', function 
         ->and((float) Setting::get('late_fee', 'contribution_day_30'))->toBe(20.0);
 });
 
+test('contribution policy settings persist bank clearing match windows', function () {
+    ContributionPolicySettings::saveFromForm([
+        ...ContributionPolicySettings::allForForm(),
+        'collection_recon_tolerance' => 0.05,
+        'collection_bank_match_date_range_days' => 14,
+        'collection_bank_match_manual_date_range_days' => 0,
+    ]);
+
+    expect(ContributionPolicySettings::reconTolerance())->toBe(0.05)
+        ->and(ContributionPolicySettings::bankMatchDateRangeDays())->toBe(14)
+        ->and(ContributionPolicySettings::bankMatchManualDateRangeDays())->toBe(0);
+
+    ContributionPolicySettings::saveFromForm([
+        ...ContributionPolicySettings::allForForm(),
+        'collection_bank_match_manual_date_range_days' => 7,
+    ]);
+
+    expect(ContributionPolicySettings::bankMatchManualDateRangeDays())->toBe(7);
+});
+
 test('statement and communication settings persist from form state', function () {
     StatementSettings::saveFromForm([
         'statement_brand_name' => 'Acme Fund',

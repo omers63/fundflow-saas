@@ -19,9 +19,9 @@ use App\Filament\Support\MasterAccountLedgerHeaderActions;
 use App\Filament\Support\MasterExpenseHeaderActions;
 use App\Filament\Support\MasterFeesHeaderActions;
 use App\Filament\Support\MasterInvestHeaderActions;
+use App\Filament\Support\MemberSelect;
 use App\Filament\Support\ViewActions\ViewAccountTransactionAction;
 use App\Models\Tenant\Account;
-use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use Filament\Tables\Columns\TextColumn;
@@ -85,13 +85,9 @@ class TransactionsRelationManager extends RelationManager
                     ->options(AccountTransactionTypeFilter::options()),
                 DateColumnRangeFilter::make('transacted_at', __('Date')),
                 AccountTransactionLinkedSourceFilter::make(),
-                SelectFilter::make('member_id')
-                    ->label(__('Member tag'))
-                    ->options(fn (): array => Member::query()
-                        ->orderBy('member_number')
-                        ->pluck('name', 'id')
-                        ->all())
-                    ->searchable(),
+                MemberSelect::configureFilter(
+                    SelectFilter::make('member_id')->label(__('Member tag')),
+                ),
             ])
             ->defaultSort('transacted_at', 'desc'))
             ->toolbarActions(ViewAccountTransactionAction::tenantToolbarActions())

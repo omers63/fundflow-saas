@@ -330,7 +330,7 @@ class Settings extends Page implements HasForms
                             ->default(true),
                     ]),
                 Section::make(__('Business calendar'))
-                    ->description(__('Set a custom date that the application treats as today. Useful for testing contribution cycles, loan eligibility, and delinquency in the future or past.'))
+                    ->description(__('Set a custom date that the application treats as today. Useful for testing contribution cycles, loan eligibility, and delinquency in the future or past. Deposit and cash-out clearing dates use this day; bank CSV lines keep their statement dates — widen bank match windows if they drift apart.'))
                     ->columns(2)
                     ->schema([
                         DatePicker::make('business_day')
@@ -877,22 +877,34 @@ class Settings extends Page implements HasForms
                             ->helperText(__('When off, admins still receive in-app reconciliation digests without browser push.'))
                             ->default(true),
                     ]),
-                Section::make(__('Auto-resolve & matching'))
-                    ->description(__('Operational tolerances used by nightly reconciliation and bank clearing.'))
+                Section::make(__('Bank clearing match'))
+                    ->description(__('Controls how Work queue Auto-match and Match pair operational rows with imported CSV lines. Amount tolerance is shared with reconciliation auto-resolve.'))
                     ->columns(3)
                     ->schema([
                         TextInput::make('collection_recon_tolerance')
-                            ->label(__('Auto-resolve tolerance'))
+                            ->label(__('Amount tolerance'))
                             ->numeric()
                             ->minValue(0)
                             ->step(0.01)
                             ->required()
-                            ->helperText(__('Maximum amount delta auto-resolved without admin review.')),
+                            ->helperText(__('Maximum amount difference allowed when matching bank lines (and when auto-resolving reconciliation).')),
                         TextInput::make('collection_bank_match_date_range_days')
-                            ->label(__('Bank match date range (days)'))
+                            ->label(__('Auto-match date range (days)'))
                             ->numeric()
                             ->minValue(0)
-                            ->required(),
+                            ->required()
+                            ->helperText(__('± days around the operational date for Auto-match and unique-candidate detection. Increase when the business day differs from CSV statement dates.')),
+                        TextInput::make('collection_bank_match_manual_date_range_days')
+                            ->label(__('Manual Match date range (days)'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->required()
+                            ->helperText(__('± days for the Match picker. Use 0 to list all same-amount CSV lines (recommended when business day and statement dates diverge).')),
+                    ]),
+                Section::make(__('Auto-resolve & timing'))
+                    ->description(__('Operational tolerances used by nightly reconciliation (non-bank timing and stale pending).'))
+                    ->columns(3)
+                    ->schema([
                         TextInput::make('collection_stale_pending_days')
                             ->label(__('Stale pending threshold (days)'))
                             ->numeric()

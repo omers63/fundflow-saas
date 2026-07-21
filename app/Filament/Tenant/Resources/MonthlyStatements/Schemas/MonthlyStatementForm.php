@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\MonthlyStatements\Schemas;
 
-use App\Models\Tenant\Member;
+use App\Filament\Support\MemberSelect;
 use App\Models\Tenant\Setting;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -19,17 +19,10 @@ class MonthlyStatementForm
         return $schema
             ->columns(2)
             ->components([
-                Select::make('member_id')
-                    ->label(__('Member'))
-                    ->options(fn (): array => Member::query()
-                        ->orderBy('member_number')
-                        ->get()
-                        ->mapWithKeys(fn (Member $member): array => [
-                            $member->id => "{$member->member_number} — {$member->name}",
-                        ])
-                        ->all())
-                    ->searchable()
-                    ->required(),
+                MemberSelect::configure(
+                    Select::make('member_id')->label(__('Member')),
+                    activeOnly: false,
+                )->required(),
                 TextInput::make('period')
                     ->label(__('Period (YYYY-MM)'))
                     ->placeholder('2026-05')

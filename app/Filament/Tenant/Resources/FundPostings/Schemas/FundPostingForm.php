@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\FundPostings\Schemas;
 
+use App\Filament\Support\MemberSelect;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Support\BusinessDay;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
@@ -27,10 +27,7 @@ class FundPostingForm
                     ->columnSpanFull()
                     ->columns(2)
                     ->schema([
-                        Select::make('member_id')
-                            ->label(__('Member'))
-                            ->options(Member::active()->orderBy('name')->pluck('name', 'id'))
-                            ->searchable()
+                        MemberSelect::make('member_id')
                             ->required()
                             ->live()
                             ->afterStateUpdated(function ($state, callable $set): void {

@@ -42,6 +42,8 @@ final class ContributionPolicySettings
             'late_fee_model' => 'replacement',
             'recon_tolerance' => 0.01,
             'bank_match_date_range_days' => 3,
+            // 0 = amount-only for the Match picker (no date window). Auto-match still uses bank_match_date_range_days.
+            'bank_match_manual_date_range_days' => 0,
             'stale_pending_days' => 30,
             'cash_deposit_unbanked_days' => 14,
             'timing_diff_defer_hours' => 24,
@@ -128,6 +130,15 @@ final class ContributionPolicySettings
         return max(0, (int) self::collectionGet('bank_match_date_range_days', 3));
     }
 
+    /**
+     * Date window (± days) for the Work queue Match picker.
+     * 0 means amount-only (no date filter); closest dates are still sorted first.
+     */
+    public static function bankMatchManualDateRangeDays(): int
+    {
+        return max(0, (int) self::collectionGet('bank_match_manual_date_range_days', 0));
+    }
+
     public static function consecutiveMissThreshold(): int
     {
         return max(1, (int) self::delinquencyGet('consecutive_miss_threshold', 3));
@@ -178,6 +189,7 @@ final class ContributionPolicySettings
             'collection_late_fee_model' => $collection['late_fee_model'],
             'collection_recon_tolerance' => $collection['recon_tolerance'],
             'collection_bank_match_date_range_days' => $collection['bank_match_date_range_days'],
+            'collection_bank_match_manual_date_range_days' => $collection['bank_match_manual_date_range_days'] ?? 0,
             'collection_stale_pending_days' => $collection['stale_pending_days'],
             'collection_cash_deposit_unbanked_days' => $collection['cash_deposit_unbanked_days'],
             'collection_timing_diff_defer_hours' => $collection['timing_diff_defer_hours'],
@@ -228,6 +240,7 @@ final class ContributionPolicySettings
             : 'replacement');
         Setting::set(self::GROUP_COLLECTION, 'recon_tolerance', max(0.0, (float) ($state['collection_recon_tolerance'] ?? 0.01)));
         Setting::set(self::GROUP_COLLECTION, 'bank_match_date_range_days', max(0, (int) ($state['collection_bank_match_date_range_days'] ?? 3)));
+        Setting::set(self::GROUP_COLLECTION, 'bank_match_manual_date_range_days', max(0, (int) ($state['collection_bank_match_manual_date_range_days'] ?? 0)));
         Setting::set(self::GROUP_COLLECTION, 'stale_pending_days', max(1, (int) ($state['collection_stale_pending_days'] ?? 30)));
         Setting::set(self::GROUP_COLLECTION, 'cash_deposit_unbanked_days', max(1, (int) ($state['collection_cash_deposit_unbanked_days'] ?? 14)));
         Setting::set(self::GROUP_COLLECTION, 'timing_diff_defer_hours', max(1, (int) ($state['collection_timing_diff_defer_hours'] ?? 24)));

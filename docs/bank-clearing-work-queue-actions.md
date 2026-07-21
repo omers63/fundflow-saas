@@ -34,6 +34,16 @@ Count badges come from `BankClearingQueueService::counts()`.
 
 The table **Source** column still shows the badge per row. The duplicate Source *table filter* was removed; chips own slice selection.
 
+### Match settings (Settings → Reconciliation)
+
+| Setting | Default | Used by |
+|---------|---------|---------|
+| Amount tolerance | `0.01` | Auto-match + Match picker + reconciliation auto-resolve |
+| Auto-match date range (days) | `3` | Auto-match / unique candidate (± days) |
+| Manual Match date range (days) | `0` | Match picker (`0` = amount-only, no date filter) |
+
+Deposit/cash-out operational dates follow **Business day** (Settings → General). CSV lines keep statement dates. If those diverge, widen auto-match days or keep manual Match at `0`.
+
 ---
 
 ## 2. Two paths

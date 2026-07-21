@@ -4,12 +4,14 @@ namespace App\Filament\Tenant\Resources\BankAccounts\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
+use App\Filament\Support\BankTransactionManualHeaderActions;
 use App\Filament\Support\BankTransactionTableActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Support\ViewActions\ViewBankTransactionAction as SharedViewBankTransactionAction;
 use App\Filament\Tenant\Support\ViewBankTransactionAction;
+use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
 use Filament\Actions\BulkActionGroup;
@@ -112,6 +114,10 @@ class BankTransactionsRelationManager extends RelationManager
                 ])
                 ->defaultSort('transaction_date', 'desc'),
         )
+            ->headerActions(BankTransactionManualHeaderActions::make(
+                fn (): BankStatement => $this->getOwnerRecord(),
+                fn (): mixed => $this->resetTable(),
+            ))
             ->recordActions(TableRecordActionGroups::wrap([
                 ViewBankTransactionAction::make(),
                 BankTransactionTableActions::delete(),

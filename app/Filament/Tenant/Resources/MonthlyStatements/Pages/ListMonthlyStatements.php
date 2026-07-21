@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\MonthlyStatements\Pages;
 
+use App\Filament\Support\MemberSelect;
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
 use App\Filament\Tenant\Widgets\MonthlyStatementInsightsWidget;
 use App\Models\Tenant\Member;
@@ -79,17 +80,12 @@ class ListMonthlyStatements extends ListRecords
                         Toggle::make('send_notification')
                             ->label(__('Email members after generation'))
                             ->default(StatementSettings::autoEmail()),
-                        Select::make('member_id')
-                            ->label(__('Specific member'))
-                            ->searchable()
-                            ->options(fn (): array => Member::query()
-                                ->orderBy('member_number')
-                                ->get()
-                                ->mapWithKeys(fn (Member $member): array => [
-                                    $member->id => "{$member->member_number} — {$member->name}",
-                                ])
-                                ->all())
-                            ->placeholder(__('All active members')),
+                        MemberSelect::configure(
+                            Select::make('member_id')
+                                ->label(__('Specific member'))
+                                ->placeholder(__('All active members')),
+                            activeOnly: false,
+                        ),
                     ])
                     ->action(function (array $data, Component $livewire): void {
                         $svc = app(MonthlyStatementService::class);

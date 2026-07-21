@@ -28,7 +28,7 @@ final class TenantPortalActionModal
 
         $action = $action
             ->modalWidth(fn (): Width|string => self::onTenantPanel()
-                ? (self::isDangerConfirmation($action) ? Width::ExtraSmall : Width::Small)
+                ? self::confirmationModalWidth($action)
                 : Width::Medium)
             ->extraModalWindowAttributes(
                 fn (): array => self::onTenantPanel()
@@ -188,6 +188,33 @@ final class TenantPortalActionModal
             $classes[] = 'ff-tenant-confirm-modal-window--long-running';
         }
 
+        if (self::hasFormFields($action)) {
+            $classes[] = 'ff-tenant-confirm-modal-window--with-fields';
+        }
+
         return implode(' ', $classes);
+    }
+
+    private static function confirmationModalWidth(Action $action): Width
+    {
+        if (self::hasFormFields($action)) {
+            return Width::Medium;
+        }
+
+        return self::isDangerConfirmation($action) ? Width::ExtraSmall : Width::Small;
+    }
+
+    /**
+     * Confirmations that embed selects / date pickers need a wider, overflow-safe window.
+     */
+    private static function hasFormFields(Action $action): bool
+    {
+        $schema = \Closure::bind(
+            fn (): mixed => $this->schema,
+            $action,
+            $action,
+        )();
+
+        return $schema !== null;
     }
 }

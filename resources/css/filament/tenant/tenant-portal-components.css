@@ -93,6 +93,45 @@
     max-width: min(28rem, 94vw) !important;
 }
 
+/*
+ * Confirmations with selects / date pickers: wider window, allow panels to open
+ * fully, and keep footer actions visible below the form fields.
+ */
+.fi-body.fi-panel-tenant .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-tenant-confirm-modal-window--with-fields {
+    max-width: min(32rem, 94vw) !important;
+    overflow: visible;
+}
+
+.fi-body.fi-panel-tenant .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-tenant-confirm-modal-window--with-fields
+    > .fi-modal-content {
+    overflow: visible;
+    padding-bottom: 0.25rem;
+}
+
+.fi-body.fi-panel-tenant .fi-modal-window.ff-tenant-confirm-modal-window--with-fields .fi-select-input .fi-dropdown-panel,
+.fi-body.fi-panel-tenant .fi-modal-window.ff-tenant-form-modal-window .fi-select-input .fi-dropdown-panel {
+    max-height: min(16rem, 40dvh);
+}
+
+.fi-body.fi-panel-tenant .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-tenant-form-modal-window {
+    overflow: visible;
+}
+
+.fi-body.fi-panel-tenant .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-tenant-form-modal-window
+    > .fi-modal-content {
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-bottom: 0.75rem;
+}
+
 .dark .fi-body.fi-panel-tenant .fi-modal-window.ff-tenant-confirm-modal-window {
     border-color: rgb(255 255 255 / 0.1);
     box-shadow:

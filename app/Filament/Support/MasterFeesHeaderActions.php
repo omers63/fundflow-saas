@@ -16,7 +16,6 @@ use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -45,10 +44,7 @@ final class MasterFeesHeaderActions
             ->modalDescription(__('Debits member cash (and master cash), credits master fees, and applies the payment to subscription or late-fee arrears when fully covered.'))
             ->modalWidth('md')
             ->schema([
-                Select::make('member_id')
-                    ->label(__('Member'))
-                    ->options(fn (): array => Member::query()->active()->orderBy('name')->pluck('name', 'id')->all())
-                    ->searchable()
+                MemberSelect::make('member_id')
                     ->required()
                     ->live()
                     ->afterStateUpdated(function ($state, callable $set, MemberFeeArrearsService $arrears): void {

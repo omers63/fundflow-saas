@@ -6,6 +6,7 @@ use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\BankAccounts\Pages\ListBankAccounts;
 use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Models\Tenant\User;
+use App\Support\BusinessDaySettings;
 use Filament\Actions\ActionGroup;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
@@ -36,6 +37,17 @@ it('renders the bank clearing workspace shell on the default queue tab', functio
         ->assertSee(__('Bank ledger'))
         ->assertSee(__('Import history'))
         ->assertSee(__('All open'));
+});
+
+it('shows a business day notice on bank clearing when the calendar is overridden', function () {
+    BusinessDaySettings::saveFromForm('2025-11-05');
+
+    Livewire::actingAs($this->admin, 'tenant')
+        ->test(ListBankAccounts::class)
+        ->assertSuccessful()
+        ->assertSee('Nov 5, 2025');
+
+    BusinessDaySettings::saveFromForm(null);
 });
 
 it('switches bank tabs via livewire actions', function () {

@@ -4,6 +4,8 @@ namespace App\Filament\Tenant\Resources\Loans\Schemas;
 
 use App\Filament\Support\LoanApplicationFundingFields;
 use App\Filament\Support\LoanApprovalPreview;
+use App\Filament\Support\MemberSelect;
+use App\Filament\Support\MemberSelectOptions;
 use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
@@ -57,10 +59,7 @@ class LoanForm
                     Step::make(__('Borrower'))
                         ->icon(Heroicon::OutlinedUserCircle)
                         ->schema([
-                            Select::make('member_id')
-                                ->label(__('Member'))
-                                ->options(Member::active()->orderBy('name')->pluck('name', 'id'))
-                                ->searchable()
+                            MemberSelect::make('member_id')
                                 ->required()
                                 ->live(),
                             Placeholder::make('member_snapshot')
@@ -119,16 +118,23 @@ class LoanForm
                     Step::make(__('Terms'))
                         ->icon(Heroicon::OutlinedAdjustmentsHorizontal)
                         ->schema([
-                            Select::make('guarantor_member_id')
-                                ->label(__('Guarantor'))
-                                ->helperText(__('Required when the amount exceeds the member fund balance for the chosen strategy.'))
-                                ->options(fn (Get $get): array => Member::query()
-                                    ->active()
-                                    ->when(filled($get('member_id')), fn ($query) => $query->whereKeyNot($get('member_id')))
-                                    ->orderBy('name')
-                                    ->pluck('name', 'id')
-                                    ->all())
-                                ->searchable()
+                            MemberSelect::configure(
+                                Select::make('guarantor_member_id')
+                                    ->label(__('Guarantor'))
+                                    ->helperText(__('Required when the amount exceeds the member fund balance for the chosen strategy.')),
+                            )
+                                ->options(fn (Get $get): array => MemberSelectOptions::options(
+                                    query: Member::query()
+                                        ->active()
+                                        ->when(filled($get('member_id')), fn ($query) => $query->whereKeyNot($get('member_id'))),
+                                    limit: 75,
+                                ))
+                                ->getSearchResultsUsing(fn (string $search, Get $get): array => MemberSelectOptions::search(
+                                    $search,
+                                    query: Member::query()
+                                        ->active()
+                                        ->when(filled($get('member_id')), fn ($query) => $query->whereKeyNot($get('member_id'))),
+                                ))
                                 ->required(fn (Get $get): bool => self::guarantorRequired($get))
                                 ->nullable(fn (Get $get): bool => ! self::guarantorRequired($get)),
                             Select::make('grace_cycles')
@@ -227,10 +233,7 @@ class LoanForm
                 self::loanSection(__('Application details'), __('Editable fields for this loan request.'))
                     ->columns(['default' => 1, 'md' => 2])
                     ->schema([
-                        Select::make('member_id')
-                            ->label(__('Member'))
-                            ->options(Member::active()->pluck('name', 'id'))
-                            ->searchable()
+                        MemberSelect::make('member_id')
                             ->required()
                             ->disabled(),
                         TextInput::make('amount_requested')
@@ -239,10 +242,8 @@ class LoanForm
                             ->prefix($currency)
                             ->required()
                             ->minValue(1),
-                        Select::make('guarantor_member_id')
+                        MemberSelect::make('guarantor_member_id')
                             ->label(__('Guarantor'))
-                            ->options(Member::active()->pluck('name', 'id'))
-                            ->searchable()
                             ->nullable(),
                         Toggle::make('is_emergency')
                             ->label(__('Emergency loan')),
@@ -320,9 +321,7 @@ class LoanForm
                 self::loanSection(__('Application details'), __('Adjust before approval if the member or board requested changes.'))
                     ->columns(['default' => 1, 'md' => 2])
                     ->schema([
-                        Select::make('member_id')
-                            ->label(__('Member'))
-                            ->options(Member::active()->orderBy('name')->pluck('name', 'id'))
+                        MemberSelect::make('member_id')
                             ->disabled()
                             ->dehydrated(),
                         TextInput::make('amount_requested')
@@ -337,16 +336,23 @@ class LoanForm
                             ->disabled()
                             ->dehydrated()
                             ->visible(fn (Get $get): bool => filled($get('guarantor_name'))),
-                        Select::make('guarantor_member_id')
-                            ->label(__('Match guarantor to member'))
-                            ->helperText(__('Link the named guarantor to a member record before approval when required.'))
-                            ->options(fn (Get $get): array => Member::query()
-                                ->active()
-                                ->when(filled($get('member_id')), fn ($query) => $query->whereKeyNot($get('member_id')))
-                                ->orderBy('name')
-                                ->pluck('name', 'id')
-                                ->all())
-                            ->searchable()
+                        MemberSelect::configure(
+                            Select::make('guarantor_member_id')
+                                ->label(__('Match guarantor to member'))
+                                ->helperText(__('Link the named guarantor to a member record before approval when required.')),
+                        )
+                            ->options(fn (Get $get): array => MemberSelectOptions::options(
+                                query: Member::query()
+                                    ->active()
+                                    ->when(filled($get('member_id')), fn ($query) => $query->whereKeyNot($get('member_id'))),
+                                limit: 75,
+                            ))
+                            ->getSearchResultsUsing(fn (string $search, Get $get): array => MemberSelectOptions::search(
+                                $search,
+                                query: Member::query()
+                                    ->active()
+                                    ->when(filled($get('member_id')), fn ($query) => $query->whereKeyNot($get('member_id'))),
+                            ))
                             ->required(fn (Get $get): bool => self::guarantorRequired($get))
                             ->nullable(fn (Get $get): bool => ! self::guarantorRequired($get)),
                         Select::make('grace_cycles')

@@ -2,12 +2,12 @@
 
 namespace App\Filament\Tenant\Resources\Contributions\Schemas;
 
+use App\Filament\Support\MemberSelect;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Support\BusinessDay;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
@@ -27,10 +27,7 @@ class ContributionForm
                 Section::make(__('Contribution details'))
                     ->columns(2)
                     ->schema([
-                        Select::make('member_id')
-                            ->label('Member')
-                            ->options(Member::active()->pluck('name', 'id'))
-                            ->searchable()
+                        MemberSelect::make('member_id')
                             ->required()
                             ->disabled(! $coreEditable)
                             ->dehydrated($coreEditable)

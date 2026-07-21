@@ -115,8 +115,9 @@ class BankImportService
                         'status' => 'imported',
                         'hash' => $hash,
                         'raw_data' => json_encode($rawData),
-                        'is_cleared' => true,
-                        'cleared_at' => BusinessDay::now(),
+                        // Remains uncleared until matched to an operation or posted via bank-file path.
+                        'is_cleared' => false,
+                        'cleared_at' => null,
                     ]));
 
                     $imported++;

@@ -160,15 +160,28 @@ class BankClearingMatchService
 
     public function formatMatchOptionLabel(BankTransaction $transaction): string
     {
-        $status = strtoupper($transaction->status);
+        $transaction->loadMissing('bankStatement');
 
-        return sprintf(
-            '%s | %s | %s | %s',
+        $status = strtoupper($transaction->status);
+        $filename = $transaction->bankStatement?->filename;
+        $description = trim((string) $transaction->description);
+
+        if ($description === '') {
+            $description = '—';
+        }
+
+        $parts = [
             Carbon::parse((string) $transaction->transaction_date)->format('Y-m-d'),
             $status,
-            $transaction->description,
             number_format((float) $transaction->amount, 2, '.', ','),
-        );
+            $description,
+        ];
+
+        if (filled($filename)) {
+            $parts[] = $filename;
+        }
+
+        return implode(' | ', $parts);
     }
 
     /**
@@ -637,6 +650,55 @@ class BankClearingMatchService
                 ]);
             })
             ->get();
+    }
+
+    /**
+     * Manual Match picker candidates.
+     *
+     * Amount tolerance always applies. Date window comes from
+     * {@see ContributionPolicySettings::bankMatchManualDateRangeDays()} (0 = amount only).
+     * Results are sorted by closeness to the operational date.
+     *
+     * @return EloquentCollection<int, BankTransaction>
+     */
+    public function findManualImportedCandidates(
+        BankTransaction $uncleared,
+        ?float $tolerance = null,
+        ?int $dayRange = null,
+    ): EloquentCollection {
+        $tolerance ??= ContributionPolicySettings::reconTolerance();
+        $dayRange ??= ContributionPolicySettings::bankMatchManualDateRangeDays();
+        $amount = (float) $uncleared->amount;
+        $anchor = $uncleared->transaction_date
+            ? Carbon::parse((string) $uncleared->transaction_date)->startOfDay()
+            : null;
+
+        $candidates = $this->bankStatementMatchTargetQuery()
+            ->whereBetween('amount', [$amount - $tolerance, $amount + $tolerance])
+            ->when(
+                $dayRange > 0 && $anchor !== null,
+                function ($query) use ($anchor, $dayRange): void {
+                    $query->whereBetween('transaction_date', [
+                        $anchor->copy()->subDays($dayRange)->toDateString(),
+                        $anchor->copy()->addDays($dayRange)->toDateString(),
+                    ]);
+                },
+            )
+            ->get();
+
+        if ($anchor === null) {
+            return $candidates;
+        }
+
+        return $candidates
+            ->sortBy(function (BankTransaction $candidate) use ($anchor): int {
+                $candidateDate = $candidate->transaction_date
+                    ? Carbon::parse((string) $candidate->transaction_date)->startOfDay()
+                    : $anchor;
+
+                return (int) abs($anchor->diffInDays($candidateDate));
+            })
+            ->values();
     }
 
     /**

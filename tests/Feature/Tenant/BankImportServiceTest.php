@@ -133,7 +133,11 @@ test('all imported transactions have imported status', function () {
     $file = createCsvFile($csv);
     $this->service->importCsv($file);
 
-    expect(BankTransaction::first()->status)->toBe('imported');
+    $txn = BankTransaction::first();
+
+    expect($txn->status)->toBe('imported')
+        ->and($txn->is_cleared)->toBeFalse()
+        ->and($txn->cleared_at)->toBeNull();
 });
 
 test('uses custom CSV template from settings', function () {
@@ -191,6 +195,7 @@ test('creates bank statement record with metadata', function () {
     expect($statement->duplicate_rows)->toBe(0);
     expect($statement->status)->toBe('completed');
     expect($statement->imported_at)->not->toBeNull();
+    expect($statement->statement_date?->toDateString())->toBe('2026-05-10');
 });
 
 // --- Split credit/debit columns ---
