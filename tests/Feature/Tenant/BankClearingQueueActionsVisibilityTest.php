@@ -14,6 +14,7 @@ use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\FundPostingService;
 use App\Services\MasterExpenseDisbursementService;
+use App\Support\Lang;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Facades\Filament;
@@ -73,7 +74,7 @@ function queueBulkActionNames(?string $filter): array
 test('bank file mode registers posting actions and omits clear', function () {
     $names = queueActionNames(BankClearingTabRegistry::FILTER_BANK_FILE);
 
-    expect($names)->toContain('mirrorToCash', 'postToMember', 'autoMatch', 'ignore', 'delete', 'view')
+    expect($names)->toContain('postAs', 'mirrorToCash', 'postToMember', 'autoMatch', 'ignore', 'delete', 'view')
         ->and($names)->not->toContain('clearWithoutEvidence', 'matchToBankLine', 'deletePendingOperational');
 
     $bulk = queueBulkActionNames(BankClearingTabRegistry::FILTER_BANK_FILE);
@@ -86,7 +87,7 @@ test('operations mode registers match and clear and omits posting', function () 
     $names = queueActionNames(BankClearingTabRegistry::FILTER_OPERATIONS);
 
     expect($names)->toContain('autoMatch', 'matchToBankLine', 'clearWithoutEvidence', 'deletePendingOperational', 'view')
-        ->and($names)->not->toContain('mirrorToCash', 'postToMember', 'ignore');
+        ->and($names)->not->toContain('postAs', 'mirrorToCash', 'postToMember', 'ignore');
 
     $bulk = queueBulkActionNames(BankClearingTabRegistry::FILTER_OPERATIONS);
 
@@ -128,6 +129,7 @@ test('work queue hides posting actions on operations rows and clear on bank file
         ->assertSuccessful();
 
     $component
+        ->assertTableActionVisible('postAs', $imported)
         ->assertTableActionVisible('mirrorToCash', $imported)
         ->assertTableActionVisible('postToMember', $imported)
         ->assertTableActionVisible('ignore', $imported)
@@ -137,6 +139,7 @@ test('work queue hides posting actions on operations rows and clear on bank file
     $component
         ->assertTableActionVisible('matchToBankLine', $operational)
         ->assertTableActionVisible('clearWithoutEvidence', $operational)
+        ->assertTableActionHidden('postAs', $operational)
         ->assertTableActionHidden('mirrorToCash', $operational)
         ->assertTableActionHidden('postToMember', $operational)
         ->assertTableActionHidden('ignore', $operational);
@@ -199,5 +202,13 @@ test('row actions sit in a single Actions group with short labels', function () 
         ->map(fn (Action $action): string => (string) $action->getLabel())
         ->all();
 
-    expect($labels)->toContain(__('Post cash'), __('Post member'), __('Auto-match'), __('View'), __('Ignore'), __('Delete'));
+    expect($labels)->toContain(
+        Lang::formatUiLabel(__('Post as…')),
+        Lang::formatUiLabel(__('Post cash')),
+        Lang::formatUiLabel(__('Post member')),
+        Lang::formatUiLabel(__('Auto-match')),
+        Lang::formatUiLabel(__('View')),
+        Lang::formatUiLabel(__('Ignore')),
+        Lang::formatUiLabel(__('Delete')),
+    );
 });

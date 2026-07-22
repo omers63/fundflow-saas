@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Resources\Accounts\Tables;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MemberAccountsListTableHeaderActions;
 use App\Filament\Support\MemberAccountTableActions;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -37,6 +38,8 @@ class MemberAccountsTable
                     default => 'gray',
                 });
         }
+
+        $columns[] = MemberTableColumns::relationNumber();
 
         $columns[] = TextColumn::make('member.name')
             ->label('Member')

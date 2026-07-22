@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\SmsClearing\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\SmsClearingQueueActions;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -51,6 +52,8 @@ final class SmsClearingQueueTable
                         ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
                         ->sortable()
                         ->color(fn (SmsTransaction $record): string => $record->transaction_type === 'credit' ? 'success' : 'danger'),
+                    MemberTableColumns::relationNumber()
+                        ->placeholder(__('Unassigned')),
                     TextColumn::make('member.name')
                         ->label(__('Member'))
                         ->placeholder(__('Unassigned'))

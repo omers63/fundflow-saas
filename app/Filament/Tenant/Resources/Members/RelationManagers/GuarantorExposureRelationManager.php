@@ -7,6 +7,7 @@ namespace App\Filament\Tenant\Resources\Members\RelationManagers;
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\LoanOutstandingColumn;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -88,6 +89,8 @@ class GuarantorExposureRelationManager extends RelationManager
                     TextColumn::make('id')
                         ->label(__('Loan #'))
                         ->url(fn (Loan $record): string => LoanResource::getUrl('view', ['record' => $record])),
+                    MemberTableColumns::relationNumber()
+                        ->label(__('Borrower #')),
                     TextColumn::make('member.name')
                         ->label(__('Borrower'))
                         ->searchable()

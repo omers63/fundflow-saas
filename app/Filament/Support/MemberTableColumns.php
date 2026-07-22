@@ -20,11 +20,15 @@ final class MemberTableColumns
      */
     private const MEMBER_LINK_COLUMNS = [
         'member.name',
+        'member.member_number',
         'member_name',
         'member_number',
         'loan.member.name',
+        'loan.member.member_number',
         'loan.guarantor.name',
+        'loan.guarantor.member_number',
         'guarantor.name',
+        'guarantor.member_number',
         'user.name',
     ];
 
@@ -137,6 +141,46 @@ final class MemberTableColumns
             ->url(fn (mixed $state, mixed $record): ?string => self::relatedMemberEditUrl($record));
     }
 
+    /**
+     * Member number for installment (or other) rows nested under {@code loan.member}.
+     */
+    public static function loanMemberNumber(?string $label = null): TextColumn
+    {
+        $textColumn = TextColumn::make('loan.member.member_number');
+
+        if ($label !== null) {
+            $textColumn->label($label);
+        } else {
+            $textColumn->label(__('Member #'));
+        }
+
+        return $textColumn
+            ->sortable(query: fn(Builder $query, string $direction): Builder => MemberNumberSettings::applyOrderByLoanInstallmentMember(
+                $query,
+                $direction,
+            ))
+            ->url(fn(mixed $state, mixed $record): ?string => self::resolveMemberUrl('loan.member.name', $record));
+    }
+
+    /**
+     * Guarantor member number for loan rows ({@code guarantor.member_number} or nested {@code loan.guarantor.member_number}).
+     */
+    public static function guarantorNumber(
+        string $column = 'guarantor.member_number',
+        ?string $memberIdColumn = null,
+        ?string $label = null,
+    ): TextColumn {
+        $nameColumn = str_starts_with($column, 'loan.')
+            ? 'loan.guarantor.name'
+            : 'guarantor.name';
+
+        return self::relationNumberFor(
+            memberNumberColumn: $column,
+            memberIdColumn: $memberIdColumn,
+            label: $label ?? __('Guarantor #'),
+        )->url(fn(mixed $state, mixed $record): ?string => self::resolveMemberUrl($nameColumn, $record));
+    }
+
     public static function applyArabicNameTypography(TextColumn $column): TextColumn
     {
         if (! ArabicDisplaySettings::enhancedNameStyle()) {
@@ -206,12 +250,14 @@ final class MemberTableColumns
         }
 
         return match ($columnName) {
-            'member.name' => $record->member instanceof Member ? $record->member : null,
-            'loan.member.name' => ($record->loan?->member ?? $record->member ?? null) instanceof Member
+            'member.name', 'member.member_number' => $record->member instanceof Member ? $record->member : null,
+            'loan.member.name', 'loan.member.member_number' => ($record->loan?->member ?? $record->member ?? null) instanceof Member
             ? ($record->loan?->member ?? $record->member)
             : null,
-            'guarantor.name' => $record->guarantor instanceof Member ? $record->guarantor : null,
-            'loan.guarantor.name' => $record->loan?->guarantor instanceof Member ? $record->loan->guarantor : null,
+            'guarantor.name', 'guarantor.member_number' => $record->guarantor instanceof Member ? $record->guarantor : null,
+            'loan.guarantor.name', 'loan.guarantor.member_number' => $record->loan?->guarantor instanceof Member
+            ? $record->loan->guarantor
+            : null,
             default => null,
         };
     }

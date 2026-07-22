@@ -11,6 +11,7 @@ use App\Filament\Support\AccountTransactionLinkedSourceFilter;
 use App\Filament\Support\AccountTransactionTypeColumn;
 use App\Filament\Support\AccountTransactionTypeFilter;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableStandards;
 use App\Filament\Support\TransactionBusinessTypeFilter;
@@ -41,6 +42,9 @@ final class TransactionsTable
                         ->sortable(),
                     AccountTransactionAmountColumn::make(),
                     AccountTransactionDescriptionColumn::make(),
+                    MemberTableColumns::relationNumber()
+                        ->placeholder(__('—'))
+                        ->toggleable(),
                     TextColumn::make('member.name')
                         ->label(__('Member'))
                         ->placeholder(__('—'))

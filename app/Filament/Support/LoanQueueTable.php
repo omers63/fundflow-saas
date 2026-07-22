@@ -271,6 +271,7 @@ final class LoanQueueTable
                 })
                 ->searchable(false)
                 ->sortable(query: fn ($query, string $direction) => $query->orderBy('applied_at', $direction === 'asc' ? 'desc' : 'asc')),
+            MemberTableColumns::relationNumber(),
             TextColumn::make('member.name')
                 ->label(__('Member'))
                 ->searchable()
@@ -305,6 +306,7 @@ final class LoanQueueTable
                 ->label(__('Queue #'))
                 ->placeholder('—')
                 ->sortable(),
+            MemberTableColumns::relationNumber(),
             TextColumn::make('member.name')
                 ->label(__('Member'))
                 ->searchable()
@@ -390,6 +392,7 @@ final class LoanQueueTable
                 ->badge()
                 ->formatStateUsing(fn(string $state): string => Loan::statusOptions()[$state] ?? $state)
                 ->color(fn(string $state): string => Loan::statusColor($state)),
+            MemberTableColumns::relationNumber(),
             TextColumn::make('member.name')
                 ->label(__('Member'))
                 ->searchable()

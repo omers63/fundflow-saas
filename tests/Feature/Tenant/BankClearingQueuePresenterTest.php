@@ -62,5 +62,6 @@ it('labels bank file and operational queue items', function () {
         ->and(BankClearingQueuePresenter::kindLabel($operational))->toBe('Expense')
         ->and(BankClearingQueuePresenter::sliceLabel($bankFile))->toBe('From bank file')
         ->and(BankClearingQueuePresenter::sliceLabel($operational))->toBe('From operations')
+        ->and(BankClearingQueuePresenter::suggestedActionLabel($bankFile))->toBe('Post as…')
         ->and(BankClearingQueuePresenter::suggestedActionLabel($operational))->toBe('Match');
 });

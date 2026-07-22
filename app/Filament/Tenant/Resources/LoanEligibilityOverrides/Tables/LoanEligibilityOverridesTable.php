@@ -48,6 +48,7 @@ class LoanEligibilityOverridesTable
     {
         return TableGrouping::apply($table
             ->columns([
+                MemberTableColumns::relationNumber(),
                 MemberTableColumns::relationName(),
                 TextColumn::make('gate')
                     ->formatStateUsing(fn (string $state): string => LoanEligibilityGate::labels()[$state] ?? $state)

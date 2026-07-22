@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\SmsClearing\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -40,6 +41,8 @@ final class SmsPostedLedgerTable
                         ->label(__('Type'))
                         ->badge()
                         ->color(fn (string $state): string => $state === 'credit' ? 'success' : 'danger'),
+                    MemberTableColumns::relationNumber()
+                        ->placeholder(__('—')),
                     TextColumn::make('member.name')
                         ->label(__('Member'))
                         ->placeholder(__('—'))

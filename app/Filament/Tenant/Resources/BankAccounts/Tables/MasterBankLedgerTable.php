@@ -14,6 +14,7 @@ use App\Filament\Support\AccountTransactionTypeFilter;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MasterAccountLedgerHeaderActions;
 use App\Filament\Support\MemberSelect;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\ViewActions\ViewAccountTransactionAction;
 use App\Models\Tenant\Account;
@@ -87,6 +88,9 @@ class MasterBankLedgerTable
                             ->label(__('Txn #'))
                             ->searchable()
                             ->sortable(),
+                        MemberTableColumns::relationNumber()
+                            ->label(__('Member #'))
+                            ->placeholder(__('—')),
                         TextColumn::make('member.name')
                             ->label(__('Member tag'))
                             ->placeholder(__('—'))

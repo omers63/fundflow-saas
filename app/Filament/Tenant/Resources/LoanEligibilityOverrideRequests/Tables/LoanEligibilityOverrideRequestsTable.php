@@ -34,6 +34,7 @@ class LoanEligibilityOverrideRequestsTable
             $table
                 ->headerActions(LoanListTableHeaderActions::eligibilityReviews())
                 ->columns([
+                    MemberTableColumns::relationNumber(),
                     MemberTableColumns::relationName(),
                     TextColumn::make('failed_gates')
                         ->label(__('Blocked rules'))

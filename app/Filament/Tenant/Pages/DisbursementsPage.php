@@ -122,10 +122,6 @@ class DisbursementsPage extends Page implements HasTable
                 LoanFilamentActions::newDisbursementHeaderAction(),
             ])
             ->columns([
-                TextColumn::make('member.name')
-                    ->label(__('Member'))
-                    ->searchable()
-                    ->wrap(),
                 MemberTableColumns::relationNumberFor(
                     memberNumberColumn: 'member.member_number',
                     memberIdColumn: 'loans.member_id',
@@ -133,6 +129,10 @@ class DisbursementsPage extends Page implements HasTable
                 )->url(fn (Loan $record): ?string => $record->member
                     ? MemberTableColumns::memberRecordEditUrl($record->member)
                     : null),
+                TextColumn::make('member.name')
+                    ->label(__('Member'))
+                    ->searchable()
+                    ->wrap(),
                 TextColumn::make('amount_approved')
                     ->label(__('Approved'))
                     ->money($currency)

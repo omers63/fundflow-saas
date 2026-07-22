@@ -66,6 +66,7 @@ final class LoanDelinquencyTables
             ->headerActions(LoanListTableHeaderActions::delinquency())
             ->columnManager(true)
             ->columns([
+                MemberTableColumns::loanMemberNumber(),
                 TextColumn::make('loan.member.name')
                     ->label(__('Member'))
                     ->searchable()
@@ -86,6 +87,14 @@ final class LoanDelinquencyTables
                     ->label(__('Late fee'))
                     ->money($currency)
                     ->placeholder(__('—')),
+                TextColumn::make('loan.guarantor.member_number')
+                    ->label(__('Guarantor #'))
+                    ->placeholder(__('—'))
+                    ->toggleable()
+                    ->url(fn(mixed $state, mixed $record): ?string => MemberTableColumns::resolveMemberUrl(
+                        'loan.guarantor.name',
+                        $record,
+                    )),
                 TextColumn::make('loan.guarantor.name')
                     ->label(__('Guarantor'))
                     ->placeholder(__('—'))
@@ -140,10 +149,16 @@ final class LoanDelinquencyTables
             ->headerActions(LoanListTableHeaderActions::delinquency())
             ->columnManager(true)
             ->columns([
+                MemberTableColumns::relationNumber()
+                    ->label(__('Borrower #')),
                 TextColumn::make('member.name')
                     ->label(__('Borrower'))
                     ->searchable()
                     ->wrap(),
+                MemberTableColumns::guarantorNumber(
+                    memberIdColumn: 'loans.guarantor_id',
+                )
+                    ->placeholder(__('—')),
                 TextColumn::make('guarantor.name')
                     ->label(__('Guarantor'))
                     ->placeholder(__('—')),

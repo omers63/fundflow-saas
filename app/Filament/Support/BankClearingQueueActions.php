@@ -11,6 +11,7 @@ use App\Filament\Tenant\Support\ViewBankTransactionAction;
 use App\Models\Tenant\BankTransaction;
 use App\Services\BankClearingMatchService;
 use App\Services\BankClearingQueueService;
+use App\Services\BankImportPostAsService;
 use App\Services\FundFlowService;
 use App\Services\PendingOperationalClearanceDeletionService;
 use App\Support\BankClearing\BankClearingQueuePresenter;
@@ -21,9 +22,11 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Utilities\Get;
 use Illuminate\Database\Eloquent\Collection;
 use Throwable;
 
@@ -108,6 +111,7 @@ final class BankClearingQueueActions
     public static function bankFileResolveActions(): array
     {
         return [
+            self::postAs(),
             self::postToCash(),
             self::postToMember(),
             self::autoMatch(),
@@ -166,6 +170,80 @@ final class BankClearingQueueActions
             ->modalContent(fn (BankTransaction $record) => TenantPortalViewModal::content(
                 BankClearingQueuePresenter::modalSections($record),
             ));
+    }
+
+    public static function postAs(): Action
+    {
+        return Action::make('postAs')
+            ->label(__('Post as…'))
+            ->icon('heroicon-o-tag')
+            ->color('primary')
+            ->modalHeading(__('Post as…'))
+            ->modalDescription(__('Record this bank line as an operation and clear it in one step.'))
+            ->modalSubmitActionLabel(__('Post'))
+            ->modalWidth('md')
+            ->visible(fn (BankTransaction $record): bool => BankImportPostAsService::canPostAs($record))
+            ->fillForm(fn (BankTransaction $record): array => [
+                'type' => (float) $record->amount >= 0
+                    ? BankImportPostAsService::TYPE_MEMBER_DEPOSIT
+                    : BankImportPostAsService::TYPE_EXPENSE_OUT,
+                'description' => FundFlowService::resolveBankLineDetail($record),
+                'transaction_date' => $record->transaction_date?->toDateString()
+                    ?? (string) $record->transaction_date,
+            ])
+            ->schema([
+                Select::make('type')
+                    ->label(__('Type'))
+                    ->options(fn (BankTransaction $record): array => BankImportPostAsService::typeOptionsForAmount(
+                        (float) $record->amount,
+                    ))
+                    ->required()
+                    ->native(false)
+                    ->live(),
+                MemberSelect::make('member_id')
+                    ->required(fn (Get $get): bool => BankImportPostAsService::requiresMember(
+                        (string) ($get('type') ?? ''),
+                    ))
+                    ->visible(fn (Get $get): bool => BankImportPostAsService::requiresMember(
+                        (string) ($get('type') ?? ''),
+                    )),
+                Textarea::make('description')
+                    ->label(__('Description'))
+                    ->rows(2)
+                    ->required()
+                    ->maxLength(500),
+                DatePicker::make('transaction_date')
+                    ->label(__('Date'))
+                    ->native(false)
+                    ->required(),
+            ])
+            ->action(function (
+                BankTransaction $record,
+                array $data,
+                Action $action,
+                BankImportPostAsService $service,
+            ): void {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $service->postAs(
+                            $record,
+                            (string) $data['type'],
+                            (string) $data['description'],
+                            filled($data['member_id'] ?? null) ? (int) $data['member_id'] : null,
+                            filled($data['transaction_date'] ?? null) ? (string) $data['transaction_date'] : null,
+                        ),
+                        __('Could not post bank line'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__('Bank line posted'))
+                    ->success()
+                    ->send();
+            });
     }
 
     public static function postToCash(): Action

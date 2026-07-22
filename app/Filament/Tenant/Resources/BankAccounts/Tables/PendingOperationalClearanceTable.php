@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\BankAccounts\Tables;
 
 use App\Filament\Support\BankClearingQueueActions;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableStandards;
@@ -54,6 +55,7 @@ final class PendingOperationalClearanceTable
         }
 
         $columns = array_merge($columns, [
+            MemberTableColumns::relationNumber(),
             TextColumn::make('member.name')
                 ->label(__('Member'))
                 ->sortable(),

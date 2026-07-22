@@ -47,9 +47,11 @@ class MyDependentsTable
                 return __('Your dependents will appear here once they are linked to your household.');
             })
             ->columns([
+                TextColumn::make('member_number')
+                    ->label(__('Member #'))
+                    ->sortable(),
                 TextColumn::make('name')
                     ->label(__('Dependent'))
-                    ->description(fn (Member $record): string => $record->member_number)
                     ->searchable(['name', 'member_number'])
                     ->sortable()
                     ->wrap(),

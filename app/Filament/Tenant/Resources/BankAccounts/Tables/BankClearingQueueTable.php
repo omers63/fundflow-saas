@@ -7,6 +7,7 @@ namespace App\Filament\Tenant\Resources\BankAccounts\Tables;
 use App\Filament\Support\BankClearingQueueActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MemberSelect;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
@@ -57,6 +58,8 @@ final class BankClearingQueueTable
                         ->money(fn (): string => Setting::get('general', 'currency', 'USD'))
                         ->sortable()
                         ->color(fn ($state): string => $state >= 0 ? 'success' : 'danger'),
+                    MemberTableColumns::relationNumber()
+                        ->placeholder(__('Unassigned')),
                     TextColumn::make('member.name')
                         ->label(__('Member'))
                         ->placeholder(__('Unassigned'))

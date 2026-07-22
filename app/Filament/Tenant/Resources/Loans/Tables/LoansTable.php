@@ -6,6 +6,7 @@ use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\LoanFilamentActions;
 use App\Filament\Support\LoanListTableHeaderActions;
 use App\Filament\Support\LoanOutstandingColumn;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\MoneyDisplay;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -31,6 +32,7 @@ class LoansTable
                 TextColumn::make('id')
                     ->label(__('Loan #'))
                     ->sortable(),
+                MemberTableColumns::relationNumber(),
                 TextColumn::make('member.name')
                     ->searchable()
                     ->sortable(),

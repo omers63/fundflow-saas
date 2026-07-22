@@ -4,6 +4,7 @@ namespace App\Filament\Tenant\Resources\CashOutRequests\Tables;
 
 use App\Filament\Support\ActionModalFailure;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -39,6 +40,7 @@ class CashOutRequestsTable
                         ->label(__('Request #'))
                         ->sortable()
                         ->searchable(),
+                    MemberTableColumns::relationNumber(),
                     TextColumn::make('member.name')
                         ->searchable()
                         ->sortable(),

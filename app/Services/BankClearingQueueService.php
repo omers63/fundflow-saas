@@ -121,12 +121,12 @@ final class BankClearingQueueService
             return 'matchToBankLine';
         }
 
-        if (BankTransactionWorkflow::canPostToCash($record)) {
-            return 'mirrorToCash';
+        if (BankTransactionWorkflow::canPostToMember($record)) {
+            return 'postAs';
         }
 
-        if (BankTransactionWorkflow::canPostToMember($record)) {
-            return 'postToMember';
+        if (BankTransactionWorkflow::canPostToCash($record)) {
+            return 'mirrorToCash';
         }
 
         if ($this->matching->isPendingClearance($record)) {

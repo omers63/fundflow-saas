@@ -3,6 +3,7 @@
 namespace App\Filament\Tenant\Resources\FundPostings\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\ViewActions\ViewFundPostingAction;
@@ -36,6 +37,7 @@ class FundPostingsTable
                         ->url(FundPostingResource::getUrl('create')),
                 ])
                 ->columns([
+                    MemberTableColumns::relationNumber(),
                     TextColumn::make('member.name')
                         ->searchable()
                         ->sortable(),

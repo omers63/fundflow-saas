@@ -6,6 +6,7 @@ use App\Filament\Support\ContributionListTableHeaderActions;
 use App\Filament\Support\ContributionTableActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\LateSettledArrearsTableStyling;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -25,6 +26,7 @@ class ContributionsTable
             $table
                 ->headerActions(ContributionListTableHeaderActions::contributions())
                 ->columns([
+                    MemberTableColumns::relationNumber(),
                     TextColumn::make('member.name')
                         ->searchable()
                         ->sortable(),

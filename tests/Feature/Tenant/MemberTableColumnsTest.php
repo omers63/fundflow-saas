@@ -69,3 +69,18 @@ test('tenant panel auto-links member name table columns', function () {
     expect($column->getUrl($member->name))
         ->toBe(MemberResource::getUrl('view', ['record' => $member]));
 });
+
+test('member table columns resolve urls for member number relation paths', function () {
+    $member = Member::factory()->create();
+    $contribution = Contribution::factory()->for($member)->create();
+    $loan = Loan::factory()->for($member)->create();
+
+    expect(MemberTableColumns::resolveMemberUrl('member.member_number', $contribution))
+        ->toBe(MemberResource::getUrl('view', ['record' => $member]))
+        ->and(MemberTableColumns::resolveMemberUrl('loan.member.member_number', $loan))
+        ->toBe(MemberResource::getUrl('view', ['record' => $member]))
+        ->and(MemberTableColumns::loanMemberNumber()->getName())
+        ->toBe('loan.member.member_number')
+        ->and(MemberTableColumns::guarantorNumber()->getName())
+        ->toBe('guarantor.member_number');
+});

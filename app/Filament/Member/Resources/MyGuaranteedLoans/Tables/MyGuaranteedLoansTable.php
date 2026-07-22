@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyGuaranteedLoans\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableStandards;
 use App\Models\Tenant\Loan;
@@ -24,6 +25,8 @@ class MyGuaranteedLoansTable
             $table
                 ->description(__('Loans you guarantee. This list is read-only.'))
                 ->columns([
+                    MemberTableColumns::relationNumber()
+                        ->label(__('Borrower #')),
                     TextColumn::make('member.name')
                         ->label(__('Borrower'))
                         ->searchable(),

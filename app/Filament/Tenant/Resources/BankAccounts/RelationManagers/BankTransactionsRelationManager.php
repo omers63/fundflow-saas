@@ -7,6 +7,7 @@ use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\BankTransactionManualHeaderActions;
 use App\Filament\Support\BankTransactionTableActions;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Support\ViewActions\ViewBankTransactionAction as SharedViewBankTransactionAction;
@@ -50,6 +51,8 @@ class BankTransactionsRelationManager extends RelationManager
                         ->color(fn ($state): string => $state >= 0 ? 'success' : 'danger'),
                     TextColumn::make('reference')
                         ->placeholder(__('—')),
+                    MemberTableColumns::relationNumber()
+                        ->placeholder(__('Unassigned')),
                     TextColumn::make('member.name')
                         ->placeholder(__('Unassigned')),
                     TextColumn::make('masterCashTransaction.id')

@@ -50,10 +50,25 @@ Deposit/cash-out operational dates follow **Business day** (Settings → General
 
 | Source | What the row is | Typical next step |
 |--------|-----------------|-------------------|
-| **From bank file** | Real statement line (`imported` / `mirrored`) | **Post cash** → **Post member** |
+| **From bank file** | Real statement line (`imported` / `mirrored`) | **Post as…** (or **Post cash** / **Post member**) |
 | **From operations** | Pending clearance after accept | **Match** (or **Auto-match** / **Clear**) |
 
 Do **not** use **Post member** on operations rows — cash was already posted when the operation was accepted.
+
+### Post as… (bank-import-first)
+
+Classify an unclassified CSV line, record the domain operation, and clear the line in one step (`BankImportPostAsService`).
+
+| Line sign | Types |
+|-----------|--------|
+| Credit (+) | Member deposit · Invest return |
+| Debit (−) | Cash-out · Expense out · Fee out · Invest out |
+
+Amount and preferred date come from the CSV line. Member is required for deposit and cash-out. Master reserve types that skip the master bank ledger on match keep that behavior.
+
+**Post member** remains a shortcut for member deposit. **Post cash** still stages master cash without classifying.
+
+Ops-first remains available: record on Master Invest / Expense / Fees (or accept cash-out), then **Match** from **From operations**.
 
 ---
 
@@ -63,7 +78,7 @@ Row click opens **View**. All mutative actions live in one **Actions** dropdown.
 
 ### When mode is From bank file (or All + bank-file row)
 
-Post cash · Post member · Auto-match · View · Ignore · Delete
+Post as… · Post cash · Post member · Auto-match · View · Ignore · Delete
 
 ### When mode is From operations (or All + operations row)
 
@@ -75,6 +90,7 @@ When mode is a single slice, only that slice’s actions are registered. When **
 
 | Name | Label | Applies to | Does |
 |------|-------|------------|------|
+| `postAs` | Post as… | Bank file (`imported`/`mirrored`) | Create op (or member deposit) + clear/match |
 | `mirrorToCash` | Post cash | Bank file (`imported`) | `FundFlowService::mirrorToCash` |
 | `postToMember` | Post member | Bank file (`imported`/`mirrored`) | Mirror if needed + credit/debit member cash |
 | `autoMatch` | Auto-match | Either, unique counterpart only | `autoMatchWhenUnique` → `clearMatchPair` |
@@ -109,7 +125,7 @@ Ineligible rows in a mixed selection are skipped. Refresh reloads the table.
 
 ## 5. Suggested “Next step”
 
-Optional column / View modal uses short labels: Auto-match, Match, Post cash, Post member, Clear.
+Optional column / View modal uses short labels: Auto-match, Match, Post as…, Post cash, Post member, Clear.
 
 ---
 
@@ -117,7 +133,7 @@ Optional column / View modal uses short labels: Auto-match, Match, Post cash, Po
 
 | Mode | Copy summary |
 |------|----------------|
-| Bank file | No lines awaiting posting — import, then Post cash / Post member |
+| Bank file | No lines awaiting posting — import, then Post as… / Post cash / Post member |
 | Operations | No rows awaiting evidence — Match or Clear |
 | All | Combined posting / matching guidance |
 
@@ -132,4 +148,5 @@ Optional column / View modal uses short labels: Auto-match, Match, Post cash, Po
 | Source defaults | `BankClearingTabRegistry::defaultQueueFilter()` |
 | Slice / suggestion | `BankClearingQueueService`, `BankClearingQueuePresenter` |
 | Match / clear | `BankClearingMatchService` |
-| Post | `FundFlowService` |
+| Post as… | `BankImportPostAsService` |
+| Post cash / member | `FundFlowService` |
