@@ -19,6 +19,7 @@ use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\FundFlowService;
 use App\Services\Loans\LoanLedgerService;
 use App\Services\ReconciliationReportService;
 use App\Support\LoanFundingStrategy;
@@ -143,6 +144,48 @@ test('global trial diagnostics exclude expected one-sided lifecycle reference gr
         ->and($check['suspected_postings'][0]['reference_id'])->toBe(9001)
         ->and(collect($check['suspected_postings'])->pluck('reference_type'))
         ->not->toContain(CashOutRequest::class, FundPosting::class);
+});
+
+test('global trial diagnostics exclude expected master-bank-only bank transaction groups', function () {
+    $masterCash = Account::masterCash();
+    $masterBank = Account::factory()->masterBank()->withBalance(0)->create();
+    expect($masterCash)->not->toBeNull();
+
+    Transaction::factory()->for($masterBank)->debit()->create([
+        'amount' => 400,
+        'reference_type' => BankTransaction::class,
+        'reference_id' => 257,
+        'description' => 'Expected cash-out match master bank debit',
+        'balance_after' => -400,
+    ]);
+
+    Transaction::factory()->for($masterBank)->credit()->create([
+        'amount' => 3,
+        'reference_type' => BankTransaction::class,
+        'reference_id' => 262,
+        'description' => 'Expected CSV mirror master bank credit',
+        'balance_after' => -397,
+    ]);
+
+    Transaction::factory()->for($masterCash)->credit()->create([
+        'amount' => 75,
+        'reference_type' => BankTransaction::class,
+        'reference_id' => 999,
+        'description' => 'Unexpected one-sided cash under bank transaction',
+        'balance_after' => 75,
+    ]);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['global_trial'];
+    $suspectedTypes = collect($check['suspected_postings']);
+
+    expect($check['severity'])->toBe('warning')
+        ->and($suspectedTypes->pluck('reference_id'))->toContain(999)
+        ->and($suspectedTypes->firstWhere('reference_id', 999)['reference_type'])->toBe(BankTransaction::class)
+        ->and($suspectedTypes->pluck('reference_id'))->not->toContain(257, 262);
 });
 
 test('global trial diagnostics exclude expected split-loan reference groups', function () {
@@ -412,6 +455,106 @@ test('global trial diagnostics list null-reference credit and debit lines', func
         ->and($check['null_reference_delta'])->toBe(200.0)
         ->and($check['null_reference_lines'])->toHaveCount(2)
         ->and(collect($check['null_reference_lines'])->pluck('type'))->toContain('credit', 'debit');
+});
+
+test('global trial diagnostics exclude expected bank-file null-reference cash legs', function () {
+    Account::factory()->masterBank()->withBalance(0)->create();
+
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 0,
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $statement = BankStatement::create([
+        'filename' => 'null-ref-bank-flow.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    $imported = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => now()->toDateString(),
+        'description' => 'Deposit from member #23 without a deposit request from member.',
+        'amount' => 3,
+        'status' => 'imported',
+        'hash' => md5('null-ref-bank-flow'),
+        'is_cleared' => false,
+    ]);
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => app(FundFlowService::class)->ensureMirroredAndPostToMember($imported, $member),
+    );
+
+    $imported = $imported->fresh();
+    $manual = Transaction::factory()->for(Account::masterCash())->credit()->create([
+        'amount' => 50,
+        'reference_type' => null,
+        'reference_id' => null,
+        'description' => 'Genuine manual null-reference credit',
+        'balance_after' => 53,
+    ]);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['global_trial'];
+    $nullIds = collect($check['null_reference_lines'])->pluck('transaction_id');
+
+    expect($imported->master_cash_transaction_id)->not->toBeNull()
+        ->and($check['severity'])->toBe('warning')
+        ->and($check['null_reference_line_count'])->toBe(1)
+        ->and($nullIds)->toContain($manual->id)
+        ->and($nullIds)->not->toContain((int) $imported->master_cash_transaction_id)
+        ->and($check['null_reference_credits'])->toBe(50.0);
+});
+
+test('global trial stays ok when only expected same-direction bank-import drift remains', function () {
+    Account::factory()->masterBank()->withBalance(0)->create();
+
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 0,
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $statement = BankStatement::create([
+        'filename' => 'expected-drift-bank-flow.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    $imported = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => now()->toDateString(),
+        'description' => 'Expected same-direction bank import drift',
+        'amount' => 3,
+        'status' => 'imported',
+        'hash' => md5('expected-drift-bank-flow'),
+        'is_cleared' => false,
+    ]);
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => app(FundFlowService::class)->ensureMirroredAndPostToMember($imported, $member),
+    );
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['global_trial'];
+
+    expect($check['severity'])->toBe('ok')
+        ->and(abs((float) $check['delta']))->toBeGreaterThan(0.0)
+        ->and($check['unbalanced_posting_group_count'])->toBe(0)
+        ->and($check['null_reference_line_count'])->toBe(0);
 });
 
 test('global trial omits diagnostics when credits and debits balance', function () {

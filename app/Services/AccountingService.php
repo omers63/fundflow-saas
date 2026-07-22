@@ -21,6 +21,7 @@ use Carbon\CarbonInterface;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use RuntimeException;
@@ -809,9 +810,14 @@ class AccountingService
         $siblings = Transaction::query()
             ->where('reference_type', $transaction->reference_type)
             ->where('reference_id', $transaction->reference_id)
+            ->with('account')
             ->get();
 
         if ($siblings->count() < 2) {
+            return null;
+        }
+
+        if ($this->isExpectedBankImportSameDirectionJournal($siblings)) {
             return null;
         }
 
@@ -831,6 +837,91 @@ class AccountingService
         return null;
     }
 
+    /**
+     * CSV mirror / post-to-member posts same-direction master bank + master cash (± member cash)
+     * under {@see BankTransaction}. That shape is intentional and must not raise UNBALANCED_ENTRY.
+     *
+     * @param  Collection<int, Transaction>  $siblings
+     */
+    public function isExpectedBankImportSameDirectionJournal($siblings): bool
+    {
+        if ($siblings->isEmpty()) {
+            return false;
+        }
+
+        $directions = $siblings->pluck('type')->unique()->values();
+
+        if ($directions->count() !== 1 || ! in_array($directions->first(), ['credit', 'debit'], true)) {
+            return false;
+        }
+
+        $amounts = $siblings
+            ->map(fn (Transaction $leg): string => number_format(abs((float) $leg->amount), 2, '.', ''))
+            ->unique()
+            ->values();
+
+        if ($amounts->count() !== 1) {
+            return false;
+        }
+
+        $hasMasterBank = false;
+
+        foreach ($siblings as $leg) {
+            if (! $leg instanceof Transaction) {
+                return false;
+            }
+
+            $account = $leg->account;
+
+            if ($account === null) {
+                $leg->loadMissing('account');
+                $account = $leg->account;
+            }
+
+            if ($account === null) {
+                return false;
+            }
+
+            $isMasterBank = $account->is_master && $account->type === 'bank';
+            $isMasterCash = $account->is_master && $account->type === 'cash';
+            $isMemberCash = ! $account->is_master && $account->type === 'cash';
+
+            if (! $isMasterBank && ! $isMasterCash && ! $isMemberCash) {
+                return false;
+            }
+
+            if ($isMasterBank) {
+                $hasMasterBank = true;
+            }
+        }
+
+        return $hasMasterBank;
+    }
+
+    /**
+     * Whether a BankTransaction reference group is the expected CSV import journal shape.
+     */
+    public function isExpectedBankImportJournalReference(string $referenceType, int $referenceId): bool
+    {
+        if ($referenceId <= 0) {
+            return false;
+        }
+
+        $bankTransactionMorph = (new BankTransaction)->getMorphClass();
+
+        if ($referenceType !== $bankTransactionMorph && $referenceType !== BankTransaction::class) {
+            return false;
+        }
+
+        $siblings = Transaction::query()
+            ->where('reference_type', $referenceType)
+            ->where('reference_id', $referenceId)
+            ->with('account')
+            ->get();
+
+        return $this->isExpectedBankImportSameDirectionJournal($siblings);
+    }
+
     protected function shouldValidateBalancedReference(Transaction $transaction): bool
     {
         if ($transaction->reference_type === Transaction::class) {
@@ -840,6 +931,8 @@ class AccountingService
         return in_array($transaction->reference_type, [
             BankTransaction::class,
             FundPosting::class,
+            (new BankTransaction)->getMorphClass(),
+            (new FundPosting)->getMorphClass(),
         ], true);
     }
 

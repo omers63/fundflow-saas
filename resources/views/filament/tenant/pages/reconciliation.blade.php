@@ -275,7 +275,7 @@
                     <li><strong>{{ __('Stored balance vs ledger') }}</strong> —
                         {{ __('critical if any account drifts beyond tolerance.') }}</li>
                                 <li><strong>{{ __('Global trial') }}</strong> —
-                                    {{ __('Σ credits vs Σ debits across all lines; warning if unequal (expected under some one-sided flows).') }}
+                                    {{ __('Σ credits vs Σ debits may differ for same-direction pool or bank-import legs; warning only when unexpected unbalanced groups or unexpected null-reference lines remain.') }}
                                 </li>
                                 <li><strong>{{ __('Master vs Σ(member) cash & fund') }}</strong> —
                                     {{ __('advisory; member-only cash debits (repayments) and guarantor fund debits break strict parity by design.') }}

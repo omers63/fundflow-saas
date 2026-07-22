@@ -42,16 +42,14 @@ class FundFlowService
                 $amount = (float) $bankTxn->amount;
                 $description = self::mirrorToCashLedgerDescription($bankTxn);
 
-                // Only the master bank leg uses the BankTransaction reference so §5.12 paired-journal
-                // validation does not treat two same-direction pool credits as an unbalanced journal.
-                $masterCashTransaction = $amount >= 0
-                    ? $this->accounting->credit($masterBank, $amount, $description, $bankTxn)
-                    : $this->accounting->debit($masterBank, abs($amount), $description, $bankTxn);
-
+                // Master bank + master cash both credit (or both debit) for the same CSV line.
+                // §5.12 allows this known same-direction bank-import shape under BankTransaction.
                 if ($amount >= 0) {
-                    $masterCashTransaction = $this->accounting->credit($masterCash, $amount, $description);
+                    $this->accounting->credit($masterBank, $amount, $description, $bankTxn);
+                    $masterCashTransaction = $this->accounting->credit($masterCash, $amount, $description, $bankTxn);
                 } else {
-                    $masterCashTransaction = $this->accounting->debit($masterCash, abs($amount), $description);
+                    $this->accounting->debit($masterBank, abs($amount), $description, $bankTxn);
+                    $masterCashTransaction = $this->accounting->debit($masterCash, abs($amount), $description, $bankTxn);
                 }
 
                 $bankTxn->update([
@@ -117,11 +115,11 @@ class FundFlowService
                     'cleared_at' => BusinessDay::now(),
                 ]);
 
-                // Do not attach BankTransaction as reference — the bank leg already holds it for §5.12.
+                // Same BankTransaction reference as bank/cash mirror legs; §5.12 allows this shape.
                 if ($amount >= 0) {
-                    $this->accounting->credit($memberCash, $amount, $description, null, null, $member->id);
+                    $this->accounting->credit($memberCash, $amount, $description, $bankTransaction, null, $member->id);
                 } else {
-                    $this->accounting->debit($memberCash, abs($amount), $description, null, null, $member->id);
+                    $this->accounting->debit($memberCash, abs($amount), $description, $bankTransaction, null, $member->id);
                 }
             });
         });

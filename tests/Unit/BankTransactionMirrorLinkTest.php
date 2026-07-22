@@ -7,9 +7,8 @@ use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
 use App\Services\FundFlowService;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();

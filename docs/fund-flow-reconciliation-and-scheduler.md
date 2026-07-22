@@ -354,7 +354,7 @@ Every snapshot mode runs these **ledger integrity** checks (severity per check: 
 | Check key | What it verifies |
 |-----------|------------------|
 | `ledger_balances` | Stored account balance = net of that account’s transactions |
-| `global_trial` | Σ credits vs Σ debits across all ledger lines |
+| `global_trial` | Σ credits vs Σ debits across all ledger lines (raw Δ always shown; warning only when unexpected unbalanced referenced groups or unexpected null-reference lines remain) |
 | `paired_control_totals` | Master cash/fund pool vs Σ member mirrors (tolerance-aware) |
 | `bank_statement_vs_book` | Optional: `master_cash` vs declared statement balance (skipped if not configured) |
 | `contributions_ledger` | Contribution rows have ledger lines; master fund credits match contribution totals |

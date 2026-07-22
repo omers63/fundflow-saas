@@ -119,7 +119,7 @@ test('mirror to cash does not auto-reverse on unbalanced journal validation', fu
     expect(Transaction::query()
         ->where('reference_type', BankTransaction::class)
         ->where('reference_id', $txn->id)
-        ->count())->toBe(1);
+        ->count())->toBe(2);
 
     expect(Account::masterBank()->balance)->toBe('1500.00')
         ->and(Account::masterCash()->balance)->toBe('1500.00');
@@ -141,7 +141,8 @@ test('mirror to cash updates master bank and master cash for credits', function 
     $ledger = Transaction::findOrFail($txn->master_cash_transaction_id);
 
     expect($ledger->account_id)->toBe(Account::masterCash()->id)
-        ->and($ledger->reference_type)->toBeNull();
+        ->and($ledger->reference_type)->toBe(BankTransaction::class)
+        ->and($ledger->reference_id)->toBe($txn->id);
 
     $bankLedger = Transaction::query()
         ->where('reference_type', BankTransaction::class)
@@ -224,7 +225,7 @@ test('ensure mirrored and post to member does not raise realtime pool or member 
     $txn = createBankTransaction(['amount' => 3, 'status' => 'imported', 'description' => 'Small deposit']);
 
     AccountingService::withoutMemberCashCollection(
-        fn() => $this->service->ensureMirroredAndPostToMember($txn, $member),
+        fn () => $this->service->ensureMirroredAndPostToMember($txn, $member),
     );
 
     expect(ReconciliationException::query()

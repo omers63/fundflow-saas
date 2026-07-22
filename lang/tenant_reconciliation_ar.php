@@ -192,6 +192,7 @@ return [
     'vs stated' => 'مقابل المُعلَن',
     'with auto-resolve and admin actions.' => 'مع الحل التلقائي وإجراءات الإدارة.',
     'with installments, compared to remaining schedule.' => 'مع الأقساط، مقارنةً بالجدول المتبقي.',
+    'Σ credits vs Σ debits may differ for same-direction pool or bank-import legs; warning only when unexpected unbalanced groups or unexpected null-reference lines remain.' => 'قد يختلف Σ الدائن عن Σ المدين عند ترحيل أرجل الصندوق أو استيراد البنك بنفس الاتجاه؛ التحذير فقط عند بقاء مجموعات مرجعية غير متوازنة غير متوقعة أو سطور بلا مرجع غير متوقعة.',
     'Σ credits vs Σ debits across all lines; warning if unequal (expected under some one-sided flows).' => 'Σ الدائن مقابل Σ المدين على جميع السطور؛ تحذير عند عدم التساوي (متوقع في بعض التدفقات أحادية الجانب).',
     'JSON' => 'JSON',
     'PDF' => 'PDF',
