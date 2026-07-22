@@ -64,8 +64,6 @@ final class BankClearingQueuePresenter
         return match (app(BankClearingQueueService::class)->primaryActionForRecord($record)) {
             'postAs' => __('Post as…'),
             'matchToBankLine' => __('Match'),
-            'mirrorToCash' => __('Post cash'),
-            'postToMember' => __('Post member'),
             'clearWithoutEvidence' => __('Clear'),
             default => null,
         };

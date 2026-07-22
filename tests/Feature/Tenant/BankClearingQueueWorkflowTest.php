@@ -114,7 +114,10 @@ test('navigation badge matches actionable open queue count', function () {
     expect(BankAccountsResource::getNavigationBadge())->toBe('1');
 });
 
-test('work queue can post a bank file row to cash', function () {
+test('work queue can post a bank file row as member deposit', function () {
+    $member = Member::factory()->create(['status' => 'active', 'monthly_contribution_amount' => 0]);
+    $this->accounting->createMemberAccounts($member);
+
     $statement = BankStatement::create([
         'filename' => 'post-queue.csv',
         'bank_name' => 'Test Bank',
@@ -135,11 +138,18 @@ test('work queue can post a bank file row to cash', function () {
 
     Livewire::actingAs($this->admin, 'tenant')
         ->test(ListBankAccounts::class)
-        ->callTableAction('mirrorToCash', $imported)
+        ->callTableAction('postAs', $imported, [
+            'type' => 'member_deposit',
+            'member_id' => $member->id,
+            'description' => 'Queue post import',
+            'transaction_date' => $imported->transaction_date?->toDateString()
+                ?? (string) $imported->transaction_date,
+        ])
         ->assertNotified();
 
-    expect($imported->fresh()->status)->toBe('mirrored')
-        ->and(app(BankClearingQueueService::class)->isBankFileItem($imported->fresh()))->toBeTrue();
+    expect($imported->fresh()->status)->toBe('posted')
+        ->and($imported->fresh()->member_id)->toBe($member->id)
+        ->and(app(BankClearingQueueService::class)->isBankFileItem($imported->fresh()))->toBeFalse();
 });
 
 test('work queue search does not query virtual queue columns', function () {

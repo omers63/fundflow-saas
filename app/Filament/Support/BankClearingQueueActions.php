@@ -16,7 +16,6 @@ use App\Services\FundFlowService;
 use App\Services\PendingOperationalClearanceDeletionService;
 use App\Support\BankClearing\BankClearingQueuePresenter;
 use App\Support\BankTransactionDeletion;
-use App\Support\BankTransactionWorkflow;
 use App\Support\ContributionPolicySettings;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -85,18 +84,15 @@ final class BankClearingQueueActions
     {
         $filter = BankClearingTabRegistry::normalizeQueueFilter($queueFilter);
 
-        $actions = [
-            self::matchAllUniqueBulk(),
-            self::matchSelectedBulk(),
-        ];
+        $actions = [];
 
         if (in_array($filter, [BankClearingTabRegistry::FILTER_ALL, BankClearingTabRegistry::FILTER_OPERATIONS], true)) {
+            $actions[] = self::matchAllUniqueBulk();
+            $actions[] = self::matchSelectedBulk();
             $actions[] = self::clearWithoutEvidenceBulk();
         }
 
         if (in_array($filter, [BankClearingTabRegistry::FILTER_ALL, BankClearingTabRegistry::FILTER_BANK_FILE], true)) {
-            $actions[] = self::postToCashBulk();
-            $actions[] = self::postToMemberBulk();
             $actions[] = self::ignoreBulk();
         }
 
@@ -112,8 +108,6 @@ final class BankClearingQueueActions
     {
         return [
             self::postAs(),
-            self::postToCash(),
-            self::postToMember(),
             self::autoMatch(),
         ];
     }
@@ -244,33 +238,6 @@ final class BankClearingQueueActions
                     ->success()
                     ->send();
             });
-    }
-
-    public static function postToCash(): Action
-    {
-        return Action::make('mirrorToCash')
-            ->label(__('Post cash'))
-            ->icon('heroicon-o-arrow-right')
-            ->color('info')
-            ->requiresConfirmation()
-            ->modalDescription(__('Post this statement line to the master cash pool.'))
-            ->visible(fn (BankTransaction $record): bool => BankTransactionWorkflow::canPostToCash($record))
-            ->action(function (BankTransaction $record, FundFlowService $service): void {
-                $service->mirrorToCash([$record->id]);
-                Notification::make()->title(__('Posted to master cash'))->success()->send();
-            });
-    }
-
-    public static function postToMember(): Action
-    {
-        return BankTransactionTableActions::postToMember()
-            ->label(__('Post member'));
-    }
-
-    public static function postToMemberBulk(): BulkAction
-    {
-        return BankTransactionTableActions::postToMemberBulk()
-            ->label(__('Post member'));
     }
 
     public static function autoMatch(): Action
@@ -510,30 +477,6 @@ final class BankClearingQueueActions
                     ->send();
             })
             ->deselectRecordsAfterCompletion();
-    }
-
-    public static function postToCashBulk(): BulkAction
-    {
-        return BulkAction::make('mirrorSelectedToCash')
-            ->label(__('Post cash'))
-            ->icon('heroicon-o-arrow-right')
-            ->color('info')
-            ->requiresConfirmation()
-            ->modalDescription(__('Post imported statement lines to the master cash pool.'))
-            ->action(function (Collection $records, FundFlowService $service): void {
-                $importedIds = $records
-                    ->filter(fn (BankTransaction $record): bool => BankTransactionWorkflow::canPostToCash($record))
-                    ->pluck('id');
-
-                if ($importedIds->isEmpty()) {
-                    Notification::make()->title(__('No imported lines can be posted to cash'))->warning()->send();
-
-                    return;
-                }
-
-                $count = $service->mirrorToCash($importedIds);
-                Notification::make()->title(__(':count transaction(s) posted to master cash', ['count' => $count]))->success()->send();
-            });
     }
 
     public static function ignoreBulk(): BulkAction

@@ -3290,6 +3290,7 @@
     "No backup files have been saved on the server yet.": "لم تُحفَظ أي ملفات نسخ احتياطي على الخادم بعد.",
     "No balance due": "لا رصيد مستحق",
     "No bank": "لا بنك",
+    "No bank file lines awaiting posting. Import a statement, then use Post as….": "لا توجد بنود ملف بنكي بانتظار الترحيل. استورد كشف حساب، ثم استخدم ترحيل كـ….",
     "No bank file lines awaiting posting. Import a statement, then use Post cash or Post member.": "لا توجد بنود ملف بنكي بانتظار الترحيل. استورد كشف حساب، ثم استخدم ترحيل نقد أو ترحيل عضو.",
     "No batch logged yet": "لم تُسجَّل دفعة بعد",
     "No cash available to withdraw": "لا نقد متاح للسحب",

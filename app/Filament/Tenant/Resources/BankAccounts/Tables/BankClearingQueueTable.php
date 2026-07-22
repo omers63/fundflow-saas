@@ -117,7 +117,7 @@ final class BankClearingQueueTable
     public static function emptyStateDescription(string $queueFilter): string
     {
         return match (BankClearingTabRegistry::normalizeQueueFilter($queueFilter)) {
-            BankClearingTabRegistry::FILTER_BANK_FILE => __('No bank file lines awaiting posting. Import a statement, then use Post cash or Post member.'),
+            BankClearingTabRegistry::FILTER_BANK_FILE => __('No bank file lines awaiting posting. Import a statement, then use Post as….'),
             BankClearingTabRegistry::FILTER_OPERATIONS => __('No operational rows awaiting bank evidence. Use Match or Clear when a deposit, cash-out, or disbursement is waiting.'),
             default => __('Open bank file lines and operational rows that need posting or bank matching. Match pairs an imported CSV line; clear closes operational rows without bank evidence.'),
         };

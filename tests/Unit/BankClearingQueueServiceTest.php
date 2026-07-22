@@ -201,5 +201,5 @@ it('classifies queue slices for records', function () {
     expect($this->queue->sliceForRecord($operational))->toBe('operations')
         ->and($this->queue->sliceForRecord($bankFile))->toBe('bank_file')
         ->and($this->queue->primaryActionForRecord($operational))->toBe('matchToBankLine')
-        ->and($this->queue->primaryActionForRecord($bankFile))->toBe('mirrorToCash');
+        ->and($this->queue->primaryActionForRecord($bankFile))->toBe('postAs');
 });
