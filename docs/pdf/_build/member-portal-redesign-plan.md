@@ -934,7 +934,7 @@ Ensure `InsightFormatter`, statement PDF, and notification bodies **all call the
 
 ## 16. Value-add features (simple, high-impact)
 
-These are **missing today** but add clear member value. Scope is intentionally small: no custom report builder, no separate analytics app, no announcement CMS. Everything routes through existing data and settings where possible.
+These are **missing today** but add clear member value. Scope is intentionally small: no custom report builder, no separate analytics app. Admin announcement composition and editable EN/AR notification templates live under tenant **Communications** (not a drag-drop page builder). Everything else routes through existing data and settings where possible.
 
 ### 16.1 Gap analysis — what exists vs what's missing
 

@@ -6,10 +6,14 @@ namespace App\Notifications\Concerns;
 
 use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
+use App\Models\Tenant\NotificationTemplate;
 use App\Models\Tenant\User;
+use App\Services\Tenant\NotificationPreferenceService;
+use App\Services\Tenant\NotificationTemplateRenderer;
 use App\Support\MemberLocale;
 use App\Support\MemberNotificationChannels;
 use App\Support\NotificationPlainText;
+use App\Support\NotificationTemplateCatalog;
 use App\Support\TenantAbsoluteUrl;
 use App\Support\WebPushNotification;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -18,17 +22,39 @@ use NotificationChannels\WebPush\WebPushMessage;
 
 trait DeliversToMemberChannels
 {
+    private bool $resolvingNotificationContentPayload = false;
+
     /**
      * @return list<string|class-string>
      */
     public function via(object $notifiable): array
     {
-        return MemberNotificationChannels::resolve($notifiable);
+        $category = $this->memberNotificationCategory();
+
+        if ($category === null) {
+            return MemberNotificationChannels::resolve($notifiable);
+        }
+
+        return NotificationPreferenceService::resolve(
+            $notifiable,
+            $category,
+            $this->memberNotificationSupportedChannels(),
+        );
     }
 
     public function toMail(object $notifiable): MailMessage
     {
         return $this->withMemberLocale($notifiable, function () use ($notifiable): MailMessage {
+            $key = $this->memberNotificationTemplateKey();
+
+            if ($key !== null) {
+                return app(NotificationTemplateRenderer::class)->brandedMailMessage(
+                    $key,
+                    $this->memberNotificationLocale($notifiable),
+                    $this->resolvedTemplateVariables($notifiable),
+                );
+            }
+
             $payload = $this->toArray($notifiable);
             $title = (string) ($payload['title'] ?? '');
             $body = (string) ($payload['body'] ?? '');
@@ -42,6 +68,17 @@ trait DeliversToMemberChannels
     public function toSms(object $notifiable): string
     {
         return $this->withMemberLocale($notifiable, function () use ($notifiable): string {
+            $key = $this->memberNotificationTemplateKey();
+
+            if ($key !== null) {
+                return app(NotificationTemplateRenderer::class)->plainText(
+                    $key,
+                    NotificationTemplate::FAMILY_SMS_PUSH,
+                    $this->memberNotificationLocale($notifiable),
+                    $this->resolvedTemplateVariables($notifiable),
+                );
+            }
+
             $payload = $this->toArray($notifiable);
             $title = (string) ($payload['title'] ?? '');
             $body = (string) ($payload['body'] ?? '');
@@ -58,10 +95,24 @@ trait DeliversToMemberChannels
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
         return $this->withMemberLocale($notifiable, function () use ($notifiable): WebPushMessage {
-            $payload = $this->toArray($notifiable);
-            $title = NotificationPlainText::from((string) ($payload['title'] ?? ''));
-            $body = NotificationPlainText::from((string) ($payload['body'] ?? ''));
-            $memberName = $this->pushRecipientName($notifiable, $payload);
+            $key = $this->memberNotificationTemplateKey();
+            $meta = $this->notificationContentPayload($notifiable);
+
+            if ($key !== null) {
+                $rendered = app(NotificationTemplateRenderer::class)->render(
+                    $key,
+                    NotificationTemplate::FAMILY_SMS_PUSH,
+                    $this->memberNotificationLocale($notifiable),
+                    $this->resolvedTemplateVariables($notifiable),
+                );
+                $title = NotificationPlainText::from($rendered['subject']);
+                $body = NotificationPlainText::from($rendered['body']);
+            } else {
+                $title = NotificationPlainText::from((string) ($meta['title'] ?? ''));
+                $body = NotificationPlainText::from((string) ($meta['body'] ?? ''));
+            }
+
+            $memberName = $this->pushRecipientName($notifiable, $meta);
 
             if ($memberName !== '') {
                 $title = $memberName.' — '.$title;
@@ -74,20 +125,129 @@ trait DeliversToMemberChannels
                 ->badge(WebPushNotification::BADGE_PATH)
                 ->options(['TTL' => 86400]);
 
-            if (isset($payload['loan_id'])) {
+            if (isset($meta['loan_id'])) {
                 $message
-                    ->tag('member-loan-'.$payload['loan_id'])
-                    ->data(['url' => $this->memberLoanUrl((int) $payload['loan_id'])]);
-            } elseif (isset($payload['fund_posting_id'])) {
+                    ->tag('member-loan-' . $meta['loan_id'])
+                    ->data(['url' => $this->memberLoanUrl((int) $meta['loan_id'])]);
+            } elseif (isset($meta['fund_posting_id'])) {
                 $message
-                    ->tag('member-fund-posting-'.$payload['fund_posting_id'])
+                    ->tag('member-fund-posting-' . $meta['fund_posting_id'])
                     ->data(['url' => $this->memberFundPostingsUrl()]);
-            } elseif (isset($payload['url'])) {
-                $message->data(['url' => (string) $payload['url']]);
+            } elseif (isset($meta['url'])) {
+                $message->data(['url' => (string) $meta['url']]);
             }
 
             return $message;
         });
+    }
+
+    protected function memberNotificationCategory(): ?string
+    {
+        return NotificationTemplateCatalog::categoryFor(static::class);
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function memberNotificationSupportedChannels(): array
+    {
+        return NotificationTemplateCatalog::supportedChannelsFor(static::class);
+    }
+
+    protected function memberNotificationTemplateKey(): ?string
+    {
+        return NotificationTemplateCatalog::keyFor(static::class);
+    }
+
+    protected function memberNotificationLocale(object $notifiable): string
+    {
+        if ($notifiable instanceof User) {
+            return $notifiable->preferredLocale();
+        }
+
+        return app()->getLocale();
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function resolvedTemplateVariables(object $notifiable): array
+    {
+        if (method_exists($this, 'templateVariables')) {
+            /** @var array<string, scalar|null> $variables */
+            $variables = $this->templateVariables($notifiable);
+
+            return $variables;
+        }
+
+        $payload = $this->notificationContentPayload($notifiable);
+
+        return [
+            'member_name' => (string) ($payload['member_name'] ?? $this->pushRecipientName($notifiable, $payload)),
+            'title' => (string) ($payload['title'] ?? ''),
+            'body' => (string) ($payload['body'] ?? ''),
+            'subject' => (string) ($payload['title'] ?? ''),
+            'action_url' => isset($payload['url']) ? (string) $payload['url'] : null,
+            'action_label' => __('Open'),
+            'loan_id' => isset($payload['loan_id']) ? (string) $payload['loan_id'] : null,
+            'amount' => isset($payload['amount']) ? (string) $payload['amount'] : null,
+            'period' => isset($payload['period']) ? (string) $payload['period'] : null,
+        ];
+    }
+
+    /**
+     * Content before template rendering (avoids recursion when toArray uses templates).
+     *
+     * @return array<string, mixed>
+     */
+    protected function notificationContentPayload(object $notifiable): array
+    {
+        if (method_exists($this, 'contentPayload')) {
+            /** @var array<string, mixed> $payload */
+            $payload = $this->contentPayload($notifiable);
+
+            return $payload;
+        }
+
+        if ($this->resolvingNotificationContentPayload) {
+            return [];
+        }
+
+        $this->resolvingNotificationContentPayload = true;
+
+        try {
+            return $this->toArray($notifiable);
+        } finally {
+            $this->resolvingNotificationContentPayload = false;
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function templatedArrayPayload(object $notifiable): array
+    {
+        $base = method_exists($this, 'contentPayload')
+            ? $this->contentPayload($notifiable)
+            : $this->notificationContentPayload($notifiable);
+
+        $key = $this->memberNotificationTemplateKey();
+
+        if ($key === null) {
+            return $base;
+        }
+
+        $rendered = app(NotificationTemplateRenderer::class)->render(
+            $key,
+            NotificationTemplate::FAMILY_IN_APP,
+            $this->memberNotificationLocale($notifiable),
+            $this->resolvedTemplateVariables($notifiable),
+        );
+
+        return array_merge($base, [
+            'title' => $rendered['subject'],
+            'body' => $rendered['body'],
+        ]);
     }
 
     /**

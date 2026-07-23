@@ -76,7 +76,7 @@ Authentication: `tenant` guard, `/member/login`, household profile picker where 
 | **EMI** | Loan installment collected per cycle |
 | **Reserved EMI** | Next installment amount treated as unavailable for cash-out |
 | **Threshold** | Loan repayment target (master portion + settlement %) |
-| **Communications center** | Help page with Messages, Requests, Alert history |
+| **Communications center** | Help page with Messages (DMs), Requests, Alerts (system/announcement history), FAQ |
 | **Western digits** | `0`–`9` Latin numerals in all locales |
 | **Saudi Riyal sign** | Unicode U+20C1 (⃁), official SAMA symbol in Arabic UI |
 

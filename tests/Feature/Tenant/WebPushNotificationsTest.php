@@ -184,7 +184,8 @@ test('in-app announcements include web push for member', function () {
 
     Notification::assertSentTo(
         $this->memberUser,
-        MemberDirectMessageNotification::class,
-        fn (MemberDirectMessageNotification $notification, array $channels): bool => in_array(WebPushChannel::class, $channels, true),
+        MemberAnnouncementNotification::class,
+        fn (MemberAnnouncementNotification $notification, array $channels): bool => in_array('database', $channels, true)
+            && in_array(WebPushChannel::class, $channels, true),
     );
 });

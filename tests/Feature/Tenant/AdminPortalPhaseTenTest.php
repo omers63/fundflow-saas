@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Tenant\Pages\CollectionCalendarPage;
-use App\Filament\Tenant\Pages\MessagesInboxPage;
+use App\Filament\Tenant\Pages\CommunicationsWorkspacePage;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\Members\Pages\EditMember;
 use App\Filament\Tenant\Resources\Members\RelationManagers\GuarantorExposureRelationManager;
@@ -231,7 +231,7 @@ test('member announcement service resolves active audience', function () {
         ->toBe($before + 2);
 });
 
-test('messages inbox exposes compose announcement action', function () {
+test('communications workspace exposes compose announcement action', function () {
     Filament::setCurrentPanel('tenant');
 
     $admin = User::create([
@@ -243,7 +243,7 @@ test('messages inbox exposes compose announcement action', function () {
     ]);
 
     Livewire::actingAs($admin, 'tenant')
-        ->test(MessagesInboxPage::class)
+        ->test(CommunicationsWorkspacePage::class, ['sideTab' => 'announcements'])
         ->assertSuccessful()
         ->mountAction('compose_announcement')
         ->assertActionMounted('compose_announcement');

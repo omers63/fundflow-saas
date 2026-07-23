@@ -10,9 +10,11 @@ use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Support\ContributionPolicySettings;
 use App\Support\DefaultFundAndLoanTiers;
+use App\Support\NotificationTemplateCatalog;
 use App\Support\PublicPageSettings;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 
 class TenantDatabaseSeeder extends Seeder
 {
@@ -44,6 +46,10 @@ class TenantDatabaseSeeder extends Seeder
         Account::ensureDefaultMasterAccounts();
 
         DefaultFundAndLoanTiers::seedIfEmpty();
+
+        if (Schema::hasTable('notification_templates')) {
+            NotificationTemplateCatalog::seedMissingDefaults();
+        }
 
         BankTemplate::firstOrCreate(
             ['name' => 'Generic CSV'],

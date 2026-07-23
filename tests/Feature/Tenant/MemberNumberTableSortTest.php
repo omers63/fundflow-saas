@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Filament\Tenant\Pages\CommunicationsWorkspacePage;
 use App\Filament\Tenant\Pages\DisbursementsPage;
-use App\Filament\Tenant\Pages\MessagesInboxPage;
 use App\Filament\Tenant\Resources\MemberRequests\Pages\ListMemberRequests;
 use App\Filament\Tenant\Resources\SupportRequests\Pages\ListSupportRequests;
 use App\Models\Tenant\Loan;
@@ -78,7 +78,7 @@ test('messages inbox table sorts member numbers numerically', function () {
     ]);
     $accounting->createMemberAccounts($two);
 
-    Livewire::test(MessagesInboxPage::class)
+    Livewire::test(CommunicationsWorkspacePage::class, ['sideTab' => 'inbox'])
         ->sortTable('member_number', 'asc')
         ->assertCanSeeTableRecords([$two, $eleven], inOrder: true)
         ->sortTable('member_number', 'desc')

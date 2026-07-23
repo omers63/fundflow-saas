@@ -32,11 +32,11 @@ class SmsClearingResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = TenantNavigation::GROUP_ACCOUNTS;
 
-    protected static ?string $navigationLabel = 'SMS clearing';
+    protected static ?string $navigationLabel = 'Bank SMS clearing';
 
-    protected static ?string $modelLabel = 'SMS transaction';
+    protected static ?string $modelLabel = 'SMS import row';
 
-    protected static ?string $pluralModelLabel = 'SMS clearing';
+    protected static ?string $pluralModelLabel = 'Bank SMS clearing';
 
     protected static ?string $slug = 'sms-imports';
 

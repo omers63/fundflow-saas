@@ -6,13 +6,12 @@ namespace App\Notifications\Tenant;
 
 use App\Models\Tenant\MonthlyStatement;
 use App\Notifications\Concerns\DeliversToMemberChannels;
-use App\Support\MemberNotificationChannels;
+use App\Services\Tenant\NotificationPreferenceService;
 use App\Support\StatementSettings;
 use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class MonthlyStatementNotification extends Notification
@@ -36,41 +35,25 @@ class MonthlyStatementNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        $channels = MemberNotificationChannels::resolve($notifiable);
+        $supported = match ($this->delivery) {
+            self::DELIVERY_EMAIL => [NotificationPreferenceService::CH_EMAIL],
+            self::DELIVERY_NOTIFY => [
+                NotificationPreferenceService::CH_IN_APP,
+                NotificationPreferenceService::CH_PUSH,
+            ],
+            default => StatementSettings::autoEmail()
+                ? NotificationPreferenceService::CATEGORIES[NotificationPreferenceService::STATEMENTS]['supported']
+                : [
+                    NotificationPreferenceService::CH_IN_APP,
+                    NotificationPreferenceService::CH_PUSH,
+                ],
+        };
 
-        if ($this->delivery === self::DELIVERY_EMAIL) {
-            return in_array('mail', $channels, true) ? ['mail'] : [];
-        }
-
-        if ($this->delivery === self::DELIVERY_NOTIFY) {
-            return array_values(array_filter(
-                $channels,
-                fn (string $channel): bool => $channel !== 'mail',
-            ));
-        }
-
-        if (! StatementSettings::autoEmail()) {
-            return array_values(array_filter(
-                $channels,
-                fn (string $channel): bool => $channel !== 'mail',
-            ));
-        }
-
-        return $channels;
-    }
-
-    public function toMail(object $notifiable): MailMessage
-    {
-        return $this->withMemberLocale($notifiable, function (): MailMessage {
-            $url = TenantAbsoluteUrl::resolve(route('tenant.member.statement.pdf', $this->statement));
-
-            return (new MailMessage)
-                ->subject(__('Monthly statement ready'))
-                ->line(__('Your statement for :period is available to download.', [
-                    'period' => $this->statement->period_formatted,
-                ]))
-                ->action(__('Download statement'), $url);
-        });
+        return NotificationPreferenceService::resolve(
+            $notifiable,
+            NotificationPreferenceService::STATEMENTS,
+            $supported,
+        );
     }
 
     /**
@@ -78,13 +61,7 @@ class MonthlyStatementNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
-        return [
-            'title' => __('Monthly statement ready'),
-            'body' => __('Your statement for :period is available to download.', [
-                'period' => $this->statement->period_formatted,
-            ]),
-            'url' => TenantAbsoluteUrl::resolve(route('tenant.member.statement.pdf', $this->statement)),
-        ];
+        return $this->templatedArrayPayload($notifiable);
     }
 
     /**
@@ -92,19 +69,48 @@ class MonthlyStatementNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
+        $payload = $this->templatedArrayPayload($notifiable);
+        $url = $this->statementUrl();
+
         return FilamentNotification::make()
-            ->title(__('Monthly statement ready'))
-            ->body(__('Your statement for :period is available to download.', [
-                'period' => $this->statement->period_formatted,
-            ]))
+            ->title((string) ($payload['title'] ?? __('Monthly statement ready')))
+            ->body((string) ($payload['body'] ?? ''))
             ->icon('heroicon-o-document-text')
             ->iconColor('info')
             ->actions([
                 Action::make('download')
                     ->label(__('Download statement'))
-                    ->url(TenantAbsoluteUrl::resolve(route('tenant.member.statement.pdf', $this->statement)))
+                    ->url($url)
                     ->markAsRead(),
             ])
             ->getDatabaseMessage();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
+        return [
+            'url' => $this->statementUrl(),
+            'period' => $this->statement->period_formatted,
+        ];
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function templateVariables(object $notifiable): array
+    {
+        return [
+            'period' => (string) $this->statement->period_formatted,
+            'action_url' => $this->statementUrl(),
+            'action_label' => __('Download statement'),
+        ];
+    }
+
+    protected function statementUrl(): string
+    {
+        return TenantAbsoluteUrl::resolve(route('tenant.member.statement.pdf', $this->statement));
     }
 }

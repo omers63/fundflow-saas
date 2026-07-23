@@ -15,10 +15,10 @@ $tabs = $this->getAuditSystemTabs();
 
 @if ($this->tenantUserIsAdmin())
     <div class="mb-4">
-        <a href="{{ \App\Filament\Tenant\Pages\MessagesInboxPage::getUrl() }}"
+        <a href="{{ \App\Filament\Tenant\Pages\CommunicationsWorkspacePage::getUrl() }}"
             class="inline-flex items-center gap-2 text-xs font-semibold text-sky-700 no-underline hover:underline dark:text-sky-300">
             <x-heroicon-o-chat-bubble-left-right class="h-4 w-4 shrink-0" />
-            {{ __('Messages inbox') }}
+            {{ __('Communications') }}
         </a>
     </div>
 @endif

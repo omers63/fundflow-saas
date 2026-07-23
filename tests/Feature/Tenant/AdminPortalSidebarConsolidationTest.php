@@ -47,23 +47,24 @@ test('tenant admin sidebar shows only consolidated navigation entries', function
 
     $labels = tenantSidebarLabels();
 
-    expect($labels)->toHaveCount(17)
+    expect($labels)->toHaveCount(18)
         ->and($labels)->toBe([
-                'Dashboard',
+            'Dashboard',
             'Applications',
-                'Members',
-                'Deposits',
-                'Contributions',
+            'Members',
+            'Deposits',
+            'Contributions',
             'Loans',
-                'Loan Queue',
-                'Disbursements',
+            'Loan Queue',
+            'Disbursements',
             'Cash Outs',
-                'Requests',
+            'Requests',
             'Bank Clearing',
-            'Sms Clearing',
+            'Bank Sms Clearing',
             'Transactions',
             'Reconciliation',
             'Reports',
+            'Communications',
             'Audit & System',
             'Settings',
         ]);

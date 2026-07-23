@@ -6,7 +6,6 @@ namespace App\Notifications\Tenant;
 
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Notifications\Concerns\DeliversToMemberChannels;
-use App\Services\Tenant\NotificationPreferenceService;
 use App\Support\TenantAbsoluteUrl;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -30,27 +29,11 @@ class ContributionDueNotification extends Notification
     ) {}
 
     /**
-     * @return list<string|class-string>
-     */
-    public function via(object $notifiable): array
-    {
-        return NotificationPreferenceService::resolveDueReminder(
-            $notifiable,
-            NotificationPreferenceService::CONTRIBUTIONS,
-        );
-    }
-
-    /**
      * @return array<string, mixed>
      */
     public function toArray(object $notifiable): array
     {
-        return [
-            'title' => __('Contribution due'),
-            'body' => $this->bodyMessage(),
-            'url' => $this->contributionsUrl(),
-            'member_name' => $this->memberName,
-        ];
+        return $this->templatedArrayPayload($notifiable);
     }
 
     /**
@@ -58,9 +41,11 @@ class ContributionDueNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
+        $payload = $this->templatedArrayPayload($notifiable);
+
         return FilamentNotification::make()
-            ->title(__('Contribution due'))
-            ->body($this->bodyMessage())
+            ->title((string) ($payload['title'] ?? __('Contribution due')))
+            ->body((string) ($payload['body'] ?? ''))
             ->icon('heroicon-o-banknotes')
             ->iconColor('warning')
             ->actions([
@@ -72,18 +57,35 @@ class ContributionDueNotification extends Notification
             ->getDatabaseMessage();
     }
 
-    protected function bodyMessage(): string
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
+        return [
+            'url' => $this->contributionsUrl(),
+            'member_name' => $this->memberName,
+        ];
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function templateVariables(object $notifiable): array
     {
         $deadline = $this->deadline instanceof Carbon
             ? $this->deadline
             : Carbon::parse($this->deadline);
 
-        return __(':amount due for :period by :deadline. Cash balance: :balance.', [
+        return [
+            'member_name' => $this->memberName,
             'amount' => number_format($this->amount, 2),
             'period' => Carbon::create($this->year, $this->month, 1)->translatedFormat('F Y'),
             'deadline' => $deadline->copy()->startOfDay()->translatedFormat('j M Y'),
             'balance' => number_format($this->cashBalance, 2),
-        ]);
+            'action_url' => $this->contributionsUrl(),
+            'action_label' => __('View my contributions'),
+        ];
     }
 
     protected function contributionsUrl(): string

@@ -91,7 +91,7 @@ class ListBankAccounts extends ListRecords
         // already selected a non-default slice (deep links, legacy tabs, Livewire params).
         if (
             $this->activeTab === BankClearingTabRegistry::TAB_QUEUE
-            && !$hasExplicitQueueFilter
+            && ! $hasExplicitQueueFilter
             && $legacyQueueFilter === null
             && $this->queueFilter === BankClearingTabRegistry::FILTER_ALL
         ) {
@@ -225,12 +225,12 @@ class ListBankAccounts extends ListRecords
 
     public function getTableColumnsSessionKey(): string
     {
-        return 'tables.' . md5(static::class . '|' . $this->activeTab) . '_columns';
+        return 'tables.'.md5(static::class.'|'.$this->activeTab).'_columns';
     }
 
     public function getHasReorderedTableColumnsSessionKey(): string
     {
-        return 'tables.' . md5(static::class . '|' . $this->activeTab) . '_has_reordered_columns';
+        return 'tables.'.md5(static::class.'|'.$this->activeTab).'_has_reordered_columns';
     }
 
     protected function applySortingToTableQuery(Builder $query): Builder
@@ -317,7 +317,7 @@ class ListBankAccounts extends ListRecords
             $import,
             ActionGroup::make([
                 Action::make('open_sms_clearing')
-                    ->label(__('SMS clearing'))
+                    ->label(__('Bank SMS clearing'))
                     ->icon('heroicon-o-device-phone-mobile')
                     ->url(SmsClearingResource::getUrl('index')),
                 Action::make('open_reconciliation')

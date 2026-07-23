@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models\Tenant;
 
+use App\Services\Tenant\MemberAudienceResolver;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -56,12 +57,7 @@ class MemberAnnouncement extends Model
      */
     public static function audienceOptions(): array
     {
-        return [
-            self::AUDIENCE_ALL_ACTIVE => __('All active members'),
-            self::AUDIENCE_OVERDUE => __('Members with overdue contributions'),
-            self::AUDIENCE_DELINQUENT => __('Delinquent members'),
-            self::AUDIENCE_WITH_ACTIVE_LOANS => __('Members with active loans'),
-        ];
+        return MemberAudienceResolver::announcementOptions();
     }
 
     /**
@@ -70,7 +66,7 @@ class MemberAnnouncement extends Model
     public static function channelOptions(): array
     {
         return [
-            self::CHANNEL_IN_APP => __('In-app message'),
+            self::CHANNEL_IN_APP => __('In-app alert'),
             self::CHANNEL_SMS => __('SMS'),
             self::CHANNEL_EMAIL => __('Email'),
         ];

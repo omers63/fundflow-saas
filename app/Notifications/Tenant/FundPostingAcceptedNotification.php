@@ -22,21 +22,14 @@ class FundPostingAcceptedNotification extends Notification
     public function __construct(
         public FundPosting $fundPosting,
         public ?FundPostingSettlementSummary $settlement = null,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>
      */
     public function toArray(object $notifiable): array
     {
-        return [
-            'title' => __('Deposit accepted'),
-            'body' => $this->fundPostingBody($this->fundPosting, $this->settlement),
-            'fund_posting_id' => $this->fundPosting->id,
-            'status' => 'accepted',
-            'settlement' => $this->settlement?->toArray(),
-        ];
+        return $this->templatedArrayPayload($notifiable);
     }
 
     /**
@@ -44,8 +37,10 @@ class FundPostingAcceptedNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
+        $payload = $this->templatedArrayPayload($notifiable);
+
         return FilamentNotification::make()
-            ->title(__('Deposit accepted'))
+            ->title((string) ($payload['title'] ?? __('Deposit accepted')))
             ->body($this->fundPostingDatabaseBody($this->fundPosting, $this->settlement, 'accepted'))
             ->icon('heroicon-o-check-circle')
             ->iconColor('success')
@@ -56,6 +51,33 @@ class FundPostingAcceptedNotification extends Notification
                     ->markAsRead(),
             ])
             ->getDatabaseMessage();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
+        return [
+            'fund_posting_id' => $this->fundPosting->id,
+            'status' => 'accepted',
+            'settlement' => $this->settlement?->toArray(),
+            'url' => $this->memberDepositsUrl(),
+        ];
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function templateVariables(object $notifiable): array
+    {
+        return [
+            'member_name' => (string) ($this->fundPosting->member?->name ?? ''),
+            'amount' => number_format((float) $this->fundPosting->amount, 2),
+            'body' => $this->fundPostingBody($this->fundPosting, $this->settlement),
+            'action_url' => $this->memberDepositsUrl(),
+            'action_label' => __('View my deposits'),
+        ];
     }
 
     protected function memberDepositsUrl(): string

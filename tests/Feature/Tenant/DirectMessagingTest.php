@@ -1,12 +1,16 @@
 <?php
 
+use App\Filament\Tenant\Pages\CommunicationsWorkspacePage;
 use App\Filament\Tenant\Pages\MessagesInboxPage;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\Tenant\DirectMessagingService;
+use App\Services\Tenant\MemberAudienceResolver;
+use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -136,7 +140,37 @@ test('attachment download requires participant', function () {
 
 test('messages inbox page is admin only', function () {
     expect(MessagesInboxPage::canAccess())->toBeFalse();
+    expect(CommunicationsWorkspacePage::canAccess())->toBeFalse();
 
     $this->actingAs($this->admin, 'tenant');
     expect(MessagesInboxPage::canAccess())->toBeTrue();
+    expect(CommunicationsWorkspacePage::canAccess())->toBeTrue();
+});
+
+test('legacy messages route redirects into communications inbox tab', function () {
+    Filament::setCurrentPanel('tenant');
+    $this->actingAs($this->admin, 'tenant');
+
+    Livewire::actingAs($this->admin, 'tenant')
+        ->test(MessagesInboxPage::class)
+        ->assertRedirect(CommunicationsWorkspacePage::getUrl(
+            ['sideTab' => 'inbox'],
+            panel: 'tenant',
+        ));
+});
+
+test('communications inbox exposes conversation header actions only', function () {
+    Filament::setCurrentPanel('tenant');
+
+    Livewire::actingAs($this->admin, 'tenant')
+        ->test(CommunicationsWorkspacePage::class, ['sideTab' => 'inbox'])
+        ->assertSuccessful()
+        ->assertActionExists('message_all_members')
+        ->assertActionExists('support_requests')
+        ->assertActionDoesNotExist('compose_announcement')
+        ->assertActionDoesNotExist('announcements')
+        ->mountAction('message_all_members')
+        ->assertActionDataSet([
+            'audience' => MemberAudienceResolver::ALL_ACTIVE,
+        ]);
 });

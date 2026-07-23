@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Support;
 
 use App\Filament\Tenant\Clusters\LoansCluster;
 use App\Filament\Tenant\Pages\AuditSystemPage;
+use App\Filament\Tenant\Pages\CommunicationsWorkspacePage;
 use App\Filament\Tenant\Pages\Dashboard;
 use App\Filament\Tenant\Pages\DisbursementsPage;
 use App\Filament\Tenant\Pages\LoanQueueWorkbenchPage;
@@ -67,6 +68,7 @@ final class TenantSidebarRegistry
             TransactionResource::class,
             ReconciliationOverviewPage::class,
             ReportsPage::class,
+            CommunicationsWorkspacePage::class,
             AuditSystemPage::class,
             Settings::class,
         ];
@@ -91,6 +93,7 @@ final class TenantSidebarRegistry
             Lang::formatUiLabel(__('Transactions')),
             Lang::formatUiLabel(__('Reconciliation')),
             Lang::formatUiLabel(__('Reports')),
+            Lang::formatUiLabel(__('Communications')),
             Lang::formatUiLabel(__('Audit & System')),
             Lang::formatUiLabel(__('Settings')),
         ];

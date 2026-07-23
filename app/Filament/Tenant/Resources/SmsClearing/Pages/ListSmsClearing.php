@@ -180,7 +180,7 @@ class ListSmsClearing extends ListRecords
 
     public function getTitle(): string|Htmlable
     {
-        return __('SMS clearing');
+        return __('Bank SMS clearing');
     }
 
     /**

@@ -8,7 +8,7 @@
 <section
     class="ff-sms-clearing-shell rounded-2xl border border-gray-200 bg-white px-5 py-5 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
     <header class="mb-4 border-b border-gray-100 pb-4 dark:border-white/10">
-        <h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('SMS clearing workspace') }}</h2>
+        <h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('Bank SMS clearing') }}</h2>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
             {{ $this->getSubheading() }}
         </p>

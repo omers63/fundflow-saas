@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Notifications\Tenant;
 
 use App\Models\Tenant\MembershipApplication;
-use Illuminate\Notifications\Messages\MailMessage;
+use App\Notifications\Concerns\DeliversToMemberChannels;
+use App\Services\Tenant\NotificationPreferenceService;
 use Illuminate\Notifications\Notification;
 
 class MembershipApplicationRejectedNotification extends Notification
 {
+    use DeliversToMemberChannels;
+
     public function __construct(
         public readonly MembershipApplication $application,
         public readonly ?string $reason = null,
@@ -18,21 +21,45 @@ class MembershipApplicationRejectedNotification extends Notification
     /**
      * @return list<string>
      */
-    public function via(object $notifiable): array
+    protected function memberNotificationSupportedChannels(): array
     {
-        return ['mail'];
+        return [
+            NotificationPreferenceService::CH_IN_APP,
+            NotificationPreferenceService::CH_EMAIL,
+        ];
     }
 
-    public function toMail(object $notifiable): MailMessage
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(object $notifiable): array
+    {
+        return $this->templatedArrayPayload($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
+        return [
+            'member_name' => $this->application->name,
+        ];
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function templateVariables(object $notifiable): array
     {
         $body = filled($this->reason)
             ? $this->reason
             : __('Your membership application could not be approved at this time.');
 
-        return (new MailMessage)
-            ->subject(__('Membership application update'))
-            ->greeting(__('Hello :name,', ['name' => $this->application->name]))
-            ->line($body)
-            ->line(__('If you have questions, contact the fund administrator.'));
+        return [
+            'member_name' => $this->application->name,
+            'body' => $body,
+            'title' => __('Membership application update'),
+        ];
     }
 }

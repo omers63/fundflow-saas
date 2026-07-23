@@ -8,18 +8,12 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberAnnouncement;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\MemberAnnouncementNotification;
-use App\Services\Loans\LoanDelinquencyService;
 use App\Support\BusinessDay;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Notification;
 
 final class MemberAnnouncementService
 {
-    public function __construct(
-        private DirectMessagingService $messaging,
-    ) {}
-
     /**
      * @param  array{
      *     audience: string,
@@ -93,7 +87,7 @@ final class MemberAnnouncementService
         $delivered = 0;
 
         foreach ($members as $member) {
-            if ($this->deliverToMember($announcement, $member, $admin)) {
+            if ($this->deliverToMember($announcement, $member)) {
                 $delivered++;
             }
         }
@@ -112,36 +106,27 @@ final class MemberAnnouncementService
      */
     public function resolveRecipients(string $audience): Collection
     {
-        $query = Member::query()
-            ->whereNotNull('user_id')
-            ->with('user');
-
-        return match ($audience) {
-            MemberAnnouncement::AUDIENCE_OVERDUE => $query
-                ->whereHas('contributions', fn (Builder $q): Builder => $q->where('status', 'overdue'))
-                ->get(),
-            MemberAnnouncement::AUDIENCE_DELINQUENT => $query
-                ->whereIn('id', app(LoanDelinquencyService::class)->delinquentMemberIds())
-                ->get(),
-            MemberAnnouncement::AUDIENCE_WITH_ACTIVE_LOANS => $query
-                ->whereHas('loans', fn (Builder $q): Builder => $q->whereIn('status', ['active', 'transferred', 'repaying', 'disbursed']))
-                ->get(),
-            default => $query->where('status', 'active')->get(),
-        };
+        return app(MemberAudienceResolver::class)->resolve($audience);
     }
 
     public function previewCount(string $audience): int
     {
-        return $this->resolveRecipients($audience)->count();
+        return app(MemberAudienceResolver::class)->previewCount($audience);
     }
 
-    private function deliverToMember(MemberAnnouncement $announcement, Member $member, User $admin): bool
+    private function deliverToMember(MemberAnnouncement $announcement, Member $member): bool
     {
         if ($member->user_id === null) {
             return false;
         }
 
-        $locale = $member->user?->preferredLocale() ?? config('app.locale');
+        $notifiable = $member->user;
+
+        if ($notifiable === null) {
+            return false;
+        }
+
+        $locale = $notifiable->preferredLocale() ?? config('app.locale');
         $title = $locale === 'ar' && filled($announcement->title_ar)
             ? (string) $announcement->title_ar
             : $announcement->title_en;
@@ -149,37 +134,23 @@ final class MemberAnnouncementService
             ? (string) $announcement->body_ar
             : $announcement->body_en;
 
-        $delivered = false;
         $channels = $announcement->channels ?? [];
+        $sendInApp = in_array(MemberAnnouncement::CHANNEL_IN_APP, $channels, true);
+        $sendEmail = in_array(MemberAnnouncement::CHANNEL_EMAIL, $channels, true);
+        $sendSms = in_array(MemberAnnouncement::CHANNEL_SMS, $channels, true);
 
-        if (in_array(MemberAnnouncement::CHANNEL_IN_APP, $channels, true)) {
-            $delivered = $this->messaging->sendAdminToMember(
-                $member,
-                $admin,
-                $body,
-                [],
-                suppressAdminToast: true,
-                subject: $title,
-            ) || $delivered;
+        if (! $sendInApp && ! $sendEmail && ! $sendSms) {
+            return false;
         }
 
-        if (
-            in_array(MemberAnnouncement::CHANNEL_EMAIL, $channels, true)
-            || in_array(MemberAnnouncement::CHANNEL_SMS, $channels, true)
-        ) {
-            $notifiable = $member->user;
+        Notification::send($notifiable, new MemberAnnouncementNotification(
+            $title,
+            $body,
+            $sendInApp,
+            $sendEmail,
+            $sendSms,
+        ));
 
-            if ($notifiable !== null) {
-                Notification::send($notifiable, new MemberAnnouncementNotification(
-                    $title,
-                    $body,
-                    in_array(MemberAnnouncement::CHANNEL_EMAIL, $channels, true),
-                    in_array(MemberAnnouncement::CHANNEL_SMS, $channels, true),
-                ));
-                $delivered = true;
-            }
-        }
-
-        return $delivered;
+        return true;
     }
 }

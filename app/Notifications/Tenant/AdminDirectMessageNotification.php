@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Notifications\Tenant;
 
-use App\Filament\Tenant\Pages\MessagesInboxPage;
+use App\Filament\Tenant\Pages\CommunicationsWorkspacePage;
 use App\Notifications\Concerns\DeliversToAdminChannels;
 use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
@@ -62,7 +62,10 @@ class AdminDirectMessageNotification extends Notification
 
     protected function inboxUrl(): string
     {
-        $url = MessagesInboxPage::getUrl(panel: 'tenant');
+        $url = CommunicationsWorkspacePage::getUrl(
+            ['sideTab' => 'inbox'],
+            panel: 'tenant',
+        );
 
         return TenantAbsoluteUrl::resolve($url);
     }

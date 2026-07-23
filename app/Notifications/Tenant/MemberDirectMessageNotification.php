@@ -27,11 +27,7 @@ class MemberDirectMessageNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
-        return [
-            'title' => $this->notificationTitle(),
-            'body' => $this->senderName.': '.$this->preview,
-            'url' => $this->messagesUrl(),
-        ];
+        return $this->templatedArrayPayload($notifiable);
     }
 
     /**
@@ -39,9 +35,11 @@ class MemberDirectMessageNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
+        $payload = $this->templatedArrayPayload($notifiable);
+
         return FilamentNotification::make()
-            ->title($this->notificationTitle())
-            ->body($this->senderName.': '.$this->preview)
+            ->title((string) ($payload['title'] ?? $this->notificationTitle()))
+            ->body((string) ($payload['body'] ?? ($this->senderName.': '.$this->preview)))
             ->icon('heroicon-o-chat-bubble-left-right')
             ->iconColor('info')
             ->actions([
@@ -51,6 +49,33 @@ class MemberDirectMessageNotification extends Notification
                     ->markAsRead(),
             ])
             ->getDatabaseMessage();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
+        return [
+            'url' => $this->messagesUrl(),
+        ];
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function templateVariables(object $notifiable): array
+    {
+        $subject = $this->notificationTitle();
+
+        return [
+            'sender_name' => $this->senderName,
+            'preview' => $this->preview,
+            'subject' => $subject,
+            'title' => $subject,
+            'action_url' => $this->messagesUrl(),
+            'action_label' => __('Open messages'),
+        ];
     }
 
     protected function notificationTitle(): string

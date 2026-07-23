@@ -44,7 +44,7 @@ class MemberAlertHistoryTableWidget extends TableWidget
         return TableGrouping::apply(
             $table
                 ->heading(__('Alerts'))
-                ->description(__('Past SMS, email, and in-app alerts sent to you. This list is read-only.'))
+                ->description(__('System and announcement alerts delivered to your account. Conversations stay under Messages.'))
                 ->columns([
                     TextColumn::make('channel')
                         ->label(__('Channel'))
@@ -68,6 +68,11 @@ class MemberAlertHistoryTableWidget extends TableWidget
                         ->searchable()
                         ->wrap()
                         ->limit(80),
+                    TextColumn::make('body')
+                        ->label(__('Details'))
+                        ->wrap()
+                        ->limit(120)
+                        ->toggleable(isToggledHiddenByDefault: true),
                     TextColumn::make('status')
                         ->label(__('Status'))
                         ->badge()
@@ -90,6 +95,7 @@ class MemberAlertHistoryTableWidget extends TableWidget
                 ])
                 ->filters([
                     SelectFilter::make('channel')
+                        ->label(__('Channel'))
                         ->options([
                             'mail' => __('Email'),
                             'database' => __('In-app'),
@@ -97,6 +103,7 @@ class MemberAlertHistoryTableWidget extends TableWidget
                             'whatsapp' => __('WhatsApp'),
                         ]),
                     SelectFilter::make('status')
+                        ->label(__('Status'))
                         ->options([
                             'sent' => __('Sent'),
                             'failed' => __('Failed'),
@@ -106,7 +113,7 @@ class MemberAlertHistoryTableWidget extends TableWidget
                 ])
                 ->defaultSort('sent_at', 'desc')
                 ->emptyStateHeading(__('No alerts yet'))
-                ->emptyStateDescription(__('When the fund sends you notifications, they will appear here.'))
+                ->emptyStateDescription(__('Contribution reminders, deposit updates, announcements, and other system alerts will appear here.'))
                 ->toolbarActions([
                     BulkActionGroup::make([
                         TableToolbar::refreshBulkAction(),

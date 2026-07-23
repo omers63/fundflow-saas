@@ -42,6 +42,7 @@ test('consolidated sidebar label catalogue matches plan in english locale', func
         'Transactions',
         'Reconciliation',
         'Reports',
+        'Communications',
         'Audit & System',
         'Settings',
     ]);

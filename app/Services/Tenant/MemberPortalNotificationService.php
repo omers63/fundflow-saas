@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services\Tenant;
 
-use App\Filament\Support\MemberDatabaseNotification;
 use App\Models\Tenant\Member;
-use Filament\Notifications\Notification;
+use App\Notifications\Tenant\GenericMemberAlertNotification;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Notification;
 
 final class MemberPortalNotificationService
 {
@@ -26,13 +26,7 @@ final class MemberPortalNotificationService
             return false;
         }
 
-        MemberDatabaseNotification::send($recipient, function (Notification $notification) use ($title, $body): void {
-            $notification
-                ->title($title)
-                ->body($body)
-                ->icon('heroicon-o-bell')
-                ->iconColor('info');
-        });
+        Notification::send($recipient, new GenericMemberAlertNotification($title, $body));
 
         return true;
     }

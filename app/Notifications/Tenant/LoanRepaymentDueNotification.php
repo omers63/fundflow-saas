@@ -7,7 +7,6 @@ namespace App\Notifications\Tenant;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Notifications\Concerns\DeliversToMemberChannels;
-use App\Services\Tenant\NotificationPreferenceService;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Notifications\Notification;
@@ -23,17 +22,6 @@ class LoanRepaymentDueNotification extends Notification
         public readonly float $cashBalance,
         public readonly string $memberName = '',
     ) {}
-
-    /**
-     * @return list<string|class-string>
-     */
-    public function via(object $notifiable): array
-    {
-        return NotificationPreferenceService::resolveDueReminder(
-            $notifiable,
-            NotificationPreferenceService::LOAN_REPAYMENT,
-        );
-    }
 
     /**
      * @return array<string, mixed>
