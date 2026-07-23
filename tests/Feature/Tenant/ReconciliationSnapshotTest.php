@@ -19,7 +19,9 @@ use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\ContributionCollectionCycleService;
 use App\Services\FundFlowService;
+use App\Services\FundPostingService;
 use App\Services\Loans\LoanLedgerService;
 use App\Services\ReconciliationReportService;
 use App\Support\LoanFundingStrategy;
@@ -511,6 +513,53 @@ test('global trial diagnostics exclude expected bank-file null-reference cash le
         ->and($nullIds)->toContain($manual->id)
         ->and($nullIds)->not->toContain((int) $imported->master_cash_transaction_id)
         ->and($check['null_reference_credits'])->toBe(50.0);
+});
+
+test('global trial excludes accepted deposit master cash null-ref mirrors', function () {
+    Account::factory()->masterBank()->withBalance(0)->create();
+
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 0,
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $collection = Mockery::mock(ContributionCollectionCycleService::class);
+    $collection->shouldReceive('onMemberCashIncreased')->andReturnNull();
+    app()->instance(ContributionCollectionCycleService::class, $collection);
+
+    $fundPostings = app(FundPostingService::class);
+    $posting = $fundPostings->submit($member, 6, now()->toDateString());
+    $fundPostings->accept($posting->fresh());
+
+    $masterMirror = Transaction::query()
+        ->where('account_id', Account::masterCash()->id)
+        ->where('type', 'credit')
+        ->where('amount', 6)
+        ->whereNull('reference_type')
+        ->where('member_id', $member->id)
+        ->first();
+
+    $manual = Transaction::factory()->for(Account::masterCash())->credit()->create([
+        'amount' => 50,
+        'reference_type' => null,
+        'reference_id' => null,
+        'description' => 'Genuine manual null-reference credit',
+        'balance_after' => 56,
+    ]);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['global_trial'];
+    $nullIds = collect($check['null_reference_lines'])->pluck('transaction_id');
+
+    expect($masterMirror)->not->toBeNull()
+        ->and($nullIds)->toContain($manual->id)
+        ->and($nullIds)->not->toContain($masterMirror->id)
+        ->and($check['null_reference_line_count'])->toBe(1)
+        ->and($check['severity'])->toBe('warning');
 });
 
 test('global trial stays ok when only expected same-direction bank-import drift remains', function () {

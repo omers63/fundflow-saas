@@ -20,6 +20,7 @@ use App\Models\Tenant\ReconciliationSnapshot;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Services\Loans\LoanLedgerService;
+use App\Support\BankTransactionWorkflow;
 use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
 use App\Support\LoanFundingStrategy;
@@ -332,55 +333,10 @@ class ReconciliationReportService
                     }
 
                     $memberPortalPostedCount++;
-
-                    if ($posting->member_id === null) {
-                        $memberPortalPostingIssues[] = [
-                            'fund_posting_id' => $posting->id,
-                            'issue' => 'accepted fund posting has no member_id',
-                        ];
-
-                        continue;
-                    }
-
-                    $lines = Transaction::query()
-                        ->where('reference_type', $fundPostingMorph)
-                        ->where('reference_id', $posting->id)
-                        ->get();
-
-                    $masterLine = $masterCashId
-                        ? $lines->first(fn (Transaction $line) => (int) $line->account_id === (int) $masterCashId)
-                        : null;
-
-                    if ($masterLine === null) {
-                        $memberPortalPostingIssues[] = [
-                            'fund_posting_id' => $posting->id,
-                            'issue' => 'missing master cash ledger line for accepted fund posting',
-                        ];
-                    } elseif ($masterLine->type !== 'credit' || abs((float) $masterLine->amount - (float) $posting->amount) > self::AMOUNT_TOLERANCE) {
-                        $memberPortalPostingIssues[] = [
-                            'fund_posting_id' => $posting->id,
-                            'issue' => 'master cash ledger line does not match posting amount/type',
-                            'ledger_amount' => (float) $masterLine->amount,
-                            'posting_amount' => (float) $posting->amount,
-                            'ledger_type' => $masterLine->type,
-                        ];
-                    }
-
-                    $memberCashLineExists = Transaction::query()
-                        ->where('reference_type', $fundPostingMorph)
-                        ->where('reference_id', $posting->id)
-                        ->where('type', 'credit')
-                        ->where('member_id', $posting->member_id)
-                        ->whereHas('account', fn ($query) => $query->where('type', 'cash')->where('is_master', false)->where('member_id', $posting->member_id))
-                        ->exists();
-
-                    if (! $memberCashLineExists) {
-                        $memberPortalPostingIssues[] = [
-                            'fund_posting_id' => $posting->id,
-                            'issue' => 'missing member cash mirror line for accepted fund posting',
-                            'member_id' => $posting->member_id,
-                        ];
-                    }
+                    array_push(
+                        $memberPortalPostingIssues,
+                        ...$this->acceptedFundPostingCashMirrorIssues($posting, $fundPostingMorph, $masterCashId),
+                    );
                 }
             });
 
@@ -1208,9 +1164,136 @@ class ReconciliationReportService
     }
 
     /**
+     * Accepted deposits credit member cash with a FundPosting linked source, and mirror master cash
+     * with a null reference (see AccountingService::masterPoolMirrorReference) so §5.12 stays clean.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function acceptedFundPostingCashMirrorIssues(
+        FundPosting $posting,
+        string $fundPostingMorph,
+        ?int $masterCashId,
+    ): array {
+        if ($posting->member_id === null) {
+            return [
+                [
+                    'fund_posting_id' => $posting->id,
+                    'issue' => 'accepted fund posting has no member_id',
+                ],
+            ];
+        }
+
+        $issues = [];
+        $amount = (float) $posting->amount;
+        $memberId = (int) $posting->member_id;
+
+        $memberCashLine = Transaction::query()
+            ->where('reference_type', $fundPostingMorph)
+            ->where('reference_id', $posting->id)
+            ->where('type', 'credit')
+            ->where('member_id', $memberId)
+            ->whereHas(
+                'account',
+                fn($query) => $query->where('type', 'cash')->where('is_master', false)->where('member_id', $memberId),
+            )
+            ->first();
+
+        if ($memberCashLine === null) {
+            $issues[] = [
+                'fund_posting_id' => $posting->id,
+                'issue' => 'missing member cash mirror line for accepted fund posting',
+                'member_id' => $memberId,
+            ];
+        } elseif (abs((float) $memberCashLine->amount - $amount) > self::AMOUNT_TOLERANCE) {
+            $issues[] = [
+                'fund_posting_id' => $posting->id,
+                'issue' => 'member cash ledger line does not match posting amount',
+                'ledger_amount' => (float) $memberCashLine->amount,
+                'posting_amount' => $amount,
+                'member_id' => $memberId,
+            ];
+        }
+
+        if ($masterCashId === null) {
+            $issues[] = [
+                'fund_posting_id' => $posting->id,
+                'issue' => 'missing master cash ledger line for accepted fund posting',
+            ];
+
+            return $issues;
+        }
+
+        $masterLine = $this->resolveAcceptedFundPostingMasterCashMirror(
+            $posting,
+            $fundPostingMorph,
+            $masterCashId,
+            $memberCashLine,
+        );
+
+        if ($masterLine === null) {
+            $issues[] = [
+                'fund_posting_id' => $posting->id,
+                'issue' => 'missing master cash ledger line for accepted fund posting',
+            ];
+        } elseif ($masterLine->type !== 'credit' || abs((float) $masterLine->amount - $amount) > self::AMOUNT_TOLERANCE) {
+            $issues[] = [
+                'fund_posting_id' => $posting->id,
+                'issue' => 'master cash ledger line does not match posting amount/type',
+                'ledger_amount' => (float) $masterLine->amount,
+                'posting_amount' => $amount,
+                'ledger_type' => $masterLine->type,
+            ];
+        }
+
+        return $issues;
+    }
+
+    private function resolveAcceptedFundPostingMasterCashMirror(
+        FundPosting $posting,
+        string $fundPostingMorph,
+        int $masterCashId,
+        ?Transaction $memberCashLine,
+    ): ?Transaction {
+        // Rare / legacy: master leg also referenced the fund posting.
+        $referenced = Transaction::query()
+            ->where('account_id', $masterCashId)
+            ->where('reference_type', $fundPostingMorph)
+            ->where('reference_id', $posting->id)
+            ->where('type', 'credit')
+            ->orderBy('id')
+            ->first();
+
+        if ($referenced instanceof Transaction) {
+            return $referenced;
+        }
+
+        $amount = (float) $posting->amount;
+        $memberId = (int) $posting->member_id;
+        $memberDescription = (string) ($memberCashLine?->description ?? '');
+
+        return Transaction::query()
+            ->where('account_id', $masterCashId)
+            ->where('type', 'credit')
+            ->where('member_id', $memberId)
+            ->whereNull('reference_type')
+            ->whereNull('reference_id')
+            ->where(function ($query) use ($memberDescription, $posting): void {
+                if ($memberDescription !== '') {
+                    $query->where('description', $memberDescription);
+                }
+
+                $query->orWhere('description', 'like', '%#' . $posting->id . '%');
+            })
+            ->orderBy('id')
+            ->get()
+            ->first(fn(Transaction $line): bool => abs((float) $line->amount - $amount) <= self::AMOUNT_TOLERANCE);
+    }
+
+    /**
      * Validate mirrored/posted bank rows against the ledger path that actually created them:
      * - CSV post-cash / post-member: master cash on the bank row
-     * - Cleared cash-out / fund-posting match: master bank on the bank row + cash legs on the request
+     * - Cleared cash-out / fund-posting match: master bank on the CSV import line; cash legs on the request
+     * - Synthetic ops clearance rows (member-postings / cash-outs): cash on the request only — never master bank
      * - Expense / fee / invest match-only: no master cash/bank on the bank row
      *
      * @return array{0: int, 1: list<array<string, mixed>>}
@@ -1222,6 +1305,7 @@ class ReconciliationReportService
 
         BankTransaction::query()
             ->whereIn('status', ['mirrored', 'posted'])
+            ->with('bankStatement')
             ->orderBy('id')
             ->chunkById(200, function ($rows) use (&$issues, &$checked): void {
                 foreach ($rows as $tx) {
@@ -1250,16 +1334,39 @@ class ReconciliationReportService
         }
 
         if ($tx->cash_out_request_id !== null) {
+                        $issues = [];
+
+                        // Master bank is posted on the matched CSV import, not the synthetic cash-out ops row.
+                        if (!BankTransactionWorkflow::isSyntheticOperationalStatement($tx)) {
+                            $issues = [
+                                ...$this->assertMatchedImportMasterBankLedger($tx, $expectedType, $expectedAmount),
+                ];
+            }
+
             return [
-                ...$this->assertMatchedImportMasterBankLedger($tx, $expectedType, $expectedAmount),
+                ...$issues,
                 ...$this->assertCashOutRequestCashLegs($tx, $expectedAmount),
             ];
         }
 
         if ($tx->fund_posting_id !== null) {
-            $issues = $this->assertMatchedImportMasterBankLedger($tx, $expectedType, $expectedAmount);
+            $issues = [];
 
-            if ($tx->member_id !== null) {
+            // Master bank is posted on the matched CSV import, not the synthetic deposit ops row
+            // (which becomes status=posted on accept, before or after bank match).
+            if (!BankTransactionWorkflow::isSyntheticOperationalStatement($tx)) {
+                $issues = [
+                    ...$this->assertMatchedImportMasterBankLedger($tx, $expectedType, $expectedAmount),
+                ];
+            }
+
+            $posting = FundPosting::query()->find($tx->fund_posting_id);
+
+            if (
+                $posting instanceof FundPosting
+                && $posting->status === 'accepted'
+                && $tx->member_id !== null
+            ) {
                 $memberCashLine = Transaction::query()
                     ->where('reference_type', FundPosting::class)
                     ->where('reference_id', $tx->fund_posting_id)
@@ -1755,7 +1862,7 @@ class ReconciliationReportService
             'resolution_hints' => [
                 __('Each posting group (same reference type and ID) should have equal total credits and debits. Groups listed below are filtered to the most likely unexpected sources of trial drift.'),
                 __('Use Suspected posting lines to see the individual ledger rows for the top unbalanced groups. The Linked source shown there is the posting-group key (same reference type and ID).'),
-                __('Unexpected lines without a reference often come from manual adjustments — open a transaction row below, then review the Linked source field in the modal or enable the Linked source column from Columns on the account ledger if it is hidden. Bank-file mirror and post-to-member cash legs are excluded here by design.'),
+                __('Unexpected lines without a reference often come from manual adjustments — open a transaction row below, then review the Linked source field in the modal or enable the Linked source column from Columns on the account ledger if it is hidden. Bank-file cash legs and accepted deposit master-cash pool mirrors (null linked source by design) are excluded here.'),
                 __('Account-type nets show where credits and debits fail to cancel; member cash and fund accounts commonly carry net drift when only one pool leg was posted.'),
                 __('Cross-check related checks: stored balance vs ledger, paired control totals, and the flow-specific integrity checks for contributions, loans, and bank imports.'),
             ],
@@ -1763,7 +1870,8 @@ class ReconciliationReportService
     }
 
     /**
-     * Null-reference diagnostics excluding intentional bank-file mirror / post-to-member cash legs.
+     * Null-reference diagnostics excluding intentional bank-file cash legs and accepted
+     * deposit master-cash pool mirrors (null linked source by design for §5.12).
      *
      * @return array{
      *     null_reference_line_count: int,
@@ -1782,6 +1890,7 @@ class ReconciliationReportService
             ->map(fn (mixed $id): int => (int) $id)
             ->all();
         $linkedMasterCashIdSet = array_fill_keys($linkedMasterCashIds, true);
+        $expectedFundPostingMasterMirrorIdSet = $this->expectedAcceptedFundPostingMasterCashMirrorIdSet();
 
         /** @var array<int, array<string, array<string, true>>> $expectedPostedMemberCash */
         $expectedPostedMemberCash = [];
@@ -1816,10 +1925,11 @@ class ReconciliationReportService
             ->orderByDesc('transacted_at')
             ->orderByDesc('id')
             ->get()
-            ->reject(fn (Transaction $transaction): bool => $this->isExpectedNullReferenceBankFlowLine(
+            ->reject(fn(Transaction $transaction): bool => $this->isExpectedNullReferenceLine(
                 $transaction,
                 $linkedMasterCashIdSet,
                 $expectedPostedMemberCash,
+                $expectedFundPostingMasterMirrorIdSet,
             ))
             ->values();
 
@@ -1854,6 +1964,79 @@ class ReconciliationReportService
             'null_reference_lines' => $nullReferenceLines,
             'null_reference_lines_truncated' => $nullReferenceLineCount > count($nullReferenceLines),
         ];
+    }
+
+    /**
+     * @return array<int, true>
+     */
+    private function expectedAcceptedFundPostingMasterCashMirrorIdSet(): array
+    {
+        $masterCashId = Account::masterCash()?->id;
+
+        if ($masterCashId === null) {
+            return [];
+        }
+
+        $ids = [];
+        $fundPostingMorph = FundPosting::class;
+
+        FundPosting::query()
+            ->where('status', 'accepted')
+            ->orderBy('id')
+            ->chunkById(100, function ($rows) use (&$ids, $masterCashId, $fundPostingMorph): void {
+                foreach ($rows as $posting) {
+                    if (!$posting instanceof FundPosting || $posting->member_id === null) {
+                        continue;
+                    }
+
+                    $memberId = (int) $posting->member_id;
+                    $memberCashLine = Transaction::query()
+                        ->where('reference_type', $fundPostingMorph)
+                        ->where('reference_id', $posting->id)
+                        ->where('type', 'credit')
+                        ->where('member_id', $memberId)
+                        ->whereHas(
+                            'account',
+                            fn($query) => $query->where('type', 'cash')->where('is_master', false)->where('member_id', $memberId),
+                        )
+                        ->first();
+
+                    $masterLine = $this->resolveAcceptedFundPostingMasterCashMirror(
+                        $posting,
+                        $fundPostingMorph,
+                        $masterCashId,
+                        $memberCashLine instanceof Transaction ? $memberCashLine : null,
+                    );
+
+                    if ($masterLine instanceof Transaction) {
+                        $ids[(int) $masterLine->id] = true;
+                    }
+                }
+            });
+
+        return $ids;
+    }
+
+    /**
+     * @param  array<int, true>  $linkedMasterCashIdSet
+     * @param  array<int, array<string, array<string, true>>>  $expectedPostedMemberCash
+     * @param  array<int, true>  $expectedFundPostingMasterMirrorIdSet
+     */
+    private function isExpectedNullReferenceLine(
+        Transaction $transaction,
+        array $linkedMasterCashIdSet,
+        array $expectedPostedMemberCash,
+        array $expectedFundPostingMasterMirrorIdSet,
+    ): bool {
+        if (isset($expectedFundPostingMasterMirrorIdSet[(int) $transaction->id])) {
+            return true;
+        }
+
+        return $this->isExpectedNullReferenceBankFlowLine(
+            $transaction,
+            $linkedMasterCashIdSet,
+            $expectedPostedMemberCash,
+        );
     }
 
     /**
