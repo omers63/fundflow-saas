@@ -22,15 +22,15 @@ final class LoanSettings
             'max_borrow_multiplier' => 2,
             'default_interest_rate' => 0,
             'default_term_months' => 12,
-            'max_loan_amount' => 0,
-            'settlement_threshold_pct' => 0.16,
+            'max_loan_amount' => 300000,
+            'settlement_threshold_pct' => 0.2,
             'default_grace_cycles' => 2,
-            'max_allowed_grace_cycles' => 2,
+            'max_allowed_grace_cycles' => 1,
             'guarantor_transfer_missed_threshold' => 3,
             'max_active_loans' => 1,
             'require_guarantor_above_fund_balance' => true,
             'member_funding_split_pct' => 50,
-            'allow_funding_strategy_member_topup' => true,
+            'allow_funding_strategy_member_topup' => false,
             'allow_funding_strategy_split_percentage' => true,
             'allow_excess_fund_cash_out' => true,
             'auto_allocate_loan_repayment' => false,
@@ -75,22 +75,22 @@ final class LoanSettings
 
     public static function maxLoanAmount(): float
     {
-        return (float) self::get('max_loan_amount', 0);
+        return (float) self::get('max_loan_amount', self::defaults()['max_loan_amount']);
     }
 
     public static function settlementThreshold(): float
     {
-        return (float) self::get('settlement_threshold_pct', 0.16);
+        return (float) self::get('settlement_threshold_pct', self::defaults()['settlement_threshold_pct']);
     }
 
     public static function defaultGraceCycles(): int
     {
-        return (int) self::get('default_grace_cycles', 2);
+        return (int) self::get('default_grace_cycles', self::defaults()['default_grace_cycles']);
     }
 
     public static function maxAllowedGraceCycles(): int
     {
-        return max(0, min(12, (int) self::get('max_allowed_grace_cycles', 2)));
+        return max(0, min(12, (int) self::get('max_allowed_grace_cycles', self::defaults()['max_allowed_grace_cycles'])));
     }
 
     public static function clampGraceCycles(int $graceCycles): int
@@ -162,7 +162,7 @@ final class LoanSettings
 
     public static function allowMemberFundTopupStrategy(): bool
     {
-        return (bool) self::get('allow_funding_strategy_member_topup', true);
+        return (bool) self::get('allow_funding_strategy_member_topup', self::defaults()['allow_funding_strategy_member_topup']);
     }
 
     public static function allowSplitPercentageStrategy(): bool
@@ -292,7 +292,21 @@ final class LoanSettings
                 continue;
             }
 
-            Setting::set(self::GROUP, $key, $values[$key]);
+            $value = $values[$key];
+
+            if (is_bool($value)) {
+                Setting::set(self::GROUP, $key, $value ? '1' : '0');
+
+                continue;
+            }
+
+            if ($value === null) {
+                Setting::set(self::GROUP, $key, null);
+
+                continue;
+            }
+
+            Setting::set(self::GROUP, $key, is_scalar($value) ? (string) $value : json_encode($value));
         }
     }
 

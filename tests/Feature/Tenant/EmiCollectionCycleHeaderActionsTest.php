@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Support\ContributionCycleHeaderActions;
 use App\Filament\Support\LoanEmiCollectionHeaderActions;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Loan;
@@ -60,6 +61,14 @@ test('emi cycle collection group exposes four actions like contribution cycle co
         'prepareOverdueEmis',
     ])
         ->and(LoanEmiCollectionHeaderActions::cycleCollectionGroup()->getLabel())->toBe(__('Cycle collection'));
+});
+
+test('run emi collection cycle uses collect oldest arrears first by default', function () {
+    $action = LoanEmiCollectionHeaderActions::runEmiCollectionCycle();
+
+    expect($action->getName())->toBe('runEmiCollectionCycle')
+        ->and($action->getLabel())->toBe(__('Run EMI collection cycle'))
+        ->and(ContributionCycleHeaderActions::collectOldestArrearsFirstToggle()->getDefaultState())->toBeTrue();
 });
 
 test('emi collection summary export includes pending period installments', function () {

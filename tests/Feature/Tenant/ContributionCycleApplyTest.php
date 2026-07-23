@@ -230,3 +230,193 @@ test('apply for period repairs collected contribution that was never posted', fu
     expect($outcome)->toBe('applied')
         ->and($broken->fresh()->status)->toBe('posted');
 });
+
+test('apply for period with oldest-first collects oldest unpaid before selected when cash is limited', function () {
+    $older = now()->subMonths(2);
+    $newer = now()->subMonth();
+
+    $member = Member::create([
+        'member_number' => 'MEM-OLDEST-FIRST',
+        'name' => 'Oldest First Apply',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => $older->copy()->startOfMonth(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    Contribution::create([
+        'member_id' => $member->id,
+        'period' => Contribution::periodDate((int) $older->month, (int) $older->year),
+        'amount' => 100,
+        'amount_due' => 100,
+        'amount_collected' => 0,
+        'status' => 'pending',
+        'collection_status' => ContributionCollectionStatus::OVERDUE,
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+        'overdue_since' => $older->copy()->endOfMonth(),
+        'is_late' => true,
+    ]);
+
+    Contribution::create([
+        'member_id' => $member->id,
+        'period' => Contribution::periodDate((int) $newer->month, (int) $newer->year),
+        'amount' => 100,
+        'amount_due' => 100,
+        'amount_collected' => 0,
+        'status' => 'pending',
+        'collection_status' => ContributionCollectionStatus::OVERDUE,
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+        'overdue_since' => $newer->copy()->endOfMonth(),
+        'is_late' => true,
+    ]);
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->accounting->credit($member->cashAccount, 100, 'Seed cash for one cycle'),
+    );
+
+    $bucket = [];
+    $outcome = $this->service->applyForPeriod(
+        $member->fresh(),
+        (int) $newer->month,
+        (int) $newer->year,
+        $bucket,
+        collectOldestArrearsFirst: true,
+    );
+
+    $olderContribution = Contribution::query()
+        ->forPeriod((int) $older->month, (int) $older->year)
+        ->where('member_id', $member->id)
+        ->first();
+    $newerContribution = Contribution::query()
+        ->forPeriod((int) $newer->month, (int) $newer->year)
+        ->where('member_id', $member->id)
+        ->first();
+
+    expect($outcome)->toBe('partial')
+        ->and($olderContribution->status)->toBe('posted')
+        ->and($newerContribution->status)->toBe('pending')
+        ->and((float) $member->cashAccount->fresh()->balance)->toBe(0.0);
+});
+
+test('apply for period with oldest-first collects all unpaid cycles through selected when cash allows', function () {
+    $oldest = now()->subMonths(3);
+    $middle = now()->subMonths(2);
+    $newest = now()->subMonth();
+
+    $member = Member::create([
+        'member_number' => 'MEM-THROUGH-ALL',
+        'name' => 'Through All Cycles',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => $oldest->copy()->startOfMonth(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    foreach ([$oldest, $middle, $newest] as $period) {
+        Contribution::create([
+            'member_id' => $member->id,
+            'period' => Contribution::periodDate((int) $period->month, (int) $period->year),
+            'amount' => 100,
+            'amount_due' => 100,
+            'amount_collected' => 0,
+            'status' => 'pending',
+            'collection_status' => ContributionCollectionStatus::OVERDUE,
+            'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+            'overdue_since' => $period->copy()->endOfMonth(),
+            'is_late' => true,
+        ]);
+    }
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->accounting->credit($member->cashAccount, 300, 'Seed cash for three cycles'),
+    );
+
+    $bucket = [];
+    $outcome = $this->service->applyForPeriod(
+        $member->fresh(),
+        (int) $newest->month,
+        (int) $newest->year,
+        $bucket,
+        collectOldestArrearsFirst: true,
+    );
+
+    expect($outcome)->toBe('applied');
+
+    foreach ([$oldest, $middle, $newest] as $period) {
+        expect(
+            Contribution::query()
+                ->forPeriod((int) $period->month, (int) $period->year)
+                ->where('member_id', $member->id)
+                ->value('status')
+        )->toBe('posted');
+    }
+
+    expect((float) $member->cashAccount->fresh()->balance)->toBe(0.0);
+});
+
+test('apply for period can skip oldest arrears and only collect the selected cycle', function () {
+    $older = now()->subMonths(2);
+    $newer = now()->subMonth();
+
+    $member = Member::create([
+        'member_number' => 'MEM-SELECTED-ONLY',
+        'name' => 'Selected Cycle Only',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => $older->copy()->startOfMonth(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    Contribution::create([
+        'member_id' => $member->id,
+        'period' => Contribution::periodDate((int) $older->month, (int) $older->year),
+        'amount' => 100,
+        'amount_due' => 100,
+        'amount_collected' => 0,
+        'status' => 'pending',
+        'collection_status' => ContributionCollectionStatus::OVERDUE,
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+        'overdue_since' => $older->copy()->endOfMonth(),
+        'is_late' => true,
+    ]);
+
+    Contribution::create([
+        'member_id' => $member->id,
+        'period' => Contribution::periodDate((int) $newer->month, (int) $newer->year),
+        'amount' => 100,
+        'amount_due' => 100,
+        'amount_collected' => 0,
+        'status' => 'pending',
+        'collection_status' => ContributionCollectionStatus::OVERDUE,
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+        'overdue_since' => $newer->copy()->endOfMonth(),
+        'is_late' => true,
+    ]);
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->accounting->credit($member->cashAccount, 100, 'Seed cash for selected cycle'),
+    );
+
+    $bucket = [];
+    $outcome = $this->service->applyForPeriod(
+        $member->fresh(),
+        (int) $newer->month,
+        (int) $newer->year,
+        $bucket,
+        collectOldestArrearsFirst: false,
+    );
+
+    $olderContribution = Contribution::query()
+        ->forPeriod((int) $older->month, (int) $older->year)
+        ->where('member_id', $member->id)
+        ->first();
+    $newerContribution = Contribution::query()
+        ->forPeriod((int) $newer->month, (int) $newer->year)
+        ->where('member_id', $member->id)
+        ->first();
+
+    expect($outcome)->toBe('applied')
+        ->and($olderContribution->status)->toBe('pending')
+        ->and($newerContribution->status)->toBe('posted')
+        ->and((float) $member->cashAccount->fresh()->balance)->toBe(0.0);
+});

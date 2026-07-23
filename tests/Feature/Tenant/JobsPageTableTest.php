@@ -48,7 +48,9 @@ test('jobs page renders automation status by default', function () {
     Livewire::test(JobsPage::class)
         ->assertOk()
         ->assertSet('jobsTab', 'status')
-        ->assertSee(__('Collections'))
+        ->assertSee(__('Contributions'))
+        ->assertSee(__('Init contribution cycle'))
+        ->assertSee(__('Bank auto-match'))
         ->assertDontSee(__('Scheduled jobs'));
 });
 

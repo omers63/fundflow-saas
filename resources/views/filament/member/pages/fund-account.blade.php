@@ -15,7 +15,7 @@
             <x-member::stat-card :label="__('Total contributed')" :amount="$contributionsTotal" :currency="$currency" />
             <x-member::stat-card :label="__('Loan fund debits')" :amount="$loanFundDebits" :currency="$currency" />
             <x-member::stat-card :label="__('Loan cap')" :amount="$maxLoan" :currency="$currency" />
-            <x-member::stat-card :label="__('Borrow multiplier')" :value="(string) $borrowMultiplier.'×'" />
+            <x-member::stat-card :label="__('Borrow multiplier')" :value="(string) $borrowMultiplier . '×'" />
             <x-member::stat-card :label="__('Contribution status')" :value="$exemptionLabel" />
             <x-member::stat-card
                 :label="__('Open period')"
@@ -26,19 +26,19 @@
 
         <p class="text-sm text-gray-600">
             {{ __(':period — :status', [
-                'period' => $cycleLabel,
-                'status' => $postedThisCycle ? __('Contribution posted this cycle') : __('Contribution not yet posted this cycle'),
-            ]) }}
+    'period' => $cycleLabel,
+    'status' => $postedThisCycle ? __('Contribution posted this cycle') : __('Contribution not yet posted this cycle'),
+]) }}
         </p>
 
         <div>
-            <a href="{{ $statementsUrl }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-primary">
+            <a href="{{ $statementsUrl }}" class="fi-btn fi-btn-size-sm fi-outlined fi-color-primary">
                 {{ __('Monthly statements') }}
             </a>
         </div>
 
         @if (filled($accountId))
-            @livewire(\App\Filament\Member\Widgets\MemberFundLedgerTableWidget::class, ['accountId' => $accountId], key('member-fund-ledger-'.$accountId))
+            @livewire(\App\Filament\Member\Widgets\MemberFundLedgerTableWidget::class, ['accountId' => $accountId], key('member-fund-ledger-' . $accountId))
         @endif
     </div>
 </x-filament-panels::page>

@@ -78,6 +78,7 @@ test('running contribution cycle refreshes pending counts and insights snapshot'
             'cycle' => $cycleKey,
             'month' => $this->month,
             'year' => $this->year,
+            'collect_oldest_arrears_first' => false,
         ])
         ->assertNotified();
 

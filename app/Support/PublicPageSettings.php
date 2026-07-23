@@ -238,21 +238,21 @@ final class PublicPageSettings
     public static function defaults(): array
     {
         return [
-            'fund_name_en' => '',
-            'fund_name_ar' => '',
-            'fund_name' => '',
+            'fund_name_en' => 'Samman Family Fund',
+            'fund_name_ar' => 'صندوق عائلة آل سمان',
+            'fund_name' => 'Samman Family Fund',
             'fund_logo' => '',
-            'membership_no_limit' => '1',
-            'membership_max_members' => '',
-            'fee_new' => '0',
+            'membership_no_limit' => '0',
+            'membership_max_members' => '100',
+            'fee_new' => '150',
             'fee_resume' => '0',
             'fee_renew' => '0',
             'rules_and_conditions_url' => '',
             'membership_application_document_url' => '',
-            'fee_transfer_bank_name' => '',
-            'fee_transfer_iban' => '',
-            'contact_email' => '',
-            'contact_phone' => '',
+            'fee_transfer_bank_name' => 'Al Rajhi Bank',
+            'fee_transfer_iban' => 'SA761234560000123101',
+            'contact_email' => 'admin@fundflow.sa',
+            'contact_phone' => '+966 557744668',
         ];
     }
 

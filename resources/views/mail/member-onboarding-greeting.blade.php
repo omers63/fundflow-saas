@@ -74,6 +74,45 @@
                         </td>
                     </tr>
 
+                    {{-- Login credentials --}}
+                    @if (filled($loginEmail ?? null))
+                        <tr>
+                            <td style="padding:8px 28px 20px;">
+                                <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                                    style="width:100%;border-collapse:separate;border:1px solid {{ $primaryBorder }};border-radius:14px;background:{{ $primarySoft }};overflow:hidden;">
+                                    <tr>
+                                        <td style="padding:18px 20px;text-align:{{ $align }};direction:{{ $dir }};">
+                                            <p
+                                                style="margin:0 0 12px;color:{{ $primaryDark }};font-size:14px;font-weight:800;letter-spacing:0.02em;text-transform:uppercase;">
+                                                {{ $credentialsHeading }}
+                                            </p>
+                                            <p style="margin:0 0 8px;color:#0f172a;font-size:14px;line-height:1.5;">
+                                                <strong style="color:#334155;">{{ $credentialsEmailLabel }}:</strong>
+                                                <span
+                                                    style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;">{{ $loginEmail }}</span>
+                                            </p>
+                                            @if (filled($loginPassword ?? null))
+                                                <p style="margin:0 0 12px;color:#0f172a;font-size:14px;line-height:1.5;">
+                                                    <strong style="color:#334155;">{{ $credentialsPasswordLabel }}:</strong>
+                                                    <span
+                                                        style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;">{{ $loginPassword }}</span>
+                                                </p>
+                                            @else
+                                                <p style="margin:0 0 12px;color:#475569;font-size:13px;line-height:1.5;">
+                                                    {{ $credentialsPasswordHint }}
+                                                </p>
+                                            @endif
+                                            <p
+                                                style="margin:0;padding:10px 12px;border-radius:10px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:13px;font-weight:700;line-height:1.45;">
+                                                {{ $credentialsPasswordUrgent }}
+                                            </p>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                    @endif
+
                     {{-- CTA --}}
                     @isset($actionUrl)
                         @if (filled($actionUrl))

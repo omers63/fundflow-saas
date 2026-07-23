@@ -16,7 +16,7 @@ final class AutomationAreaSummary
     public static function areaLabels(): array
     {
         return [
-            'contributions' => __('Collections'),
+            'contributions' => __('Contributions'),
             'loans' => __('Loans'),
             'bank' => __('Bank'),
             'reconciliation' => __('Reconciliation'),
@@ -48,7 +48,14 @@ final class AutomationAreaSummary
      *     job_count: int,
      *     last_status: ?string,
      *     failures_last_7_days: int,
-     *     schedule_hint: string
+     *     schedule_hint: string,
+     *     jobs: list<array{
+     *         key: string,
+     *         job_label: string,
+     *         schedule: string,
+     *         last_status: ?string,
+     *         last_started_at: mixed
+     *     }>
      * }>
      */
     public static function summarize(SystemJobRunnerService $runner): array
@@ -60,7 +67,7 @@ final class AutomationAreaSummary
                 $categories = self::categoriesForArea($area);
                 $areaJobs = $records->filter(
                     fn (array $row): bool => in_array($row['category'], $categories, true),
-                );
+                )->values();
 
                 $failures = self::failuresInLastSevenDays($areaJobs->pluck('key')->all());
 
@@ -71,6 +78,13 @@ final class AutomationAreaSummary
                     'last_status' => self::worstStatus($areaJobs),
                     'failures_last_7_days' => $failures,
                     'schedule_hint' => self::scheduleHint($areaJobs),
+                    'jobs' => $areaJobs->map(fn (array $row): array => [
+                        'key' => $row['key'],
+                        'job_label' => $row['job_label'],
+                        'schedule' => $row['schedule'],
+                        'last_status' => $row['last_status'],
+                        'last_started_at' => $row['last_started_at'],
+                    ])->all(),
                 ];
             })
             ->values()

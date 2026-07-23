@@ -217,6 +217,196 @@ class ContributionCollectionCycleService
     }
 
     /**
+     * Unpaid contribution periods oldest-first through the given cycle (inclusive).
+     *
+     * Used by manual Contribute / Run contribution cycle when “Collect oldest arrears first”
+     * is enabled so available cash clears as many cycles as possible from the oldest unpaid
+     * period up to the selected period.
+     *
+     * @return list<array{0: int, 1: int}>
+     */
+    public function orderedUnpaidPeriodsThrough(Member $member, int $throughMonth, int $throughYear): array
+    {
+        $throughKey = sprintf('%04d-%02d', $throughYear, $throughMonth);
+        $periods = [];
+
+        foreach (app(LoanDelinquencyService::class)->contributionArrearsTableRecords(
+            $member->id,
+            $throughMonth,
+            $throughYear,
+            live: true,
+        ) as $row) {
+            $month = (int) $row['month'];
+            $year = (int) $row['year'];
+            $key = sprintf('%04d-%02d', $year, $month);
+
+            if ($key <= $throughKey) {
+                $periods[$key] = [$month, $year];
+            }
+        }
+
+        foreach ($this->openContributionsOrdered($member) as $contribution) {
+            $period = $contribution->period;
+
+            if ($period === null) {
+                continue;
+            }
+
+            $month = (int) $period->month;
+            $year = (int) $period->year;
+            $key = $period->format('Y-m');
+
+            if ($key <= $throughKey) {
+                $periods[$key] = [$month, $year];
+            }
+        }
+
+        if (
+            ! Contribution::periodFullyPosted($member->id, $throughMonth, $throughYear)
+            && ! $member->isExemptFromContributions($throughMonth, $throughYear)
+            && (float) $member->monthly_contribution_amount > 0
+        ) {
+            $periods[$throughKey] = [$throughMonth, $throughYear];
+        }
+
+        ksort($periods);
+
+        return array_values($periods);
+    }
+
+    /**
+     * @deprecated Prefer {@see orderedUnpaidPeriodsThrough()} for manual oldest-first apply.
+     */
+    public function settleOlderContributionArrearsBeforePeriod(Member $member, int $beforeMonth, int $beforeYear): void
+    {
+        $member = $member->fresh() ?? $member;
+        $member->unsetRelation('accounts');
+
+        $this->settleMemberCashBeforePeriod($member, $beforeMonth, $beforeYear);
+    }
+
+    /**
+     * Settle household unpaid contribution cycles oldest-first through the given cycle (inclusive).
+     *
+     * @param  SupportCollection<int, Member>  $dependents
+     * @param  array{applied: SupportCollection, insufficient: SupportCollection, skipped: SupportCollection}  $results
+     */
+    public function settleHouseholdUnpaidContributionsThroughPeriod(
+        Member $parent,
+        SupportCollection $dependents,
+        int $throughMonth,
+        int $throughYear,
+        array &$results,
+    ): void {
+        $throughKey = sprintf('%04d-%02d', $throughYear, $throughMonth);
+        $periods = [];
+
+        foreach ($this->outstandingPeriodsForHousehold($parent, $dependents) as [$month, $year]) {
+            $key = sprintf('%04d-%02d', $year, $month);
+
+            if ($key > $throughKey) {
+                break;
+            }
+
+            $periods[$key] = [$month, $year];
+        }
+
+        $periods[$throughKey] = [$throughMonth, $throughYear];
+        ksort($periods);
+
+        $contributionService = app(ContributionService::class);
+
+        foreach ($periods as [$month, $year]) {
+            $parent = $parent->fresh() ?? $parent;
+            $parent->unsetRelation('accounts');
+
+            if ($parent->getCashBalance() < 0.00001) {
+                break;
+            }
+
+            if ($dependents->isNotEmpty()) {
+                $this->cycles->applyDependentAllocationForParentForPeriod($parent, $month, $year);
+            }
+
+            $parent = $parent->fresh() ?? $parent;
+            $parent->unsetRelation('accounts');
+
+            $contributionService->applyForPeriod(
+                $parent,
+                $month,
+                $year,
+                $results,
+                collectOldestArrearsFirst: false,
+            );
+
+            foreach ($dependents as $dependent) {
+                $dependent = $dependent->fresh() ?? $dependent;
+                $dependent->unsetRelation('accounts');
+
+                $contributionService->applyForPeriod(
+                    $dependent,
+                    $month,
+                    $year,
+                    $results,
+                    collectOldestArrearsFirst: false,
+                );
+            }
+        }
+    }
+
+    /**
+     * Settle household contribution arrears older than the given cycle (oldest first),
+     * including parent→dependent allocation for each older cycle.
+     *
+     * @param  SupportCollection<int, Member>  $dependents
+     */
+    public function settleHouseholdOlderContributionArrearsBeforePeriod(
+        Member $parent,
+        SupportCollection $dependents,
+        int $beforeMonth,
+        int $beforeYear,
+    ): void {
+        $beforeKey = sprintf('%04d-%02d', $beforeYear, $beforeMonth);
+
+        foreach ($this->outstandingPeriodsForHousehold($parent, $dependents) as [$month, $year]) {
+            if (sprintf('%04d-%02d', $year, $month) >= $beforeKey) {
+                break;
+            }
+
+            $parent = $parent->fresh() ?? $parent;
+            $parent->unsetRelation('accounts');
+
+            if ($parent->getCashBalance() < 0.00001) {
+                break;
+            }
+
+            $allocatedDependentIds = [];
+
+            if ($dependents->isNotEmpty()) {
+                $allocation = $this->cycles->applyDependentAllocationForParentForPeriod($parent, $month, $year);
+                $allocatedDependentIds = $allocation['allocated_dependent_ids'] ?? [];
+            }
+
+            $parent = $parent->fresh() ?? $parent;
+            $parent->unsetRelation('accounts');
+
+            $this->settleSingleContributionPeriod($parent, $month, $year);
+
+            foreach ($dependents as $dependent) {
+                $dependent = $dependent->fresh() ?? $dependent;
+                $dependent->unsetRelation('accounts');
+
+                if (
+                    in_array($dependent->id, $allocatedDependentIds, true)
+                    || $dependent->getCashBalance() >= 0.00001
+                ) {
+                    $this->settleMemberCashThroughPeriod($dependent, $month, $year);
+                }
+            }
+        }
+    }
+
+    /**
      * Settle a member's contributions oldest-first through the given period (inclusive).
      */
     protected function settleMemberCashThroughPeriod(Member $member, int $throughMonth, int $throughYear): void
@@ -225,6 +415,24 @@ class ContributionCollectionCycleService
 
         foreach ($this->orderedCollectiblePeriodsForAutoCollection($member) as [$month, $year]) {
             if (sprintf('%04d-%02d', $year, $month) > $throughKey) {
+                break;
+            }
+
+            if (! $this->settleSingleContributionPeriod($member, $month, $year)) {
+                break;
+            }
+        }
+    }
+
+    /**
+     * Settle a member's contributions oldest-first for periods strictly before the given cycle.
+     */
+    protected function settleMemberCashBeforePeriod(Member $member, int $beforeMonth, int $beforeYear): void
+    {
+        $beforeKey = sprintf('%04d-%02d', $beforeYear, $beforeMonth);
+
+        foreach ($this->orderedCollectiblePeriodsForAutoCollection($member) as [$month, $year]) {
+            if (sprintf('%04d-%02d', $year, $month) >= $beforeKey) {
                 break;
             }
 
@@ -415,9 +623,22 @@ class ContributionCollectionCycleService
         int $month,
         int $year,
         array &$results,
+        bool $collectOldestArrearsFirst = false,
     ): void {
         $parent = $parent->fresh() ?? $parent;
         $parent->unsetRelation('accounts');
+
+        if ($collectOldestArrearsFirst) {
+            $this->settleHouseholdUnpaidContributionsThroughPeriod(
+                $parent,
+                $dependents,
+                $month,
+                $year,
+                $results,
+            );
+
+            return;
+        }
 
         if ($dependents->isNotEmpty() && $parent->getCashBalance() >= 0.00001) {
             $this->cycles->applyDependentAllocationForParentForPeriod($parent, $month, $year);
@@ -426,13 +647,25 @@ class ContributionCollectionCycleService
         $parent = $parent->fresh() ?? $parent;
         $parent->unsetRelation('accounts');
 
-        app(ContributionService::class)->applyForPeriod($parent, $month, $year, $results);
+        app(ContributionService::class)->applyForPeriod(
+            $parent,
+            $month,
+            $year,
+            $results,
+            collectOldestArrearsFirst: false,
+        );
 
         foreach ($dependents as $dependent) {
             $dependent = $dependent->fresh() ?? $dependent;
             $dependent->unsetRelation('accounts');
 
-            app(ContributionService::class)->applyForPeriod($dependent, $month, $year, $results);
+            app(ContributionService::class)->applyForPeriod(
+                $dependent,
+                $month,
+                $year,
+                $results,
+                collectOldestArrearsFirst: false,
+            );
         }
     }
 

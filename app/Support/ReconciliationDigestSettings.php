@@ -15,6 +15,16 @@ final class ReconciliationDigestSettings
     /**
      * @return array<string, mixed>
      */
+    public static function defaults(): array
+    {
+        return [
+            self::KEY_DIGEST_PUSH_ENABLED => true,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     public static function allForForm(): array
     {
         return [
@@ -27,7 +37,7 @@ final class ReconciliationDigestSettings
         $value = Setting::get(self::GROUP, self::KEY_DIGEST_PUSH_ENABLED);
 
         if ($value === null) {
-            return true;
+            return (bool) self::defaults()[self::KEY_DIGEST_PUSH_ENABLED];
         }
 
         return filter_var($value, FILTER_VALIDATE_BOOL);

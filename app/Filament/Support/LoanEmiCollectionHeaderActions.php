@@ -79,12 +79,22 @@ final class LoanEmiCollectionHeaderActions
             ->label(__('Run EMI collection cycle'))
             ->icon('heroicon-o-play')
             ->color('primary')
-            ->schema(ContributionCycleHeaderActions::periodFormSchema())
-            ->fillForm(fn (): array => ContributionCycleHeaderActions::defaultPeriod())
+            ->schema([
+                ...ContributionCycleHeaderActions::periodFormSchema(),
+                ContributionCycleHeaderActions::collectOldestArrearsFirstToggle(),
+            ])
+            ->fillForm(fn (): array => [
+                ...ContributionCycleHeaderActions::defaultPeriod(),
+                'collect_oldest_arrears_first' => true,
+            ])
             ->action(function (array $data, Component $livewire): void {
                 $cycles = app(ContributionCycleService::class);
                 [$month, $year] = ContributionCycleHeaderActions::resolvePeriodFromForm($data);
-                $results = app(LoanEmiCollectionCatalogService::class)->applyInstallmentsForPeriod($month, $year);
+                $results = app(LoanEmiCollectionCatalogService::class)->applyInstallmentsForPeriod(
+                    $month,
+                    $year,
+                    (bool) ($data['collect_oldest_arrears_first'] ?? true),
+                );
 
                 Notification::make()
                     ->title(__('EMI cycle complete – :period', ['period' => $cycles->periodLabel($month, $year)]))

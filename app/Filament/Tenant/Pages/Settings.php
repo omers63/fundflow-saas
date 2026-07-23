@@ -15,10 +15,12 @@ use App\Models\Tenant\SmsImportTemplate;
 use App\Services\FiscalClose\FiscalClosePeriodResolver;
 use App\Services\SmsImportTemplateSyncService;
 use App\Support\ArabicDisplaySettings;
+use App\Support\AutomationScheduleSettings;
 use App\Support\BusinessDay;
 use App\Support\BusinessDaySettings;
 use App\Support\CommunicationSettings;
 use App\Support\ContributionPolicySettings;
+use App\Support\DefaultTenantSettings;
 use App\Support\FiscalSettings;
 use App\Support\ImportDateFormats;
 use App\Support\Lang;
@@ -196,8 +198,11 @@ class Settings extends Page implements HasForms
             'member_match_field' => $t->member_match_field ?? 'member_number',
         ])->toArray();
 
+        $loanDefaults = LoanSettings::defaults();
+        $publicDefaults = PublicPageSettings::defaults();
+
         return [
-            'currency' => $general['currency'] ?? 'USD',
+            'currency' => $general['currency'] ?? DefaultTenantSettings::CURRENCY,
             ...LocalizationSettings::allForForm(),
             ...LedgerSettings::allForForm(),
             'business_day' => BusinessDaySettings::forForm(),
@@ -216,25 +221,26 @@ class Settings extends Page implements HasForms
             'member_number_separator' => $memberNumber['separator'],
             'member_number_padding' => $memberNumber['padding'],
             'member_number_include_year' => (bool) $memberNumber['include_year'],
-            'cycle_start_day' => $contribution['cycle_start_day'] ?? 6,
-            'loan_eligibility_months' => $loan['eligibility_months'] ?? 12,
-            'loan_min_fund_balance' => $loan['min_fund_balance'] ?? 6000,
-            'loan_max_borrow_multiplier' => $loan['max_borrow_multiplier'] ?? 2,
-            'loan_default_interest_rate' => $loan['default_interest_rate'] ?? LoanSettings::defaults()['default_interest_rate'],
-            'loan_default_term_months' => $loan['default_term_months'] ?? 12,
-            'loan_max_loan_amount' => $loan['max_loan_amount'] ?? 0,
-            'loan_settlement_threshold_pct' => ($loan['settlement_threshold_pct'] ?? 0.16) * 100,
-            'loan_require_guarantor_above_fund' => (bool) ($loan['require_guarantor_above_fund_balance'] ?? true),
-            'loan_member_funding_split_pct' => (float) ($loan['member_funding_split_pct'] ?? 50),
-            'loan_allow_funding_strategy_member_topup' => (bool) ($loan['allow_funding_strategy_member_topup'] ?? true),
-            'loan_allow_funding_strategy_split' => (bool) ($loan['allow_funding_strategy_split_percentage'] ?? true),
-            'loan_allow_excess_fund_cash_out' => (bool) ($loan['allow_excess_fund_cash_out'] ?? true),
-            'loan_auto_allocate_repayment' => (bool) ($loan['auto_allocate_loan_repayment'] ?? false),
-            'loan_default_grace_cycles' => $loan['default_grace_cycles'] ?? 2,
-            'loan_max_allowed_grace_cycles' => $loan['max_allowed_grace_cycles'] ?? 2,
-            'loan_late_payment_consecutive' => $loan['late_payment_consecutive_threshold'] ?? 3,
-            'loan_late_payment_rolling' => $loan['late_payment_rolling_threshold'] ?? 15,
-            'loan_late_payment_lookback_months' => $loan['late_payment_lookback_months'] ?? 60,
+            'cycle_start_day' => $contribution['cycle_start_day'] ?? DefaultTenantSettings::CYCLE_START_DAY,
+            ...AutomationScheduleSettings::allForForm(),
+            'loan_eligibility_months' => $loan['eligibility_months'] ?? $loanDefaults['eligibility_months'],
+            'loan_min_fund_balance' => $loan['min_fund_balance'] ?? $loanDefaults['min_fund_balance'],
+            'loan_max_borrow_multiplier' => $loan['max_borrow_multiplier'] ?? $loanDefaults['max_borrow_multiplier'],
+            'loan_default_interest_rate' => $loan['default_interest_rate'] ?? $loanDefaults['default_interest_rate'],
+            'loan_default_term_months' => $loan['default_term_months'] ?? $loanDefaults['default_term_months'],
+            'loan_max_loan_amount' => $loan['max_loan_amount'] ?? $loanDefaults['max_loan_amount'],
+            'loan_settlement_threshold_pct' => ((float) ($loan['settlement_threshold_pct'] ?? $loanDefaults['settlement_threshold_pct'])) * 100,
+            'loan_require_guarantor_above_fund' => (bool) ($loan['require_guarantor_above_fund_balance'] ?? $loanDefaults['require_guarantor_above_fund_balance']),
+            'loan_member_funding_split_pct' => (float) ($loan['member_funding_split_pct'] ?? $loanDefaults['member_funding_split_pct']),
+            'loan_allow_funding_strategy_member_topup' => (bool) ($loan['allow_funding_strategy_member_topup'] ?? $loanDefaults['allow_funding_strategy_member_topup']),
+            'loan_allow_funding_strategy_split' => (bool) ($loan['allow_funding_strategy_split_percentage'] ?? $loanDefaults['allow_funding_strategy_split_percentage']),
+            'loan_allow_excess_fund_cash_out' => (bool) ($loan['allow_excess_fund_cash_out'] ?? $loanDefaults['allow_excess_fund_cash_out']),
+            'loan_auto_allocate_repayment' => (bool) ($loan['auto_allocate_loan_repayment'] ?? $loanDefaults['auto_allocate_loan_repayment']),
+            'loan_default_grace_cycles' => $loan['default_grace_cycles'] ?? $loanDefaults['default_grace_cycles'],
+            'loan_max_allowed_grace_cycles' => $loan['max_allowed_grace_cycles'] ?? $loanDefaults['max_allowed_grace_cycles'],
+            'loan_late_payment_consecutive' => $loan['late_payment_consecutive_threshold'] ?? $loanDefaults['late_payment_consecutive_threshold'],
+            'loan_late_payment_rolling' => $loan['late_payment_rolling_threshold'] ?? $loanDefaults['late_payment_rolling_threshold'],
+            'loan_late_payment_lookback_months' => $loan['late_payment_lookback_months'] ?? $loanDefaults['late_payment_lookback_months'],
             ...LoanQueueProjectionSettings::allForForm(),
             ...ContributionPolicySettings::allForForm(),
             ...StatementSettings::allForForm(),
@@ -250,19 +256,19 @@ class Settings extends Page implements HasForms
             'sms_templates' => $smsTemplates,
             'fund_name_en' => filled($public['fund_name_en'] ?? null)
                 ? $public['fund_name_en']
-                : ($general['fund_name'] ?? 'Family Fund'),
-            'fund_name_ar' => $public['fund_name_ar'] ?? 'صندوق العائلة',
-            'membership_no_limit' => filter_var($public['membership_no_limit'] ?? true, FILTER_VALIDATE_BOOLEAN),
-            'membership_max_members' => $public['membership_max_members'] ?? '',
-            'fee_new' => $public['fee_new'] ?? '0',
-            'fee_resume' => $public['fee_resume'] ?? '0',
-            'fee_renew' => $public['fee_renew'] ?? '0',
+                : ($general['fund_name'] ?? $publicDefaults['fund_name_en']),
+            'fund_name_ar' => $public['fund_name_ar'] ?? $publicDefaults['fund_name_ar'],
+            'membership_no_limit' => filter_var($public['membership_no_limit'] ?? $publicDefaults['membership_no_limit'], FILTER_VALIDATE_BOOLEAN),
+            'membership_max_members' => $public['membership_max_members'] ?? $publicDefaults['membership_max_members'],
+            'fee_new' => $public['fee_new'] ?? $publicDefaults['fee_new'],
+            'fee_resume' => $public['fee_resume'] ?? $publicDefaults['fee_resume'],
+            'fee_renew' => $public['fee_renew'] ?? $publicDefaults['fee_renew'],
             'rules_and_conditions_url' => $public['rules_and_conditions_url'] ?? '',
             'membership_application_document_url' => $public['membership_application_document_url'] ?? '',
-            'fee_transfer_bank_name' => $public['fee_transfer_bank_name'] ?? '',
-            'fee_transfer_iban' => $public['fee_transfer_iban'] ?? '',
-            'contact_email' => $public['contact_email'] ?? '',
-            'contact_phone' => $public['contact_phone'] ?? '',
+            'fee_transfer_bank_name' => $public['fee_transfer_bank_name'] ?? $publicDefaults['fee_transfer_bank_name'],
+            'fee_transfer_iban' => $public['fee_transfer_iban'] ?? $publicDefaults['fee_transfer_iban'],
+            'contact_email' => $public['contact_email'] ?? $publicDefaults['contact_email'],
+            'contact_phone' => $public['contact_phone'] ?? $publicDefaults['contact_phone'],
             'fund_logo' => filled($public['fund_logo'] ?? '') ? [$public['fund_logo']] : [],
             ...ArabicDisplaySettings::allForForm(),
         ];
@@ -588,7 +594,47 @@ class Settings extends Page implements HasForms
                             ->minValue(1)
                             ->maxValue(28)
                             ->required()
-                            ->helperText(__('Day of month when the contribution cycle starts (1-28). Default: 6th.')),
+                            ->helperText(__('Day of month when the contribution cycle starts (1–28). Closing the previous cycle and opening the next run automatically on this day (00:30 then 00:35).')),
+                        TextInput::make('automation_month_boundary_day')
+                            ->label(__('Month-boundary automation day'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(28)
+                            ->required()
+                            ->helperText(__('Day of month for monthly reconciliation snapshot and statement generation at 00:30. Defaults to the cycle start day.')),
+                    ]),
+                Section::make(__('Automation schedule'))
+                    ->description(__('Due notifications fire on selected days after the cycle opens. Apply jobs run once or twice daily while the cycle is open; late fees and loan delinquency follow each apply automatically.'))
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('automation_contribution_due_notify_days')
+                            ->label(__('Contribution due notify days'))
+                            ->required()
+                            ->helperText(__('Days after cycle open (0 = open day), comma-separated. Example: 0,7,14,21')),
+                        TextInput::make('automation_contribution_due_notify_time')
+                            ->label(__('Contribution due notify time'))
+                            ->required()
+                            ->placeholder('09:00')
+                            ->helperText(__('24-hour clock time (HH:MM).')),
+                        TextInput::make('automation_loan_due_notify_days')
+                            ->label(__('Loan due notify days'))
+                            ->required()
+                            ->helperText(__('Days after cycle open (0 = open day), comma-separated.')),
+                        TextInput::make('automation_loan_due_notify_time')
+                            ->label(__('Loan due notify time'))
+                            ->required()
+                            ->placeholder('09:00')
+                            ->helperText(__('24-hour clock time (HH:MM).')),
+                        TextInput::make('automation_contribution_apply_times')
+                            ->label(__('Apply contributions times'))
+                            ->required()
+                            ->placeholder('06:00')
+                            ->helperText(__('One or two HH:MM times per day while the cycle is open (e.g. 06:00 or 06:00,18:00). Late fees run after each apply.')),
+                        TextInput::make('automation_loan_apply_times')
+                            ->label(__('Apply loan repayments times'))
+                            ->required()
+                            ->placeholder('06:00')
+                            ->helperText(__('One or two HH:MM times per day while the cycle is open. Delinquency check runs after each apply.')),
                     ]),
                 Section::make(__('Delinquency policy'))
                     ->description(__('Daily arrears check flags active members who breach consecutive or rolling miss thresholds. Status is not changed.'))
@@ -1334,8 +1380,9 @@ class Settings extends Page implements HasForms
     {
         $state = array_merge($this->defaultSettingsFormState(), $this->form->getState());
 
-        $allowMemberTopup = (bool) ($state['loan_allow_funding_strategy_member_topup'] ?? true);
-        $allowSplit = (bool) ($state['loan_allow_funding_strategy_split'] ?? true);
+        $loanDefaults = LoanSettings::defaults();
+        $allowMemberTopup = (bool) ($state['loan_allow_funding_strategy_member_topup'] ?? $loanDefaults['allow_funding_strategy_member_topup']);
+        $allowSplit = (bool) ($state['loan_allow_funding_strategy_split'] ?? $loanDefaults['allow_funding_strategy_split_percentage']);
 
         if (! $allowMemberTopup && ! $allowSplit) {
             Notification::make()
@@ -1372,6 +1419,7 @@ class Settings extends Page implements HasForms
             'include_year' => (bool) ($state['member_number_include_year'] ?? $memberNumber['include_year']),
         ]);
         Setting::set('contribution', 'cycle_start_day', $state['cycle_start_day']);
+        AutomationScheduleSettings::saveFromForm($state);
 
         LoanQueueProjectionSettings::saveFromForm($state);
 
@@ -1382,18 +1430,18 @@ class Settings extends Page implements HasForms
             'default_interest_rate' => (float) $state['loan_default_interest_rate'],
             'default_term_months' => (int) $state['loan_default_term_months'],
             'max_loan_amount' => (float) ($state['loan_max_loan_amount'] ?? 0),
-            'settlement_threshold_pct' => ((float) ($state['loan_settlement_threshold_pct'] ?? 16)) / 100,
-            'default_grace_cycles' => (int) ($state['loan_default_grace_cycles'] ?? 2),
-            'max_allowed_grace_cycles' => max(0, min(12, (int) ($state['loan_max_allowed_grace_cycles'] ?? 2))),
-            'require_guarantor_above_fund_balance' => (bool) ($state['loan_require_guarantor_above_fund'] ?? true),
-            'member_funding_split_pct' => max(0, min(100, (float) ($state['loan_member_funding_split_pct'] ?? 50))),
+            'settlement_threshold_pct' => ((float) ($state['loan_settlement_threshold_pct'] ?? ($loanDefaults['settlement_threshold_pct'] * 100))) / 100,
+            'default_grace_cycles' => (int) ($state['loan_default_grace_cycles'] ?? $loanDefaults['default_grace_cycles']),
+            'max_allowed_grace_cycles' => max(0, min(12, (int) ($state['loan_max_allowed_grace_cycles'] ?? $loanDefaults['max_allowed_grace_cycles']))),
+            'require_guarantor_above_fund_balance' => (bool) ($state['loan_require_guarantor_above_fund'] ?? $loanDefaults['require_guarantor_above_fund_balance']),
+            'member_funding_split_pct' => max(0, min(100, (float) ($state['loan_member_funding_split_pct'] ?? $loanDefaults['member_funding_split_pct']))),
             'allow_funding_strategy_member_topup' => $allowMemberTopup,
             'allow_funding_strategy_split_percentage' => $allowSplit,
-            'allow_excess_fund_cash_out' => (bool) ($state['loan_allow_excess_fund_cash_out'] ?? true),
-            'auto_allocate_loan_repayment' => (bool) ($state['loan_auto_allocate_repayment'] ?? false),
-            'late_payment_consecutive_threshold' => max(1, min(36, (int) ($state['loan_late_payment_consecutive'] ?? 3))),
-            'late_payment_rolling_threshold' => max(1, min(240, (int) ($state['loan_late_payment_rolling'] ?? 15))),
-            'late_payment_lookback_months' => max(1, min(240, (int) ($state['loan_late_payment_lookback_months'] ?? 60))),
+            'allow_excess_fund_cash_out' => (bool) ($state['loan_allow_excess_fund_cash_out'] ?? $loanDefaults['allow_excess_fund_cash_out']),
+            'auto_allocate_loan_repayment' => (bool) ($state['loan_auto_allocate_repayment'] ?? $loanDefaults['auto_allocate_loan_repayment']),
+            'late_payment_consecutive_threshold' => max(1, min(36, (int) ($state['loan_late_payment_consecutive'] ?? $loanDefaults['late_payment_consecutive_threshold']))),
+            'late_payment_rolling_threshold' => max(1, min(240, (int) ($state['loan_late_payment_rolling'] ?? $loanDefaults['late_payment_rolling_threshold']))),
+            'late_payment_lookback_months' => max(1, min(240, (int) ($state['loan_late_payment_lookback_months'] ?? $loanDefaults['late_payment_lookback_months']))),
         ]);
 
         ContributionPolicySettings::saveFromForm($state);

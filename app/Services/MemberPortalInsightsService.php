@@ -515,17 +515,19 @@ final class MemberPortalInsightsService
         $pills = [];
 
         if ($arrears['is_delinquent'] ?? false) {
+            $cta = $this->arrearsCallToAction($arrears);
             $pills[] = [
                 'label' => __('Account delinquent'),
                 'icon' => 'heroicon-o-exclamation-triangle',
-                'url' => MyLoanResource::getUrl('index'),
+                'url' => $cta['url'],
                 'tone' => 'danger',
             ];
         } elseif ($arrears['has_arrears'] ?? false) {
+            $cta = $this->arrearsCallToAction($arrears);
             $pills[] = [
                 'label' => __('Arrears on record'),
                 'icon' => 'heroicon-o-exclamation-circle',
-                'url' => MyLoanResource::getUrl('index'),
+                'url' => $cta['url'],
                 'tone' => 'warning',
             ];
         }
@@ -731,7 +733,63 @@ final class MemberPortalInsightsService
     }
 
     /**
-     * @param  array{has_arrears: bool, is_delinquent: bool}  $arrears
+     * @param  array{
+     *     has_arrears: bool,
+     *     is_delinquent: bool,
+     *     overdue_installment_count?: int,
+     *     unpaid_contribution_periods?: list<string>
+     * }  $arrears
+     * @return array{label: string, url: string, subtitle: string}
+     */
+    private function arrearsCallToAction(array $arrears): array
+    {
+        $unpaidPeriods = array_values(array_filter(
+            $arrears['unpaid_contribution_periods'] ?? [],
+            static fn (mixed $period): bool => filled($period),
+        ));
+        $overdueInstallments = (int) ($arrears['overdue_installment_count'] ?? 0);
+        $hasContributionArrears = $unpaidPeriods !== [];
+        $hasLoanArrears = $overdueInstallments > 0;
+
+        if ($hasContributionArrears && ! $hasLoanArrears) {
+            return [
+                'label' => __('View contributions'),
+                'url' => MyContributionResource::getUrl('index'),
+                'subtitle' => __('Unpaid contributions: :periods', [
+                    'periods' => implode(', ', $unpaidPeriods),
+                ]),
+            ];
+        }
+
+        if ($hasLoanArrears && ! $hasContributionArrears) {
+            return [
+                'label' => __('View loans'),
+                'url' => MyLoanResource::getUrl('index'),
+                'subtitle' => trans_choice(
+                    ':count overdue loan installment|:count overdue loan installments',
+                    $overdueInstallments,
+                    ['count' => $overdueInstallments],
+                ),
+            ];
+        }
+
+        if ($hasContributionArrears) {
+            return [
+                'label' => __('View contributions'),
+                'url' => MyContributionResource::getUrl('index'),
+                'subtitle' => __('Please review contribution and loan arrears or contact the fund office.'),
+            ];
+        }
+
+        return [
+            'label' => __('View loans'),
+            'url' => MyLoanResource::getUrl('index'),
+            'subtitle' => __('Please review arrears or contact the fund office.'),
+        ];
+    }
+
+    /**
+     * @param  array{has_arrears: bool, is_delinquent: bool, overdue_installment_count?: int, unpaid_contribution_periods?: list<string>}  $arrears
      * @param  array{eligible: bool, reasons?: list<string>}  $eligibility
      * @return array{tone: string, title: string, subtitle: string, cta_label: ?string, cta_url: ?string}
      */
@@ -746,12 +804,14 @@ final class MemberPortalInsightsService
         bool $hasPendingOverrideRequest = false,
     ): array {
         if ($arrears['is_delinquent'] || $arrears['has_arrears']) {
+            $cta = $this->arrearsCallToAction($arrears);
+
             return [
                 'tone' => 'danger',
                 'title' => __('Action required on your account'),
-                'subtitle' => __('Please review arrears or contact the fund office.'),
-                'cta_label' => __('My loans'),
-                'cta_url' => MyLoanResource::getUrl('index'),
+                'subtitle' => $cta['subtitle'],
+                'cta_label' => $cta['label'],
+                'cta_url' => $cta['url'],
             ];
         }
 
@@ -1289,13 +1349,15 @@ final class MemberPortalInsightsService
         int $curYear,
     ): ?array {
         if ($arrears['is_delinquent'] || $arrears['has_arrears']) {
+            $cta = $this->arrearsCallToAction($arrears);
+
             return [
                 'tone' => 'red',
                 'title' => __('Action required on your account'),
-                'body' => __('Please review arrears or contact the fund office.'),
+                'body' => $cta['subtitle'],
                 'action' => [
-                    'label' => __('My loans'),
-                    'url' => MyLoanResource::getUrl('index'),
+                    'label' => $cta['label'],
+                    'url' => $cta['url'],
                 ],
             ];
         }
@@ -1418,17 +1480,14 @@ final class MemberPortalInsightsService
             ];
         }
 
-        if ($arrears['is_delinquent'] ?? false) {
+        if (($arrears['is_delinquent'] ?? false) || ($arrears['has_arrears'] ?? false)) {
+            $cta = $this->arrearsCallToAction($arrears);
             $actions[] = [
-                'label' => __('Account delinquent'),
-                'url' => MyLoanResource::getUrl('index'),
-                'tone' => 'red',
-            ];
-        } elseif ($arrears['has_arrears'] ?? false) {
-            $actions[] = [
-                'label' => __('Arrears on record'),
-                'url' => MyLoanResource::getUrl('index'),
-                'tone' => 'amber',
+                'label' => ($arrears['is_delinquent'] ?? false)
+                    ? __('Account delinquent')
+                    : __('Arrears on record'),
+                'url' => $cta['url'],
+                'tone' => ($arrears['is_delinquent'] ?? false) ? 'red' : 'amber',
             ];
         }
 

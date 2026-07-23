@@ -283,6 +283,10 @@ test('member portal insights include lifetime loan count value and outstanding t
 });
 
 test('member portal emi due notice embeds amount with symbol before digits', function () {
+    $this->member->update([
+        'contribution_arrears_cutoff_date' => now()->toDateString(),
+    ]);
+
     $loan = Loan::query()->create([
         'member_id' => $this->member->id,
         'amount' => 20_000,

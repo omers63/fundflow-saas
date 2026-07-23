@@ -73,7 +73,15 @@ final class NotificationSettings
                 continue;
             }
 
-            Setting::set(self::GROUP, $key, $values[$key]);
+            $value = $values[$key];
+
+            if (is_bool($value)) {
+                Setting::set(self::GROUP, $key, $value ? '1' : '0');
+
+                continue;
+            }
+
+            Setting::set(self::GROUP, $key, $value === null ? null : (string) $value);
         }
     }
 

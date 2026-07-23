@@ -1,19 +1,26 @@
 @php
-        $g = $greeting;
-        $currency = $currency ?? null;
-    $tone = $g['card_tone'] ?? ($g['highlight_tone'] ?? 'emerald');
-    $urgency = isset($g['card_urgency']) ? max(0, min(1, (float) $g['card_urgency'])) : null;
+$g = $greeting;
+$currency = $currency ?? null;
+$tone = $g['card_tone'] ?? ($g['highlight_tone'] ?? 'emerald');
+$urgency = isset($g['card_urgency']) ? max(0, min(1, (float) $g['card_urgency'])) : null;
+$ctaTone = match ($g['highlight_tone'] ?? null) {
+    'danger', 'rose', 'red' => 'danger',
+    'amber', 'warning', 'orange' => 'amber',
+    'sky', 'blue', 'info', 'violet' => 'sky',
+    'success', 'emerald', 'green' => 'success',
+    default => 'default',
+};
 @endphp
 
 <div
     @class([
-        'ff-member-greeting ff-member-dashboard-hero',
-        'ff-member-greeting--progressive' => $urgency !== null,
-        'ff-member-greeting--tone-amber' => $tone === 'amber',
-        'ff-member-greeting--tone-orange' => $tone === 'orange',
-        'ff-member-greeting--tone-rose' => in_array($tone, ['rose', 'danger'], true),
-        'ff-member-greeting--tone-emerald' => in_array($tone, ['success', 'emerald'], true),
-    ])
+    'ff-member-greeting ff-member-dashboard-hero',
+    'ff-member-greeting--progressive' => $urgency !== null,
+    'ff-member-greeting--tone-amber' => $tone === 'amber',
+    'ff-member-greeting--tone-orange' => $tone === 'orange',
+    'ff-member-greeting--tone-rose' => in_array($tone, ['rose', 'danger'], true),
+    'ff-member-greeting--tone-emerald' => in_array($tone, ['success', 'emerald'], true),
+])
     @if ($urgency !== null)
         style="--ff-greeting-urgency: {{ number_format($urgency, 4, '.', '') }};"
     @endif
@@ -52,75 +59,81 @@
                     @endif
                 </div>
                 @if (filled($g['highlight_cta_url'] ?? null))
-                    <a href="{{ $g['highlight_cta_url'] }}" wire:navigate class="ff-member-greeting__cta">
+                    {{-- Full page navigation: wire:navigate from the greeting CTA can leave an extra history
+                    entry and break sidebar chrome on browser back (especially into My Loans). --}}
+                    <a href="{{ $g['highlight_cta_url'] }}" @class([
+                        'ff-member-greeting__cta',
+                        'ff-member-greeting__cta--' . $ctaTone => $ctaTone !== 'default',
+                    ])>
                         {{ $g['highlight_cta_label'] }} →
                     </a>
                 @endif
-            </div>
-        </div>
-
-        <div class="ff-member-greeting__balances">
-            @foreach ($g['balances'] as $balance)
-                <a href="{{ $balance['url'] }}" wire:navigate @class([
-                    'ff-member-greeting__balance',
-                    'ff-member-greeting__balance--negative' => $balance['negative'] ?? false,
-                ])
-                    title="{{ $balance['full'] }}">
-                    <div class="ff-member-greeting__balance-head">
-                        <x-dynamic-component :component="$balance['icon']" class="ff-member-greeting__balance-icon" />
-                        <span class="ff-member-greeting__balance-label">{{ $balance['label'] }}</span>
                     </div>
-                    <p class="ff-member-greeting__balance-amount">
-                        @if (isset($balance['amount_value']))
-                            <x-member::amount :value="$balance['amount_value']" :currency="$currency" compact />
-                        @else
-                            {{ $balance['amount'] }}
-                        @endif
-                    </p>
-                </a>
-            @endforeach
-        </div>
-    </div>
-
-    @if (count($g['spotlights'] ?? []) > 0)
-        <ul class="ff-member-greeting__spotlights">
-            @foreach ($g['spotlights'] as $spotlight)
-                <li>
-                    <a href="{{ $spotlight['url'] }}" wire:navigate class="ff-member-greeting__spotlight">
-                        <x-dynamic-component :component="$spotlight['icon']" class="ff-member-greeting__spotlight-icon" />
-                        <span class="ff-member-greeting__spotlight-copy">
-                            <span class="ff-member-greeting__spotlight-label">{{ $spotlight['label'] }}</span>
-                            <span class="ff-member-greeting__spotlight-value">{{ $spotlight['value'] }}</span>
-                            @if (filled($spotlight['sub'] ?? null))
-                                <span class="ff-member-greeting__spotlight-sub">{{ $spotlight['sub'] }}</span>
-                            @endif
-                        </span>
-                    </a>
-                </li>
-            @endforeach
-        </ul>
-    @endif
-
-    @if (count($g['pills'] ?? []) > 0)
-        <ul class="ff-member-greeting__pills">
-            @foreach ($g['pills'] as $pill)
-                <li>
-                    @if (filled($pill['url'] ?? null))
-                        <a href="{{ $pill['url'] }}" wire:navigate @class([
-                            'ff-member-greeting__pill',
-                            'ff-member-greeting__pill--' . ($pill['tone'] ?? 'default') => filled($pill['tone'] ?? null),
-                        ])>
-                            <x-dynamic-component :component="$pill['icon']" class="ff-member-greeting__pill-icon" />
-                            {{ $pill['label'] }}
-                        </a>
-                    @else
-                        <span class="ff-member-greeting__pill ff-member-greeting__pill--static">
-                            <x-dynamic-component :component="$pill['icon']" class="ff-member-greeting__pill-icon" />
-                            {{ $pill['label'] }}
-                        </span>
+                    </div>
+                    
+                    <div class="ff-member-greeting__balances">
+                        @foreach ($g['balances'] as $balance)
+                            {{-- Full page navigation: wire:navigate stacks duplicate history entries so Back
+                            from cash/fund account can bounce through the same page or unrelated routes. --}}
+                            <a href="{{ $balance['url'] }}" @class([
+                                'ff-member-greeting__balance',
+                                'ff-member-greeting__balance--negative' => $balance['negative'] ?? false,
+                            ]) title="{{ $balance['full'] }}">
+                                <div class="ff-member-greeting__balance-head">
+                                    <x-dynamic-component :component="$balance['icon']" class="ff-member-greeting__balance-icon" />
+                                    <span class="ff-member-greeting__balance-label">{{ $balance['label'] }}</span>
+                                </div>
+                                <p class="ff-member-greeting__balance-amount">
+                                    @if (isset($balance['amount_value']))
+                                        <x-member::amount :value="$balance['amount_value']" :currency="$currency" compact />
+                                    @else
+                                        {{ $balance['amount'] }}
+                                    @endif
+                                </p>
+                            </a>
+                        @endforeach
+                    </div>
+                    </div>
+                    
+                    @if (count($g['spotlights'] ?? []) > 0)
+                        <ul class="ff-member-greeting__spotlights">
+                            @foreach ($g['spotlights'] as $spotlight)
+                                <li>
+                                    <a href="{{ $spotlight['url'] }}" class="ff-member-greeting__spotlight">
+                                        <x-dynamic-component :component="$spotlight['icon']" class="ff-member-greeting__spotlight-icon" />
+                                        <span class="ff-member-greeting__spotlight-copy">
+                                            <span class="ff-member-greeting__spotlight-label">{{ $spotlight['label'] }}</span>
+                                            <span class="ff-member-greeting__spotlight-value">{{ $spotlight['value'] }}</span>
+                                            @if (filled($spotlight['sub'] ?? null))
+                                                <span class="ff-member-greeting__spotlight-sub">{{ $spotlight['sub'] }}</span>
+                                            @endif
+                                        </span>
+                                    </a>
+                                </li>
+                            @endforeach
+                        </ul>
                     @endif
-                </li>
-            @endforeach
-        </ul>
-    @endif
+                    
+                    @if (count($g['pills'] ?? []) > 0)
+                                    <ul class="ff-member-greeting__pills">
+                                        @foreach ($g['pills'] as $pill)
+                                                    <li>
+                                                        @if (filled($pill['url'] ?? null))
+                                                                            <a href="{{ $pill['url'] }}" @class([
+                                                                'ff-member-greeting__pill',
+                                                                'ff-member-greeting__pill--' . ($pill['tone'] ?? 'default') => filled($pill['tone'] ?? null),
+                                                            ])>
+                                                                            <x-dynamic-component :component="$pill['icon']" class="ff-member-greeting__pill-icon" />
+                                                                            {{ $pill['label'] }}
+                                                                        </a>
+                                                        @else
+                                                    <span class="ff-member-greeting__pill ff-member-greeting__pill--static">
+                                                        <x-dynamic-component :component="$pill['icon']" class="ff-member-greeting__pill-icon" />
+                                                        {{ $pill['label'] }}
+                                                    </span>
+                                                @endif
+                                            </li>
+                                        @endforeach
+                        </ul>
+                    @endif
 </div>

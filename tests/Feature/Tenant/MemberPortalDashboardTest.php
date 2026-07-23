@@ -13,6 +13,7 @@ use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
+use App\Services\Loans\LoanDelinquencyService;
 use App\Services\MemberPortalInsightsService;
 use App\Support\BusinessDaySettings;
 use Carbon\Carbon;
@@ -90,6 +91,201 @@ test('member portal dashboard does not duplicate contribution not posted in pend
 
     expect(collect($snapshot['pending_actions'])->pluck('label')->all())
         ->not->toContain($contributionPendingLabel);
+});
+
+test('member dashboard action-required CTA links to contributions for contribution arrears', function () {
+    Filament::setCurrentPanel('member');
+    app()->setLocale('en');
+
+    $cycles = app(ContributionCycleService::class);
+    Carbon::setTestNow(Carbon::parse('2025-12-15 10:00:00'));
+    BusinessDaySettings::saveFromForm('2025-12-15');
+
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $prior = Carbon::create($openYear, $openMonth, 1)->subMonthNoOverflow();
+
+    Contribution::query()->where('member_id', $this->member->id)->delete();
+    $this->member->update([
+        'joined_at' => $prior->copy()->subYear(),
+        'contribution_arrears_cutoff_date' => $prior->copy()->subYear()->toDateString(),
+    ]);
+
+    auth('tenant')->login($this->memberUser);
+    $this->actingAs($this->memberUser, 'tenant');
+
+    $snapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
+    $contributionsPath = '/member/my-contributions';
+    $loansPath = '/member/my-loans';
+
+    expect($snapshot['greeting']['highlight_title'])->toBe(__('Action required on your account'))
+        ->and($snapshot['greeting']['highlight_cta_label'])->toBe(__('View contributions'))
+        ->and($snapshot['greeting']['highlight_cta_url'])->toContain($contributionsPath)
+        ->and($snapshot['greeting']['highlight_cta_url'])->not->toContain($loansPath)
+        ->and($snapshot['greeting']['highlight_tone'])->toBe('danger');
+
+    $arrearsPill = collect($snapshot['greeting']['pills'] ?? [])
+        ->first(fn (array $pill): bool => in_array($pill['label'], [__('Arrears on record'), __('Account delinquent')], true));
+
+    expect($arrearsPill)->not->toBeNull()
+        ->and($arrearsPill['url'])->toContain($contributionsPath)
+        ->and($arrearsPill['url'])->not->toContain($loansPath);
+    $html = $this->get('http://'.$this->domain.'/member')->assertSuccessful()->getContent();
+
+    expect($html)
+        ->toContain(__('Action required on your account'))
+        ->toContain(__('View contributions'))
+        ->toContain($contributionsPath)
+        ->toContain('ff-member-greeting__cta--danger')
+        ->not->toContain('ff-member-notice');
+
+    preg_match(
+        '/<a[^>]*ff-member-greeting__cta[^>]*>.*?<\/a>/s',
+        $html,
+        $matches,
+    );
+
+    expect($matches[0] ?? '')
+        ->toContain($contributionsPath)
+        ->toContain('ff-member-greeting__cta--danger')
+        ->not->toContain('wire:navigate')
+        ->not->toContain($loansPath);
+
+    Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('member dashboard action-required CTA links to loans for overdue installments only', function () {
+    Filament::setCurrentPanel('member');
+    app()->setLocale('en');
+
+    $cycles = app(ContributionCycleService::class);
+    Carbon::setTestNow(Carbon::parse('2025-12-15 10:00:00'));
+    BusinessDaySettings::saveFromForm('2025-12-15');
+
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $openStart = Carbon::create($openYear, $openMonth, 1)->startOfMonth();
+
+    Contribution::query()->where('member_id', $this->member->id)->delete();
+    Contribution::create([
+        'member_id' => $this->member->id,
+        'period' => Contribution::periodDate($openMonth, $openYear),
+        'amount' => 1000,
+        'status' => 'posted',
+        'posted_at' => now(),
+    ]);
+
+    $this->member->update([
+        'joined_at' => $openStart->copy()->subYear(),
+        'contribution_arrears_cutoff_date' => $openStart->toDateString(),
+    ]);
+
+    $loan = Loan::query()->create([
+        'member_id' => $this->member->id,
+        'amount' => 5000,
+        'amount_requested' => 5000,
+        'amount_approved' => 5000,
+        'amount_disbursed' => 5000,
+        'interest_rate' => 0,
+        'term_months' => 10,
+        'monthly_repayment' => 500,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(2),
+        'approved_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    LoanInstallment::query()->create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 500,
+        'due_date' => now()->subDays(20),
+        'status' => 'overdue',
+    ]);
+
+    auth('tenant')->login($this->memberUser);
+
+    $arrears = app(LoanDelinquencyService::class)->memberArrearsSummary($this->member->fresh());
+    expect($arrears['overdue_installment_count'])->toBe(1)
+        ->and($arrears['unpaid_contribution_periods'])->toBe([]);
+
+    $snapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
+    $loansPath = '/member/my-loans';
+
+    expect($snapshot['greeting']['highlight_cta_label'])->toBe(__('View loans'))
+        ->and($snapshot['greeting']['highlight_cta_url'])->toContain($loansPath)
+        ->and($snapshot['greeting']['highlight_tone'])->toBe('danger');
+
+    $arrearsPill = collect($snapshot['greeting']['pills'] ?? [])
+        ->first(fn (array $pill): bool => in_array($pill['label'], [__('Arrears on record'), __('Account delinquent')], true));
+
+    expect($arrearsPill)->not->toBeNull()
+        ->and($arrearsPill['url'])->toContain($loansPath);
+
+    Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('member dashboard deposit link uses full page navigation to cash account deposit section', function () {
+    Filament::setCurrentPanel('member');
+    app()->setLocale('en');
+    $this->actingAs($this->memberUser, 'tenant');
+
+    $snapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
+    $deposit = collect($snapshot['cash_card']['actions'] ?? [])->firstWhere('label', __('Deposit'));
+
+    expect($deposit)->not->toBeNull()
+        ->and($deposit['url'])->toContain('/member/cash-account')
+        ->and($deposit['url'])->toContain('#deposit');
+
+    $html = $this->get('http://'.$this->domain.'/member')->assertSuccessful()->getContent();
+
+    preg_match(
+        '/<a[^>]*href="[^"]*#deposit"[^>]*>\s*Deposit\s*<\/a>/s',
+        $html,
+        $matches,
+    );
+
+    expect($matches[0] ?? '')
+        ->toContain('#deposit')
+        ->not->toContain('wire:navigate');
+});
+
+test('member dashboard outbound links use full page navigation without wire:navigate', function () {
+    Filament::setCurrentPanel('member');
+    app()->setLocale('en');
+    $this->actingAs($this->memberUser, 'tenant');
+
+    $html = $this->get('http://'.$this->domain.'/member')->assertSuccessful()->getContent();
+
+    expect($html)
+        ->toContain('ff-member-dashboard-overview')
+        ->toContain('/member/fund-account')
+        ->toContain('/member/cash-account');
+
+    preg_match_all(
+        '/<a\b[^>]*>/i',
+        $html,
+        $anchors,
+    );
+
+    $dashboardOutbound = collect($anchors[0] ?? [])
+        ->filter(function (string $anchor): bool {
+            return str_contains($anchor, '/member/fund-account')
+                || str_contains($anchor, '/member/cash-account')
+                || str_contains($anchor, 'ff-member-greeting__balance')
+                || str_contains($anchor, 'ff-member-greeting__spotlight')
+                || str_contains($anchor, 'ff-member-greeting__pill')
+                || str_contains($anchor, 'ff-member-greeting__cta')
+                || str_contains($anchor, 'ff-member-quick-action');
+        })
+        ->values();
+
+    expect($dashboardOutbound)->not->toBeEmpty();
+
+    foreach ($dashboardOutbound as $anchor) {
+        expect($anchor)->not->toContain('wire:navigate');
+    }
 });
 
 test('member dashboard household settings link uses full page navigation', function () {
@@ -179,9 +375,13 @@ test('member dashboard shows active loan panel when member has active loan', fun
         ->assertDontSee(__('Loan eligibility'), false);
 });
 
-test('member dashboard shows loan repayment notice instead of contribution not posted during active loan', function () {
+test('member dashboard shows loan repayment status in greeting instead of contribution not posted during active loan', function () {
     Carbon::setTestNow(Carbon::parse('2026-06-18 10:00:00'));
     BusinessDaySettings::saveFromForm('2026-06-18');
+
+    $this->member->update([
+        'contribution_arrears_cutoff_date' => now()->toDateString(),
+    ]);
 
     $loan = Loan::query()->create([
         'member_id' => $this->member->id,
@@ -207,15 +407,13 @@ test('member dashboard shows loan repayment notice instead of contribution not p
         'status' => 'pending',
     ]);
 
-    $cycles = app(ContributionCycleService::class);
-    [$curMonth, $curYear] = $cycles->currentOpenPeriod();
-
     Filament::setCurrentPanel('member');
     app()->setLocale('en');
 
     $snapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
 
-    expect($snapshot['notice']['title'] ?? null)->toBe(__('Active loan in progress'))
+    expect($snapshot['greeting']['highlight_title'] ?? null)->toBe(__('Active loan in progress'))
+        ->and($snapshot['greeting']['highlight_tone'] ?? null)->toBe('sky')
         ->and($snapshot['cycle']['under_loan_repayment'] ?? false)->toBeTrue()
         ->and($snapshot['loan_panel'])->not->toBeNull();
 
@@ -224,7 +422,9 @@ test('member dashboard shows loan repayment notice instead of contribution not p
     $this->get('http://'.$this->domain.'/member')
         ->assertSuccessful()
         ->assertSee('ff-member-greeting', false)
+        ->assertSee('ff-member-greeting__cta--sky', false)
         ->assertSee(__('Active loan in progress'), false)
+        ->assertDontSee('ff-member-notice', false)
         ->assertDontSee('Contribution not posted', false);
 
     Carbon::setTestNow();
@@ -297,6 +497,7 @@ test('member greeting card stays green early in the cycle when contribution is u
     $cycleEnd = $cycles->deadline($month, $year);
 
     Carbon::setTestNow($cycleStart->copy()->addDay()->setTime(10, 0));
+    BusinessDaySettings::saveFromForm($cycleStart->copy()->addDay()->toDateString());
 
     Contribution::query()->where('member_id', $this->member->id)->delete();
     $this->member->update([
@@ -323,6 +524,7 @@ test('member greeting card stays green early in the cycle when contribution is u
     Carbon::setTestNow($cycleStart->copy()->addSeconds(
         (int) ($cycleStart->diffInSeconds($cycleEnd) * 0.55),
     )->setTime(10, 0));
+    BusinessDaySettings::saveFromForm(now()->toDateString());
 
     $midSnapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
 
@@ -332,6 +534,7 @@ test('member greeting card stays green early in the cycle when contribution is u
     Carbon::setTestNow($cycleStart->copy()->addSeconds(
         (int) ($cycleStart->diffInSeconds($cycleEnd) * 0.90),
     )->setTime(10, 0));
+    BusinessDaySettings::saveFromForm(now()->toDateString());
 
     $lateSnapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
 
@@ -339,6 +542,7 @@ test('member greeting card stays green early in the cycle when contribution is u
         ->and($lateSnapshot['greeting']['card_urgency'])->toBeGreaterThanOrEqual(0.85);
 
     Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
 });
 
 test('member greeting card uses green heatmap when current cycle is posted', function () {
@@ -468,5 +672,7 @@ test('member greeting card uses red heatmap when member has arrears', function (
 
     $this->get('http://'.$this->domain.'/member')
         ->assertSuccessful()
-        ->assertSee('ff-member-greeting--tone-rose', false);
+        ->assertSee('ff-member-greeting--tone-rose', false)
+        ->assertSee('ff-member-greeting__cta--danger', false)
+        ->assertDontSee('ff-member-notice', false);
 });

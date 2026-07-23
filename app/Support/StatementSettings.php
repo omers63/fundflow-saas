@@ -24,16 +24,16 @@ final class StatementSettings
     public static function defaults(): array
     {
         return [
-            'brand_name' => config('app.name'),
-            'tagline' => __('Member fund statement'),
+            'brand_name' => 'Samman Family Fund',
+            'tagline' => 'Member fund statement',
             'accent_color' => '#059669',
-            'footer_disclaimer' => __('Computer-generated statement. Confidential.'),
-            'signature_line' => __('Fund administration'),
-            'auto_email' => false,
+            'footer_disclaimer' => 'Computer-generated statement. Confidential.',
+            'signature_line' => 'Fund administration',
+            'auto_email' => true,
             'attach_pdf' => false,
             'include_transactions' => true,
             'include_loan_section' => true,
-            'include_compliance' => false,
+            'include_compliance' => true,
             'font_en' => self::FONT_DEJAVU_SANS,
             'font_ar' => self::FONT_DEJAVU_SANS,
         ];

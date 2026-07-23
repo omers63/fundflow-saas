@@ -8,6 +8,7 @@ use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Services\ReconciliationDigestService;
 use App\Services\ReconciliationReportService;
+use App\Support\AutomationScheduleSettings;
 use App\Support\BusinessDay;
 use Filament\Facades\Filament;
 use Illuminate\Console\Command;
@@ -21,13 +22,27 @@ class FundReconcileCommand extends Command
         {--daily : Calendar-day window (yesterday) plus full ledger checks}
         {--monthly : Previous calendar month window plus full ledger checks}
         {--no-store : Print summary only; do not write reconciliation_snapshots}
-        {--strict : Exit with failure when the report verdict does not pass (CI / manual gates)}';
+        {--strict : Exit with failure when the report verdict does not pass (CI / manual gates)}
+        {--force : Run monthly mode even when not on the configured month-boundary slot}';
 
     protected $description = 'Run financial reconciliation report and optionally store an audit snapshot';
 
     public function handle(ReconciliationReportService $service): int
     {
         @set_time_limit(0);
+
+        if (
+            $this->option('monthly')
+            && ! $this->option('force')
+            && ! AutomationScheduleSettings::isMonthBoundarySlot()
+        ) {
+            $this->skipScheduledRunRecording = true;
+            $this->info(__('Skipped: monthly reconciliation runs on day :day at 00:30.', [
+                'day' => AutomationScheduleSettings::monthBoundaryDay(),
+            ]));
+
+            return self::SUCCESS;
+        }
 
         $now = BusinessDay::now();
 

@@ -30,7 +30,7 @@ final class LoanQueueProjectionSettings
             'queued_demand_scope' => self::SCOPE_WITHIN_TIER,
             'pending_demand_scope' => self::SCOPE_PENDING_WITHIN_TIER,
             'include_open_period_contributions' => true,
-            'include_contribution_arrears' => false,
+            'include_contribution_arrears' => true,
             'emi_forecast_months' => 3,
             'use_forward_inflow' => true,
             'use_historical_inflow' => true,
@@ -84,7 +84,7 @@ final class LoanQueueProjectionSettings
             ? $pendingScope
             : self::SCOPE_PENDING_WITHIN_TIER);
         Setting::set(self::GROUP, 'include_open_period_contributions', ($state['lqp_include_open_contributions'] ?? true) ? '1' : '0');
-        Setting::set(self::GROUP, 'include_contribution_arrears', ($state['lqp_include_contribution_arrears'] ?? false) ? '1' : '0');
+        Setting::set(self::GROUP, 'include_contribution_arrears', ($state['lqp_include_contribution_arrears'] ?? true) ? '1' : '0');
         Setting::set(self::GROUP, 'emi_forecast_months', max(1, min(24, (int) ($state['lqp_emi_forecast_months'] ?? 3))));
         Setting::set(self::GROUP, 'use_forward_inflow', ($state['lqp_use_forward_inflow'] ?? true) ? '1' : '0');
         Setting::set(self::GROUP, 'use_historical_inflow', ($state['lqp_use_historical_inflow'] ?? true) ? '1' : '0');
@@ -109,12 +109,12 @@ final class LoanQueueProjectionSettings
 
     public static function includeOpenPeriodContributions(): bool
     {
-        return self::bool('include_open_period_contributions', true);
+        return self::bool('include_open_period_contributions', (bool) self::defaults()['include_open_period_contributions']);
     }
 
     public static function includeContributionArrears(): bool
     {
-        return self::bool('include_contribution_arrears', false);
+        return self::bool('include_contribution_arrears', (bool) self::defaults()['include_contribution_arrears']);
     }
 
     public static function emiForecastMonths(): int

@@ -14,11 +14,11 @@ beforeEach(function () {
     Setting::query()->where('group', LocalizationSettings::GROUP)->delete();
 });
 
-test('localization settings default to arabic for admins and members', function () {
-    expect(LocalizationSettings::adminLocale())->toBe('ar')
+test('localization settings default to english for admins and arabic for members', function () {
+    expect(LocalizationSettings::adminLocale())->toBe('en')
         ->and(LocalizationSettings::memberLocale())->toBe('ar')
         ->and(LocalizationSettings::allForForm())->toBe([
-            'localization_default_admin_locale' => 'ar',
+            'localization_default_admin_locale' => 'en',
             'localization_default_member_locale' => 'ar',
         ]);
 });

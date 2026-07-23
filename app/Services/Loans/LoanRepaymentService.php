@@ -93,23 +93,18 @@ class LoanRepaymentService
     /**
      * Apply loan repayments for all active loans for the given month/year period.
      *
+     * Defaults to draining oldest unpaid EMIs through the selected period (same as
+     * Run EMI collection cycle / Contribute oldest-first).
+     *
      * Returns: ['applied' => Collection, 'insufficient' => Collection, 'skipped' => Collection]
      */
-    public function applyRepayments(int $month, int $year): array
+    public function applyRepayments(int $month, int $year, bool $collectOldestArrearsFirst = true): array
     {
-        $results = [
-            'applied' => collect(),
-            'insufficient' => collect(),
-            'skipped' => collect(),
-        ];
-
-        Loan::active()->with(['member.user', 'installments'])->each(
-            function (Loan $loan) use ($month, $year, &$results) {
-                $this->applyOne($loan, $month, $year, $results);
-            }
+        return app(LoanEmiCollectionCatalogService::class)->applyInstallmentsForPeriod(
+            $month,
+            $year,
+            $collectOldestArrearsFirst,
         );
-
-        return $results;
     }
 
     /**

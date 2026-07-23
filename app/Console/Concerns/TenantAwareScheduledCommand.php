@@ -20,6 +20,12 @@ trait TenantAwareScheduledCommand
     use HasATenantsOption;
     use TenantAwareCommand;
 
+    /**
+     * When true, this tenant execution is a no-op (e.g. not cycle start day) and should
+     * not create a system_job_runs row.
+     */
+    protected bool $skipScheduledRunRecording = false;
+
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $definition = ScheduledJobRegistry::findForCommand($this);
@@ -30,10 +36,12 @@ trait TenantAwareScheduledCommand
             $started = microtime(true);
 
             $result = (int) $tenant->run(function () use ($definition, $started) {
+                $this->skipScheduledRunRecording = false;
                 $result = (int) $this->laravel->call([$this, 'handle']);
 
                 if (
                     $definition !== null
+                    && ! $this->skipScheduledRunRecording
                     && ! RecordSystemJobRunListener::recordingSuppressed()
                 ) {
                     $durationMs = (int) round((microtime(true) - $started) * 1000);

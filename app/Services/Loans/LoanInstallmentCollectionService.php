@@ -33,9 +33,13 @@ class LoanInstallmentCollectionService
         $this->collectOpenInstallments($member, $month, $year, throughOpenPeriod: true);
     }
 
-    public function onMemberCashIncreasedForPeriod(Member $member, int $month, int $year): void
-    {
-        $this->collectOpenInstallments($member, $month, $year);
+    public function onMemberCashIncreasedForPeriod(
+        Member $member,
+        int $month,
+        int $year,
+        bool $throughSelectedPeriod = false,
+    ): void {
+        $this->collectOpenInstallments($member, $month, $year, throughOpenPeriod: $throughSelectedPeriod);
     }
 
     protected function collectOpenInstallments(

@@ -32,7 +32,7 @@ final class MemberNumberSettings
     public static function defaults(): array
     {
         return [
-            'format' => self::FORMAT_FORMATTED,
+            'format' => self::FORMAT_SEQUENTIAL,
             'prefix' => 'MEM',
             'separator' => self::SEPARATOR_HYPHEN,
             'padding' => 4,

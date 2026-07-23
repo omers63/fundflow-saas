@@ -42,6 +42,7 @@ test('onboarding greeting is registered in the template catalog and job registry
 
 test('onboarding greeting email uses fund name and member name variables', function (): void {
     Notification::fake();
+    NotificationTemplateCatalog::restoreDefaults('member_onboarding_greeting');
 
     $user = User::create([
         'name' => 'Welcome Member',
@@ -63,7 +64,7 @@ test('onboarding greeting email uses fund name and member name variables', funct
     ]);
     app(AccountingService::class)->createMemberAccounts($member);
 
-    expect(app(MemberOnboardingGreetingService::class)->sendToMember($member))->toBeTrue();
+    expect(app(MemberOnboardingGreetingService::class)->sendToMember($member, 'TempPass123!'))->toBeTrue();
 
     Notification::assertSentTo($user, MemberOnboardingGreetingNotification::class, function (MemberOnboardingGreetingNotification $notification) use ($member, $user): bool {
         $mail = $notification->toMail($user);
@@ -80,6 +81,11 @@ test('onboarding greeting email uses fund name and member name variables', funct
             ->and($rendered)->toContain('Loan')
             ->and($rendered)->toContain('How money moves')
             ->and($rendered)->toContain('Deposits')
+            ->and($rendered)->toContain('Your login credentials')
+            ->and($rendered)->toContain('welcome-member@fund.test')
+            ->and($rendered)->toContain('TempPass123!')
+            ->and($rendered)->toContain('Change this password as soon as you sign in.')
+            ->and($rendered)->toContain('Change your password as soon as you sign in')
             ->and($rendered)->toContain('Install the app')
             ->and($rendered)->toContain('Android')
             ->and($rendered)->toContain('iPhone')
@@ -125,6 +131,9 @@ test('arabic onboarding greeting email is rendered right to left', function () {
             ->and($rendered)->toContain('حساباتك')
             ->and($rendered)->toContain('النقد')
             ->and($rendered)->toContain('كيف تتحرك الأموال')
+            ->and($rendered)->toContain('بيانات تسجيل الدخول')
+            ->and($rendered)->toContain('welcome-ar@fund.test')
+            ->and($rendered)->toContain('غيّر كلمة المرور هذه فور تسجيل الدخول.')
             ->and($rendered)->toContain('border-radius:16px');
 
         return true;
@@ -161,6 +170,7 @@ test('onboarding greeting command notifies active members', function (): void {
 
 test('admin-created members receive the onboarding greeting by default', function (): void {
     Notification::fake();
+    NotificationTemplateCatalog::restoreDefaults('member_onboarding_greeting');
 
     $member = app(HouseholdMemberService::class)->createFromAdmin([
         'name' => 'Admin Created Welcome',
@@ -168,9 +178,27 @@ test('admin-created members receive the onboarding greeting by default', functio
         'monthly_contribution_amount' => 500,
         'joined_at' => now(),
         'status' => 'active',
-    ], 'password');
+    ], 'WelcomePass9!');
 
-    Notification::assertSentTo($member->user, MemberOnboardingGreetingNotification::class);
+    Notification::assertSentTo($member->user, MemberOnboardingGreetingNotification::class, function (MemberOnboardingGreetingNotification $notification) use ($member): bool {
+        expect($notification->plainPassword)->toBe('WelcomePass9!');
+
+        $rendered = (string) $notification->toMail($member->user)->render();
+
+        expect($rendered)
+            ->toContain('admin-created-welcome@fund.test')
+            ->toContain('WelcomePass9!')
+            ->and(
+                str_contains($rendered, 'Your login credentials')
+                || str_contains($rendered, 'بيانات تسجيل الدخول')
+            )->toBeTrue()
+            ->and(
+                str_contains($rendered, 'Change this password as soon as you sign in.')
+                || str_contains($rendered, 'غيّر كلمة المرور هذه فور تسجيل الدخول.')
+            )->toBeTrue();
+
+        return true;
+    });
 });
 
 test('admin-created members can skip the onboarding greeting', function (): void {

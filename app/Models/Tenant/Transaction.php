@@ -132,6 +132,7 @@ class Transaction extends Model
             : __('Deposit #:id', ['id' => $reference->id]),
             $reference instanceof MembershipApplication => __('Membership application #:id', ['id' => $reference->id]),
             $reference instanceof Contribution => __('Contribution #:id', ['id' => $reference->id]),
+            $reference instanceof DependentCashAllocation => __('Dependent allocation #:id', ['id' => $reference->id]),
             $reference instanceof Loan => __('Loan #:id', ['id' => $reference->id]),
             $reference instanceof LoanRepayment => __('Loan repayment #:id', ['id' => $reference->id]),
             $reference instanceof InvestDisbursement => __('Investment #:id', ['id' => $reference->id]),
@@ -314,6 +315,7 @@ class Transaction extends Model
 
         return match ($this->reference_type) {
             Contribution::class => __('Contribution'),
+            DependentCashAllocation::class => __('Allocation'),
             FundPosting::class => __('Deposit'),
             LoanInstallment::class, LoanRepayment::class => __('EMI'),
             Loan::class => __('Loan'),

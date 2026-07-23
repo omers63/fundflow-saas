@@ -22,6 +22,11 @@ class ContributionsCloseWindowCommand extends Command
         if (! $this->ensureBatchPostingAllowed()) {
             return self::SUCCESS;
         }
+
+        if ($this->shouldSkipUntilCycleTransition($cycles)) {
+            return self::SUCCESS;
+        }
+
         [$month, $year] = $this->resolvePeriod($cycles);
         $flagged = $collection->closeCollectionWindow($month, $year);
 
@@ -42,9 +47,24 @@ class ContributionsCloseWindowCommand extends Command
             return [(int) $this->option('month'), (int) $this->option('year')];
         }
 
-        $open = $cycles->currentOpenPeriod();
-        $start = $cycles->cycleStartAt($open[0], $open[1])->copy()->subMonthNoOverflow();
+        return $cycles->periodClosedByTransition();
+    }
 
-        return [(int) $start->month, (int) $start->year];
+    protected function shouldSkipUntilCycleTransition(ContributionCycleService $cycles): bool
+    {
+        if ($this->option('month') && $this->option('year')) {
+            return false;
+        }
+
+        if ($cycles->isCycleTransitionDay()) {
+            return false;
+        }
+
+        $this->skipScheduledRunRecording = true;
+        $this->info(__('Skipped: today is not the contribution cycle start day (:day).', [
+            'day' => $cycles->cycleStartDay(),
+        ]));
+
+        return true;
     }
 }

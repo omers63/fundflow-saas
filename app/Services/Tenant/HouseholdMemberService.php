@@ -98,7 +98,7 @@ class HouseholdMemberService
         $member = $member->fresh() ?? $member;
 
         if ($sendOnboardingGreeting) {
-            app(MemberOnboardingGreetingService::class)->sendToMember($member);
+            app(MemberOnboardingGreetingService::class)->sendToMember($member, $password);
         }
 
         return $member;

@@ -25,8 +25,8 @@ class MemberOnboardingGreetingNotification extends Notification
 
     public function __construct(
         public readonly Member $member,
-    ) {
-    }
+        public readonly ?string $plainPassword = null,
+    ) {}
 
     /**
      * Always include email — this is the primary onboarding channel.
@@ -37,7 +37,7 @@ class MemberOnboardingGreetingNotification extends Notification
     {
         $channels = $this->deliversVia($notifiable);
 
-        if (!in_array('mail', $channels, true)) {
+        if (! in_array('mail', $channels, true)) {
             $channels[] = 'mail';
         }
 
@@ -112,11 +112,15 @@ class MemberOnboardingGreetingNotification extends Notification
      */
     protected function templateVariables(object $notifiable): array
     {
+        $loginEmail = $notifiable->email ?? $this->member->email ?? $this->member->household_email;
+
         return [
             'member_name' => $this->member->name,
             'fund_name' => PublicPageSettings::fundName(),
             'action_url' => $this->portalUrl(),
             'action_label' => __('Open member portal'),
+            'login_email' => filled($loginEmail) ? (string) $loginEmail : null,
+            'login_password' => filled($this->plainPassword) ? $this->plainPassword : null,
         ];
     }
 

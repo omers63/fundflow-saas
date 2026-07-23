@@ -146,11 +146,17 @@ class SystemJobRunnerService
         }
 
         if ($definition === null || ! $definition->hasOption('tenants')) {
-            return [];
+            $parameters = [];
+        } else {
+            $parameters = [
+                '--tenants' => [(string) tenant('id')],
+            ];
         }
 
-        return [
-            '--tenants' => [(string) tenant('id')],
-        ];
+        if ($definition !== null && $definition->hasOption('force')) {
+            $parameters['--force'] = true;
+        }
+
+        return $parameters;
     }
 }

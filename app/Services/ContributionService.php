@@ -225,10 +225,23 @@ class ContributionService
     /**
      * Apply (create + post) a cycle contribution for one member.
      *
+     * When {@see $collectOldestArrearsFirst} is true (Contribute / Run cycle modal default),
+     * available cash is applied to unpaid cycles oldest-first through the selected period
+     * (inclusive), collecting as many full cycles as the balance allows.
+     *
      * @param  array<string, mixed>  $results
      */
-    public function applyForPeriod(Member $member, int $month, int $year, array &$results = []): string
-    {
+    public function applyForPeriod(
+        Member $member,
+        int $month,
+        int $year,
+        array &$results = [],
+        bool $collectOldestArrearsFirst = false,
+    ): string {
+        if ($collectOldestArrearsFirst) {
+            return $this->applyUnpaidCyclesThroughPeriod($member, $month, $year, $results);
+        }
+
         if ($member->isExemptFromContributions($month, $year)) {
             $results['skipped'][] = $member;
 
@@ -294,6 +307,92 @@ class ContributionService
         }
 
         return 'skipped';
+    }
+
+    /**
+     * Collect unpaid contribution cycles oldest-first through the selected period (inclusive).
+     *
+     * @param  array<string, mixed>  $results
+     */
+    private function applyUnpaidCyclesThroughPeriod(
+        Member $member,
+        int $throughMonth,
+        int $throughYear,
+        array &$results,
+    ): string {
+        $periods = $this->collectionCycle->orderedUnpaidPeriodsThrough($member, $throughMonth, $throughYear);
+
+        if ($periods === []) {
+            $results['skipped'][] = $member;
+
+            return 'skipped';
+        }
+
+        $selectedOutcome = null;
+        $anyApplied = false;
+        $anyPartial = false;
+        $hitInsufficient = false;
+
+        foreach ($periods as [$month, $year]) {
+            $member = $member->fresh() ?? $member;
+            $member->unsetRelation('accounts');
+
+            if ($member->getCashBalance() < 0.00001) {
+                $hitInsufficient = true;
+                break;
+            }
+
+            $bucket = [];
+            $outcome = $this->applyForPeriod($member, $month, $year, $bucket, collectOldestArrearsFirst: false);
+
+            if ($month === $throughMonth && $year === $throughYear) {
+                $selectedOutcome = $outcome;
+            }
+
+            if ($outcome === 'applied') {
+                $anyApplied = true;
+            }
+
+            if ($outcome === 'partial') {
+                $anyPartial = true;
+                break;
+            }
+
+            if ($outcome === 'insufficient') {
+                $hitInsufficient = true;
+                break;
+            }
+        }
+
+        $final = match (true) {
+            $selectedOutcome === 'applied' => 'applied',
+            $selectedOutcome === 'partial', $anyPartial => 'partial',
+            $selectedOutcome === 'insufficient', $hitInsufficient && $anyApplied => 'partial',
+            $hitInsufficient && ! $anyApplied => 'insufficient',
+            $anyApplied => 'applied',
+            $selectedOutcome === 'exempt', $selectedOutcome === 'already_contributed' => $selectedOutcome,
+            default => $selectedOutcome ?? 'skipped',
+        };
+
+        if (in_array($final, ['applied', 'partial'], true)) {
+            $results['applied'][] = $member;
+
+            return $final;
+        }
+
+        if ($final === 'insufficient') {
+            $results['insufficient'][] = [
+                'member' => $member,
+                'balance' => $member->getCashBalance(),
+                'required' => 0.0,
+            ];
+
+            return 'insufficient';
+        }
+
+        $results['skipped'][] = $member;
+
+        return in_array($final, ['exempt', 'already_contributed', 'skipped'], true) ? $final : 'skipped';
     }
 
     /**
@@ -380,7 +479,7 @@ class ContributionService
     /**
      * @return array{applied: Collection, insufficient: Collection, skipped: Collection}
      */
-    public function applyContributionsForPeriod(int $month, int $year): array
+    public function applyContributionsForPeriod(int $month, int $year, bool $collectOldestArrearsFirst = false): array
     {
         $results = [
             'applied' => collect(),
@@ -397,10 +496,17 @@ class ContributionService
             ->whereHas('dependents', fn ($query) => $query->where('status', 'active'))
             ->with(['dependents' => fn ($query) => $query->where('status', 'active')->orderBy('member_number')])
             ->orderBy('id')
-            ->each(function (Member $parent) use ($month, $year, &$results, &$householdMemberIds, $collectionCycle): void {
+            ->each(function (Member $parent) use ($month, $year, $collectOldestArrearsFirst, &$results, &$householdMemberIds, $collectionCycle): void {
                 $dependents = $parent->dependents;
 
-                $collectionCycle->applyHouseholdContributionsForPeriod($parent, $dependents, $month, $year, $results);
+                $collectionCycle->applyHouseholdContributionsForPeriod(
+                    $parent,
+                    $dependents,
+                    $month,
+                    $year,
+                    $results,
+                    $collectOldestArrearsFirst,
+                );
 
                 $householdMemberIds[] = $parent->id;
 
@@ -412,8 +518,8 @@ class ContributionService
         Member::active()
             ->with('user')
             ->when($householdMemberIds !== [], fn ($query) => $query->whereNotIn('id', $householdMemberIds))
-            ->each(function (Member $member) use ($month, $year, &$results): void {
-                $this->applyForPeriod($member, $month, $year, $results);
+            ->each(function (Member $member) use ($month, $year, $collectOldestArrearsFirst, &$results): void {
+                $this->applyForPeriod($member, $month, $year, $results, $collectOldestArrearsFirst);
             });
 
         return $results;

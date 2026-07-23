@@ -98,9 +98,19 @@ final class LoanEmiCollectionTables
                         ->label(__('Apply now'))
                         ->icon('heroicon-o-check')
                         ->color('success')
-                        ->requiresConfirmation()
-                        ->action(function (Member $record, Action $action, Component $livewire) use ($catalog, $month, $year): void {
-                            $outcome = $catalog->applyForMember($record, $month, $year);
+                        ->schema([
+                            ContributionCycleHeaderActions::collectOldestArrearsFirstToggle(),
+                        ])
+                        ->fillForm([
+                            'collect_oldest_arrears_first' => true,
+                        ])
+                        ->action(function (Member $record, array $data, Action $action, Component $livewire) use ($catalog, $month, $year): void {
+                            $outcome = $catalog->applyForMember(
+                                $record,
+                                $month,
+                                $year,
+                                (bool) ($data['collect_oldest_arrears_first'] ?? true),
+                            );
 
                             LoanEmiCollectionTableActions::notifyApplyOutcome($outcome, $record->name, $action);
 
@@ -115,18 +125,29 @@ final class LoanEmiCollectionTables
                             ->label(__('Apply now'))
                             ->icon('heroicon-o-check')
                             ->color('success')
-                            ->requiresConfirmation()
-                            ->action(function (Collection $records, Component $livewire) use ($catalog, $month, $year): void {
+                            ->schema([
+                                ContributionCycleHeaderActions::collectOldestArrearsFirstToggle(),
+                            ])
+                            ->fillForm([
+                                'collect_oldest_arrears_first' => true,
+                            ])
+                            ->action(function (Collection $records, array $data, Component $livewire) use ($catalog, $month, $year): void {
                                 $collected = 0;
                                 $partial = 0;
                                 $skipped = 0;
+                                $collectOldestArrearsFirst = (bool) ($data['collect_oldest_arrears_first'] ?? true);
 
                                 foreach ($records as $record) {
                                     if (! $record instanceof Member) {
                                         continue;
                                     }
 
-                                    $outcome = $catalog->applyForMember($record, $month, $year);
+                                    $outcome = $catalog->applyForMember(
+                                        $record,
+                                        $month,
+                                        $year,
+                                        $collectOldestArrearsFirst,
+                                    );
 
                                     match ($outcome) {
                                         'collected' => $collected++,

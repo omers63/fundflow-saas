@@ -26,7 +26,7 @@ final class FiscalSettings
             'fiscal_year_start_month' => 1,
             'fiscal_year_start_day' => 1,
             'books_closed_through' => null,
-            'current_fiscal_year_label' => null,
+            'current_fiscal_year_label' => 'FY'.now()->year,
             'purge_policy' => self::PURGE_ARCHIVE_THEN_DELETE,
         ];
     }

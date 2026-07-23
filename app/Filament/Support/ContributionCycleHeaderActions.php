@@ -11,6 +11,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Component;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Livewire\Component as LivewireComponent;
 
@@ -79,12 +80,22 @@ final class ContributionCycleHeaderActions
             ->label(__('Run contribution cycle'))
             ->icon('heroicon-o-play')
             ->color('primary')
-            ->schema(self::periodFormSchema())
-            ->fillForm(fn (): array => self::defaultPeriod())
+            ->schema([
+                ...self::periodFormSchema(),
+                self::collectOldestArrearsFirstToggle(),
+            ])
+            ->fillForm(fn (): array => [
+                ...self::defaultPeriod(),
+                'collect_oldest_arrears_first' => true,
+            ])
             ->action(function (array $data, LivewireComponent $livewire): void {
                 $service = app(ContributionCycleService::class);
                 [$month, $year] = self::resolvePeriodFromForm($data);
-                $results = $service->applyContributions($month, $year);
+                $results = $service->applyContributions(
+                    $month,
+                    $year,
+                    (bool) ($data['collect_oldest_arrears_first'] ?? true),
+                );
 
                 Notification::make()
                     ->title(__('Cycle complete – :period', ['period' => $service->periodLabel($month, $year)]))
@@ -129,6 +140,14 @@ final class ContributionCycleHeaderActions
             Hidden::make('month'),
             Hidden::make('year'),
         ];
+    }
+
+    public static function collectOldestArrearsFirstToggle(): Toggle
+    {
+        return Toggle::make('collect_oldest_arrears_first')
+            ->label(__('Collect oldest arrears first'))
+            ->helperText(__('Apply available cash from the oldest unpaid cycle through the selected period, collecting as many cycles as the balance allows.'))
+            ->default(true);
     }
 
     /**

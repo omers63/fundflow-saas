@@ -5,7 +5,7 @@
     <div class="ff-member-quick-actions__grid">
         @foreach ($actions as $i => $action)
             @if ($action['visible'] ?? false)
-                <a href="{{ $action['url'] }}" wire:navigate
+                <a href="{{ $action['url'] }}"
                     class="ff-dashboard-action group relative isolate min-h-[5.25rem] overflow-hidden rounded-xl p-3 text-white shadow-sm ring-1 ring-black/10 transition hover:-translate-y-0.5 hover:shadow-lg"
                     style="animation: ff-stat-in 0.4s ease-out {{ 0.04 + ($i * 0.04) }}s forwards">
                     <div @class(['ff-dashboard-action__bg', 'ff-dashboard-action__bg--' . ($action['tone'] ?? 'accounts')])

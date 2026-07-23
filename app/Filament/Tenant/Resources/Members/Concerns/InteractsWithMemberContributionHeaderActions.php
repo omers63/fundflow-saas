@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\Members\Concerns;
 
+use App\Filament\Support\ContributionCycleHeaderActions;
 use App\Filament\Support\ContributionTableActions;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
@@ -37,11 +38,13 @@ trait InteractsWithMemberContributionHeaderActions
                         ? $cycles->contributionCycleSelectOptionsForMember($member)
                         : [])
                     ->required(),
+                ContributionCycleHeaderActions::collectOldestArrearsFirstToggle(),
             ])
             ->fillForm(fn (): array => [
                 'cycle' => ($member = $this->resolveMemberForContributionAction()) !== null
                     ? $cycles->defaultContributionCycleKeyForMember($member)
                     : null,
+                'collect_oldest_arrears_first' => true,
             ])
             ->action(function (array $data) use ($cycles): void {
                 $member = $this->resolveMemberForContributionAction();
@@ -51,7 +54,12 @@ trait InteractsWithMemberContributionHeaderActions
                 }
 
                 [$month, $year] = $cycles->parseContributionCycleKey($data['cycle']);
-                $outcome = $cycles->applyContributionForMemberForPeriod($member, $month, $year);
+                $outcome = $cycles->applyContributionForMemberForPeriod(
+                    $member,
+                    $month,
+                    $year,
+                    (bool) ($data['collect_oldest_arrears_first'] ?? true),
+                );
 
                 ContributionTableActions::notifyApplyOutcome($outcome, $member->name);
 

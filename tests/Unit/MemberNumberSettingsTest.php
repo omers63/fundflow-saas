@@ -13,8 +13,8 @@ beforeEach(function () {
     Member::query()->delete();
 });
 
-it('generates default formatted member numbers', function () {
-    expect(MemberNumberSettings::generate())->toBe('MEM-0001');
+it('generates default sequential member numbers', function () {
+    expect(MemberNumberSettings::generate())->toBe('1');
 
     Member::create([
         'member_number' => MemberNumberSettings::generate(),
@@ -24,11 +24,12 @@ it('generates default formatted member numbers', function () {
         'status' => 'active',
     ]);
 
-    expect(MemberNumberSettings::generate())->toBe('MEM-0002');
+    expect(MemberNumberSettings::generate())->toBe('2');
 });
 
 it('supports prefix year and custom padding', function () {
     MemberNumberSettings::save([
+        'format' => MemberNumberSettings::FORMAT_FORMATTED,
         'prefix' => 'FUND',
         'separator' => MemberNumberSettings::SEPARATOR_SLASH,
         'padding' => 3,
@@ -41,6 +42,10 @@ it('supports prefix year and custom padding', function () {
 });
 
 it('increments from highest matching sequence not member count', function () {
+    MemberNumberSettings::save([
+        'format' => MemberNumberSettings::FORMAT_FORMATTED,
+    ]);
+
     Member::create([
         'member_number' => 'MEM-0099',
         'name' => 'Legacy',
@@ -54,6 +59,7 @@ it('increments from highest matching sequence not member count', function () {
 
 it('restarts sequence each calendar year when year is included', function () {
     MemberNumberSettings::save([
+        'format' => MemberNumberSettings::FORMAT_FORMATTED,
         'prefix' => 'MEM',
         'separator' => MemberNumberSettings::SEPARATOR_HYPHEN,
         'padding' => 4,
@@ -74,6 +80,10 @@ it('restarts sequence each calendar year when year is included', function () {
 });
 
 it('previews using draft settings from the form', function () {
+    MemberNumberSettings::save([
+        'format' => MemberNumberSettings::FORMAT_FORMATTED,
+    ]);
+
     Member::create([
         'member_number' => 'MEM-0005',
         'name' => 'Existing',
@@ -83,29 +93,12 @@ it('previews using draft settings from the form', function () {
     ]);
 
     expect(MemberNumberSettings::preview([
+        'format' => MemberNumberSettings::FORMAT_FORMATTED,
         'prefix' => 'X',
         'separator' => MemberNumberSettings::SEPARATOR_NONE,
         'padding' => 3,
         'include_year' => false,
     ]))->toBe('X001');
-});
-
-it('generates simple sequential member numbers', function () {
-    MemberNumberSettings::save([
-        'format' => MemberNumberSettings::FORMAT_SEQUENTIAL,
-    ]);
-
-    expect(MemberNumberSettings::generate())->toBe('1');
-
-    Member::create([
-        'member_number' => MemberNumberSettings::generate(),
-        'name' => 'First',
-        'monthly_contribution_amount' => 500,
-        'joined_at' => now(),
-        'status' => 'active',
-    ]);
-
-    expect(MemberNumberSettings::generate())->toBe('2');
 });
 
 it('increments sequential numbers from highest numeric member number', function () {
@@ -156,6 +149,7 @@ it('previews sequential numbers using draft settings', function () {
 
 it('preserves formatted settings when saving sequential format only', function () {
     MemberNumberSettings::save([
+        'format' => MemberNumberSettings::FORMAT_FORMATTED,
         'prefix' => 'FUND',
         'separator' => MemberNumberSettings::SEPARATOR_SLASH,
         'padding' => 5,

@@ -14,7 +14,7 @@ use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanEligibilityOverrideService;
 use App\Services\Loans\LoanEligibilityService;
-use App\Services\Loans\LoanRepaymentService;
+use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Services\MemberAnnualSubscriptionFeeService;
 use App\Services\MemberCashOutService;
 use App\Services\MemberStatusService;
@@ -223,15 +223,22 @@ final class MemberFilamentActions
                     ->options(fn (Member $record): array => app(ContributionCycleService::class)
                         ->contributionCycleSelectOptionsForMember($record))
                     ->required(),
+                ContributionCycleHeaderActions::collectOldestArrearsFirstToggle(),
             ])
             ->fillForm(fn (Member $record): array => [
                 'cycle' => app(ContributionCycleService::class)
                     ->defaultContributionCycleKeyForMember($record),
+                'collect_oldest_arrears_first' => true,
             ])
             ->action(function (Member $record, array $data, Component $livewire): void {
                 $cycles = app(ContributionCycleService::class);
                 [$month, $year] = $cycles->parseContributionCycleKey($data['cycle']);
-                $outcome = $cycles->applyContributionForMemberForPeriod($record, $month, $year);
+                $outcome = $cycles->applyContributionForMemberForPeriod(
+                    $record,
+                    $month,
+                    $year,
+                    (bool) ($data['collect_oldest_arrears_first'] ?? true),
+                );
 
                 ContributionTableActions::notifyApplyOutcome($outcome, $record->name);
 
@@ -249,32 +256,31 @@ final class MemberFilamentActions
             ->color('primary')
             ->visible(fn (Member $record): bool => self::isTenantAdmin()
                 && $record->hasActiveLoanRepaymentObligation())
-            ->requiresConfirmation()
-            ->modalHeading(__('Pay loan installment from cash'))
-            ->modalDescription(fn (Member $record): string => app(LoanRepaymentService::class)
-                ->openPeriodRepaymentModalDescription($record))
-            ->action(function (Member $record, LoanRepaymentService $repayments, Component $livewire): void {
-                $result = $repayments->applyOpenPeriodRepaymentForMember($record);
+            ->schema([
+                Select::make('cycle')
+                    ->label(__('Cycle'))
+                    ->options(fn (): array => app(ContributionCycleService::class)
+                        ->contributionCycleSelectOptionsForBulk())
+                    ->required(),
+                ContributionCycleHeaderActions::collectOldestArrearsFirstToggle(),
+            ])
+            ->fillForm(fn (): array => [
+                ...ContributionCycleHeaderActions::defaultPeriod(),
+                'collect_oldest_arrears_first' => true,
+            ])
+            ->action(function (Member $record, array $data, Component $livewire): void {
+                $cycles = app(ContributionCycleService::class);
+                [$month, $year] = $cycles->parseContributionCycleKey($data['cycle']);
+                $outcome = app(LoanEmiCollectionCatalogService::class)->applyForMember(
+                    $record,
+                    $month,
+                    $year,
+                    (bool) ($data['collect_oldest_arrears_first'] ?? true),
+                );
 
-                $notification = Notification::make()
-                    ->title(match ($result) {
-                        'applied' => __('Repayment applied'),
-                        'insufficient' => __('Insufficient cash'),
-                        default => __('Nothing to apply'),
-                    })
-                    ->body($result === 'skipped'
-                        ? $repayments->openPeriodSkipMessage($record)
-                        : null);
+                LoanEmiCollectionTableActions::notifyApplyOutcome($outcome, $record->name);
 
-                match ($result) {
-                    'applied' => $notification->success(),
-                    'insufficient' => $notification->warning(),
-                    default => $notification->info(),
-                };
-
-                $notification->send();
-
-                if ($result === 'applied') {
+                if (in_array($outcome, ['collected', 'partial'], true)) {
                     self::refreshMembersList($livewire);
                 }
             });
@@ -1047,16 +1053,21 @@ final class MemberFilamentActions
                     ->options(fn (): array => app(ContributionCycleService::class)
                         ->contributionCycleSelectOptionsForBulk())
                     ->required(),
+                ContributionCycleHeaderActions::collectOldestArrearsFirstToggle(),
             ])
             ->fillForm(function (): array {
                 $cycles = app(ContributionCycleService::class);
                 [$month, $year] = $cycles->currentOpenPeriod();
 
-                return ['cycle' => $cycles->contributionCycleKey($month, $year)];
+                return [
+                    'cycle' => $cycles->contributionCycleKey($month, $year),
+                    'collect_oldest_arrears_first' => true,
+                ];
             })
             ->action(function (Collection $records, array $data, Component $livewire): void {
                 $cycles = app(ContributionCycleService::class);
                 [$month, $year] = $cycles->parseContributionCycleKey($data['cycle']);
+                $collectOldestArrearsFirst = (bool) ($data['collect_oldest_arrears_first'] ?? true);
                 $applied = 0;
                 $skipped = 0;
 
@@ -1067,7 +1078,12 @@ final class MemberFilamentActions
                         continue;
                     }
 
-                    $outcome = $cycles->applyContributionForMemberForPeriod($record, $month, $year);
+                    $outcome = $cycles->applyContributionForMemberForPeriod(
+                        $record,
+                        $month,
+                        $year,
+                        $collectOldestArrearsFirst,
+                    );
 
                     if (in_array($outcome, ['applied', 'partial'], true)) {
                         $applied++;
@@ -1088,12 +1104,25 @@ final class MemberFilamentActions
             ->icon('heroicon-o-currency-dollar')
             ->color('primary')
             ->visible(fn (): bool => self::isTenantAdmin())
-            ->requiresConfirmation()
-            ->modalHeading(__('Apply open-period repayment'))
-            ->modalDescription(__('Debits member cash for the current open-period EMI where applicable.'))
-            ->action(function (Collection $records, LoanRepaymentService $repayments, Component $livewire): void {
-                $applied = 0;
-                $insufficient = 0;
+            ->schema([
+                Select::make('cycle')
+                    ->label(__('Cycle'))
+                    ->options(fn (): array => app(ContributionCycleService::class)
+                        ->contributionCycleSelectOptionsForBulk())
+                    ->required(),
+                ContributionCycleHeaderActions::collectOldestArrearsFirstToggle(),
+            ])
+            ->fillForm(fn (): array => [
+                ...ContributionCycleHeaderActions::defaultPeriod(),
+                'collect_oldest_arrears_first' => true,
+            ])
+            ->action(function (Collection $records, array $data, Component $livewire): void {
+                $cycles = app(ContributionCycleService::class);
+                [$month, $year] = $cycles->parseContributionCycleKey($data['cycle']);
+                $collectOldestArrearsFirst = (bool) ($data['collect_oldest_arrears_first'] ?? true);
+                $catalog = app(LoanEmiCollectionCatalogService::class);
+                $collected = 0;
+                $partial = 0;
                 $skipped = 0;
 
                 foreach ($records as $record) {
@@ -1103,26 +1132,31 @@ final class MemberFilamentActions
                         continue;
                     }
 
-                    $result = $repayments->applyOpenPeriodRepaymentForMember($record);
+                    $outcome = $catalog->applyForMember(
+                        $record,
+                        $month,
+                        $year,
+                        $collectOldestArrearsFirst,
+                    );
 
-                    match ($result) {
-                        'applied' => $applied++,
-                        'insufficient' => $insufficient++,
+                    match ($outcome) {
+                        'collected' => $collected++,
+                        'partial' => $partial++,
                         default => $skipped++,
                     };
                 }
 
                 Notification::make()
                     ->title(__('Repayment complete'))
-                    ->body(__(':applied applied · :insufficient insufficient · :skipped skipped', [
-                        'applied' => $applied,
-                        'insufficient' => $insufficient,
+                    ->body(__(':collected collected · :partial partial · :skipped skipped', [
+                        'collected' => $collected,
+                        'partial' => $partial,
                         'skipped' => $skipped,
                     ]))
-                    ->color($applied > 0 ? 'success' : 'warning')
+                    ->color($collected > 0 ? 'success' : 'warning')
                     ->send();
 
-                if ($applied > 0) {
+                if ($collected > 0 || $partial > 0) {
                     self::refreshMembersList($livewire);
                 }
             });

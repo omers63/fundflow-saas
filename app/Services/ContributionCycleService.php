@@ -39,6 +39,30 @@ class ContributionCycleService
         return Setting::contributionCycleStartDay();
     }
 
+    /**
+     * True on the calendar day a new contribution cycle opens (Settings → cycle start day).
+     */
+    public function isCycleTransitionDay(?Carbon $at = null): bool
+    {
+        $at = ($at ?? BusinessDay::now())->copy()->startOfDay();
+        $start = $this->cycleStartAt((int) $at->month, (int) $at->year)->startOfDay();
+
+        return $at->equalTo($start);
+    }
+
+    /**
+     * Period that ends when today's cycle opens (previous labelled month).
+     *
+     * @return array{0: int, 1: int}
+     */
+    public function periodClosedByTransition(?Carbon $at = null): array
+    {
+        $at = $at ?? BusinessDay::now();
+        $cursor = $at->copy()->startOfMonth()->subMonthNoOverflow();
+
+        return [(int) $cursor->month, (int) $cursor->year];
+    }
+
     public function cycleStartAt(int $month, int $year): Carbon
     {
         $day = $this->cycleStartDay();
@@ -723,16 +747,30 @@ class ContributionCycleService
     /**
      * @return array{applied: Collection, insufficient: Collection, skipped: Collection}
      */
-    public function applyContributions(int $month, int $year): array
+    public function applyContributions(int $month, int $year, bool $collectOldestArrearsFirst = false): array
     {
-        return app(ContributionService::class)->applyContributionsForPeriod($month, $year);
+        return app(ContributionService::class)->applyContributionsForPeriod(
+            $month,
+            $year,
+            $collectOldestArrearsFirst,
+        );
     }
 
-    public function applyContributionForMemberForPeriod(Member $member, int $month, int $year): string
-    {
+    public function applyContributionForMemberForPeriod(
+        Member $member,
+        int $month,
+        int $year,
+        bool $collectOldestArrearsFirst = false,
+    ): string {
         $bucket = [];
 
-        return app(ContributionService::class)->applyForPeriod($member, $month, $year, $bucket);
+        return app(ContributionService::class)->applyForPeriod(
+            $member,
+            $month,
+            $year,
+            $bucket,
+            $collectOldestArrearsFirst,
+        );
     }
 
     public function dependentAllocationExistsForPeriod(Member $dependent, int $month, int $year): bool
@@ -1045,20 +1083,21 @@ class ContributionCycleService
 
             try {
                 DB::transaction(function () use ($parent, $dependent, $shortfall, $periodLabel, $month, $year): void {
-                    $this->accounting->fundDependentCashAccount(
-                        $parent,
-                        $dependent,
-                        $shortfall,
-                        __('Allocation — :period', ['period' => $periodLabel]),
-                    );
-
-                    DependentCashAllocation::query()->create([
+                    $allocation = DependentCashAllocation::query()->create([
                         'parent_member_id' => $parent->id,
                         'dependent_member_id' => $dependent->id,
                         'allocation_month' => $month,
                         'allocation_year' => $year,
                         'amount' => $shortfall,
                     ]);
+
+                    $this->accounting->fundDependentCashAccount(
+                        $parent,
+                        $dependent,
+                        $shortfall,
+                        __('Allocation — :period', ['period' => $periodLabel]),
+                        reference: $allocation,
+                    );
                 });
                 $transfers++;
                 $allocatedDependentIds[] = $dependent->id;

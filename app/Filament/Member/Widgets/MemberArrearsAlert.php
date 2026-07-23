@@ -13,7 +13,7 @@ use Filament\Widgets\Widget;
 
 class MemberArrearsAlert extends Widget
 {
-    protected static bool $isDiscovered = true;
+    protected static bool $isDiscovered = false;
 
     protected static ?int $sort = -20;
 

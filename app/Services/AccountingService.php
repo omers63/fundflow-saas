@@ -1970,6 +1970,7 @@ class AccountingService
         float $amount,
         string $note = '',
         bool $triggerCollection = false,
+        ?Model $reference = null,
     ): void {
         if ($amount <= 0) {
             throw new InvalidArgumentException(__('Amount must be greater than zero.'));
@@ -1989,19 +1990,21 @@ class AccountingService
         $debitDesc = trim(__('Transfer to :name', ['name' => $dependent->name]).($note ? " — {$note}" : ''));
         $creditDesc = trim(__('Transfer from :name', ['name' => $parent->name]).($note ? " — {$note}" : ''));
 
-        DB::transaction(function () use ($parentCash, $dependentCash, $amount, $debitDesc, $creditDesc): void {
-            self::withoutMemberCashCollection(function () use ($parentCash, $dependentCash, $amount, $debitDesc, $creditDesc): void {
+        DB::transaction(function () use ($parentCash, $dependentCash, $amount, $debitDesc, $creditDesc, $reference): void {
+            self::withoutMemberCashCollection(function () use ($parentCash, $dependentCash, $amount, $debitDesc, $creditDesc, $reference): void {
                 $this->debitMemberCashWithMasterMirror(
                     $parentCash,
                     $amount,
                     $debitDesc,
                     __('(dependent transfer mirror)'),
+                    $reference,
                 );
                 $this->creditMemberCashWithMasterMirror(
                     $dependentCash,
                     $amount,
                     $creditDesc,
                     __('(dependent transfer mirror)'),
+                    $reference,
                 );
             });
         });

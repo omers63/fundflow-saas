@@ -44,7 +44,7 @@ final class MemberOnboardingGreetingService
         ];
     }
 
-    public function sendToMember(Member $member): bool
+    public function sendToMember(Member $member, ?string $plainPassword = null): bool
     {
         $member->loadMissing('user');
         $user = $member->user;
@@ -54,7 +54,7 @@ final class MemberOnboardingGreetingService
         }
 
         try {
-            $user->notify(new MemberOnboardingGreetingNotification($member));
+            $user->notify(new MemberOnboardingGreetingNotification($member, $plainPassword));
 
             return true;
         } catch (Throwable $exception) {

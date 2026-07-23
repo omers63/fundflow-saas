@@ -22,6 +22,11 @@ class ContributionsInitCycleCommand extends Command
         if (! $this->ensureBatchPostingAllowed()) {
             return self::SUCCESS;
         }
+
+        if ($this->shouldSkipUntilCycleTransition($cycles)) {
+            return self::SUCCESS;
+        }
+
         [$month, $year] = $this->resolvePeriod($cycles);
         $created = $collection->initializeOpenPeriod($month, $year);
 
@@ -43,5 +48,23 @@ class ContributionsInitCycleCommand extends Command
         }
 
         return $cycles->currentOpenPeriod();
+    }
+
+    protected function shouldSkipUntilCycleTransition(ContributionCycleService $cycles): bool
+    {
+        if ($this->option('month') && $this->option('year')) {
+            return false;
+        }
+
+        if ($cycles->isCycleTransitionDay()) {
+            return false;
+        }
+
+        $this->skipScheduledRunRecording = true;
+        $this->info(__('Skipped: today is not the contribution cycle start day (:day).', [
+            'day' => $cycles->cycleStartDay(),
+        ]));
+
+        return true;
     }
 }

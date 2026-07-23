@@ -255,7 +255,7 @@ final class NotificationTemplateCatalog
             'member_onboarding_greeting' => [
                 'category' => NotificationPreferenceService::MEMBERSHIP,
                 'label' => 'Member onboarding greeting',
-                'variables' => ['member_name', 'fund_name', 'action_url', 'action_label'],
+                'variables' => ['member_name', 'fund_name', 'action_url', 'action_label', 'login_email'],
                 'supported' => NotificationPreferenceService::CATEGORIES[NotificationPreferenceService::MEMBERSHIP]['supported'],
                 'en' => [
                     'subject' => 'Welcome to {{fund_name}}',
@@ -320,8 +320,9 @@ Keep enough **cash** before collection windows so contributions and EMI can clea
 ## How to access the fund
 
 1. Open the member portal with the button below (or your fund’s member login page).
-2. Sign in with the email and password you were given or set during registration.
-3. On first visit, install the portal as an app for quicker access (see below).
+2. Sign in with the **login credentials** shown in this email.
+3. **Change your password as soon as you sign in** (Settings in the member portal).
+4. On first visit, install the portal as an app for quicker access (see below).
 
 ## Install the app (PWA)
 
@@ -429,8 +430,9 @@ MD,
 ## كيفية الدخول إلى الصندوق
 
 1. افتح بوابة العضو عبر الزر أدناه (أو صفحة تسجيل دخول الأعضاء لصندوقك).
-2. سجّل الدخول بالبريد وكلمة المرور التي حصلت عليها أو عيّنتها عند التسجيل.
-3. في الزيارة الأولى، ثبّت البوابة كتطبيق لوصول أسرع (انظر أدناه).
+2. سجّل الدخول باستخدام **بيانات الدخول** الظاهرة في هذه الرسالة.
+3. **غيّر كلمة المرور فور تسجيل الدخول** (من الإعدادات داخل بوابة العضو).
+4. في الزيارة الأولى، ثبّت البوابة كتطبيق لوصول أسرع (انظر أدناه).
 
 ## تثبيت التطبيق (PWA)
 

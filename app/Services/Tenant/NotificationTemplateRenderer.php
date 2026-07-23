@@ -56,12 +56,23 @@ final class NotificationTemplateRenderer
         array $variables = [],
         string $theme = 'default',
     ): MailMessage {
-        $rendered = $this->render($key, NotificationTemplate::FAMILY_EMAIL, $locale, $variables);
         $footer = CommunicationBrandSettings::footerForLocale($locale);
         $color = CommunicationBrandSettings::primaryColor();
         $fromName = CommunicationBrandSettings::fromName();
         $isRtl = $locale === 'ar';
         $logoAbsolute = $this->resolveLogoAbsolutePath();
+
+        // Keep temporary passwords out of markdown interpolation (custom templates / logs).
+        $loginPassword = isset($variables['login_password']) && filled($variables['login_password'])
+            ? (string) $variables['login_password']
+            : null;
+        $loginEmail = isset($variables['login_email']) && filled($variables['login_email'])
+            ? (string) $variables['login_email']
+            : null;
+        $markdownVariables = $variables;
+        unset($markdownVariables['login_password']);
+
+        $rendered = $this->render($key, NotificationTemplate::FAMILY_EMAIL, $locale, $markdownVariables);
 
         if ($theme === 'onboarding') {
             $bodyHtml = $this->styleOnboardingBodyHtml($rendered['body_html'], $color, $isRtl);
@@ -91,10 +102,17 @@ final class NotificationTemplateRenderer
                         ? __('Hello :name — your member portal is ready.', ['name' => $memberName], $locale)
                         : null,
                     'accentLabel' => __('Accounts · money flow · portal & app guide', [], $locale),
+                    'loginEmail' => $loginEmail,
+                    'loginPassword' => $loginPassword,
+                    'credentialsHeading' => __('Your login credentials', [], $locale),
+                    'credentialsEmailLabel' => __('Email', [], $locale),
+                    'credentialsPasswordLabel' => __('Temporary password', [], $locale),
+                    'credentialsPasswordHint' => __('Use the password you set during registration. Contact your fund administrator if you need a reset.', [], $locale),
+                    'credentialsPasswordUrgent' => __('Change this password as soon as you sign in.', [], $locale),
                 ]);
         } else {
             $logoPath = CommunicationBrandSettings::logoPath();
-            $logoAbsoluteForDefault = $logoPath !== null ? storage_path('app/public/' . $logoPath) : null;
+            $logoAbsoluteForDefault = $logoPath !== null ? storage_path('app/public/'.$logoPath) : null;
 
             $message = (new MailMessage)
                 ->subject($rendered['subject'])
@@ -138,7 +156,7 @@ final class NotificationTemplateRenderer
         $brandPath = CommunicationBrandSettings::logoPath();
 
         if ($brandPath !== null) {
-            $absolute = storage_path('app/public/' . $brandPath);
+            $absolute = storage_path('app/public/'.$brandPath);
 
             if (is_file($absolute)) {
                 return $absolute;
@@ -147,7 +165,7 @@ final class NotificationTemplateRenderer
 
         $fundPath = PublicPageSettings::fundLogoPath();
 
-        if ($fundPath !== null && !str_starts_with($fundPath, 'http://') && !str_starts_with($fundPath, 'https://')) {
+        if ($fundPath !== null && ! str_starts_with($fundPath, 'http://') && ! str_starts_with($fundPath, 'https://')) {
             if (TenantAssetUrl::publicDiskExists($fundPath)) {
                 $absolute = Storage::disk('public')->path($fundPath);
 
@@ -172,31 +190,31 @@ final class NotificationTemplateRenderer
 
         $html = preg_replace(
             '/<h2(\s[^>]*)?>/i',
-            '<h2$1 style="margin:28px 0 12px;padding:10px 14px;background:' . $soft . ';' . $borderSide . ':4px solid ' . $primary . ';border-radius:8px;color:' . $dark . ';font-size:17px;line-height:1.35;font-weight:800;text-align:' . $align . ';">',
+            '<h2$1 style="margin:28px 0 12px;padding:10px 14px;background:'.$soft.';'.$borderSide.':4px solid '.$primary.';border-radius:8px;color:'.$dark.';font-size:17px;line-height:1.35;font-weight:800;text-align:'.$align.';">',
             $html,
         ) ?? $html;
 
         $html = preg_replace(
             '/<h3(\s[^>]*)?>/i',
-            '<h3$1 style="margin:18px 0 8px;color:' . $dark . ';font-size:15px;line-height:1.4;font-weight:700;text-align:' . $align . ';">',
+            '<h3$1 style="margin:18px 0 8px;color:'.$dark.';font-size:15px;line-height:1.4;font-weight:700;text-align:'.$align.';">',
             $html,
         ) ?? $html;
 
         $html = preg_replace(
             '/<p(\s[^>]*)?>/i',
-            '<p$1 style="margin:0 0 12px;color:#334155;font-size:15px;line-height:1.65;text-align:' . $align . ';">',
+            '<p$1 style="margin:0 0 12px;color:#334155;font-size:15px;line-height:1.65;text-align:'.$align.';">',
             $html,
         ) ?? $html;
 
         $html = preg_replace(
             '/<ul(\s[^>]*)?>/i',
-            '<ul$1 style="margin:0 0 16px;padding-' . ($isRtl ? 'right' : 'left') . ':20px;color:#334155;">',
+            '<ul$1 style="margin:0 0 16px;padding-'.($isRtl ? 'right' : 'left').':20px;color:#334155;">',
             $html,
         ) ?? $html;
 
         $html = preg_replace(
             '/<ol(\s[^>]*)?>/i',
-            '<ol$1 style="margin:0 0 16px;padding-' . ($isRtl ? 'right' : 'left') . ':20px;color:#334155;">',
+            '<ol$1 style="margin:0 0 16px;padding-'.($isRtl ? 'right' : 'left').':20px;color:#334155;">',
             $html,
         ) ?? $html;
 
@@ -208,7 +226,7 @@ final class NotificationTemplateRenderer
 
         $html = preg_replace(
             '/<strong(\s[^>]*)?>/i',
-            '<strong$1 style="color:' . $dark . ';font-weight:700;">',
+            '<strong$1 style="color:'.$dark.';font-weight:700;">',
             $html,
         ) ?? $html;
 
@@ -258,10 +276,10 @@ final class NotificationTemplateRenderer
         $hex = ltrim(trim($hex), '#');
 
         if (strlen($hex) === 3) {
-            $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+            $hex = $hex[0].$hex[0].$hex[1].$hex[1].$hex[2].$hex[2];
         }
 
-        if (!preg_match('/^[0-9a-fA-F]{6}$/', $hex)) {
+        if (! preg_match('/^[0-9a-fA-F]{6}$/', $hex)) {
             return [15, 118, 110];
         }
 

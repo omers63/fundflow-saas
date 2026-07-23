@@ -184,6 +184,69 @@ test('apply for member collects open period emi from cash', function () {
         ->and(LoanInstallment::query()->where('loan_id', $loan->id)->value('status'))->toBe('paid');
 });
 
+test('apply for member with oldest-first drains older unpaid emis before selected cycle', function () {
+    [$month, $year] = $this->cycles->currentOpenPeriod();
+    [$cycleStart] = $this->cycles->cycleDueDateBounds($month, $year);
+    $olderDue = Carbon::parse($cycleStart)->subMonthNoOverflow()->addDays(5);
+
+    $member = Member::create([
+        'member_number' => 'EMI-OLDEST-1',
+        'name' => 'Oldest First Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'master_portion' => 0,
+        'member_portion' => 6000,
+        'settlement_threshold' => 0.2,
+        'interest_rate' => 0,
+        'term_months' => 6,
+        'installments_count' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2025-01-01'),
+        'disbursed_at' => Carbon::parse('2025-01-01'),
+    ]);
+
+    $older = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => $olderDue,
+        'status' => 'overdue',
+    ]);
+
+    $current = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 2,
+        'amount' => 1000,
+        'due_date' => Carbon::parse($cycleStart)->addDays(4),
+        'status' => 'pending',
+    ]);
+
+    expect($this->catalog->pendingInstallmentCountForMemberThroughPeriod($member, $month, $year))->toBe(2);
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->accounting->credit($member->cashAccount, 1000, 'Cash for one EMI'),
+    );
+
+    $outcome = $this->catalog->applyForMember($member->fresh(), $month, $year, collectOldestArrearsFirst: true);
+
+    expect($older->fresh()->status)->toBe('paid')
+        ->and($current->fresh()->status)->toBe('pending')
+        ->and((float) $member->fresh()->getCashBalance())->toBe(0.0)
+        ->and($outcome)->toBe('partial');
+});
+
 test('collected installment count reflects paid emis in open period', function () {
     [$month, $year] = $this->cycles->currentOpenPeriod();
 

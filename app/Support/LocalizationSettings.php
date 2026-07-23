@@ -50,8 +50,8 @@ final class LocalizationSettings
     public static function defaults(): array
     {
         return [
-            'default_admin_locale' => AppLocale::DEFAULT,
-            'default_member_locale' => AppLocale::DEFAULT,
+            'default_admin_locale' => 'en',
+            'default_member_locale' => 'ar',
         ];
     }
 
@@ -86,10 +86,14 @@ final class LocalizationSettings
     private static function resolveLocaleKey(string $key): string
     {
         if (! tenancy()->initialized) {
-            return (string) (self::defaults()[$key] ?? AppLocale::DEFAULT);
+            return self::sanitizeLocale(self::defaults()[$key] ?? AppLocale::DEFAULT);
         }
 
         $value = Setting::get(self::GROUP, $key);
+
+        if ($value === null || $value === '') {
+            return self::sanitizeLocale(self::defaults()[$key] ?? AppLocale::DEFAULT);
+        }
 
         return self::sanitizeLocale($value);
     }

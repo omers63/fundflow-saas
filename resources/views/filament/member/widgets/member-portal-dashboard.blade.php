@@ -16,34 +16,6 @@ $currency = $currency ?? null;
         ])
         @endif
 
-        @if (!empty($d['notice']))
-            @php $notice = $d['notice']; @endphp
-            <x-member::notice :tone="$notice['tone']" :title="$notice['title'] ?? null">
-                <p class="m-0">{!! $notice['body'] ?? '' !!}</p>
-                @if (!empty($notice['action']['url'] ?? null))
-                    <p class="m-0 mt-1">
-                        <a href="{{ $notice['action']['url'] }}" wire:navigate class="font-semibold underline">
-                            {{ $notice['action']['label'] }} →
-                        </a>
-                    </p>
-                @endif
-            </x-member::notice>
-        @endif
-
-        @if (!empty($d['pending_actions']))
-            <div class="space-y-2">
-                @foreach ($d['pending_actions'] as $pending)
-                    <x-member::notice :tone="$pending['tone'] ?? 'amber'">
-                        <p class="m-0">
-                            <a href="{{ $pending['url'] }}" wire:navigate class="font-semibold underline">
-                                {{ $pending['label'] }} →
-                            </a>
-                        </p>
-                    </x-member::notice>
-                @endforeach
-            </div>
-        @endif
-
         <div class="ff-member-dashboard-account-grid grid grid-cols-1 gap-3.5 sm:grid-cols-2">
             @if (!empty($d['cash_card']))
                 @php $cash = $d['cash_card']; @endphp
@@ -67,7 +39,10 @@ $currency = $currency ?? null;
                         </div>
                         <div class="ff-member-dashboard-actions">
                             @foreach ($cash['actions'] ?? [] as $action)
-                                <a href="{{ $action['url'] }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-gray">
+                                {{-- Full page navigation: wire:navigate stacks duplicate history entries
+                                     (Back from cash/fund can bounce the same page or unrelated routes)
+                                     and cash-account#deposit can flash a 419 before the form loads. --}}
+                                    <a href="{{ $action['url'] }}" class="fi-btn fi-btn-size-sm fi-outlined fi-color-gray">
                                     {{ $action['label'] }}
                                 </a>
                             @endforeach
@@ -93,7 +68,7 @@ $currency = $currency ?? null;
                         </div>
                         <div class="ff-member-dashboard-actions">
                             @foreach ($fund['actions'] ?? [] as $action)
-                                <a href="{{ $action['url'] }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-gray">
+                                <a href="{{ $action['url'] }}" class="fi-btn fi-btn-size-sm fi-outlined fi-color-gray">
                                     {{ $action['label'] }}
                                 </a>
                             @endforeach
@@ -151,7 +126,7 @@ $currency = $currency ?? null;
                                 @endif
                                 @if (filled($loan['settle_url'] ?? null))
                                     <x-member::panel-actions>
-                                        <a href="{{ $loan['settle_url'] }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-primary">
+                                        <a href="{{ $loan['settle_url'] }}" class="fi-btn fi-btn-size-sm fi-outlined fi-color-primary">
                                             {{ __('Early settlement') }}
                                         </a>
                                     </x-member::panel-actions>
@@ -172,7 +147,7 @@ $currency = $currency ?? null;
                                             </p>
                                         </div>
                                         <div class="ff-member-dashboard-actions ff-member-dashboard-eligibility__actions">
-                                            <a href="{{ $eligibility['apply_url'] }}" wire:navigate
+                                            <a href="{{ $eligibility['apply_url'] }}"
                                                 class="fi-btn fi-btn-size-sm fi-color-primary">
                                                 {{ __('Apply for loan') }}
                                             </a>
@@ -193,11 +168,11 @@ $currency = $currency ?? null;
                                                 <div class="ff-member-dashboard-actions ff-member-dashboard-eligibility__actions">
                                                     @if ($eligibility['has_pending_override_request'] ?? false)
                                                         <x-member::chip variant="amber">{{ __('Review pending') }}</x-member::chip>
-                                                        <a href="{{ $eligibility['loans_url'] }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-primary">
+                                                        <a href="{{ $eligibility['loans_url'] }}" class="fi-btn fi-btn-size-sm fi-outlined fi-color-primary">
                                                             {{ __('My loans') }}
                                                         </a>
                                                     @elseif ($eligibility['can_request_override'] ?? false)
-                                                        <a href="{{ $eligibility['request_url'] }}" wire:navigate class="fi-btn fi-btn-size-sm fi-color-warning">
+                                                        <a href="{{ $eligibility['request_url'] }}" class="fi-btn fi-btn-size-sm fi-color-warning">
                                                             {{ __('Request eligibility review') }}
                                                         </a>
                                                     @endif
@@ -353,7 +328,7 @@ $currency = $currency ?? null;
                             <p class="ff-member-dashboard-meta mb-3">
                                 {{ trans_choice('You guarantee :count active loan|You guarantee :count active loans', $guarantor['count'] ?? 0, ['count' => $guarantor['count'] ?? 0]) }}
                             </p>
-                            <a href="{{ $guarantor['url'] ?? '#' }}" wire:navigate class="fi-btn fi-btn-size-sm fi-outlined fi-color-primary">
+                            <a href="{{ $guarantor['url'] ?? '#' }}" class="fi-btn fi-btn-size-sm fi-outlined fi-color-primary">
                                 {{ __('View guaranteed loans') }}
                             </a>
                         </x-member::panel>
