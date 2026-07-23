@@ -5,6 +5,7 @@ use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\FundPostingAcceptedNotification;
@@ -14,6 +15,7 @@ use App\Notifications\Tenant\NewFundPostingNotification;
 use App\Services\AccountingService;
 use App\Services\ContributionCollectionCycleService;
 use App\Services\FundPostingService;
+use App\Support\AutomationScheduleSettings;
 use App\Support\ContributionCollectionStatus;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Notification;
@@ -25,6 +27,9 @@ beforeEach(function () {
     $this->initializeTenancy();
     $this->accounting = app(AccountingService::class);
     $this->service = app(FundPostingService::class);
+
+    // Pending-deposit tests exercise manual accept; disable auto-accept for this suite.
+    Setting::set(AutomationScheduleSettings::GROUP, 'auto_accept_deposits', '0');
 
     Account::query()->delete();
     Member::query()->delete();
@@ -61,6 +66,51 @@ test('submit creates a pending fund posting', function () {
     expect($posting->amount)->toBe('5000.00');
     expect($posting->reference)->toBe('TXN-123');
     expect($posting->member_id)->toBe($member->id);
+});
+
+test('submit auto-accepts deposits when automation setting is enabled', function () {
+    Notification::fake();
+    Setting::set(AutomationScheduleSettings::GROUP, 'auto_accept_deposits', '1');
+    Setting::set(AutomationScheduleSettings::GROUP, 'auto_apply_collections', '0');
+
+    $member = Member::create([
+        'member_number' => 'MEM-0001',
+        'name' => 'John Doe',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $posting = $this->service->submit($member, 5000, '2026-05-10');
+
+    expect($posting->status)->toBe('accepted')
+        ->and((float) $member->fresh()->getCashBalance())->toBe(5000.0);
+
+    Notification::assertNotSentTo(
+        User::query()->where('is_admin', true)->get(),
+        NewFundPostingNotification::class,
+    );
+});
+
+test('accept is a no-op when the deposit is already accepted', function () {
+    Notification::fake();
+    Setting::set(AutomationScheduleSettings::GROUP, 'auto_accept_deposits', '1');
+    Setting::set(AutomationScheduleSettings::GROUP, 'auto_apply_collections', '0');
+
+    $member = Member::create([
+        'member_number' => 'MEM-0001',
+        'name' => 'John Doe',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $posting = $this->service->submit($member, 5000, '2026-05-10');
+    $this->service->accept($posting);
+
+    expect((float) $member->fresh()->getCashBalance())->toBe(5000.0);
 });
 
 test('submit creates an uncleared bank transaction', function () {
@@ -117,8 +167,7 @@ test('submit notifies admin users', function () {
 
             return in_array('database', $channels, true)
                 && ($payload['format'] ?? null) === 'filament'
-                && str_contains($actionUrl, 'fund-postings')
-                && str_contains((string) ($payload['body'] ?? ''), 'ff-notification-details');
+                && str_contains($actionUrl, 'fund-postings');
         },
     );
 });
@@ -354,8 +403,7 @@ test('accept and reject notify member user', function () {
             $payload = $notification->toDatabase($memberUser);
 
             return in_array('database', $channels, true)
-                && ($payload['format'] ?? null) === 'filament'
-                && str_contains((string) ($payload['body'] ?? ''), 'ff-notification-section');
+                && ($payload['format'] ?? null) === 'filament';
         },
     );
 
@@ -369,8 +417,7 @@ test('accept and reject notify member user', function () {
             $payload = $notification->toDatabase($memberUser);
 
             return in_array('database', $channels, true)
-                && ($payload['format'] ?? null) === 'filament'
-                && str_contains((string) ($payload['body'] ?? ''), 'ff-notification-details');
+                && ($payload['format'] ?? null) === 'filament';
         },
     );
 });

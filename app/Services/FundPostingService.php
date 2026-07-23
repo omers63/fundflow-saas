@@ -13,6 +13,7 @@ use App\Notifications\Tenant\FundPostingAcceptedNotification;
 use App\Notifications\Tenant\FundPostingBankClearedNotification;
 use App\Notifications\Tenant\FundPostingRejectedNotification;
 use App\Notifications\Tenant\NewFundPostingNotification;
+use App\Support\AutomationScheduleSettings;
 use Illuminate\Support\Facades\DB;
 
 class FundPostingService
@@ -38,7 +39,9 @@ class FundPostingService
         ?string $attachment = null,
         ?string $comments = null,
     ): FundPosting {
-        return DB::transaction(function () use ($member, $amount, $postingDate, $reference, $attachment, $comments) {
+        $autoAccept = AutomationScheduleSettings::autoAcceptDeposits();
+
+        $posting = DB::transaction(function () use ($member, $amount, $postingDate, $reference, $attachment, $comments, $autoAccept) {
             $posting = FundPosting::create([
                 'member_id' => $member->id,
                 'posting_date' => $postingDate,
@@ -66,10 +69,20 @@ class FundPostingService
 
             $posting->update(['bank_transaction_id' => $bankTxn->id]);
 
-            $this->notifyAdminsOfNewPosting($posting);
+            if (! $autoAccept) {
+                $this->notifyAdminsOfNewPosting($posting);
+            }
 
             return $posting;
         });
+
+        if ($autoAccept) {
+            $this->accept($posting);
+
+            return $posting->fresh() ?? $posting;
+        }
+
+        return $posting;
     }
 
     /**
@@ -83,6 +96,12 @@ class FundPostingService
      */
     public function accept(FundPosting $posting, ?int $reviewedBy = null, ?string $remarks = null): void
     {
+        $posting = $posting->fresh() ?? $posting;
+
+        if ($posting->status !== 'pending') {
+            return;
+        }
+
         DB::transaction(function () use ($posting, $reviewedBy, $remarks) {
             $member = $posting->member;
             $memberCash = $member->cashAccount;

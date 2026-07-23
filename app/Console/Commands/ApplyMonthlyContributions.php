@@ -29,6 +29,13 @@ class ApplyMonthlyContributions extends Command
 
         $forcedPeriod = $this->option('month') && $this->option('year');
 
+        if (! $this->option('force') && ! AutomationScheduleSettings::autoApplyCollections()) {
+            $this->skipScheduledRunRecording = true;
+            $this->info(__('Skipped: auto-apply allocations, contributions, and EMI repayments is disabled in Settings.'));
+
+            return self::SUCCESS;
+        }
+
         if (! $this->option('force') && ! $forcedPeriod && ! AutomationScheduleSettings::isContributionApplySlot()) {
             $this->skipScheduledRunRecording = true;
             $this->info(__('Skipped: not a configured contribution apply slot (:times).', [

@@ -31,6 +31,9 @@ final class AutomationScheduleSettings
             'loan_apply_times' => '06:00',
             // Day of month for monthly reconcile + statements (null → cycle start day).
             'month_boundary_day' => null,
+            // Behaviour toggles (Samman default: automate deposits + cash allocation).
+            'auto_accept_deposits' => true,
+            'auto_apply_collections' => true,
         ];
     }
 
@@ -42,6 +45,8 @@ final class AutomationScheduleSettings
         $all = array_merge(self::defaults(), Setting::getGroup(self::GROUP));
 
         return [
+            'automation_auto_accept_deposits' => self::boolFromStored($all['auto_accept_deposits'] ?? null, true),
+            'automation_auto_apply_collections' => self::boolFromStored($all['auto_apply_collections'] ?? null, true),
             'automation_contribution_due_notify_days' => (string) ($all['contribution_due_notify_days'] ?? self::defaults()['contribution_due_notify_days']),
             'automation_contribution_due_notify_time' => (string) ($all['contribution_due_notify_time'] ?? self::defaults()['contribution_due_notify_time']),
             'automation_loan_due_notify_days' => (string) ($all['loan_due_notify_days'] ?? self::defaults()['loan_due_notify_days']),
@@ -57,6 +62,8 @@ final class AutomationScheduleSettings
      */
     public static function saveFromForm(array $state): void
     {
+        Setting::set(self::GROUP, 'auto_accept_deposits', ($state['automation_auto_accept_deposits'] ?? true) ? '1' : '0');
+        Setting::set(self::GROUP, 'auto_apply_collections', ($state['automation_auto_apply_collections'] ?? true) ? '1' : '0');
         Setting::set(self::GROUP, 'contribution_due_notify_days', self::normalizeDayList($state['automation_contribution_due_notify_days'] ?? null));
         Setting::set(self::GROUP, 'contribution_due_notify_time', self::normalizeClockTime($state['automation_contribution_due_notify_time'] ?? null) ?? '09:00');
         Setting::set(self::GROUP, 'loan_due_notify_days', self::normalizeDayList($state['automation_loan_due_notify_days'] ?? null));
@@ -68,6 +75,20 @@ final class AutomationScheduleSettings
             ? max(1, min(28, (int) $state['automation_month_boundary_day']))
             : null;
         Setting::set(self::GROUP, 'month_boundary_day', $boundary !== null ? (string) $boundary : null);
+    }
+
+    public static function autoAcceptDeposits(): bool
+    {
+        return self::boolFromStored(self::get('auto_accept_deposits', null), (bool) self::defaults()['auto_accept_deposits']);
+    }
+
+    /**
+     * When enabled, scheduled apply jobs and realtime cash settlement allocate
+     * parent→dependent shares, contributions, and EMI repayments automatically.
+     */
+    public static function autoApplyCollections(): bool
+    {
+        return self::boolFromStored(self::get('auto_apply_collections', null), (bool) self::defaults()['auto_apply_collections']);
     }
 
     /**
@@ -347,5 +368,14 @@ final class AutomationScheduleSettings
         }
 
         return sprintf('%02d:%02d', (int) $m[1], (int) $m[2]);
+    }
+
+    private static function boolFromStored(mixed $value, bool $default): bool
+    {
+        if ($value === null || $value === '') {
+            return $default;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOL);
     }
 }

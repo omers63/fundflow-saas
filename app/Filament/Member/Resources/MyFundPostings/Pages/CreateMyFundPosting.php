@@ -29,6 +29,15 @@ class CreateMyFundPosting extends CreateRecord
 
     protected function getCreatedNotification(): ?Notification
     {
+        $record = $this->getRecord();
+
+        if ($record?->status === 'accepted') {
+            return Notification::make()
+                ->title(__('Deposit accepted'))
+                ->body(__('Your deposit was accepted and credited to your cash account.'))
+                ->success();
+        }
+
         return Notification::make()
             ->title(__('Deposit submitted'))
             ->body(__('Your request has been sent to the admin for review.'))

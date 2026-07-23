@@ -107,6 +107,38 @@ test('post to member uses bank line detail when description is empty', function 
         ->and($txn->fresh()->is_cleared)->toBeTrue();
 });
 
+test('post to member and mirror use the csv bank transaction date on ledger legs', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-DATE-01',
+        'name' => 'Csv Date Member',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $csvDate = '2025-03-18';
+    $txn = createBankTransaction([
+        'amount' => 2500,
+        'description' => 'CSV deposit',
+        'transaction_date' => $csvDate,
+        'status' => 'imported',
+    ]);
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->service->ensureMirroredAndPostToMember($txn->fresh(), $member),
+    );
+
+    $legs = Transaction::query()
+        ->where('reference_type', BankTransaction::class)
+        ->where('reference_id', $txn->id)
+        ->get();
+
+    expect($legs)->toHaveCount(3)
+        ->and($legs->every(fn (Transaction $leg): bool => $leg->transacted_at->toDateString() === $csvDate))->toBeTrue()
+        ->and($txn->fresh()->cleared_at->toDateString())->toBe($csvDate);
+});
+
 test('mirror to cash does not auto-reverse on unbalanced journal validation', function () {
     $txn = createBankTransaction(['amount' => 1500]);
 

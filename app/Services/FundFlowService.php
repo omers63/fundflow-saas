@@ -7,6 +7,8 @@ use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Member;
 use App\Support\BankTransactionWorkflow;
 use App\Support\BusinessDay;
+use Carbon\Carbon;
+use DateTimeInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -21,14 +23,18 @@ class FundFlowService
      * Mirror selected bank transactions to the Master Cash account.
      * Credits for incoming money (contributions/deposits/repayments),
      * debits for outgoing money (loan disbursements).
+     *
+     * Ledger legs use each CSV line’s transaction_date (or $forceTransactedAt when set).
+     *
+     * @param  Collection<int, int|string>|array<int, int|string>  $bankTransactionIds
      */
-    public function mirrorToCash(Collection|array $bankTransactionIds): int
+    public function mirrorToCash(Collection|array $bankTransactionIds, ?DateTimeInterface $forceTransactedAt = null): int
     {
         $masterCash = Account::masterCash();
         $masterBank = Account::masterBank();
         $mirrored = 0;
 
-        DB::transaction(function () use ($bankTransactionIds, $masterCash, $masterBank, &$mirrored) {
+        DB::transaction(function () use ($bankTransactionIds, $masterCash, $masterBank, $forceTransactedAt, &$mirrored) {
             $transactions = BankTransaction::whereIn('id', $bankTransactionIds)
                 ->where('status', 'imported')
                 ->lockForUpdate()
@@ -41,15 +47,16 @@ class FundFlowService
 
                 $amount = (float) $bankTxn->amount;
                 $description = self::mirrorToCashLedgerDescription($bankTxn);
+                $transactedAt = $forceTransactedAt ?? $this->ledgerDateFromBankLine($bankTxn);
 
                 // Master bank + master cash both credit (or both debit) for the same CSV line.
                 // §5.12 allows this known same-direction bank-import shape under BankTransaction.
                 if ($amount >= 0) {
-                    $this->accounting->credit($masterBank, $amount, $description, $bankTxn);
-                    $masterCashTransaction = $this->accounting->credit($masterCash, $amount, $description, $bankTxn);
+                    $this->accounting->credit($masterBank, $amount, $description, $bankTxn, $transactedAt);
+                    $masterCashTransaction = $this->accounting->credit($masterCash, $amount, $description, $bankTxn, $transactedAt);
                 } else {
-                    $this->accounting->debit($masterBank, abs($amount), $description, $bankTxn);
-                    $masterCashTransaction = $this->accounting->debit($masterCash, abs($amount), $description, $bankTxn);
+                    $this->accounting->debit($masterBank, abs($amount), $description, $bankTxn, $transactedAt);
+                    $masterCashTransaction = $this->accounting->debit($masterCash, abs($amount), $description, $bankTxn, $transactedAt);
                 }
 
                 $bankTxn->update([
@@ -66,18 +73,23 @@ class FundFlowService
     /**
      * Post to master cash when still imported, then post to the member cash account.
      */
-    public function ensureMirroredAndPostToMember(BankTransaction $bankTransaction, Member $member): void
-    {
+    public function ensureMirroredAndPostToMember(
+        BankTransaction $bankTransaction,
+        Member $member,
+        ?DateTimeInterface $transactedAt = null,
+    ): void {
         if (! BankTransactionWorkflow::canPostToMember($bankTransaction)) {
             throw new InvalidArgumentException(__('This statement line is for bank matching only; posting was already recorded via the deposit or cash-out request.'));
         }
 
+        $transactedAt ??= $this->ledgerDateFromBankLine($bankTransaction);
+
         // Mirror then member credit are one economic event for the bank-file path.
         // Realtime pool/member checks mid-way would false-positive (master cash moves
         // before member cash; member cash moves before the bank line is marked posted).
-        ReconciliationService::withoutRealtimeChecks(function () use ($bankTransaction, $member): void {
+        ReconciliationService::withoutRealtimeChecks(function () use ($bankTransaction, $member, $transactedAt): void {
             if ($bankTransaction->status === 'imported') {
-                $this->mirrorToCash([$bankTransaction->id]);
+                $this->mirrorToCash([$bankTransaction->id], $transactedAt);
                 $bankTransaction->refresh();
             }
 
@@ -85,7 +97,7 @@ class FundFlowService
                 throw new InvalidArgumentException(__('This statement line cannot be posted to a member.'));
             }
 
-            $this->postToMember($bankTransaction, $member);
+            $this->postToMember($bankTransaction, $member, $transactedAt);
         });
     }
 
@@ -94,14 +106,19 @@ class FundFlowService
      * This reflects the credit in the member's cash account as a mirror
      * (no actual debit of master cash — just a mirror of the credit).
      */
-    public function postToMember(BankTransaction $bankTransaction, Member $member): void
-    {
+    public function postToMember(
+        BankTransaction $bankTransaction,
+        Member $member,
+        ?DateTimeInterface $transactedAt = null,
+    ): void {
         if (! BankTransactionWorkflow::canPostToMember($bankTransaction)) {
             throw new InvalidArgumentException(__('This statement line is for bank matching only; posting was already recorded via the deposit or cash-out request.'));
         }
 
-        ReconciliationService::withoutRealtimeChecks(function () use ($bankTransaction, $member): void {
-            DB::transaction(function () use ($bankTransaction, $member): void {
+        $transactedAt ??= $this->ledgerDateFromBankLine($bankTransaction);
+
+        ReconciliationService::withoutRealtimeChecks(function () use ($bankTransaction, $member, $transactedAt): void {
+            DB::transaction(function () use ($bankTransaction, $member, $transactedAt): void {
                 $memberCash = $member->cashAccount;
                 $amount = (float) $bankTransaction->amount;
                 $description = self::postedToMemberLedgerDescription($bankTransaction);
@@ -112,14 +129,14 @@ class FundFlowService
                     'status' => 'posted',
                     'member_id' => $member->id,
                     'is_cleared' => true,
-                    'cleared_at' => BusinessDay::now(),
+                    'cleared_at' => $transactedAt,
                 ]);
 
                 // Same BankTransaction reference as bank/cash mirror legs; §5.12 allows this shape.
                 if ($amount >= 0) {
-                    $this->accounting->credit($memberCash, $amount, $description, $bankTransaction, null, $member->id);
+                    $this->accounting->credit($memberCash, $amount, $description, $bankTransaction, $transactedAt, $member->id);
                 } else {
-                    $this->accounting->debit($memberCash, abs($amount), $description, $bankTransaction, null, $member->id);
+                    $this->accounting->debit($memberCash, abs($amount), $description, $bankTransaction, $transactedAt, $member->id);
                 }
             });
         });
@@ -193,5 +210,19 @@ class FundFlowService
         }
 
         return __('Bank import #:id', ['id' => $bankTransaction->id]);
+    }
+
+    /**
+     * Ledger / clearance timestamp for a CSV bank line (falls back to business day).
+     */
+    public function ledgerDateFromBankLine(BankTransaction $bankTransaction): Carbon
+    {
+        $date = $bankTransaction->transaction_date;
+
+        if ($date === null) {
+            return BusinessDay::now();
+        }
+
+        return Carbon::parse($date)->startOfDay();
     }
 }

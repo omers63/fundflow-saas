@@ -73,3 +73,23 @@ it('falls back month-boundary day to cycle start day when unset', function () {
 
     expect(AutomationScheduleSettings::monthBoundaryDay())->toBe(8);
 });
+
+it('defaults auto-accept deposits and auto-apply collections to on', function () {
+    Setting::query()->where('group', AutomationScheduleSettings::GROUP)->delete();
+
+    expect(AutomationScheduleSettings::autoAcceptDeposits())->toBeTrue()
+        ->and(AutomationScheduleSettings::autoApplyCollections())->toBeTrue();
+});
+
+it('persists automation behaviour toggles from the settings form', function () {
+    AutomationScheduleSettings::saveFromForm([
+        ...AutomationScheduleSettings::allForForm(),
+        'automation_auto_accept_deposits' => false,
+        'automation_auto_apply_collections' => false,
+    ]);
+
+    expect(AutomationScheduleSettings::autoAcceptDeposits())->toBeFalse()
+        ->and(AutomationScheduleSettings::autoApplyCollections())->toBeFalse()
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'auto_accept_deposits'))->toBe('0')
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'auto_apply_collections'))->toBe('0');
+});

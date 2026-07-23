@@ -78,7 +78,7 @@ class CashAccountPage extends Page implements HasForms
 
         $data = $this->depositForm->getState();
 
-        app(FundPostingService::class)->submit(
+        $posting = app(FundPostingService::class)->submit(
             member: $member,
             amount: (float) $data['amount'],
             postingDate: $data['posting_date'],
@@ -89,11 +89,19 @@ class CashAccountPage extends Page implements HasForms
 
         $this->depositForm->fill([]);
 
-        Notification::make()
-            ->title(__('Deposit submitted'))
-            ->body(__('Your request has been sent to the admin for review.'))
-            ->success()
-            ->send();
+        if ($posting->status === 'accepted') {
+            Notification::make()
+                ->title(__('Deposit accepted'))
+                ->body(__('Your deposit was accepted and credited to your cash account.'))
+                ->success()
+                ->send();
+        } else {
+            Notification::make()
+                ->title(__('Deposit submitted'))
+                ->body(__('Your request has been sent to the admin for review.'))
+                ->success()
+                ->send();
+        }
 
         $this->dispatch('$refresh');
     }

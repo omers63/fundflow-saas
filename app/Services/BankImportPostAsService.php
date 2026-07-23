@@ -106,7 +106,7 @@ final class BankImportPostAsService
         }
 
         if ($type === self::TYPE_MEMBER_DEPOSIT) {
-            $this->postMemberDeposit($imported, $memberId);
+            $this->postMemberDeposit($imported, $memberId, $date);
 
             return;
         }
@@ -141,12 +141,12 @@ final class BankImportPostAsService
         });
     }
 
-    private function postMemberDeposit(BankTransaction $imported, ?int $memberId): void
+    private function postMemberDeposit(BankTransaction $imported, ?int $memberId, Carbon $date): void
     {
         $member = $this->requireMember($memberId);
 
         AccountingService::withoutMemberCashCollection(
-            fn () => $this->fundFlow->ensureMirroredAndPostToMember($imported, $member),
+            fn () => $this->fundFlow->ensureMirroredAndPostToMember($imported, $member, $date),
         );
     }
 

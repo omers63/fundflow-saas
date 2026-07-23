@@ -603,6 +603,19 @@ class Settings extends Page implements HasForms
                             ->required()
                             ->helperText(__('Day of month for monthly reconciliation snapshot and statement generation at 00:30. Defaults to the cycle start day.')),
                     ]),
+                Section::make(__('Automation behaviour'))
+                    ->description(__('Control whether deposits and cash allocations run without manual review.'))
+                    ->columns(2)
+                    ->schema([
+                        Toggle::make('automation_auto_accept_deposits')
+                            ->label(__('Auto-accept deposits'))
+                            ->helperText(__('When enabled, member deposit requests are accepted immediately and credited to cash. When disabled, deposits stay pending until an admin accepts them.'))
+                            ->default(true),
+                        Toggle::make('automation_auto_apply_collections')
+                            ->label(__('Auto-apply allocations, contributions, and EMI repayments'))
+                            ->helperText(__('When enabled, available cash is allocated automatically (parent→dependent shares, contributions, and EMI repayments) on deposit/credit and on the scheduled apply jobs. When disabled, only explicit admin apply actions run.'))
+                            ->default(true),
+                    ]),
                 Section::make(__('Automation schedule'))
                     ->description(__('Due notifications fire on selected days after the cycle opens. Apply jobs run once or twice daily while the cycle is open; late fees and loan delinquency follow each apply automatically.'))
                     ->columns(2)

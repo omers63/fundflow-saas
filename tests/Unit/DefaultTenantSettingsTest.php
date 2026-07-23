@@ -51,6 +51,8 @@ it('persists samman-shaped settings defaults for a fresh tenant', function () {
         ->and(Setting::get(AutomationScheduleSettings::GROUP, 'contribution_apply_times'))->toBe('06:00')
         ->and(Setting::get(AutomationScheduleSettings::GROUP, 'loan_apply_times'))->toBe('06:00')
         ->and(Setting::get(AutomationScheduleSettings::GROUP, 'contribution_due_notify_days'))->toBe('0,7,14,21')
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'auto_accept_deposits'))->toBe('1')
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'auto_apply_collections'))->toBe('1')
         ->and(Setting::get(CommunicationSettings::GROUP, 'email_enabled'))->toBe('1')
         ->and(Setting::get(LedgerSettings::GROUP, 'show_manual_credit_debit'))->toBe('0')
         ->and(Setting::get(FiscalSettings::GROUP, 'fiscal_year_start_month'))->toBe('1')

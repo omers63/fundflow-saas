@@ -17,6 +17,7 @@ use App\Support\ContributionExemptionPolicy;
 use App\Support\MemberMembershipPolicy;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
@@ -782,6 +783,29 @@ class ContributionCycleService
             ->exists();
     }
 
+    public function dependentAllocatedAmountForPeriod(Member $dependent, int $month, int $year): float
+    {
+        return (float) DependentCashAllocation::query()
+            ->where('dependent_member_id', $dependent->id)
+            ->where('allocation_month', $month)
+            ->where('allocation_year', $year)
+            ->sum('amount');
+    }
+
+    /**
+     * True once parent→dependent transfers for the cycle cover the dependent’s full cycle dues.
+     */
+    public function dependentAllocationFulfilledForPeriod(Member $dependent, int $month, int $year): bool
+    {
+        $required = $this->dependentCycleDuesForPeriod($dependent, $month, $year);
+
+        if ($required <= 0.00001) {
+            return true;
+        }
+
+        return $this->dependentAllocatedAmountForPeriod($dependent, $month, $year) >= $required - 0.00001;
+    }
+
     public function memberBaseEligibleForDependentAllocation(Member $dependent, int $month, int $year): bool
     {
         if ($dependent->status !== 'active') {
@@ -817,9 +841,14 @@ class ContributionCycleService
             return false;
         }
 
-        return ! $this->dependentAllocationExistsForPeriod($dependent, $month, $year);
+        return ! $this->dependentAllocationFulfilledForPeriod($dependent, $month, $year);
     }
 
+    /**
+     * Remaining parent→dependent transfer for the cycle: min(unfulfilled dues quota, cash shortfall).
+     * Re-runs are allowed until the full cycle dues have been allocated; spending allocated cash
+     * does not reopen the quota.
+     */
     public function dependentAllocationShortfallForPeriod(Member $dependent, int $month, int $year): float
     {
         if (! $this->memberEligibleForDependentAllocationFunding($dependent, $month, $year)) {
@@ -827,8 +856,10 @@ class ContributionCycleService
         }
 
         $required = $this->dependentCycleDuesForPeriod($dependent, $month, $year);
+        $remainingQuota = max(0.0, $required - $this->dependentAllocatedAmountForPeriod($dependent, $month, $year));
+        $cashShortfall = max(0.0, $required - $dependent->getCashBalance());
 
-        return max(0.0, $required - $dependent->getCashBalance());
+        return min($remainingQuota, $cashShortfall);
     }
 
     public function totalDependentShortfallForParentForPeriod(Member $parent, int $month, int $year): float
@@ -1054,7 +1085,7 @@ class ContributionCycleService
         }
 
         foreach ($parent->dependents()->where('status', 'active')->orderBy('member_number')->get() as $dependent) {
-            if ($this->dependentAllocationExistsForPeriod($dependent, $month, $year)) {
+            if ($this->dependentAllocationFulfilledForPeriod($dependent, $month, $year)) {
                 $details[] = $this->dependentAllocationDetailLine(
                     $dependent,
                     __('Allocation for :period was already completed.', ['period' => $periodLabel]),
@@ -1082,29 +1113,30 @@ class ContributionCycleService
             }
 
             try {
-                DB::transaction(function () use ($parent, $dependent, $shortfall, $periodLabel, $month, $year): void {
-                    $allocation = DependentCashAllocation::query()->create([
-                        'parent_member_id' => $parent->id,
-                        'dependent_member_id' => $dependent->id,
-                        'allocation_month' => $month,
-                        'allocation_year' => $year,
-                        'amount' => $shortfall,
-                    ]);
+                $transferred = $this->transferDependentAllocationTowardFulfillment(
+                    $parent,
+                    $dependent,
+                    $shortfall,
+                    $month,
+                    $year,
+                    $periodLabel,
+                );
 
-                    $this->accounting->fundDependentCashAccount(
-                        $parent,
+                if ($transferred <= 0.00001) {
+                    $details[] = $this->dependentAllocationDetailLine(
                         $dependent,
-                        $shortfall,
-                        __('Allocation — :period', ['period' => $periodLabel]),
-                        reference: $allocation,
+                        __('Allocation for :period was already completed.', ['period' => $periodLabel]),
                     );
-                });
+
+                    continue;
+                }
+
                 $transfers++;
                 $allocatedDependentIds[] = $dependent->id;
                 $details[] = $this->dependentAllocationDetailLine(
                     $dependent,
                     __('Transferred :amount for :period.', [
-                        'amount' => MoneyDisplay::format($shortfall, $currency) ?? '',
+                        'amount' => MoneyDisplay::format($transferred, $currency) ?? '',
                         'period' => $periodLabel,
                     ]),
                 );
@@ -1122,6 +1154,67 @@ class ContributionCycleService
             'details' => $details,
             'allocated_dependent_ids' => $allocatedDependentIds,
         ];
+    }
+
+    /**
+     * Transfer remaining cycle allocation (top-up allowed until dues are fully funded).
+     * Concurrent creators lose the unique race and are treated as already handled this pass.
+     *
+     * @return float Amount transferred (0 when nothing left to allocate)
+     */
+    private function transferDependentAllocationTowardFulfillment(
+        Member $parent,
+        Member $dependent,
+        float $requested,
+        int $month,
+        int $year,
+        string $periodLabel,
+    ): float {
+        try {
+            return DB::transaction(function () use ($parent, $dependent, $requested, $month, $year, $periodLabel): float {
+                $existing = DependentCashAllocation::query()
+                    ->where('dependent_member_id', $dependent->id)
+                    ->where('allocation_month', $month)
+                    ->where('allocation_year', $year)
+                    ->lockForUpdate()
+                    ->first();
+
+                $required = $this->dependentCycleDuesForPeriod($dependent, $month, $year);
+                $alreadyAllocated = $existing !== null ? (float) $existing->amount : 0.0;
+                $remainingQuota = max(0.0, $required - $alreadyAllocated);
+                $cashShortfall = max(0.0, $required - $dependent->getCashBalance());
+                $toTransfer = min($requested, $remainingQuota, $cashShortfall);
+
+                if ($toTransfer <= 0.00001) {
+                    return 0.0;
+                }
+
+                if ($existing !== null) {
+                    $existing->update(['amount' => round($alreadyAllocated + $toTransfer, 2)]);
+                    $allocation = $existing->fresh() ?? $existing;
+                } else {
+                    $allocation = DependentCashAllocation::query()->create([
+                        'parent_member_id' => $parent->id,
+                        'dependent_member_id' => $dependent->id,
+                        'allocation_month' => $month,
+                        'allocation_year' => $year,
+                        'amount' => round($toTransfer, 2),
+                    ]);
+                }
+
+                $this->accounting->fundDependentCashAccount(
+                    $parent,
+                    $dependent,
+                    $toTransfer,
+                    __('Allocation — :period', ['period' => $periodLabel]),
+                    reference: $allocation,
+                );
+
+                return $toTransfer;
+            });
+        } catch (UniqueConstraintViolationException) {
+            return 0.0;
+        }
     }
 
     private function dependentAllocationDetailLine(Member $dependent, string $message): string

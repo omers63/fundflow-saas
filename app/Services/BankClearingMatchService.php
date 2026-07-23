@@ -459,10 +459,11 @@ class BankClearingMatchService
 
         $description = FundFlowService::mirrorToCashLedgerDescription($imported);
         $memberId = $imported->member_id;
+        $transactedAt = app(FundFlowService::class)->ledgerDateFromBankLine($imported);
 
         $ledger = $amount >= 0
-            ? $this->accounting->credit($masterBank, $amount, $description, $imported, null, $memberId)
-            : $this->accounting->debit($masterBank, abs($amount), $description, $imported, null, $memberId);
+            ? $this->accounting->credit($masterBank, $amount, $description, $imported, $transactedAt, $memberId)
+            : $this->accounting->debit($masterBank, abs($amount), $description, $imported, $transactedAt, $memberId);
 
         $imported->forceFill(['master_bank_transaction_id' => $ledger->id])->saveQuietly();
     }

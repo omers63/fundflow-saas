@@ -13,6 +13,7 @@ use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Services\Loans\LoanInstallmentCollectionService;
 use App\Services\Loans\LoanRepaymentService;
+use App\Support\AutomationScheduleSettings;
 use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
 use App\Support\ContributionPolicySettings;
@@ -185,6 +186,10 @@ class ContributionCollectionCycleService
      */
     public function onMemberCashIncreased(Member $member): void
     {
+        if (! AutomationScheduleSettings::autoApplyCollections()) {
+            return;
+        }
+
         $member = $member->fresh() ?? $member;
         $member->unsetRelation('accounts');
         $activeDependents = $member->dependents()->where('status', 'active')->orderBy('member_number')->get();
