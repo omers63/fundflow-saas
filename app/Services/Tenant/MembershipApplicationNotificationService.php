@@ -17,6 +17,7 @@ final class MembershipApplicationNotificationService
 {
     public function __construct(
         private readonly OperationalReviewWorkflowService $reviewWorkflow,
+        private readonly MemberOnboardingGreetingService $onboardingGreetings,
     ) {}
 
     public function notifyAdminsOfSubmission(MembershipApplication $application): void
@@ -36,6 +37,7 @@ final class MembershipApplicationNotificationService
         try {
             $member->loadMissing('user');
             $member->user?->notify(new MembershipApplicationApprovedNotification($application, $member));
+            $this->onboardingGreetings->sendToMember($member);
         } catch (Throwable $e) {
             logger()->warning('MembershipApplicationNotificationService: approval alert failed', [
                 'application_id' => $application->id,

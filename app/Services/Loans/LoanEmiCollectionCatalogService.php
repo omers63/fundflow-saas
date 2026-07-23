@@ -59,8 +59,7 @@ class LoanEmiCollectionCatalogService
                             ->whereBetween('due_date', [$start, $end]);
                     });
             })
-            ->with(['cashAccount', 'parent'])
-            ->orderBy('name');
+            ->with(['cashAccount', 'parent']);
     }
 
     /**

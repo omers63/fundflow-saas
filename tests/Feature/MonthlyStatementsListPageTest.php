@@ -185,3 +185,37 @@ test('bulk regenerate recalculates selected statements and clears delivery', fun
     expect($fresh->notified_at)->toBeNull()
         ->and($fresh->generated_at->greaterThan($statement->generated_at))->toBeTrue();
 });
+
+test('generate previous month action dismisses modal when generation completes', function () {
+    Notification::fake();
+
+    $period = now()->subMonthNoOverflow()->format('Y-m');
+
+    Livewire::actingAs($this->admin, 'tenant')
+        ->test(ListMonthlyStatements::class)
+        ->mountAction('generate_previous')
+        ->assertActionMounted('generate_previous')
+        ->callMountedAction()
+        ->assertHasNoActionErrors()
+        ->assertNotified()
+        ->assertSet('mountedActions', []);
+
+    expect(MonthlyStatement::query()->where('period', $period)->where('member_id', $this->member->id)->exists())->toBeTrue();
+});
+
+test('generate for period action dismisses modal when generation completes', function () {
+    Notification::fake();
+
+    Livewire::actingAs($this->admin, 'tenant')
+        ->test(ListMonthlyStatements::class)
+        ->callAction('generate_for_period', [
+            'period' => '2026-03',
+            'send_notification' => false,
+            'member_id' => $this->member->id,
+        ])
+        ->assertHasNoActionErrors()
+        ->assertNotified()
+        ->assertSet('mountedActions', []);
+
+    expect(MonthlyStatement::query()->where('period', '2026-03')->where('member_id', $this->member->id)->exists())->toBeTrue();
+});

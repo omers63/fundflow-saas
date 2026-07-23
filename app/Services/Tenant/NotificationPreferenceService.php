@@ -89,7 +89,7 @@ final class NotificationPreferenceService
         ],
         self::MEMBERSHIP => [
             'label' => 'Membership',
-            'description' => 'Membership application approval or rejection updates.',
+            'description' => 'Membership approval, rejection, and onboarding welcome emails.',
             'icon' => 'heroicon-o-identification',
             'supported' => [self::CH_IN_APP, self::CH_PUSH, self::CH_EMAIL, self::CH_SMS, self::CH_WHATSAPP],
             'defaults' => [self::CH_IN_APP, self::CH_PUSH, self::CH_EMAIL],

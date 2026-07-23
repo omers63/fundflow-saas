@@ -256,7 +256,37 @@ test('branded mail message uses markdown mail view', function () {
         ],
     );
 
-    expect($mail->subject)->toBe('Hello');
+    expect($mail->subject)->toBe('Hello')
+        ->and((string) $mail->render())->toContain('dir="ltr"');
+});
+
+test('branded arabic mail message sets rtl direction', function () {
+    NotificationTemplateCatalog::seedMissingDefaults();
+    NotificationTemplateCatalog::restoreDefaults('member_onboarding_greeting');
+
+    $mail = app(NotificationTemplateRenderer::class)->brandedMailMessage(
+        'member_onboarding_greeting',
+        'ar',
+        [
+            'member_name' => 'أحمد',
+            'fund_name' => 'صندوق العائلة',
+            'action_url' => 'https://example.test/member',
+            'action_label' => 'فتح',
+        ],
+        theme: 'onboarding',
+    );
+
+    $html = (string) $mail->render();
+
+    expect($mail->subject)->toContain('صندوق العائلة')
+        ->and($html)->toContain('dir="rtl"')
+        ->and($html)->toContain('lang="ar"')
+        ->and($html)->toContain('direction:rtl')
+        ->and($html)->toContain('مرحبًا بك معنا')
+        ->and($html)->toContain('الحسابات · حركة الأموال')
+        ->and($html)->toContain('حساباتك')
+        ->and($html)->toContain('النقد')
+        ->and($html)->toContain('border-radius:16px');
 });
 
 test('in-app and push channel families can be saved independently from email', function () {

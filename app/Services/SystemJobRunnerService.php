@@ -53,17 +53,13 @@ class SystemJobRunnerService
 
         $output = new BufferedOutput;
         $started = microtime(true);
-        $parameters = [];
-
-        if (tenancy()->initialized && filled(tenant('id'))) {
-            $parameters['--tenants'] = [(string) tenant('id')];
-        }
+        $parameters = $this->artisanParametersFor($definition['command']);
 
         RecordSystemJobRunListener::suppressRecording();
 
         try {
             @set_time_limit(0);
-                        $exitCode = Artisan::call($definition['command'], $parameters, $output);
+            $exitCode = Artisan::call($definition['command'], $parameters, $output);
         } catch (\Throwable $exception) {
             $exitCode = 1;
             $output->writeln($exception->getMessage());
@@ -129,6 +125,32 @@ class SystemJobRunnerService
             'last_started_at' => $latest?->started_at,
             'last_duration_ms' => $latest?->duration_ms,
             'last_exit_code' => $latest?->exit_code,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function artisanParametersFor(string $command): array
+    {
+        if (! tenancy()->initialized || blank(tenant('id'))) {
+            return [];
+        }
+
+        $name = explode(' ', trim($command), 2)[0];
+
+        try {
+            $definition = Artisan::all()[$name]?->getDefinition();
+        } catch (\Throwable) {
+            return [];
+        }
+
+        if ($definition === null || ! $definition->hasOption('tenants')) {
+            return [];
+        }
+
+        return [
+            '--tenants' => [(string) tenant('id')],
         ];
     }
 }

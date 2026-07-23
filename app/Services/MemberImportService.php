@@ -192,7 +192,7 @@ final class MemberImportService
                 $attributes['parent_member_id'] = $parentMember->id;
             }
 
-            $member = $this->householdMembers->createFromAdmin($attributes, $plainPassword);
+            $member = $this->householdMembers->createFromAdmin($attributes, $plainPassword, sendOnboardingGreeting: false);
 
             if ($arrearsCutoffDate !== null) {
                 $cutoff = Carbon::parse($arrearsCutoffDate);

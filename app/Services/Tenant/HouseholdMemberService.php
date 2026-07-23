@@ -54,7 +54,7 @@ class HouseholdMemberService
      *     parent_member_id?: int|null,
      * }  $attributes
      */
-    public function createFromAdmin(array $attributes, string $password): Member
+    public function createFromAdmin(array $attributes, string $password, bool $sendOnboardingGreeting = true): Member
     {
         $parentMember = null;
         $parentId = $attributes['parent_member_id'] ?? null;
@@ -95,7 +95,13 @@ class HouseholdMemberService
             $this->assignToHousehold($member, $parentMember, $householdEmail);
         }
 
-        return $member->fresh();
+        $member = $member->fresh() ?? $member;
+
+        if ($sendOnboardingGreeting) {
+            app(MemberOnboardingGreetingService::class)->sendToMember($member);
+        }
+
+        return $member;
     }
 
     public function assignToHousehold(Member $member, Member $parent, ?string $contactEmail = null): Member

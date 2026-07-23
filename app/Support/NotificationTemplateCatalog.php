@@ -37,6 +37,7 @@ use App\Notifications\Tenant\LoanSettledNotification;
 use App\Notifications\Tenant\LoanSubmittedNotification;
 use App\Notifications\Tenant\MemberAnnouncementNotification;
 use App\Notifications\Tenant\MemberDirectMessageNotification;
+use App\Notifications\Tenant\MemberOnboardingGreetingNotification;
 use App\Notifications\Tenant\MembershipApplicationApprovedNotification;
 use App\Notifications\Tenant\MembershipApplicationRejectedNotification;
 use App\Notifications\Tenant\MemberStatusChangedNotification;
@@ -249,6 +250,230 @@ final class NotificationTemplateCatalog
                 'ar' => [
                     'subject' => 'تمت الموافقة على العضوية',
                     'body' => '{{body}}',
+                ],
+            ],
+            'member_onboarding_greeting' => [
+                'category' => NotificationPreferenceService::MEMBERSHIP,
+                'label' => 'Member onboarding greeting',
+                'variables' => ['member_name', 'fund_name', 'action_url', 'action_label'],
+                'supported' => NotificationPreferenceService::CATEGORIES[NotificationPreferenceService::MEMBERSHIP]['supported'],
+                'en' => [
+                    'subject' => 'Welcome to {{fund_name}}',
+                    'body' => <<<'MD'
+Hello {{member_name}},
+
+Welcome to **{{fund_name}}**.
+
+## About the fund
+
+{{fund_name}} is a family fund where members contribute regularly, build a shared pool, and access loans and support according to the fund’s rules. Our goals are mutual support, clear balances, and orderly monthly collections.
+
+## Your accounts
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:separate;border-spacing:8px;margin:8px 0 16px;">
+<tr>
+<td width="33%" valign="top" style="width:33%;background:#ecfeff;border:1px solid #a5f3fc;border-radius:12px;padding:14px;">
+<div style="font-size:20px;line-height:1;margin-bottom:6px;">💵</div>
+<strong style="color:#0e7490;">Cash</strong><br>
+<span style="color:#475569;font-size:13px;line-height:1.45;">Money available to spend inside the fund — pay contributions, repay loans, or request a cash-out.</span>
+</td>
+<td width="33%" valign="top" style="width:33%;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px;">
+<div style="font-size:20px;line-height:1;margin-bottom:6px;">🏦</div>
+<strong style="color:#15803d;">Fund</strong><br>
+<span style="color:#475569;font-size:13px;line-height:1.45;">Your share of the pool. Monthly contributions increase this balance and reflect your standing.</span>
+</td>
+<td width="33%" valign="top" style="width:33%;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px;">
+<div style="font-size:20px;line-height:1;margin-bottom:6px;">📄</div>
+<strong style="color:#c2410c;">Loan</strong><br>
+<span style="color:#475569;font-size:13px;line-height:1.45;">What you still owe if you have an approved loan. It goes down as EMI repayments are applied.</span>
+</td>
+</tr>
+</table>
+
+Parents may also manage **dependents** and set how much of the household contribution is allocated to each dependent.
+
+## How money moves
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:separate;border-spacing:8px;margin:8px 0 16px;">
+<tr>
+<td width="50%" valign="top" style="width:50%;background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #0284c7;border-radius:12px;padding:14px;">
+<strong style="color:#0369a1;">Into your cash (then the fund)</strong>
+<ul style="margin:10px 0 0;padding-left:18px;color:#475569;font-size:13px;line-height:1.5;">
+<li><strong>Deposits</strong> — bank transfer accepted → cash rises</li>
+<li><strong>Contributions</strong> — cash → fund share each cycle</li>
+<li><strong>EMI repayments</strong> — cash reduces your loan balance</li>
+<li><strong>Dependent allocation</strong> — parent splits household contribution</li>
+</ul>
+</td>
+<td width="50%" valign="top" style="width:50%;background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #059669;border-radius:12px;padding:14px;">
+<strong style="color:#047857;">From the fund to you</strong>
+<ul style="margin:10px 0 0;padding-left:18px;color:#475569;font-size:13px;line-height:1.5;">
+<li><strong>Loan disbursement</strong> — payout credited to your cash</li>
+<li><strong>Cash-outs</strong> — approved withdrawal leaves your cash</li>
+</ul>
+</td>
+</tr>
+</table>
+
+Keep enough **cash** before collection windows so contributions and EMI can clear without arrears.
+
+## How to access the fund
+
+1. Open the member portal with the button below (or your fund’s member login page).
+2. Sign in with the email and password you were given or set during registration.
+3. On first visit, install the portal as an app for quicker access (see below).
+
+## Install the app (PWA)
+
+### On a computer (Chrome or Edge)
+
+1. Open the member portal in **Chrome** or **Microsoft Edge**.
+2. Look for the install icon in the address bar, or open the browser menu → **Install app** / **Apps** → **Install this site as an app**.
+3. Confirm. The fund opens in its own window from your desktop or Start menu.
+
+### On Android
+
+1. Open the member portal in **Chrome**.
+2. Tap the menu (⋮) → **Install app** or **Add to Home screen**.
+3. Confirm. An icon appears on your home screen.
+
+### On iPhone or iPad
+
+1. Open the member portal in **Safari** (required on iOS).
+2. Tap the **Share** button.
+3. Choose **Add to Home Screen**, then **Add**.
+
+## Permissions to accept
+
+When prompted, please allow:
+
+- **Notifications** — contribution due dates, loan reminders, and important fund messages
+- **Camera** only if the portal asks for document uploads (not required for basic use)
+
+You can change notification preferences anytime under **Settings → Notifications** in the member portal.
+
+## Using the member portal
+
+- **Home** — balances, due items, and quick actions
+- **Contributions** — what is due and your history
+- **Loans** — request or track repayments when eligible
+- **Statements** — download monthly statements
+- **Messages / Alerts** — admin messages and system notifications
+- **Settings** — profile, language, and notification preferences
+
+If you need help, reply to this email or contact your fund administrators.
+
+Welcome aboard!
+MD,
+                ],
+                'ar' => [
+                    'subject' => 'مرحبًا بك في {{fund_name}}',
+                    'body' => <<<'MD'
+مرحبًا {{member_name}}،
+
+أهلًا بك في **{{fund_name}}**.
+
+## عن الصندوق
+
+{{fund_name}} صندوق عائلي يساهم فيه الأعضاء بانتظام، ويبنيون رصيدًا مشتركًا، ويحصلون على القروض والدعم وفق قواعد الصندوق. أهدافنا هي الدعم المتبادل، ووضوح الأرصدة، وتحصيل الاشتراكات الشهرية بشكل منظم.
+
+## حساباتك
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:separate;border-spacing:8px;margin:8px 0 16px;">
+<tr>
+<td width="33%" valign="top" style="width:33%;background:#ecfeff;border:1px solid #a5f3fc;border-radius:12px;padding:14px;">
+<div style="font-size:20px;line-height:1;margin-bottom:6px;">💵</div>
+<strong style="color:#0e7490;">النقد</strong><br>
+<span style="color:#475569;font-size:13px;line-height:1.45;">المال المتاح للاستخدام داخل الصندوق — دفع الاشتراكات، سداد القروض، أو طلب سحب نقدي.</span>
+</td>
+<td width="33%" valign="top" style="width:33%;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px;">
+<div style="font-size:20px;line-height:1;margin-bottom:6px;">🏦</div>
+<strong style="color:#15803d;">الصندوق</strong><br>
+<span style="color:#475569;font-size:13px;line-height:1.45;">حصتك في المجموع المشترك. تزيد الاشتراكات الشهرية هذا الرصيد وتعكس مكانتك.</span>
+</td>
+<td width="33%" valign="top" style="width:33%;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px;">
+<div style="font-size:20px;line-height:1;margin-bottom:6px;">📄</div>
+<strong style="color:#c2410c;">القرض</strong><br>
+<span style="color:#475569;font-size:13px;line-height:1.45;">ما لا يزال مستحقًا عليك إذا كان لديك قرض معتمد. ينخفض مع تطبيق الأقساط.</span>
+</td>
+</tr>
+</table>
+
+قد يدير ولي الأمر أيضًا **التابعين** ويحدد مقدار ما يُخصَّص من اشتراك الأسرة لكل تابع.
+
+## كيف تتحرك الأموال
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:separate;border-spacing:8px;margin:8px 0 16px;">
+<tr>
+<td width="50%" valign="top" style="width:50%;background:#f8fafc;border:1px solid #e2e8f0;border-right:4px solid #0284c7;border-radius:12px;padding:14px;">
+<strong style="color:#0369a1;">إلى نقدك (ثم إلى الصندوق)</strong>
+<ul style="margin:10px 0 0;padding-right:18px;color:#475569;font-size:13px;line-height:1.5;">
+<li><strong>الإيداعات</strong> — بعد قبول التحويل البنكي يرتفع النقد</li>
+<li><strong>الاشتراكات</strong> — من النقد إلى حصة الصندوق كل دورة</li>
+<li><strong>سداد الأقساط</strong> — النقد يخفض رصيد القرض</li>
+<li><strong>تخصيص التابعين</strong> — ولي الأمر يقسّم اشتراك الأسرة</li>
+</ul>
+</td>
+<td width="50%" valign="top" style="width:50%;background:#f8fafc;border:1px solid #e2e8f0;border-right:4px solid #059669;border-radius:12px;padding:14px;">
+<strong style="color:#047857;">من الصندوق إليك</strong>
+<ul style="margin:10px 0 0;padding-right:18px;color:#475569;font-size:13px;line-height:1.5;">
+<li><strong>صرف القرض</strong> — يُضاف المبلغ إلى نقدك</li>
+<li><strong>السحب النقدي</strong> — بعد الموافقة ينخفض رصيد النقد</li>
+</ul>
+</td>
+</tr>
+</table>
+
+احرص على وجود **نقد** كافٍ قبل نوافذ التحصيل حتى تُسدَّد الاشتراكات والأقساط دون متأخرات.
+
+## كيفية الدخول إلى الصندوق
+
+1. افتح بوابة العضو عبر الزر أدناه (أو صفحة تسجيل دخول الأعضاء لصندوقك).
+2. سجّل الدخول بالبريد وكلمة المرور التي حصلت عليها أو عيّنتها عند التسجيل.
+3. في الزيارة الأولى، ثبّت البوابة كتطبيق لوصول أسرع (انظر أدناه).
+
+## تثبيت التطبيق (PWA)
+
+### على الحاسوب (Chrome أو Edge)
+
+1. افتح بوابة العضو في **Chrome** أو **Microsoft Edge**.
+2. ابحث عن أيقونة التثبيت في شريط العنوان، أو من قائمة المتصفح ← **تثبيت التطبيق** / **التطبيقات** ← **تثبيت هذا الموقع كتطبيق**.
+3. أكّد. يفتح الصندوق في نافذة مستقلة من سطح المكتب أو قائمة ابدأ.
+
+### على Android
+
+1. افتح بوابة العضو في **Chrome**.
+2. من القائمة (⋮) ← **تثبيت التطبيق** أو **إضافة إلى الشاشة الرئيسية**.
+3. أكّد. تظهر أيقونة على الشاشة الرئيسية.
+
+### على iPhone أو iPad
+
+1. افتح بوابة العضو في **Safari** (مطلوب على iOS).
+2. اضغط زر **المشاركة**.
+3. اختر **إضافة إلى الشاشة الرئيسية** ثم **إضافة**.
+
+## الأذونات التي يُفضّل قبولها
+
+عند ظهور الطلب، يُرجى السماح بـ:
+
+- **الإشعارات** — مواعيد الاشتراكات، تذكيرات القروض، ورسائل الصندوق المهمة
+- **الكاميرا** فقط إذا طلبت البوابة رفع مستندات (غير مطلوبة للاستخدام الأساسي)
+
+يمكنك تعديل تفضيلات الإشعارات في أي وقت من **الإعدادات ← الإشعارات** داخل بوابة العضو.
+
+## استخدام بوابة العضو
+
+- **الرئيسية** — الأرصدة والمستحقات والإجراءات السريعة
+- **الاشتراكات** — المستحق وسجل الدفعات
+- **القروض** — طلب القرض أو متابعة السداد عند الأهلية
+- **الكشوف** — تنزيل كشوف الحساب الشهرية
+- **الرسائل / التنبيهات** — رسائل الإدارة وإشعارات النظام
+- **الإعدادات** — الملف الشخصي واللغة وتفضيلات الإشعارات
+
+إذا احتجت مساعدة، اردّ على هذا البريد أو تواصل مع إدارة الصندوق.
+
+مرحبًا بك معنا!
+MD,
                 ],
             ],
             'membership_rejected' => [
@@ -559,6 +784,10 @@ final class NotificationTemplateCatalog
             ],
             MembershipApplicationApprovedNotification::class => [
                 'key' => 'membership_approved',
+                'category' => NotificationPreferenceService::MEMBERSHIP,
+            ],
+            MemberOnboardingGreetingNotification::class => [
+                'key' => 'member_onboarding_greeting',
                 'category' => NotificationPreferenceService::MEMBERSHIP,
             ],
             MembershipApplicationRejectedNotification::class => [

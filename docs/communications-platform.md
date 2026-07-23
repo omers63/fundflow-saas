@@ -41,6 +41,8 @@ Open **Communications → Templates**, pick an event under **Members** or **Admi
 
 Member **bell** alerts use the **In-app (bell)** family. Admin automation digests and operational review alerts (loan/deposit/cash-out requests, reconciliation, delinquency) appear under **Admin & automation** and use the same In-app / Push families for the admin bell and browser push.
 
+**Member onboarding greeting** (`member_onboarding_greeting`) is a Markdown welcome email (fund purpose, PWA install on PC / Android / iPhone, permissions, portal basics). It is sent when a member is onboarded (application approval or admin create) and can be bulk-sent from System → Jobs → **Send onboarding greeting** after legacy migration. CSV member import skips the auto-send so you can run the job once afterward.
+
 ## Preferences
 
 Member Settings → Notifications categories are honored by `DeliversToMemberChannels` via `NotificationPreferenceService` for every categorized member notification in the catalog.

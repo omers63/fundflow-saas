@@ -16,10 +16,12 @@ class ReconciliationPdfService
      */
     public function download(ReconciliationSnapshot $snapshot): StreamedResponse
     {
-        $filename = 'reconciliation-snapshot-' . $snapshot->id . '-' . $snapshot->as_of->format('Y-m-d-His') . '.pdf';
+        $filename = 'reconciliation-snapshot-'.$snapshot->id.'-'.$snapshot->as_of->format('Y-m-d-His').'.pdf';
 
         return response()->streamDownload(
             function () use ($snapshot): void {
+                @set_time_limit(0);
+
                 echo Pdf::loadView('pdf.reconciliation-snapshot', [
                     'snapshot' => $snapshot,
                 ])

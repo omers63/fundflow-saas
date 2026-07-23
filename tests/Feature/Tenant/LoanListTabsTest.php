@@ -15,6 +15,7 @@ use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
+use App\Support\MemberNumberSettings;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
@@ -109,7 +110,7 @@ test('portfolio tab exposes import and export header actions', function () {
     $names = LoanListTableHeaderActions::flattenActionNames($headerActions);
 
     expect($names)->toContain('create', 'importLoans', 'exportLoans', 'importRepayments', 'exportRepayments')
-        ->and(collect($headerActions)->first(fn($action) => $action->getName() === 'create'))->not->toBeNull();
+        ->and(collect($headerActions)->first(fn ($action) => $action->getName() === 'create'))->not->toBeNull();
 });
 
 test('collection tab exposes cycle selector and drives selected period', function () {
@@ -686,6 +687,77 @@ test('collection arrears segment lists unpaid installments before selected cycle
         ->and((string) $formattedOutstanding)->toContain('ff-loan-outstanding-cell');
 
     expect($catalog->emiArrearsInstallmentCount(10, 2025, true))->toBe(1);
+
+    Carbon::setTestNow();
+});
+
+test('to collect table sorts by member number without being pinned to name order', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+
+    MemberNumberSettings::save([
+        'format' => MemberNumberSettings::FORMAT_SEQUENTIAL,
+    ]);
+
+    $cycles = app(ContributionCycleService::class);
+    [$month, $year] = $cycles->currentOpenPeriod();
+    $accounting = app(AccountingService::class);
+    $cycleKey = $cycles->contributionCycleKey($month, $year);
+
+    $alphaHighNumber = Member::create([
+        'member_number' => '11',
+        'name' => 'Aaa First Alphabetically',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($alphaHighNumber);
+
+    $zetaLowNumber = Member::create([
+        'member_number' => '2',
+        'name' => 'Zzz Last Alphabetically',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($zetaLowNumber);
+
+    foreach ([$alphaHighNumber, $zetaLowNumber] as $member) {
+        $loan = Loan::create([
+            'member_id' => $member->id,
+            'amount' => 6000,
+            'amount_requested' => 6000,
+            'amount_approved' => 6000,
+            'amount_disbursed' => 6000,
+            'interest_rate' => 10,
+            'term_months' => 6,
+            'monthly_repayment' => 1000,
+            'total_repaid' => 0,
+            'status' => 'active',
+            'applied_at' => Carbon::parse('2026-01-01'),
+            'disbursed_at' => Carbon::parse('2026-01-01'),
+        ]);
+
+        LoanInstallment::create([
+            'loan_id' => $loan->id,
+            'installment_number' => 1,
+            'amount' => 1000,
+            'due_date' => Carbon::create($year, $month, 10),
+            'status' => 'pending',
+        ]);
+    }
+
+    expect(app(LoanEmiCollectionCatalogService::class)->membersWithCollectableEmisQuery($month, $year)->pluck('id'))
+        ->toContain($alphaHighNumber->id)
+        ->toContain($zetaLowNumber->id);
+
+    Livewire::test(ListLoans::class)
+        ->set('activeTab', 'collection')
+        ->set('collectionSegment', 'collect')
+        ->set('selectedCycle', $cycleKey)
+        ->sortTable('member_number', 'asc')
+        ->assertCanSeeTableRecords([$zetaLowNumber, $alphaHighNumber], inOrder: true)
+        ->sortTable('member_number', 'desc')
+        ->assertCanSeeTableRecords([$alphaHighNumber, $zetaLowNumber], inOrder: true);
 
     Carbon::setTestNow();
 });

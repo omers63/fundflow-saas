@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Support\Pdf\DomPdfFactory;
+use App\Support\StatementSettings;
 
 it('shapes arabic html into presentation forms for dompdf', function (): void {
     $source = '<html><body><p>جدول سداد القرض</p></body></html>';
@@ -52,4 +53,43 @@ it('preserves western digits in ltr amount spans adjacent to arabic labels', fun
 
     expect($shaped)->toContain('1,500.00')
         ->not->toMatch('/[٠-٩]/u');
+});
+
+it('registers amiri normal and bold then aliases numeric css weights', function (): void {
+    $amiri = StatementSettings::customFontPath(StatementSettings::FONT_AMIRI);
+
+    if ($amiri === null) {
+        $this->markTestSkipped('Amiri font is not installed.');
+    }
+
+    $fontDir = sys_get_temp_dir().'/ff-dompdf-fonts-'.uniqid('', true);
+    mkdir($fontDir);
+
+    try {
+        $dompdf = new Dompdf\Dompdf([
+            'fontDir' => $fontDir,
+            'fontCache' => $fontDir,
+            'chroot' => base_path(),
+            'isRemoteEnabled' => false,
+            'allowedProtocols' => [
+                'file://' => ['rules' => []],
+                'data://' => ['rules' => []],
+            ],
+        ]);
+
+        DomPdfFactory::ensureCustomFontsRegistered($dompdf);
+        DomPdfFactory::ensureCustomFontsRegistered($dompdf);
+
+        $family = $dompdf->getFontMetrics()->getFontFamilies()['amiri'] ?? [];
+
+        expect($family)->toHaveKeys(['normal', 'bold', '500', '600', '800'])
+            ->and($family['500'])->toBe($family['normal'])
+            ->and($family['600'])->toBe($family['bold'])
+            ->and($family['800'])->toBe($family['bold']);
+    } finally {
+        foreach (glob($fontDir.'/*') ?: [] as $file) {
+            @unlink($file);
+        }
+        @rmdir($fontDir);
+    }
 });

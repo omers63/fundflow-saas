@@ -21,6 +21,9 @@ final class DomPdfFactory
         string $paper = 'a4',
         string $orientation = 'portrait',
     ): DomPdfDocument {
+        // DomPDF layout + Arabic shaping routinely exceeds PHP-FPM's default 30s limit.
+        @set_time_limit(0);
+
         $html = view($view, $data)->render();
 
         // Always shape Arabic glyphs when present — English PDFs may still include Arabic names.
@@ -83,10 +86,18 @@ final class DomPdfFactory
 
         $metrics = $dompdf->getFontMetrics();
         $fileUri = 'file://'.$amiri;
+        $families = $metrics->getFontFamilies();
+        $existing = $families['amiri'] ?? [];
 
-        // DomPDF falls back to Helvetica (Arabic → ????) when a requested weight
-        // is not registered for Amiri — cover common numeric/named weights.
-        foreach (['normal', 'bold', '400', '500', '600', '700', '800'] as $weight) {
+        // Parse the TTF only for normal/bold. Extra numeric weights were re-parsing
+        // the same 550KB file on every miss and bloating storage/fonts.
+        foreach (['normal', 'bold'] as $weight) {
+            $path = $existing[$weight] ?? null;
+
+            if (is_string($path) && (is_file($path.'.ttf') || is_file($path))) {
+                continue;
+            }
+
             $metrics->registerFont(
                 [
                     'family' => 'Amiri',
@@ -96,5 +107,34 @@ final class DomPdfFactory
                 $fileUri,
             );
         }
+
+        $families = $metrics->getFontFamilies();
+        $amiriFamily = $families['amiri'] ?? [];
+        $normal = $amiriFamily['normal'] ?? null;
+        $bold = $amiriFamily['bold'] ?? null;
+
+        if (! is_string($normal) || ! is_string($bold)) {
+            return;
+        }
+
+        // DomPDF falls back to Helvetica (Arabic → ????) when CSS weights like
+        // 600/800 are missing — alias them to the already-parsed faces.
+        $aliased = [
+            'normal' => $normal,
+            'bold' => $bold,
+            '500' => $normal,
+            '600' => $bold,
+            '800' => $bold,
+        ];
+
+        if (
+            ($amiriFamily['500'] ?? null) === $normal
+            && ($amiriFamily['600'] ?? null) === $bold
+            && ($amiriFamily['800'] ?? null) === $bold
+        ) {
+            return;
+        }
+
+        $metrics->setFontFamily('Amiri', $aliased);
     }
 }
