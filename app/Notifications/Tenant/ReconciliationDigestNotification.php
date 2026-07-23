@@ -6,6 +6,7 @@ namespace App\Notifications\Tenant;
 
 use App\Notifications\Concerns\DeliversToAdminChannels;
 use App\Support\AdminNotificationChannels;
+use App\Support\PushEventSettings;
 use App\Support\ReconciliationDigestSettings;
 use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
@@ -33,7 +34,10 @@ class ReconciliationDigestNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        $channels = AdminNotificationChannels::resolve();
+        $channels = PushEventSettings::filterChannels(
+            AdminNotificationChannels::resolve(),
+            $this->adminNotificationTemplateKey(),
+        );
 
         if (ReconciliationDigestSettings::digestPushEnabled()) {
             return $channels;
@@ -47,10 +51,8 @@ class ReconciliationDigestNotification extends Notification
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        return $this->buildAdminWebPushFor(
+        return $this->buildTemplatedAdminWebPush(
             $notifiable,
-            $this->title(),
-            $this->summary,
             $this->absoluteUrl(),
             'reconciliation-'.$this->mode,
         );
@@ -61,21 +63,39 @@ class ReconciliationDigestNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
-        return $this->withRecipientLocale($notifiable, fn (): array => FilamentNotification::make()
-            ->title($this->title())
-            ->body($this->summary)
-            ->icon($this->critical ? 'heroicon-o-exclamation-triangle' : 'heroicon-o-shield-check')
-            ->iconColor($this->critical ? 'danger' : 'success')
-            ->actions([
-                Action::make('review')
-                    ->label(__('Review reconciliation'))
-                    ->url($this->absoluteUrl())
-                    ->markAsRead(),
-            ])
-            ->getDatabaseMessage());
+        return $this->withRecipientLocale($notifiable, function () use ($notifiable): array {
+            $copy = $this->adminBellCopy($notifiable);
+
+            return FilamentNotification::make()
+                ->title($copy['title'] !== '' ? $copy['title'] : $this->fallbackTitle())
+                ->body($copy['body'] !== '' ? $copy['body'] : $this->summary)
+                ->icon($this->critical ? 'heroicon-o-exclamation-triangle' : 'heroicon-o-shield-check')
+                ->iconColor($this->critical ? 'danger' : 'success')
+                ->actions([
+                    Action::make('review')
+                        ->label(__('Review reconciliation'))
+                        ->url($this->absoluteUrl())
+                        ->markAsRead(),
+                ])
+                ->getDatabaseMessage();
+        });
     }
 
-    protected function title(): string
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function adminTemplateVariables(object $notifiable): array
+    {
+        return [
+            'title' => $this->fallbackTitle(),
+            'summary' => $this->summary,
+            'mode' => $this->mode,
+            'action_url' => $this->absoluteUrl(),
+            'action_label' => __('Review reconciliation'),
+        ];
+    }
+
+    protected function fallbackTitle(): string
     {
         return match ($this->mode) {
             'nightly' => $this->critical

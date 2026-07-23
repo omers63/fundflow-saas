@@ -6,12 +6,16 @@ namespace App\Notifications\Tenant;
 
 use App\Models\Tenant\MonthlyStatement;
 use App\Notifications\Concerns\DeliversToMemberChannels;
+use App\Services\Tenant\MonthlyStatementPdfService;
 use App\Services\Tenant\NotificationPreferenceService;
+use App\Services\Tenant\NotificationTemplateRenderer;
+use App\Support\PushEventSettings;
 use App\Support\StatementSettings;
 use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Bus\Queueable;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class MonthlyStatementNotification extends Notification
@@ -49,11 +53,37 @@ class MonthlyStatementNotification extends Notification
                 ],
         };
 
-        return NotificationPreferenceService::resolve(
-            $notifiable,
-            NotificationPreferenceService::STATEMENTS,
-            $supported,
+        return PushEventSettings::filterChannels(
+            NotificationPreferenceService::resolve(
+                $notifiable,
+                NotificationPreferenceService::STATEMENTS,
+                $supported,
+            ),
+            $this->memberNotificationTemplateKey(),
         );
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        return $this->withMemberLocale($notifiable, function () use ($notifiable): MailMessage {
+            $mail = app(NotificationTemplateRenderer::class)->brandedMailMessage(
+                (string) $this->memberNotificationTemplateKey(),
+                $this->memberNotificationLocale($notifiable),
+                $this->resolvedTemplateVariables($notifiable),
+            );
+
+            if (! StatementSettings::attachPdf()) {
+                return $mail;
+            }
+
+            $pdf = app(MonthlyStatementPdfService::class);
+
+            return $mail->attachData(
+                $pdf->binary($this->statement),
+                $pdf->filename($this->statement),
+                ['mime' => 'application/pdf'],
+            );
+        });
     }
 
     /**

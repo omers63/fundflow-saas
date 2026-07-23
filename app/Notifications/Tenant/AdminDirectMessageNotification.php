@@ -25,10 +25,8 @@ class AdminDirectMessageNotification extends Notification
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        return $this->buildAdminWebPushFor(
+        return $this->buildTemplatedAdminWebPush(
             $notifiable,
-            $this->title(),
-            $this->subject.': '.$this->preview,
             $this->inboxUrl(),
             'admin-message-'.md5($this->memberName.$this->subject),
         );
@@ -39,21 +37,40 @@ class AdminDirectMessageNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
-        return FilamentNotification::make()
-            ->title($this->title())
-            ->body($this->subject.': '.$this->preview)
-            ->icon('heroicon-o-chat-bubble-left-right')
-            ->iconColor('info')
-            ->actions([
-                Action::make('open')
-                    ->label(__('Open inbox'))
-                    ->url($this->inboxUrl())
-                    ->markAsRead(),
-            ])
-            ->getDatabaseMessage();
+        return $this->withRecipientLocale($notifiable, function () use ($notifiable): array {
+            $copy = $this->adminBellCopy($notifiable);
+
+            return FilamentNotification::make()
+                ->title($copy['title'] !== '' ? $copy['title'] : $this->fallbackTitle())
+                ->body($copy['body'] !== '' ? $copy['body'] : $this->subject.': '.$this->preview)
+                ->icon('heroicon-o-chat-bubble-left-right')
+                ->iconColor('info')
+                ->actions([
+                    Action::make('open')
+                        ->label(__('Open inbox'))
+                        ->url($this->inboxUrl())
+                        ->markAsRead(),
+                ])
+                ->getDatabaseMessage();
+        });
     }
 
-    protected function title(): string
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function adminTemplateVariables(object $notifiable): array
+    {
+        return [
+            'title' => $this->fallbackTitle(),
+            'subject' => $this->subject,
+            'preview' => $this->preview,
+            'member_name' => $this->memberName,
+            'action_url' => $this->inboxUrl(),
+            'action_label' => __('Open inbox'),
+        ];
+    }
+
+    protected function fallbackTitle(): string
     {
         return $this->isReply
             ? __('Reply from :name', ['name' => $this->memberName])

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use Illuminate\Console\Command;
+use Symfony\Component\Console\Input\InputInterface;
+
 /**
  * Tenant schedulable commands exposed in System → Jobs.
  *
@@ -61,6 +64,46 @@ final class ScheduledJobRegistry
     }
 
     /**
+     * Resolve a registry definition for a running Artisan command (including option flags).
+     *
+     * @return JobDefinition|null
+     */
+    public static function findForCommand(Command $command): ?array
+    {
+        $name = $command->getName();
+
+        if ($name === null || $name === '') {
+            return null;
+        }
+
+        return self::findForCommandName($name, function (string $flag) use ($command): bool {
+            if (! $command->getDefinition()->hasOption($flag)) {
+                return false;
+            }
+
+            $value = $command->option($flag);
+
+            return self::optionValueIsPresent($value);
+        });
+    }
+
+    /**
+     * Resolve a registry definition from a command name + Symfony input.
+     *
+     * @return JobDefinition|null
+     */
+    public static function findForInput(string $commandName, InputInterface $input): ?array
+    {
+        return self::findForCommandName($commandName, function (string $flag) use ($input): bool {
+            if ($input->hasParameterOption('--'.$flag, true)) {
+                return true;
+            }
+
+            return $input->hasParameterOption('--'.$flag.'=', true);
+        });
+    }
+
+    /**
      * @return list<string>
      */
     public static function commandNames(): array
@@ -69,6 +112,94 @@ final class ScheduledJobRegistry
             fn (array $job): string => explode(' ', $job['command'])[0],
             self::all(),
         );
+    }
+
+    /**
+     * @param  callable(string): bool  $optionIsSet
+     * @return JobDefinition|null
+     */
+    private static function findForCommandName(string $commandName, callable $optionIsSet): ?array
+    {
+        $candidates = array_values(array_filter(
+            self::all(),
+            fn (array $definition): bool => explode(' ', $definition['command'])[0] === $commandName,
+        ));
+
+        if ($candidates === []) {
+            return null;
+        }
+
+        if (count($candidates) === 1) {
+            return $candidates[0];
+        }
+
+        $best = null;
+        $bestScore = -1;
+
+        foreach ($candidates as $definition) {
+            $flags = self::optionFlagsFromCommandString($definition['command']);
+            $score = 0;
+            $matches = true;
+
+            foreach ($flags as $flag) {
+                if (! $optionIsSet($flag)) {
+                    $matches = false;
+                    break;
+                }
+
+                $score++;
+            }
+
+            if ($matches && $score > $bestScore) {
+                $best = $definition;
+                $bestScore = $score;
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function optionFlagsFromCommandString(string $command): array
+    {
+        $parts = preg_split('/\s+/', trim($command)) ?: [];
+        array_shift($parts);
+
+        $flags = [];
+
+        foreach ($parts as $part) {
+            if (! str_starts_with($part, '--')) {
+                continue;
+            }
+
+            $flag = substr($part, 2);
+            $eqPos = strpos($flag, '=');
+
+            if ($eqPos !== false) {
+                $flag = substr($flag, 0, $eqPos);
+            }
+
+            if ($flag !== '') {
+                $flags[] = $flag;
+            }
+        }
+
+        return $flags;
+    }
+
+    private static function optionValueIsPresent(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_array($value)) {
+            return $value !== [];
+        }
+
+        return $value !== null && $value !== '';
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Listeners\RecordSystemJobRunListener;
 use App\Models\Tenant\SystemJobRun;
 use App\Models\Tenant\User;
 use App\Support\BatchPostingGate;
@@ -52,13 +53,22 @@ class SystemJobRunnerService
 
         $output = new BufferedOutput;
         $started = microtime(true);
+        $parameters = [];
+
+        if (tenancy()->initialized && filled(tenant('id'))) {
+            $parameters['--tenants'] = [(string) tenant('id')];
+        }
+
+        RecordSystemJobRunListener::suppressRecording();
 
         try {
             @set_time_limit(0);
-            $exitCode = Artisan::call($definition['command'], [], $output);
+                        $exitCode = Artisan::call($definition['command'], $parameters, $output);
         } catch (\Throwable $exception) {
             $exitCode = 1;
             $output->writeln($exception->getMessage());
+        } finally {
+            RecordSystemJobRunListener::resumeRecording();
         }
 
         $durationMs = (int) round((microtime(true) - $started) * 1000);
@@ -116,7 +126,7 @@ class SystemJobRunnerService
             'category' => $definition['category'],
             'halt_sensitive' => $definition['halt_sensitive'],
             'last_status' => $latest?->status,
-            'last_started_at' => $latest?->started_at?->toDateTimeString(),
+            'last_started_at' => $latest?->started_at,
             'last_duration_ms' => $latest?->duration_ms,
             'last_exit_code' => $latest?->exit_code,
         ];

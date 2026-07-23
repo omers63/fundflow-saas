@@ -22,6 +22,14 @@ class AccountTransactionReversedNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
+        return $this->templatedArrayPayload($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
         return [
             'title' => __('Ledger entry reversed'),
             'body' => __('A ledger entry on your account was reversed: :reason', [

@@ -24,14 +24,8 @@ class NewLoanEligibilityOverrideRequestNotification extends Notification
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        $this->request->loadMissing('member');
-
-        return $this->buildAdminWebPushFor(
+        return $this->buildTemplatedAdminWebPush(
             $notifiable,
-            __('Loan eligibility review requested'),
-            __(':name requested an eligibility review.', [
-                'name' => $this->request->member?->name ?? __('Member'),
-            ]),
             $this->reviewUrl(),
             'loan-eligibility-override-'.$this->request->getKey(),
         );
@@ -42,29 +36,57 @@ class NewLoanEligibilityOverrideRequestNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
-        $this->request->loadMissing('member');
+        return $this->withRecipientLocale($notifiable, function () use ($notifiable): array {
+            $copy = $this->adminBellCopy($notifiable);
 
+            return FilamentNotification::make()
+                ->title($copy['title'] !== '' ? $copy['title'] : __('Loan eligibility review requested'))
+                ->body($copy['body'] !== '' ? $copy['body'] : $this->fallbackBody())
+                ->icon('heroicon-o-shield-exclamation')
+                ->iconColor('warning')
+                ->actions([
+                    Action::make('review')
+                        ->label(__('Review request'))
+                        ->url($this->reviewUrl())
+                        ->markAsRead(),
+                ])
+                ->getDatabaseMessage();
+        });
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function adminTemplateVariables(object $notifiable): array
+    {
+        $this->request->loadMissing('member');
         $gateCount = count($this->request->failed_gates ?? []);
         $gateLabels = LoanEligibilityGate::labels();
         $firstGate = array_key_first($this->request->failed_gates ?? []);
         $firstLabel = $firstGate !== null ? ($gateLabels[$firstGate] ?? $firstGate) : __('Eligibility');
 
-        return FilamentNotification::make()
-            ->title(__('Loan eligibility review requested'))
-            ->body(__(':name requested an eligibility review (:count blocked rule(s), first: :gate).', [
-                'name' => $this->request->member->name,
-                'count' => $gateCount,
-                'gate' => $firstLabel,
-            ]))
-            ->icon('heroicon-o-shield-exclamation')
-            ->iconColor('warning')
-            ->actions([
-                Action::make('review')
-                    ->label(__('Review request'))
-                    ->url($this->reviewUrl())
-                    ->markAsRead(),
-            ])
-            ->getDatabaseMessage();
+        return [
+            'member_name' => (string) ($this->request->member?->name ?? __('Member')),
+            'gate_count' => (string) $gateCount,
+            'first_gate' => (string) $firstLabel,
+            'action_url' => $this->reviewUrl(),
+            'action_label' => __('Review request'),
+        ];
+    }
+
+    protected function fallbackBody(): string
+    {
+        $this->request->loadMissing('member');
+        $gateCount = count($this->request->failed_gates ?? []);
+        $gateLabels = LoanEligibilityGate::labels();
+        $firstGate = array_key_first($this->request->failed_gates ?? []);
+        $firstLabel = $firstGate !== null ? ($gateLabels[$firstGate] ?? $firstGate) : __('Eligibility');
+
+        return __(':name requested an eligibility review (:count blocked rule(s), first: :gate).', [
+            'name' => $this->request->member->name,
+            'count' => $gateCount,
+            'gate' => $firstLabel,
+        ]);
     }
 
     protected function reviewUrl(): string

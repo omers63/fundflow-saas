@@ -22,15 +22,8 @@ class NewCashOutRequestNotification extends Notification
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        $this->cashOutRequest->loadMissing('member');
-
-        return $this->buildAdminWebPushFor(
+        return $this->buildTemplatedAdminWebPush(
             $notifiable,
-            __('New cash-out request'),
-            __(':name requested :amount.', [
-                'name' => $this->cashOutRequest->member->name,
-                'amount' => number_format((float) $this->cashOutRequest->amount, 2),
-            ]),
             $this->reviewUrl(),
             'cash-out-request-'.$this->cashOutRequest->getKey(),
         );
@@ -41,20 +34,19 @@ class NewCashOutRequestNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
-        $this->cashOutRequest->loadMissing('member');
+        return $this->withRecipientLocale($notifiable, function () use ($notifiable): array {
+            $copy = $this->adminBellCopy($notifiable);
 
-        return FilamentNotification::make()
-            ->title(__('New cash-out request'))
-            ->body(__(':name requested :amount.', [
-                'name' => $this->cashOutRequest->member->name,
-                'amount' => number_format((float) $this->cashOutRequest->amount, 2),
-            ]))
-            ->icon('heroicon-o-arrow-up-tray')
-            ->iconColor('warning')
-            ->actions([
-                AdminNotificationActions::reviewCashOutRequest($this->cashOutRequest),
-            ])
-            ->getDatabaseMessage();
+            return FilamentNotification::make()
+                ->title($copy['title'] !== '' ? $copy['title'] : __('New cash-out request'))
+                ->body($copy['body'] !== '' ? $copy['body'] : $this->fallbackBody())
+                ->icon('heroicon-o-arrow-up-tray')
+                ->iconColor('warning')
+                ->actions([
+                    AdminNotificationActions::reviewCashOutRequest($this->cashOutRequest),
+                ])
+                ->getDatabaseMessage();
+        });
     }
 
     /**
@@ -63,6 +55,31 @@ class NewCashOutRequestNotification extends Notification
     public function toArray(object $notifiable): array
     {
         return $this->toDatabase($notifiable);
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function adminTemplateVariables(object $notifiable): array
+    {
+        $this->cashOutRequest->loadMissing('member');
+
+        return [
+            'member_name' => (string) ($this->cashOutRequest->member->name ?? __('Member')),
+            'amount' => number_format((float) $this->cashOutRequest->amount, 2),
+            'action_url' => $this->reviewUrl(),
+            'action_label' => __('Review'),
+        ];
+    }
+
+    protected function fallbackBody(): string
+    {
+        $this->cashOutRequest->loadMissing('member');
+
+        return __(':name requested :amount.', [
+            'name' => $this->cashOutRequest->member->name,
+            'amount' => number_format((float) $this->cashOutRequest->amount, 2),
+        ]);
     }
 
     protected function reviewUrl(): string

@@ -21,6 +21,14 @@ class CashOutBankClearedNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
+        return $this->templatedArrayPayload($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
         return [
             'title' => __('Withdrawal cleared'),
             'body' => __('Your withdrawal of :amount has been matched on the bank statement.', [

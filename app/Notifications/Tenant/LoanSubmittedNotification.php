@@ -21,6 +21,14 @@ class LoanSubmittedNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
+        return $this->templatedArrayPayload($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
         return [
             'title' => __('Loan application submitted'),
             'body' => __('Your application for :amount is pending review.', [

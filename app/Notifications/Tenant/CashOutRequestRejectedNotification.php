@@ -21,6 +21,14 @@ class CashOutRequestRejectedNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
+        return $this->templatedArrayPayload($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
         return [
             'title' => __('Cash-out rejected'),
             'body' => __('Your withdrawal request of :amount was rejected.', [

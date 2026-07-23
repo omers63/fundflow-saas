@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Notifications\Tenant;
 
+use App\Models\Tenant\NotificationTemplate;
 use App\Models\Tenant\User;
 use App\Notifications\Concerns\DeliversToAdminChannels;
 use App\Support\AdminNotificationChannels;
+use App\Support\PushEventSettings;
 use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
@@ -31,7 +33,10 @@ class DelinquencyDigestNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        $channels = AdminNotificationChannels::resolve();
+        $channels = PushEventSettings::filterChannels(
+            AdminNotificationChannels::resolve(),
+            $this->adminNotificationTemplateKey(),
+        );
 
         if ($notifiable instanceof User && filled($notifiable->email)) {
             $channels[] = 'mail';
@@ -42,18 +47,8 @@ class DelinquencyDigestNotification extends Notification
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        $overdue = $this->counts['overdue_installments'] ?? 0;
-        $arrears = $this->counts['contribution_arrears_periods'] ?? 0;
-        $delinquent = $this->counts['delinquent_members'] ?? 0;
-
-        return $this->buildAdminWebPushFor(
+        return $this->buildTemplatedAdminWebPush(
             $notifiable,
-            __('Delinquency digest'),
-            __(':overdue overdue installment(s) · :arrears contribution period(s) in arrears · :delinquent delinquent member(s).', [
-                'overdue' => $overdue,
-                'arrears' => $arrears,
-                'delinquent' => $delinquent,
-            ]),
             $this->absoluteDelinquencyUrl(),
             'delinquency-digest',
         );
@@ -61,24 +56,22 @@ class DelinquencyDigestNotification extends Notification
 
     public function toMail(object $notifiable): MailMessage
     {
-        $overdue = $this->counts['overdue_installments'] ?? 0;
-        $arrears = $this->counts['contribution_arrears_periods'] ?? 0;
-        $delinquent = $this->counts['delinquent_members'] ?? 0;
-        $guarantor = $this->counts['guarantor_at_risk'] ?? 0;
+        return $this->withRecipientLocale($notifiable, function () use ($notifiable): MailMessage {
+            $copy = $this->adminTemplatedCopy($notifiable, NotificationTemplate::FAMILY_EMAIL);
+            $guarantor = $this->counts['guarantor_at_risk'] ?? 0;
 
-        $message = (new MailMessage)
-            ->subject(__('Delinquency digest'))
-            ->greeting(__('Hello :name,', ['name' => $notifiable->name]))
-            ->line(__('Delinquency activity needs your attention:'))
-            ->line(__(':overdue overdue installment(s)', ['overdue' => $overdue]))
-            ->line(__(':arrears contribution period(s) in arrears', ['arrears' => $arrears]))
-            ->line(__(':delinquent delinquent member(s)', ['delinquent' => $delinquent]));
+            $message = (new MailMessage)
+                ->subject($copy['title'] !== '' ? $copy['title'] : __('Delinquency digest'))
+                ->greeting(__('Hello :name,', ['name' => $notifiable->name]))
+                ->line(__('Delinquency activity needs your attention:'))
+                ->line($copy['body'] !== '' ? $copy['body'] : $this->fallbackBody());
 
-        if ($guarantor > 0) {
-            $message->line(__(':guarantor loan(s) with guarantor exposure', ['guarantor' => $guarantor]));
-        }
+            if ($guarantor > 0) {
+                $message->line(__(':guarantor loan(s) with guarantor exposure', ['guarantor' => $guarantor]));
+            }
 
-        return $message->action(__('Review in admin'), $this->absoluteDelinquencyUrl());
+            return $message->action(__('Review in admin'), $this->absoluteDelinquencyUrl());
+        });
     }
 
     /**
@@ -86,26 +79,46 @@ class DelinquencyDigestNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
-        $overdue = $this->counts['overdue_installments'] ?? 0;
-        $arrears = $this->counts['contribution_arrears_periods'] ?? 0;
-        $delinquent = $this->counts['delinquent_members'] ?? 0;
+        return $this->withRecipientLocale($notifiable, function () use ($notifiable): array {
+            $copy = $this->adminBellCopy($notifiable);
 
-        return FilamentNotification::make()
-            ->title(__('Delinquency digest'))
-            ->body(__(':overdue overdue installment(s) · :arrears contribution period(s) in arrears · :delinquent delinquent member(s). Review loans, contributions, or members as needed.', [
-                'overdue' => $overdue,
-                'arrears' => $arrears,
-                'delinquent' => $delinquent,
-            ]))
-            ->icon('heroicon-o-exclamation-triangle')
-            ->iconColor('warning')
-            ->actions([
-                Action::make('open')
-                    ->label(__('Review in admin'))
-                    ->url($this->absoluteDelinquencyUrl())
-                    ->markAsRead(),
-            ])
-            ->getDatabaseMessage();
+            return FilamentNotification::make()
+                ->title($copy['title'] !== '' ? $copy['title'] : __('Delinquency digest'))
+                ->body($copy['body'] !== '' ? $copy['body'] : $this->fallbackBody())
+                ->icon('heroicon-o-exclamation-triangle')
+                ->iconColor('warning')
+                ->actions([
+                    Action::make('open')
+                        ->label(__('Review in admin'))
+                        ->url($this->absoluteDelinquencyUrl())
+                        ->markAsRead(),
+                ])
+                ->getDatabaseMessage();
+        });
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function adminTemplateVariables(object $notifiable): array
+    {
+        return [
+            'overdue' => (string) ($this->counts['overdue_installments'] ?? 0),
+            'arrears' => (string) ($this->counts['contribution_arrears_periods'] ?? 0),
+            'delinquent' => (string) ($this->counts['delinquent_members'] ?? 0),
+            'guarantor' => (string) ($this->counts['guarantor_at_risk'] ?? 0),
+            'action_url' => $this->absoluteDelinquencyUrl(),
+            'action_label' => __('Review in admin'),
+        ];
+    }
+
+    protected function fallbackBody(): string
+    {
+        return __(':overdue overdue installment(s) · :arrears contribution period(s) in arrears · :delinquent delinquent member(s).', [
+            'overdue' => $this->counts['overdue_installments'] ?? 0,
+            'arrears' => $this->counts['contribution_arrears_periods'] ?? 0,
+            'delinquent' => $this->counts['delinquent_members'] ?? 0,
+        ]);
     }
 
     protected function absoluteDelinquencyUrl(): string

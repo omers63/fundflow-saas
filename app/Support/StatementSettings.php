@@ -30,6 +30,7 @@ final class StatementSettings
             'footer_disclaimer' => __('Computer-generated statement. Confidential.'),
             'signature_line' => __('Fund administration'),
             'auto_email' => false,
+            'attach_pdf' => false,
             'include_transactions' => true,
             'include_loan_section' => true,
             'include_compliance' => false,
@@ -88,6 +89,7 @@ final class StatementSettings
             'statement_footer_disclaimer' => $all['footer_disclaimer'],
             'statement_signature_line' => $all['signature_line'],
             'statement_auto_email' => (bool) ($all['auto_email'] ?? false),
+            'statement_attach_pdf' => (bool) ($all['attach_pdf'] ?? false),
             'statement_include_transactions' => (bool) ($all['include_transactions'] ?? true),
             'statement_include_loan_section' => (bool) ($all['include_loan_section'] ?? true),
             'statement_include_compliance' => (bool) ($all['include_compliance'] ?? false),
@@ -124,6 +126,11 @@ final class StatementSettings
     public static function autoEmail(): bool
     {
         return (bool) self::get('auto_email', false);
+    }
+
+    public static function attachPdf(): bool
+    {
+        return (bool) self::get('attach_pdf', false);
     }
 
     public static function includeTransactions(): bool
@@ -210,6 +217,7 @@ final class StatementSettings
         Setting::set(self::GROUP, 'footer_disclaimer', trim((string) ($state['statement_footer_disclaimer'] ?? '')));
         Setting::set(self::GROUP, 'signature_line', trim((string) ($state['statement_signature_line'] ?? '')));
         Setting::set(self::GROUP, 'auto_email', (bool) ($state['statement_auto_email'] ?? false));
+        Setting::set(self::GROUP, 'attach_pdf', (bool) ($state['statement_attach_pdf'] ?? false));
         Setting::set(self::GROUP, 'include_transactions', (bool) ($state['statement_include_transactions'] ?? true));
         Setting::set(self::GROUP, 'include_loan_section', (bool) ($state['statement_include_loan_section'] ?? true));
         Setting::set(self::GROUP, 'include_compliance', (bool) ($state['statement_include_compliance'] ?? false));

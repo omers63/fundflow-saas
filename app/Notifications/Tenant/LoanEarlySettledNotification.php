@@ -19,6 +19,14 @@ class LoanEarlySettledNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
+        return $this->templatedArrayPayload($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
         return [
             'title' => __('Loan early settled'),
             'body' => __('Loan #:id has been paid off early.', ['id' => $this->loan->id]),

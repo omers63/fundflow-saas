@@ -21,6 +21,14 @@ class CashOutRequestAcceptedNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
+        return $this->templatedArrayPayload($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
         return [
             'title' => __('Cash-out approved'),
             'body' => __('Your withdrawal of :amount has been approved. Bank clearance will be completed when the transfer appears on the statement.', [

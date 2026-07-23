@@ -37,8 +37,16 @@ Tenant table `notification_templates` keyed by `key` + `locale` + `channel_famil
 | `in_app` | Member bell / database notifications + Alerts history |
 | `sms_push` | Web push, SMS, and WhatsApp (plain text; Markdown stripped) |
 
-Open **Communications → Templates**, pick an event, then switch **Email / In-app (bell) / Push & SMS** to edit each channel separately (EN/AR). Restore defaults resets all channel families for that event.
+Open **Communications → Templates**, pick an event under **Members** or **Admin & automation**, then switch **Email / In-app (bell) / Push & SMS** to edit each channel separately (EN/AR). Restore defaults resets all channel families for that event.
+
+Member **bell** alerts use the **In-app (bell)** family. Admin automation digests and operational review alerts (loan/deposit/cash-out requests, reconciliation, delinquency) appear under **Admin & automation** and use the same In-app / Push families for the admin bell and browser push.
 
 ## Preferences
 
 Member Settings → Notifications categories are honored by `DeliversToMemberChannels` via `NotificationPreferenceService` for every categorized member notification in the catalog.
+
+Tenant admins can also disable **browser push per event** under Settings → Communication (`push_events` settings group). Disabled events never send web push, even when the member opted in.
+
+## Statement emails
+
+Settings → Statements → **Attach statement PDF to email** adds the member's PDF for that statement period to statement-ready emails when enabled.

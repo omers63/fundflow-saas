@@ -6,12 +6,14 @@ namespace App\Support;
 
 use App\Models\Tenant\NotificationTemplate;
 use App\Notifications\Tenant\AccountTransactionReversedNotification;
+use App\Notifications\Tenant\AdminDirectMessageNotification;
 use App\Notifications\Tenant\CashOutBankClearedNotification;
 use App\Notifications\Tenant\CashOutRequestAcceptedNotification;
 use App\Notifications\Tenant\CashOutRequestRejectedNotification;
 use App\Notifications\Tenant\ContributionDueNotification;
 use App\Notifications\Tenant\ContributionLateFeeAppliedNotification;
 use App\Notifications\Tenant\ContributionPostedNotification;
+use App\Notifications\Tenant\DelinquencyDigestNotification;
 use App\Notifications\Tenant\DependentAllocationChangedNotification;
 use App\Notifications\Tenant\FundPostingAcceptedNotification;
 use App\Notifications\Tenant\FundPostingBankClearedNotification;
@@ -25,6 +27,7 @@ use App\Notifications\Tenant\LoanDisbursedNotification;
 use App\Notifications\Tenant\LoanEarlySettledNotification;
 use App\Notifications\Tenant\LoanEligibilityOverrideApprovedNotification;
 use App\Notifications\Tenant\LoanEligibilityOverrideRejectedNotification;
+use App\Notifications\Tenant\LoanGuarantorTransferAdminNotification;
 use App\Notifications\Tenant\LoanGuarantorTransferNotification;
 use App\Notifications\Tenant\LoanPartialDisbursementNotification;
 use App\Notifications\Tenant\LoanRejectedNotification;
@@ -38,15 +41,25 @@ use App\Notifications\Tenant\MembershipApplicationApprovedNotification;
 use App\Notifications\Tenant\MembershipApplicationRejectedNotification;
 use App\Notifications\Tenant\MemberStatusChangedNotification;
 use App\Notifications\Tenant\MonthlyStatementNotification;
+use App\Notifications\Tenant\NewCashOutRequestNotification;
+use App\Notifications\Tenant\NewFundPostingNotification;
+use App\Notifications\Tenant\NewLoanApplicationNotification;
+use App\Notifications\Tenant\NewLoanEligibilityOverrideRequestNotification;
+use App\Notifications\Tenant\NewMemberRequestNotification;
+use App\Notifications\Tenant\NewMembershipApplicationNotification;
+use App\Notifications\Tenant\NewSupportRequestNotification;
+use App\Notifications\Tenant\ReconciliationDigestNotification;
+use App\Notifications\Tenant\ReconciliationExceptionRaisedNotification;
 use App\Notifications\Tenant\SupportRequestStatusNotification;
 use App\Services\Tenant\NotificationPreferenceService;
 
 /**
- * Registry of member alert template keys, categories, and default EN/AR copy.
+ * Registry of alert template keys (member + admin/automation), categories, and default EN/AR copy.
  *
  * @phpstan-type TemplateDefault array{
  *     category: string,
  *     label: string,
+ *     audience?: 'member'|'admin',
  *     variables: list<string>,
  *     supported: list<string>,
  *     en: array{subject: string, body: string},
@@ -266,7 +279,232 @@ final class NotificationTemplateCatalog
                     'body' => '{{body}}',
                 ],
             ],
+            ...self::adminDefinitions(),
         ];
+    }
+
+    /**
+     * Admin / automation alerts (scheduler digests, operational review requests).
+     *
+     * @return array<string, TemplateDefault>
+     */
+    public static function adminDefinitions(): array
+    {
+        $bellPush = [
+            NotificationPreferenceService::CH_IN_APP,
+            NotificationPreferenceService::CH_PUSH,
+        ];
+        $bellPushEmail = [
+            NotificationPreferenceService::CH_IN_APP,
+            NotificationPreferenceService::CH_PUSH,
+            NotificationPreferenceService::CH_EMAIL,
+        ];
+
+        return [
+            'reconciliation_digest' => [
+                'audience' => 'admin',
+                'category' => 'automation',
+                'label' => 'Reconciliation digest (automation)',
+                'variables' => ['title', 'summary', 'mode', 'action_url'],
+                'supported' => $bellPush,
+                'en' => [
+                    'subject' => '{{title}}',
+                    'body' => '{{summary}}',
+                ],
+                'ar' => [
+                    'subject' => '{{title}}',
+                    'body' => '{{summary}}',
+                ],
+            ],
+            'delinquency_digest' => [
+                'audience' => 'admin',
+                'category' => 'automation',
+                'label' => 'Delinquency digest (automation)',
+                'variables' => ['overdue', 'arrears', 'delinquent', 'guarantor', 'action_url'],
+                'supported' => $bellPushEmail,
+                'en' => [
+                    'subject' => 'Delinquency digest',
+                    'body' => '{{overdue}} overdue installment(s) · {{arrears}} contribution period(s) in arrears · {{delinquent}} delinquent member(s).',
+                ],
+                'ar' => [
+                    'subject' => 'ملخص التعثر',
+                    'body' => '{{overdue}} قسط(أقساط) متأخر · {{arrears}} فترة(فترات) مساهمات متأخرة · {{delinquent}} عضو(أعضاء) متعثر.',
+                ],
+            ],
+            'reconciliation_exception' => [
+                'audience' => 'admin',
+                'category' => 'automation',
+                'label' => 'Reconciliation exception',
+                'variables' => ['severity', 'code', 'domain', 'action_url'],
+                'supported' => $bellPush,
+                'en' => [
+                    'subject' => 'Reconciliation exception',
+                    'body' => '{{severity}} exception {{code}} in {{domain}}.',
+                ],
+                'ar' => [
+                    'subject' => 'استثناء مطابقة',
+                    'body' => 'استثناء {{severity}}: {{code}} في {{domain}}.',
+                ],
+            ],
+            'new_loan_application' => [
+                'audience' => 'admin',
+                'category' => 'operations',
+                'label' => 'New loan application (admin)',
+                'variables' => ['member_name', 'amount', 'action_url'],
+                'supported' => $bellPush,
+                'en' => [
+                    'subject' => 'New loan application',
+                    'body' => '{{member_name}} applied for {{amount}}.',
+                ],
+                'ar' => [
+                    'subject' => 'طلب قرض جديد',
+                    'body' => '{{member_name}} تقدّم بطلب بمبلغ {{amount}}.',
+                ],
+            ],
+            'new_fund_posting' => [
+                'audience' => 'admin',
+                'category' => 'operations',
+                'label' => 'New deposit request (admin)',
+                'variables' => ['member_name', 'amount', 'body', 'action_url'],
+                'supported' => $bellPush,
+                'en' => [
+                    'subject' => 'New deposit request',
+                    'body' => '{{body}}',
+                ],
+                'ar' => [
+                    'subject' => 'طلب إيداع جديد',
+                    'body' => '{{body}}',
+                ],
+            ],
+            'new_cash_out_request' => [
+                'audience' => 'admin',
+                'category' => 'operations',
+                'label' => 'New cash-out request (admin)',
+                'variables' => ['member_name', 'amount', 'action_url'],
+                'supported' => $bellPush,
+                'en' => [
+                    'subject' => 'New cash-out request',
+                    'body' => '{{member_name}} requested {{amount}}.',
+                ],
+                'ar' => [
+                    'subject' => 'طلب سحب نقدي جديد',
+                    'body' => '{{member_name}} طلب {{amount}}.',
+                ],
+            ],
+            'new_membership_application' => [
+                'audience' => 'admin',
+                'category' => 'operations',
+                'label' => 'New membership application (admin)',
+                'variables' => ['member_name', 'action_url'],
+                'supported' => $bellPush,
+                'en' => [
+                    'subject' => 'New membership application',
+                    'body' => '{{member_name}} submitted a membership application.',
+                ],
+                'ar' => [
+                    'subject' => 'طلب عضوية جديد',
+                    'body' => '{{member_name}} قدّم طلب عضوية.',
+                ],
+            ],
+            'new_support_request' => [
+                'audience' => 'admin',
+                'category' => 'operations',
+                'label' => 'New support request (admin)',
+                'variables' => ['request_id', 'subject', 'from', 'category', 'message', 'action_url'],
+                'supported' => $bellPush,
+                'en' => [
+                    'subject' => 'Support request #{{request_id}}: {{subject}}',
+                    'body' => 'Request #{{request_id}} from {{from}}\nCategory: {{category}}\n\n{{message}}',
+                ],
+                'ar' => [
+                    'subject' => 'طلب دعم #{{request_id}}: {{subject}}',
+                    'body' => 'طلب #{{request_id}} من {{from}}\nالتصنيف: {{category}}\n\n{{message}}',
+                ],
+            ],
+            'new_member_request' => [
+                'audience' => 'admin',
+                'category' => 'operations',
+                'label' => 'New member request (admin)',
+                'variables' => ['member_name', 'request_type', 'action_url'],
+                'supported' => $bellPush,
+                'en' => [
+                    'subject' => 'New member request',
+                    'body' => '{{member_name}} — {{request_type}}',
+                ],
+                'ar' => [
+                    'subject' => 'طلب عضو جديد',
+                    'body' => '{{member_name}} — {{request_type}}',
+                ],
+            ],
+            'new_loan_eligibility_override' => [
+                'audience' => 'admin',
+                'category' => 'operations',
+                'label' => 'Loan eligibility review (admin)',
+                'variables' => ['member_name', 'gate_count', 'first_gate', 'action_url'],
+                'supported' => $bellPush,
+                'en' => [
+                    'subject' => 'Loan eligibility review requested',
+                    'body' => '{{member_name}} requested an eligibility review ({{gate_count}} blocked rule(s), first: {{first_gate}}).',
+                ],
+                'ar' => [
+                    'subject' => 'طلب مراجعة أهلية القرض',
+                    'body' => '{{member_name}} طلب مراجعة الأهلية ({{gate_count}} قاعدة محظورة، الأولى: {{first_gate}}).',
+                ],
+            ],
+            'loan_guarantor_transfer_admin' => [
+                'audience' => 'admin',
+                'category' => 'operations',
+                'label' => 'Loan guarantor transfer (admin)',
+                'variables' => ['loan_id', 'borrower_name', 'guarantor_name', 'action_url'],
+                'supported' => $bellPush,
+                'en' => [
+                    'subject' => 'Loan transferred to guarantor',
+                    'body' => 'Loan #{{loan_id}} moved from {{borrower_name}} to guarantor {{guarantor_name}}.',
+                ],
+                'ar' => [
+                    'subject' => 'نقل القرض إلى الكفيل',
+                    'body' => 'القرض #{{loan_id}} نُقل من {{borrower_name}} إلى الكفيل {{guarantor_name}}.',
+                ],
+            ],
+            'admin_direct_message' => [
+                'audience' => 'admin',
+                'category' => 'operations',
+                'label' => 'Member message to admin',
+                'variables' => ['title', 'subject', 'preview', 'member_name', 'action_url'],
+                'supported' => $bellPush,
+                'en' => [
+                    'subject' => '{{title}}',
+                    'body' => '{{subject}}: {{preview}}',
+                ],
+                'ar' => [
+                    'subject' => '{{title}}',
+                    'body' => '{{subject}}: {{preview}}',
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return array<'member'|'admin', array<string, string>>
+     */
+    public static function optionsGroupedByAudience(): array
+    {
+        $groups = [
+            'member' => [],
+            'admin' => [],
+        ];
+
+        foreach (self::definitions() as $key => $definition) {
+            $audience = $definition['audience'] ?? 'member';
+            $groups[$audience][$key] = __($definition['label']);
+        }
+
+        return $groups;
+    }
+
+    public static function audienceFor(string $key): string
+    {
+        return self::definition($key)['audience'] ?? 'member';
     }
 
     /**
@@ -410,6 +648,54 @@ final class NotificationTemplateCatalog
             SupportRequestStatusNotification::class => [
                 'key' => 'generic_member_alert',
                 'category' => NotificationPreferenceService::ACCOUNT_ALERTS,
+            ],
+            ReconciliationDigestNotification::class => [
+                'key' => 'reconciliation_digest',
+                'category' => 'automation',
+            ],
+            DelinquencyDigestNotification::class => [
+                'key' => 'delinquency_digest',
+                'category' => 'automation',
+            ],
+            ReconciliationExceptionRaisedNotification::class => [
+                'key' => 'reconciliation_exception',
+                'category' => 'automation',
+            ],
+            NewLoanApplicationNotification::class => [
+                'key' => 'new_loan_application',
+                'category' => 'operations',
+            ],
+            NewFundPostingNotification::class => [
+                'key' => 'new_fund_posting',
+                'category' => 'operations',
+            ],
+            NewCashOutRequestNotification::class => [
+                'key' => 'new_cash_out_request',
+                'category' => 'operations',
+            ],
+            NewMembershipApplicationNotification::class => [
+                'key' => 'new_membership_application',
+                'category' => 'operations',
+            ],
+            NewSupportRequestNotification::class => [
+                'key' => 'new_support_request',
+                'category' => 'operations',
+            ],
+            NewMemberRequestNotification::class => [
+                'key' => 'new_member_request',
+                'category' => 'operations',
+            ],
+            NewLoanEligibilityOverrideRequestNotification::class => [
+                'key' => 'new_loan_eligibility_override',
+                'category' => 'operations',
+            ],
+            LoanGuarantorTransferAdminNotification::class => [
+                'key' => 'loan_guarantor_transfer_admin',
+                'category' => 'operations',
+            ],
+            AdminDirectMessageNotification::class => [
+                'key' => 'admin_direct_message',
+                'category' => 'operations',
             ],
         ];
     }

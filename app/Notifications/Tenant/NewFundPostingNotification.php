@@ -26,12 +26,8 @@ class NewFundPostingNotification extends Notification
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        $this->fundPosting->loadMissing('member');
-
-        return $this->buildAdminWebPushFor(
+        return $this->buildTemplatedAdminWebPush(
             $notifiable,
-            __('New deposit request'),
-            FundPostingNotificationFormatter::adminNewRequestPlainText($this->fundPosting),
             $this->reviewUrl(),
             'fund-posting-'.$this->fundPosting->getKey(),
         );
@@ -42,18 +38,38 @@ class NewFundPostingNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
-        return FilamentNotification::make()
-            ->title(__('New deposit request'))
-            ->body(FundPostingNotificationFormatter::adminNewRequestBody($this->fundPosting))
-            ->icon('heroicon-o-inbox-arrow-down')
-            ->iconColor('warning')
-            ->actions([
-                Action::make('review')
-                    ->label(__('Review deposit'))
-                    ->url($this->reviewUrl())
-                    ->markAsRead(),
-            ])
-            ->getDatabaseMessage();
+        return $this->withRecipientLocale($notifiable, function () use ($notifiable): array {
+            $copy = $this->adminBellCopy($notifiable);
+
+            return FilamentNotification::make()
+                ->title($copy['title'] !== '' ? $copy['title'] : __('New deposit request'))
+                ->body($copy['body'] !== '' ? $copy['body'] : FundPostingNotificationFormatter::adminNewRequestBody($this->fundPosting))
+                ->icon('heroicon-o-inbox-arrow-down')
+                ->iconColor('warning')
+                ->actions([
+                    Action::make('review')
+                        ->label(__('Review deposit'))
+                        ->url($this->reviewUrl())
+                        ->markAsRead(),
+                ])
+                ->getDatabaseMessage();
+        });
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function adminTemplateVariables(object $notifiable): array
+    {
+        $this->fundPosting->loadMissing('member');
+
+        return [
+            'member_name' => (string) ($this->fundPosting->member?->name ?? __('Member')),
+            'amount' => number_format((float) $this->fundPosting->amount, 2),
+            'body' => FundPostingNotificationFormatter::adminNewRequestPlainText($this->fundPosting),
+            'action_url' => $this->reviewUrl(),
+            'action_label' => __('Review deposit'),
+        ];
     }
 
     protected function reviewUrl(): string

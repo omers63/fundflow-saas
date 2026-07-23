@@ -21,13 +21,53 @@ class FundPostingRejectedNotification extends Notification
 
     public function __construct(
         public FundPosting $fundPosting,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>
      */
     public function toArray(object $notifiable): array
+    {
+        return $this->templatedArrayPayload($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toDatabase(object $notifiable): array
+    {
+        $payload = $this->templatedArrayPayload($notifiable);
+
+        return FilamentNotification::make()
+            ->title((string) ($payload['title'] ?? __('Deposit rejected')))
+            ->body((string) ($payload['body'] ?? $this->fundPostingDatabaseBody($this->fundPosting, null, 'rejected')))
+            ->icon('heroicon-o-x-circle')
+            ->iconColor('danger')
+            ->actions([
+                Action::make('view')
+                    ->label(__('View my deposits'))
+                    ->url($this->memberDepositsUrl())
+                    ->markAsRead(),
+            ])
+            ->getDatabaseMessage();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
+        return [
+            'fund_posting_id' => $this->fundPosting->id,
+            'status' => 'rejected',
+            'url' => $this->memberDepositsUrl(),
+        ];
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function templateVariables(object $notifiable): array
     {
         $lines = FundPostingNotificationFormatter::depositDetailRows($this->fundPosting);
 
@@ -39,30 +79,12 @@ class FundPostingRejectedNotification extends Notification
         }
 
         return [
-            'title' => __('Deposit rejected'),
+            'member_name' => (string) ($this->fundPosting->member?->name ?? ''),
+            'amount' => number_format((float) $this->fundPosting->amount, 2),
             'body' => FundPostingNotificationFormatter::plainTextFromRows($lines),
-            'fund_posting_id' => $this->fundPosting->id,
-            'status' => 'rejected',
+            'action_url' => $this->memberDepositsUrl(),
+            'action_label' => __('View my deposits'),
         ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    public function toDatabase(object $notifiable): array
-    {
-        return FilamentNotification::make()
-            ->title(__('Deposit rejected'))
-            ->body($this->fundPostingDatabaseBody($this->fundPosting, null, 'rejected'))
-            ->icon('heroicon-o-x-circle')
-            ->iconColor('danger')
-            ->actions([
-                Action::make('view')
-                    ->label(__('View my deposits'))
-                    ->url($this->memberDepositsUrl())
-                    ->markAsRead(),
-            ])
-            ->getDatabaseMessage();
     }
 
     protected function memberDepositsUrl(): string

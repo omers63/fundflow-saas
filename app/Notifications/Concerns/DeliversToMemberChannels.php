@@ -14,8 +14,11 @@ use App\Support\MemberLocale;
 use App\Support\MemberNotificationChannels;
 use App\Support\NotificationPlainText;
 use App\Support\NotificationTemplateCatalog;
+use App\Support\PushEventSettings;
 use App\Support\TenantAbsoluteUrl;
 use App\Support\WebPushNotification;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -31,14 +34,17 @@ trait DeliversToMemberChannels
     {
         $category = $this->memberNotificationCategory();
 
-        if ($category === null) {
-            return MemberNotificationChannels::resolve($notifiable);
-        }
+        $channels = $category === null
+            ? MemberNotificationChannels::resolve($notifiable)
+            : NotificationPreferenceService::resolve(
+                $notifiable,
+                $category,
+                $this->memberNotificationSupportedChannels(),
+            );
 
-        return NotificationPreferenceService::resolve(
-            $notifiable,
-            $category,
-            $this->memberNotificationSupportedChannels(),
+        return PushEventSettings::filterChannels(
+            $channels,
+            $this->memberNotificationTemplateKey(),
         );
     }
 
@@ -63,6 +69,43 @@ trait DeliversToMemberChannels
                 ->subject($title)
                 ->line($body);
         });
+    }
+
+    /**
+     * Default Filament bell payload from the in-app (FAMILY_IN_APP) template.
+     *
+     * @return array<string, mixed>
+     */
+    public function toDatabase(object $notifiable): array
+    {
+        return $this->memberBellDatabaseMessage($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function memberBellDatabaseMessage(object $notifiable): array
+    {
+        $payload = $this->templatedArrayPayload($notifiable);
+
+        $notification = FilamentNotification::make()
+            ->title((string) ($payload['title'] ?? ''))
+            ->body((string) ($payload['body'] ?? ''))
+            ->icon((string) ($payload['icon'] ?? 'heroicon-o-bell'))
+            ->iconColor((string) ($payload['color'] ?? $payload['iconColor'] ?? 'info'));
+
+        $url = isset($payload['url']) ? trim((string) $payload['url']) : '';
+
+        if ($url !== '') {
+            $notification->actions([
+                Action::make('view')
+                    ->label((string) ($payload['action_label'] ?? __('Open')))
+                    ->url($url)
+                    ->markAsRead(),
+            ]);
+        }
+
+        return $notification->getDatabaseMessage();
     }
 
     public function toSms(object $notifiable): string
@@ -127,11 +170,11 @@ trait DeliversToMemberChannels
 
             if (isset($meta['loan_id'])) {
                 $message
-                    ->tag('member-loan-' . $meta['loan_id'])
+                    ->tag('member-loan-'.$meta['loan_id'])
                     ->data(['url' => $this->memberLoanUrl((int) $meta['loan_id'])]);
             } elseif (isset($meta['fund_posting_id'])) {
                 $message
-                    ->tag('member-fund-posting-' . $meta['fund_posting_id'])
+                    ->tag('member-fund-posting-'.$meta['fund_posting_id'])
                     ->data(['url' => $this->memberFundPostingsUrl()]);
             } elseif (isset($meta['url'])) {
                 $message->data(['url' => (string) $meta['url']]);

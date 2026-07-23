@@ -22,6 +22,14 @@ class SupportRequestStatusNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
+        return $this->templatedArrayPayload($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
         $label = SupportRequest::statusOptions()[$this->status] ?? ucfirst($this->status);
 
         return [

@@ -131,7 +131,7 @@ class CommunicationsWorkspacePage extends Page implements HasTable
         $this->sideTab = CommunicationsTabRegistry::normalize($this->sideTab);
 
         if (
-            !in_array($this->sideTab, [
+            ! in_array($this->sideTab, [
                 CommunicationsTabRegistry::TAB_INBOX,
                 CommunicationsTabRegistry::TAB_ANNOUNCEMENTS,
                 CommunicationsTabRegistry::TAB_TEMPLATES,
@@ -173,14 +173,14 @@ class CommunicationsWorkspacePage extends Page implements HasTable
                     ->limit(60),
                 TextColumn::make('audience')
                     ->label(__('Audience'))
-                    ->formatStateUsing(fn(?string $state): string => MemberAnnouncement::audienceOptions()[$state] ?? ($state ?? '—')),
+                    ->formatStateUsing(fn (?string $state): string => MemberAnnouncement::audienceOptions()[$state] ?? ($state ?? '—')),
                 TextColumn::make('channels')
                     ->label(__('Channels'))
                     ->formatStateUsing(function (mixed $state): string {
                         $channels = is_array($state) ? $state : [];
 
                         return collect($channels)
-                            ->map(fn(string $channel): string => MemberAnnouncement::channelOptions()[$channel] ?? $channel)
+                            ->map(fn (string $channel): string => MemberAnnouncement::channelOptions()[$channel] ?? $channel)
                             ->implode(', ');
                     }),
                 TextColumn::make('recipient_count')
@@ -229,14 +229,14 @@ class CommunicationsWorkspacePage extends Page implements HasTable
                         ->modalWidth('3xl')
                         ->schema($this->announcementFormSchema())
                         ->action(function (array $data): void {
-                                $admin = auth('tenant')->user();
+                            $admin = auth('tenant')->user();
 
-                                if (!$admin instanceof User) {
-                                    return;
-                                }
+                            if (! $admin instanceof User) {
+                                return;
+                            }
 
-                                try {
-                                    $announcement = app(MemberAnnouncementService::class)->createAndDispatch($admin, [
+                            try {
+                                $announcement = app(MemberAnnouncementService::class)->createAndDispatch($admin, [
                                     'audience' => (string) ($data['audience'] ?? MemberAnnouncement::AUDIENCE_ALL_ACTIVE),
                                     'title_en' => (string) ($data['title_en'] ?? ''),
                                     'title_ar' => $data['title_ar'] ?? null,
@@ -244,24 +244,24 @@ class CommunicationsWorkspacePage extends Page implements HasTable
                                     'body_ar' => $data['body_ar'] ?? null,
                                     'channels' => array_values($data['channels'] ?? []),
                                     'scheduled_for' => $data['scheduled_for'] ?? null,
-                                    ]);
-                                } catch (\InvalidArgumentException $exception) {
-                                    Notification::make()->title($exception->getMessage())->danger()->send();
+                                ]);
+                            } catch (\InvalidArgumentException $exception) {
+                                Notification::make()->title($exception->getMessage())->danger()->send();
 
-                                    return;
-                                }
+                                return;
+                            }
 
-                                if ($announcement->scheduled_for !== null && $announcement->sent_at === null) {
-                                    Notification::make()
+                            if ($announcement->scheduled_for !== null && $announcement->sent_at === null) {
+                                Notification::make()
                                     ->title(__('Announcement scheduled'))
                                     ->body(__('Scheduled for :at', ['at' => $announcement->scheduled_for->toDayDateTimeString()]))
                                     ->success()
                                     ->send();
 
-                                    return;
-                                }
+                                return;
+                            }
 
-                                Notification::make()
+                            Notification::make()
                                 ->title(__('Announcement sent'))
                                 ->body(__('Delivered to :count of :total member(s).', [
                                     'count' => $announcement->delivered_count,
@@ -270,8 +270,8 @@ class CommunicationsWorkspacePage extends Page implements HasTable
                                 ->success()
                                 ->send();
 
-                                $this->resetTable();
-                            }),
+                            $this->resetTable();
+                        }),
                 ),
             ],
             default => [],
@@ -292,7 +292,7 @@ class CommunicationsWorkspacePage extends Page implements HasTable
                 ->default(MemberAnnouncement::AUDIENCE_ALL_ACTIVE)
                 ->required()
                 ->live()
-                ->helperText(fn(?string $state): string => $state === null
+                ->helperText(fn (?string $state): string => $state === null
                     ? ''
                     : __('Matches :count member(s) with portal accounts.', [
                         'count' => $announcements->previewCount($state),
@@ -340,7 +340,7 @@ class CommunicationsWorkspacePage extends Page implements HasTable
 
     public function selectChannelFamily(string $family): void
     {
-        if (!in_array($family, NotificationTemplate::channelFamilies(), true)) {
+        if (! in_array($family, NotificationTemplate::channelFamilies(), true)) {
             return;
         }
 
@@ -443,7 +443,7 @@ class CommunicationsWorkspacePage extends Page implements HasTable
             $sample,
         );
 
-        $this->previewText = trim($rendered['subject'] . "\n\n" . $rendered['body']);
+        $this->previewText = trim($rendered['subject']."\n\n".$rendered['body']);
     }
 
     public function setPreviewLocale(string $locale): void
@@ -480,7 +480,7 @@ class CommunicationsWorkspacePage extends Page implements HasTable
     {
         $family = $channelFamily ?? $this->selectedChannelFamily;
 
-        if ($key === '' || !DatabaseSchema::hasTable('notification_templates')) {
+        if ($key === '' || ! DatabaseSchema::hasTable('notification_templates')) {
             $defaults = NotificationTemplateCatalog::defaultContent($key, $locale) ?? ['subject' => '', 'body' => ''];
 
             return ['subject' => $defaults['subject'], 'body' => $defaults['body']];
@@ -536,6 +536,18 @@ class CommunicationsWorkspacePage extends Page implements HasTable
 
     public function channelFamilyHelperText(): string
     {
+        $audience = $this->selectedTemplateKey !== null
+            ? NotificationTemplateCatalog::audienceFor($this->selectedTemplateKey)
+            : 'member';
+
+        if ($audience === 'admin') {
+            return match ($this->selectedChannelFamily) {
+                NotificationTemplate::FAMILY_IN_APP => __('Shown in the admin bell for automation and operational alerts.'),
+                NotificationTemplate::FAMILY_SMS_PUSH => __('Used for admin browser push. Keep it short; Markdown is stripped for delivery.'),
+                default => __('Used when this admin alert is emailed (for example delinquency digest).'),
+            };
+        }
+
         return match ($this->selectedChannelFamily) {
             NotificationTemplate::FAMILY_IN_APP => __('Shown in the member bell and Alerts history.'),
             NotificationTemplate::FAMILY_SMS_PUSH => __('Used for web push, SMS, and WhatsApp. Keep it short; Markdown is stripped for delivery.'),
@@ -557,6 +569,25 @@ class CommunicationsWorkspacePage extends Page implements HasTable
         return $options;
     }
 
+    /**
+     * @return array<string, array<string, string>>
+     */
+    public function templateOptionGroups(): array
+    {
+        $grouped = NotificationTemplateCatalog::optionsGroupedByAudience();
+
+        return [
+            __('Members') => array_map(
+                fn (string $label): string => Lang::formatUiLabel($label),
+                $grouped['member'],
+            ),
+            __('Admin & automation') => array_map(
+                fn (string $label): string => Lang::formatUiLabel($label),
+                $grouped['admin'],
+            ),
+        ];
+    }
+
     public function selectedTemplateVariables(): string
     {
         $definition = $this->selectedTemplateKey
@@ -564,7 +595,7 @@ class CommunicationsWorkspacePage extends Page implements HasTable
             : null;
 
         return implode(', ', array_map(
-            fn(string $v): string => '{{' . $v . '}}',
+            fn (string $v): string => '{{'.$v.'}}',
             $definition['variables'] ?? [],
         ));
     }

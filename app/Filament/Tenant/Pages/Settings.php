@@ -29,6 +29,7 @@ use App\Support\LocalizationSettings;
 use App\Support\MemberNumberSettings;
 use App\Support\NotificationSettings;
 use App\Support\PublicPageSettings;
+use App\Support\PushEventSettings;
 use App\Support\ReconciliationDigestSettings;
 use App\Support\StatementSettings;
 use BackedEnum;
@@ -238,6 +239,7 @@ class Settings extends Page implements HasForms
             ...ContributionPolicySettings::allForForm(),
             ...StatementSettings::allForForm(),
             ...CommunicationSettings::allForForm(),
+            ...PushEventSettings::allForForm(),
             'notifications_sms_enabled' => (bool) ($notifications['sms_enabled'] ?? false),
             'notifications_whatsapp_enabled' => (bool) ($notifications['whatsapp_enabled'] ?? false),
             'notifications_twilio_sid' => $notifications['twilio_account_sid'] ?? '',
@@ -1055,6 +1057,9 @@ class Settings extends Page implements HasForms
                         Toggle::make('statement_auto_email')
                             ->label(__('Auto-email members on generation'))
                             ->helperText(__('When enabled, statement notifications may include email when the email channel is on.')),
+                        Toggle::make('statement_attach_pdf')
+                            ->label(__('Attach statement PDF to email'))
+                            ->helperText(__('When enabled, statement-ready emails include the member\'s PDF for that period.')),
                         Toggle::make('statement_include_transactions')
                             ->label(__('Include transaction detail table')),
                         Toggle::make('statement_include_loan_section')
@@ -1072,6 +1077,17 @@ class Settings extends Page implements HasForms
                             ->label(__('In-app inbox')),
                         Toggle::make('communication_email_enabled')
                             ->label(__('Email')),
+                    ]),
+                Section::make(__('Push notifications by event'))
+                    ->description(__('Turn off browser push for specific alert events. Members must still have push enabled, and VAPID keys must be configured.'))
+                    ->schema([
+                        CheckboxList::make('push_events_enabled')
+                            ->label(__('Events that may send push'))
+                            ->options(PushEventSettings::eventOptions())
+                            ->columns(2)
+                            ->bulkToggleable()
+                            ->searchable()
+                            ->columnSpanFull(),
                     ]),
             ],
             'notifications::tab' => [
@@ -1383,6 +1399,7 @@ class Settings extends Page implements HasForms
         ContributionPolicySettings::saveFromForm($state);
         StatementSettings::saveFromForm($state);
         CommunicationSettings::saveFromForm($state);
+        PushEventSettings::saveFromForm($state);
 
         NotificationSettings::save([
             'sms_enabled' => (bool) ($state['notifications_sms_enabled'] ?? false),

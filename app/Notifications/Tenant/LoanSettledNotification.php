@@ -19,6 +19,14 @@ class LoanSettledNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
+        return $this->templatedArrayPayload($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
         return [
             'title' => __('Loan settled'),
             'body' => __('Loan #:id is fully settled.', ['id' => $this->loan->id]),

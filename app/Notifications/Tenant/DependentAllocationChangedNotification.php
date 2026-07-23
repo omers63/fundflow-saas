@@ -13,6 +13,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Notifications\Concerns\DeliversToMemberChannels;
 use App\Services\Tenant\NotificationPreferenceService;
+use App\Support\PushEventSettings;
 use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
@@ -34,7 +35,7 @@ class DependentAllocationChangedNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        return match ($this->role) {
+        $channels = match ($this->role) {
             'dependent' => NotificationPreferenceService::resolve(
                 $notifiable,
                 NotificationPreferenceService::ALLOCATIONS,
@@ -57,6 +58,11 @@ class DependentAllocationChangedNotification extends Notification
             ),
             default => ['database'],
         };
+
+        return PushEventSettings::filterChannels(
+            $channels,
+            $this->memberNotificationTemplateKey(),
+        );
     }
 
     /**
@@ -64,11 +70,7 @@ class DependentAllocationChangedNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
-        return [
-            'title' => $this->title(),
-            'body' => $this->body(),
-            'dependent_allocation_change_id' => $this->change->id,
-        ];
+        return $this->templatedArrayPayload($notifiable);
     }
 
     /**
@@ -76,9 +78,11 @@ class DependentAllocationChangedNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
+        $payload = $this->templatedArrayPayload($notifiable);
+
         $notification = FilamentNotification::make()
-            ->title($this->title())
-            ->body($this->body())
+            ->title((string) ($payload['title'] ?? $this->title()))
+            ->body((string) ($payload['body'] ?? $this->body()))
             ->icon($this->icon())
             ->iconColor($this->iconColor());
 
@@ -93,6 +97,32 @@ class DependentAllocationChangedNotification extends Notification
         }
 
         return $notification->getDatabaseMessage();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
+        return [
+            'dependent_allocation_change_id' => $this->change->id,
+            'url' => $this->actionUrl(),
+            'icon' => $this->icon(),
+            'color' => $this->iconColor(),
+        ];
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function templateVariables(object $notifiable): array
+    {
+        return [
+            'member_name' => (string) ($notifiable->name ?? ''),
+            'body' => $this->body(),
+            'action_url' => $this->actionUrl(),
+            'action_label' => $this->actionLabel(),
+        ];
     }
 
     protected function title(): string

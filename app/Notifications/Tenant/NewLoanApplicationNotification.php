@@ -23,15 +23,8 @@ class NewLoanApplicationNotification extends Notification
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        $this->loan->loadMissing('member');
-
-        return $this->buildAdminWebPushFor(
+        return $this->buildTemplatedAdminWebPush(
             $notifiable,
-            __('New loan application'),
-            __(':name applied for :amount.', [
-                'name' => $this->loan->member?->name ?? __('Member'),
-                'amount' => number_format((float) $this->loan->amount_requested, 2),
-            ]),
             $this->reviewUrl(),
             'loan-application-'.$this->loan->getKey(),
         );
@@ -42,23 +35,47 @@ class NewLoanApplicationNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
+        return $this->withRecipientLocale($notifiable, function () use ($notifiable): array {
+            $copy = $this->adminBellCopy($notifiable);
+
+            return FilamentNotification::make()
+                ->title($copy['title'] !== '' ? $copy['title'] : __('New loan application'))
+                ->body($copy['body'] !== '' ? $copy['body'] : $this->fallbackBody())
+                ->icon('heroicon-o-document-plus')
+                ->iconColor('warning')
+                ->actions([
+                    Action::make('review')
+                        ->label(__('Review application'))
+                        ->url($this->reviewUrl())
+                        ->markAsRead(),
+                ])
+                ->getDatabaseMessage();
+        });
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function adminTemplateVariables(object $notifiable): array
+    {
         $this->loan->loadMissing('member');
 
-        return FilamentNotification::make()
-            ->title(__('New loan application'))
-            ->body(__(':name applied for :amount.', [
-                'name' => $this->loan->member?->name ?? __('Member'),
-                'amount' => number_format((float) $this->loan->amount_requested, 2),
-            ]))
-            ->icon('heroicon-o-document-plus')
-            ->iconColor('warning')
-            ->actions([
-                Action::make('review')
-                    ->label(__('Review application'))
-                    ->url($this->reviewUrl())
-                    ->markAsRead(),
-            ])
-            ->getDatabaseMessage();
+        return [
+            'member_name' => (string) ($this->loan->member?->name ?? __('Member')),
+            'amount' => number_format((float) $this->loan->amount_requested, 2),
+            'action_url' => $this->reviewUrl(),
+            'action_label' => __('Review application'),
+        ];
+    }
+
+    protected function fallbackBody(): string
+    {
+        $this->loan->loadMissing('member');
+
+        return __(':name applied for :amount.', [
+            'name' => $this->loan->member?->name ?? __('Member'),
+            'amount' => number_format((float) $this->loan->amount_requested, 2),
+        ]);
     }
 
     protected function reviewUrl(): string

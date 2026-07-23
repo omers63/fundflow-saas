@@ -92,12 +92,21 @@ trait InteractsWithJobsTable
             ->columns([
                 TextColumn::make('job_label')
                     ->label(__('Job'))
-                    ->wrap(),
+                    ->wrap()
+                    ->toggleable(false)
+                    ->searchable(false)
+                    ->sortable(false),
                 TextColumn::make('category')
-                    ->badge(),
+                    ->badge()
+                    ->toggleable(false)
+                    ->searchable(false)
+                    ->sortable(false),
                 TextColumn::make('schedule')
                     ->label(__('Schedule'))
-                    ->wrap(),
+                                        ->wrap()
+                                        ->toggleable(false)
+                                        ->searchable(false)
+                                        ->sortable(false),
                 TextColumn::make('last_status')
                     ->label(__('Last run'))
                     ->badge()
@@ -107,15 +116,24 @@ trait InteractsWithJobsTable
                         SystemJobRun::STATUS_RUNNING => 'warning',
                         default => 'gray',
                     })
-                    ->placeholder(__('Never')),
+                    ->placeholder(__('Never'))
+                    ->toggleable(false)
+                    ->searchable(false)
+                    ->sortable(false),
                 TextColumn::make('last_started_at')
                     ->label(__('Last started'))
                     ->dateTime()
-                    ->placeholder(__('—')),
+                    ->placeholder(__('—'))
+                    ->toggleable(false)
+                    ->searchable(false)
+                    ->sortable(false),
                 TextColumn::make('last_duration_ms')
                     ->label(__('Duration'))
-                    ->formatStateUsing(fn (?int $state): string => $state ? $state.' ms' : '—')
-                    ->visible(fn (): bool => $this->jobsAdvancedUi()),
+                    ->formatStateUsing(fn(mixed $state): string => filled($state) ? ((int) $state) . ' ms' : '—')
+                    ->alignEnd()
+                    ->toggleable(false)
+                    ->searchable(false)
+                    ->sortable(false),
             ])
             ->recordActions(TableRecordActionGroups::wrap([
                 Action::make('run')
@@ -184,16 +202,30 @@ trait InteractsWithJobsTable
                     ->label(__('Job'))
                     ->formatStateUsing(fn (string $state): string => ScheduledJobRegistry::find($state)['label'] ?? $state)
                     ->searchable()
-                    ->wrap(),
+                    ->wrap()
+                    ->toggleable(false),
                 TextColumn::make('status')
-                    ->badge(),
+                    ->badge()
+                    ->toggleable(false)
+                    ->searchable(false),
                 TextColumn::make('started_at')
+                    ->label(__('Started'))
                     ->dateTime()
+                    ->sortable()
+                    ->toggleable(false)
+                    ->searchable(false),
+                TextColumn::make('duration_ms')
+                    ->label(__('Duration'))
+                    ->formatStateUsing(fn(mixed $state): string => filled($state) ? ((int) $state) . ' ms' : '—')
+                    ->alignEnd()
+                    ->toggleable(false)
+                    ->searchable(false)
                     ->sortable(),
                 TextColumn::make('exit_code')
                     ->label(__('Exit code'))
                     ->placeholder(__('—'))
-                    ->visible(fn (): bool => $this->jobsAdvancedUi()),
+                    ->visible(fn(): bool => $this->jobsAdvancedUi())
+                    ->searchable(false),
             ])
             ->recordActions(TableRecordActionGroups::wrap([
                 Action::make('view_run')

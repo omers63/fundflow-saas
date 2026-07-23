@@ -20,19 +20,14 @@ class LoanEligibilityOverrideRejectedNotification extends Notification
 
     public function __construct(
         public LoanEligibilityOverrideRequest $request,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>
      */
     public function toArray(object $notifiable): array
     {
-        return [
-            'title' => __('Loan eligibility review declined'),
-            'body' => $this->bodyMessage(),
-            'loan_eligibility_override_request_id' => $this->request->id,
-        ];
+        return $this->templatedArrayPayload($notifiable);
     }
 
     /**
@@ -40,9 +35,11 @@ class LoanEligibilityOverrideRejectedNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
+        $payload = $this->templatedArrayPayload($notifiable);
+
         return FilamentNotification::make()
-            ->title(__('Loan eligibility review declined'))
-            ->body($this->bodyMessage())
+            ->title((string) ($payload['title'] ?? __('Loan eligibility review declined')))
+            ->body((string) ($payload['body'] ?? $this->bodyMessage()))
             ->icon('heroicon-o-x-circle')
             ->iconColor('danger')
             ->actions([
@@ -52,6 +49,22 @@ class LoanEligibilityOverrideRejectedNotification extends Notification
                     ->markAsRead(),
             ])
             ->getDatabaseMessage();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
+        return [
+            'title' => __('Loan eligibility review declined'),
+            'body' => $this->bodyMessage(),
+            'loan_eligibility_override_request_id' => $this->request->id,
+            'url' => $this->loansUrl(),
+            'action_label' => __('My loans'),
+            'icon' => 'heroicon-o-x-circle',
+            'color' => 'danger',
+        ];
     }
 
     protected function bodyMessage(): string

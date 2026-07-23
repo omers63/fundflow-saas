@@ -26,14 +26,8 @@ class LoanGuarantorTransferAdminNotification extends Notification
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        return $this->buildAdminWebPushFor(
+        return $this->buildTemplatedAdminWebPush(
             $notifiable,
-            __('Loan transferred to guarantor'),
-            __('Loan #:id moved from :borrower to guarantor :guarantor.', [
-                'id' => $this->loan->id,
-                'borrower' => $this->borrower->name,
-                'guarantor' => $this->guarantor->name,
-            ]),
             $this->reviewUrl(),
             'loan-guarantor-transfer-'.$this->loan->getKey(),
         );
@@ -44,22 +38,45 @@ class LoanGuarantorTransferAdminNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
-        return FilamentNotification::make()
-            ->title(__('Loan transferred to guarantor'))
-            ->body(__('Loan #:id moved from :borrower to guarantor :guarantor.', [
-                'id' => $this->loan->id,
-                'borrower' => $this->borrower->name,
-                'guarantor' => $this->guarantor->name,
-            ]))
-            ->icon('heroicon-o-arrow-path')
-            ->iconColor('danger')
-            ->actions([
-                Action::make('view')
-                    ->label(__('View loan'))
-                    ->url($this->reviewUrl())
-                    ->markAsRead(),
-            ])
-            ->getDatabaseMessage();
+        return $this->withRecipientLocale($notifiable, function () use ($notifiable): array {
+            $copy = $this->adminBellCopy($notifiable);
+
+            return FilamentNotification::make()
+                ->title($copy['title'] !== '' ? $copy['title'] : __('Loan transferred to guarantor'))
+                ->body($copy['body'] !== '' ? $copy['body'] : $this->fallbackBody())
+                ->icon('heroicon-o-arrow-path')
+                ->iconColor('danger')
+                ->actions([
+                    Action::make('view')
+                        ->label(__('View loan'))
+                        ->url($this->reviewUrl())
+                        ->markAsRead(),
+                ])
+                ->getDatabaseMessage();
+        });
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function adminTemplateVariables(object $notifiable): array
+    {
+        return [
+            'loan_id' => (string) $this->loan->id,
+            'borrower_name' => (string) $this->borrower->name,
+            'guarantor_name' => (string) $this->guarantor->name,
+            'action_url' => $this->reviewUrl(),
+            'action_label' => __('View loan'),
+        ];
+    }
+
+    protected function fallbackBody(): string
+    {
+        return __('Loan #:id moved from :borrower to guarantor :guarantor.', [
+            'id' => $this->loan->id,
+            'borrower' => $this->borrower->name,
+            'guarantor' => $this->guarantor->name,
+        ]);
     }
 
     protected function reviewUrl(): string

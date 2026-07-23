@@ -23,10 +23,8 @@ class NewMembershipApplicationNotification extends Notification
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        return $this->buildAdminWebPushFor(
+        return $this->buildTemplatedAdminWebPush(
             $notifiable,
-            __('New membership application'),
-            __(':name submitted a membership application.', ['name' => $this->application->name]),
             $this->reviewUrl(),
             'membership-application-'.$this->application->getKey(),
         );
@@ -37,18 +35,39 @@ class NewMembershipApplicationNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
-        return FilamentNotification::make()
-            ->title(__('New membership application'))
-            ->body(__(':name submitted a membership application.', ['name' => $this->application->name]))
-            ->icon('heroicon-o-user-plus')
-            ->iconColor('warning')
-            ->actions([
-                Action::make('review')
-                    ->label(__('Review application'))
-                    ->url($this->reviewUrl())
-                    ->markAsRead(),
-            ])
-            ->getDatabaseMessage();
+        return $this->withRecipientLocale($notifiable, function () use ($notifiable): array {
+            $copy = $this->adminBellCopy($notifiable);
+
+            return FilamentNotification::make()
+                ->title($copy['title'] !== '' ? $copy['title'] : __('New membership application'))
+                ->body($copy['body'] !== '' ? $copy['body'] : $this->fallbackBody())
+                ->icon('heroicon-o-user-plus')
+                ->iconColor('warning')
+                ->actions([
+                    Action::make('review')
+                        ->label(__('Review application'))
+                        ->url($this->reviewUrl())
+                        ->markAsRead(),
+                ])
+                ->getDatabaseMessage();
+        });
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function adminTemplateVariables(object $notifiable): array
+    {
+        return [
+            'member_name' => (string) $this->application->name,
+            'action_url' => $this->reviewUrl(),
+            'action_label' => __('Review application'),
+        ];
+    }
+
+    protected function fallbackBody(): string
+    {
+        return __(':name submitted a membership application.', ['name' => $this->application->name]);
     }
 
     protected function reviewUrl(): string

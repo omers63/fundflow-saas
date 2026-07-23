@@ -23,6 +23,14 @@ class LoanDefaultGuarantorNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
+        return $this->templatedArrayPayload($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
         return [
             'title' => __('Guarantor liability'),
             'body' => __('Your fund account was debited for loan #:id installment #:num.', [

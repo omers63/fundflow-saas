@@ -24,6 +24,14 @@ class LoanApprovedNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
+        return $this->templatedArrayPayload($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
         return [
             'title' => __('Loan approved'),
             'body' => __('Your loan of :amount has been approved with :installments monthly installments. Final due: :date.', [

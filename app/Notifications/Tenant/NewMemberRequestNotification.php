@@ -25,10 +25,8 @@ class NewMemberRequestNotification extends Notification
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        return $this->buildAdminWebPushFor(
+        return $this->buildTemplatedAdminWebPush(
             $notifiable,
-            __('New member request'),
-            $this->summary(),
             $this->reviewUrl(),
             'member-request-'.$this->request->getKey(),
         );
@@ -39,18 +37,35 @@ class NewMemberRequestNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
-        return FilamentNotification::make()
-            ->title(__('New member request'))
-            ->body($this->summary())
-            ->icon('heroicon-o-clipboard-document-list')
-            ->iconColor('warning')
-            ->actions([
-                AdminNotificationActions::reviewMemberRequest($this->request),
-            ])
-            ->getDatabaseMessage();
+        return $this->withRecipientLocale($notifiable, function () use ($notifiable): array {
+            $copy = $this->adminBellCopy($notifiable);
+
+            return FilamentNotification::make()
+                ->title($copy['title'] !== '' ? $copy['title'] : __('New member request'))
+                ->body($copy['body'] !== '' ? $copy['body'] : $this->fallbackSummary())
+                ->icon('heroicon-o-clipboard-document-list')
+                ->iconColor('warning')
+                ->actions([
+                    AdminNotificationActions::reviewMemberRequest($this->request),
+                ])
+                ->getDatabaseMessage();
+        });
     }
 
-    protected function summary(): string
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function adminTemplateVariables(object $notifiable): array
+    {
+        return [
+            'member_name' => (string) ($this->requester->name ?? __('Member')),
+            'request_type' => MemberRequest::typeLabel($this->request->type),
+            'action_url' => $this->reviewUrl(),
+            'action_label' => __('Review'),
+        ];
+    }
+
+    protected function fallbackSummary(): string
     {
         return ($this->requester->name ?? __('Member'))
             .' — '

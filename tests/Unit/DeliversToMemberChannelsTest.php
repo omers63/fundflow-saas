@@ -5,9 +5,6 @@ use App\Models\Tenant\User;
 use App\Notifications\Tenant\GuarantorLoanApplicationNotification;
 use App\Notifications\Tenant\LoanSubmittedNotification;
 use Illuminate\Notifications\Messages\MailMessage;
-use Tests\TestCase;
-
-uses(TestCase::class);
 
 test('member channel notifications build mail messages from array payload', function () {
     $loan = new Loan([

@@ -22,19 +22,14 @@ class ContributionPostedNotification extends Notification
 
     public function __construct(
         public Contribution $contribution,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>
      */
     public function toArray(object $notifiable): array
     {
-        return [
-            'title' => __('Contribution posted'),
-            'body' => $this->bodyMessage(),
-            'contribution_id' => $this->contribution->id,
-        ];
+        return $this->templatedArrayPayload($notifiable);
     }
 
     /**
@@ -42,9 +37,11 @@ class ContributionPostedNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
+        $payload = $this->templatedArrayPayload($notifiable);
+
         return FilamentNotification::make()
-            ->title(__('Contribution posted'))
-            ->body($this->bodyMessage())
+            ->title((string) ($payload['title'] ?? __('Contribution posted')))
+            ->body((string) ($payload['body'] ?? ''))
             ->icon('heroicon-o-check-circle')
             ->iconColor('success')
             ->actions([
@@ -56,27 +53,35 @@ class ContributionPostedNotification extends Notification
             ->getDatabaseMessage();
     }
 
-    protected function bodyMessage(): string
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
+        return [
+            'contribution_id' => $this->contribution->id,
+            'url' => $this->contributionsUrl(),
+        ];
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function templateVariables(object $notifiable): array
     {
         $this->contribution->loadMissing('member');
 
         $periodLabel = $this->contribution->period?->translatedFormat('F Y') ?? __('Unknown period');
         $currency = Setting::get('general', 'currency', 'USD');
         $amount = MoneyDisplay::format((float) $this->contribution->amount, $currency);
-        $lateFee = (float) ($this->contribution->late_fee_amount ?? 0);
 
-        if ($lateFee > 0.00001) {
-            return __(':amount for :period posted (including :fee late fee).', [
-                'amount' => $amount,
-                'period' => $periodLabel,
-                'fee' => MoneyDisplay::format($lateFee, $currency),
-            ]);
-        }
-
-        return __(':amount for :period has been posted to your fund account.', [
+        return [
+            'member_name' => (string) ($this->contribution->member?->name ?? ''),
             'amount' => $amount,
             'period' => $periodLabel,
-        ]);
+            'action_url' => $this->contributionsUrl(),
+            'action_label' => __('View my contributions'),
+        ];
     }
 
     protected function contributionsUrl(): string

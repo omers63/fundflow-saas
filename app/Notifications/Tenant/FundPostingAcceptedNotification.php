@@ -41,7 +41,7 @@ class FundPostingAcceptedNotification extends Notification
 
         return FilamentNotification::make()
             ->title((string) ($payload['title'] ?? __('Deposit accepted')))
-            ->body($this->fundPostingDatabaseBody($this->fundPosting, $this->settlement, 'accepted'))
+            ->body((string) ($payload['body'] ?? $this->fundPostingDatabaseBody($this->fundPosting, $this->settlement, 'accepted')))
             ->icon('heroicon-o-check-circle')
             ->iconColor('success')
             ->actions([

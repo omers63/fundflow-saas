@@ -23,15 +23,31 @@ class ContributionLateFeeAppliedNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
+        return $this->templatedArrayPayload($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
         return [
-            'title' => __('Contribution late fee applied'),
-            'body' => __('A late fee of :amount was applied to your :period contribution (tier :tier).', [
-                'amount' => number_format($this->lateFeeAmount, 2),
-                'period' => $this->contribution->period?->format('M Y') ?? __('contribution'),
-                'tier' => $this->tier,
-            ]),
             'icon' => 'heroicon-o-clock',
             'color' => 'warning',
+        ];
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function templateVariables(object $notifiable): array
+    {
+        return [
+            'member_name' => (string) ($this->contribution->member?->name ?? ''),
+            'amount' => number_format($this->lateFeeAmount, 2),
+            'period' => $this->contribution->period?->format('M Y') ?? __('contribution'),
+            'action_url' => null,
+            'action_label' => __('Open'),
         ];
     }
 }

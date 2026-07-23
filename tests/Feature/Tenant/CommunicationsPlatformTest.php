@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\Tenant\Account;
 use App\Models\Tenant\DirectMessage;
+use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberAnnouncement;
 use App\Models\Tenant\MemberCommunicationPreference;
@@ -12,8 +13,10 @@ use App\Models\Tenant\User;
 use App\Notifications\Tenant\ContributionDueNotification;
 use App\Notifications\Tenant\FundPostingAcceptedNotification;
 use App\Notifications\Tenant\GenericMemberAlertNotification;
+use App\Notifications\Tenant\LoanSubmittedNotification;
 use App\Notifications\Tenant\MemberAnnouncementNotification;
 use App\Notifications\Tenant\MemberDirectMessageNotification;
+use App\Notifications\Tenant\NewLoanApplicationNotification;
 use App\Services\AccountingService;
 use App\Services\Tenant\MemberAnnouncementService;
 use App\Services\Tenant\MemberPortalNotificationService;
@@ -202,7 +205,7 @@ test('in-app announcements create bell alerts and not direct messages', function
     Notification::assertSentTo(
         $memberUser,
         MemberAnnouncementNotification::class,
-        fn(MemberAnnouncementNotification $notification, array $channels): bool => in_array('database', $channels, true)
+        fn (MemberAnnouncementNotification $notification, array $channels): bool => in_array('database', $channels, true)
         && $notification->title === 'Pool notice'
         && $notification->body === 'Meeting Thursday.',
     );
@@ -295,4 +298,74 @@ test('in-app and push channel families can be saved independently from email', f
         ->and($push['subject'])->toBe('Push title')
         ->and($push['body'])->toContain('Push body 99.00')
         ->and($email['subject'])->toBe('Contribution due');
+});
+
+test('in-app template edits drive previously hardcoded member bell notifications', function () {
+    NotificationTemplateCatalog::seedMissingDefaults();
+    app()->setLocale('en');
+
+    NotificationTemplate::query()->updateOrCreate(
+        [
+            'key' => 'generic_member_alert',
+            'locale' => 'en',
+            'channel_family' => NotificationTemplate::FAMILY_IN_APP,
+        ],
+        [
+            'subject' => 'Custom: {{title}}',
+            'body_markdown' => 'Bell says: {{body}}',
+        ],
+    );
+
+    $loan = new Loan(['amount_requested' => 15000]);
+    $loan->id = 99;
+
+    $user = new User([
+        'name' => 'Bell Member',
+        'email' => 'bell-member@fund.test',
+        'preferred_locale' => 'en',
+    ]);
+
+    $payload = (new LoanSubmittedNotification($loan))->toDatabase($user);
+
+    expect($payload['title'] ?? null)->toBe('Custom: Loan application submitted')
+        ->and($payload['body'] ?? null)->toContain('Bell says:')
+        ->and($payload['body'] ?? null)->toContain('15,000.00');
+});
+
+test('admin automation templates are listed and drive bell copy', function () {
+    NotificationTemplateCatalog::seedMissingDefaults();
+    app()->setLocale('en');
+
+    $groups = NotificationTemplateCatalog::optionsGroupedByAudience();
+
+    expect($groups['admin'])->toHaveKey('reconciliation_digest')
+        ->and($groups['admin'])->toHaveKey('delinquency_digest')
+        ->and($groups['admin'])->toHaveKey('new_loan_application');
+
+    NotificationTemplate::query()->updateOrCreate(
+        [
+            'key' => 'new_loan_application',
+            'locale' => 'en',
+            'channel_family' => NotificationTemplate::FAMILY_IN_APP,
+        ],
+        [
+            'subject' => 'Admin loan alert',
+            'body_markdown' => '{{member_name}} wants {{amount}}',
+        ],
+    );
+
+    $loan = new Loan(['amount_requested' => 2500]);
+    $loan->id = 7;
+    $loan->setRelation('member', new Member(['name' => 'Sara']));
+
+    $admin = new User([
+        'name' => 'Admin',
+        'email' => 'admin-bell@fund.test',
+        'preferred_locale' => 'en',
+    ]);
+
+    $payload = (new NewLoanApplicationNotification($loan))->toDatabase($admin);
+
+    expect($payload['title'] ?? null)->toBe('Admin loan alert')
+        ->and($payload['body'] ?? null)->toBe('Sara wants 2,500.00');
 });

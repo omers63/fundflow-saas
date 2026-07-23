@@ -25,6 +25,14 @@ class LoanGuarantorTransferNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
+        return $this->templatedArrayPayload($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
         if ($this->role === 'guarantor') {
             return [
                 'title' => __('Guarantor loan transfer'),

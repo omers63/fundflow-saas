@@ -25,10 +25,8 @@ class NewSupportRequestNotification extends Notification
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
-        return $this->buildAdminWebPushFor(
+        return $this->buildTemplatedAdminWebPush(
             $notifiable,
-            __('Support request #:id', ['id' => $this->supportRequest->id]),
-            $this->summary(),
             $this->reviewUrl(),
             'support-request-'.$this->supportRequest->getKey(),
         );
@@ -39,21 +37,41 @@ class NewSupportRequestNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
-        return FilamentNotification::make()
-            ->title(__('Support request #:id: :subject', [
-                'id' => $this->supportRequest->id,
-                'subject' => $this->supportRequest->subject,
-            ]))
-            ->body($this->summary())
-            ->icon('heroicon-o-chat-bubble-left-right')
-            ->iconColor('warning')
-            ->actions([
-                AdminNotificationActions::reviewSupportRequest($this->supportRequest),
-            ])
-            ->getDatabaseMessage();
+        return $this->withRecipientLocale($notifiable, function () use ($notifiable): array {
+            $copy = $this->adminBellCopy($notifiable);
+
+            return FilamentNotification::make()
+                ->title($copy['title'] !== '' ? $copy['title'] : __('Support request #:id: :subject', [
+                    'id' => $this->supportRequest->id,
+                    'subject' => $this->supportRequest->subject,
+                ]))
+                ->body($copy['body'] !== '' ? $copy['body'] : $this->fallbackSummary())
+                ->icon('heroicon-o-chat-bubble-left-right')
+                ->iconColor('warning')
+                ->actions([
+                    AdminNotificationActions::reviewSupportRequest($this->supportRequest),
+                ])
+                ->getDatabaseMessage();
+        });
     }
 
-    protected function summary(): string
+    /**
+     * @return array<string, scalar|null>
+     */
+    protected function adminTemplateVariables(object $notifiable): array
+    {
+        return [
+            'request_id' => (string) $this->supportRequest->id,
+            'subject' => (string) $this->supportRequest->subject,
+            'from' => $this->memberInfo,
+            'category' => $this->categoryLabel,
+            'message' => (string) $this->supportRequest->message,
+            'action_url' => $this->reviewUrl(),
+            'action_label' => __('Review'),
+        ];
+    }
+
+    protected function fallbackSummary(): string
     {
         return __('Request #:id from :from', [
             'id' => $this->supportRequest->id,

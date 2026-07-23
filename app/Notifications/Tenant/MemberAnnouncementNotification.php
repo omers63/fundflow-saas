@@ -7,6 +7,7 @@ namespace App\Notifications\Tenant;
 use App\Filament\Member\Pages\CommunicationsPage;
 use App\Notifications\Concerns\DeliversToMemberChannels;
 use App\Services\Tenant\NotificationPreferenceService;
+use App\Support\PushEventSettings;
 use App\Support\TenantAbsoluteUrl;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
@@ -76,7 +77,10 @@ class MemberAnnouncementNotification extends Notification
             }
         }
 
-        return $resolved;
+        return PushEventSettings::filterChannels(
+            $resolved,
+            $this->memberNotificationTemplateKey(),
+        );
     }
 
     /**

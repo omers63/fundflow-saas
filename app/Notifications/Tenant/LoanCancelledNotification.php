@@ -22,6 +22,14 @@ class LoanCancelledNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
+        return $this->templatedArrayPayload($notifiable);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contentPayload(object $notifiable): array
+    {
         $body = filled($this->reason)
             ? $this->reason
             : __('Your pending loan application #:id was cancelled.', ['id' => $this->loan->id]);
