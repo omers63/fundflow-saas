@@ -594,14 +594,53 @@ class Settings extends Page implements HasForms
                             ->minValue(1)
                             ->maxValue(28)
                             ->required()
-                            ->helperText(__('Day of month when the contribution cycle starts (1–28). Closing the previous cycle and opening the next run automatically on this day (00:30 then 00:35).')),
+                            ->helperText(__('Day of month when the contribution cycle starts (1–28). Closing the previous cycle and opening the next run automatically on this day at the times below.')),
                         TextInput::make('automation_month_boundary_day')
                             ->label(__('Month-boundary automation day'))
                             ->numeric()
                             ->minValue(1)
                             ->maxValue(28)
                             ->required()
-                            ->helperText(__('Day of month for monthly reconciliation snapshot and statement generation at 00:30. Defaults to the cycle start day.')),
+                            ->helperText(__('Day of month for monthly reconciliation snapshot and statement generation. Defaults to the cycle start day.')),
+                        TextInput::make('automation_month_boundary_time')
+                            ->label(__('Month-boundary time'))
+                            ->required()
+                            ->placeholder('00:30')
+                            ->helperText(__('24-hour clock time (HH:MM) for monthly reconcile and statements.')),
+                        TextInput::make('automation_cycle_close_time')
+                            ->label(__('Close collection window time'))
+                            ->required()
+                            ->placeholder('00:30')
+                            ->helperText(__('Runs on the cycle start day to mark unpaid contributions overdue.')),
+                        TextInput::make('automation_cycle_init_time')
+                            ->label(__('Init contribution cycle time'))
+                            ->required()
+                            ->placeholder('00:35')
+                            ->helperText(__('Runs on the cycle start day to open the new period (usually a few minutes after close).')),
+                        TextInput::make('automation_emi_close_day')
+                            ->label(__('Close EMI window day'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(28)
+                            ->required()
+                            ->helperText(__('Day of month to mark unpaid EMIs overdue. Defaults to the cycle start day.')),
+                        TextInput::make('automation_emi_close_time')
+                            ->label(__('Close EMI window time'))
+                            ->required()
+                            ->placeholder('00:45')
+                            ->helperText(__('24-hour clock time (HH:MM) on the EMI close day.')),
+                        TextInput::make('automation_statements_day')
+                            ->label(__('Generate statements day'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(28)
+                            ->required()
+                            ->helperText(__('Day of month for monthly statement generation. Defaults to the month-boundary day.')),
+                        TextInput::make('automation_statements_time')
+                            ->label(__('Generate statements time'))
+                            ->required()
+                            ->placeholder('00:30')
+                            ->helperText(__('24-hour clock time (HH:MM) for statement generation.')),
                     ]),
                 Section::make(__('Automation behaviour'))
                     ->description(__('Control whether deposits and cash allocations run without manual review.'))
@@ -609,7 +648,7 @@ class Settings extends Page implements HasForms
                     ->schema([
                         Toggle::make('automation_auto_accept_deposits')
                             ->label(__('Auto-accept deposits'))
-                            ->helperText(__('When enabled, member deposit requests are accepted immediately and credited to cash. When disabled, deposits stay pending until an admin accepts them.'))
+                            ->helperText(__('When enabled, member deposit requests are accepted immediately and credited to cash. Admins still receive the new-deposit notification. When disabled, deposits stay pending until an admin accepts them.'))
                             ->default(true),
                         Toggle::make('automation_auto_apply_collections')
                             ->label(__('Auto-apply allocations, contributions, and EMI repayments'))
@@ -617,7 +656,7 @@ class Settings extends Page implements HasForms
                             ->default(true),
                     ]),
                 Section::make(__('Automation schedule'))
-                    ->description(__('Due notifications fire on selected days after the cycle opens. Apply jobs run once or twice daily while the cycle is open; late fees and loan delinquency follow each apply automatically.'))
+                    ->description(__('Configure when each automation job runs. Due notifications fire on selected days after the cycle opens. Apply jobs run once or twice daily while the cycle is open; late fees and loan delinquency follow each apply automatically. Daily fund and bank jobs use the times below.'))
                     ->columns(2)
                     ->schema([
                         TextInput::make('automation_contribution_due_notify_days')
@@ -648,6 +687,103 @@ class Settings extends Page implements HasForms
                             ->required()
                             ->placeholder('06:00')
                             ->helperText(__('One or two HH:MM times per day while the cycle is open. Delinquency check runs after each apply.')),
+                        TextInput::make('automation_master_invariants_time')
+                            ->label(__('Assert master invariants time'))
+                            ->required()
+                            ->placeholder('06:00')
+                            ->helperText(__('Daily check that master cash/fund match member sums.')),
+                        TextInput::make('automation_daily_reconcile_time')
+                            ->label(__('Daily reconciliation time'))
+                            ->required()
+                            ->placeholder('06:20')
+                            ->helperText(__('Daily ledger audit snapshot.')),
+                        TextInput::make('automation_nightly_reconcile_time')
+                            ->label(__('Nightly reconciliation time'))
+                            ->required()
+                            ->placeholder('06:30')
+                            ->helperText(__('Nightly master, contributions, EMI, and bank checks.')),
+                        TextInput::make('automation_delinquency_digest_time')
+                            ->label(__('Delinquency digest time'))
+                            ->required()
+                            ->placeholder('07:30')
+                            ->helperText(__('Daily admin digest of delinquency status.')),
+                        TextInput::make('automation_bank_auto_match_time')
+                            ->label(__('Bank auto-match time'))
+                            ->required()
+                            ->placeholder('08:00')
+                            ->helperText(__('Daily matching of imported bank lines to uncleared postings.')),
+                        TextInput::make('automation_late_fees_time')
+                            ->label(__('Apply late fees time'))
+                            ->required()
+                            ->placeholder('06:05')
+                            ->helperText(__('Daily late-fee pass (also runs after each Apply contributions when enabled).')),
+                        TextInput::make('automation_loan_defaults_time')
+                            ->label(__('Loan delinquency check time'))
+                            ->required()
+                            ->placeholder('06:05')
+                            ->helperText(__('Daily delinquency/guarantor maintenance (also runs after each Apply loan repayments when enabled).')),
+                        TextInput::make('automation_onboarding_greeting_time')
+                            ->label(__('Onboarding greeting catch-up time'))
+                            ->required()
+                            ->placeholder('10:00')
+                            ->helperText(__('Used only when scheduled onboarding greeting catch-up is enabled.')),
+                        Toggle::make('automation_late_fees_enabled')
+                            ->label(__('Enable late fee automation'))
+                            ->helperText(__('When off, scheduled and post-apply late fee passes are skipped.'))
+                            ->default(true),
+                        Toggle::make('automation_loan_defaults_enabled')
+                            ->label(__('Enable loan delinquency check automation'))
+                            ->helperText(__('When off, scheduled and post-apply delinquency checks are skipped.'))
+                            ->default(true),
+                        Toggle::make('automation_dispatch_announcements_enabled')
+                            ->label(__('Enable scheduled announcement dispatch'))
+                            ->helperText(__('When enabled, polls on the interval below for member announcements whose send time has arrived.'))
+                            ->live()
+                            ->default(true),
+                        Select::make('automation_dispatch_announcements_interval_minutes')
+                            ->label(__('Announcement dispatch polling interval'))
+                            ->options(AutomationScheduleSettings::pollingIntervalOptions())
+                            ->required()
+                            ->native(false)
+                            ->visible(fn (Get $get): bool => (bool) $get('automation_dispatch_announcements_enabled'))
+                            ->helperText(__('How often the dispatcher checks for due announcements. The scheduler still wakes every minute; this controls how often the job actually runs.')),
+                        Toggle::make('automation_onboarding_greeting_enabled')
+                            ->label(__('Enable scheduled onboarding greeting catch-up'))
+                            ->helperText(__('When on, sends the welcome/PWA greeting daily at the time above. Manual runs from Jobs still work.'))
+                            ->default(false),
+                    ]),
+                Section::make(__('Automation notifications'))
+                    ->description(__('Turn off notifications from scheduled automation. Jobs can still run; only outbound alerts are suppressed. Channel and push-event settings under Communication still apply when notifications are enabled.'))
+                    ->columns(2)
+                    ->schema([
+                        Toggle::make('automation_notify_contribution_due')
+                            ->label(__('Contribution due notifications'))
+                            ->helperText(__('Notify members on the configured cycle days.'))
+                            ->default(true),
+                        Toggle::make('automation_notify_loan_due')
+                            ->label(__('Loan due notifications'))
+                            ->helperText(__('Notify borrowers of EMI due on the configured cycle days.'))
+                            ->default(true),
+                        Toggle::make('automation_notify_delinquency_digest')
+                            ->label(__('Delinquency digest'))
+                            ->helperText(__('Daily admin digest when arrears or overdue EMIs exist.'))
+                            ->default(true),
+                        Toggle::make('automation_notify_reconciliation_digest')
+                            ->label(__('Reconciliation digests'))
+                            ->helperText(__('Admin alerts for daily, monthly, and nightly reconciliation runs.'))
+                            ->default(true),
+                        Toggle::make('automation_notify_monthly_statements')
+                            ->label(__('Monthly statement notifications'))
+                            ->helperText(__('When statement generation runs with notify, send member statement-ready alerts.'))
+                            ->default(true),
+                        Toggle::make('automation_notify_announcements')
+                            ->label(__('Scheduled announcement notifications'))
+                            ->helperText(__('When off, due announcements are not dispatched even if dispatch is enabled.'))
+                            ->default(true),
+                        Toggle::make('automation_notify_onboarding_greeting')
+                            ->label(__('Onboarding greeting notifications'))
+                            ->helperText(__('Controls scheduled catch-up sends. Manual Jobs runs with force still send.'))
+                            ->default(true),
                     ]),
                 Section::make(__('Delinquency policy'))
                     ->description(__('Daily arrears check flags active members who breach consecutive or rolling miss thresholds. Status is not changed.'))
@@ -931,11 +1067,11 @@ class Settings extends Page implements HasForms
                             ->default(false),
                     ]),
                 Section::make(__('Digest notifications'))
-                    ->description(__('Database alerts always go to admins. Push can be turned off for scheduled digests.'))
+                    ->description(__('Database alerts always go to admins when reconciliation digests are enabled under Collection → Automation notifications. Push can be turned off separately here.'))
                     ->schema([
                         Toggle::make('reconciliation_digest_push_enabled')
                             ->label(__('Send web push for daily and nightly reconciliation digests'))
-                            ->helperText(__('When off, admins still receive in-app reconciliation digests without browser push.'))
+                            ->helperText(__('When off, admins still receive in-app reconciliation digests without browser push (if digests are enabled).'))
                             ->default(true),
                     ]),
                 Section::make(__('Bank clearing match'))

@@ -60,13 +60,15 @@ class ApplyMonthlyContributions extends Command
             'skipped' => $results['skipped']->count(),
         ]));
 
-        $contributionFees = $collection->applyNightlyLateFees();
-        $installmentFees = app(LoanInstallmentLateFeeService::class)->applyNightlyLateFees();
+        if (AutomationScheduleSettings::lateFeesEnabled()) {
+            $contributionFees = $collection->applyNightlyLateFees();
+            $installmentFees = app(LoanInstallmentLateFeeService::class)->applyNightlyLateFees();
 
-        $this->info(__('Late fees after apply — contributions: :c, EMIs: :e', [
-            'c' => $contributionFees,
-            'e' => $installmentFees,
-        ]));
+            $this->info(__('Late fees after apply — contributions: :c, EMIs: :e', [
+                'c' => $contributionFees,
+                'e' => $installmentFees,
+            ]));
+        }
 
         return self::SUCCESS;
     }

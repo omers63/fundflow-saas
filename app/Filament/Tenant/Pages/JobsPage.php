@@ -8,7 +8,7 @@ use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Concerns\InteractsWithAdvancedUi;
 use App\Filament\Tenant\Concerns\InteractsWithJobsTable;
 use App\Filament\Tenant\Support\TenantNavigation;
-use App\Services\ReconciliationService;
+use App\Jobs\Tenant\RunReconciliationJob;
 use App\Support\BatchPostingGate;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -113,17 +113,21 @@ class JobsPage extends Page implements HasTable
                 ->color('primary')
                 ->visible(fn (): bool => $this->advancedUi)
                 ->action(function (): void {
-                    $result = app(ReconciliationService::class)->runNightlyBatch();
+                    $userId = auth('tenant')->id();
 
-                    Notification::make()
-                        ->title($result['halted'] ? __('Reconciliation halted') : __('Reconciliation complete'))
-                        ->body(__('Raised: :raised | Resolved: :resolved', [
-                            'raised' => $result['raised'],
-                            'resolved' => $result['resolved'],
-                        ]))
-                        ->color($result['halted'] ? 'danger' : 'success')
-                        ->send();
-                }),
+                    RunReconciliationJob::dispatch(
+                        RunReconciliationJob::MODE_EXCEPTION_QUEUE,
+                        [],
+                        $userId !== null ? (int) $userId : null,
+                    );
+                })
+                ->successNotification(
+                    fn (): Notification => Notification::make()
+                        ->title(__('Reconciliation queued'))
+                        ->body(__('Running in the background. Watch the notification bell — large tenants can take about a minute.'))
+                        ->success()
+                        ->persistent()
+                ),
         ];
     }
 

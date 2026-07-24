@@ -8,9 +8,7 @@
             </p>
         </header>
 
-        @include('filament.tenant.partials.reconciliation-workspace-actions', [
-            'class' => 'ff-audit-workspace-actions ff-recon-workspace-actions mb-4',
-        ])
+        @include('filament.tenant.partials.reconciliation-workspace-actions')
 
         @include('filament.tenant.partials.reconciliation-tab-pills')
 
@@ -66,7 +64,7 @@
 
                 <div
                     class="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 p-4 text-sm text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
-                    {{ __('Open an issue row for context and fix actions. Use Run check now to save a realtime snapshot, or More runs for exception re-check / daily / monthly.') }}
+                    {{ __('Open an issue row for context and fix actions. Use Run check now for a realtime snapshot, or Exception queue re-check / Daily / Monthly for the other background runs.') }}
                 </div>
             @elseif ($this->sideTab === 'history')
                 <div
@@ -82,11 +80,11 @@
                             <p
                                 class="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-200">
                                 {{ __('Last batch (:time): raised :raised, auto-resolved :resolved, critical :critical', [
-                                    'time' => $lastBatch->occurred_at?->format('d M Y H:i') ?? '—',
-                                    'raised' => $lastBatch->payload['raised'] ?? 0,
-                                    'resolved' => $lastBatch->payload['resolved'] ?? 0,
-                                    'critical' => $lastBatch->payload['critical'] ?? 0,
-                                ]) }}
+            'time' => $lastBatch->occurred_at?->format('d M Y H:i') ?? '—',
+            'raised' => $lastBatch->payload['raised'] ?? 0,
+            'resolved' => $lastBatch->payload['resolved'] ?? 0,
+            'critical' => $lastBatch->payload['critical'] ?? 0,
+        ]) }}
                             </p>
                         @endif
                     </div>
@@ -119,8 +117,8 @@
                                 </p>
                             </div>
                             @include('filament.tenant.partials.reconciliation.exception-detail', [
-                                'exception' => $selectedException,
-                            ])
+            'exception' => $selectedException,
+        ])
                         </div>
                     @elseif ($this->getOpenExceptionQueueStats()['total'] === 0)
                         <div
@@ -197,10 +195,10 @@
                                             {{ $snap->as_of->format('Y-m-d H:i') }}</td>
                                         <td class="px-4 py-3">
                                             <span @class([
-                                                'inline-flex rounded-full px-2 py-0.5 text-xs font-semibold',
-                                                'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200' => $snap->is_passing,
-                                                'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-200' => !$snap->is_passing,
-                                            ])>{{ $snap->is_passing ? __('Pass') : __('Fail') }}</span>
+            'inline-flex rounded-full px-2 py-0.5 text-xs font-semibold',
+            'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200' => $snap->is_passing,
+            'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-200' => !$snap->is_passing,
+        ])>{{ $snap->is_passing ? __('Pass') : __('Fail') }}</span>
                                         </td>
                                         <td class="px-4 py-3 tabular-nums text-gray-700 dark:text-gray-300">
                                             {{ $snap->critical_issues }}</td>

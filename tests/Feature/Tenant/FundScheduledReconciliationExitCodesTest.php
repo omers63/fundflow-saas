@@ -56,7 +56,7 @@ test('assert master invariants exits success when imbalanced so the scheduler do
     app(AccountingService::class)->createMemberAccounts($member);
     app(AccountingService::class)->credit($member->fundAccount, 1800, 'Seed fund without master mirror');
 
-    expect(Artisan::call('fund:assert-master-invariants'))->toBe(0);
+    expect(Artisan::call('fund:assert-master-invariants', ['--force' => true, '--tenants' => ['testing']]))->toBe(0);
 });
 
 test('assert master invariants --strict exits failure when imbalanced', function () {
@@ -71,7 +71,7 @@ test('assert master invariants --strict exits failure when imbalanced', function
     app(AccountingService::class)->createMemberAccounts($member);
     app(AccountingService::class)->credit($member->fundAccount, 1800, 'Seed fund without master mirror');
 
-    expect(Artisan::call('fund:assert-master-invariants', ['--strict' => true]))->toBe(1);
+    expect(Artisan::call('fund:assert-master-invariants', ['--force' => true, '--strict' => true, '--tenants' => ['testing']]))->toBe(1);
 });
 
 test('fund reconcile exits success when verdict fails so the scheduler does not log ERROR', function () {
@@ -88,7 +88,7 @@ test('fund reconcile exits success when verdict fails so the scheduler does not 
         $mock->shouldReceive('notifyAdminsOfReport')->once();
     });
 
-    expect(Artisan::call('fund:reconcile', ['--daily' => true]))->toBe(0);
+    expect(Artisan::call('fund:reconcile', ['--daily' => true, '--force' => true, '--tenants' => ['testing']]))->toBe(0);
 });
 
 test('fund reconcile --strict exits failure when the verdict fails', function () {
@@ -105,5 +105,5 @@ test('fund reconcile --strict exits failure when the verdict fails', function ()
         $mock->shouldReceive('notifyAdminsOfReport')->once();
     });
 
-    expect(Artisan::call('fund:reconcile', ['--daily' => true, '--strict' => true]))->toBe(1);
+    expect(Artisan::call('fund:reconcile', ['--daily' => true, '--force' => true, '--strict' => true, '--tenants' => ['testing']]))->toBe(1);
 });

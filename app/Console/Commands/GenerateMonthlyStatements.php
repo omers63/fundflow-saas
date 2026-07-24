@@ -16,7 +16,7 @@ class GenerateMonthlyStatements extends Command
 {
     use TenantAwareScheduledCommand;
 
-    protected $signature = 'statements:generate {--period=} {--notify} {--member=} {--force : Run even when not on the configured month-boundary slot}';
+    protected $signature = 'statements:generate {--period=} {--notify} {--member=} {--force : Run even when not on the configured statements schedule slot}';
 
     protected $description = 'Generate monthly member statements';
 
@@ -28,11 +28,12 @@ class GenerateMonthlyStatements extends Command
         if (
             ! $this->option('force')
             && ! $periodForced
-            && ! AutomationScheduleSettings::isMonthBoundarySlot()
+            && ! AutomationScheduleSettings::isStatementsSlot()
         ) {
             $this->skipScheduledRunRecording = true;
-            $this->info(__('Skipped: statements generate on day :day at 00:30.', [
-                'day' => AutomationScheduleSettings::monthBoundaryDay(),
+            $this->info(__('Skipped: statements generate on day :day at :time.', [
+                'day' => AutomationScheduleSettings::statementsDay(),
+                'time' => AutomationScheduleSettings::statementsTime(),
             ]));
 
             return self::SUCCESS;
@@ -42,6 +43,11 @@ class GenerateMonthlyStatements extends Command
             ?: BusinessDay::now()->subMonthNoOverflow()->format('Y-m');
 
         $notify = (bool) $this->option('notify');
+
+        if ($notify && ! AutomationScheduleSettings::notifyMonthlyStatements()) {
+            $notify = false;
+            $this->info(__('Statement notifications are disabled in automation settings; generating without notify.'));
+        }
 
         if ($memberId) {
             $member = Member::query()->findOrFail((int) $memberId);

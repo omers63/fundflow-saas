@@ -47,14 +47,21 @@ final class CollectionArrearsCatalogService
             live: true,
         );
 
-        $contributionArrearsMembers = $this->delinquency
-            ->contributionArrearsTableRecords(null, $month, $year, true)
-            ->pluck('member_id')
+        $contributionArrearsMembers = $contributionArrearsPeriods === 0
+            ? 0
+            : $this->delinquency->countContributionArrearsMembers(
+                throughMonth: $month,
+                throughYear: $year,
+                live: true,
+            );
+
+        $emiArrears = $this->emiCatalog->emiArrearsInstallmentsForPeriod($month, $year, true);
+        $emiArrearsInstallments = $emiArrears->count();
+        $emiArrearsMembers = $emiArrears
+            ->map(fn (LoanInstallment $installment): ?int => $installment->loan?->member_id)
+            ->filter()
             ->unique()
             ->count();
-
-        $emiArrearsInstallments = $this->emiCatalog->emiArrearsInstallmentCount($month, $year, true);
-        $emiArrearsMembers = $this->emiCatalog->emiArrearsMemberCount($month, $year, true);
 
         return [
             'month' => $month,

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
+use App\Jobs\Tenant\RunReconciliationJob;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
@@ -27,6 +28,7 @@ use App\Services\ReconciliationReportService;
 use App\Support\LoanFundingStrategy;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
@@ -870,7 +872,11 @@ test('reconciliation snapshot persists report payload', function () {
 });
 
 test('fund reconcile command stores daily snapshot by default', function () {
-    Artisan::call('fund:reconcile --daily');
+    Artisan::call('fund:reconcile', [
+        '--daily' => true,
+        '--force' => true,
+        '--tenants' => ['testing'],
+    ]);
 
     expect(ReconciliationSnapshot::query()->count())->toBe(1)
         ->and(ReconciliationSnapshot::query()->value('mode'))->toBe(ReconciliationSnapshot::MODE_DAILY);
@@ -922,7 +928,7 @@ test('reconciliation page workspace tabs switch via livewire', function () {
         ->assertSet('sideTab', 'methodology');
 });
 
-test('run check now action completes and opens snapshots', function () {
+test('run check now action queues reconciliation and stays responsive', function () {
     $admin = User::create([
         'name' => 'Recon Run Check Admin',
         'email' => 'recon-run-check-'.uniqid('', true).'@fund.test',
@@ -934,23 +940,138 @@ test('run check now action completes and opens snapshots', function () {
     Filament::setCurrentPanel('tenant');
     $this->actingAs($admin, 'tenant');
 
+    Queue::fake();
+
     $before = ReconciliationSnapshot::query()->count();
 
     Livewire::test(ReconciliationOverviewPage::class)
         ->assertSee(__('Run check now'))
         ->assertSee(__('How it works'))
         ->assertSee(__('Current reconciliation settings'))
-        ->mountAction('run_realtime')
-        ->callMountedAction()
+        ->call('queueRealtimeReconciliation')
         ->assertNotified()
-        ->assertSet('mountedActions', [])
-        ->assertSet('sideTab', 'snapshots')
+        ->assertSet('reconciliationRunFeedback', fn (?string $value): bool => filled($value))
         ->call('setSideTab', 'exceptions')
         ->assertSet('sideTab', 'exceptions')
         ->call('setSideTab', 'overview')
         ->assertSet('sideTab', 'overview');
 
-    expect(ReconciliationSnapshot::query()->count())->toBe($before + 1);
+    Queue::assertPushed(RunReconciliationJob::class, function (RunReconciliationJob $job) use ($admin): bool {
+        return $job->mode === ReconciliationSnapshot::MODE_REALTIME
+            && $job->notifyUserId === $admin->id
+            && filled($job->uiRunToken);
+    });
+
+    expect(ReconciliationSnapshot::query()->count())->toBe($before);
+});
+
+test('reconciliation run banner clears when background job finishes', function () {
+    $admin = User::create([
+        'name' => 'Recon Banner Admin',
+        'email' => 'recon-banner-'.uniqid('', true).'@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+    $this->actingAs($admin, 'tenant');
+
+    Queue::fake();
+
+    $component = Livewire::test(ReconciliationOverviewPage::class)
+        ->call('queueRealtimeReconciliation')
+        ->assertSet('reconciliationRunFeedback', fn (?string $value): bool => filled($value))
+        ->assertSet('reconciliationRunToken', fn (?string $value): bool => filled($value));
+
+    $token = $component->get('reconciliationRunToken');
+
+    Cache::put(
+        RunReconciliationJob::uiRunCacheKey($token),
+        [
+            'status' => RunReconciliationJob::UI_RUN_STATUS_COMPLETED,
+            'title' => 'Reconciliation passed',
+            'body' => 'Snapshot #1 — critical: 0, warnings: 0',
+            'color' => 'success',
+        ],
+        now()->addHour(),
+    );
+
+    $component
+        ->call('refreshReconciliationRunStatus')
+        ->assertSet('reconciliationRunFeedback', null)
+        ->assertSet('reconciliationRunToken', null)
+        ->assertNotified();
+});
+
+test('reconciliation run banner stops polling after timeout without status', function () {
+    $admin = User::create([
+        'name' => 'Recon Banner Timeout Admin',
+        'email' => 'recon-banner-timeout-'.uniqid('', true).'@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+    $this->actingAs($admin, 'tenant');
+
+    Queue::fake();
+
+    $component = Livewire::test(ReconciliationOverviewPage::class)
+        ->call('queueRealtimeReconciliation')
+        ->assertSet('reconciliationRunToken', fn (?string $value): bool => filled($value));
+
+    $component
+        ->set('reconciliationRunQueuedAt', time() - 181)
+        ->call('refreshReconciliationRunStatus')
+        ->assertSet('reconciliationRunToken', null)
+        ->assertSet('reconciliationRunFeedback', __('Still running in the background. Watch the notification bell.'));
+});
+
+test('more runs queue exception re-check daily and monthly jobs', function () {
+    $admin = User::create([
+        'name' => 'Recon More Runs Admin',
+        'email' => 'recon-more-runs-'.uniqid('', true).'@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Filament::setCurrentPanel('tenant');
+    $this->actingAs($admin, 'tenant');
+
+    Queue::fake();
+
+    Livewire::test(ReconciliationOverviewPage::class)
+        ->assertSee(__('Exception queue re-check'))
+        ->call('queueExceptionQueueRecheck')
+        ->assertNotified()
+        ->assertSet('reconciliationRunFeedback', fn (?string $value): bool => filled($value));
+
+    Queue::assertPushed(RunReconciliationJob::class, function (RunReconciliationJob $job): bool {
+        return $job->mode === RunReconciliationJob::MODE_EXCEPTION_QUEUE;
+    });
+
+    Queue::fake();
+
+    Livewire::test(ReconciliationOverviewPage::class)
+        ->call('queueDailySnapshot')
+        ->assertNotified();
+
+    Queue::assertPushed(RunReconciliationJob::class, function (RunReconciliationJob $job): bool {
+        return $job->mode === ReconciliationSnapshot::MODE_DAILY;
+    });
+
+    Queue::fake();
+
+    Livewire::test(ReconciliationOverviewPage::class)
+        ->call('queueMonthlySnapshot')
+        ->assertNotified();
+
+    Queue::assertPushed(RunReconciliationJob::class, function (RunReconciliationJob $job): bool {
+        return $job->mode === ReconciliationSnapshot::MODE_MONTHLY;
+    });
 });
 
 test('reconciliation overview renders run check actions', function () {
@@ -968,11 +1089,13 @@ test('reconciliation overview renders run check actions', function () {
     Livewire::test(ReconciliationOverviewPage::class)
         ->assertSet('sideTab', 'overview')
         ->assertSee(__('Run check now'))
-        ->assertSee(__('More runs'))
+        ->assertSee(__('Exception queue re-check'))
+        ->assertSee(__('Daily snapshot'))
+        ->assertSee(__('Monthly snapshot'))
         ->assertSee(__('Current reconciliation settings'));
 });
 
-test('real-time snapshot action completes and tabs remain switchable', function () {
+test('real-time snapshot action queues and tabs remain switchable', function () {
     $admin = User::create([
         'name' => 'Recon Run Admin',
         'email' => 'recon-run-'.uniqid('', true).'@fund.test',
@@ -984,6 +1107,8 @@ test('real-time snapshot action completes and tabs remain switchable', function 
     Filament::setCurrentPanel('tenant');
     $this->actingAs($admin, 'tenant');
 
+    Queue::fake();
+
     $before = ReconciliationSnapshot::query()->count();
 
     Livewire::test(ReconciliationOverviewPage::class)
@@ -993,13 +1118,9 @@ test('real-time snapshot action completes and tabs remain switchable', function 
         ->assertSet('sideTab', 'overview')
         ->call('setSideTab', 'history')
         ->assertSet('sideTab', 'history')
-        ->mountAction('run_realtime')
-        ->callMountedAction()
+        ->call('queueRealtimeReconciliation')
         ->assertNotified()
-        ->assertSet('mountedActions', [])
-        ->assertSet('sideTab', 'snapshots')
-        ->assertSee(__('Snapshot analysis'))
-        ->assertSee(__('Check results'))
+        ->assertSet('reconciliationRunFeedback', fn (?string $value): bool => filled($value))
         ->call('setSideTab', 'exceptions')
         ->assertSet('sideTab', 'exceptions')
         ->call('setSideTab', 'overview')
@@ -1007,7 +1128,8 @@ test('real-time snapshot action completes and tabs remain switchable', function 
         ->call('setSideTab', 'methodology')
         ->assertSet('sideTab', 'methodology');
 
-    expect(ReconciliationSnapshot::query()->count())->toBe($before + 1);
+    Queue::assertPushed(RunReconciliationJob::class);
+    expect(ReconciliationSnapshot::query()->count())->toBe($before);
 });
 
 test('reconciliation exceptions tab selects issue and shows analysis panel', function () {

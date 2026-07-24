@@ -9,6 +9,7 @@ use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\ReconciliationDigestNotification;
 use App\Services\ReconciliationDigestService;
+use App\Support\AutomationScheduleSettings;
 use App\Support\LocalizationSettings;
 use App\Support\ReconciliationDigestSettings;
 use Filament\Facades\Filament;
@@ -90,6 +91,25 @@ test('nightly batch digest omits web push when setting disabled', function () {
         fn (ReconciliationDigestNotification $notification, array $channels): bool => in_array('database', $channels, true)
         && ! in_array(WebPushChannel::class, $channels, true),
     );
+});
+
+test('nightly batch digest sends nothing when automation reconciliation notifications are disabled', function () {
+    Notification::fake();
+
+    AutomationScheduleSettings::saveFromForm([
+        ...AutomationScheduleSettings::allForForm(),
+        'automation_notify_reconciliation_digest' => false,
+    ]);
+
+    $notified = app(ReconciliationDigestService::class)->notifyAdminsOfNightlyBatch([
+        'halted' => false,
+        'raised' => 1,
+        'resolved' => 0,
+        'critical' => 0,
+    ]);
+
+    expect($notified)->toBe(0);
+    Notification::assertNothingSent();
 });
 
 test('halted nightly batch digest is flagged critical', function () {
@@ -181,7 +201,10 @@ test('nightly reconciliation command notifies admins', function () {
     Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
     Account::create(['type' => 'bank', 'name' => 'Master Bank', 'balance' => 0, 'is_master' => true]);
 
-    $this->artisan('fund:nightly-reconciliation')->assertSuccessful();
+    $this->artisan('fund:nightly-reconciliation', [
+        '--force' => true,
+        '--tenants' => ['testing'],
+    ])->assertSuccessful();
 
     Notification::assertSentTo($this->admin, ReconciliationDigestNotification::class);
 });

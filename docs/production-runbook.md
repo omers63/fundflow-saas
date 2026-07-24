@@ -114,23 +114,38 @@ sudo chown root:root /etc/cron.d/fundflow-scheduler
 The template at `deploy/cron/fundflow-scheduler` runs:
 
 ```bash
-* * * * * www-data cd /var/www/fundflow-saas && php artisan schedule:run >> storage/logs/scheduler.log 2>&1
+* * * * * www-data cd /var/www/fundflow-saas && php artisan schedule:run -q >> storage/logs/scheduler.log 2>&1
+```
+
+`-q` keeps the log small: only errors are written. Many scheduled commands are registered every minute (with per-tenant time-slot checks inside), so a verbose `schedule:run` would otherwise append a large block every minute.
+
+| Goal | Change |
+|------|--------|
+| Quiet (default) | Keep `-q` |
+| Temporary verbose debug | Remove `-q` for a few minutes, then restore |
+| Discard all output | Redirect to `/dev/null` instead of `scheduler.log` |
+| Cap file size | Install `deploy/logrotate/fundflow-scheduler` |
+
+```bash
+sudo cp deploy/logrotate/fundflow-scheduler /etc/logrotate.d/fundflow-scheduler
+sudo chmod 644 /etc/logrotate.d/fundflow-scheduler
 ```
 
 **Manual crontab alternative** (`sudo crontab -u www-data -e`):
 
 ```bash
-* * * * * cd /var/www/fundflow-saas && php artisan schedule:run >> /dev/null 2>&1
+* * * * * cd /var/www/fundflow-saas && php artisan schedule:run -q >> /dev/null 2>&1
 ```
 
 Verify:
 
 ```bash
 php artisan schedule:list
-tail -f /var/www/fundflow-saas/storage/logs/scheduler.log
+# Errors (if any) after ~1 minute:
+tail -n 20 storage/logs/scheduler.log
 ```
 
-Review **System → Jobs & commands** in the tenant admin panel for the catalog, last run times, and manual runs (respects `BatchPostingGate`).
+Job run history lives in **System → Automation** (not in `scheduler.log`).
 
 ## Tenant admin URLs (typical)
 

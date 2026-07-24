@@ -46,7 +46,7 @@ it('respects a different cycle start day setting', function () {
         ->and($cycles->periodClosedByTransition())->toBe([6, 2026]);
 });
 
-it('schedules close then init daily so they follow the cycle start day setting', function () {
+it('schedules close then init every minute so tenant time slots can apply', function () {
     $events = collect(app(Schedule::class)->events());
 
     $close = $events->first(
@@ -58,8 +58,8 @@ it('schedules close then init daily so they follow the cycle start day setting',
 
     expect($close)->not->toBeNull()
         ->and($init)->not->toBeNull()
-        ->and($close->expression)->toBe('30 0 * * *')
-        ->and($init->expression)->toBe('35 0 * * *');
+        ->and($close->expression)->toBe('* * * * *')
+        ->and($init->expression)->toBe('* * * * *');
 });
 
 it('describes close and init schedules using the tenant cycle start day', function () {

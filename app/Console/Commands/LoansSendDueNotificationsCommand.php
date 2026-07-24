@@ -32,6 +32,13 @@ class LoansSendDueNotificationsCommand extends Command
             return self::SUCCESS;
         }
 
+        if (! AutomationScheduleSettings::notifyLoanDue()) {
+            $this->skipScheduledRunRecording = true;
+            $this->info(__('Skipped: loan due notifications are disabled in automation settings.'));
+
+            return self::SUCCESS;
+        }
+
         if ($forcedPeriod) {
             $month = (int) $this->option('month');
             $year = (int) $this->option('year');

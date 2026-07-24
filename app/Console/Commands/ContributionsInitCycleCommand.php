@@ -6,6 +6,7 @@ use App\Console\Concerns\EnsuresBatchPostingAllowed;
 use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Services\ContributionCollectionCycleService;
 use App\Services\ContributionCycleService;
+use App\Support\AutomationScheduleSettings;
 use Illuminate\Console\Command;
 
 class ContributionsInitCycleCommand extends Command
@@ -13,7 +14,7 @@ class ContributionsInitCycleCommand extends Command
     use EnsuresBatchPostingAllowed;
     use TenantAwareScheduledCommand;
 
-    protected $signature = 'contributions:init-cycle {--month=} {--year=}';
+    protected $signature = 'contributions:init-cycle {--month=} {--year=} {--force : Run even when not on the configured cycle init slot}';
 
     protected $description = 'Initialize the open contribution cycle (pending ledger + balance snapshots)';
 
@@ -56,15 +57,28 @@ class ContributionsInitCycleCommand extends Command
             return false;
         }
 
-        if ($cycles->isCycleTransitionDay()) {
+        if ($this->option('force')) {
             return false;
         }
 
-        $this->skipScheduledRunRecording = true;
-        $this->info(__('Skipped: today is not the contribution cycle start day (:day).', [
-            'day' => $cycles->cycleStartDay(),
-        ]));
+        if (! $cycles->isCycleTransitionDay()) {
+            $this->skipScheduledRunRecording = true;
+            $this->info(__('Skipped: today is not the contribution cycle start day (:day).', [
+                'day' => $cycles->cycleStartDay(),
+            ]));
 
-        return true;
+            return true;
+        }
+
+        if (! AutomationScheduleSettings::isCycleInitSlot()) {
+            $this->skipScheduledRunRecording = true;
+            $this->info(__('Skipped: not the configured init-cycle time (:time).', [
+                'time' => AutomationScheduleSettings::cycleInitTime(),
+            ]));
+
+            return true;
+        }
+
+        return false;
     }
 }

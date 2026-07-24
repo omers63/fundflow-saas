@@ -31,11 +31,13 @@ sudo supervisorctl status fundflow-reverb
 ### Quick Queue/Reverb/PHP re-deployment
 
 ```bash
-# One-time: Supervisor + Redis (if not already installed)
+# After PHP/code deploys, restart workers so they load new job classes:
 sudo supervisorctl restart fundflow-queue
 sudo supervisorctl restart fundflow-reverb
 sudo systemctl reload php8.4-fpm
 ```
+
+Queue workers keep old class code in memory until restarted (`queue:restart` or Supervisor restart). Without that, jobs like reconciliation keep using the previous notification path.
 
 ### Quick operations
 
@@ -53,7 +55,8 @@ Also see **`docs/production-runbook.md`** (Reverb section) for nginx WebSockets 
 
 | File | Purpose |
 |------|---------|
-| `cron/fundflow-scheduler` | Runs `php artisan schedule:run` every minute as `www-data` |
+| `cron/fundflow-scheduler` | Runs `php artisan schedule:run -q` every minute as `www-data` (errors only in `scheduler.log`) |
+| `logrotate/fundflow-scheduler` | Weekly / 5MB rotate for `storage/logs/scheduler.log` |
 
 **Full guide:** [`docs/production-runbook.md`](../docs/production-runbook.md#scheduled-fund-jobs)
 
@@ -66,6 +69,8 @@ sudo chown www-data:www-data storage/logs/scheduler.log
 sudo cp deploy/cron/fundflow-scheduler /etc/cron.d/fundflow-scheduler
 sudo chmod 644 /etc/cron.d/fundflow-scheduler
 sudo chown root:root /etc/cron.d/fundflow-scheduler
+sudo cp deploy/logrotate/fundflow-scheduler /etc/logrotate.d/fundflow-scheduler
+sudo chmod 644 /etc/logrotate.d/fundflow-scheduler
 ```
 
 Verify:
@@ -73,8 +78,21 @@ Verify:
 ```bash
 cat /etc/cron.d/fundflow-scheduler
 cd /var/www/fundflow-saas && php artisan schedule:list
-# After ~1 minute:
+# After ~1 minute (normally empty when quiet):
 tail -n 20 storage/logs/scheduler.log
+```
+
+Scheduler logging is quiet by default (`-q`). For temporary verbose output, edit the cron line and remove `-q`.
+
+### Log file ownership
+
+PHP-FPM runs as `www-data`. If `storage/logs/laravel.log` is owned by `root` (e.g. after `sudo php artisan …`), web requests that log (including web-push delivery) can 500 with Filament’s “Error while loading page”. Prefer:
+
+```bash
+sudo -u www-data php artisan …
+# or fix ownership:
+sudo chown -R www-data:www-data storage/logs
+sudo chmod 2775 storage/logs
 ```
 
 ## Queue worker watchdog

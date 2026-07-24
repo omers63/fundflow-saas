@@ -8,6 +8,7 @@ use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\ReconciliationDigestNotification;
+use App\Support\AutomationScheduleSettings;
 use App\Support\MemberLocale;
 
 class ReconciliationDigestService
@@ -17,6 +18,10 @@ class ReconciliationDigestService
      */
     public function notifyAdminsOfNightlyBatch(array $result): int
     {
+        if (! AutomationScheduleSettings::notifyReconciliationDigest()) {
+            return 0;
+        }
+
         $halted = (bool) ($result['halted'] ?? false);
 
         return $this->dispatch(
@@ -43,6 +48,10 @@ class ReconciliationDigestService
      */
     public function notifyAdminsOfReport(string $snapshotMode, array $report): int
     {
+        if (! AutomationScheduleSettings::notifyReconciliationDigest()) {
+            return 0;
+        }
+
         $mode = $snapshotMode === ReconciliationSnapshot::MODE_MONTHLY ? 'monthly' : 'daily';
 
         $verdict = is_array($report['verdict'] ?? null) ? $report['verdict'] : [];

@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Services\MasterAccountInvariantService;
+use App\Support\AutomationScheduleSettings;
 use Illuminate\Console\Command;
 
 class FundAssertMasterInvariantsCommand extends Command
@@ -11,12 +12,22 @@ class FundAssertMasterInvariantsCommand extends Command
     use TenantAwareScheduledCommand;
 
     protected $signature = 'fund:assert-master-invariants
+        {--force : Run even when not in the configured daily slot}
         {--strict : Exit with failure when master pools are imbalanced (CI / manual gates)}';
 
     protected $description = 'Assert master fund/cash equals sum of member accounts';
 
     public function handle(MasterAccountInvariantService $invariants): int
     {
+        if (! $this->option('force') && ! AutomationScheduleSettings::isMasterInvariantsSlot()) {
+            $this->skipScheduledRunRecording = true;
+            $this->info(__('Skipped: not the configured master invariants slot (:time).', [
+                'time' => AutomationScheduleSettings::masterInvariantsTime(),
+            ]));
+
+            return self::SUCCESS;
+        }
+
         $result = $invariants->check();
 
         if ($result['balanced']) {

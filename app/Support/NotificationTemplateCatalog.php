@@ -51,6 +51,7 @@ use App\Notifications\Tenant\NewMembershipApplicationNotification;
 use App\Notifications\Tenant\NewSupportRequestNotification;
 use App\Notifications\Tenant\ReconciliationDigestNotification;
 use App\Notifications\Tenant\ReconciliationExceptionRaisedNotification;
+use App\Notifications\Tenant\ReconciliationRunCompletedNotification;
 use App\Notifications\Tenant\SupportRequestStatusNotification;
 use App\Services\Tenant\NotificationPreferenceService;
 
@@ -543,6 +544,21 @@ MD,
                     'body' => '{{summary}}',
                 ],
             ],
+            'reconciliation_run_completed' => [
+                'audience' => 'admin',
+                'category' => 'automation',
+                'label' => 'Reconciliation run completed (manual)',
+                'variables' => ['title', 'summary', 'mode', 'action_url'],
+                'supported' => $bellPush,
+                'en' => [
+                    'subject' => '{{title}}',
+                    'body' => '{{summary}}',
+                ],
+                'ar' => [
+                    'subject' => '{{title}}',
+                    'body' => '{{summary}}',
+                ],
+            ],
             'delinquency_digest' => [
                 'audience' => 'admin',
                 'category' => 'automation',
@@ -882,6 +898,10 @@ MD,
             ],
             ReconciliationDigestNotification::class => [
                 'key' => 'reconciliation_digest',
+                'category' => 'automation',
+            ],
+            ReconciliationRunCompletedNotification::class => [
+                'key' => 'reconciliation_run_completed',
                 'category' => 'automation',
             ],
             DelinquencyDigestNotification::class => [

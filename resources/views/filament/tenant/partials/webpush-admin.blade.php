@@ -1,6 +1,6 @@
 @php
-    $vapidPublicKey = config('webpush.vapid.public_key');
-    $user = auth('tenant')->user();
+$vapidPublicKey = config('webpush.vapid.public_key');
+$user = auth('tenant')->user();
 @endphp
 @if (filled($vapidPublicKey) && $user?->is_admin)
     <script>
@@ -78,7 +78,16 @@
                 await ensureServiceWorker();
 
                 const registration = await navigator.serviceWorker.ready;
+                const subVersionKey = 'ff-webpush-sub-version';
+                const subVersion = '2';
                 let subscription = await registration.pushManager.getSubscription();
+
+                // Drop browser-local subscriptions that FCM may have already expired (410 Gone),
+                // otherwise we keep re-saving dead endpoints into the database.
+                if (subscription && localStorage.getItem(subVersionKey) !== subVersion) {
+                    await subscription.unsubscribe();
+                    subscription = null;
+                }
 
                 if (!subscription) {
                     subscription = await registration.pushManager.subscribe({
@@ -88,6 +97,7 @@
                 }
 
                 await syncSubscription(subscription);
+                localStorage.setItem(subVersionKey, subVersion);
             };
 
             window.addEventListener('load', () => {

@@ -64,13 +64,15 @@ class LoansApplyRepaymentsCommand extends Command
             'skipped' => $results['skipped']->count(),
         ]));
 
-        $delinquencyResult = $delinquency->runDailyMaintenance();
+        if (AutomationScheduleSettings::loanDefaultsEnabled()) {
+            $delinquencyResult = $delinquency->runDailyMaintenance();
 
-        $this->info(__('Delinquency after apply — overdue: :overdue, delinquent: :delinquent, transfers: :transferred', [
-            'overdue' => $delinquencyResult['marked_overdue'],
-            'delinquent' => $delinquencyResult['delinquent_count'],
-            'transferred' => $delinquencyResult['transferred_to_guarantor'] ?? 0,
-        ]));
+            $this->info(__('Delinquency after apply — overdue: :overdue, delinquent: :delinquent, transfers: :transferred', [
+                'overdue' => $delinquencyResult['marked_overdue'],
+                'delinquent' => $delinquencyResult['delinquent_count'],
+                'transferred' => $delinquencyResult['transferred_to_guarantor'] ?? 0,
+            ]));
+        }
 
         return self::SUCCESS;
     }

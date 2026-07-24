@@ -23,7 +23,7 @@ class FundReconcileCommand extends Command
         {--monthly : Previous calendar month window plus full ledger checks}
         {--no-store : Print summary only; do not write reconciliation_snapshots}
         {--strict : Exit with failure when the report verdict does not pass (CI / manual gates)}
-        {--force : Run monthly mode even when not on the configured month-boundary slot}';
+        {--force : Run even when not in the configured daily or month-boundary slot}';
 
     protected $description = 'Run financial reconciliation report and optionally store an audit snapshot';
 
@@ -37,8 +37,23 @@ class FundReconcileCommand extends Command
             && ! AutomationScheduleSettings::isMonthBoundarySlot()
         ) {
             $this->skipScheduledRunRecording = true;
-            $this->info(__('Skipped: monthly reconciliation runs on day :day at 00:30.', [
+            $this->info(__('Skipped: monthly reconciliation runs on day :day at :time.', [
                 'day' => AutomationScheduleSettings::monthBoundaryDay(),
+                'time' => AutomationScheduleSettings::monthBoundaryTime(),
+            ]));
+
+            return self::SUCCESS;
+        }
+
+        if (
+            $this->option('daily')
+            && ! $this->option('force')
+            && ! $this->option('realtime')
+            && ! AutomationScheduleSettings::isDailyReconcileSlot()
+        ) {
+            $this->skipScheduledRunRecording = true;
+            $this->info(__('Skipped: daily reconciliation runs at :time.', [
+                'time' => AutomationScheduleSettings::dailyReconcileTime(),
             ]));
 
             return self::SUCCESS;

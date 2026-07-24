@@ -19,14 +19,11 @@ final class DatabaseNotificationsRefresh
     }
 
     /**
-     * Prefer Reverb/Echo push refresh; HTTP polling only when broadcasting is off.
+     * Prefer Reverb/Echo for instant refresh; always keep light HTTP polling as a
+     * fallback when the websocket proxy is unavailable.
      */
     public static function panelPollingInterval(): ?string
     {
-        if (filled(config('filament.broadcasting.echo.broadcaster'))) {
-            return null;
-        }
-
         return self::pollingInterval();
     }
 
@@ -48,7 +45,7 @@ final class DatabaseNotificationsRefresh
         );
 
         $livewire->js(
-            'setTimeout(() => window.Livewire.getByName(' . $targetName . ').forEach(w => w.$refresh()), 0)',
+            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)',
         );
     }
 }

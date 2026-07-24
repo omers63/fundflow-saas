@@ -41,7 +41,7 @@ class FundPostingService
     ): FundPosting {
         $autoAccept = AutomationScheduleSettings::autoAcceptDeposits();
 
-        $posting = DB::transaction(function () use ($member, $amount, $postingDate, $reference, $attachment, $comments, $autoAccept) {
+        $posting = DB::transaction(function () use ($member, $amount, $postingDate, $reference, $attachment, $comments) {
             $posting = FundPosting::create([
                 'member_id' => $member->id,
                 'posting_date' => $postingDate,
@@ -69,9 +69,7 @@ class FundPostingService
 
             $posting->update(['bank_transaction_id' => $bankTxn->id]);
 
-            if (! $autoAccept) {
-                $this->notifyAdminsOfNewPosting($posting);
-            }
+            $this->notifyAdminsOfNewPosting($posting);
 
             return $posting;
         });

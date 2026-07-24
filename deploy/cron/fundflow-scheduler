@@ -5,8 +5,14 @@
 #   sudo chown root:root /etc/cron.d/fundflow-scheduler
 #   touch /var/www/fundflow-saas/storage/logs/scheduler.log
 #   sudo chown www-data:www-data /var/www/fundflow-saas/storage/logs/scheduler.log
+#
+# Logging:
+#   Default uses `schedule:run -q` so only errors are written (most jobs are
+#   registered every minute and would otherwise spam ~18 lines/minute).
+#   For temporary verbose debugging, remove `-q` then restore it afterward.
+#   Pair with deploy/logrotate/fundflow-scheduler for size caps.
 
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-* * * * * www-data cd /var/www/fundflow-saas && /usr/bin/php artisan schedule:run >> /var/www/fundflow-saas/storage/logs/scheduler.log 2>&1
+* * * * * www-data cd /var/www/fundflow-saas && /usr/bin/php artisan schedule:run -q >> /var/www/fundflow-saas/storage/logs/scheduler.log 2>&1

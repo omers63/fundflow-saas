@@ -8,6 +8,7 @@ use App\Console\Concerns\EnsuresBatchPostingAllowed;
 use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Services\ContributionCycleService;
 use App\Services\LoanInstallmentCollectionCycleService;
+use App\Support\AutomationScheduleSettings;
 use Illuminate\Console\Command;
 
 class LoansCloseEmiWindowCommand extends Command
@@ -15,7 +16,7 @@ class LoansCloseEmiWindowCommand extends Command
     use EnsuresBatchPostingAllowed;
     use TenantAwareScheduledCommand;
 
-    protected $signature = 'loans:close-emi-window {--month=} {--year=}';
+    protected $signature = 'loans:close-emi-window {--month=} {--year=} {--force : Run even when not in the configured EMI close slot}';
 
     protected $description = 'Close the EMI collection window and mark unpaid installments overdue';
 
@@ -24,6 +25,18 @@ class LoansCloseEmiWindowCommand extends Command
         ContributionCycleService $cycles,
     ): int {
         if (! $this->ensureBatchPostingAllowed()) {
+            return self::SUCCESS;
+        }
+
+        $forcedPeriod = $this->option('month') && $this->option('year');
+
+        if (! $this->option('force') && ! $forcedPeriod && ! AutomationScheduleSettings::isEmiCloseSlot()) {
+            $this->skipScheduledRunRecording = true;
+            $this->info(__('Skipped: EMI close runs on day :day at :time.', [
+                'day' => AutomationScheduleSettings::emiCloseDay(),
+                'time' => AutomationScheduleSettings::emiCloseTime(),
+            ]));
+
             return self::SUCCESS;
         }
 

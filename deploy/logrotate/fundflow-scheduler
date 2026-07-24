@@ -1,0 +1,16 @@
+# Logrotate for FundFlow SaaS scheduler heartbeat / error log.
+# Install:
+#   sudo cp deploy/logrotate/fundflow-scheduler /etc/logrotate.d/fundflow-scheduler
+#   sudo chmod 644 /etc/logrotate.d/fundflow-scheduler
+
+/var/www/fundflow-saas/storage/logs/scheduler.log {
+    weekly
+    rotate 4
+    size 5M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    su www-data www-data
+}

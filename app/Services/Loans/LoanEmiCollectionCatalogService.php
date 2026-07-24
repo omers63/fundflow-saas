@@ -9,7 +9,10 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\ContributionCycleService;
+use App\Support\ContributionCollectionStatus;
+use App\Support\ContributionExemptionPolicy;
 use App\Support\InstallmentCollectionStatus;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -27,6 +30,11 @@ class LoanEmiCollectionCatalogService
      * @var array<string, Collection<int, LoanInstallment>>
      */
     private array $collectableInstallmentsCache = [];
+
+    /**
+     * @var array<string, Collection<int, LoanInstallment>>
+     */
+    private array $emiArrearsInstallmentsCache = [];
 
     /**
      * @return array{0: int, 1: int}
@@ -556,9 +564,32 @@ class LoanEmiCollectionCatalogService
         $context = app(LoanDelinquencyService::class)
             ->contributionArrearsEvaluationContext($month, $year, $live);
         $asOf = $context['as_of'];
+        $cacheKey = sprintf(
+            '%d-%02d|%s|%s',
+            $year,
+            $month,
+            $asOf->toDateString(),
+            $live ? '1' : '0',
+        );
+
+        if (isset($this->emiArrearsInstallmentsCache[$cacheKey])) {
+            return $this->emiArrearsInstallmentsCache[$cacheKey];
+        }
+
         $cycleStart = $this->cycles->cycleStartAt($month, $year)->toDateString();
 
-        return LoanInstallment::query()
+        return $this->emiArrearsInstallmentsCache[$cacheKey] = $this->loadEmiArrearsInstallmentsForPeriod(
+            $asOf,
+            $cycleStart,
+        );
+    }
+
+    /**
+     * @return Collection<int, LoanInstallment>
+     */
+    private function loadEmiArrearsInstallmentsForPeriod(Carbon $asOf, string $cycleStart): Collection
+    {
+        $installments = LoanInstallment::query()
             ->whereIn('status', ['pending', 'overdue'])
             ->where(function (Builder $query): void {
                 $query->whereNull('collection_status')
@@ -568,29 +599,101 @@ class LoanEmiCollectionCatalogService
             ->whereHas('loan', function (Builder $loan): void {
                 $loan->whereIn('status', ['active', 'transferred']);
             })
-            ->with(['loan.member'])
+            ->with(['loan.member.loans'])
             ->orderBy('due_date')
-            ->get()
-            ->filter(function (LoanInstallment $installment) use ($asOf): bool {
-                if ($installment->due_date === null) {
-                    return false;
+            ->get();
+
+        /** @var list<array{0: LoanInstallment, 1: Member, 2: int, 3: int}> $candidates */
+        $candidates = [];
+        /** @var array<int, array<string, true>> $periodsByMember */
+        $periodsByMember = [];
+
+        foreach ($installments as $installment) {
+            if ($installment->due_date === null) {
+                continue;
+            }
+
+            [$cycleMonth, $cycleYear] = $this->cycles->cyclePeriodForDueDate($installment->due_date);
+
+            if (! $asOf->greaterThan($this->cycles->deadline($cycleMonth, $cycleYear))) {
+                continue;
+            }
+
+            $member = $installment->loan?->member;
+
+            if (! $member instanceof Member) {
+                continue;
+            }
+
+            $periodKey = Contribution::periodDate($cycleMonth, $cycleYear);
+            $candidates[] = [$installment, $member, $cycleMonth, $cycleYear];
+            $periodsByMember[(int) $member->id][$periodKey] = true;
+        }
+
+        $blockingContributionKeys = $this->postedContributionPeriodKeys($periodsByMember);
+        $policy = app(ContributionExemptionPolicy::class);
+
+        return collect($candidates)
+            ->filter(function (array $row) use ($blockingContributionKeys, $policy): bool {
+                [$installment, $member, $cycleMonth, $cycleYear] = $row;
+                unset($installment);
+
+                if ($policy->isContributionExemptForCycle($member, $cycleMonth, $cycleYear)) {
+                    return true;
                 }
 
-                [$cycleMonth, $cycleYear] = $this->cycles->cyclePeriodForDueDate($installment->due_date);
+                $key = ((int) $member->id).'|'.Contribution::periodDate($cycleMonth, $cycleYear);
 
-                if (! $asOf->greaterThan($this->cycles->deadline($cycleMonth, $cycleYear))) {
-                    return false;
-                }
-
-                $member = $installment->loan?->member;
-
-                if (! $member instanceof Member) {
-                    return false;
-                }
-
-                return ! Contribution::blocksLoanRepaymentForMemberPeriod($member, $cycleMonth, $cycleYear);
+                return ! isset($blockingContributionKeys[$key]);
             })
+            ->map(fn (array $row): LoanInstallment => $row[0])
             ->values();
+    }
+
+    /**
+     * @param  array<int, array<string, true>>  $periodsByMember
+     * @return array<string, true>
+     */
+    private function postedContributionPeriodKeys(array $periodsByMember): array
+    {
+        if ($periodsByMember === []) {
+            return [];
+        }
+
+        $memberIds = array_keys($periodsByMember);
+        $periodDates = [];
+
+        foreach ($periodsByMember as $periods) {
+            foreach (array_keys($periods) as $period) {
+                $periodDates[$period] = true;
+            }
+        }
+
+        if ($periodDates === []) {
+            return [];
+        }
+
+        $keys = [];
+
+        Contribution::query()
+            ->whereIn('member_id', $memberIds)
+            ->whereIn('period', array_keys($periodDates))
+            ->where(function (Builder $query): void {
+                $query->where('status', 'posted')
+                    ->orWhere('collection_status', ContributionCollectionStatus::COLLECTED);
+            })
+            ->get(['member_id', 'period'])
+            ->each(function (Contribution $contribution) use (&$keys): void {
+                $period = Contribution::normalizePeriodKey($contribution->period);
+
+                if ($period === null) {
+                    return;
+                }
+
+                $keys[((int) $contribution->member_id).'|'.$period] = true;
+            });
+
+        return $keys;
     }
 
     public function emiArrearsAmountTotal(int $month, int $year, ?bool $live = null): float

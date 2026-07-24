@@ -284,6 +284,6 @@ test('open-cycle override does not break scheduled recon command exit codes', fu
     );
     app(MemberRequestService::class)->approve($request->fresh(), $this->admin);
 
-    expect(Artisan::call('fund:assert-master-invariants'))->toBe(0)
+    expect(Artisan::call('fund:assert-master-invariants', ['--force' => true]))->toBe(0)
         ->and(Artisan::call('fund:reconcile', ['--realtime' => true, '--no-store' => true]))->toBe(0);
 });

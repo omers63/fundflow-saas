@@ -6,6 +6,7 @@ use App\Console\Concerns\EnsuresBatchPostingAllowed;
 use App\Console\Concerns\TenantAwareScheduledCommand;
 use App\Services\ContributionCollectionCycleService;
 use App\Services\ContributionCycleService;
+use App\Support\AutomationScheduleSettings;
 use Illuminate\Console\Command;
 
 class ContributionsCloseWindowCommand extends Command
@@ -13,7 +14,7 @@ class ContributionsCloseWindowCommand extends Command
     use EnsuresBatchPostingAllowed;
     use TenantAwareScheduledCommand;
 
-    protected $signature = 'contributions:close-window {--month=} {--year=}';
+    protected $signature = 'contributions:close-window {--month=} {--year=} {--force : Run even when not on the configured cycle close slot}';
 
     protected $description = 'Close the collection window and flag overdue members';
 
@@ -56,15 +57,28 @@ class ContributionsCloseWindowCommand extends Command
             return false;
         }
 
-        if ($cycles->isCycleTransitionDay()) {
+        if ($this->option('force')) {
             return false;
         }
 
-        $this->skipScheduledRunRecording = true;
-        $this->info(__('Skipped: today is not the contribution cycle start day (:day).', [
-            'day' => $cycles->cycleStartDay(),
-        ]));
+        if (! $cycles->isCycleTransitionDay()) {
+            $this->skipScheduledRunRecording = true;
+            $this->info(__('Skipped: today is not the contribution cycle start day (:day).', [
+                'day' => $cycles->cycleStartDay(),
+            ]));
 
-        return true;
+            return true;
+        }
+
+        if (! AutomationScheduleSettings::isCycleCloseSlot()) {
+            $this->skipScheduledRunRecording = true;
+            $this->info(__('Skipped: not the configured close-window time (:time).', [
+                'time' => AutomationScheduleSettings::cycleCloseTime(),
+            ]));
+
+            return true;
+        }
+
+        return false;
     }
 }

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
-use App\Filament\Support\Action;
 use App\Filament\Support\MoneyDisplay;
 use App\Filament\Tenant\Concerns\EmbedsAsAuditWorkspacePanel;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
@@ -13,31 +12,28 @@ use App\Filament\Tenant\Resources\ReconciliationExceptions\Tables\Reconciliation
 use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Filament\Tenant\Support\ReconciliationTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
+use App\Jobs\Tenant\RunReconciliationJob;
 use App\Models\Tenant\FundAuditLog;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Services\BankClearingMatchService;
 use App\Services\ReconciliationPdfService;
 use App\Services\ReconciliationReportService;
-use App\Services\ReconciliationService;
 use App\Support\AutomationScheduleSettings;
 use App\Support\BatchPostingGate;
-use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
 use App\Support\Reconciliation\ReconciliationHealthSummary;
 use BackedEnum;
 use Carbon\Carbon;
-use Filament\Actions\ActionGroup;
-use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Url;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use UnitEnum;
@@ -74,6 +70,12 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     #[Url(as: 'queueDomain')]
     public ?string $queueDomainFilter = null;
+
+    public ?string $reconciliationRunFeedback = null;
+
+    public ?string $reconciliationRunToken = null;
+
+    public ?int $reconciliationRunQueuedAt = null;
 
     public static function canAccess(): bool
     {
@@ -216,11 +218,18 @@ class ReconciliationOverviewPage extends Page implements HasTable
         $monthDay = AutomationScheduleSettings::monthBoundaryDay();
 
         return [
-            'invariants' => __('Daily at 06:00 — assert master cash/fund vs member sums'),
-            'daily' => __('Daily at 06:20 — store daily reconciliation snapshot'),
-            'nightly' => __('Daily at 06:30 — refresh exception queue (auto-resolve)'),
-            'monthly' => __('On day :day at 00:30 — monthly snapshot + statements', [
+            'invariants' => __('Daily at :time — assert master cash/fund vs member sums', [
+                'time' => AutomationScheduleSettings::masterInvariantsTime(),
+            ]),
+            'daily' => __('Daily at :time — store daily reconciliation snapshot', [
+                'time' => AutomationScheduleSettings::dailyReconcileTime(),
+            ]),
+            'nightly' => __('Daily at :time — refresh exception queue (auto-resolve)', [
+                'time' => AutomationScheduleSettings::nightlyReconcileTime(),
+            ]),
+            'monthly' => __('On day :day at :time — monthly snapshot + statements', [
                 'day' => $monthDay,
+                'time' => AutomationScheduleSettings::monthBoundaryTime(),
             ]),
         ];
     }
@@ -482,150 +491,164 @@ class ReconciliationOverviewPage extends Page implements HasTable
     }
 
     /**
-     * @return array<int, Action|ActionGroup>
+     * Workspace Filament actions are unused — runs use Livewire wire:click buttons
+     * so feedback is reliable outside ActionGroup / modal plumbing.
+     *
+     * @return array<int, mixed>
      */
     protected function workspacePanelActions(): array
     {
-        $canRun = fn (): bool => auth('tenant')->user()?->is_admin === true;
+        return [];
+    }
 
-        if (! $canRun()) {
-            return [];
-        }
+    public function queueRealtimeReconciliation(): void
+    {
+        $this->queueReconciliationRun(ReconciliationSnapshot::MODE_REALTIME);
+    }
 
-        $bankSchema = $this->reconciliationBankSchema();
+    public function queueExceptionQueueRecheck(): void
+    {
+        $this->queueReconciliationRun(RunReconciliationJob::MODE_EXCEPTION_QUEUE);
+    }
 
-        $runRealtime = Action::make('run_realtime')
-            ->label(__('Run check now'))
-            ->icon('heroicon-o-play')
-            ->color('primary')
-            ->button()
-            ->longRunning()
-            ->longRunningMessage(__('Running real-time reconciliation checks and saving a snapshot.'))
-            ->schema($bankSchema)
-            ->fillForm(fn (): array => $this->bankFormDefaultsFromSettings())
-            ->modalHeading(__('Run real-time reconciliation'))
-            ->modalDescription(__('Recomputes all checks as of this moment and stores a snapshot. Bank fields default from Settings → Reconciliation.'))
-            ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_REALTIME, $this->optionsFromActionData($data)));
+    public function queueDailySnapshot(): void
+    {
+        $this->queueReconciliationRun(ReconciliationSnapshot::MODE_DAILY);
+    }
 
-        $moreRuns = [
-            Action::make('run_nightly')
-                ->label(__('Exception queue re-check'))
-                ->icon('heroicon-o-arrow-path')
-                ->requiresConfirmation()
-                ->longRunning()
-                ->longRunningMessage(__('Re-running all reconciliation checks and refreshing the exception queue. This can take a minute on large tenants.'))
-                ->modalHeading(__('Re-run exception checks now'))
-                ->modalDescription(__('Runs the full reconciliation scan immediately — including member cash/fund invariants — auto-resolves eligible issues, and refreshes the exception queue in real time.'))
-                ->action(function (): void {
-                    try {
-                        $result = app(ReconciliationService::class)->runNightlyBatch();
-
-                        Notification::make()
-                            ->title($result['halted']
-                                ? __('Reconciliation halted')
-                                : __('Reconciliation complete'))
-                            ->body(__('Raised: :raised | Resolved: :resolved', [
-                                'raised' => $result['raised'],
-                                'resolved' => $result['resolved'],
-                            ]))
-                            ->color($result['halted'] ? 'danger' : 'success')
-                            ->send();
-                    } catch (\Throwable $exception) {
-                        $this->notifyReconciliationRunFailed($exception);
-
-                        return;
-                    } finally {
-                        $this->finishWorkspaceReconciliationRun();
-                    }
-                }),
-            Action::make('run_daily')
-                ->label(__('Daily snapshot'))
-                ->icon('heroicon-o-calendar-days')
-                ->longRunning()
-                ->longRunningMessage(__('Recording the daily snapshot and running ledger checks.'))
-                ->schema($bankSchema)
-                ->fillForm(fn (): array => $this->bankFormDefaultsFromSettings())
-                ->modalHeading(__('Record daily snapshot'))
-                ->modalDescription(__('Uses yesterday’s calendar window (app timezone) for period metrics, plus full ledger checks as of now. Bank fields default from Settings → Reconciliation.'))
-                ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_DAILY, $this->optionsFromActionData($data))),
-            Action::make('run_monthly')
-                ->label(__('Monthly snapshot'))
-                ->icon('heroicon-o-calendar')
-                ->longRunning()
-                ->longRunningMessage(__('Recording the monthly snapshot and running ledger checks.'))
-                ->schema($bankSchema)
-                ->fillForm(fn (): array => $this->bankFormDefaultsFromSettings())
-                ->modalHeading(__('Record monthly snapshot'))
-                ->modalDescription(__('Uses the previous calendar month for period metrics, plus full ledger checks as of now. Bank fields default from Settings → Reconciliation.'))
-                ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_MONTHLY, $this->optionsFromActionData($data))),
-        ];
-
-        return [
-            $runRealtime,
-            ActionGroup::make($moreRuns)
-                ->label(__('More runs'))
-                ->icon('heroicon-o-ellipsis-horizontal')
-                ->color('gray')
-                ->button()
-                ->dropdownPlacement('bottom-end'),
-        ];
+    public function queueMonthlySnapshot(): void
+    {
+        $this->queueReconciliationRun(ReconciliationSnapshot::MODE_MONTHLY);
     }
 
     /**
-     * @return array<string, mixed>
+     * @param  array<string, mixed>  $options
      */
-    protected function bankFormDefaultsFromSettings(): array
+    protected function queueReconciliationRun(string $mode, array $options = []): void
     {
-        $opts = ReconciliationReportService::bankOptionsFromSettings();
+        abort_unless(auth('tenant')->user()?->is_admin === true, 403);
 
-        return [
-            'declared_bank_balance' => $opts['declared_bank_balance'] ?? null,
-            'declared_bank_date' => $opts['declared_bank_date'] ?? null,
-            'bank_mismatch_treat_as_critical' => (bool) ($opts['bank_mismatch_treat_as_critical'] ?? false),
-        ];
+        try {
+            $token = (string) Str::uuid();
+
+            $this->dispatchReconciliationJob(
+                $mode,
+                $options !== []
+                ? $options
+                : ReconciliationReportService::bankOptionsFromSettings(),
+                $token,
+            );
+
+            $label = match ($mode) {
+                ReconciliationSnapshot::MODE_REALTIME => __('Real-time check'),
+                ReconciliationSnapshot::MODE_DAILY => __('Daily snapshot'),
+                ReconciliationSnapshot::MODE_MONTHLY => __('Monthly snapshot'),
+                RunReconciliationJob::MODE_EXCEPTION_QUEUE => __('Exception queue re-check'),
+                default => __('Reconciliation'),
+            };
+
+            $this->reconciliationRunToken = $token;
+            $this->reconciliationRunQueuedAt = time();
+            $this->reconciliationRunFeedback = __(':label is running in the background. Watch the notification bell — large tenants can take about a minute.', [
+                'label' => $label,
+            ]);
+
+            $this->reconciliationQueuedNotification()->send();
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            $this->clearReconciliationRunBanner();
+
+            Notification::make()
+                ->title(__('Reconciliation run failed'))
+                ->body($exception->getMessage())
+                ->danger()
+                ->persistent()
+                ->send();
+        }
     }
 
-    /**
-     * @return array<int, DatePicker|TextInput|Toggle>
-     */
-    protected function reconciliationBankSchema(): array
+    public function refreshReconciliationRunStatus(): void
     {
-        return [
-            TextInput::make('declared_bank_balance')
-                ->label(__('Statement / bank closing balance'))
-                ->numeric()
-                ->nullable()
-                ->helperText(__('Optional. Compared to master cash book balance for this run. Defaults from Settings → Reconciliation.')),
-            DatePicker::make('declared_bank_date')
-                ->label(__('Statement as-of date'))
-                ->native(false)
-                ->nullable(),
-            Toggle::make('bank_mismatch_treat_as_critical')
-                ->label(__('Treat bank vs book variance as critical (not only warning)'))
-                ->default(false)
-                ->helperText(__('Also configurable under Settings → Reconciliation for scheduled runs.')),
-        ];
+        if ($this->reconciliationRunToken === null || $this->reconciliationRunToken === '') {
+            $this->skipRender();
+
+            return;
+        }
+
+        $status = RunReconciliationJob::uiRunStatus(
+            Cache::get(RunReconciliationJob::uiRunCacheKey($this->reconciliationRunToken)),
+        );
+
+        if (
+            in_array($status, [
+                RunReconciliationJob::UI_RUN_STATUS_COMPLETED,
+                RunReconciliationJob::UI_RUN_STATUS_FAILED,
+            ], true)
+        ) {
+            $cached = Cache::get(RunReconciliationJob::uiRunCacheKey($this->reconciliationRunToken));
+            $toast = RunReconciliationJob::uiRunToast($cached);
+
+            $this->clearReconciliationRunBanner();
+
+            if ($toast !== null) {
+                $notification = Notification::make()
+                    ->title($toast['title'])
+                    ->body($toast['body'])
+                    ->persistent();
+
+                match ($toast['color']) {
+                    'success' => $notification->success(),
+                    'warning' => $notification->warning(),
+                    'danger' => $notification->danger(),
+                    default => null,
+                };
+
+                $notification->send();
+            }
+
+            if (in_array($this->sideTab, $this->tableSideTabs(), true)) {
+                $this->resetTable();
+                $this->ensureExceptionSelected();
+            }
+
+            return;
+        }
+
+        // Stop hammering PHP-FPM with full-page Livewire payloads if the job status never lands.
+        if (
+            $this->reconciliationRunQueuedAt !== null
+            && (time() - $this->reconciliationRunQueuedAt) >= 180
+        ) {
+            if (filled($this->reconciliationRunToken)) {
+                Cache::forget(RunReconciliationJob::uiRunCacheKey($this->reconciliationRunToken));
+            }
+
+            $this->reconciliationRunToken = null;
+            $this->reconciliationRunQueuedAt = null;
+            $this->reconciliationRunFeedback = __('Still running in the background. Watch the notification bell.');
+
+            return;
+        }
+
+        // Status unchanged — avoid re-serializing the whole reconciliation workspace (~200KB).
+        $this->skipRender();
     }
 
-    /**
-     * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
-     */
-    protected function optionsFromActionData(array $data): array
+    public function dismissReconciliationRunFeedback(): void
     {
-        $options = [];
+        $this->clearReconciliationRunBanner();
+    }
 
-        if (filled($data['declared_bank_balance'] ?? null)) {
-            $options['declared_bank_balance'] = (float) $data['declared_bank_balance'];
+    protected function clearReconciliationRunBanner(): void
+    {
+        if (filled($this->reconciliationRunToken)) {
+            Cache::forget(RunReconciliationJob::uiRunCacheKey($this->reconciliationRunToken));
         }
 
-        if (filled($data['declared_bank_date'] ?? null)) {
-            $options['declared_bank_date'] = Carbon::parse($data['declared_bank_date'])->toDateString();
-        }
-
-        $options['bank_mismatch_treat_as_critical'] = (bool) ($data['bank_mismatch_treat_as_critical'] ?? false);
-
-        return $options;
+        $this->reconciliationRunToken = null;
+        $this->reconciliationRunQueuedAt = null;
+        $this->reconciliationRunFeedback = null;
     }
 
     public function selectSnapshot(?int $id): void
@@ -873,90 +896,25 @@ class ReconciliationOverviewPage extends Page implements HasTable
     /**
      * @param  array<string, mixed>  $options
      */
-    protected function executeRun(string $mode, array $options = []): void
+    protected function dispatchReconciliationJob(string $mode, array $options = [], ?string $uiRunToken = null): void
     {
-        try {
-            @set_time_limit(0);
+        $userId = auth('tenant')->id();
 
-            $now = BusinessDay::now();
-            $service = app(ReconciliationReportService::class);
-
-            if ($mode === ReconciliationSnapshot::MODE_REALTIME) {
-                $report = $service->buildReport($mode, $now, null, null, $options);
-            } elseif ($mode === ReconciliationSnapshot::MODE_DAILY) {
-                $periodStart = $now->copy()->subDay()->startOfDay();
-                $periodEnd = $now->copy()->subDay()->endOfDay();
-                $report = $service->buildReport($mode, $now, $periodStart, $periodEnd, $options);
-            } else {
-                $anchor = $now->copy()->subMonthNoOverflow();
-                $periodStart = $anchor->copy()->startOfMonth();
-                $periodEnd = $anchor->copy()->endOfMonth();
-                $report = $service->buildReport($mode, $now, $periodStart, $periodEnd, $options);
-            }
-
-            $userId = auth('tenant')->id();
-            $snapshot = $service->persistSnapshot($report, is_int($userId) ? $userId : null);
-            $this->selectedSnapshotId = $snapshot->id;
-            $this->sideTab = 'snapshots';
-
-            $pass = $report['verdict']['pass'] ?? false;
-            $notification = Notification::make()
-                ->title($pass ? __('Reconciliation passed') : __('Reconciliation found critical issues'))
-                ->body(__('Snapshot #:id — critical: :critical, warnings: :warnings', [
-                    'id' => $snapshot->id,
-                    'critical' => ($report['verdict']['critical_issues'] ?? 0),
-                    'warnings' => ($report['verdict']['warnings'] ?? 0),
-                ]));
-
-            $pass ? $notification->success()->send() : $notification->danger()->send();
-        } catch (\Throwable $exception) {
-            $this->notifyReconciliationRunFailed($exception);
-        } finally {
-            $this->finishWorkspaceReconciliationRun();
-        }
+        RunReconciliationJob::dispatch(
+            $mode,
+            $options,
+            $userId !== null ? (int) $userId : null,
+            $uiRunToken,
+        );
     }
 
-    protected function finishWorkspaceReconciliationRun(): void
+    protected function reconciliationQueuedNotification(): Notification
     {
-        $this->resetStuckActionState();
-
-        if (in_array($this->sideTab, $this->tableSideTabs(), true)) {
-            $this->reconfigureTableForSideTab();
-            $this->resetTable();
-            $this->ensureExceptionSelected();
-        }
-
-        $this->refreshWorkspacePanelActions();
-    }
-
-    protected function resetStuckActionState(): void
-    {
-        if (method_exists($this, 'unmountAction')) {
-            $this->unmountAction(false);
-        }
-
-        if (property_exists($this, 'mountedActions')) {
-            $this->mountedActions = [];
-        }
-
-        if (property_exists($this, 'cachedMountedActions')) {
-            $this->cachedMountedActions = null;
-        }
-
-        if (in_array($this->sideTab, $this->tableSideTabs(), true)) {
-            $this->unmountTableAction(false);
-        }
-    }
-
-    protected function notifyReconciliationRunFailed(\Throwable $exception): void
-    {
-        report($exception);
-
-        Notification::make()
-            ->title(__('Reconciliation run failed'))
-            ->body($exception->getMessage())
-            ->danger()
-            ->send();
+        return Notification::make()
+            ->title(__('Reconciliation queued'))
+            ->body(__('Running in the background. Watch the notification bell — large tenants can take about a minute.'))
+            ->success()
+            ->persistent();
     }
 
     protected function authorizeExport(): void

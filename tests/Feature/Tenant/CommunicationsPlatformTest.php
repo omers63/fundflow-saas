@@ -369,6 +369,7 @@ test('admin automation templates are listed and drive bell copy', function () {
     $groups = NotificationTemplateCatalog::optionsGroupedByAudience();
 
     expect($groups['admin'])->toHaveKey('reconciliation_digest')
+        ->and($groups['admin'])->toHaveKey('reconciliation_run_completed')
         ->and($groups['admin'])->toHaveKey('delinquency_digest')
         ->and($groups['admin'])->toHaveKey('new_loan_application');
 

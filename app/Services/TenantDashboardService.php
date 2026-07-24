@@ -74,7 +74,7 @@ final class TenantDashboardService
     {
         $now = BusinessDay::now();
         $currency = InsightFormatter::currency();
-        $user = Auth::user();
+        $user = Auth::guard('tenant')->user() ?? Auth::user();
         assert($user instanceof User);
 
         $masters = Account::master()->get()->keyBy('type');

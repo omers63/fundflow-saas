@@ -10,6 +10,7 @@ use App\Models\Tenant\User;
 use App\Notifications\Tenant\DelinquencyDigestNotification;
 use App\Services\AccountingService;
 use App\Services\Loans\DelinquencyDigestService;
+use App\Support\AutomationScheduleSettings;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
@@ -37,7 +38,7 @@ beforeEach(function () {
 function createMemberForDigest(AccountingService $accounting, array $overrides = []): Member
 {
     $member = Member::create(array_merge([
-        'member_number' => 'MEM-' . uniqid(),
+        'member_number' => 'MEM-'.uniqid(),
         'name' => 'Digest Member',
         'monthly_contribution_amount' => 5000,
         'joined_at' => now()->subYear(),
@@ -190,9 +191,9 @@ test('delinquency digest omits mail when admin has no email', function () {
     Notification::assertSentTo(
         $admin,
         DelinquencyDigestNotification::class,
-        fn(DelinquencyDigestNotification $notification, array $channels): bool => in_array('database', $channels, true)
+        fn (DelinquencyDigestNotification $notification, array $channels): bool => in_array('database', $channels, true)
         && in_array(WebPushChannel::class, $channels, true)
-        && !in_array('mail', $channels, true)
+        && ! in_array('mail', $channels, true)
         && ($notification->toDatabase($admin)['format'] ?? null) === 'filament',
     );
 });
@@ -209,5 +210,47 @@ test('delinquency digest is skipped when there is nothing to report', function (
 
     expect($this->digest->notifyAdminsIfNeeded())->toBe(0);
 
+    Notification::assertNothingSent();
+});
+
+test('delinquency digest is skipped when automation notifications are disabled', function () {
+    Notification::fake();
+
+    AutomationScheduleSettings::saveFromForm([
+        ...AutomationScheduleSettings::allForForm(),
+        'automation_notify_delinquency_digest' => false,
+    ]);
+
+    User::create([
+        'name' => 'Digest Admin',
+        'email' => 'digest-off@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    $member = createMemberForDigest(app(AccountingService::class));
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 5000,
+        'amount_requested' => 5000,
+        'amount_approved' => 5000,
+        'amount_disbursed' => 5000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => now()->subMonth(),
+        'status' => 'overdue',
+    ]);
+
+    expect($this->digest->notifyAdminsIfNeeded())->toBe(0);
     Notification::assertNothingSent();
 });

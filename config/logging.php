@@ -55,7 +55,9 @@ return [
         'stack' => [
             'driver' => 'stack',
             'channels' => explode(',', (string) env('LOG_STACK', 'single')),
-            'ignore_exceptions' => false,
+            // Never let a full/unwritable log file take down Livewire/Filament requests
+            // (e.g. storage/logs/laravel.log owned by root after a sudo artisan run).
+            'ignore_exceptions' => true,
         ],
 
         'single' => [

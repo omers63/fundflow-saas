@@ -21,13 +21,14 @@ test('filament panels do not inject automatic livewire session reload scripts', 
     expect(file_exists(resource_path('views/partials/livewire-session-recovery.blade.php')))->toBeFalse();
 });
 
-test('filament panels disable notification polling when echo broadcasting is configured', function (string $panelId) {
+test('filament panels keep database notification polling enabled', function (string $panelId) {
     expect(Filament::getPanel($panelId)->getDatabaseNotificationsPollingInterval())
-        ->toBe(DatabaseNotificationsRefresh::panelPollingInterval());
+        ->toBe(DatabaseNotificationsRefresh::panelPollingInterval())
+        ->not->toBeNull();
 })->with([
-            'tenant fund admin' => 'tenant',
-            'member portal' => 'member',
-        ]);
+    'tenant fund admin' => 'tenant',
+    'member portal' => 'member',
+]);
 
 test('filament panels enable desktop sidebar collapse', function (string $panelId) {
     $panel = Filament::getPanel($panelId);
@@ -35,7 +36,7 @@ test('filament panels enable desktop sidebar collapse', function (string $panelI
     expect($panel->isSidebarCollapsibleOnDesktop())->toBeTrue()
         ->and($panel->isSidebarFullyCollapsibleOnDesktop())->toBeTrue();
 })->with([
-            'central admin' => 'admin',
-            'tenant fund admin' => 'tenant',
-            'member portal' => 'member',
-        ]);
+    'central admin' => 'admin',
+    'tenant fund admin' => 'tenant',
+    'member portal' => 'member',
+]);

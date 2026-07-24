@@ -73,6 +73,13 @@ test('submit auto-accepts deposits when automation setting is enabled', function
     Setting::set(AutomationScheduleSettings::GROUP, 'auto_accept_deposits', '1');
     Setting::set(AutomationScheduleSettings::GROUP, 'auto_apply_collections', '0');
 
+    $admin = User::create([
+        'name' => 'Admin',
+        'email' => 'admin-auto-deposit@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
     $memberUser = User::create([
         'name' => 'John Doe',
         'email' => 'john-auto-deposit@test.com',
@@ -95,11 +102,7 @@ test('submit auto-accepts deposits when automation setting is enabled', function
     expect($posting->status)->toBe('accepted')
         ->and((float) $member->fresh()->getCashBalance())->toBe(5000.0);
 
-    Notification::assertNotSentTo(
-        User::query()->where('is_admin', true)->get(),
-        NewFundPostingNotification::class,
-    );
-
+    Notification::assertSentTo($admin, NewFundPostingNotification::class);
     Notification::assertSentTo($memberUser, FundPostingAcceptedNotification::class);
 });
 

@@ -8,18 +8,21 @@ use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\DelinquencyDigestNotification;
+use App\Support\AutomationScheduleSettings;
 
 class DelinquencyDigestService
 {
-    public function __construct(protected LoanDelinquencyService $delinquency)
-    {
-    }
+    public function __construct(protected LoanDelinquencyService $delinquency) {}
 
     /**
      * Notify tenant admins when there is delinquency activity worth reviewing.
      */
     public function notifyAdminsIfNeeded(): int
     {
+        if (! AutomationScheduleSettings::notifyDelinquencyDigest()) {
+            return 0;
+        }
+
         $counts = $this->delinquency->digestCounts();
 
         $total = $counts['overdue_installments']

@@ -7,6 +7,7 @@ use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Member\Resources\MyMessages\MyMessageResource;
+use App\Filament\Support\DatabaseNotificationsRefresh;
 use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
@@ -280,7 +281,8 @@ test('loan calculator funding strategy options are translated in Arabic locale',
 test('member panel has database notifications enabled', function () {
     expect(filament()->getPanel('member')->hasDatabaseNotifications())->toBeTrue()
         ->and(filament()->getPanel('member')->hasLazyLoadedDatabaseNotifications())->toBeFalse()
-        ->and(filament()->getPanel('member')->getDatabaseNotificationsPollingInterval())->toBeNull()
+        ->and(filament()->getPanel('member')->getDatabaseNotificationsPollingInterval())
+        ->toBe(DatabaseNotificationsRefresh::panelPollingInterval())
         ->and(filament()->getPanel('member')->hasBroadcasting())->toBeTrue()
         ->and(config('filament.broadcasting.echo.broadcaster'))->toBe('reverb');
 });

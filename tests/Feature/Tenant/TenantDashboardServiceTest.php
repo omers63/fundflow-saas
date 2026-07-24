@@ -21,8 +21,10 @@ use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\TenantDashboardService;
 use App\Support\BusinessDay;
+use App\Support\Lang;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
@@ -31,8 +33,16 @@ uses(InitializesTenancy::class);
 beforeEach(function () {
     $this->initializeTenancy();
     Filament::setCurrentPanel('tenant');
+    Carbon::setTestNow(null);
+    app()->setLocale('en');
+    Cache::flush();
     $this->service = app(TenantDashboardService::class);
 
+    LoanInstallment::query()->delete();
+    LoanRepayment::query()->delete();
+    Loan::query()->delete();
+    Contribution::withTrashed()->forceDelete();
+    Transaction::query()->delete();
     Account::query()->delete();
     Member::query()->delete();
 });
@@ -118,7 +128,7 @@ test('tenant dashboard kpi includes collection arrears for open cycle', function
     $this->actingAs($user, 'tenant');
 
     $kpis = collect($this->service->snapshot()['kpi_stats'])->keyBy('label');
-    $arrearsKpi = $kpis->get(__('Collection arrears'));
+    $arrearsKpi = $kpis->get(Lang::ui('Collection arrears'));
 
     expect($kpis)->toHaveCount(5)
         ->and($arrearsKpi)->not->toBeNull()

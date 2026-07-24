@@ -73,6 +73,8 @@ class ReconciliationService
      */
     public function runNightlyBatch(): array
     {
+        @set_time_limit(0);
+
         $raised = 0;
         $resolved = 0;
         $critical = 0;
