@@ -44,11 +44,38 @@
         'toggleProperty' => 'auditLoggingEnabled',
         'toggleLabel' => __('Record new audit log entries'),
         'rowCount' => $this->fundAuditLogRowCount(),
+        'exportAction' => 'exportFundAuditLogs',
+        'exportLabel' => __('Export CSV'),
         'truncateAction' => 'truncateFundAuditLogs',
         'truncateLabel' => __('Empty audit log table'),
         'truncateConfirm' => __('Permanently delete every row in the fund audit log table? This cannot be undone.'),
     ])
                     <div wire:key="audit-system-table-audit-{{ $this->auditFilter }}">
+                        {{ $this->table }}
+                    </div>
+                </div>
+            @elseif ($this->sideTab === 'access')
+                <div>
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                            {{ __('Portal access log') }}</h3>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {{ __('Who signed in to the member or admin portal, shown by member name.') }}
+                        </p>
+                    </div>
+                    @include('filament.tenant.partials.audit-system-logging-controls', [
+        'loggingTitle' => __('Access logging'),
+        'loggingDescription' => __('Turn off to stop writing new rows to the portal access log. Existing rows stay until you empty the table.'),
+        'toggleProperty' => 'portalAccessLoggingEnabled',
+        'toggleLabel' => __('Record portal sign-ins'),
+        'rowCount' => $this->portalAccessLogRowCount(),
+        'exportAction' => 'exportPortalAccessLogs',
+        'exportLabel' => __('Export CSV'),
+        'truncateAction' => 'truncatePortalAccessLogs',
+        'truncateLabel' => __('Empty access log table'),
+        'truncateConfirm' => __('Permanently delete every row in the portal access log table? This cannot be undone.'),
+    ])
+                    <div wire:key="audit-system-table-access">
                         {{ $this->table }}
                     </div>
                 </div>
@@ -67,6 +94,8 @@
         'toggleProperty' => 'notificationLoggingEnabled',
         'toggleLabel' => __('Record notification delivery log entries'),
         'rowCount' => $this->notificationLogRowCount(),
+        'exportAction' => 'exportNotificationLogs',
+        'exportLabel' => __('Export CSV'),
         'truncateAction' => 'truncateNotificationLogs',
         'truncateLabel' => __('Empty notification log table'),
         'truncateConfirm' => __('Permanently delete every row in the notification log table? This cannot be undone.'),

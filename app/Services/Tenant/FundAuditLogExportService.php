@@ -33,13 +33,24 @@ final class FundAuditLogExportService
 
     public function downloadCsv(?Carbon $from = null, ?Carbon $until = null): StreamedResponse
     {
+        return $this->downloadCsvFromQuery($this->query($from, $until));
+    }
+
+    /**
+     * @param  Builder<FundAuditLog>  $query
+     */
+    public function downloadCsvFromQuery(Builder $query): StreamedResponse
+    {
         $filename = 'fund-audit-log-'.BusinessDay::now()->format('Y-m-d').'.csv';
 
-        return response()->streamDownload(function () use ($from, $until): void {
+        return response()->streamDownload(function () use ($query): void {
             $handle = Utf8CsvStream::open();
             fputcsv($handle, self::csvHeaders());
 
-            $this->query($from, $until)
+            (clone $query)
+                ->reorder()
+                ->orderByDesc('occurred_at')
+                ->orderByDesc('id')
                 ->each(function (FundAuditLog $log) use ($handle): void {
                     fputcsv($handle, [
                         $log->id,

@@ -134,6 +134,7 @@ class LegacyMigrationPage extends Page implements HasForms
     public function mount(bool $embedded = false): void
     {
         $this->mountEmbedded($embedded);
+        $this->redirectToAuditWorkspaceUnlessEmbedded('migration');
 
         $this->form->fill([
             'strategy' => 'historical',

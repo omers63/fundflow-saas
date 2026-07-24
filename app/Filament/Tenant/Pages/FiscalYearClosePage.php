@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Concerns\EmbedsAsAuditWorkspacePanel;
+use App\Filament\Tenant\Support\SettingsTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\FiscalClose;
 use App\Models\Tenant\User;
@@ -72,6 +73,7 @@ class FiscalYearClosePage extends Page implements HasForms
     public function mount(bool $embedded = false): void
     {
         $this->mountEmbedded($embedded);
+        $this->redirectToAuditWorkspaceUnlessEmbedded('fiscal');
 
         $period = app(FiscalClosePeriodResolver::class)->resolvePeriodContaining();
 
@@ -98,15 +100,15 @@ class FiscalYearClosePage extends Page implements HasForms
                             ->dehydrated(),
                         Placeholder::make('fiscal_year_label_display')
                             ->label(__('Fiscal year'))
-                            ->content(fn(): string => (string) ($this->data['fiscal_year_label'] ?? '—')),
+                            ->content(fn (): string => (string) ($this->data['fiscal_year_label'] ?? '—')),
                         DatePicker::make('period_end')
                             ->label(__('Proposed period end'))
                             ->native(false)
                             ->required()
-                            ->disabled(fn(): bool => $this->closeIsLocked())
+                            ->disabled(fn (): bool => $this->closeIsLocked())
                             ->live(onBlur: true)
                             ->afterStateUpdated(function (?string $state, callable $set): void {
-                                if (!filled($state)) {
+                                if (! filled($state)) {
                                     return;
                                 }
 
@@ -125,7 +127,7 @@ class FiscalYearClosePage extends Page implements HasForms
                         Placeholder::make('active_close_status')
                             ->label(__('Close record'))
                             ->columnSpanFull()
-                            ->content(fn(): string => $this->activeCloseSummary()),
+                            ->content(fn (): string => $this->activeCloseSummary()),
                     ]),
             ]);
     }
@@ -154,12 +156,12 @@ class FiscalYearClosePage extends Page implements HasForms
             Action::make('open_settings')
                 ->label(__('Fiscal calendar settings'))
                 ->icon('heroicon-o-cog-6-tooth')
-                ->url(Settings::getUrl()),
+                ->url(SettingsTabRegistry::url('fiscal-calendar::tab')),
             Action::make('run_readiness')
                 ->label(__('Run readiness checks'))
                 ->icon('heroicon-o-shield-check')
                 ->color('gray')
-                ->disabled(fn(): bool => $this->closeIsLocked())
+                ->disabled(fn (): bool => $this->closeIsLocked())
                 ->action(function (): void {
                     $state = $this->form->getState();
                     $periodEnd = $this->periodEndFromState($state);
@@ -186,7 +188,7 @@ class FiscalYearClosePage extends Page implements HasForms
                 ->label(__('Build snapshot'))
                 ->icon('heroicon-o-camera')
                 ->color('primary')
-                ->visible(fn(): bool => ($this->readinessReport['can_proceed'] ?? false) === true && !$this->closeIsLocked())
+                ->visible(fn (): bool => ($this->readinessReport['can_proceed'] ?? false) === true && ! $this->closeIsLocked())
                 ->requiresConfirmation()
                 ->modalHeading(__('Build certified snapshot'))
                 ->modalDescription(__('Captures pool totals and per-member balances, arrears, and loan state. No ledger rows are changed yet.'))
@@ -212,7 +214,7 @@ class FiscalYearClosePage extends Page implements HasForms
                     Notification::make()
                         ->title(__('Snapshot built'))
                         ->body(__('Checksum :checksum · :count members captured.', [
-                            'checksum' => substr((string) $close->checksum, 0, 12) . '…',
+                            'checksum' => substr((string) $close->checksum, 0, 12).'…',
                             'count' => $close->member_count,
                         ]))
                         ->success()
@@ -222,7 +224,7 @@ class FiscalYearClosePage extends Page implements HasForms
                 ->label(__('Generate archive'))
                 ->icon('heroicon-o-archive-box-arrow-down')
                 ->color('gray')
-                ->visible(fn(): bool => $this->canGenerateExports())
+                ->visible(fn (): bool => $this->canGenerateExports())
                 ->requiresConfirmation()
                 ->modalHeading(__('Generate archive exports'))
                 ->modalDescription(__('Writes GL, arrears, loan portfolio, and readiness report files to tenant storage. Required before purge when retention policy is archive-then-delete.'))
@@ -258,7 +260,7 @@ class FiscalYearClosePage extends Page implements HasForms
                 ->label(__('Execute roll-forward'))
                 ->icon('heroicon-o-arrow-path')
                 ->color('danger')
-                ->visible(fn(): bool => $this->canExecuteRollForward())
+                ->visible(fn (): bool => $this->canExecuteRollForward())
                 ->requiresConfirmation()
                 ->modalHeading(__('Execute roll-forward'))
                 ->modalDescription(__('Updates member opening balances, sets books closed through :date, and locks backdated postings. Ledger history is retained until purge.', [
@@ -298,7 +300,7 @@ class FiscalYearClosePage extends Page implements HasForms
                 ->label(__('Purge Tier A ledger'))
                 ->icon('heroicon-o-trash')
                 ->color('danger')
-                ->visible(fn(): bool => $this->canExecuteTierAPurge())
+                ->visible(fn (): bool => $this->canExecuteTierAPurge())
                 ->requiresConfirmation()
                 ->modalHeading(__('Purge Tier A ledger detail'))
                 ->modalDescription(__('Permanently deletes transactions through the close period, cleared bank lines, and resolved reconciliation exceptions. Account balances and open arrears are not changed. This cannot be undone.'))
@@ -338,7 +340,7 @@ class FiscalYearClosePage extends Page implements HasForms
                 ->label(__('Purge Tier B records'))
                 ->icon('heroicon-o-trash')
                 ->color('danger')
-                ->visible(fn(): bool => $this->canExecuteTierBPurge())
+                ->visible(fn (): bool => $this->canExecuteTierBPurge())
                 ->requiresConfirmation()
                 ->modalHeading(__('Purge Tier B operational history'))
                 ->modalDescription(__('Permanently deletes collected contributions, paid installments, closed fund postings, and audit log rows through the close period. Open arrears and pending installments are kept. This cannot be undone.'))
@@ -384,7 +386,7 @@ class FiscalYearClosePage extends Page implements HasForms
         $closeId = $this->activeClose['id'] ?? null;
         $files = $this->activeClose['export_manifest_json']['files'] ?? [];
 
-        if ($closeId === null || !is_array($files)) {
+        if ($closeId === null || ! is_array($files)) {
             return [];
         }
 
@@ -398,7 +400,7 @@ class FiscalYearClosePage extends Page implements HasForms
         $links = [];
 
         foreach ($files as $key => $path) {
-            if (!is_string($path) || blank($path)) {
+            if (! is_string($path) || blank($path)) {
                 continue;
             }
 
@@ -491,7 +493,7 @@ class FiscalYearClosePage extends Page implements HasForms
             'status' => $this->activeClose['status'] ?? '—',
             'count' => $this->activeClose['member_count'] ?? 0,
             'checksum' => filled($this->activeClose['checksum'] ?? null)
-                ? substr((string) $this->activeClose['checksum'], 0, 12) . '…'
+                ? substr((string) $this->activeClose['checksum'], 0, 12).'…'
                 : '—',
         ]);
     }
@@ -500,7 +502,7 @@ class FiscalYearClosePage extends Page implements HasForms
     {
         $user = auth()->guard('tenant')->user();
 
-        if (!$user instanceof User) {
+        if (! $user instanceof User) {
             throw new \RuntimeException(__('Tenant admin user required.'));
         }
 

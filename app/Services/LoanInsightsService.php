@@ -7,13 +7,12 @@ namespace App\Services;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Support\MoneyDisplay;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
-use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\LoanEligibilityOverrideRequestResource;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrides\LoanEligibilityOverrideResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
-use App\Filament\Tenant\Resources\LoanTiers\LoanTierResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
+use App\Filament\Tenant\Support\SettingsTabRegistry;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
@@ -775,7 +774,7 @@ final class LoanInsightsService
                     ['active' => $activeTiers->count(), 'inactive' => $inactiveCount]
                 ),
                 'cta_label' => __('Fund tiers'),
-                'cta_url' => FundTierResource::getUrl('index'),
+                'cta_url' => SettingsTabRegistry::url('fund-tiers::tab'),
             ],
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'active', 'label' => __('Active'), 'value' => (string) $activeTiers->count(), 'sub' => __('Tiers'), 'icon' => 'heroicon-o-squares-2x2', 'accent' => 'emerald', 'active' => true],
@@ -785,17 +784,17 @@ final class LoanInsightsService
                 ['key' => 'max_band', 'label' => __('Max band'), ...($activeTiers->isNotEmpty() ? InsightKpi::moneyValue((float) $activeTiers->max('max_amount'), $currency) : ['value' => '—']), 'sub' => __('Highest'), 'icon' => 'heroicon-o-arrow-up', 'accent' => 'violet', 'active' => true],
                 ['key' => 'fund_pools', 'label' => __('Fund pools'), 'value' => (string) FundTier::query()->where('is_active', true)->count(), 'sub' => __('Linked'), 'icon' => 'heroicon-o-circle-stack', 'accent' => 'indigo', 'active' => true],
             ], [
-                'active' => LoanTierResource::getUrl('index'),
-                'inactive' => LoanTierResource::getUrl('index'),
+                'active' => SettingsTabRegistry::url('loans::tab'),
+                'inactive' => SettingsTabRegistry::url('loans::tab'),
                 'in_flight' => LoanResource::getUrl('index'),
-                'min_band' => LoanTierResource::getUrl('index'),
-                'max_band' => LoanTierResource::getUrl('index'),
-                'fund_pools' => FundTierResource::getUrl('index'),
+                'min_band' => SettingsTabRegistry::url('loans::tab'),
+                'max_band' => SettingsTabRegistry::url('loans::tab'),
+                'fund_pools' => SettingsTabRegistry::url('fund-tiers::tab'),
             ]),
             'breakdown' => $breakdown,
             'max_count' => $maxCount,
-            'tiers_url' => LoanTierResource::getUrl('index'),
-            'fund_tiers_url' => FundTierResource::getUrl('index'),
+            'tiers_url' => SettingsTabRegistry::url('loans::tab'),
+            'fund_tiers_url' => SettingsTabRegistry::url('fund-tiers::tab'),
         ];
     }
 
@@ -852,7 +851,7 @@ final class LoanInsightsService
                     'allocated' => $this->formatMoneyCompact($totalAllocated, $currency),
                 ]),
                 'cta_label' => __('Loan tiers'),
-                'cta_url' => LoanTierResource::getUrl('index'),
+                'cta_url' => SettingsTabRegistry::url('loans::tab'),
             ],
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'master_fund', 'label' => __('Master fund'), ...InsightKpi::moneyValue($masterBalance, $currency), 'sub' => __('Balance'), 'icon' => 'heroicon-o-building-library', 'accent' => 'indigo', 'active' => true],
@@ -863,16 +862,16 @@ final class LoanInsightsService
                 ['key' => 'active_tiers', 'label' => __('Active tiers'), 'value' => (string) $tiers->count(), 'sub' => __('Pools'), 'icon' => 'heroicon-o-squares-2x2', 'accent' => 'teal', 'active' => true],
             ], [
                 'master_fund' => MasterAccountResource::getUrl('index', ['tab' => 'fund']),
-                'allocated' => FundTierResource::getUrl('index'),
+                'allocated' => SettingsTabRegistry::url('fund-tiers::tab'),
                 'deployed' => LoanResource::getUrl('index'),
-                'available' => FundTierResource::getUrl('index'),
-                'utilization' => FundTierResource::getUrl('index'),
-                'active_tiers' => FundTierResource::getUrl('index'),
+                'available' => SettingsTabRegistry::url('fund-tiers::tab'),
+                'utilization' => SettingsTabRegistry::url('fund-tiers::tab'),
+                'active_tiers' => SettingsTabRegistry::url('fund-tiers::tab'),
             ]),
             'breakdown' => $breakdown,
             'max_used' => $maxUsed,
             'utilization' => $utilization,
-            'fund_tiers_url' => FundTierResource::getUrl('index'),
+            'fund_tiers_url' => SettingsTabRegistry::url('fund-tiers::tab'),
             'queue_url' => LoanResource::queueUrl(),
         ];
     }

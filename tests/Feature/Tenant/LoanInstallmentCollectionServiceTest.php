@@ -6,10 +6,13 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\User;
+use App\Notifications\Tenant\LoanRepaymentAppliedNotification;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanInstallmentCollectionService;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Notification;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -82,7 +85,7 @@ test('cash increase only collects open period and arrears not future installment
     }
 
     AccountingService::withoutMemberCashCollection(
-        fn() => $this->accounting->credit($member->cashAccount, 5000, 'Large deposit'),
+        fn () => $this->accounting->credit($member->cashAccount, 5000, 'Large deposit'),
     );
 
     $this->collection->onMemberCashIncreased($member->fresh());
@@ -146,7 +149,7 @@ test('mar 5 due date is collected in february open period not march', function (
     ]);
 
     AccountingService::withoutMemberCashCollection(
-        fn() => $this->accounting->credit($member->cashAccount, 3000, 'Deposit'),
+        fn () => $this->accounting->credit($member->cashAccount, 3000, 'Deposit'),
     );
 
     $this->collection->onMemberCashIncreased($member->fresh());
@@ -194,7 +197,7 @@ test('cash increase for a specific period only collects that installment', funct
     }
 
     AccountingService::withoutMemberCashCollection(
-        fn() => $this->accounting->credit($member->cashAccount, 3000, 'Deposit'),
+        fn () => $this->accounting->credit($member->cashAccount, 3000, 'Deposit'),
     );
 
     $this->collection->onMemberCashIncreasedForPeriod($member->fresh(), 6, 2026);
@@ -204,4 +207,63 @@ test('cash increase for a specific period only collects that installment', funct
 
     expect($installmentOne?->status)->toBe('pending')
         ->and($installmentTwo?->status)->toBe('paid');
+});
+
+test('collecting an installment notifies the member like applyOne', function () {
+    Notification::fake();
+
+    $user = User::create([
+        'name' => 'EMI Notify Borrower',
+        'email' => 'emi-notify@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => false,
+    ]);
+
+    $member = Member::create([
+        'user_id' => $user->id,
+        'member_number' => 'MEM-EMI-NOTIFY',
+        'name' => 'EMI Notify Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    $installment = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2026-06-15'),
+        'status' => 'pending',
+    ]);
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->accounting->credit($member->cashAccount, 1000, 'Deposit'),
+    );
+
+    expect($this->collection->attemptCollection($installment->fresh(), $member->fresh()))->toBe('collected');
+
+    Notification::assertSentTo(
+        $user,
+        LoanRepaymentAppliedNotification::class,
+        function (LoanRepaymentAppliedNotification $notification) use ($loan, $installment): bool {
+            return $notification->loan->id === $loan->id
+                && $notification->installment->id === $installment->id;
+        },
+    );
 });

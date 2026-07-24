@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Services\Loans;
 
 use App\Exceptions\InsufficientMemberCashForCollectionException;
+use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Notifications\Tenant\LoanRepaymentAppliedNotification;
 use App\Services\ContributionCycleService;
 use App\Support\BusinessDay;
 use App\Support\InstallmentCollectionStatus;
@@ -230,6 +232,45 @@ class LoanInstallmentCollectionService
             $member->increment('late_repayment_amount', $amt);
         }
 
+        $this->notifyMemberOfAppliedRepayment($loan, $installment, $member, $isLate);
+
         return 'collected';
+    }
+
+    protected function notifyMemberOfAppliedRepayment(
+        Loan $loan,
+        LoanInstallment $installment,
+        Member $member,
+        bool $isLate,
+    ): void {
+        $member->loadMissing('user');
+
+        if ($member->user === null) {
+            return;
+        }
+
+        try {
+            $freshCash = Account::query()
+                ->where('type', 'cash')
+                ->where('member_id', $member->id)
+                ->where('is_master', false)
+                ->first();
+
+            $loan->refresh();
+            $installment->refresh();
+
+            $member->user->notify(new LoanRepaymentAppliedNotification(
+                loan: $loan,
+                installment: $installment,
+                cashBalance: (float) ($freshCash?->balance ?? 0),
+                isLate: $isLate,
+            ));
+        } catch (\Throwable $e) {
+            logger()->error('LoanInstallmentCollectionService: repayment notification failed', [
+                'loan_id' => $loan->id,
+                'installment_id' => $installment->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

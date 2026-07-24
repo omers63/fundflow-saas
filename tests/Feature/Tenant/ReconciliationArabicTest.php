@@ -23,9 +23,11 @@ test('reconciliation page translation keys have arabic entries', function (): vo
         'Reconciliation',
         'Fund status',
         'Open issues',
-        'Methodology',
-        'Simple',
-        'Advanced',
+        'How it works',
+        'How reconciliation works',
+        'Current reconciliation settings',
+        'Run check now',
+        'Snapshots',
     ];
 
     /** @var array<string, string> $arabic */

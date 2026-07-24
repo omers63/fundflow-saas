@@ -916,17 +916,16 @@ test('reconciliation page workspace tabs switch via livewire', function () {
         ->assertSet('sideTab', 'history')
         ->call('setSideTab', 'overview')
         ->assertSet('sideTab', 'overview')
-        ->call('setAdvancedUi', true)
         ->call('setSideTab', 'snapshots')
         ->assertSet('sideTab', 'snapshots')
         ->call('setSideTab', 'methodology')
         ->assertSet('sideTab', 'methodology');
 });
 
-test('run check now completes in simple mode', function () {
+test('run check now action completes and opens snapshots', function () {
     $admin = User::create([
-        'name' => 'Recon Simple Run Admin',
-        'email' => 'recon-simple-run-'.uniqid('', true).'@fund.test',
+        'name' => 'Recon Run Check Admin',
+        'email' => 'recon-run-check-'.uniqid('', true).'@fund.test',
         'password' => bcrypt('password'),
         'email_verified_at' => now(),
         'is_admin' => true,
@@ -938,11 +937,14 @@ test('run check now completes in simple mode', function () {
     $before = ReconciliationSnapshot::query()->count();
 
     Livewire::test(ReconciliationOverviewPage::class)
-        ->assertSet('advancedUi', false)
         ->assertSee(__('Run check now'))
-        ->call('runCheckNow')
+        ->assertSee(__('How it works'))
+        ->assertSee(__('Current reconciliation settings'))
+        ->mountAction('run_realtime')
+        ->callMountedAction()
         ->assertNotified()
         ->assertSet('mountedActions', [])
+        ->assertSet('sideTab', 'snapshots')
         ->call('setSideTab', 'exceptions')
         ->assertSet('sideTab', 'exceptions')
         ->call('setSideTab', 'overview')
@@ -951,7 +953,7 @@ test('run check now completes in simple mode', function () {
     expect(ReconciliationSnapshot::query()->count())->toBe($before + 1);
 });
 
-test('reconciliation overview renders page action modals in advanced mode', function () {
+test('reconciliation overview renders run check actions', function () {
     $admin = User::create([
         'name' => 'Recon Modal Admin',
         'email' => 'recon-modal-'.uniqid('', true).'@fund.test',
@@ -964,9 +966,10 @@ test('reconciliation overview renders page action modals in advanced mode', func
     $this->actingAs($admin, 'tenant');
 
     Livewire::test(ReconciliationOverviewPage::class)
-        ->call('setAdvancedUi', true)
         ->assertSet('sideTab', 'overview')
-        ->assertSeeHtml('wire:partial="action-modals"');
+        ->assertSee(__('Run check now'))
+        ->assertSee(__('More runs'))
+        ->assertSee(__('Current reconciliation settings'));
 });
 
 test('real-time snapshot action completes and tabs remain switchable', function () {
@@ -984,7 +987,6 @@ test('real-time snapshot action completes and tabs remain switchable', function 
     $before = ReconciliationSnapshot::query()->count();
 
     Livewire::test(ReconciliationOverviewPage::class)
-        ->call('setAdvancedUi', true)
         ->call('setSideTab', 'exceptions')
         ->assertSet('sideTab', 'exceptions')
         ->call('setSideTab', 'overview')
@@ -1095,7 +1097,6 @@ test('admin can delete a reconciliation snapshot from snapshots tab', function (
     $this->actingAs($admin, 'tenant');
 
     Livewire::test(ReconciliationOverviewPage::class)
-        ->call('setAdvancedUi', true)
         ->call('setSideTab', 'snapshots')
         ->assertSet('selectedSnapshotId', $newer->id)
         ->call('deleteSnapshot', $newer->id)
@@ -1148,7 +1149,6 @@ test('admin can bulk delete reconciliation snapshots', function () {
     $this->actingAs($admin, 'tenant');
 
     Livewire::test(ReconciliationOverviewPage::class)
-        ->call('setAdvancedUi', true)
         ->call('setSideTab', 'snapshots')
         ->set('snapshotBulkSelection', [$deleteOne->id, $deleteTwo->id])
         ->call('deleteSelectedSnapshots')

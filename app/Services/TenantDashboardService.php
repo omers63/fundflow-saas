@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Filament\Tenant\Pages\JobsPage;
+use App\Filament\Tenant\Pages\AuditSystemPage;
 use App\Filament\Tenant\Pages\LoanQueueWorkbenchPage;
 use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Filament\Tenant\Pages\Settings;
@@ -13,14 +13,13 @@ use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\CashOutRequests\CashOutRequestResource;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
-use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\LoanEligibilityOverrideRequestResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
-use App\Filament\Tenant\Resources\LoanTiers\LoanTierResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
+use App\Filament\Tenant\Support\SettingsTabRegistry;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundAuditLog;
@@ -65,7 +64,7 @@ final class TenantDashboardService
      */
     public function snapshot(): array
     {
-        return TenantRuntimeCache::remember('tenant_dashboard_snapshot', 60, fn(): array => $this->buildSnapshot());
+        return TenantRuntimeCache::remember('tenant_dashboard_snapshot', 60, fn (): array => $this->buildSnapshot());
     }
 
     /**
@@ -415,7 +414,7 @@ final class TenantDashboardService
             ")
             ->groupBy('day')
             ->pluck('net', 'day')
-            ->map(fn($net): float => (float) $net)
+            ->map(fn ($net): float => (float) $net)
             ->all();
 
         $values = [];
@@ -1075,29 +1074,29 @@ final class TenantDashboardService
             ->orderBy('tier_number')
             ->get();
 
-                if ($tiers->isEmpty()) {
-                    return [];
-                }
+        if ($tiers->isEmpty()) {
+            return [];
+        }
 
-                $tierIds = $tiers->pluck('id')->all();
+        $tierIds = $tiers->pluck('id')->all();
 
-                $activeExposureByTier = Loan::query()
-                    ->whereIn('fund_tier_id', $tierIds)
-                    ->where('status', 'active')
-                    ->selectRaw('fund_tier_id, COALESCE(SUM(amount_approved), 0) as exposure')
-                    ->groupBy('fund_tier_id')
-                    ->pluck('exposure', 'fund_tier_id');
+        $activeExposureByTier = Loan::query()
+            ->whereIn('fund_tier_id', $tierIds)
+            ->where('status', 'active')
+            ->selectRaw('fund_tier_id, COALESCE(SUM(amount_approved), 0) as exposure')
+            ->groupBy('fund_tier_id')
+            ->pluck('exposure', 'fund_tier_id');
 
-                $queuedExposureByTier = Loan::query()
-                    ->whereIn('fund_tier_id', $tierIds)
-                    ->whereIn('status', ['approved', 'partially_disbursed'])
-                    ->selectRaw('fund_tier_id, COALESCE(SUM(GREATEST(0, COALESCE(amount_approved, 0) - COALESCE(amount_disbursed, 0))), 0) as exposure')
-                    ->groupBy('fund_tier_id')
-                    ->pluck('exposure', 'fund_tier_id');
+        $queuedExposureByTier = Loan::query()
+            ->whereIn('fund_tier_id', $tierIds)
+            ->whereIn('status', ['approved', 'partially_disbursed'])
+            ->selectRaw('fund_tier_id, COALESCE(SUM(GREATEST(0, COALESCE(amount_approved, 0) - COALESCE(amount_disbursed, 0))), 0) as exposure')
+            ->groupBy('fund_tier_id')
+            ->pluck('exposure', 'fund_tier_id');
 
-                return $tiers->map(function (FundTier $tier) use ($masterFundBalance, $activeExposureByTier, $queuedExposureByTier): array {
-                    $allocated = $masterFundBalance * ((float) $tier->percentage / 100);
-                    $exposure = (float) ($activeExposureByTier[$tier->id] ?? 0) + (float) ($queuedExposureByTier[$tier->id] ?? 0);
+        return $tiers->map(function (FundTier $tier) use ($masterFundBalance, $activeExposureByTier, $queuedExposureByTier): array {
+            $allocated = $masterFundBalance * ((float) $tier->percentage / 100);
+            $exposure = (float) ($activeExposureByTier[$tier->id] ?? 0) + (float) ($queuedExposureByTier[$tier->id] ?? 0);
             $pct = $allocated > 0 ? min(100, round(($exposure / $allocated) * 100)) : 0;
 
             $tone = match (true) {
@@ -1118,7 +1117,7 @@ final class TenantDashboardService
                 'bar_color' => $bar,
                 'tone' => $tone,
                 'available_amount' => max(0, $allocated - $exposure),
-                'url' => FundTierResource::getUrl('index'),
+                'url' => SettingsTabRegistry::url('fund-tiers::tab'),
             ];
         })->all();
     }
@@ -1148,8 +1147,8 @@ final class TenantDashboardService
                     ['label' => Lang::ui('Overdue installments'), 'icon' => 'heroicon-o-calendar-days', 'url' => LoanResource::listTabUrl('overdue_installments')],
                     ['label' => Lang::ui('Contribution arrears'), 'icon' => 'heroicon-o-banknotes', 'url' => ContributionResource::listTabUrl('arrears')],
                     ['label' => Lang::ui('Delinquent members'), 'icon' => 'heroicon-o-user-minus', 'url' => MemberResource::listTabUrl('delinquent')],
-                    ['label' => Lang::ui('Loan tiers'), 'icon' => 'heroicon-o-squares-2x2', 'url' => LoanTierResource::getUrl('index')],
-                    ['label' => Lang::ui('Fund tiers'), 'icon' => 'heroicon-o-chart-pie', 'url' => FundTierResource::getUrl('index')],
+                    ['label' => Lang::ui('Loan tiers'), 'icon' => 'heroicon-o-squares-2x2', 'url' => SettingsTabRegistry::url('loans::tab')],
+                    ['label' => Lang::ui('Fund tiers'), 'icon' => 'heroicon-o-chart-pie', 'url' => SettingsTabRegistry::url('fund-tiers::tab')],
                 ],
             ],
             [
@@ -1164,7 +1163,7 @@ final class TenantDashboardService
             [
                 'title' => Lang::ui('System'),
                 'links' => [
-                    ['label' => Lang::ui('Jobs & commands'), 'icon' => 'heroicon-o-cpu-chip', 'url' => JobsPage::getUrl()],
+                    ['label' => Lang::ui('Jobs & commands'), 'icon' => 'heroicon-o-cpu-chip', 'url' => AuditSystemPage::getUrl(['sideTab' => 'jobs'])],
                     ['label' => Lang::ui('Reconciliation'), 'icon' => 'heroicon-o-shield-exclamation', 'url' => ReconciliationOverviewPage::getUrl()],
                     ['label' => Lang::ui('Fund settings'), 'icon' => 'heroicon-o-cog-6-tooth', 'url' => Settings::getUrl()],
                 ],

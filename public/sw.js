@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'fundflow-v6';
+const CACHE_VERSION = 'fundflow-v7';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 

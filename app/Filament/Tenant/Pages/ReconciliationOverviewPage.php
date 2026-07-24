@@ -6,8 +6,8 @@ namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Support\Action;
+use App\Filament\Support\MoneyDisplay;
 use App\Filament\Tenant\Concerns\EmbedsAsAuditWorkspacePanel;
-use App\Filament\Tenant\Concerns\InteractsWithAdvancedUi;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\ReconciliationExceptions\Tables\ReconciliationExceptionsTable;
 use App\Filament\Tenant\Support\BankClearingTabRegistry;
@@ -20,7 +20,10 @@ use App\Services\BankClearingMatchService;
 use App\Services\ReconciliationPdfService;
 use App\Services\ReconciliationReportService;
 use App\Services\ReconciliationService;
+use App\Support\AutomationScheduleSettings;
+use App\Support\BatchPostingGate;
 use App\Support\BusinessDay;
+use App\Support\ContributionPolicySettings;
 use App\Support\Reconciliation\ReconciliationHealthSummary;
 use BackedEnum;
 use Carbon\Carbon;
@@ -42,7 +45,6 @@ use UnitEnum;
 class ReconciliationOverviewPage extends Page implements HasTable
 {
     use EmbedsAsAuditWorkspacePanel;
-    use InteractsWithAdvancedUi;
     use InteractsWithTable;
     use TranslatesPageNavigationLabel;
 
@@ -111,7 +113,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
     public function getSubheading(): ?string
     {
-        return __('See whether the fund books are in balance and work through anything that needs attention.');
+        return __('Check fund balance, resolve open issues, and review stored snapshots. Scheduled runs use Settings → Reconciliation.');
     }
 
     /**
@@ -127,12 +129,11 @@ class ReconciliationOverviewPage extends Page implements HasTable
      */
     public function getReconciliationTabs(): array
     {
-        return ReconciliationTabRegistry::tabs($this->advancedUi);
+        return ReconciliationTabRegistry::tabs();
     }
 
     public function mount(): void
     {
-        $this->mountAdvancedUi();
         $this->normalizeSideTab();
         $this->ensureSnapshotSelected();
         $this->ensureExceptionSelected();
@@ -152,21 +153,76 @@ class ReconciliationOverviewPage extends Page implements HasTable
         }
     }
 
-    protected function onAdvancedUiToggled(): void
+    /**
+     * @return array{
+     *     bank_balance_label: string,
+     *     bank_date_label: string,
+     *     bank_critical_label: string,
+     *     tolerance_label: string,
+     *     month_boundary_label: string
+     * }
+     */
+    public function getReconciliationSettingsSummary(): array
     {
-        $this->normalizeSideTab();
-        $this->refreshWorkspacePanelActions();
-        $this->resetStuckActionState();
+        $bank = ReconciliationReportService::bankOptionsFromSettings();
+        $balance = $bank['declared_bank_balance'] ?? null;
+        $date = $bank['declared_bank_date'] ?? null;
+        $critical = (bool) ($bank['bank_mismatch_treat_as_critical'] ?? false);
+        $tolerance = ContributionPolicySettings::reconTolerance();
+        $monthDay = AutomationScheduleSettings::monthBoundaryDay();
+
+        return [
+            'bank_balance_label' => is_numeric($balance)
+                ? (MoneyDisplay::format((float) $balance) ?? (string) $balance)
+                : __('Not set'),
+            'bank_date_label' => filled($date)
+                ? __('As of :date', ['date' => $date])
+                : __('No statement date saved'),
+            'bank_critical_label' => $critical
+                ? __('Treated as critical on scheduled runs')
+                : __('Warning only (default)'),
+            'tolerance_label' => MoneyDisplay::format($tolerance) ?? number_format($tolerance, 2),
+            'month_boundary_label' => __('Day :day', ['day' => $monthDay]),
+        ];
     }
 
-    public function runCheckNow(): void
+    public function batchPostingIsHalted(): bool
+    {
+        return app(BatchPostingGate::class)->isHalted();
+    }
+
+    public function batchPostingHaltReason(): ?string
+    {
+        return app(BatchPostingGate::class)->reason();
+    }
+
+    public function clearBatchPostingHalt(): void
     {
         abort_unless(auth('tenant')->user()?->is_admin === true, 403);
 
-        $this->executeRun(
-            ReconciliationSnapshot::MODE_REALTIME,
-            ReconciliationReportService::bankOptionsFromSettings(),
-        );
+        app(BatchPostingGate::class)->clear();
+
+        Notification::make()
+            ->title(__('Batch posting halt cleared'))
+            ->success()
+            ->send();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function getAutomationScheduleSummary(): array
+    {
+        $monthDay = AutomationScheduleSettings::monthBoundaryDay();
+
+        return [
+            'invariants' => __('Daily at 06:00 — assert master cash/fund vs member sums'),
+            'daily' => __('Daily at 06:20 — store daily reconciliation snapshot'),
+            'nightly' => __('Daily at 06:30 — refresh exception queue (auto-resolve)'),
+            'monthly' => __('On day :day at 00:30 — monthly snapshot + statements', [
+                'day' => $monthDay,
+            ]),
+        ];
     }
 
     protected function normalizeSideTab(): void
@@ -285,7 +341,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
         return ReconciliationExceptionsTable::configure(
             $table->query($query),
             queueOnly: $this->sideTab === 'exceptions',
-            advancedUi: $this->advancedUi,
+            advancedUi: true,
             workspacePanel: $this->sideTab === 'exceptions',
             selectedExceptionId: $this->selectedExceptionId,
         );
@@ -439,20 +495,17 @@ class ReconciliationOverviewPage extends Page implements HasTable
         $bankSchema = $this->reconciliationBankSchema();
 
         $runRealtime = Action::make('run_realtime')
-            ->label(__('Real-time snapshot'))
+            ->label(__('Run check now'))
             ->icon('heroicon-o-play')
             ->color('primary')
             ->button()
             ->longRunning()
             ->longRunningMessage(__('Running real-time reconciliation checks and saving a snapshot.'))
             ->schema($bankSchema)
+            ->fillForm(fn (): array => $this->bankFormDefaultsFromSettings())
             ->modalHeading(__('Run real-time reconciliation'))
-            ->modalDescription(__('Recomputes all checks as of this moment and stores a snapshot tagged realtime.'))
+            ->modalDescription(__('Recomputes all checks as of this moment and stores a snapshot. Bank fields default from Settings → Reconciliation.'))
             ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_REALTIME, $this->optionsFromActionData($data)));
-
-        if (! $this->advancedUi) {
-            return [];
-        }
 
         $moreRuns = [
             Action::make('run_nightly')
@@ -491,8 +544,9 @@ class ReconciliationOverviewPage extends Page implements HasTable
                 ->longRunning()
                 ->longRunningMessage(__('Recording the daily snapshot and running ledger checks.'))
                 ->schema($bankSchema)
+                ->fillForm(fn (): array => $this->bankFormDefaultsFromSettings())
                 ->modalHeading(__('Record daily snapshot'))
-                ->modalDescription(__('Uses yesterday’s calendar window (app timezone) for period metrics, plus full ledger checks as of now.'))
+                ->modalDescription(__('Uses yesterday’s calendar window (app timezone) for period metrics, plus full ledger checks as of now. Bank fields default from Settings → Reconciliation.'))
                 ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_DAILY, $this->optionsFromActionData($data))),
             Action::make('run_monthly')
                 ->label(__('Monthly snapshot'))
@@ -500,19 +554,34 @@ class ReconciliationOverviewPage extends Page implements HasTable
                 ->longRunning()
                 ->longRunningMessage(__('Recording the monthly snapshot and running ledger checks.'))
                 ->schema($bankSchema)
+                ->fillForm(fn (): array => $this->bankFormDefaultsFromSettings())
                 ->modalHeading(__('Record monthly snapshot'))
-                ->modalDescription(__('Uses the previous calendar month for period metrics, plus full ledger checks as of now.'))
+                ->modalDescription(__('Uses the previous calendar month for period metrics, plus full ledger checks as of now. Bank fields default from Settings → Reconciliation.'))
                 ->action(fn (array $data) => $this->executeRun(ReconciliationSnapshot::MODE_MONTHLY, $this->optionsFromActionData($data))),
         ];
 
         return [
             $runRealtime,
             ActionGroup::make($moreRuns)
-                ->label(__('More reconciliation runs'))
+                ->label(__('More runs'))
                 ->icon('heroicon-o-ellipsis-horizontal')
                 ->color('gray')
                 ->button()
                 ->dropdownPlacement('bottom-end'),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function bankFormDefaultsFromSettings(): array
+    {
+        $opts = ReconciliationReportService::bankOptionsFromSettings();
+
+        return [
+            'declared_bank_balance' => $opts['declared_bank_balance'] ?? null,
+            'declared_bank_date' => $opts['declared_bank_date'] ?? null,
+            'bank_mismatch_treat_as_critical' => (bool) ($opts['bank_mismatch_treat_as_critical'] ?? false),
         ];
     }
 
@@ -526,14 +595,15 @@ class ReconciliationOverviewPage extends Page implements HasTable
                 ->label(__('Statement / bank closing balance'))
                 ->numeric()
                 ->nullable()
-                ->helperText(__('Optional. Compared to master cash book balance for this run.')),
+                ->helperText(__('Optional. Compared to master cash book balance for this run. Defaults from Settings → Reconciliation.')),
             DatePicker::make('declared_bank_date')
                 ->label(__('Statement as-of date'))
                 ->native(false)
                 ->nullable(),
             Toggle::make('bank_mismatch_treat_as_critical')
                 ->label(__('Treat bank vs book variance as critical (not only warning)'))
-                ->default(false),
+                ->default(false)
+                ->helperText(__('Also configurable under Settings → Reconciliation for scheduled runs.')),
         ];
     }
 
@@ -827,10 +897,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
             $userId = auth('tenant')->id();
             $snapshot = $service->persistSnapshot($report, is_int($userId) ? $userId : null);
             $this->selectedSnapshotId = $snapshot->id;
-
-            if ($this->advancedUi) {
-                $this->sideTab = 'snapshots';
-            }
+            $this->sideTab = 'snapshots';
 
             $pass = $report['verdict']['pass'] ?? false;
             $notification = Notification::make()

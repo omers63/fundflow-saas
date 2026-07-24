@@ -4,7 +4,7 @@ use App\Support\Reconciliation\ReconciliationExceptionPresenter as Presenter;
 
 $style = Presenter::severityStyle((string) $exception->severity);
 $contextItems = Presenter::contextItems($exception);
-$fixActions = Presenter::recommendedFixActions($exception, (bool) $this->advancedUi);
+$fixActions = Presenter::recommendedFixActions($exception, true);
 @endphp
 
 <div class="ff-recon-exception-detail space-y-5" wire:key="recon-exception-detail-{{ $exception->id }}">

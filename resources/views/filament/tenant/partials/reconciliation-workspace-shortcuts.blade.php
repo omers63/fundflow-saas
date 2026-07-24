@@ -46,7 +46,7 @@
                 {{ __('Settings') }}</p>
             <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ __('Tolerances & bank defaults') }}</p>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {{ __('Statement balance defaults and reconciliation thresholds.') }}</p>
+                {{ __('Settings → Reconciliation: statement balance, critical variance, digests, and match tolerance.') }}</p>
         </div>
     </a>
 </div>

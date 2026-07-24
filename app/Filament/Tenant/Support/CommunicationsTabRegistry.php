@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Support;
 
 use App\Filament\Tenant\Pages\CommunicationsWorkspacePage;
-use App\Filament\Tenant\Pages\Settings;
 
 final class CommunicationsTabRegistry
 {
@@ -36,7 +35,7 @@ final class CommunicationsTabRegistry
     public static function url(string $tab): string
     {
         return match ($tab) {
-            self::TAB_SETTINGS => Settings::getUrl(['tab' => 'communication::tab']),
+            self::TAB_SETTINGS => SettingsTabRegistry::url('communication::tab'),
             default => CommunicationsWorkspacePage::getUrl(['sideTab' => $tab]),
         };
     }

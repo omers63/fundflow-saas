@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Tenant\Pages\AuditSystemPage;
+use App\Filament\Tenant\Pages\CommunicationsWorkspacePage;
 use App\Filament\Tenant\Pages\FiscalYearClosePage;
 use App\Filament\Tenant\Pages\LegacyMigrationPage;
 use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
@@ -212,6 +213,7 @@ test('settings save from general tab preserves fiscal year settings', function (
 test('audit system tab registry exposes workspace tabs', function () {
     expect(AuditSystemTabRegistry::tabs())->toHaveKeys([
         'audit',
+        'access',
         'notifications',
         'jobs',
         'maintenance',
@@ -342,11 +344,7 @@ test('audit system page falls back to audit tab for invalid query tab', function
 });
 
 test('reconciliation tab registry exposes workspace tabs', function () {
-    expect(ReconciliationTabRegistry::tabs(false))->toHaveKeys([
-        'overview',
-        'exceptions',
-        'history',
-    ])->and(ReconciliationTabRegistry::tabs(true))->toHaveKeys([
+    expect(ReconciliationTabRegistry::tabs())->toHaveKeys([
         'overview',
         'exceptions',
         'history',
@@ -370,10 +368,10 @@ test('reconciliation page switches workspace tabs via livewire method', function
         ->test(ReconciliationOverviewPage::class)
         ->assertSet('sideTab', 'overview')
         ->assertSee(__('Fund status'))
-        ->call('setAdvancedUi', true)
+        ->assertSee(__('Current reconciliation settings'))
         ->call('setSideTab', 'methodology')
         ->assertSet('sideTab', 'methodology')
-        ->assertSee(__('Reconciliation approach'))
+        ->assertSee(__('How reconciliation works'))
         ->assertDontSee(__('Fund status'))
         ->call('setSideTab', 'exceptions')
         ->assertSet('sideTab', 'exceptions')
@@ -402,6 +400,23 @@ test('reconciliation page falls back to overview tab for invalid query tab', fun
 
 test('audit system page exposes navigation label', function () {
     expect(AuditSystemPage::getNavigationLabel())->toBe('Audit & System');
+});
+
+test('audit system page does not link to communications workspace', function () {
+    Filament::setCurrentPanel('tenant');
+
+    $admin = User::create([
+        'name' => 'Audit No Comms Link',
+        'email' => 'audit-no-comms@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(AuditSystemPage::class)
+        ->assertSuccessful()
+        ->assertDontSeeHtml(CommunicationsWorkspacePage::getUrl());
 });
 
 test('audit system page embeds maintenance workspace for tenant admin', function () {

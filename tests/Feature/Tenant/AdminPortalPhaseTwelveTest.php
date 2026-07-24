@@ -197,6 +197,7 @@ test('audit system workspace tabs render over livewire in english and arabic', f
     'ar',
 ])->with([
     'audit',
+    'access',
     'notifications',
     'jobs',
     'fiscal',

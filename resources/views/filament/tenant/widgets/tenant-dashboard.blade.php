@@ -553,7 +553,7 @@ $lateFeeTiers = [
                     <x-heroicon-o-bolt class="h-4 w-4 text-violet-500" />
                     <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Recent activity') }}</span>
                 </div>
-                <a href="{{ \App\Filament\Tenant\Resources\FundAuditLogs\FundAuditLogResource::getUrl('index') }}"
+                <a href="{{ \App\Filament\Tenant\Pages\AuditSystemPage::getUrl(['sideTab' => 'audit']) }}"
                     class="text-[11px] font-medium text-sky-600 hover:underline dark:text-sky-400">{{ __('All →') }}</a>
             </div>
             <div class="divide-y divide-gray-50 px-1 dark:divide-gray-800">
@@ -597,7 +597,7 @@ $lateFeeTiers = [
                     <x-heroicon-o-chart-pie class="h-4 w-4 text-indigo-500" />
                     <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Fund tier utilisation') }}</span>
                 </div>
-                <a href="{{ \App\Filament\Tenant\Resources\FundTiers\FundTierResource::getUrl('index') }}"
+                <a href="{{ \App\Filament\Tenant\Support\SettingsTabRegistry::url('fund-tiers::tab') }}"
                     class="text-[11px] font-medium text-sky-600 hover:underline dark:text-sky-400">{{ __('Manage →') }}</a>
             </div>
             <div class="space-y-3 p-4">

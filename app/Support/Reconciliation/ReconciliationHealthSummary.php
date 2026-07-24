@@ -56,7 +56,7 @@ final class ReconciliationHealthSummary
             'last_checked_at' => $lastCheckedAt,
             'last_checked_label' => $lastCheckedAt?->diffForHumans() ?? __('Not yet checked'),
             'next_check_at' => $nextCheckAt,
-            'next_check_label' => __('Next automatic check: :time', [
+            'next_check_label' => __('Next nightly exception batch: :time', [
                 'time' => $nextCheckAt->format('d M Y').' '.__('at').' '.$nextCheckAt->format('H:i'),
             ]),
         ];

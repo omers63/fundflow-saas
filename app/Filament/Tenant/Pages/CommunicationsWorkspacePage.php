@@ -10,6 +10,7 @@ use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Concerns\ManagesCommunicationsInbox;
 use App\Filament\Tenant\Resources\NotificationLogs\Tables\NotificationLogsTable;
 use App\Filament\Tenant\Support\CommunicationsTabRegistry;
+use App\Filament\Tenant\Support\SettingsTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Filament\Tenant\Support\TenantPortalViewModal;
 use App\Models\Tenant\MemberAnnouncement;
@@ -123,7 +124,7 @@ class CommunicationsWorkspacePage extends Page implements HasTable
     public function mount(): void
     {
         if ($this->sideTab === CommunicationsTabRegistry::TAB_SETTINGS) {
-            $this->redirect(Settings::getUrl(['tab' => 'communication::tab']));
+            $this->redirect(SettingsTabRegistry::url('communication::tab'));
 
             return;
         }

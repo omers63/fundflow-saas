@@ -89,7 +89,7 @@ test('tenant admin can access legacy migration page', function () {
     Setting::set('legacy_migration', 'members_imported', '1');
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(LegacyMigrationPage::class)
+        ->test(LegacyMigrationPage::class, ['embedded' => true])
         ->assertSuccessful()
         ->assertSee(__('Step 1: Import members'))
         ->call('goToStep', 2)
@@ -863,7 +863,7 @@ test('legacy migration classify payments writes downloadable classified csv', fu
     ]));
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(LegacyMigrationPage::class)
+        ->test(LegacyMigrationPage::class, ['embedded' => true])
         ->fillForm([
             'cutoff_date' => '2025-12-31',
             'default_password' => 'password123',
@@ -917,7 +917,7 @@ test('legacy migration blocks classify payments until members and loans are impo
     ]));
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(LegacyMigrationPage::class)
+        ->test(LegacyMigrationPage::class, ['embedded' => true])
         ->fillForm([
             'cutoff_date' => '2025-12-31',
         ])
@@ -962,7 +962,7 @@ test('legacy migration can classify payments without default password', function
     Setting::set('legacy_migration', 'loans_imported', '1');
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(LegacyMigrationPage::class)
+        ->test(LegacyMigrationPage::class, ['embedded' => true])
         ->set('currentStep', 3)
         ->fillForm([
             'cutoff_date' => '2025-12-31',
@@ -995,7 +995,7 @@ test('legacy migration pollClassificationStatus updates results when classificat
     Storage::disk('local')->put('legacy-migration/last-classified-payments.csv', "header\n");
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(LegacyMigrationPage::class)
+        ->test(LegacyMigrationPage::class, ['embedded' => true])
         ->set('currentStep', 3)
         ->set('lastKnownClassificationStatus', 'running')
         ->call('pollClassificationStatus')
@@ -2962,7 +2962,7 @@ test('legacy migration apply replays classified csv on step 5', function () {
     Setting::set('legacy_migration', 'classify_stats', json_encode(['contributions' => 1, 'loan_repayments' => 0, 'failed' => 0]));
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(LegacyMigrationPage::class)
+        ->test(LegacyMigrationPage::class, ['embedded' => true])
         ->set('currentStep', 5)
         ->call('runMigration', false)
         ->assertNotified(__('Migration complete'));

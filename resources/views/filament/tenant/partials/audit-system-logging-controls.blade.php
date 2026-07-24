@@ -23,9 +23,22 @@
                 </p>
             </div>
 
-            <div class="shrink-0">
-                <x-filament::button color="danger" outlined wire:click="{{ $truncateAction }}"
-                    wire:confirm="{{ $truncateConfirm }}">
+            <div class="flex shrink-0 flex-wrap items-center gap-2">
+                <x-filament::button
+                    color="gray"
+                    size="sm"
+                    icon="heroicon-o-arrow-down-tray"
+                    wire:click="{{ $exportAction }}"
+                >
+                    {{ $exportLabel ?? __('Export CSV') }}
+                </x-filament::button>
+                <x-filament::button
+                    color="danger"
+                    size="sm"
+                    icon="heroicon-o-trash"
+                    wire:click="{{ $truncateAction }}"
+                    wire:confirm="{{ $truncateConfirm }}"
+                >
                     {{ $truncateLabel }}
                 </x-filament::button>
             </div>

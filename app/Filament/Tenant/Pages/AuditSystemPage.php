@@ -9,12 +9,17 @@ use App\Filament\Tenant\Concerns\InteractsWithAdvancedUi;
 use App\Filament\Tenant\Concerns\InteractsWithJobsTable;
 use App\Filament\Tenant\Resources\FundAuditLogs\Tables\FundAuditLogsTable;
 use App\Filament\Tenant\Resources\NotificationLogs\Tables\NotificationLogsTable;
+use App\Filament\Tenant\Resources\PortalAccessLogs\Tables\PortalAccessLogsTable;
 use App\Filament\Tenant\Support\AuditSystemTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\FundAuditLog;
 use App\Models\Tenant\NotificationLog;
+use App\Models\Tenant\PortalAccessLog;
 use App\Models\Tenant\ReconciliationException;
 use App\Services\SystemLogMaintenanceService;
+use App\Services\Tenant\FundAuditLogExportService;
+use App\Services\Tenant\NotificationLogExportService;
+use App\Services\Tenant\PortalAccessLogExportService;
 use App\Support\BatchPostingGate;
 use App\Support\SystemLoggingSettings;
 use BackedEnum;
@@ -28,6 +33,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\Url;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use UnitEnum;
 
 class AuditSystemPage extends Page implements HasTable
@@ -49,7 +55,7 @@ class AuditSystemPage extends Page implements HasTable
 
     protected string $view = 'filament.tenant.pages.audit-system';
 
-    /** @var 'audit'|'notifications'|'jobs'|'maintenance'|'migration'|'fiscal' */
+    /** @var 'audit'|'access'|'notifications'|'jobs'|'maintenance'|'migration'|'fiscal' */
     #[Url(as: 'sideTab')]
     public string $sideTab = 'audit';
 
@@ -60,6 +66,8 @@ class AuditSystemPage extends Page implements HasTable
     public bool $auditLoggingEnabled = false;
 
     public bool $notificationLoggingEnabled = false;
+
+    public bool $portalAccessLoggingEnabled = false;
 
     public static function canAccess(): bool
     {
@@ -93,7 +101,7 @@ class AuditSystemPage extends Page implements HasTable
 
     public function getSubheading(): ?string
     {
-        return __('Audit trail, notification delivery, automation, maintenance, migration, and year-end close.');
+        return __('Audit trail, portal access, notification delivery, automation, maintenance, migration, and year-end close.');
     }
 
     /**
@@ -132,6 +140,7 @@ class AuditSystemPage extends Page implements HasTable
 
         $this->auditLoggingEnabled = SystemLoggingSettings::fundAuditLogEnabled();
         $this->notificationLoggingEnabled = SystemLoggingSettings::notificationLogEnabled();
+        $this->portalAccessLoggingEnabled = SystemLoggingSettings::portalAccessLogEnabled();
     }
 
     public function batchPostingIsHalted(): bool
@@ -164,7 +173,7 @@ class AuditSystemPage extends Page implements HasTable
         $this->sideTab = $tab;
         $this->tableSort = null;
 
-        if (in_array($tab, ['audit', 'notifications', 'jobs'], true)) {
+        if (in_array($tab, ['audit', 'access', 'notifications', 'jobs'], true)) {
             $this->reconfigureTableForSideTab();
             $this->resetTable();
         }
@@ -194,6 +203,11 @@ class AuditSystemPage extends Page implements HasTable
     public function notificationLogRowCount(): int
     {
         return app(SystemLogMaintenanceService::class)->notificationLogRowCount();
+    }
+
+    public function portalAccessLogRowCount(): int
+    {
+        return app(SystemLogMaintenanceService::class)->portalAccessLogRowCount();
     }
 
     public function updatedAuditLoggingEnabled(bool $value): void
@@ -234,6 +248,25 @@ class AuditSystemPage extends Page implements HasTable
             ->send();
     }
 
+    public function updatedPortalAccessLoggingEnabled(bool $value): void
+    {
+        if (! $this->tenantUserIsAdmin()) {
+            $this->portalAccessLoggingEnabled = SystemLoggingSettings::portalAccessLogEnabled();
+
+            return;
+        }
+
+        SystemLoggingSettings::setPortalAccessLogEnabled($value);
+
+        Notification::make()
+            ->title($value ? __('Access logging enabled') : __('Access logging disabled'))
+            ->body($value
+                ? __('Portal sign-ins will be stored in the access log table.')
+                : __('Portal sign-ins will not be stored until logging is turned back on.'))
+            ->success()
+            ->send();
+    }
+
     public function truncateFundAuditLogs(): void
     {
         abort_unless($this->tenantUserIsAdmin(), 403);
@@ -251,6 +284,13 @@ class AuditSystemPage extends Page implements HasTable
         $this->resetTable();
     }
 
+    public function exportFundAuditLogs(): StreamedResponse
+    {
+        abort_unless($this->tenantUserIsAdmin(), 403);
+
+        return app(FundAuditLogExportService::class)->downloadCsvFromQuery($this->auditLogQuery());
+    }
+
     public function truncateNotificationLogs(): void
     {
         abort_unless($this->tenantUserIsAdmin(), 403);
@@ -266,6 +306,37 @@ class AuditSystemPage extends Page implements HasTable
             ->send();
 
         $this->resetTable();
+    }
+
+    public function exportNotificationLogs(): StreamedResponse
+    {
+        abort_unless($this->tenantUserIsAdmin(), 403);
+
+        return app(NotificationLogExportService::class)->downloadCsv();
+    }
+
+    public function truncatePortalAccessLogs(): void
+    {
+        abort_unless($this->tenantUserIsAdmin(), 403);
+
+        $removed = app(SystemLogMaintenanceService::class)->truncatePortalAccessLogs();
+
+        Notification::make()
+            ->title(__('Access log table emptied'))
+            ->body($removed > 0
+                ? __('Removed :count access log row(s).', ['count' => number_format($removed)])
+                : __('The access log table was already empty.'))
+            ->success()
+            ->send();
+
+        $this->resetTable();
+    }
+
+    public function exportPortalAccessLogs(): StreamedResponse
+    {
+        abort_unless($this->tenantUserIsAdmin(), 403);
+
+        return app(PortalAccessLogExportService::class)->downloadCsv();
     }
 
     protected function reconfigureTableForSideTab(): void
@@ -286,6 +357,9 @@ class AuditSystemPage extends Page implements HasTable
     public function table(Table $table): Table
     {
         return match ($this->sideTab) {
+            'access' => PortalAccessLogsTable::configure(
+                $table->query(PortalAccessLog::query())
+            ),
             'notifications' => NotificationLogsTable::configure(
                 $table->query(NotificationLog::query())
             ),

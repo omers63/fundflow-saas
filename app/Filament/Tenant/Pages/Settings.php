@@ -463,7 +463,7 @@ class Settings extends Page implements HasForms
                             ->columnSpanFull()
                             ->content(fn (): string => __('Run readiness checks on the Year-end close page.'))
                             ->helperText(new HtmlString(
-                                '<a class="text-primary-600 underline" href="'.e(FiscalYearClosePage::getUrl()).'">'
+                                '<a class="text-primary-600 underline" href="'.e(AuditSystemPage::getUrl(['sideTab' => 'fiscal'])).'">'
                                 .e(__('Open year-end close')).'</a>'
                             )),
                     ]),
@@ -915,7 +915,7 @@ class Settings extends Page implements HasForms
             ],
             'reconciliation::tab' => [
                 Section::make(__('Bank vs book'))
-                    ->description(__('Optional declared bank closing balance merged into scheduled fund:reconcile runs and available as defaults on the reconciliation page.'))
+                    ->description(__('Declared bank closing balance and critical variance for scheduled fund:reconcile runs and as defaults when you Run check now on the reconciliation page.'))
                     ->columns(2)
                     ->schema([
                         TextInput::make('reconciliation_bank_statement_balance')

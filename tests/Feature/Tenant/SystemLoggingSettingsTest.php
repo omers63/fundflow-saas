@@ -30,11 +30,12 @@ beforeEach(function () {
     SystemLoggingSettings::setNotificationLogEnabled(true);
 });
 
-test('system logging defaults to disabled when settings are not stored', function () {
+test('system logging defaults when settings are not stored', function () {
     Setting::query()->where('group', SystemLoggingSettings::GROUP)->delete();
 
     expect(SystemLoggingSettings::fundAuditLogEnabled())->toBeFalse()
-        ->and(SystemLoggingSettings::notificationLogEnabled())->toBeFalse();
+        ->and(SystemLoggingSettings::notificationLogEnabled())->toBeFalse()
+        ->and(SystemLoggingSettings::portalAccessLogEnabled())->toBeTrue();
 });
 
 test('fund audit log service skips persistence when audit logging is disabled', function () {

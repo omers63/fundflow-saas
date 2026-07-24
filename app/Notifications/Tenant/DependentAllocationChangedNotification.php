@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Notifications\Tenant;
 
-use App\Filament\Member\Pages\MyContributionSettingsPage;
+use App\Filament\Member\Pages\MemberSettingsPage;
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Support\MoneyDisplay;
 use App\Filament\Tenant\Resources\Members\MemberResource;
@@ -205,7 +205,7 @@ class DependentAllocationChangedNotification extends Notification
         $this->change->loadMissing(['dependent', 'parent']);
 
         $url = match ($this->role) {
-            'dependent' => MyContributionSettingsPage::getUrl(panel: 'member'),
+            'dependent' => MemberSettingsPage::getUrl(['tab' => 'contributions'], panel: 'member'),
             'parent' => MyDependentResource::getUrl('index', panel: 'member'),
             default => $this->change->dependent instanceof Member
                 ? MemberResource::getUrl('view', ['record' => $this->change->dependent], panel: 'tenant')

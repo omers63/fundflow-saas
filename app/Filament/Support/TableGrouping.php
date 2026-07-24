@@ -21,6 +21,7 @@ use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
+use App\Models\Tenant\PortalAccessLog;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\SmsImportSession;
 use App\Models\Tenant\SmsImportTemplate;
@@ -845,6 +846,25 @@ final class TableGrouping
                 ->titlePrefixedWithLabel(false),
             Group::make('sent_at')
                 ->label(__('Sent'))
+                ->date(),
+        ];
+    }
+
+    /**
+     * @return array<int, Group>
+     */
+    public static function portalAccessLogs(): array
+    {
+        return [
+            Group::make('member_name')
+                ->label(__('Member name'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn (PortalAccessLog $record): string => $record->displayName()),
+            Group::make('panel')
+                ->label(__('Portal'))
+                ->titlePrefixedWithLabel(false),
+            Group::make('accessed_at')
+                ->label(__('Accessed at'))
                 ->date(),
         ];
     }

@@ -73,7 +73,15 @@ test('submit auto-accepts deposits when automation setting is enabled', function
     Setting::set(AutomationScheduleSettings::GROUP, 'auto_accept_deposits', '1');
     Setting::set(AutomationScheduleSettings::GROUP, 'auto_apply_collections', '0');
 
+    $memberUser = User::create([
+        'name' => 'John Doe',
+        'email' => 'john-auto-deposit@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => false,
+    ]);
+
     $member = Member::create([
+        'user_id' => $memberUser->id,
         'member_number' => 'MEM-0001',
         'name' => 'John Doe',
         'monthly_contribution_amount' => 5000,
@@ -91,6 +99,8 @@ test('submit auto-accepts deposits when automation setting is enabled', function
         User::query()->where('is_admin', true)->get(),
         NewFundPostingNotification::class,
     );
+
+    Notification::assertSentTo($memberUser, FundPostingAcceptedNotification::class);
 });
 
 test('accept is a no-op when the deposit is already accepted', function () {

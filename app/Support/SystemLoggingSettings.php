@@ -18,6 +18,7 @@ final class SystemLoggingSettings
         return [
             'fund_audit_log_enabled' => false,
             'notification_log_enabled' => false,
+            'portal_access_log_enabled' => true,
         ];
     }
 
@@ -31,6 +32,11 @@ final class SystemLoggingSettings
         return (bool) self::get('notification_log_enabled');
     }
 
+    public static function portalAccessLogEnabled(): bool
+    {
+        return (bool) self::get('portal_access_log_enabled');
+    }
+
     public static function setFundAuditLogEnabled(bool $enabled): void
     {
         Setting::set(self::GROUP, 'fund_audit_log_enabled', $enabled);
@@ -39,6 +45,11 @@ final class SystemLoggingSettings
     public static function setNotificationLogEnabled(bool $enabled): void
     {
         Setting::set(self::GROUP, 'notification_log_enabled', $enabled);
+    }
+
+    public static function setPortalAccessLogEnabled(bool $enabled): void
+    {
+        Setting::set(self::GROUP, 'portal_access_log_enabled', $enabled);
     }
 
     private static function get(string $key): bool

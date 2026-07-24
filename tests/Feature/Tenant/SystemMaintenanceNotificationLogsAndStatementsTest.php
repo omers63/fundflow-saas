@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Filament\Tenant\Pages\AuditSystemPage;
 use App\Filament\Tenant\Pages\SystemMaintenancePage;
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
 use App\Filament\Tenant\Resources\MonthlyStatements\Pages\ListMonthlyStatements;
-use App\Filament\Tenant\Resources\NotificationLogs\Pages\ListNotificationLogs;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MonthlyStatement;
 use App\Models\Tenant\NotificationLog;
@@ -62,19 +62,23 @@ test('tenant admin can access system maintenance and notification log pages', fu
     Filament::setCurrentPanel('tenant');
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(SystemMaintenancePage::class)
+        ->test(SystemMaintenancePage::class, ['embedded' => true])
         ->assertSuccessful()
         ->assertSee(__('Database backups'))
         ->assertDontSee(__('Purge database (destructive)'));
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(SystemMaintenancePage::class)
+        ->test(SystemMaintenancePage::class, ['embedded' => true])
         ->call('setAdvancedUi', true)
-        ->assertSee(__('Purge database (destructive)'));
+        ->assertSee(__('Purge database (destructive)'))
+        ->assertSee(__('Tables that will be emptied'))
+        ->assertSeeHtml('ff-maintenance-danger-banner')
+        ->assertSeeHtml('ff-maintenance-scroll');
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(ListNotificationLogs::class)
-        ->assertSuccessful();
+        ->test(AuditSystemPage::class, ['sideTab' => 'notifications'])
+        ->assertSuccessful()
+        ->assertSee(__('Notification delivery log'));
 });
 
 test('notification delivery is logged when a notification is sent', function () {

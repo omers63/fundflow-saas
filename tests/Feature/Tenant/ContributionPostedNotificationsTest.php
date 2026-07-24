@@ -44,6 +44,7 @@ function createMemberWithUserForPostedNotification(AccountingService $accounting
         'email' => 'posted-member@test.com',
         'password' => bcrypt('password'),
         'is_admin' => false,
+        'preferred_locale' => 'en',
     ], $overrides['user'] ?? []));
 
     $member = Member::create(array_merge([

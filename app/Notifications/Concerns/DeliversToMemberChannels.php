@@ -164,8 +164,8 @@ trait DeliversToMemberChannels
             $message = (new WebPushMessage)
                 ->title($title)
                 ->body($body)
-                ->icon(WebPushNotification::ICON_PATH)
-                ->badge(WebPushNotification::BADGE_PATH)
+                ->icon(WebPushNotification::iconUrl())
+                ->badge(WebPushNotification::badgeUrl())
                 ->options(['TTL' => 86400]);
 
             if (isset($meta['loan_id'])) {

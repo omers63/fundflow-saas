@@ -141,6 +141,11 @@ final class AutomationScheduleSettings
             return max(1, min(28, (int) $stored));
         }
 
+        // Registry labels resolve outside tenancy (TenantAwareScheduledCommand::execute).
+        if (! function_exists('tenancy') || ! tenancy()->initialized) {
+            return 6;
+        }
+
         return Setting::contributionCycleStartDay();
     }
 

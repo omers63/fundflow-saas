@@ -2,7 +2,9 @@
 
 namespace App\Livewire\Tenant;
 
+use App\Models\Tenant\PortalAccessLog;
 use App\Models\Tenant\User;
+use App\Services\PortalAccessLogService;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
@@ -103,6 +105,12 @@ class TenantAdminLoginPage extends Component
         RateLimiter::clear($this->throttleKey());
         session()->regenerate();
         session()->put('locale', $user->preferredLocale());
+
+        app(PortalAccessLogService::class)->record(
+            $user,
+            PortalAccessLog::PANEL_ADMIN,
+            $user->member,
+        );
 
         $this->redirectIntended(Filament::getPanel('tenant')->getUrl());
     }

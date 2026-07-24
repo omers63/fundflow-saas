@@ -67,6 +67,7 @@ class SystemMaintenancePage extends Page
     public function mount(DatabaseMaintenanceService $service, bool $embedded = false): void
     {
         $this->mountEmbedded($embedded);
+        $this->redirectToAuditWorkspaceUnlessEmbedded('maintenance');
         $this->mountAdvancedUi();
         $this->refreshTableLists($service);
         $this->memberPortalMaintenanceEnabled = MemberPortalMaintenance::isEnabled();

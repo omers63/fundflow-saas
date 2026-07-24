@@ -6,9 +6,9 @@ namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
-use App\Filament\Tenant\Resources\FundTiers\FundTierResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
+use App\Filament\Tenant\Support\SettingsTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Services\Tenant\TenantAdminReportExportService;
 use BackedEnum;
@@ -109,7 +109,7 @@ class ReportsPage extends Page
                 'title' => __('Fund tier utilisation'),
                 'description' => __('Inspect committed and available capacity by fund tier.'),
                 'icon' => 'heroicon-o-chart-pie',
-                'url' => FundTierResource::getUrl('index'),
+                'url' => SettingsTabRegistry::url('fund-tiers::tab'),
                 'badge' => null,
             ],
             [

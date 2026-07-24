@@ -12,7 +12,7 @@
                 {{ $this->form }}
 
                 <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4 dark:border-white/10">
-                    <a href="{{ \App\Filament\Tenant\Pages\Settings::getUrl() }}"
+                    <a href="{{ \App\Filament\Tenant\Support\SettingsTabRegistry::url('fiscal-calendar::tab') }}"
                         class="text-sm font-medium text-sky-600 hover:underline dark:text-sky-400">
                         {{ __('Fiscal calendar settings') }}
                     </a>

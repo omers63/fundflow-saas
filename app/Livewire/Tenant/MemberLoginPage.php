@@ -4,8 +4,10 @@ namespace App\Livewire\Tenant;
 
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberRequest;
+use App\Models\Tenant\PortalAccessLog;
 use App\Models\Tenant\User;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Services\PortalAccessLogService;
 use App\Services\Tenant\HouseholdProfileVerificationService;
 use App\Services\Tenant\MemberHouseholdLoginService;
 use App\Services\Tenant\MemberRequestService;
@@ -417,6 +419,12 @@ class MemberLoginPage extends Component
                     session()->regenerate();
                     session()->put('locale', $user->preferredLocale());
 
+                    app(PortalAccessLogService::class)->record(
+                        $user,
+                        PortalAccessLog::PANEL_ADMIN,
+                        $member,
+                    );
+
                     $this->redirectIntended($tenantPanel->getUrl());
 
                     return;
@@ -440,6 +448,12 @@ class MemberLoginPage extends Component
             MemberPortalMaintenance::syncSessionEpoch();
             session()->forget(self::STATUS_REQUEST_SESSION_KEY);
 
+            app(PortalAccessLogService::class)->record(
+                $user,
+                PortalAccessLog::PANEL_MEMBER,
+                $member,
+            );
+
             $this->redirectIntended($memberPanel->getUrl());
 
             return;
@@ -449,6 +463,12 @@ class MemberLoginPage extends Component
             Auth::guard('tenant')->login($user, $this->remember);
             session()->regenerate();
             session()->put('locale', $user->preferredLocale());
+
+            app(PortalAccessLogService::class)->record(
+                $user,
+                PortalAccessLog::PANEL_ADMIN,
+                $user->member,
+            );
 
             $this->redirectIntended($tenantPanel->getUrl());
 

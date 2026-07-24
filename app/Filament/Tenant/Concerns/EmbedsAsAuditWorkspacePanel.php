@@ -130,6 +130,15 @@ trait EmbedsAsAuditWorkspacePanel
         return $actions;
     }
 
+    protected function redirectToAuditWorkspaceUnlessEmbedded(string $sideTab): void
+    {
+        if ($this->embedded) {
+            return;
+        }
+
+        $this->redirect($this->embeddedWorkspaceUrl($sideTab));
+    }
+
     protected function embeddedWorkspaceUrl(string $sideTab): string
     {
         return AuditSystemPage::getUrl(['sideTab' => $sideTab]);

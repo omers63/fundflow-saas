@@ -92,7 +92,7 @@ test('filament stored upload path resolves livewire temporary file references', 
     FileUploadConfiguration::storage()->put($temporaryPath, "member_number,name,email\n1,Temp,temp@fund.test\n");
 
     $resolved = FilamentStoredUploadPath::tryResolveReadableCsvToAbsolutePath([
-        'livewire-file:' . $filename,
+        'livewire-file:'.$filename,
     ]);
 
     expect($resolved)->not->toBeNull()
@@ -111,7 +111,7 @@ test('legacy migration livewire upload writes working members file', function ()
     ]));
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(LegacyMigrationPage::class)
+        ->test(LegacyMigrationPage::class, ['embedded' => true])
         ->set('pendingMembersCsv', $file)
         ->assertNotified(__('CSV uploaded'));
 
@@ -127,7 +127,7 @@ test('legacy migration loans step renders loans and payments upload cards', func
     Setting::set('legacy_migration', 'members_imported', '1');
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(LegacyMigrationPage::class)
+        ->test(LegacyMigrationPage::class, ['embedded' => true])
         ->call('goToStep', 2)
         ->assertSuccessful()
         ->assertSee(__('Step 2: Import loans'), false)
@@ -146,7 +146,7 @@ test('legacy migration apply step renders without markup errors', function () {
     );
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(LegacyMigrationPage::class)
+        ->test(LegacyMigrationPage::class, ['embedded' => true])
         ->call('goToStep', 5)
         ->assertSuccessful()
         ->assertSee(__('Step 5: Apply migration'), false);
@@ -163,7 +163,7 @@ test('legacy migration import members reads working copy from disk', function ()
     ]));
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(LegacyMigrationPage::class)
+        ->test(LegacyMigrationPage::class, ['embedded' => true])
         ->fillForm([
             'cutoff_date' => '2025-12-31',
             'default_password' => 'password123',
