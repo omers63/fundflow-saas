@@ -13,8 +13,10 @@ use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Section;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
 use Livewire\Component;
@@ -47,31 +49,61 @@ final class MembershipApplicationListTableHeaderActions
                 ->color('success')
                 ->visible(fn (): bool => MembershipApplicationResource::canCreate())
                 ->modalHeading(__('Import applications from CSV'))
-                ->modalDescription(fn (): HtmlString => new HtmlString(
-                    view('filament.tenant.membership-application-import-csv-help')->render()
-                ))
-                ->modalWidth('lg')
+                ->modalWidth('2xl')
                 ->schema([
-                    FileUpload::make('csv_file')
-                        ->label(__('CSV file'))
-                        ->disk('local')
-                        ->directory('membership-application-imports')
-                        ->maxFiles(1)
-                        ->helperText(__('Upload comma-separated data (typical .csv). If parsing fails, the importer will show detailed row errors.'))
-                        ->required(),
-                    TextInput::make('default_password')
-                        ->label(__('Default password'))
-                        ->password()
-                        ->revealable()
-                        ->required()
-                        ->minLength(8)
-                        ->helperText(__('Used when the password column is empty or shorter than 8 characters. Applicants should change it after first login.')),
-                    DatePicker::make('arrears_cutoff_date')
-                        ->label(__('Cut-off date'))
-                        ->required()
-                        ->maxDate(BusinessDay::now())
-                        ->native(false)
-                        ->helperText(__('Contribution cycles before this date are not treated as arrears on approval. Optional CSV columns post cut-off cash and fund balances to master and member accounts.')),
+                    Section::make(__('Import settings'))
+                        ->schema([
+                            FileUpload::make('csv_file')
+                                ->label(__('CSV file'))
+                                ->disk('local')
+                                ->directory('membership-application-imports')
+                                ->maxFiles(1)
+                                ->helperText(__('Upload comma-separated data (typical .csv). If parsing fails, the importer will show detailed row errors.'))
+                                ->required(),
+                            TextInput::make('default_password')
+                                ->label(__('Default password'))
+                                ->password()
+                                ->revealable()
+                                ->required()
+                                ->minLength(8)
+                                ->helperText(__('Used when the password column is empty or shorter than 8 characters. Applicants should change it after first login.')),
+                            DatePicker::make('arrears_cutoff_date')
+                                ->label(__('Cut-off date'))
+                                ->required()
+                                ->maxDate(BusinessDay::now())
+                                ->native(false)
+                                ->helperText(__('Contribution cycles before this date are not treated as arrears on approval. Optional CSV columns post cut-off cash and fund balances to master and member accounts.')),
+                        ]),
+                    Section::make(__('Need a starter file?'))
+                        ->collapsible()
+                        ->collapsed()
+                        ->schema([
+                            self::helpPlaceholder('sample'),
+                        ]),
+                    Section::make(__('CSV format'))
+                        ->collapsible()
+                        ->collapsed()
+                        ->schema([
+                            self::helpPlaceholder('format'),
+                        ]),
+                    Section::make(__('Required Columns'))
+                        ->collapsible()
+                        ->collapsed()
+                        ->schema([
+                            self::helpPlaceholder('required'),
+                        ]),
+                    Section::make(__('Optional Columns'))
+                        ->collapsible()
+                        ->collapsed()
+                        ->schema([
+                            self::helpPlaceholder('optional'),
+                        ]),
+                    Section::make(__('Row Handling Rules'))
+                        ->collapsible()
+                        ->collapsed()
+                        ->schema([
+                            self::helpPlaceholder('rules'),
+                        ]),
                 ])
                 ->action(function (array $data, Component $livewire): void {
                     $mounted = collect($livewire->mountedActions ?? [])->last();
@@ -157,6 +189,17 @@ final class MembershipApplicationListTableHeaderActions
                     }
                 }),
         );
+    }
+
+    private static function helpPlaceholder(string $section): Placeholder
+    {
+        return Placeholder::make('import_help_'.$section)
+            ->hiddenLabel()
+            ->content(new HtmlString(
+                view('filament.tenant.membership-application-import-csv-help', [
+                    'section' => $section,
+                ])->render()
+            ));
     }
 
     /**

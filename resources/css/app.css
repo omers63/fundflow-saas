@@ -455,6 +455,40 @@
         transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
 
+    .member-login-password-wrap {
+        position: relative;
+    }
+
+    .member-login-input--with-toggle {
+        padding-inline-end: 2.75rem;
+    }
+
+    .member-login-password-toggle {
+        position: absolute;
+        inset-inline-end: 0.65rem;
+        top: 50%;
+        display: inline-flex;
+        transform: translateY(-50%);
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.5rem;
+        padding: 0.25rem;
+        color: #64748b;
+        background: transparent;
+        border: 0;
+        cursor: pointer;
+    }
+
+    .member-login-password-toggle:hover {
+        color: #0f172a;
+        background: rgb(148 163 184 / 0.15);
+    }
+
+    .member-login-password-toggle:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 3px rgb(16 185 129 / 0.25);
+    }
+
     .member-login-input:focus {
         outline: none;
         border-color: #10b981;

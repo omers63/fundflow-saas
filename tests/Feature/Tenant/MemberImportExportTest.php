@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Support\MemberListTableHeaderActions;
 use App\Filament\Tenant\Resources\Members\Pages\ListMembers;
 use App\Filament\Tenant\Resources\Members\Pages\ViewMember;
 use App\Models\Central\Tenant;
@@ -20,6 +21,8 @@ use App\Support\BusinessDay;
 use App\Support\LoanEligibilityGate;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
+use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\Section;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
@@ -338,6 +341,36 @@ test('members list exposes table header import export and create actions', funct
         ->all();
 
     expect($names)->toContain('importMembers', 'exportMembers', 'create');
+});
+
+test('import members modal uses collapsible csv guide sections', function () {
+    $action = MemberListTableHeaderActions::importMembersAction();
+    $schemaProperty = new ReflectionProperty($action, 'schema');
+    /** @var list<Component> $components */
+    $components = $schemaProperty->getValue($action);
+
+    $sections = collect($components)
+        ->filter(fn($component): bool => $component instanceof Section)
+        ->values();
+
+    expect($sections)->toHaveCount(6)
+        ->and($sections[0]->getHeading())->toBe(__('Import settings'))
+        ->and($sections[0]->isCollapsible())->toBeFalse()
+        ->and($sections[0]->isCollapsed())->toBeFalse();
+
+    $guideHeadings = [
+        __('Need a starter file?'),
+        __('CSV format'),
+        __('Required Columns'),
+        __('Optional Columns'),
+        __('Row Handling Rules'),
+    ];
+
+    foreach ($sections->slice(1)->values() as $index => $section) {
+        expect($section->getHeading())->toBe($guideHeadings[$index])
+            ->and($section->isCollapsible())->toBeTrue()
+            ->and($section->isCollapsed())->toBeTrue();
+    }
 });
 
 test('member workspace exposes membership and arrears header actions', function () {
