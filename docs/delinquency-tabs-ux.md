@@ -133,3 +133,33 @@ Two independent Settings sections block new loan applications after too many **l
 Outstanding unpaid contribution/EMI arrears (excluding the open cycle) still block loans separately, before late-history checks.
 
 **Delinquency policy** (consecutive / rolling **missed unpaid** closed cycles) remains a flagging signal for daily arrears checks; it does not replace the late-settlement loan gate.
+
+---
+
+## 3. “Run delinquency check” toast — what the numbers mean
+
+The toast looks like:
+
+> Overdue: *N* · Arrears: *N* · Clear: *N* · Warnings: *N* · Guarantor debits: *N*
+
+These are **results of that run**, not always a dedicated list for each metric.
+
+| Result | Meaning | Where to check |
+|--------|---------|----------------|
+| **Overdue** | How many EMIs were **newly** flipped to `overdue` this run | **Loans → Delinquency → Overdue installments**. `0` = none new this time (already overdue earlier, or none past deadline yet). |
+| **Arrears** | Misleading label — **policy-breach count** among active members (Settings → Delinquency policy consecutive/rolling **missed unpaid** cycles), **not** the Contributions Arrears table | No separate list for this counter. Related queues: **Members → Arrears** or **Contributions → Ledger → Arrears** for outstanding unpaid items. |
+| **Clear** | Active members who **do not** breach that policy (scanned this run) | Not a UI queue — just “looked fine vs policy.” |
+| **Warnings** | Borrower **warning notifications** for overdue EMIs still within grace | **Notification logs** (admin) and the **member’s notifications**; related loans under **Loans → Delinquency → Overdue** / loan installments. |
+| **Guarantor debits** | Times a **guarantor’s fund was debited** for overdue EMIs past grace | **Loans → Delinquency → Guarantor exposure**; open the loan → installments (`paid_by_guarantor`); guarantor **fund ledger** / transactions; guarantor notification logs. |
+
+### Example
+
+`Overdue: 0 · Arrears: 0 · Clear: 85 · Warnings: 19 · Guarantor debits: 9` means:
+
+- No **new** EMI overdues this pass.
+- 85 active members clear of policy breach; 0 currently counted as policy-breaching.
+- 19 warning notices and 9 guarantor debits **already ran** — review **Guarantor exposure** + **Notification logs**, not Contributions Arrears.
+
+### Label caveat
+
+The toast keys **Arrears** / **Clear** come from `syncMemberDelinquencyStatus()` (`delinquent_count` / `cleared_count`) and are easy to confuse with contribution or collection arrears. Prefer reading them as **policy breaches** / **policy clear** until the toast copy is renamed.
