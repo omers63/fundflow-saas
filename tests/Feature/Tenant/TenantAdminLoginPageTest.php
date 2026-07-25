@@ -46,6 +46,8 @@ test('tenant admin login page renders styled auth card', function () {
         ->assertSee(__('Member portal'), false)
         ->assertSee('tenant-public-nav', false)
         ->assertSee('tenant-public-footer', false)
+        ->assertSee('member-login-password-toggle', false)
+        ->assertSee(__('Show password'), false)
         ->assertDontSee('fi-simple-header', false);
 });
 

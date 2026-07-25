@@ -1,5 +1,6 @@
 <?php
 
+use App\Filament\Support\MembershipApplicationListTableHeaderActions;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Filament\Tenant\Resources\MembershipApplications\Pages\CreateMembershipApplication;
 use App\Filament\Tenant\Resources\MembershipApplications\Pages\EditMembershipApplication;
@@ -13,6 +14,8 @@ use App\Services\MembershipApplicationImportService;
 use App\Support\PublicPageSettings;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
+use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\Section;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
@@ -134,6 +137,36 @@ test('applications list shows purpose subheading and table header actions for ad
     foreach ($tableHeaderActions as $action) {
         expect($action->isIconButton())->toBeTrue()
             ->and($action->getTooltip())->not->toBeEmpty();
+    }
+});
+
+test('import applications modal uses collapsible csv guide sections', function () {
+    $action = MembershipApplicationListTableHeaderActions::importApplicationsAction();
+    $schemaProperty = new ReflectionProperty($action, 'schema');
+    /** @var list<Component> $components */
+    $components = $schemaProperty->getValue($action);
+
+    $sections = collect($components)
+        ->filter(fn ($component): bool => $component instanceof Section)
+        ->values();
+
+    expect($sections)->toHaveCount(6)
+        ->and($sections[0]->getHeading())->toBe(__('Import settings'))
+        ->and($sections[0]->isCollapsible())->toBeFalse()
+        ->and($sections[0]->isCollapsed())->toBeFalse();
+
+    $guideHeadings = [
+        __('Need a starter file?'),
+        __('CSV format'),
+        __('Required Columns'),
+        __('Optional Columns'),
+        __('Row Handling Rules'),
+    ];
+
+    foreach ($sections->slice(1)->values() as $index => $section) {
+        expect($section->getHeading())->toBe($guideHeadings[$index])
+            ->and($section->isCollapsible())->toBeTrue()
+            ->and($section->isCollapsed())->toBeTrue();
     }
 });
 

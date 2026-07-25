@@ -42,6 +42,7 @@ use Filament\Actions\ViewAction;
 use Filament\Auth\Http\Responses\Contracts\LogoutResponse;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Field;
+use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Tabs;
@@ -221,6 +222,12 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Field::configureUsing(fn (Field $field): Field => $field->translateLabel());
+
+        TextInput::configureUsing(
+            fn (TextInput $input): TextInput => $input->revealable(
+                fn (TextInput $component): bool => $component->isPassword(),
+            ),
+        );
 
         FilamentAction::configureUsing(function (FilamentAction $action): FilamentAction {
             $action = $action->translateLabel();

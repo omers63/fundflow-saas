@@ -994,6 +994,7 @@
     "CSV column reference & sample downloads": "مرجع أعمدة CSV ونماذج للتنزيل",
     "CSV file": "ملف CSV",
     "CSV format": "تنسيق CSV",
+    "Import settings": "إعدادات الاستيراد",
     "CSV import": "استيراد CSV",
     "CSV import cut-off": "قطع الاستيراد من CSV",
     "CSV lines with the same amount are listed (closest dates first). Auto-match still uses the configured date window.": "تُعرض أسطر CSV بنفس المبلغ (الأقرب تاريخاً أولاً). المطابقة التلقائية ما زالت تستخدم نافذة التاريخ المضبوطة.",
@@ -6036,5 +6037,9 @@
     "Instant dependent transfer": "تحويل فوري إلى تابع",
     "Shift single-overdue schedules (grace)": "إزاحة جداول المتأخر الواحد (سماح)",
     "One-time: loans with no beginning grace and exactly one overdue cycle — push unpaid EMIs forward by the chosen grace cycles": "مرة واحدة: قروض بلا سماح ابتدائي ومتأخرة لدورة واحدة فقط — تُدفع أقساط EMI غير المدفوعة بعدد دورات السماح المختارة",
-    "Cash balance: :cash · Next EMI reserved for cash-out only: :reserved": "رصيد النقد: :cash · القسط التالي محجوز للسحب النقدي فقط: :reserved"
+    "Cash balance: :cash · Next EMI reserved for cash-out only: :reserved": "رصيد النقد: :cash · القسط التالي محجوز للسحب النقدي فقط: :reserved",
+    "Show password": "إظهار كلمة المرور",
+    "Hide password": "إخفاء كلمة المرور",
+    "Use a UTF-8 CSV with a <strong class=\"text-gray-950 dark:text-white\">header row</strong>.": "استخدم CSV بترميز UTF-8 مع <strong class=\"text-gray-950 dark:text-white\">صف عناوين</strong>.",
+    "Existing members (same email or member number) are skipped.": "يُتخطى الأعضاء الموجودون (نفس البريد أو رقم العضو)."
 }

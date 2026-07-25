@@ -1,33 +1,36 @@
-<div class="space-y-4 text-sm leading-relaxed text-gray-600 dark:text-gray-400">
-    <div class="rounded-lg border border-blue-200 bg-blue-50/80 p-3 text-xs dark:border-blue-500/30 dark:bg-blue-500/10">
-        <p class="font-semibold text-blue-900 dark:text-blue-200 mb-1">{{ __('Need a starter file?') }}</p>
+{{-- Sample download callout --}}
+@if (($section ?? null) === 'sample')
+    <div class="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
         <p>
             {{ __('Download a ready sample with 20 varied rows (including optional fields):') }}
             <a
                 href="{{ route('tenant.downloads.membership-application-import-sample') }}"
-                class="font-semibold text-blue-700 underline hover:text-blue-600 dark:text-blue-300 dark:hover:text-blue-200"
+                class="font-semibold text-primary-600 underline hover:text-primary-500 dark:text-primary-400"
             >
                 membership-applications-sample-20.csv
             </a>
         </p>
     </div>
+@endif
 
-    <div class="rounded-lg border border-gray-200 bg-gray-50/80 p-3 text-xs dark:border-white/10 dark:bg-white/5">
+{{-- Format tip --}}
+@if (($section ?? null) === 'format')
+    <div class="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
         <p>
             {!! __('Use a UTF-8 CSV with a <strong class="text-gray-950 dark:text-white">header row</strong>.') !!}
             {{ __('Column names must match exactly; order can be anything.') }}
             {{ __('Comma, semicolon (common Excel exports), or tab-separated rows are detected automatically from the header.') }}
         </p>
     </div>
+@endif
 
-    <div class="rounded-lg border border-gray-200 overflow-hidden dark:border-white/10">
-        <div class="bg-gray-50 dark:bg-white/5 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">
-            {{ __('Required Columns') }}
-        </div>
+{{-- Required columns table --}}
+@if (($section ?? null) === 'required')
+    <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-white/10">
         <table class="w-full text-xs">
             <thead class="bg-gray-50/60 dark:bg-white/5">
                 <tr>
-                    <th class="px-3 py-2 text-start font-semibold text-gray-700 dark:text-gray-200 w-56">{{ __('Column') }}</th>
+                    <th class="w-56 px-3 py-2 text-start font-semibold text-gray-700 dark:text-gray-200">{{ __('Column') }}</th>
                     <th class="px-3 py-2 text-start font-semibold text-gray-700 dark:text-gray-200">{{ __('Description') }}</th>
                 </tr>
             </thead>
@@ -48,15 +51,15 @@
             </tbody>
         </table>
     </div>
+@endif
 
-    <div class="rounded-lg border border-gray-200 overflow-hidden dark:border-white/10">
-        <div class="bg-gray-50 dark:bg-white/5 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">
-            {{ __('Optional Columns') }}
-        </div>
+{{-- Optional columns table --}}
+@if (($section ?? null) === 'optional')
+    <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-white/10">
         <table class="w-full text-xs">
             <thead class="bg-gray-50/60 dark:bg-white/5">
                 <tr>
-                    <th class="px-3 py-2 text-start font-semibold text-gray-700 dark:text-gray-200 w-56">{{ __('Column') }}</th>
+                    <th class="w-56 px-3 py-2 text-start font-semibold text-gray-700 dark:text-gray-200">{{ __('Column') }}</th>
                     <th class="px-3 py-2 text-start font-semibold text-gray-700 dark:text-gray-200">{{ __('Description') }}</th>
                 </tr>
             </thead>
@@ -96,26 +99,26 @@
             </tbody>
         </table>
     </div>
+@endif
 
-    <div class="rounded-lg border border-gray-200 overflow-hidden dark:border-white/10">
-        <div class="bg-gray-50 dark:bg-white/5 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">
-            {{ __('Row Handling Rules') }}
-        </div>
+{{-- Row handling rules --}}
+@if (($section ?? null) === 'rules')
+    <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-white/10">
         <table class="w-full text-xs">
             <tbody class="divide-y divide-gray-100 dark:divide-white/10">
                 <tr>
-                    <td class="px-3 py-2 font-semibold text-gray-700 dark:text-gray-200 w-56">{{ __('Password fallback') }}</td>
-                    <td class="px-3 py-2">{!! __('Empty or short <code class="font-mono text-[11px]">password</code> uses the default password set in this modal.') !!}</td>
+                    <td class="w-56 px-3 py-2 font-semibold text-gray-700 dark:text-gray-200">{{ __('Password fallback') }}</td>
+                    <td class="px-3 py-2 text-gray-600 dark:text-gray-400">{!! __('Empty or short <code class="font-mono text-[11px]">password</code> uses the default password set in this modal.') !!}</td>
                 </tr>
                 <tr>
                     <td class="px-3 py-2 font-semibold text-gray-700 dark:text-gray-200">{{ __('Cut-off date') }}</td>
-                    <td class="px-3 py-2">{{ __('Set in this modal for the whole import. Cycles before that date are not arrears when you approve. Cash and fund cut-off columns post opening balances on approval.') }}</td>
+                    <td class="px-3 py-2 text-gray-600 dark:text-gray-400">{{ __('Set in this modal for the whole import. Cycles before that date are not arrears when you approve. Cash and fund cut-off columns post opening balances on approval.') }}</td>
                 </tr>
                 <tr>
                     <td class="px-3 py-2 font-semibold text-gray-700 dark:text-gray-200">{{ __('Each row') }}</td>
-                    <td class="px-3 py-2">{!! __('Creates one <strong class="text-gray-800 dark:text-gray-200">pending membership application</strong> with the credentials and profile fields from that row.') !!}</td>
+                    <td class="px-3 py-2 text-gray-600 dark:text-gray-400">{!! __('Creates one <strong class="text-gray-800 dark:text-gray-200">pending membership application</strong> with the credentials and profile fields from that row.') !!}</td>
                 </tr>
             </tbody>
         </table>
     </div>
-</div>
+@endif

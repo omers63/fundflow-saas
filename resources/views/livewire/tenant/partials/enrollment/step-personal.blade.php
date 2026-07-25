@@ -72,8 +72,12 @@
             <label for="password" class="mb-1.5 block text-sm font-medium text-gray-700">
                 {{ __('Password') }} <span class="text-red-500">*</span>
             </label>
-            <input wire:model="password" type="password" id="password" autocomplete="new-password"
-                class="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+            <x-password-input
+                id="password"
+                wire:model="password"
+                autocomplete="new-password"
+                variant="enrollment"
+            />
             @error('password') <p class="mt-1 text-sm text-red-500">{{ $message }}</p> @enderror
         </div>
 
@@ -81,9 +85,12 @@
             <label for="password_confirmation" class="mb-1.5 block text-sm font-medium text-gray-700">
                 {{ __('Confirm password') }} <span class="text-red-500">*</span>
             </label>
-            <input wire:model="password_confirmation" type="password" id="password_confirmation"
+            <x-password-input
+                id="password_confirmation"
+                wire:model="password_confirmation"
                 autocomplete="new-password"
-                class="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+                variant="enrollment"
+            />
         </div>
     </div>
 </div>

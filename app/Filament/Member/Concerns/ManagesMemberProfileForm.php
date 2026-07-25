@@ -127,11 +127,13 @@ trait ManagesMemberProfileForm
                         TextInput::make('pin')
                             ->label(__('4-digit PIN'))
                             ->password()
+                            ->revealable()
                             ->rules(['nullable', 'digits:4'])
                             ->visible(fn ($get): bool => (bool) $get('set_parent_pin')),
                         TextInput::make('pin_confirmation')
                             ->label(__('Confirm PIN'))
                             ->password()
+                            ->revealable()
                             ->same('pin')
                             ->visible(fn ($get): bool => (bool) $get('set_parent_pin')),
                     ])

@@ -125,9 +125,13 @@
 
                     <div>
                         <label class="member-login-label" for="member-login-password">{{ __('Password') }}</label>
-                        <input id="member-login-password" wire:model="password" type="password"
-                            autocomplete="current-password" placeholder="{{ __('••••••••') }}"
-                            class="member-login-input @error('password') member-login-input--error @enderror">
+                        <x-password-input
+                            id="member-login-password"
+                            wire:model="password"
+                            autocomplete="current-password"
+                            :placeholder="__('••••••••')"
+                            :error="$errors->has('password')"
+                        />
                         @error('password')
                             <p class="member-login-error">{{ $message }}</p>
                         @enderror
@@ -191,9 +195,13 @@
                         <label class="member-login-label" for="member-login-verification">
                             {{ __('Verification code/password') }}
                         </label>
-                        <input id="member-login-verification" wire:model="verificationSecret" type="password"
-                            autocomplete="off" placeholder="{{ __('Enter parent PIN or dependent password') }}"
-                            class="member-login-input @error('verificationSecret') member-login-input--error @enderror">
+                        <x-password-input
+                            id="member-login-verification"
+                            wire:model="verificationSecret"
+                            autocomplete="off"
+                            :placeholder="__('Enter parent PIN or dependent password')"
+                            :error="$errors->has('verificationSecret')"
+                        />
                         @error('verificationSecret')
                             <p class="member-login-error">{{ $message }}</p>
                         @enderror

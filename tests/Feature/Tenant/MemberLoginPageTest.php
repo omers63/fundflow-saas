@@ -61,6 +61,8 @@ test('member login page renders reference-style card', function () {
         ->assertSee(__('Welcome back'), false)
         ->assertSee(__('Sign in to your member portal account'), false)
         ->assertSee(__('Not a member yet?'), false)
+        ->assertSee('member-login-password-toggle', false)
+        ->assertSee(__('Show password'), false)
         ->assertDontSee('fi-simple-header', false);
 });
 

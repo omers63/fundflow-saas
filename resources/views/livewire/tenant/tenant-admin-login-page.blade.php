@@ -25,9 +25,13 @@
 
                 <div>
                     <label class="member-login-label" for="admin-login-password">{{ __('Password') }}</label>
-                    <input id="admin-login-password" wire:model="password" type="password"
-                        autocomplete="current-password" placeholder="{{ __('••••••••') }}"
-                        class="member-login-input @error('password') member-login-input--error @enderror">
+                    <x-password-input
+                        id="admin-login-password"
+                        wire:model="password"
+                        autocomplete="current-password"
+                        :placeholder="__('••••••••')"
+                        :error="$errors->has('password')"
+                    />
                     @error('password')
                         <p class="member-login-error">{{ $message }}</p>
                     @enderror
