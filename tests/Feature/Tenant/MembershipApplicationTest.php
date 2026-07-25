@@ -116,8 +116,6 @@ test('applications list shows purpose subheading and table header actions for ad
         ->test(ListMembershipApplications::class)
         ->assertSuccessful()
         ->assertSee(__('Review new membership applications and manage the onboarding pipeline.'))
-        ->assertSee(__('Import Applications'))
-        ->assertSee(__('New Application'))
         ->assertSee(__('Applications need your attention'))
         ->assertSee(__('Review queue'));
 
@@ -125,12 +123,18 @@ test('applications list shows purpose subheading and table header actions for ad
         ->map(fn ($action) => $action->getName())
         ->all();
 
-    $tableHeaderActionNames = collect($component->instance()->getTable()->getHeaderActions())
+    $tableHeaderActions = collect($component->instance()->getTable()->getHeaderActions());
+    $tableHeaderActionNames = $tableHeaderActions
         ->map(fn ($action) => $action->getName())
         ->all();
 
     expect($pageHeaderNames)->not->toContain('importApplications', 'create')
         ->and($tableHeaderActionNames)->toContain('importApplications', 'create');
+
+    foreach ($tableHeaderActions as $action) {
+        expect($action->isIconButton())->toBeTrue()
+            ->and($action->getTooltip())->not->toBeEmpty();
+    }
 });
 
 test('admin can create application from tenant panel', function () {

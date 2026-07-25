@@ -113,7 +113,19 @@ test('loans hub history tab shows completed loan cards', function () {
         ->assertSet('hubTab', 'history')
         ->assertSee(__('History'), false)
         ->assertSee(__('Loan #:id', ['id' => $completed->id]), false)
+        ->assertSeeHtml('ff-member-panel--collapsible')
+        ->assertDontSeeHtml('ff-member-panel--collapsible" open')
         ->assertActionHidden('earlySettle');
+});
+
+test('loans hub active tab loan cards are not collapsible', function () {
+    Filament::setCurrentPanel('member');
+    $this->actingAs($this->memberUser, 'tenant');
+
+    Livewire::test(ListMyLoans::class)
+        ->assertSet('hubTab', 'active')
+        ->assertSee(__('Loan #:id', ['id' => $this->loan->id]), false)
+        ->assertDontSeeHtml('ff-member-panel--collapsible');
 });
 
 test('active tab exposes early settlement on loan card not header', function () {

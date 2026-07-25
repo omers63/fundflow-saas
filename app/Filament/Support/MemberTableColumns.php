@@ -9,6 +9,7 @@ use App\Models\Tenant\Member;
 use App\Support\ArabicDisplaySettings;
 use App\Support\ArabicTypography;
 use App\Support\MemberNumberSettings;
+use Filament\Facades\Filament;
 use Filament\Tables\Columns\TextColumn;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
@@ -83,7 +84,7 @@ final class MemberTableColumns
 
         return $textColumn
             ->url(
-                fn (mixed $state, Member $record): string => self::memberRecordEditUrl($record),
+                fn (mixed $state, Member $record): ?string => self::memberRecordEditUrl($record),
             )
             ->sortable(query: fn (Builder $query, string $direction): Builder => MemberNumberSettings::applySequenceOrder(
                 $query,
@@ -103,7 +104,7 @@ final class MemberTableColumns
         }
 
         return self::applyArabicNameTypography($textColumn)
-            ->url(fn (mixed $state, Member $record): string => self::memberRecordEditUrl($record));
+            ->url(fn (mixed $state, Member $record): ?string => self::memberRecordEditUrl($record));
     }
 
     public static function relationNumber(?string $label = null): TextColumn
@@ -155,11 +156,11 @@ final class MemberTableColumns
         }
 
         return $textColumn
-            ->sortable(query: fn(Builder $query, string $direction): Builder => MemberNumberSettings::applyOrderByLoanInstallmentMember(
+            ->sortable(query: fn (Builder $query, string $direction): Builder => MemberNumberSettings::applyOrderByLoanInstallmentMember(
                 $query,
                 $direction,
             ))
-            ->url(fn(mixed $state, mixed $record): ?string => self::resolveMemberUrl('loan.member.name', $record));
+            ->url(fn (mixed $state, mixed $record): ?string => self::resolveMemberUrl('loan.member.name', $record));
     }
 
     /**
@@ -178,7 +179,7 @@ final class MemberTableColumns
             memberNumberColumn: $column,
             memberIdColumn: $memberIdColumn,
             label: $label ?? __('Guarantor #'),
-        )->url(fn(mixed $state, mixed $record): ?string => self::resolveMemberUrl($nameColumn, $record));
+        )->url(fn (mixed $state, mixed $record): ?string => self::resolveMemberUrl($nameColumn, $record));
     }
 
     public static function applyArabicNameTypography(TextColumn $column): TextColumn
@@ -196,19 +197,27 @@ final class MemberTableColumns
             );
     }
 
-    public static function memberRecordUrl(Member $record): string
+    public static function memberRecordUrl(Member $record): ?string
     {
-        return MemberResource::getUrl('view', ['record' => $record]);
+        if (self::isMemberPanel()) {
+            return null;
+        }
+
+        return MemberResource::getUrl('view', ['record' => $record], panel: 'tenant');
     }
 
-    public static function memberRecordEditUrl(Member $record): string
+    public static function memberRecordEditUrl(Member $record): ?string
     {
         return self::memberRecordUrl($record);
     }
 
-    public static function memberProfileEditUrl(Member $record): string
+    public static function memberProfileEditUrl(Member $record): ?string
     {
-        return MemberResource::getUrl('edit', ['record' => $record]);
+        if (self::isMemberPanel()) {
+            return null;
+        }
+
+        return MemberResource::getUrl('edit', ['record' => $record], panel: 'tenant');
     }
 
     public static function relatedMemberEditUrl(object $record): ?string
@@ -225,9 +234,18 @@ final class MemberTableColumns
     /**
      * @param  array{member_id: int|string}  $record
      */
-    public static function memberIdEditUrl(array $record): string
+    public static function memberIdEditUrl(array $record): ?string
     {
-        return MemberResource::getUrl('view', ['record' => $record['member_id']]);
+        if (self::isMemberPanel()) {
+            return null;
+        }
+
+        return MemberResource::getUrl('view', ['record' => $record['member_id']], panel: 'tenant');
+    }
+
+    private static function isMemberPanel(): bool
+    {
+        return Filament::getCurrentPanel()?->getId() === 'member';
     }
 
     private static function extractMemberId(mixed $record): ?int

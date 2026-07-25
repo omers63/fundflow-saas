@@ -7,10 +7,12 @@ namespace App\Filament\Tenant\Resources\LoanEligibilityOverrides\Tables;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableHeaderIconAction;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\LoanEligibilityOverride;
 use App\Services\Loans\LoanEligibilityOverrideService;
 use App\Support\LoanEligibilityGate;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\Select;
@@ -21,27 +23,29 @@ use Filament\Tables\Table;
 
 class LoanEligibilityOverridesTable
 {
-    public static function createAction(): CreateAction
+    public static function createAction(): Action
     {
-        return CreateAction::make()
-            ->icon('heroicon-o-plus-circle')
-            ->schema([
-                Select::make('member_id')
-                    ->relationship('member', 'name')
-                    ->searchable()
-                    ->required(),
-                Select::make('gate')
-                    ->options(LoanEligibilityGate::labels())
-                    ->required(),
-                Textarea::make('reason')->required()->rows(3),
-            ])
-            ->using(function (array $data, LoanEligibilityOverrideService $service): LoanEligibilityOverride {
-                return $service->record(
-                    (int) $data['member_id'],
-                    (string) $data['gate'],
-                    (string) $data['reason'],
-                );
-            });
+        return TableHeaderIconAction::apply(
+            CreateAction::make()
+                ->icon('heroicon-o-plus-circle')
+                ->schema([
+                    Select::make('member_id')
+                        ->relationship('member', 'name')
+                        ->searchable()
+                        ->required(),
+                    Select::make('gate')
+                        ->options(LoanEligibilityGate::labels())
+                        ->required(),
+                    Textarea::make('reason')->required()->rows(3),
+                ])
+                ->using(function (array $data, LoanEligibilityOverrideService $service): LoanEligibilityOverride {
+                    return $service->record(
+                        (int) $data['member_id'],
+                        (string) $data['gate'],
+                        (string) $data['reason'],
+                    );
+                }),
+        );
     }
 
     public static function configure(Table $table): Table

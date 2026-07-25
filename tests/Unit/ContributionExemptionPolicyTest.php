@@ -61,12 +61,46 @@ test('grace cycle labels replay exactly N periods from disbursement', function (
         'applied_at' => Carbon::parse('2025-09-21'),
     ]);
 
-    $labels = $this->policy->graceCycleLabels($loan->fresh());
+    $fresh = $loan->fresh();
+    $labels = $this->policy->graceCycleLabels($fresh);
 
-    expect($labels)->toHaveCount(2)
-        ->and($this->policy->isLoanInGraceCycle($loan, 9, 2025))->toBeTrue()
-        ->and($this->policy->isLoanInGraceCycle($loan, 10, 2025))->toBeTrue()
-        ->and($this->policy->isLoanInGraceCycle($loan, 11, 2025))->toBeFalse();
+    expect($labels)->toHaveCount(2);
+
+    foreach ($labels as [$month, $year]) {
+        expect($this->policy->isLoanInGraceCycle($fresh, $month, $year))->toBeTrue();
+    }
+
+    [$lastMonth, $lastYear] = $labels[1];
+    $after = Carbon::create($lastYear, $lastMonth, 1)->addMonthNoOverflow();
+    expect($this->policy->isLoanInGraceCycle($fresh, (int) $after->month, (int) $after->year))->toBeFalse();
+});
+
+test('grace cycle labels prefer stored exemption after manual remediation', function () {
+    $member = createPolicyMember($this->accounting);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 10_000,
+        'amount_requested' => 10_000,
+        'amount_approved' => 10_000,
+        'amount_disbursed' => 10_000,
+        'interest_rate' => 0,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'status' => 'active',
+        'grace_cycles' => 1,
+        'has_grace_cycle' => true,
+        'exempted_month' => 2,
+        'exempted_year' => 2025,
+        'first_repayment_month' => 3,
+        'first_repayment_year' => 2025,
+        'disbursed_at' => Carbon::parse('2025-02-02'),
+        'applied_at' => Carbon::parse('2025-02-02'),
+    ]);
+
+    expect($this->policy->graceCycleLabels($loan->fresh()))->toBe([[2, 2025]])
+        ->and($this->policy->isLoanInGraceCycle($loan, 2, 2025))->toBeTrue()
+        ->and($this->policy->isLoanInGraceCycle($loan, 1, 2025))->toBeFalse();
 });
 
 test('gap month between grace and first repayment is contribution liable', function () {

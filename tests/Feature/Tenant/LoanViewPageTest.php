@@ -49,3 +49,26 @@ test('loan view page shows lifecycle insights and detail sections', function () 
         ->assertSee(__('Application & purpose'), false)
         ->assertSee(__('Details'), false);
 });
+
+test('loan view page header actions are icon buttons', function () {
+    $member = Member::factory()->create(['status' => 'active']);
+
+    $loan = Loan::factory()->for($member)->create([
+        'status' => 'approved',
+        'amount_requested' => 12000,
+        'amount_approved' => 12000,
+        'approved_at' => now(),
+    ]);
+
+    $component = Livewire::test(ViewLoan::class, ['record' => $loan->getKey()])
+        ->assertSuccessful();
+
+    $headerActions = $component->instance()->getCachedHeaderActions();
+
+    expect($headerActions)->not->toBeEmpty();
+
+    foreach ($headerActions as $action) {
+        expect($action->isIconButton())->toBeTrue()
+            ->and($action->getTooltip())->not->toBeEmpty();
+    }
+});

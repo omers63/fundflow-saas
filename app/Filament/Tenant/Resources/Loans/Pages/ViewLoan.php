@@ -10,6 +10,7 @@ use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Loans\Schemas\LoanViewInfolist;
 use App\Filament\Tenant\Resources\Loans\Widgets\LoanViewInsights;
 use App\Models\Tenant\Loan;
+use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Schema;
@@ -83,8 +84,15 @@ class ViewLoan extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            ...LoanFilamentActions::workflowActions(),
+            ...array_map(
+                fn (Action $action): Action => $action
+                    ->iconButton()
+                    ->tooltip(fn (): mixed => $action->getLabel()),
+                LoanFilamentActions::workflowActions(),
+            ),
             EditAction::make()
+                ->iconButton()
+                ->tooltip(__('Edit'))
                 ->hidden(fn (): bool => ! in_array($this->record->status, ['pending', 'approved'], true)),
         ];
     }

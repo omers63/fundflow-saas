@@ -263,6 +263,40 @@ class Member extends Model
             });
     }
 
+    /**
+     * Members currently carrying unpaid EMI obligations (active / transferred loans).
+     */
+    public function scopeWithActiveLoanRepaymentObligation(Builder $query): Builder
+    {
+        return $query->whereHas(
+            'loans',
+            fn (Builder $loanQuery): Builder => $loanQuery
+                ->whereIn('status', ['active', 'transferred'])
+                ->whereHas(
+                    'installments',
+                    fn (Builder $installmentQuery): Builder => $installmentQuery->whereIn('status', ['pending', 'overdue']),
+                ),
+        );
+    }
+
+    /**
+     * Contribution-cycle participants who are not currently under loan repayment.
+     */
+    public function scopeUnderContributionCycle(Builder $query): Builder
+    {
+        return $query
+            ->contributionCycleEligible()
+            ->whereDoesntHave(
+                'loans',
+                fn (Builder $loanQuery): Builder => $loanQuery
+                    ->whereIn('status', ['active', 'transferred'])
+                    ->whereHas(
+                        'installments',
+                        fn (Builder $installmentQuery): Builder => $installmentQuery->whereIn('status', ['pending', 'overdue']),
+                    ),
+            );
+    }
+
     public function scopeCollectibleForContributionPeriod(Builder $query, int $month, int $year): Builder
     {
         $periodStart = Carbon::create($year, $month, 1)->startOfMonth();

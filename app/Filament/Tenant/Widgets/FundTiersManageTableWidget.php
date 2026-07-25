@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Widgets;
 
+use App\Filament\Support\TableHeaderIconAction;
 use App\Filament\Tenant\Resources\FundTiers\Schemas\FundTierForm;
 use App\Filament\Tenant\Resources\FundTiers\Tables\FundTiersTable;
 use App\Models\Tenant\FundTier;
@@ -31,20 +32,22 @@ class FundTiersManageTableWidget extends TableWidget
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make()
-                ->model(FundTier::class)
-                ->label(__('New fund tier'))
-                ->icon('heroicon-o-plus-circle')
-                ->schema(fn (): array => FundTierForm::components())
-                ->using(function (array $data): FundTier {
-                    [$attributes, $loanTierIds] = FundTierForm::extractLoanTierIds($data);
-                    $attributes['tier_number'] = FundTier::nextTierNumber();
+            TableHeaderIconAction::apply(
+                CreateAction::make()
+                    ->model(FundTier::class)
+                    ->label(__('New fund tier'))
+                    ->icon('heroicon-o-plus-circle')
+                    ->schema(fn (): array => FundTierForm::components())
+                    ->using(function (array $data): FundTier {
+                        [$attributes, $loanTierIds] = FundTierForm::extractLoanTierIds($data);
+                        $attributes['tier_number'] = FundTier::nextTierNumber();
 
-                    $record = FundTier::query()->create($attributes);
-                    $record->syncLoanTiers($loanTierIds);
+                        $record = FundTier::query()->create($attributes);
+                        $record->syncLoanTiers($loanTierIds);
 
-                    return $record;
-                }),
+                        return $record;
+                    }),
+            ),
         ];
     }
 

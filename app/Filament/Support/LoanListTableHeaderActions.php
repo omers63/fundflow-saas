@@ -68,16 +68,17 @@ final class LoanListTableHeaderActions
 
     public static function portfolioGroup(): ActionGroup
     {
-        return ActionGroup::make([
-            self::importLoansAction(asGroupItem: true),
-            self::exportLoansAction(asGroupItem: true),
-            self::importRepaymentsAction(asGroupItem: true),
-            self::exportRepaymentsAction(asGroupItem: true),
-        ])
-            ->label(__('Portfolio'))
-            ->icon(Heroicon::OutlinedBriefcase)
-            ->color('gray')
-            ->button();
+        return TableHeaderIconAction::applyGroup(
+            ActionGroup::make([
+                self::importLoansAction(asGroupItem: true),
+                self::exportLoansAction(asGroupItem: true),
+                self::importRepaymentsAction(asGroupItem: true),
+                self::exportRepaymentsAction(asGroupItem: true),
+            ])
+                ->label(__('Portfolio'))
+                ->icon(Heroicon::OutlinedBriefcase)
+                ->color('gray'),
+        );
     }
 
     public static function delinquencyGroup(): ActionGroup
@@ -385,13 +386,17 @@ final class LoanListTableHeaderActions
 
     private static function portfolioToolbarAction(Action $action, bool $asGroupItem = false): Action
     {
-        $icon = $action->getIcon();
+        if ($asGroupItem) {
+            $icon = $action->getIcon();
 
-        if ($icon !== null) {
-            $action->tableIcon($icon);
+            if ($icon !== null) {
+                $action->tableIcon($icon);
+            }
+
+            return $action;
         }
 
-        return $asGroupItem ? $action : $action->button();
+        return TableHeaderIconAction::apply($action);
     }
 
     /**

@@ -63,6 +63,8 @@ $tabs = [
                 'currency' => $currency,
                 'showSchedule' => $loan['show_schedule'] ?? false,
                 'canSettle' => false,
+                'collapsible' => true,
+                'open' => false,
             ])
         @empty
             <x-member::notice tone="blue">

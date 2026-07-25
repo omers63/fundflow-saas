@@ -6,6 +6,7 @@ use App\Filament\Support\ActionModalFailure;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableHeaderIconAction;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\CashOutRequests\CashOutRequestResource;
@@ -30,10 +31,12 @@ class CashOutRequestsTable
         return TableGrouping::apply(
             $table
                 ->headerActions([
-                    CreateAction::make()
-                        ->label(__('New cash out'))
-                        ->icon('heroicon-o-plus-circle')
-                        ->url(CashOutRequestResource::getUrl('create')),
+                    TableHeaderIconAction::apply(
+                        CreateAction::make()
+                            ->label(__('New cash out'))
+                            ->icon('heroicon-o-plus-circle')
+                            ->url(CashOutRequestResource::getUrl('create')),
+                    ),
                 ])
                 ->columns([
                     TextColumn::make('id')

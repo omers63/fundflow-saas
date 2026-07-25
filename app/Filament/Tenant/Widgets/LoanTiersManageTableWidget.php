@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Widgets;
 
+use App\Filament\Support\TableHeaderIconAction;
 use App\Filament\Tenant\Resources\LoanTiers\Schemas\LoanTierForm;
 use App\Filament\Tenant\Resources\LoanTiers\Tables\LoanTiersTable;
 use App\Models\Tenant\LoanTier;
@@ -31,16 +32,18 @@ class LoanTiersManageTableWidget extends TableWidget
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make()
-                ->model(LoanTier::class)
-                ->label(__('New loan tier'))
-                ->icon('heroicon-o-plus-circle')
-                ->schema(fn (): array => LoanTierForm::components())
-                ->using(function (array $data): LoanTier {
-                    $data['tier_number'] = LoanTier::nextTierNumber();
+            TableHeaderIconAction::apply(
+                CreateAction::make()
+                    ->model(LoanTier::class)
+                    ->label(__('New loan tier'))
+                    ->icon('heroicon-o-plus-circle')
+                    ->schema(fn (): array => LoanTierForm::components())
+                    ->using(function (array $data): LoanTier {
+                        $data['tier_number'] = LoanTier::nextTierNumber();
 
-                    return LoanTier::query()->create($data);
-                }),
+                        return LoanTier::query()->create($data);
+                    }),
+            ),
         ];
     }
 

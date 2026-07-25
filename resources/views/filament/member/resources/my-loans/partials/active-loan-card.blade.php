@@ -2,12 +2,29 @@
     $showSchedule = $showSchedule ?? ($loan['show_schedule'] ?? true);
     $canSettle = $canSettle ?? ($loan['show_settle_button'] ?? false);
     $hasActions = $canSettle || filled($loan['schedule_pdf_url'] ?? null);
+    $collapsible = (bool) ($collapsible ?? false);
+    $open = (bool) ($open ?? ! $collapsible);
 @endphp
 
-<x-member::panel :title="$loan['label']" :link="$loan['view_url']" :link-label="__('Details')"
-    class="ff-member-loan-card">
+<x-member::panel
+    :title="$loan['label']"
+    :link="$loan['view_url']"
+    :link-label="__('Details')"
+    :collapsible="$collapsible"
+    :open="$open"
+    class="ff-member-loan-card"
+>
+    @if ($collapsible)
+        <x-slot:summary>
+            <x-member::chip :variant="$loan['status_variant'] ?? 'gray'">{{ $loan['status_label'] }}</x-member::chip>
+            @if (filled($loan['meta'] ?? null))
+                <span class="ff-member-dashboard-meta">{{ $loan['meta'] }}</span>
+            @endif
+        </x-slot:summary>
+    @endif
+
     <div class="ff-member-loan-card__summary">
-        @if (filled($loan['meta'] ?? null))
+        @if (! $collapsible && filled($loan['meta'] ?? null))
             <p class="ff-member-dashboard-meta mb-2">{{ $loan['meta'] }}</p>
         @endif
 
@@ -20,7 +37,9 @@
         <div class="ff-member-loan-card__header-row">
             <div class="ff-member-loan-card__header-main">
                 <x-member::amount :value="$loan['outstanding']" :currency="$currency" class="text-xl font-bold" />
-                <x-member::chip :variant="$loan['status_variant'] ?? 'green'">{{ $loan['status_label'] }}</x-member::chip>
+                @unless ($collapsible)
+                    <x-member::chip :variant="$loan['status_variant'] ?? 'green'">{{ $loan['status_label'] }}</x-member::chip>
+                @endunless
             </div>
             <p class="ff-member-loan-card__meta-line ff-member-dashboard-meta">{{ $loan['installments_label'] }}</p>
         </div>

@@ -28,6 +28,7 @@ use App\Services\ReconciliationReportService;
 use App\Support\LoanFundingStrategy;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
@@ -789,6 +790,114 @@ test('reconciliation report skips per-installment ledger checks for legacy impor
 
     expect($report['checks']['loan_installment_flow_integrity']['severity'])->toBe('ok')
         ->and($report['checks']['loan_installment_flow_integrity']['legacy_import_loan_count'])->toBe(1);
+});
+
+test('legacy imported loan integrity counts later installment-referenced guarantor legs', function () {
+    $accounting = app(AccountingService::class);
+
+    $borrower = Member::create([
+        'member_number' => 'RECON-LEGACY-G',
+        'name' => 'Legacy Guarantor Recon Borrower',
+        'email' => 'legacy-guarantor-recon@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYears(3),
+        'status' => 'active',
+    ]);
+    $guarantor = Member::create([
+        'member_number' => 'RECON-LEGACY-GG',
+        'name' => 'Legacy Guarantor Recon Guarantor',
+        'email' => 'legacy-guarantor-recon-g@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYears(3),
+        'status' => 'active',
+    ]);
+
+    $accounting->createMemberAccounts($borrower);
+    $accounting->createMemberAccounts($guarantor);
+    $accounting->credit($guarantor->fresh()->fundAccount, 10_000, 'Seed guarantor fund');
+
+    $loan = Loan::create([
+        'member_id' => $borrower->id,
+        'guarantor_member_id' => $guarantor->id,
+        'amount' => 6_000,
+        'amount_requested' => 6_000,
+        'amount_approved' => 6_000,
+        'amount_disbursed' => 6_000,
+        'member_portion' => 2_000,
+        'master_portion' => 4_000,
+        'interest_rate' => 0,
+        'term_months' => 2,
+        'monthly_repayment' => 3000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'disbursed_at' => now()->subYear(),
+        'approved_at' => now()->subYear(),
+        'applied_at' => now()->subYear(),
+        'installments_count' => 2,
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 3000,
+        'due_date' => now()->subMonths(6)->toDateString(),
+        'status' => 'paid',
+        'paid_at' => now()->subMonths(6),
+    ]);
+
+    $repayment = LoanRepayment::create([
+        'loan_id' => $loan->id,
+        'amount' => 3000,
+        'paid_at' => now()->subMonths(6),
+        'notes' => 'legacy-import:test|legacy-guarantor-recon@fund.test|2025-01-01|3000|loan_repayment|2025-01',
+    ]);
+
+    $ledger = app(LoanLedgerService::class);
+    $ledger->postImportedLoanRepaymentWithCashFlow(
+        $loan->fresh(),
+        $repayment,
+        3000,
+        now()->subMonths(6),
+    );
+
+    $guarantorInstallment = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 2,
+        'amount' => 3000,
+        'due_date' => now()->subMonths(2)->toDateString(),
+        'status' => 'overdue',
+    ]);
+
+    DB::transaction(function () use ($ledger, $loan, $guarantorInstallment): void {
+        $ledger->debitGuarantorFundForDefault($loan->fresh()->guarantor, $guarantorInstallment);
+        $guarantorInstallment->update([
+            'status' => 'paid',
+            'paid_at' => now()->subMonth(),
+            'paid_by_guarantor' => true,
+        ]);
+    });
+
+    expect(LoanRepayment::query()->where('loan_id', $loan->id)->count())->toBe(2)
+        ->and((float) (Transaction::query()
+            ->where('reference_type', LoanRepayment::class)
+            ->whereIn('reference_id', LoanRepayment::query()->where('loan_id', $loan->id)->pluck('id'))
+            ->where('type', 'credit')
+            ->whereHas('account', fn ($q) => $q->where('type', 'fund')->where('member_id', $borrower->id))
+            ->sum('amount')))->toBe(3000.0)
+        ->and((float) (Transaction::query()
+            ->where('reference_type', LoanInstallment::class)
+            ->where('reference_id', $guarantorInstallment->id)
+            ->where('type', 'credit')
+            ->whereHas('account', fn ($q) => $q->where('type', 'fund')->where('member_id', $borrower->id))
+            ->sum('amount')))->toBe(3000.0);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    expect($report['checks']['loan_installment_flow_integrity']['severity'])->toBe('ok')
+        ->and($report['checks']['loan_installment_flow_integrity']['legacy_import_loan_count'])->toBe(1)
+        ->and($report['checks']['loan_installment_flow_integrity']['issues'] ?? [])->toBeEmpty();
 });
 
 test('reconciliation active loan check uses scheduled minus partial paid for ledger comparison', function () {

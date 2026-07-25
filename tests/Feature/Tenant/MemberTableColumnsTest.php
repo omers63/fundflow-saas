@@ -22,11 +22,11 @@ test('member table columns resolve member workspace urls', function () {
     $workspaceUrl = MemberTableColumns::memberRecordUrl($member);
 
     expect($workspaceUrl)
-        ->toBe(MemberResource::getUrl('view', ['record' => $member]))
+        ->toBe(MemberResource::getUrl('view', ['record' => $member], panel: 'tenant'))
         ->and(MemberTableColumns::memberRecordEditUrl($member))
         ->toBe($workspaceUrl)
         ->and(MemberTableColumns::memberProfileEditUrl($member))
-        ->toBe(MemberResource::getUrl('edit', ['record' => $member]))
+        ->toBe(MemberResource::getUrl('edit', ['record' => $member], panel: 'tenant'))
         ->and($workspaceUrl)->toContain((string) $member->getKey());
 });
 
@@ -35,14 +35,14 @@ test('member table columns resolve related member workspace urls', function () {
     $contribution = Contribution::factory()->for($member)->create();
 
     expect(MemberTableColumns::relatedMemberEditUrl($contribution))
-        ->toBe(MemberResource::getUrl('view', ['record' => $member]));
+        ->toBe(MemberResource::getUrl('view', ['record' => $member], panel: 'tenant'));
 });
 
 test('member table columns resolve member id workspace urls', function () {
     $member = Member::factory()->create();
 
     expect(MemberTableColumns::memberIdEditUrl(['member_id' => $member->id]))
-        ->toBe(MemberResource::getUrl('view', ['record' => $member]));
+        ->toBe(MemberResource::getUrl('view', ['record' => $member], panel: 'tenant'));
 });
 
 test('member table columns resolve urls for related and array records', function () {
@@ -51,13 +51,13 @@ test('member table columns resolve urls for related and array records', function
     $loan = Loan::factory()->for($member)->create();
 
     expect(MemberTableColumns::resolveMemberUrl('member.name', $contribution))
-        ->toBe(MemberResource::getUrl('view', ['record' => $member]))
+        ->toBe(MemberResource::getUrl('view', ['record' => $member], panel: 'tenant'))
         ->and(MemberTableColumns::resolveMemberUrl('loan.member.name', $loan))
-        ->toBe(MemberResource::getUrl('view', ['record' => $member]))
+        ->toBe(MemberResource::getUrl('view', ['record' => $member], panel: 'tenant'))
         ->and(MemberTableColumns::resolveMemberUrl('member_name', ['member_id' => $member->id]))
-        ->toBe(MemberResource::getUrl('view', ['record' => $member]))
+        ->toBe(MemberResource::getUrl('view', ['record' => $member], panel: 'tenant'))
         ->and(MemberTableColumns::resolveMemberUrl('name', $member))
-        ->toBe(MemberResource::getUrl('view', ['record' => $member]));
+        ->toBe(MemberResource::getUrl('view', ['record' => $member], panel: 'tenant'));
 });
 
 test('tenant panel auto-links member name table columns', function () {
@@ -67,7 +67,20 @@ test('tenant panel auto-links member name table columns', function () {
     $column = TextColumn::make('member.name')->record($contribution);
 
     expect($column->getUrl($member->name))
-        ->toBe(MemberResource::getUrl('view', ['record' => $member]));
+        ->toBe(MemberResource::getUrl('view', ['record' => $member], panel: 'tenant'));
+});
+
+test('member panel does not link to admin member workspace urls', function () {
+    Filament::setCurrentPanel('member');
+
+    $member = Member::factory()->create();
+    $contribution = Contribution::factory()->for($member)->create();
+
+    expect(MemberTableColumns::memberRecordUrl($member))->toBeNull()
+        ->and(MemberTableColumns::memberRecordEditUrl($member))->toBeNull()
+        ->and(MemberTableColumns::memberProfileEditUrl($member))->toBeNull()
+        ->and(MemberTableColumns::relatedMemberEditUrl($contribution))->toBeNull()
+        ->and(MemberTableColumns::memberIdEditUrl(['member_id' => $member->id]))->toBeNull();
 });
 
 test('member table columns resolve urls for member number relation paths', function () {
@@ -76,9 +89,9 @@ test('member table columns resolve urls for member number relation paths', funct
     $loan = Loan::factory()->for($member)->create();
 
     expect(MemberTableColumns::resolveMemberUrl('member.member_number', $contribution))
-        ->toBe(MemberResource::getUrl('view', ['record' => $member]))
+        ->toBe(MemberResource::getUrl('view', ['record' => $member], panel: 'tenant'))
         ->and(MemberTableColumns::resolveMemberUrl('loan.member.member_number', $loan))
-        ->toBe(MemberResource::getUrl('view', ['record' => $member]))
+        ->toBe(MemberResource::getUrl('view', ['record' => $member], panel: 'tenant'))
         ->and(MemberTableColumns::loanMemberNumber()->getName())
         ->toBe('loan.member.member_number')
         ->and(MemberTableColumns::guarantorNumber()->getName())

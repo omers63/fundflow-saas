@@ -81,6 +81,19 @@ class MembersTable
             ->filters([
                 SelectFilter::make('status')
                     ->options(Member::statusOptions()),
+                SelectFilter::make('cycle_obligation')
+                    ->label(__('Cycle obligation'))
+                    ->options([
+                        'contribution' => __('Contribution cycle'),
+                        'loan_repayment' => __('Loan repayment'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return match ($data['value'] ?? null) {
+                            'contribution' => $query->underContributionCycle(),
+                            'loan_repayment' => $query->withActiveLoanRepaymentObligation(),
+                            default => $query,
+                        };
+                    }),
                 SelectFilter::make('parent_member_id')
                     ->label(__('Parent'))
                     ->relationship('parent', 'name')

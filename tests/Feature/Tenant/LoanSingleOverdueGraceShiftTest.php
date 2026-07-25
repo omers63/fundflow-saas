@@ -203,15 +203,26 @@ test('artisan command requires force and is registered for jobs ui', function ()
     $member = createMemberForGraceShift($this->accounting);
     createSingleOverdueLoan($member);
 
-    expect(Artisan::call('loans:shift-single-overdue-grace'))->toBe(0)
+    expect(Artisan::call('loans:push-schedule-grace'))->toBe(0)
         ->and(Loan::query()->where('grace_cycles', 1)->count())->toBe(0);
 
-    expect(Artisan::call('loans:shift-single-overdue-grace', ['--force' => true]))->toBe(0)
+    expect(Artisan::call('loans:push-schedule-grace', ['--force' => true]))->toBe(0)
         ->and(Loan::query()->where('grace_cycles', 1)->count())->toBe(1);
 
     $registry = collect(ScheduledJobRegistry::all())
-        ->firstWhere('key', 'loans:shift-single-overdue-grace');
+        ->firstWhere('key', 'loans:push-schedule-grace');
 
     expect($registry)->not->toBeNull()
         ->and($registry['schedule'])->toBe(__('Manual only (one-time)'));
+});
+
+test('artisan bulk mode shifts eligible single-overdue loans without a loan id', function () {
+    $member = createMemberForGraceShift($this->accounting);
+    $loan = createSingleOverdueLoan($member);
+
+    expect(Artisan::call('loans:push-schedule-grace', [
+        '--force' => true,
+        '--cycles' => 2,
+    ]))->toBe(0)
+        ->and((int) $loan->fresh()->grace_cycles)->toBe(2);
 });

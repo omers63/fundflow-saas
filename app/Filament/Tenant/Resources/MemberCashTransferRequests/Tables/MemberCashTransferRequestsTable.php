@@ -9,6 +9,7 @@ use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MemberSelect;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableHeaderIconAction;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\MemberCashTransferRequests\MemberCashTransferRequestResource;
@@ -31,10 +32,12 @@ class MemberCashTransferRequestsTable
         return TableGrouping::apply(
             $table
                 ->headerActions([
-                    CreateAction::make()
-                        ->label(__('New cash transfer'))
-                        ->icon('heroicon-o-plus-circle')
-                        ->url(MemberCashTransferRequestResource::getUrl('create')),
+                    TableHeaderIconAction::apply(
+                        CreateAction::make()
+                            ->label(__('New cash transfer'))
+                            ->icon('heroicon-o-plus-circle')
+                            ->url(MemberCashTransferRequestResource::getUrl('create')),
+                    ),
                 ])
                 ->columns([
                     TextColumn::make('id')

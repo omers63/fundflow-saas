@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\SmsImportTemplates\Tables;
 
 use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableHeaderIconAction;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\SmsImportTemplates\Pages\CreateSmsImportTemplate;
 use App\Support\Lang;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -25,14 +27,16 @@ use Filament\Tables\Table;
 
 final class SmsImportTemplatesTable
 {
-    public static function createAction(bool $fromSettings = false): CreateAction
+    public static function createAction(bool $fromSettings = false): Action
     {
-        return CreateAction::make()
-            ->label(__('New SMS template'))
-            ->icon(Heroicon::OutlinedChatBubbleBottomCenterText)
-            ->url(fn (): string => CreateSmsImportTemplate::getUrl(
-                $fromSettings ? ['from' => 'settings'] : [],
-            ));
+        return TableHeaderIconAction::apply(
+            CreateAction::make()
+                ->label(__('New SMS template'))
+                ->icon(Heroicon::OutlinedChatBubbleBottomCenterText)
+                ->url(fn (): string => CreateSmsImportTemplate::getUrl(
+                    $fromSettings ? ['from' => 'settings'] : [],
+                )),
+        );
     }
 
     public static function configure(Table $table, bool $embedInBankWorkspace = false, bool $fromSettings = false, bool $includeCreateHeaderAction = true): Table

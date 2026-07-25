@@ -44,8 +44,13 @@ test('requests table exposes new request header action', function () {
         ->test(ListMemberRequests::class)
         ->assertSuccessful();
 
+    $newRequest = collect($component->instance()->getTable()->getHeaderActions())
+        ->first(fn ($action): bool => $action instanceof Action && $action->getName() === 'newRequest');
+
     expect(tableHeaderActionNames($component))->toContain('newRequest')
-        ->and($component->html())->toContain(__('New request'));
+        ->and($newRequest)->not->toBeNull()
+        ->and($newRequest->isIconButton())->toBeTrue()
+        ->and($newRequest->getTooltip())->toBe(__('New request'));
 });
 
 test('loans portfolio table exposes standalone new loan header action', function () {
@@ -55,13 +60,15 @@ test('loans portfolio table exposes standalone new loan header action', function
         ->assertSuccessful();
 
     $headerActions = $component->instance()->getTable()->getHeaderActions();
+    $create = collect($headerActions)->first(
+        fn ($action): bool => $action instanceof Action && $action->getName() === 'create',
+    );
 
     expect(tableHeaderActionNames($component))->toContain('create')
-        ->and(collect($headerActions)->first(
-            fn($action): bool => $action instanceof Action && $action->getName() === 'create',
-        ))->not->toBeNull()
-        ->and(collect($headerActions)->contains(fn($action): bool => $action instanceof ActionGroup))->toBeTrue()
-        ->and($component->html())->toContain(__('New loan'));
+        ->and($create)->not->toBeNull()
+        ->and($create->isIconButton())->toBeTrue()
+        ->and($create->getTooltip())->toBe(__('New loan'))
+        ->and(collect($headerActions)->contains(fn ($action): bool => $action instanceof ActionGroup))->toBeTrue();
 });
 
 test('contributions ledger table exposes new contribution header action', function () {
@@ -70,8 +77,13 @@ test('contributions ledger table exposes new contribution header action', functi
         ->set('activeTab', 'ledger')
         ->assertSuccessful();
 
+    $create = collect($component->instance()->getTable()->getHeaderActions())
+        ->first(fn ($action): bool => $action instanceof Action && $action->getName() === 'create');
+
     expect(tableHeaderActionNames($component))->toContain('create')
-        ->and($component->html())->toContain(__('New contribution'));
+        ->and($create)->not->toBeNull()
+        ->and($create->isIconButton())->toBeTrue()
+        ->and($create->getTooltip())->toBe(__('New contribution'));
 });
 
 test('disbursements table exposes new disbursement header action', function () {
@@ -79,6 +91,11 @@ test('disbursements table exposes new disbursement header action', function () {
         ->test(DisbursementsPage::class)
         ->assertSuccessful();
 
+    $create = collect($component->instance()->getTable()->getHeaderActions())
+        ->first(fn ($action): bool => $action instanceof Action && $action->getName() === 'newDisbursement');
+
     expect(tableHeaderActionNames($component))->toContain('newDisbursement')
-        ->and($component->html())->toContain(__('New disbursement'));
+        ->and($create)->not->toBeNull()
+        ->and($create->isIconButton())->toBeTrue()
+        ->and($create->getTooltip())->toBe(__('New disbursement'));
 });

@@ -7,6 +7,7 @@ use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\LoanOutstandingColumn;
 use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableHeaderIconAction;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
@@ -88,13 +89,15 @@ class LoansRelationManager extends RelationManager
                         DateColumnRangeFilter::make('applied_at', __('Applied')),
                     ])
                     ->headerActions([
-                        Action::make('new_loan')
-                            ->label(__('New loan'))
-                            ->icon('heroicon-o-plus-circle')
-                            ->url(fn (): string => LoanResource::getUrl('create').'?member_id='.$this->getOwnerRecord()->getKey())
-                            ->visible(fn (): bool => LoanResource::canCreate()
-                                && $this->getOwnerRecord() instanceof Member
-                                && $this->getOwnerRecord()->isEligibleForLoan()),
+                        TableHeaderIconAction::apply(
+                            Action::make('new_loan')
+                                ->label(__('New loan'))
+                                ->icon('heroicon-o-plus-circle')
+                                ->url(fn (): string => LoanResource::getUrl('create').'?member_id='.$this->getOwnerRecord()->getKey())
+                                ->visible(fn (): bool => LoanResource::canCreate()
+                                    && $this->getOwnerRecord() instanceof Member
+                                    && $this->getOwnerRecord()->isEligibleForLoan()),
+                        ),
                     ])
                     ->toolbarActions([
                         BulkActionGroup::make([

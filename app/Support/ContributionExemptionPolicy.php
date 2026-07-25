@@ -36,6 +36,15 @@ final class ContributionExemptionPolicy
             return [];
         }
 
+        // Prefer stored exemption when present (manual remediation / imports).
+        if ($loan->exempted_month !== null && $loan->exempted_year !== null) {
+            return $this->labelsEndingAt(
+                (int) $loan->exempted_month,
+                (int) $loan->exempted_year,
+                $graceCycles,
+            );
+        }
+
         $member = $loan->relationLoaded('member')
             ? $loan->member
             : Member::query()->find($loan->member_id);
@@ -55,9 +64,20 @@ final class ContributionExemptionPolicy
             return [];
         }
 
+        return $this->labelsEndingAt(
+            (int) $exemption['exempted_month'],
+            (int) $exemption['exempted_year'],
+            $graceCycles,
+        );
+    }
+
+    /**
+     * @return list<array{0: int, 1: int}>
+     */
+    private function labelsEndingAt(int $endMonth, int $endYear, int $graceCycles): array
+    {
         $labels = [];
-        $cursor = Carbon::create((int) $exemption['exempted_year'], (int) $exemption['exempted_month'], 1)
-            ->subMonthsNoOverflow($graceCycles - 1);
+        $cursor = Carbon::create($endYear, $endMonth, 1)->subMonthsNoOverflow($graceCycles - 1);
 
         for ($i = 0; $i < $graceCycles; $i++) {
             $period = $cursor->copy()->addMonthsNoOverflow($i);

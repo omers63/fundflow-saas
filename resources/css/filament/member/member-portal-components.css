@@ -42,6 +42,43 @@
     padding: 0.75rem 1rem;
 }
 
+.ff-member-panel--collapsible > .ff-member-panel__summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.ff-member-panel--collapsible > .ff-member-panel__summary::-webkit-details-marker {
+    display: none;
+}
+
+.ff-member-panel--collapsible:not([open]) > .ff-member-panel__summary {
+    border-block-end: none;
+}
+
+.ff-member-panel__summary-main {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ff-member-panel__summary-extra {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ff-member-panel__summary-aside {
+    display: inline-flex;
+    shrink: 0;
+    align-items: center;
+    gap: 0.5rem;
+}
+
 .ff-member-notice {
     display: flex;
     flex-direction: column;

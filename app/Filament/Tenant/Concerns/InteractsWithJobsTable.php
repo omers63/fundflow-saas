@@ -8,13 +8,14 @@ use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\SystemJobRun;
-use App\Services\Loans\LoanSingleOverdueGraceShiftService;
+use App\Services\Loans\LoanManualScheduleGracePushService;
 use App\Services\SystemJobRunnerService;
 use App\Support\ScheduledJobRegistry;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
@@ -145,34 +146,43 @@ trait InteractsWithJobsTable
                     ->color('success')
                     ->requiresConfirmation()
                     ->modalHeading(fn (array $record): string => __('Run :job', ['job' => $record['job_label']]))
-                    ->fillForm(fn (array $record): array => $record['key'] === 'loans:shift-single-overdue-grace'
+                    ->fillForm(fn (array $record): array => $record['key'] === 'loans:push-schedule-grace'
                         ? [
-                            'grace_cycles' => 1,
+                            'loan' => null,
+                            'cycles' => 1,
                             'dry_run' => false,
                         ]
                         : [])
-                    ->schema(fn (array $record): array => $record['key'] === 'loans:shift-single-overdue-grace'
+                    ->schema(fn (array $record): array => $record['key'] === 'loans:push-schedule-grace'
                         ? [
-                            Select::make('grace_cycles')
-                                ->label(__('Grace cycles to shift'))
+                            TextInput::make('loan')
+                                ->label(__('Loan #'))
+                                ->numeric()
+                                ->helperText(__('Leave blank to shift all eligible loans with no beginning grace and exactly one overdue cycle. Enter a loan id to push that loan’s unpaid schedule.')),
+                            Select::make('cycles')
+                                ->label(__('Cycles to push'))
                                 ->options(collect(range(
-                                    LoanSingleOverdueGraceShiftService::MIN_GRACE_CYCLES,
-                                    LoanSingleOverdueGraceShiftService::MAX_GRACE_CYCLES,
+                                    LoanManualScheduleGracePushService::MIN_CYCLES,
+                                    LoanManualScheduleGracePushService::MAX_CYCLES,
                                 ))->mapWithKeys(fn (int $n): array => [
                                     $n => trans_choice(':count cycle|:count cycles', $n, ['count' => $n]),
                                 ])->all())
                                 ->required()
-                                ->helperText(__('Unpaid EMIs move forward by this many labelled cycles; loan grace is set to the same value.')),
+                                ->helperText(__('Unpaid EMIs move forward by this many cycles. The previous first repayment cycle becomes grace-exempt (e.g. Jan → Feb, Jan marked grace).')),
                             Toggle::make('dry_run')
                                 ->label(__('Dry run (preview only)'))
-                                ->helperText(__('Lists eligible loans without changing schedules.')),
+                                ->helperText(__('Preview without changing schedules.')),
                         ]
                         : [])
                     ->action(function (array $record, array $data): void {
                         $extra = [];
 
-                        if ($record['key'] === 'loans:shift-single-overdue-grace') {
-                            $extra['grace-cycles'] = (int) ($data['grace_cycles'] ?? 1);
+                        if ($record['key'] === 'loans:push-schedule-grace') {
+                            if (filled($data['loan'] ?? null)) {
+                                $extra['loan'] = (int) $data['loan'];
+                            }
+
+                            $extra['cycles'] = (int) ($data['cycles'] ?? 1);
 
                             if (! empty($data['dry_run'])) {
                                 $extra['dry-run'] = true;

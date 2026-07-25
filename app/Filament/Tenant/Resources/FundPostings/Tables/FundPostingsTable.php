@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Resources\FundPostings\Tables;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableHeaderIconAction;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\ViewActions\ViewFundPostingAction;
 use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
@@ -31,10 +32,12 @@ class FundPostingsTable
         return TableGrouping::apply(
             ViewFundPostingAction::configure($table)
                 ->headerActions([
-                    CreateAction::make()
-                        ->label(__('New deposit'))
-                        ->icon('heroicon-o-plus-circle')
-                        ->url(FundPostingResource::getUrl('create')),
+                    TableHeaderIconAction::apply(
+                        CreateAction::make()
+                            ->label(__('New deposit'))
+                            ->icon('heroicon-o-plus-circle')
+                            ->url(FundPostingResource::getUrl('create')),
+                    ),
                 ])
                 ->columns([
                     MemberTableColumns::relationNumber(),
