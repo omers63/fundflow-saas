@@ -766,7 +766,7 @@ test('dependent allocation transfers only the cash shortfall for a cycle', funct
         ->and((float) $dependent->cashAccount->fresh()->balance)->toBe(100.0);
 });
 
-test('dependent allocation does not re-fund after the cycle amount is fulfilled', function () {
+test('dependent allocation does not re-fund after the cycle shortfall is fulfilled', function () {
     $jan = now()->subMonths(2);
 
     $parent = Member::create([
@@ -816,7 +816,7 @@ test('dependent allocation does not re-fund after the cycle amount is fulfilled'
         (int) $jan->year,
     );
 
-    // Drain dependent cash so a naive cash-shortfall check would try again.
+    // Drain dependent cash — cycle dues quota is already fulfilled, so no re-allocation.
     AccountingService::withoutMemberCashCollection(fn () => $this->accounting->debit(
         $dependent->cashAccount,
         200,

@@ -85,11 +85,12 @@ test('legacy imported loans skip automated overdue marking and late fee collecti
     $this->delinquency->markOverdueInstallments();
 
     $installment->refresh();
-    expect($installment->status)->toBe('pending')
-        ->and((float) ($installment->late_fee_amount ?? 0))->toBe(0.0);
+    expect($installment->status)->toBe('overdue')
+        ->and((float) ($installment->late_fee_amount ?? 0))->toBe(0.0)
+        ->and($installment->is_late)->toBeTrue();
 
     AccountingService::withoutMemberCashCollection(
-        fn() => $this->accounting->credit($member->cashAccount, 5000, 'Deposit'),
+        fn () => $this->accounting->credit($member->cashAccount, 5000, 'Deposit'),
     );
 
     $this->collection->onMemberCashIncreased($member->fresh());

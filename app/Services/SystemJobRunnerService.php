@@ -22,11 +22,12 @@ class SystemJobRunnerService
     ) {}
 
     /**
+     * @param  array<string, mixed>  $extraParameters
      * @return array{run: SystemJobRun, exit_code: int}
      *
      * @throws InvalidArgumentException
      */
-    public function run(string $jobKey, string $trigger = SystemJobRun::TRIGGER_MANUAL, ?User $user = null): array
+    public function run(string $jobKey, string $trigger = SystemJobRun::TRIGGER_MANUAL, ?User $user = null, array $extraParameters = []): array
     {
         $definition = ScheduledJobRegistry::find($jobKey);
 
@@ -53,7 +54,10 @@ class SystemJobRunnerService
 
         $output = new BufferedOutput;
         $started = microtime(true);
-        $parameters = $this->artisanParametersFor($definition['command']);
+        $parameters = array_merge(
+            $this->artisanParametersFor($definition['command']),
+            $this->normalizeExtraParameters($definition['command'], $extraParameters),
+        );
 
         RecordSystemJobRunListener::suppressRecording();
 
@@ -158,5 +162,42 @@ class SystemJobRunnerService
         }
 
         return $parameters;
+    }
+
+    /**
+     * @param  array<string, mixed>  $extraParameters
+     * @return array<string, mixed>
+     */
+    protected function normalizeExtraParameters(string $command, array $extraParameters): array
+    {
+        if ($extraParameters === []) {
+            return [];
+        }
+
+        $name = explode(' ', trim($command), 2)[0];
+
+        try {
+            $definition = Artisan::all()[$name]?->getDefinition();
+        } catch (\Throwable) {
+            return [];
+        }
+
+        if ($definition === null) {
+            return [];
+        }
+
+        $normalized = [];
+
+        foreach ($extraParameters as $key => $value) {
+            $option = str_starts_with((string) $key, '--') ? (string) $key : '--'.$key;
+
+            if (! $definition->hasOption(ltrim($option, '-'))) {
+                continue;
+            }
+
+            $normalized[$option] = $value;
+        }
+
+        return $normalized;
     }
 }

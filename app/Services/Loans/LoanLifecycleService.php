@@ -96,6 +96,7 @@ final class LoanLifecycleService
         bool $cashOutExcessFund = false,
         ?string $guarantorName = null,
         ?string $applicationFormPath = null,
+        bool $bypassLoanAmountValidation = false,
     ): Loan {
         $failedGates = $this->eligibility->getFailedGates($member);
 
@@ -110,13 +111,19 @@ final class LoanLifecycleService
             }
         }
 
-        if ($error = $this->validateLoanAmount($member, $amountRequested)) {
-            throw new InvalidArgumentException($error);
+        if (! $bypassLoanAmountValidation) {
+            if ($error = $this->validateLoanAmount($member, $amountRequested)) {
+                throw new InvalidArgumentException($error);
+            }
+        } elseif ($amountRequested <= 0) {
+            throw new InvalidArgumentException(__('Loan amount must be greater than zero.'));
+        } elseif (LoanTier::forAmount($amountRequested) === null) {
+            throw new InvalidArgumentException(__('No loan tier covers this amount. Contact an administrator.'));
         }
 
         $fundingStrategy = LoanFundingStrategy::normalize($fundingStrategy);
 
-        if (! LoanFundingStrategy::isAvailableForApplication($fundingStrategy)) {
+        if (! $bypassLoanAmountValidation && ! LoanFundingStrategy::isAvailableForApplication($fundingStrategy)) {
             throw new InvalidArgumentException(__('The selected loan funding option is not available.'));
         }
 
@@ -307,6 +314,7 @@ final class LoanLifecycleService
         ?CarbonInterface $disbursedAt = null,
         bool $force = false,
         bool $allowNegativeMasterFundBalance = false,
+        ?float $memberFundBalanceOverride = null,
     ): void {
         if (! in_array($loan->status, ['approved', 'partially_disbursed'], true)) {
             throw new InvalidArgumentException(__('Only approved or partially disbursed loans can receive disbursements.'));
@@ -334,14 +342,15 @@ final class LoanLifecycleService
             throw new InvalidArgumentException(__('Amount exceeds master fund balance.'));
         }
 
-        $memberFundBalanceBefore = (float) ($loan->member->fundAccount?->balance ?? 0);
+        $memberFundBalanceBefore = $memberFundBalanceOverride ?? (float) ($loan->member->fundAccount?->balance ?? 0);
         $hadPriorDisbursements = (float) $loan->amount_disbursed > 0.01;
         $memberFundBalanceForActivation = filled($loan->member_fund_balance_at_disbursement)
             ? (float) $loan->member_fund_balance_at_disbursement
-            : $memberFundBalanceBefore;
+            : ($memberFundBalanceOverride ?? $memberFundBalanceBefore);
         $strategy = LoanFundingStrategy::normalize($loan->funding_strategy);
         $skipMemberFundSufficiencyCheck = $strategy === LoanFundingStrategy::SPLIT_PERCENTAGE
-            || $hadPriorDisbursements;
+            || $hadPriorDisbursements
+            || $memberFundBalanceOverride !== null;
         $at = $disbursedAt ?? BusinessDay::now();
         $disbursement = LoanDisbursement::create([
             'loan_id' => $loan->id,

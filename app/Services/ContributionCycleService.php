@@ -794,6 +794,7 @@ class ContributionCycleService
 
     /**
      * True once parent→dependent transfers for the cycle cover the dependent’s full cycle dues.
+     * Spending that cash does not reopen allocation until the next cycle.
      */
     public function dependentAllocationFulfilledForPeriod(Member $dependent, int $month, int $year): bool
     {
@@ -846,8 +847,8 @@ class ContributionCycleService
 
     /**
      * Remaining parent→dependent transfer for the cycle: min(unfulfilled dues quota, cash shortfall).
-     * Re-runs are allowed until the full cycle dues have been allocated; spending allocated cash
-     * does not reopen the quota.
+     * Tops up only what cash still needs, but once the cycle dues quota is filled there is no
+     * further allocation until the next cycle (spending allocated cash does not reopen it).
      */
     public function dependentAllocationShortfallForPeriod(Member $dependent, int $month, int $year): float
     {
@@ -1157,8 +1158,9 @@ class ContributionCycleService
     }
 
     /**
-     * Transfer remaining cycle allocation (top-up allowed until dues are fully funded).
-     * Concurrent creators lose the unique race and are treated as already handled this pass.
+     * Top up dependent cash toward current cycle dues (cash shortfall), capped by the
+     * remaining cycle dues quota. Concurrent creators lose the unique race and are treated
+     * as already handled this pass.
      *
      * @return float Amount transferred (0 when nothing left to allocate)
      */

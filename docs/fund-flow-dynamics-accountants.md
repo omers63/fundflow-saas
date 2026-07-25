@@ -95,6 +95,13 @@ Ledger records **intent**; clearance updates `is_cleared` and matches lines. **N
 
 Net effect on cash: **zero** (paired mirror); fund and loan reflect repayment.
 
+### Admin loan transfer
+
+| Mode | Effect |
+|------|--------|
+| **Remaining** | Reassigns the same loan row to the recipient; obligation = unpaid master portion (`master_portion − repaid_to_master`). No fund/cash unwind. |
+| **Full** | Unwinds loan account + member/master **fund** exposure for the source loan (does **not** claw back cash already paid out), cancels the source loan, then creates and redisburses a new loan on the recipient (optional 100% master funding). Redisbursement credits recipient cash + master cash mirror like a normal disbursement. |
+
 ---
 
 ## Repayment economics

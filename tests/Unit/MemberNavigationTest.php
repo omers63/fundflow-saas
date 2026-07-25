@@ -13,6 +13,7 @@ use App\Filament\Member\Pages\MyNotificationPreferencesPage;
 use App\Filament\Member\Pages\SupportPage;
 use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
 use App\Filament\Member\Resources\MyCashOutRequests\MyCashOutRequestResource;
+use App\Filament\Member\Resources\MyCashTransfers\MyCashTransferResource;
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
@@ -21,9 +22,6 @@ use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Member\Resources\MyMessages\MyMessageResource;
 use App\Filament\Member\Resources\MyStatements\MyStatementResource;
 use App\Filament\Member\Support\MemberNavigation;
-use Tests\TestCase;
-
-uses(TestCase::class);
 
 test('member navigation group keys match prototype sidebar sections', function () {
     expect(MemberNavigation::groupKeys())->toBe([
@@ -53,6 +51,7 @@ test('member resources use navigation groups and sort order', function (string $
     'contributions' => [MyContributionResource::class, MemberNavigation::GROUP_HISTORY, MemberNavigation::SORT_CONTRIBUTIONS],
     'transactions' => [MemberActivityPage::class, MemberNavigation::GROUP_HISTORY, MemberNavigation::SORT_ACTIVITY],
     'cash out' => [MyCashOutRequestResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_CASH_OUTS],
+            'cash transfer' => [MyCashTransferResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_CASH_TRANSFERS],
     'statements' => [MyStatementResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_STATEMENTS],
     'deposits' => [MyFundPostingResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_DEPOSITS],
     'dependents' => [MyDependentResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_DEPENDENTS],
@@ -75,17 +74,18 @@ test('apply for loan page is hidden from member navigation', function () {
 test('legacy member resources remain hidden from navigation', function (string $class) {
     expect($class::shouldRegisterNavigation())->toBeFalse();
 })->with([
-    MyAccountResource::class,
-    MyMessageResource::class,
-    SupportPage::class,
-    MyContributionSettingsPage::class,
-    MyNotificationPreferencesPage::class,
-    BusinessDayTestingPage::class,
+            'accounts' => [MyAccountResource::class],
+            'messages' => [MyMessageResource::class],
+            'support' => [SupportPage::class],
+            'contribution settings' => [MyContributionSettingsPage::class],
+            'notification preferences' => [MyNotificationPreferencesPage::class],
+            'business day testing' => [BusinessDayTestingPage::class],
 ]);
 
 test('restored member features register in navigation', function (string $class) {
     expect($class::shouldRegisterNavigation())->toBeTrue();
 })->with([
-    MyFundPostingResource::class,
-    LoanCalculatorPage::class,
+            'deposits' => [MyFundPostingResource::class],
+            'loan calculator' => [LoanCalculatorPage::class],
+            'cash transfer' => [MyCashTransferResource::class],
 ]);

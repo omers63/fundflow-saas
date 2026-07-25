@@ -94,6 +94,11 @@ final class MemberCashOutService
         return max(0.0, round($balance - $reserved - $pending, 2));
     }
 
+    public function pendingCashOutAmountForMember(Member $member, ?CashOutRequest $excludeRequest = null): float
+    {
+        return $this->pendingCashOutAmount($member, $excludeRequest);
+    }
+
     private function cashBalanceFor(Member $member): float
     {
         return (float) ($member->cashAccount?->balance ?? 0);

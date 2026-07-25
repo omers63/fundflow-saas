@@ -20,6 +20,7 @@ use App\Filament\Tenant\Resources\CashOutRequests\CashOutRequestResource;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
+use App\Filament\Tenant\Resources\MemberCashTransferRequests\MemberCashTransferRequestResource;
 use App\Filament\Tenant\Resources\MemberRequests\MemberRequestResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
@@ -57,12 +58,13 @@ final class TenantSidebarRegistry
         return [
             MembershipApplicationResource::class,
             MemberResource::class,
-            FundPostingResource::class,
             ContributionResource::class,
             LoansCluster::class,
             LoanQueueWorkbenchPage::class,
             DisbursementsPage::class,
+            FundPostingResource::class,
             CashOutRequestResource::class,
+            MemberCashTransferRequestResource::class,
             MemberRequestResource::class,
             BankAccountsResource::class,
             TransactionResource::class,
@@ -82,12 +84,13 @@ final class TenantSidebarRegistry
         return [
             Lang::formatUiLabel(__('Applications')),
             Lang::formatUiLabel(__('Members')),
-            Lang::formatUiLabel(__('Deposits')),
             Lang::formatUiLabel(__('Contributions')),
             Lang::formatUiLabel(__('Loans')),
             Lang::formatUiLabel(__('Loan queue')),
             Lang::formatUiLabel(__('Disbursements')),
+            Lang::formatUiLabel(__('Deposits')),
             Lang::formatUiLabel(__('Cash outs')),
+            Lang::formatUiLabel(__('Cash transfers')),
             Lang::formatUiLabel(__('Requests')),
             Lang::formatUiLabel(__('Bank clearing')),
             Lang::formatUiLabel(__('Transactions')),

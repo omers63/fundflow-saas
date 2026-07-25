@@ -51,6 +51,9 @@ class Loan extends Model
         'has_grace_cycle',
         'grace_cycles',
         'original_borrower_member_id',
+        'transferred_from_loan_id',
+        'admin_transfer_mode',
+        'admin_transferred_at',
         'transferred_to_guarantor_at',
         'settled_at',
         'threshold_waived_at',
@@ -106,6 +109,7 @@ class Loan extends Model
             'guarantor_released_at' => 'datetime',
             'guarantor_liability_transferred_at' => 'datetime',
             'transferred_to_guarantor_at' => 'datetime',
+            'admin_transferred_at' => 'datetime',
             'grace_cycles' => 'integer',
             'due_date' => 'date',
             'payout_at' => 'datetime',
@@ -136,6 +140,11 @@ class Loan extends Model
     public function guarantor(): BelongsTo
     {
         return $this->belongsTo(Member::class, 'guarantor_member_id');
+    }
+
+    public function transferredFromLoan(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'transferred_from_loan_id');
     }
 
     public function guarantorDisplayName(): ?string

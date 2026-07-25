@@ -19,6 +19,8 @@ use App\Notifications\Tenant\FundPostingAcceptedNotification;
 use App\Notifications\Tenant\FundPostingBankClearedNotification;
 use App\Notifications\Tenant\FundPostingRejectedNotification;
 use App\Notifications\Tenant\GuarantorLoanApplicationNotification;
+use App\Notifications\Tenant\LoanAdminTransferAdminNotification;
+use App\Notifications\Tenant\LoanAdminTransferNotification;
 use App\Notifications\Tenant\LoanApprovedNotification;
 use App\Notifications\Tenant\LoanCancelledNotification;
 use App\Notifications\Tenant\LoanDefaultGuarantorNotification;
@@ -36,6 +38,8 @@ use App\Notifications\Tenant\LoanRepaymentDueNotification;
 use App\Notifications\Tenant\LoanSettledNotification;
 use App\Notifications\Tenant\LoanSubmittedNotification;
 use App\Notifications\Tenant\MemberAnnouncementNotification;
+use App\Notifications\Tenant\MemberCashTransferAcceptedNotification;
+use App\Notifications\Tenant\MemberCashTransferRejectedNotification;
 use App\Notifications\Tenant\MemberDirectMessageNotification;
 use App\Notifications\Tenant\MemberOnboardingGreetingNotification;
 use App\Notifications\Tenant\MembershipApplicationApprovedNotification;
@@ -46,6 +50,7 @@ use App\Notifications\Tenant\NewCashOutRequestNotification;
 use App\Notifications\Tenant\NewFundPostingNotification;
 use App\Notifications\Tenant\NewLoanApplicationNotification;
 use App\Notifications\Tenant\NewLoanEligibilityOverrideRequestNotification;
+use App\Notifications\Tenant\NewMemberCashTransferRequestNotification;
 use App\Notifications\Tenant\NewMemberRequestNotification;
 use App\Notifications\Tenant\NewMembershipApplicationNotification;
 use App\Notifications\Tenant\NewSupportRequestNotification;
@@ -634,6 +639,21 @@ MD,
                     'body' => '{{member_name}} طلب {{amount}}.',
                 ],
             ],
+            'new_member_cash_transfer_request' => [
+                'audience' => 'admin',
+                'category' => 'operations',
+                'label' => 'New member cash transfer request (admin)',
+                'variables' => ['member_name', 'recipient_name', 'amount', 'action_url'],
+                'supported' => $bellPush,
+                'en' => [
+                    'subject' => 'New cash transfer request',
+                    'body' => '{{member_name}} requested {{amount}} to {{recipient_name}}.',
+                ],
+                'ar' => [
+                    'subject' => 'طلب تحويل نقدي جديد',
+                    'body' => '{{member_name}} طلب تحويل {{amount}} إلى {{recipient_name}}.',
+                ],
+            ],
             'new_membership_application' => [
                 'audience' => 'admin',
                 'category' => 'operations',
@@ -707,6 +727,21 @@ MD,
                 'ar' => [
                     'subject' => 'نقل القرض إلى الكفيل',
                     'body' => 'القرض #{{loan_id}} نُقل من {{borrower_name}} إلى الكفيل {{guarantor_name}}.',
+                ],
+            ],
+            'loan_admin_transfer_admin' => [
+                'audience' => 'admin',
+                'category' => 'operations',
+                'label' => 'Admin loan transfer',
+                'variables' => ['loan_id', 'source_loan_id', 'borrower_name', 'recipient_name', 'mode', 'action_url'],
+                'supported' => $bellPush,
+                'en' => [
+                    'subject' => 'Admin loan transfer',
+                    'body' => 'Loan #{{source_loan_id}} transferred from {{borrower_name}} to {{recipient_name}} ({{mode}}).',
+                ],
+                'ar' => [
+                    'subject' => 'نقل قرض إداري',
+                    'body' => 'القرض #{{source_loan_id}} نُقل من {{borrower_name}} إلى {{recipient_name}} ({{mode}}).',
                 ],
             ],
             'admin_direct_message' => [
@@ -820,6 +855,14 @@ MD,
                 'key' => 'generic_member_alert',
                 'category' => NotificationPreferenceService::ACCOUNT_ALERTS,
             ],
+            MemberCashTransferAcceptedNotification::class => [
+                'key' => 'generic_member_alert',
+                'category' => NotificationPreferenceService::ACCOUNT_ALERTS,
+            ],
+            MemberCashTransferRejectedNotification::class => [
+                'key' => 'generic_member_alert',
+                'category' => NotificationPreferenceService::ACCOUNT_ALERTS,
+            ],
             CashOutBankClearedNotification::class => [
                 'key' => 'generic_member_alert',
                 'category' => NotificationPreferenceService::ACCOUNT_ALERTS,
@@ -876,6 +919,10 @@ MD,
                 'key' => 'generic_member_alert',
                 'category' => NotificationPreferenceService::LOAN_ALERTS,
             ],
+            LoanAdminTransferNotification::class => [
+                'key' => 'generic_member_alert',
+                'category' => NotificationPreferenceService::LOAN_ALERTS,
+            ],
             GuarantorLoanApplicationNotification::class => [
                 'key' => 'generic_member_alert',
                 'category' => NotificationPreferenceService::LOAN_ALERTS,
@@ -924,6 +971,10 @@ MD,
                 'key' => 'new_cash_out_request',
                 'category' => 'operations',
             ],
+            NewMemberCashTransferRequestNotification::class => [
+                'key' => 'new_member_cash_transfer_request',
+                'category' => 'operations',
+            ],
             NewMembershipApplicationNotification::class => [
                 'key' => 'new_membership_application',
                 'category' => 'operations',
@@ -942,6 +993,10 @@ MD,
             ],
             LoanGuarantorTransferAdminNotification::class => [
                 'key' => 'loan_guarantor_transfer_admin',
+                'category' => 'operations',
+            ],
+            LoanAdminTransferAdminNotification::class => [
+                'key' => 'loan_admin_transfer_admin',
                 'category' => 'operations',
             ],
             AdminDirectMessageNotification::class => [

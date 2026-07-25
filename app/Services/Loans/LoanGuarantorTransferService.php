@@ -102,15 +102,15 @@ class LoanGuarantorTransferService
      * Settlement threshold is part of the normal borrower schedule only; it is not
      * transferred to the guarantor.
      */
-    protected function remainingGuarantorObligation(Loan $loan): float
+    public function remainingGuarantorObligation(Loan $loan): float
     {
-        $masterPortion = max(0.0, (float) $loan->master_portion);
-        $repaidToMaster = (float) ($loan->repaid_to_master ?? 0);
-
-        return max(0.0, $masterPortion - $repaidToMaster);
+        return LoanTransferPreview::remainingObligation(
+            max(0.0, (float) $loan->master_portion),
+            (float) ($loan->repaid_to_master ?? 0),
+        );
     }
 
-    protected function rebuildGuarantorSchedule(Loan $loan, Member $guarantor, float $obligation): void
+    public function rebuildGuarantorSchedule(Loan $loan, Member $guarantor, float $obligation): void
     {
         $emi = (float) ($loan->loanTier?->min_monthly_installment ?? $loan->monthly_repayment ?? 0);
 

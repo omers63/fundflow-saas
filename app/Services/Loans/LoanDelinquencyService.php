@@ -208,6 +208,9 @@ class LoanDelinquencyService
 
     /**
      * Pending installments past their cycle deadline become overdue.
+     *
+     * Legacy-imported loans are still marked overdue for schedule/collection accuracy,
+     * but late fees stay at zero (automated fee posting remains skipped elsewhere).
      */
     public function markOverdueInstallments(): int
     {
@@ -215,21 +218,21 @@ class LoanDelinquencyService
 
         LoanInstallment::query()
             ->where('status', 'pending')
-            ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
+            ->whereHas('loan', fn ($q) => $q->whereIn('status', ['active', 'transferred']))
             ->with('loan')
             ->each(function (LoanInstallment $installment) use (&$marked): void {
                 if (! $this->installmentIsPastDeadline($installment)) {
                     return;
                 }
 
-                if (LegacyImportedLoan::isLoan((int) $installment->loan_id)) {
-                    return;
-                }
+                $deadline = $this->deadlineForInstallment($installment);
+                $isLegacy = LegacyImportedLoan::isLoan((int) $installment->loan_id);
+                $feeAmt = 0.0;
 
-                $due = $installment->due_date;
-                $deadline = $this->cycles->deadline((int) $due->month, (int) $due->year);
-                $days = $this->lateFees->daysPastDue($deadline, BusinessDay::now());
-                $feeAmt = $this->lateFees->repaymentLateFeeForDays($days);
+                if (! $isLegacy) {
+                    $days = $this->lateFees->daysPastDue($deadline, BusinessDay::now());
+                    $feeAmt = $this->lateFees->repaymentLateFeeForDays($days);
+                }
 
                 $installment->update([
                     'status' => 'overdue',
@@ -900,11 +903,24 @@ class LoanDelinquencyService
 
     public function installmentIsPastDeadline(LoanInstallment $installment): bool
     {
-        $due = $installment->due_date;
+        if ($installment->due_date === null) {
+            return false;
+        }
 
-        return BusinessDay::now()->greaterThan(
-            $this->cycles->deadline((int) $due->month, (int) $due->year)
-        );
+        return BusinessDay::now()->greaterThan($this->deadlineForInstallment($installment));
+    }
+
+    /**
+     * Cycle due-end for the labelled collection period that owns this installment's due date.
+     * Must use {@see ContributionCycleService::cyclePeriodForDueDate()} — not the calendar
+     * month of the due date — when cycle_start_day is not 1 (e.g. due on the 5th belongs
+     * to the previous labelled cycle).
+     */
+    public function deadlineForInstallment(LoanInstallment $installment): Carbon
+    {
+        [$cycleMonth, $cycleYear] = $this->cycles->cyclePeriodForDueDate($installment->due_date);
+
+        return $this->cycles->deadline($cycleMonth, $cycleYear);
     }
 
     /**

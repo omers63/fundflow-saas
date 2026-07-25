@@ -86,6 +86,56 @@ test('pending installment past cycle deadline is marked overdue', function () {
         ->and($installment->is_late)->toBeTrue();
 });
 
+test('overdue marking uses labelled cycle deadline not calendar month of due date', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    BusinessDaySettings::saveFromForm('2025-11-05');
+
+    $member = createMemberForDelinquency(app(AccountingService::class));
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 9000,
+        'amount_requested' => 9000,
+        'amount_approved' => 9000,
+        'amount_disbursed' => 9000,
+        'interest_rate' => 0,
+        'term_months' => 6,
+        'monthly_repayment' => 1500,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::create(2025, 4, 1),
+        'disbursed_at' => Carbon::create(2025, 4, 1),
+    ]);
+
+    $pastDue = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1500,
+        'due_date' => Carbon::create(2025, 10, 5),
+        'status' => 'pending',
+    ]);
+    $currentCycleDue = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 2,
+        'amount' => 1500,
+        'due_date' => Carbon::create(2025, 11, 5),
+        'status' => 'pending',
+    ]);
+
+    expect($this->cycles->cyclePeriodForDueDate($pastDue->due_date))->toBe([9, 2025])
+        ->and($this->cycles->cyclePeriodForDueDate($currentCycleDue->due_date))->toBe([10, 2025])
+        ->and($this->delinquency->installmentIsPastDeadline($pastDue))->toBeTrue()
+        ->and($this->delinquency->installmentIsPastDeadline($currentCycleDue))->toBeFalse();
+
+    $marked = $this->delinquency->markOverdueInstallments();
+
+    expect($marked)->toBe(1)
+        ->and($pastDue->fresh()->status)->toBe('overdue')
+        ->and($currentCycleDue->fresh()->status)->toBe('pending');
+
+    BusinessDaySettings::saveFromForm(null);
+});
+
 test('member with overdue installments is marked delinquent', function () {
     BusinessDaySettings::saveFromForm('2026-05-20');
 

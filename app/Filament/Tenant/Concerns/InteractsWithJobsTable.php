@@ -8,11 +8,14 @@ use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\SystemJobRun;
+use App\Services\Loans\LoanSingleOverdueGraceShiftService;
 use App\Services\SystemJobRunnerService;
 use App\Support\ScheduledJobRegistry;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -103,10 +106,10 @@ trait InteractsWithJobsTable
                     ->sortable(false),
                 TextColumn::make('schedule')
                     ->label(__('Schedule'))
-                                        ->wrap()
-                                        ->toggleable(false)
-                                        ->searchable(false)
-                                        ->sortable(false),
+                    ->wrap()
+                    ->toggleable(false)
+                    ->searchable(false)
+                    ->sortable(false),
                 TextColumn::make('last_status')
                     ->label(__('Last run'))
                     ->badge()
@@ -129,7 +132,7 @@ trait InteractsWithJobsTable
                     ->sortable(false),
                 TextColumn::make('last_duration_ms')
                     ->label(__('Duration'))
-                    ->formatStateUsing(fn(mixed $state): string => filled($state) ? ((int) $state) . ' ms' : '—')
+                    ->formatStateUsing(fn (mixed $state): string => filled($state) ? ((int) $state).' ms' : '—')
                     ->alignEnd()
                     ->toggleable(false)
                     ->searchable(false)
@@ -141,9 +144,46 @@ trait InteractsWithJobsTable
                     ->icon('heroicon-o-play')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->action(function (array $record): void {
+                    ->modalHeading(fn (array $record): string => __('Run :job', ['job' => $record['job_label']]))
+                    ->fillForm(fn (array $record): array => $record['key'] === 'loans:shift-single-overdue-grace'
+                        ? [
+                            'grace_cycles' => 1,
+                            'dry_run' => false,
+                        ]
+                        : [])
+                    ->schema(fn (array $record): array => $record['key'] === 'loans:shift-single-overdue-grace'
+                        ? [
+                            Select::make('grace_cycles')
+                                ->label(__('Grace cycles to shift'))
+                                ->options(collect(range(
+                                    LoanSingleOverdueGraceShiftService::MIN_GRACE_CYCLES,
+                                    LoanSingleOverdueGraceShiftService::MAX_GRACE_CYCLES,
+                                ))->mapWithKeys(fn (int $n): array => [
+                                    $n => trans_choice(':count cycle|:count cycles', $n, ['count' => $n]),
+                                ])->all())
+                                ->required()
+                                ->helperText(__('Unpaid EMIs move forward by this many labelled cycles; loan grace is set to the same value.')),
+                            Toggle::make('dry_run')
+                                ->label(__('Dry run (preview only)'))
+                                ->helperText(__('Lists eligible loans without changing schedules.')),
+                        ]
+                        : [])
+                    ->action(function (array $record, array $data): void {
+                        $extra = [];
+
+                        if ($record['key'] === 'loans:shift-single-overdue-grace') {
+                            $extra['grace-cycles'] = (int) ($data['grace_cycles'] ?? 1);
+
+                            if (! empty($data['dry_run'])) {
+                                $extra['dry-run'] = true;
+                            }
+                        }
+
                         try {
-                            $result = app(SystemJobRunnerService::class)->run($record['key']);
+                            $result = app(SystemJobRunnerService::class)->run(
+                                $record['key'],
+                                extraParameters: $extra,
+                            );
                         } catch (\InvalidArgumentException $exception) {
                             Notification::make()->title(__('Cannot run job'))->body($exception->getMessage())->danger()->send();
 
@@ -216,7 +256,7 @@ trait InteractsWithJobsTable
                     ->searchable(false),
                 TextColumn::make('duration_ms')
                     ->label(__('Duration'))
-                    ->formatStateUsing(fn(mixed $state): string => filled($state) ? ((int) $state) . ' ms' : '—')
+                    ->formatStateUsing(fn (mixed $state): string => filled($state) ? ((int) $state).' ms' : '—')
                     ->alignEnd()
                     ->toggleable(false)
                     ->searchable(false)
@@ -224,7 +264,7 @@ trait InteractsWithJobsTable
                 TextColumn::make('exit_code')
                     ->label(__('Exit code'))
                     ->placeholder(__('—'))
-                    ->visible(fn(): bool => $this->jobsAdvancedUi())
+                    ->visible(fn (): bool => $this->jobsAdvancedUi())
                     ->searchable(false),
             ])
             ->recordActions(TableRecordActionGroups::wrap([

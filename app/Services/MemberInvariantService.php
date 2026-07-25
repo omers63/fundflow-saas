@@ -89,7 +89,7 @@ class MemberInvariantService
             : 0.0;
 
         $dependentTransfersIn = $cashAccountId
-            ? $this->sumDescriptionPattern($cashAccountId, $member->id, 'credit', 'Transfer from%')
+            ? $this->sumMemberCashTransfersIn($cashAccountId, $member->id)
             : 0.0;
 
         $contributionsDebited = $cashAccountId
@@ -129,7 +129,7 @@ class MemberInvariantService
             : 0.0;
 
         $dependentTransfersOut = $cashAccountId
-            ? $this->sumDescriptionPattern($cashAccountId, $member->id, 'debit', 'Transfer to%')
+                        ? $this->sumMemberCashTransfersOut($cashAccountId, $member->id)
             : 0.0;
 
         $directBankImportsPosted = $this->sumDirectBankImportsPosted($member->id);
@@ -237,12 +237,44 @@ class MemberInvariantService
         string $type,
         string $descriptionPattern,
     ): float {
+        return $this->sumDescriptionPatterns($accountId, $memberId, $type, [$descriptionPattern]);
+    }
+
+    /**
+     * @param  list<string>  $descriptionPatterns
+     */
+    protected function sumDescriptionPatterns(
+        int $accountId,
+        int $memberId,
+        string $type,
+        array $descriptionPatterns,
+    ): float {
         return (float) Transaction::query()
             ->where('account_id', $accountId)
             ->where('member_id', $memberId)
             ->where('type', $type)
-            ->where('description', 'like', $descriptionPattern)
+            ->where(function ($query) use ($descriptionPatterns): void {
+                foreach ($descriptionPatterns as $pattern) {
+                    $query->orWhere('description', 'like', $pattern);
+                }
+            })
             ->sum('amount');
+    }
+
+    protected function sumMemberCashTransfersIn(int $accountId, int $memberId): float
+    {
+        return $this->sumDescriptionPatterns($accountId, $memberId, 'credit', [
+            'Transfer from%',
+            'تحويل من%',
+        ]);
+    }
+
+    protected function sumMemberCashTransfersOut(int $accountId, int $memberId): float
+    {
+        return $this->sumDescriptionPatterns($accountId, $memberId, 'debit', [
+            'Transfer to%',
+            'تحويل إلى%',
+        ]);
     }
 
     /**

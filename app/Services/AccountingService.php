@@ -1976,14 +1976,25 @@ class AccountingService
             throw new InvalidArgumentException(__('Amount must be greater than zero.'));
         }
 
-        $parentCash = $parent->cashAccount;
-        $dependentCash = $dependent->cashAccount;
+        if ((int) ($dependent->parent_member_id ?? 0) !== (int) $parent->id) {
+            throw new InvalidArgumentException(__('Cash can only be transferred to your own dependents.'));
+        }
+
+        if ($dependent->status !== 'active') {
+            throw new InvalidArgumentException(__('Recipient membership must be active.'));
+        }
+
+        $this->createMemberAccounts($parent);
+        $this->createMemberAccounts($dependent);
+
+        $parentCash = $parent->fresh()->cashAccount;
+        $dependentCash = $dependent->fresh()->cashAccount;
 
         if ($parentCash === null || $dependentCash === null) {
             throw new InvalidArgumentException(__('Member cash accounts are not configured.'));
         }
 
-        if ((float) $parentCash->balance < $amount) {
+        if ((float) $parentCash->balance < $amount - 0.00001) {
             throw new RuntimeException(__('Insufficient parent cash balance.'));
         }
 
@@ -2012,6 +2023,65 @@ class AccountingService
         if ($triggerCollection) {
             $this->triggerMemberCashCollection($dependent->fresh() ?? $dependent);
         }
+    }
+
+    /**
+     * Move cash between two members with master cash mirrors (internal transfer; no bank line).
+     */
+    public function transferPeerMemberCash(
+        Member $from,
+        Member $to,
+        float $amount,
+        string $note = '',
+        ?Model $reference = null,
+    ): void {
+        if ($amount <= 0) {
+            throw new InvalidArgumentException(__('Amount must be greater than zero.'));
+        }
+
+        if ((int) $from->id === (int) $to->id) {
+            throw new InvalidArgumentException(__('Cannot transfer cash to the same member.'));
+        }
+
+        $this->createMemberAccounts($from);
+        $this->createMemberAccounts($to);
+
+        $fromCash = $from->fresh()->cashAccount;
+        $toCash = $to->fresh()->cashAccount;
+
+        if ($fromCash === null || $toCash === null) {
+            throw new InvalidArgumentException(__('Member cash accounts are not configured.'));
+        }
+
+        if ((float) $fromCash->balance < $amount - 0.00001) {
+            throw new RuntimeException(__('Insufficient member cash balance.'));
+        }
+
+        $debitDesc = trim(__('Transfer to :name', ['name' => $to->name]).($note !== '' ? " — {$note}" : ''));
+        $creditDesc = trim(__('Transfer from :name', ['name' => $from->name]).($note !== '' ? " — {$note}" : ''));
+
+        DB::transaction(function () use ($fromCash, $toCash, $amount, $debitDesc, $creditDesc, $reference, $from, $to): void {
+            self::withoutMemberCashCollection(function () use ($fromCash, $toCash, $amount, $debitDesc, $creditDesc, $reference, $from, $to): void {
+                $this->debitMemberCashWithMasterMirror(
+                    $fromCash,
+                    $amount,
+                    $debitDesc,
+                    __('(member cash transfer mirror)'),
+                    $reference,
+                    null,
+                    $from->id,
+                );
+                $this->creditMemberCashWithMasterMirror(
+                    $toCash,
+                    $amount,
+                    $creditDesc,
+                    __('(member cash transfer mirror)'),
+                    $reference,
+                    null,
+                    $to->id,
+                );
+            });
+        });
     }
 
     /**

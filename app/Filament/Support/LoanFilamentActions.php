@@ -8,7 +8,9 @@ use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Services\Loans\LoanAdminTransferService;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanEarlySettlementService;
 use App\Services\Loans\LoanLifecycleService;
@@ -16,6 +18,7 @@ use App\Services\Loans\LoanQueueOrderingService;
 use App\Services\Loans\LoanRepaymentService;
 use App\Services\Loans\LoanSplitExcessFundCashOutService;
 use App\Services\Loans\LoanThresholdInstallmentWaiverService;
+use App\Services\Loans\LoanTransferPreview;
 use App\Services\LoanService;
 use App\Support\BusinessDay;
 use App\Support\Lang;
@@ -26,6 +29,7 @@ use Filament\Actions\BulkAction;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -298,7 +302,7 @@ final class LoanFilamentActions
                         ->label(__('Loan'))
                         ->options($loans->mapWithKeys(function (Loan $loan): array {
                             $member = $loan->member;
-                            $label = ($member?->member_number ?? '—') . ' — ' . ($member?->name ?? __('Unknown member'));
+                            $label = ($member?->member_number ?? '—').' — '.($member?->name ?? __('Unknown member'));
                             $remaining = number_format($loan->remainingToDisburse(), 2);
 
                             return [$loan->id => "{$label} ({$remaining})"];
@@ -336,7 +340,7 @@ final class LoanFilamentActions
             ->action(function (array $data, Action $action, LoanLifecycleService $lifecycle, Component $livewire): void {
                 $loan = Loan::query()->find((int) ($data['loan_id'] ?? 0));
 
-                if ($loan === null || !in_array($loan->status, ['approved', 'partially_disbursed'], true)) {
+                if ($loan === null || ! in_array($loan->status, ['approved', 'partially_disbursed'], true)) {
                     Notification::make()
                         ->title(__('Disbursement failed'))
                         ->body(__('Select a loan that is ready to disburse.'))
@@ -347,9 +351,9 @@ final class LoanFilamentActions
                 }
 
                 if (
-                    !ActionModalFailure::attemptThrowable(
+                    ! ActionModalFailure::attemptThrowable(
                         $action,
-                        fn() => $lifecycle->disbursePartial(
+                        fn () => $lifecycle->disbursePartial(
                             $loan,
                             (float) $data['amount'],
                             filled($data['notes'] ?? null) ? (string) $data['notes'] : null,
@@ -684,10 +688,219 @@ final class LoanFilamentActions
         ];
     }
 
+    public static function transferLoanAdmin(): Action
+    {
+        return Action::make('transferLoanAdmin')
+            ->label(__('Transfer loan (admin)'))
+            ->icon('heroicon-o-arrows-right-left')
+            ->color('danger')
+            ->visible(fn (Loan $record): bool => $record->status === 'active'
+                && $record->isFullyDisbursed()
+                && $record->admin_transferred_at === null)
+            ->modalHeading(__('Transfer loan (admin)'))
+            ->modalDescription(__('Reassigns this loan to another member. Remaining keeps the same loan row; Full unwinds fund/loan exposure (no cash clawback) then redisburses a new loan.'))
+            ->modalWidth('xl')
+            ->fillForm(function (Loan $record): array {
+                $hasGuarantor = filled($record->guarantor_member_id)
+                    && (int) $record->guarantor_member_id !== (int) $record->member_id;
+
+                return [
+                    'mode' => LoanTransferPreview::MODE_REMAINING,
+                    'recipient_scope' => $hasGuarantor ? 'guarantor' : 'any_member',
+                    'recipient_member_id' => $hasGuarantor ? $record->guarantor_member_id : null,
+                    'allow_second_running_loan' => false,
+                    'fund_entirely_from_master' => false,
+                    'suspend_borrower' => true,
+                ];
+            })
+            ->schema(fn (Loan $record): array => [
+                Select::make('mode')
+                    ->label(__('Transfer mode'))
+                    ->options(Lang::transOptions([
+                        LoanTransferPreview::MODE_REMAINING => 'Remaining obligation',
+                        LoanTransferPreview::MODE_FULL => 'Full unwind and redisburse',
+                    ]))
+                    ->required()
+                    ->live(),
+                Radio::make('recipient_scope')
+                    ->label(__('Recipient'))
+                    ->options(function () use ($record): array {
+                        $options = [
+                            'any_member' => __('Any active member'),
+                        ];
+
+                        if (filled($record->guarantor_member_id)
+                            && (int) $record->guarantor_member_id !== (int) $record->member_id) {
+                            $options = [
+                                'guarantor' => __('Assigned guarantor'),
+                                ...$options,
+                            ];
+                        }
+
+                        return $options;
+                    })
+                    ->required()
+                    ->live()
+                    ->afterStateUpdated(function ($state, callable $set) use ($record): void {
+                        if ($state === 'guarantor') {
+                            $set('recipient_member_id', $record->guarantor_member_id);
+                        }
+                    }),
+                Placeholder::make('guarantor_recipient')
+                    ->label(__('Guarantor'))
+                    ->content(fn (): string => $record->guarantor?->name
+                        ?? __('No guarantor assigned'))
+                    ->visible(fn (Get $get): bool => $get('recipient_scope') === 'guarantor'),
+                MemberSelect::make('recipient_member_id')
+                    ->label(__('Recipient member'))
+                    ->required(fn (Get $get): bool => $get('recipient_scope') === 'any_member')
+                    ->visible(fn (Get $get): bool => $get('recipient_scope') === 'any_member')
+                    ->live()
+                    ->disableOptionWhen(fn (mixed $value): bool => (int) $value === (int) $record->member_id),
+                Toggle::make('allow_second_running_loan')
+                    ->label(__('Allow second running loan'))
+                    ->helperText(__('Required when the recipient is already at the maximum active loans cap.'))
+                    ->live(),
+                Toggle::make('fund_entirely_from_master')
+                    ->label(__('Fund entirely from master'))
+                    ->helperText(__('Sets member portion to zero and funds the redisbursement 100% from master fund.'))
+                    ->visible(fn (Get $get): bool => $get('mode') === LoanTransferPreview::MODE_FULL)
+                    ->live(),
+                Toggle::make('suspend_borrower')
+                    ->label(__('Suspend original borrower'))
+                    ->default(true)
+                    ->helperText(__('Same default as delinquency transfer.')),
+                Placeholder::make('transfer_preview')
+                    ->label(__('Preview'))
+                    ->content(function (Get $get) use ($record): HtmlString {
+                        return self::adminTransferPreviewHtml($record, $get);
+                    })
+                    ->columnSpanFull(),
+            ])
+            ->action(function (Loan $record, array $data, Action $action, LoanAdminTransferService $transfers): void {
+                $scope = (string) ($data['recipient_scope'] ?? 'guarantor');
+                $recipientId = $scope === 'guarantor'
+                    ? (int) $record->guarantor_member_id
+                    : (int) ($data['recipient_member_id'] ?? 0);
+
+                $recipient = Member::query()->find($recipientId);
+
+                if ($recipient === null) {
+                    ActionModalFailure::present($action, __('Select a valid recipient member.'), __('Cannot transfer loan'));
+
+                    return;
+                }
+
+                $mode = (string) ($data['mode'] ?? LoanTransferPreview::MODE_REMAINING);
+
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $transfers->transfer(
+                            $record,
+                            $recipient,
+                            $mode,
+                            (bool) ($data['allow_second_running_loan'] ?? false),
+                            (bool) ($data['fund_entirely_from_master'] ?? false),
+                            (bool) ($data['suspend_borrower'] ?? true),
+                        ),
+                        __('Cannot transfer loan'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__('Loan transferred'))
+                    ->success()
+                    ->send();
+            });
+    }
+
+    private static function adminTransferPreviewHtml(Loan $record, Get $get): HtmlString
+    {
+        $mode = (string) ($get('mode') ?: LoanTransferPreview::MODE_REMAINING);
+        $scope = (string) ($get('recipient_scope') ?: 'guarantor');
+        $recipientId = $scope === 'guarantor'
+            ? (int) $record->guarantor_member_id
+            : (int) ($get('recipient_member_id') ?: 0);
+        $recipient = $recipientId > 0
+            ? Member::query()->with('accounts')->find($recipientId)
+            : null;
+
+        if ($recipient === null) {
+            return new HtmlString('<p class="text-sm text-gray-500">'.e(__('Select a recipient to preview amounts.')).'</p>');
+        }
+
+        try {
+            $preview = app(LoanAdminTransferService::class)->preview(
+                $record,
+                $recipient,
+                $mode,
+                (bool) $get('fund_entirely_from_master'),
+            );
+        } catch (\Throwable $e) {
+            return new HtmlString('<p class="text-sm text-danger-600">'.e($e->getMessage()).'</p>');
+        }
+
+        $lines = [
+            __('Recipient: :name', ['name' => $recipient->name]),
+            __('Approved amount: :amount', ['amount' => number_format($preview->approvedAmount, 2)]),
+        ];
+
+        if ($mode === LoanTransferPreview::MODE_REMAINING) {
+            $lines[] = __('Remaining obligation (master unpaid): :amount', [
+                'amount' => number_format($preview->remainingObligation, 2),
+            ]);
+            $lines[] = __('No fund or cash unwind — same loan row is reassigned.');
+        } else {
+            $lines[] = __('Loan account balance to clear: :amount', [
+                'amount' => number_format($preview->loanAccountBalance, 2),
+            ]);
+            $lines[] = __('Borrower fund restore: :amount', [
+                'amount' => number_format($preview->fundRestoreAmount, 2),
+            ]);
+            $lines[] = __('New member portion: :amount', [
+                'amount' => number_format($preview->redisbursePortions['member_portion'], 2),
+            ]);
+            $lines[] = __('New master portion: :amount', [
+                'amount' => number_format($preview->redisbursePortions['master_portion'], 2),
+            ]);
+            $lines[] = __('Full mode does not claw back cash already paid to the borrower. Redisbursement credits the recipient cash account.');
+
+            if (! $preview->recipientFundSufficient) {
+                $lines[] = __('Recipient fund (:balance) is below required (:required). Enable “Fund entirely from master” or top up.', [
+                    'balance' => number_format($preview->recipientFundBalance, 2),
+                    'required' => number_format($preview->requiredRecipientFund, 2),
+                ]);
+            }
+
+            if (! $preview->masterFundSufficientForRedisburse) {
+                $lines[] = __('Master fund (:balance) is below redisburse master portion (:portion).', [
+                    'balance' => number_format($preview->masterFundBalance, 2),
+                    'portion' => number_format($preview->redisbursePortions['master_portion'], 2),
+                ]);
+            }
+        }
+
+        if ($preview->recipientAtActiveLoanCap) {
+            $lines[] = __('Recipient is at the active loan cap (:count / :max). Enable “Allow second running loan”.', [
+                'count' => $preview->recipientActiveLoanCount,
+                'max' => $preview->maxActiveLoans,
+            ]);
+        }
+
+        $html = '<ul class="list-disc space-y-1 ps-4 text-sm">'
+            .collect($lines)->map(fn (string $line): string => '<li>'.e($line).'</li>')->implode('')
+            .'</ul>';
+
+        return new HtmlString($html);
+    }
+
     public static function transferGuarantorLiability(): Action
     {
         return Action::make('transferGuarantorLiability')
-            ->label(__('Transfer liability to guarantor'))
+            ->label(__('Delinquency transfer (guarantor liability)'))
             ->icon('heroicon-o-shield-exclamation')
             ->color('warning')
             ->visible(fn (Loan $record): bool => $record->status === 'active'
@@ -695,8 +908,8 @@ final class LoanFilamentActions
                 && $record->guarantor_liability_transferred_at === null
                 && ! $record->isGuarantorReleased())
             ->requiresConfirmation()
-            ->modalHeading(__('Transfer liability to guarantor'))
-            ->modalDescription(__('Future overdue installments will be collected from the guarantor fund immediately instead of following the borrower warning cycle.'))
+            ->modalHeading(__('Delinquency transfer (guarantor liability)'))
+            ->modalDescription(__('Future overdue installments will be collected from the guarantor fund immediately instead of following the borrower warning cycle. This is separate from admin loan transfer.'))
             ->action(function (Loan $record, Action $action, LoanDelinquencyService $delinquency): void {
                 if (
                     ! ActionModalFailure::attemptThrowable(
@@ -857,6 +1070,7 @@ final class LoanFilamentActions
                 self::earlySettle(),
                 self::waiveThresholdInstallments(),
                 self::applyOpenRepayment(),
+                self::transferLoanAdmin(),
                 self::transferGuarantorLiability(),
                 self::restoreBorrowerLiability(),
                 self::reinstateSuspendedBorrower(),

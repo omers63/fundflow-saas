@@ -40,13 +40,15 @@ final class MemberNavigation
 
     public const SORT_ACTIVITY = 2;
 
-    public const SORT_CASH_OUTS = 1;
+    public const SORT_CASH_OUTS = 2;
 
-    public const SORT_STATEMENTS = 2;
+    public const SORT_CASH_TRANSFERS = 3;
 
-    public const SORT_DEPOSITS = 3;
+    public const SORT_STATEMENTS = 4;
 
-    public const SORT_DEPENDENTS = 4;
+    public const SORT_DEPOSITS = 1;
+
+    public const SORT_DEPENDENTS = 5;
 
     public const SORT_SETTINGS = 5;
 
