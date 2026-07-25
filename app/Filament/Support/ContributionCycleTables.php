@@ -16,6 +16,8 @@ use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -23,15 +25,19 @@ use Livewire\Component;
 
 final class ContributionCycleTables
 {
-    public static function configurePendingMembersTable(Table $table): Table
-    {
+    public static function configurePendingMembersTable(
+        Table $table,
+        ?string $heading = null,
+        bool $includeCollectionFilters = false,
+    ): Table {
         $cycles = app(ContributionCycleService::class);
         [$month, $year] = ContributionResource::resolveListCycle();
         $currency = Setting::get('general', 'currency', 'USD');
+        $periodLabel = $cycles->periodLabel($month, $year);
 
         return TableGrouping::apply($table
             ->query(fn (): Builder => $cycles->pendingMembersQueryForPeriod($month, $year))
-            ->heading(__('To collect – :period', ['period' => $cycles->periodLabel($month, $year)]))
+            ->heading($heading ?? __('To collect – :period', ['period' => $periodLabel]))
             ->defaultSort(fn (Builder $query, string $direction): Builder => MemberNumberSettings::applySequenceOrder($query, $direction))
             ->headerActions([
                 ContributionListTableHeaderActions::cycleCollectionGroup(),
@@ -116,6 +122,7 @@ final class ContributionCycleTables
                     ->placeholder(__('—'))
                     ->toggleable(),
             ])
+            ->filters($includeCollectionFilters ? self::collectionMemberFilters($cycles, $month, $year) : [])
             ->recordActions(TableRecordActionGroups::wrap([
                 Action::make('apply_single')
                     ->label(__('Apply now'))
@@ -169,6 +176,87 @@ final class ContributionCycleTables
                     TableToolbar::refreshBulkAction(),
                 ]),
             ]), TableGrouping::members());
+    }
+
+    /**
+     * @return array<int, SelectFilter|TernaryFilter>
+     */
+    private static function collectionMemberFilters(
+        ContributionCycleService $cycles,
+        int $month,
+        int $year,
+    ): array {
+        return [
+            MemberSelect::configureFilter(
+                SelectFilter::make('member_id')->label(__('Member')),
+                activeOnly: true,
+            )->query(function (Builder $query, array $data): Builder {
+                if (blank($data['value'] ?? null)) {
+                    return $query;
+                }
+
+                return $query->where('members.id', (int) $data['value']);
+            }),
+            TernaryFilter::make('ready')
+                ->label(__('Ready'))
+                ->trueLabel(__('Yes'))
+                ->falseLabel(__('Insufficient'))
+                ->queries(
+                    true: fn (Builder $query): Builder => self::constrainByContributionCashReadiness(
+                        $query,
+                        $cycles,
+                        $month,
+                        $year,
+                        ready: true,
+                    ),
+                    false: fn (Builder $query): Builder => self::constrainByContributionCashReadiness(
+                        $query,
+                        $cycles,
+                        $month,
+                        $year,
+                        ready: false,
+                    ),
+                ),
+        ];
+    }
+
+    private static function constrainByContributionCashReadiness(
+        Builder $query,
+        ContributionCycleService $cycles,
+        int $month,
+        int $year,
+        bool $ready,
+    ): Builder {
+        $ids = $cycles->pendingMembersQueryForPeriod($month, $year)
+            ->with('cashAccount')
+            ->get()
+            ->filter(function (Member $member) use ($cycles, $month, $year, $ready): bool {
+                $required = $cycles->requiredCollectionCashForMemberPeriod(
+                    $member,
+                    $month,
+                    $year,
+                    syncLateFees: false,
+                );
+
+                $hasCash = $member->getCashBalance() >= $required;
+
+                return $hasCash === $ready;
+            })
+            ->modelKeys();
+
+        return $query->whereIn('members.id', $ids === [] ? [0] : $ids);
+    }
+
+    public static function configureCycleArrearsTable(Table $table): Table
+    {
+        $cycles = app(ContributionCycleService::class);
+        [$month, $year] = ContributionResource::resolveListCycle();
+
+        return self::configurePendingMembersTable(
+            $table,
+            __('Arrears – :period', ['period' => $cycles->periodLabel($month, $year)]),
+            includeCollectionFilters: true,
+        );
     }
 
     public static function configureCollectedTable(Table $table): Table

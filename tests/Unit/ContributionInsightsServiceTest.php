@@ -4,6 +4,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Services\ContributionCycleService;
 use App\Services\ContributionInsightsService;
+use App\Support\CollectionInsightsCache;
 use App\Support\Insights\DualProgressTrendBuilder;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
@@ -16,6 +17,7 @@ beforeEach(function () {
     Filament::setCurrentPanel('tenant');
     Contribution::query()->delete();
     Member::query()->delete();
+    CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_CONTRIBUTIONS);
 });
 
 test('insights snapshot aggregates contribution pipeline metrics', function () {
@@ -60,6 +62,34 @@ test('insights snapshot aggregates contribution pipeline metrics', function () {
         ->and($snapshot['open_period']['collection_rate'])->toBeInt();
 });
 
+test('collect snapshot uses selected cycle not only the open period', function () {
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $previous = Carbon::create($openYear, $openMonth, 1)->subMonthNoOverflow();
+    $prevMonth = (int) $previous->month;
+    $prevYear = (int) $previous->year;
+    $previousKey = $cycles->contributionCycleKey($prevMonth, $prevYear);
+
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    Contribution::factory()->for($member)->posted()->create([
+        'period' => Contribution::periodDate($prevMonth, $prevYear),
+        'amount' => 1000,
+    ]);
+
+    $openSnapshot = app(ContributionInsightsService::class)->forContext('collect');
+    $pastSnapshot = app(ContributionInsightsService::class)->forContext('collect', $previousKey);
+
+    expect($openSnapshot['open_period']['label'])->toBe($cycles->periodLabel($openMonth, $openYear))
+        ->and($pastSnapshot['open_period']['label'])->toBe($cycles->periodLabel($prevMonth, $prevYear))
+        ->and($pastSnapshot['open_period']['label'])->not->toBe($openSnapshot['open_period']['label'])
+        ->and((int) collect($pastSnapshot['kpis'])->firstWhere('key', 'posted')['value'])->toBe(1);
+});
+
 test('collect snapshot exposes cycle collection amount stats', function () {
     $member = Member::factory()->create([
         'status' => 'active',
@@ -97,10 +127,35 @@ test('collected snapshot amount kpi exposes numeric value for stat rendering', f
 
     $snapshot = app(ContributionInsightsService::class)->forContext('collected');
     $amountKpi = collect($snapshot['kpis'])->firstWhere('key', 'amount');
+    $kpiKeys = collect($snapshot['kpis'])->pluck('key')->all();
 
     expect($amountKpi)->not->toBeNull()
         ->and($amountKpi['value'])->toBe(2500.0)
-        ->and($amountKpi['currency'])->toBeString();
+        ->and($amountKpi['currency'])->toBeString()
+        ->and($kpiKeys)->toContain('collect')
+        ->and($kpiKeys)->not->toContain('remaining')
+        ->and($snapshot['collection_amounts']['recovered_amount'])->toBe(2500.0);
+});
+
+test('total recovered matches collected principal not assessed late fees', function () {
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+    ]);
+
+    [$month, $year] = app(ContributionCycleService::class)->currentOpenPeriod();
+
+    Contribution::factory()->for($member)->posted()->create([
+        'period' => Contribution::periodDate($month, $year),
+        'amount' => 1000,
+        'late_fee_amount' => 50,
+    ]);
+
+    $snapshot = app(ContributionInsightsService::class)->forContext('collected');
+
+    expect($snapshot['collection_amounts']['recovered_amount'])->toBe(1000.0)
+        ->and((float) collect($snapshot['kpis'])->firstWhere('key', 'amount')['value'])->toBe(1000.0);
 });
 
 test('six month trend buckets contributions using normalized period keys', function () {

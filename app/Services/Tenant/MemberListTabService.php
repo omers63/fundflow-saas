@@ -48,14 +48,14 @@ final class MemberListTabService
     {
         return once(function (): array {
             $migrationPendingIds = $this->migrationPendingMemberIds();
-            $delinquentIds = $this->delinquentMemberIds();
+            $arrearsIds = $this->outstandingArrearsMemberIds();
 
             return [
                 'all' => Member::query()->count(),
                 'active' => Member::query()->where('status', 'active')->count(),
                 'inactive' => Member::query()->where('status', 'inactive')->count(),
                 'withdrawn' => Member::query()->where('status', 'withdrawn')->count(),
-                'delinquent' => count($delinquentIds),
+                'delinquent' => count($arrearsIds),
                 'migration_pending' => count($migrationPendingIds),
             ];
         });
@@ -68,9 +68,7 @@ final class MemberListTabService
             'inactive' => $query->where('members.status', 'inactive'),
             'withdrawn' => $query->where('members.status', 'withdrawn'),
             'migration_pending' => $query->whereIn('members.id', $this->migrationPendingMemberIds()),
-            'delinquent' => $query
-                ->where('members.status', 'active')
-                ->whereIn('members.id', $this->delinquentMemberIds()),
+            'delinquent' => $query->whereIn('members.id', $this->outstandingArrearsMemberIds()),
             default => $query,
         };
     }
@@ -81,26 +79,35 @@ final class MemberListTabService
     public function migrationPendingMemberIds(): array
     {
         return once(function (): array {
-            $delinquency = app(LoanDelinquencyService::class);
-
-            return Member::query()
+            $importedActiveIds = Member::query()
                 ->where('status', 'active')
                 ->whereNotNull('opening_balances_posted_at')
-                ->orderBy('name')
                 ->pluck('id')
                 ->map(fn (mixed $id): int => (int) $id)
-                ->filter(fn (int $memberId): bool => $delinquency->countContributionArrearsPeriods($memberId) > 0)
-                ->values()
                 ->all();
+
+            if ($importedActiveIds === []) {
+                return [];
+            }
+
+            $contributionArrearsLookup = array_fill_keys(
+                app(LoanDelinquencyService::class)->contributionArrearsMemberIds(),
+                true,
+            );
+
+            return array_values(array_filter(
+                $importedActiveIds,
+                fn (int $memberId): bool => isset($contributionArrearsLookup[$memberId]),
+            ));
         });
     }
 
     /**
      * @return list<int>
      */
-    private function delinquentMemberIds(): array
+    public function outstandingArrearsMemberIds(): array
     {
-        return once(fn(): array => app(LoanDelinquencyService::class)->delinquentMemberIds());
+        return once(fn (): array => app(LoanDelinquencyService::class)->membersWithOutstandingArrearsIds());
     }
 
     /**

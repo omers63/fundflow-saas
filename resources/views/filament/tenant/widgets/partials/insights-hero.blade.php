@@ -1,6 +1,6 @@
-@props(['hero', 'stackCta' => true])
-
 @php
+    $hero = $hero ?? [];
+    $compact = (bool) ($compact ?? false);
     $tone = $hero['tone'] ?? 'success';
     $borderBg = match ($tone) {
         'danger' => 'border-red-200 bg-red-50 text-red-800 dark:border-red-800/40 dark:bg-red-950/30 dark:text-red-300',
@@ -17,15 +17,36 @@
     $ctaBg = 'border border-gray-200 bg-white text-gray-600 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700 dark:border-white/10 dark:bg-slate-800 dark:text-gray-300 dark:hover:border-sky-600 dark:hover:bg-sky-950/30 dark:hover:text-sky-300';
 @endphp
 
-<div class="ff-app-insights-hero flex items-center gap-3 rounded-xl border px-4 py-3 shadow-sm {{ $borderBg }}">
-    <x-dynamic-component :component="$iconName" class="h-5 w-5 shrink-0 mt-0.5" />
+<div @class([
+    'ff-app-insights-hero flex items-center shadow-sm rounded-xl border',
+    'gap-2 px-3 py-2' => $compact,
+    'gap-3 px-4 py-3' => !$compact,
+    $borderBg,
+])>
+    <x-dynamic-component :component="$iconName" @class([
+        'shrink-0 mt-0.5',
+        'h-4 w-4' => $compact,
+        'h-5 w-5' => !$compact,
+    ]) />
     <div class="min-w-0 flex-1">
-        <p class="text-[12px] font-semibold">{{ $hero['title'] }}</p>
-        <p class="mt-0.5 text-[11px] opacity-80">{{ $hero['subtitle'] }}</p>
+        <p @class([
+            'font-semibold',
+            'text-[11px] leading-snug' => $compact,
+            'text-[12px]' => !$compact,
+        ])>{{ $hero['title'] ?? '' }}</p>
+        <p @class([
+            'opacity-80',
+            'mt-0 text-[10px] leading-snug' => $compact,
+            'mt-0.5 text-[11px]' => !$compact,
+        ])>{{ $hero['subtitle'] ?? '' }}</p>
     </div>
     @if (!empty($hero['cta_url'] ?? null))
-        <a href="{{ $hero['cta_url'] }}"
-            class="ms-auto shrink-0 rounded-lg px-4 py-1.5 text-[11px] font-semibold transition {{ $ctaBg }}">
+        <a href="{{ $hero['cta_url'] }}" @class([
+            'ms-auto shrink-0 rounded-lg font-semibold transition',
+            'px-3 py-1 text-[10px]' => $compact,
+            'px-4 py-1.5 text-[11px]' => !$compact,
+            $ctaBg,
+        ])>
             {{ $hero['cta_label'] }}
         </a>
     @endif

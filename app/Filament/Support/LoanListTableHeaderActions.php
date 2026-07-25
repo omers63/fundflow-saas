@@ -83,14 +83,15 @@ final class LoanListTableHeaderActions
 
     public static function delinquencyGroup(): ActionGroup
     {
-        return ActionGroup::make([
-            self::exportGuarantorExposureAction(),
-            ...LoanDelinquencyHeaderActions::make(),
-        ])
-            ->label(__('Delinquency tools'))
-            ->icon('heroicon-o-exclamation-triangle')
-            ->color('gray')
-            ->button();
+        return TableHeaderIconAction::applyGroup(
+            ActionGroup::make([
+                self::exportGuarantorExposureAction(),
+                ...LoanDelinquencyHeaderActions::make(),
+            ])
+                ->label(__('Delinquency tools'))
+                ->icon('heroicon-o-exclamation-triangle')
+                ->color('gray'),
+        );
     }
 
     public static function eligibilityReviewsGroup(): ActionGroup
@@ -129,15 +130,16 @@ final class LoanListTableHeaderActions
     }
 
     /**
-     * Delinquency maintenance only (used on contribution arrears).
+     * @deprecated Prefer {@see delinquencyGroup()} on Loans → Delinquency.
      */
     public static function delinquencyToolsGroup(): ActionGroup
     {
-        return ActionGroup::make(LoanDelinquencyHeaderActions::make())
-            ->label(__('Delinquency tools'))
-            ->icon('heroicon-o-exclamation-triangle')
-            ->color('gray')
-            ->button();
+        return TableHeaderIconAction::applyGroup(
+            ActionGroup::make(LoanDelinquencyHeaderActions::make())
+                ->label(__('Delinquency tools'))
+                ->icon('heroicon-o-exclamation-triangle')
+                ->color('gray'),
+        );
     }
 
     public static function loanOverridesAction(): Action

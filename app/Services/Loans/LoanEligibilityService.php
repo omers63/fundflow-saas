@@ -13,6 +13,7 @@ use App\Services\ContributionCycleService;
 use App\Services\MemberLatePaymentHistoryEvaluator;
 use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
+use App\Support\ContributionPolicySettings;
 use App\Support\LoanEligibilityGate;
 use App\Support\LoanSettings;
 use Carbon\CarbonInterface;
@@ -105,20 +106,32 @@ class LoanEligibilityService
             } else {
                 $lateHistory = $this->latePaymentHistory->evaluate($member);
 
-                if (
-                    $this->latePaymentHistory->shouldBlockLoanEligibility(
-                        $lateHistory['trailing_consecutive'],
-                        $lateHistory['rolling_total'],
-                    )
-                ) {
-                    if ($lateHistory['trailing_consecutive'] >= LoanSettings::latePaymentConsecutiveThreshold()) {
-                        $failed[LoanEligibilityGate::DELINQUENCY] = __('You have :count consecutive late contribution or repayment cycles (limit :limit).', [
-                            'count' => $lateHistory['trailing_consecutive'],
+                if ($this->latePaymentHistory->shouldBlockFromLateContributions($lateHistory['contribution'])) {
+                    $contribution = $lateHistory['contribution'];
+
+                    if ($contribution['trailing_consecutive'] >= ContributionPolicySettings::lateSettlementConsecutiveThreshold()) {
+                        $failed[LoanEligibilityGate::DELINQUENCY] = __('You have :count consecutive late contribution cycles (limit :limit).', [
+                            'count' => $contribution['trailing_consecutive'],
+                            'limit' => ContributionPolicySettings::lateSettlementConsecutiveThreshold(),
+                        ]);
+                    } else {
+                        $failed[LoanEligibilityGate::DELINQUENCY] = __('You have :count late contribution cycles in the last :months months (limit :limit).', [
+                            'count' => $contribution['rolling_total'],
+                            'months' => ContributionPolicySettings::lateSettlementLookbackMonths(),
+                            'limit' => ContributionPolicySettings::lateSettlementRollingThreshold(),
+                        ]);
+                    }
+                } elseif ($this->latePaymentHistory->shouldBlockFromLateRepayments($lateHistory['repayment'])) {
+                    $repayment = $lateHistory['repayment'];
+
+                    if ($repayment['trailing_consecutive'] >= LoanSettings::latePaymentConsecutiveThreshold()) {
+                        $failed[LoanEligibilityGate::DELINQUENCY] = __('You have :count consecutive late EMI cycles (limit :limit).', [
+                            'count' => $repayment['trailing_consecutive'],
                             'limit' => LoanSettings::latePaymentConsecutiveThreshold(),
                         ]);
                     } else {
-                        $failed[LoanEligibilityGate::DELINQUENCY] = __('You have :count late contribution or repayment cycles in the last :months months (limit :limit).', [
-                            'count' => $lateHistory['rolling_total'],
+                        $failed[LoanEligibilityGate::DELINQUENCY] = __('You have :count late EMI cycles in the last :months months (limit :limit).', [
+                            'count' => $repayment['rolling_total'],
                             'months' => LoanSettings::latePaymentLookbackMonths(),
                             'limit' => LoanSettings::latePaymentRollingThreshold(),
                         ]);

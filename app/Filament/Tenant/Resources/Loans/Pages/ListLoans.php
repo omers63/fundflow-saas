@@ -59,32 +59,37 @@ class ListLoans extends ListRecords
             [$month, $year] = $cycles->currentOpenPeriod();
             $this->selectedCycle = $cycles->contributionCycleKey($month, $year);
         }
+
+        $this->collectionSegment = LoanResource::normalizeCycleSegment($this->collectionSegment, $this->selectedCycle);
     }
 
     public function updatedSelectedCycle(): void
     {
+        $this->collectionSegment = LoanResource::normalizeCycleSegment($this->collectionSegment, $this->selectedCycle);
+
         if (LoanResource::resolvePrimaryTab() === 'collection') {
             $this->reconfigureTableForActiveTab();
-            LoanResource::dispatchInsightsRefresh($this);
+            LoanResource::dispatchInsightsRefresh($this, invalidateInsights: false);
         }
     }
 
     public function updatedCollectionSegment(): void
     {
+        $this->collectionSegment = LoanResource::normalizeCycleSegment($this->collectionSegment, $this->selectedCycle);
         $this->reconfigureTableForActiveTab();
-        LoanResource::dispatchInsightsRefresh($this);
+        LoanResource::dispatchInsightsRefresh($this, invalidateInsights: false);
     }
 
     public function updatedDelinquencyView(): void
     {
         $this->reconfigureTableForActiveTab();
-        LoanResource::dispatchInsightsRefresh($this);
+        LoanResource::dispatchInsightsRefresh($this, invalidateInsights: false);
     }
 
     public function updatedPortfolioView(): void
     {
         $this->reconfigureTableForActiveTab();
-        LoanResource::dispatchInsightsRefresh($this);
+        LoanResource::dispatchInsightsRefresh($this, invalidateInsights: false);
     }
 
     protected function makeTable(): Table
@@ -104,6 +109,8 @@ class ListLoans extends ListRecords
 
         if ($this->activeTab !== 'collection') {
             $this->collectionSegment = 'collect';
+        } else {
+            $this->collectionSegment = LoanResource::normalizeCycleSegment($this->collectionSegment, $this->selectedCycle);
         }
 
         $this->tableSort = null;
@@ -142,7 +149,7 @@ class ListLoans extends ListRecords
                 'collected' => __('Installments already collected from member cash for :period.', [
                     'period' => LoanResource::resolveListCycleLabel(),
                 ]),
-                'arrears' => __('Unpaid installments from labelled cycles before :period.', [
+                'arrears' => __('Members who still owe EMI for :period. Apply from cash balance.', [
                     'period' => LoanResource::resolveListCycleLabel(),
                 ]),
                 default => __('Members with pending EMIs for :period. Apply from cash balance.', [
@@ -194,6 +201,7 @@ class ListLoans extends ListRecords
         return [
             ...parent::getWidgetData(),
             'context' => LoanResource::resolveInsightsContext(),
+            'selectedCycle' => $this->selectedCycle,
         ];
     }
 
@@ -214,6 +222,10 @@ class ListLoans extends ListRecords
 
     protected function collectionPendingBadge(): ?string
     {
+        if (! in_array(LoanResource::resolveCollectionSegment(), ['collect', 'arrears'], true)) {
+            return null;
+        }
+
         $pending = LoanResource::pendingEmiCollectionMemberCount();
 
         return $pending > 0 ? (string) $pending : null;
@@ -261,6 +273,7 @@ class ListLoans extends ListRecords
         return [
             ...parent::getPageClasses(),
             'fi-page-loans',
+            'ff-tenant-loans-workspace',
         ];
     }
 

@@ -14,6 +14,7 @@ use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\LoanInsightsService;
 use App\Services\Loans\LoanEligibilityOverrideRequestService;
+use App\Support\CollectionInsightsCache;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Route;
@@ -25,6 +26,7 @@ beforeEach(function () {
     $this->initializeTenancy();
     Filament::setCurrentPanel('tenant');
     $this->service = app(LoanInsightsService::class);
+    CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_LOAN_EMI);
 
     Loan::query()->delete();
     FundTier::query()->delete();
@@ -214,10 +216,13 @@ test('emi collected snapshot reports paid installments for open period', functio
     Carbon::setTestNow();
 });
 
-test('emi arrears snapshot reports unpaid installments before selected cycle', function () {
+test('emi arrears snapshot reports unpaid members for selected cycle', function () {
     Carbon::setTestNow(Carbon::parse('2025-10-15'));
 
     Setting::set('contribution', 'cycle_start_day', '6');
+
+    $cycles = app(ContributionCycleService::class);
+    $octoberKey = $cycles->contributionCycleKey(10, 2025);
 
     $member = Member::create([
         'member_number' => 'EMI-INS-ARR',
@@ -259,16 +264,76 @@ test('emi arrears snapshot reports unpaid installments before selected cycle', f
         'status' => 'pending',
     ]);
 
-    $snapshot = $this->service->forContext('emi_arrears');
+    $snapshot = $this->service->forContext('emi_arrears', cycleKey: $octoberKey);
 
     expect($snapshot)->toHaveKeys(['hero', 'kpis', 'open_period', 'collection_amounts'])
         ->and($snapshot['hero']['tone'])->toBe('danger')
+        ->and($snapshot['open_period']['label'])->toBe($cycles->periodLabel(10, 2025))
+        ->and((int) collect($snapshot['kpis'])->firstWhere('key', 'arrears')['value'])->toBe(1)
+        ->and($snapshot['collection_amounts']['unrecovered_amount'])->toBe(1000.0)
         ->and($snapshot['collection_amounts']['arrears_amount'])->toBe(1000.0);
 
-    $html = view('filament.tenant.widgets.loans.emi_arrears', ['d' => $snapshot])->render();
+    $html = view('filament.tenant.widgets.loans.emi_arrears', [
+        'd' => $snapshot,
+        'compact' => true,
+    ])->render();
 
     expect($html)->toContain('ff-app-insights')
-        ->and($html)->toContain(__('Total arrears amount'));
+        ->and($html)->toContain(__('Total arrears amount'))
+        ->and($html)->toContain('space-y-2')
+        ->and($html)->toContain('text-lg');
+
+    Carbon::setTestNow();
+});
+
+test('emi collect snapshot follows explicit cycle key', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $previous = Carbon::create($openYear, $openMonth, 1)->subMonthNoOverflow();
+    $previousKey = $cycles->contributionCycleKey((int) $previous->month, (int) $previous->year);
+    $previousLabel = $cycles->periodLabel((int) $previous->month, (int) $previous->year);
+
+    $member = Member::create([
+        'member_number' => 'EMI-INS-CYCLE',
+        'name' => 'EMI Cycle Insights Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 1000,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2024-01-01'),
+        'disbursed_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::create((int) $previous->year, (int) $previous->month, 10),
+        'status' => 'paid',
+        'paid_at' => Carbon::create((int) $previous->year, (int) $previous->month, 12),
+    ]);
+
+    $openSnapshot = $this->service->forContext('emi_collect');
+    $pastSnapshot = $this->service->forContext('emi_collected', cycleKey: $previousKey);
+
+    expect($openSnapshot['open_period']['label'])->toBe($cycles->periodLabel($openMonth, $openYear))
+        ->and($pastSnapshot['open_period']['label'])->toBe($previousLabel)
+        ->and((int) collect($pastSnapshot['kpis'])->firstWhere('key', 'collected')['value'])->toBe(1);
 
     Carbon::setTestNow();
 });

@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Widgets;
 
+use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Models\Tenant\Loan;
 use App\Services\LoanInsightsService;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Facades\Route;
+use Livewire\Attributes\On;
 
 class LoanInsightsWidget extends Widget
 {
@@ -23,6 +25,8 @@ class LoanInsightsWidget extends Widget
 
     public string $context = 'portfolio';
 
+    public ?string $selectedCycle = null;
+
     public ?string $queueTab = null;
 
     public Loan|int|null $record = null;
@@ -30,6 +34,18 @@ class LoanInsightsWidget extends Widget
     public function getPollingInterval(): ?string
     {
         return $this->pollingInterval;
+    }
+
+    #[On('refresh-loan-insights')]
+    public function refreshInsights(?string $cycle = null, ?string $context = null): void
+    {
+        if (filled($cycle)) {
+            $this->selectedCycle = $cycle;
+        }
+
+        if (filled($context)) {
+            $this->context = $context;
+        }
     }
 
     public function resolvedContext(): string
@@ -50,10 +66,16 @@ class LoanInsightsWidget extends Widget
             ? (string) (request()->query('tab') ?? $this->queueTab ?? 'needs_decision')
             : $this->queueTab;
 
+        $cycleKey = filled($this->selectedCycle)
+            ? $this->selectedCycle
+            : LoanResource::resolveListCycleKey();
+
         return app(LoanInsightsService::class)->forContext(
             $context,
             $loan,
             $queueTab,
+            null,
+            $cycleKey,
         );
     }
 

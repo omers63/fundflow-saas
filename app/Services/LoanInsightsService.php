@@ -26,20 +26,47 @@ use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanEligibilityOverrideRequestService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Support\BusinessDay;
+use App\Support\CollectionInsightsCache;
 use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightKpi;
 use App\Support\LoanEligibilityGate;
 use App\Support\Loans\LoanUserFacingStage;
+use App\Support\TenantRuntimeCache;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
+use InvalidArgumentException;
 
 final class LoanInsightsService
 {
     /**
      * @return array<string, mixed>
      */
-    public function forContext(string $context, ?Loan $loan = null, ?string $queueTab = null, ?int $memberId = null): array
-    {
+    public function forContext(
+        string $context,
+        ?Loan $loan = null,
+        ?string $queueTab = null,
+        ?int $memberId = null,
+        ?string $cycleKey = null,
+    ): array {
+        if (in_array($context, ['emi_collect', 'emi_collected', 'emi_arrears'], true)) {
+            $resolvedCycle = $cycleKey;
+
+            if (! filled($resolvedCycle)) {
+                $resolvedCycle = LoanResource::resolveListCycleKey() ?? '';
+            }
+
+            return CollectionInsightsCache::remember(
+                CollectionInsightsCache::DOMAIN_LOAN_EMI,
+                "{$context}:{$resolvedCycle}",
+                fn (): array => match ($context) {
+                    'emi_collect' => $this->emiCollectSnapshot($cycleKey),
+                    'emi_collected' => $this->emiCollectedSnapshot($cycleKey),
+                    'emi_arrears' => $this->emiArrearsSnapshot($cycleKey),
+                    default => [],
+                },
+            );
+        }
+
         return match ($context) {
             'portfolio' => $this->portfolioSnapshot(),
             'queue' => $this->queueSnapshot($queueTab ?? 'needs_decision'),
@@ -49,11 +76,32 @@ final class LoanInsightsService
             'member_portfolio' => $this->memberPortfolioSnapshot($memberId),
             'delinquency' => $this->delinquencySnapshot(),
             'eligibility_reviews' => $this->eligibilityReviewsSnapshot(),
-            'emi_collect' => $this->emiCollectSnapshot(),
-            'emi_collected' => $this->emiCollectedSnapshot(),
-            'emi_arrears' => $this->emiArrearsSnapshot(),
             default => [],
         };
+    }
+
+    /**
+     * @return array{0: int, 1: int, 2: string, 3: bool}
+     */
+    private function resolveEmiPeriod(?string $cycleKey = null): array
+    {
+        $cycles = app(ContributionCycleService::class);
+
+        if (filled($cycleKey)) {
+            try {
+                [$month, $year] = $cycles->parseContributionCycleKey($cycleKey);
+            } catch (InvalidArgumentException) {
+                [$month, $year] = LoanResource::resolveListCycle();
+            }
+        } else {
+            [$month, $year] = LoanResource::resolveListCycle();
+        }
+
+        [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+        $isOpen = $month === $openMonth && $year === $openYear;
+        $periodLabel = $cycles->periodLabel($month, $year);
+
+        return [$month, $year, $periodLabel, $isOpen];
     }
 
     /**
@@ -471,12 +519,11 @@ final class LoanInsightsService
     /**
      * @return array<string, mixed>
      */
-    public function emiCollectSnapshot(): array
+    public function emiCollectSnapshot(?string $cycleKey = null): array
     {
         $catalog = app(LoanEmiCollectionCatalogService::class);
-        [$month, $year] = LoanResource::resolveListCycle();
+        [$month, $year, $periodLabel, $isOpen] = $this->resolveEmiPeriod($cycleKey);
         $currency = Setting::get('general', 'currency', 'USD');
-        $periodLabel = $catalog->periodLabel($month, $year);
         $metrics = $this->aggregateEmiCollectMetrics($catalog, $month, $year);
 
         $pendingMembers = $metrics['pending_members'];
@@ -484,13 +531,15 @@ final class LoanInsightsService
         $totalPendingEmis = $metrics['total_pending_emis'];
         $readyWithCash = $metrics['ready_with_cash'];
         $collectionRate = $metrics['collection_rate'];
+        $periodSub = $isOpen ? __('Open period') : $periodLabel;
+        $outstandingUrl = $isOpen
+            ? LoanResource::listTabUrl('emi_collect')
+            : LoanResource::listCollectionSegmentUrl('arrears');
 
         $overdueInstallments = (int) LoanInstallment::query()
             ->where('status', 'overdue')
             ->whereHas('loan', fn ($q) => $q->whereIn('status', ['active', 'transferred']))
             ->count();
-
-        $collectUrl = LoanResource::listTabUrl('emi_collect');
 
         return [
             'currency' => $currency,
@@ -512,66 +561,69 @@ final class LoanInsightsService
                     )
                     : __('All collectable installments for :period are paid from member cash.', ['period' => $periodLabel]),
                 'cta_label' => $pendingMembers > 0 ? __('EMI collection') : null,
-                'cta_url' => $pendingMembers > 0 ? $collectUrl : null,
+                'cta_url' => $pendingMembers > 0 ? $outstandingUrl : null,
             ],
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'missing', 'label' => __('To collect'), 'value' => (string) $pendingMembers, 'sub' => __('Members'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $pendingMembers > 0],
                 ['key' => 'collected', 'label' => __('Collected'), 'value' => (string) $collectedCount, 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => $collectedCount > 0],
                 ['key' => 'pending_emis', 'label' => __('Pending EMIs'), 'value' => (string) $totalPendingEmis, 'sub' => __('Installments'), 'icon' => 'heroicon-o-clock', 'accent' => 'sky', 'active' => $totalPendingEmis > 0],
-                ['key' => 'rate', 'label' => __('Collection'), 'value' => $collectionRate.'%', 'sub' => __('Open period'), 'icon' => 'heroicon-o-chart-pie', 'accent' => 'violet', 'active' => true],
+                ['key' => 'rate', 'label' => __('Collection'), 'value' => $collectionRate.'%', 'sub' => $periodSub, 'icon' => 'heroicon-o-chart-pie', 'accent' => 'violet', 'active' => true],
                 ['key' => 'ready_cash', 'label' => __('Ready'), 'value' => (string) $readyWithCash, 'sub' => __('Sufficient cash'), 'icon' => 'heroicon-o-banknotes', 'accent' => 'teal', 'active' => $readyWithCash > 0],
                 ['key' => 'overdue', 'label' => __('Overdue'), 'value' => (string) $overdueInstallments, 'sub' => __('Installments'), 'icon' => 'heroicon-o-exclamation-triangle', 'accent' => 'rose', 'active' => $overdueInstallments > 0, 'value_class' => $overdueInstallments > 0 ? 'text-rose-600 dark:text-rose-400' : null],
             ], [
-                'missing' => $collectUrl,
+                'missing' => $outstandingUrl,
                 'collected' => LoanResource::listTabUrl('emi_collected'),
-                'pending_emis' => $collectUrl,
-                'rate' => $collectUrl,
-                'ready_cash' => $collectUrl,
+                'pending_emis' => $outstandingUrl,
+                'rate' => $outstandingUrl,
+                'ready_cash' => $outstandingUrl,
                 'overdue' => LoanResource::listTabUrl('overdue_installments'),
             ]),
-            'collection_amounts' => $this->emiCycleCollectionAmounts($catalog, $month, $year),
+            'collection_amounts' => $this->emiCycleCollectionAmounts($catalog, $month, $year, $isOpen, $metrics),
         ];
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function emiArrearsSnapshot(): array
+    public function emiArrearsSnapshot(?string $cycleKey = null): array
     {
         $catalog = app(LoanEmiCollectionCatalogService::class);
-        [$month, $year] = LoanResource::resolveListCycle();
+        [$month, $year, $periodLabel, $isOpen] = $this->resolveEmiPeriod($cycleKey);
         $currency = Setting::get('general', 'currency', 'USD');
-        $periodLabel = $catalog->periodLabel($month, $year);
-        $live = LoanResource::isViewingOpenCycle();
-        $arrearsCount = $catalog->emiArrearsInstallmentCount($month, $year, $live);
-        $arrearsMembers = $catalog->emiArrearsMemberCount($month, $year, $live);
         $metrics = $this->aggregateEmiCollectMetrics($catalog, $month, $year);
+        $missingMembers = $metrics['pending_members'];
+        $collectedCount = $metrics['collected_count'];
+        $periodSub = $isOpen ? __('Open period') : $periodLabel;
         $arrearsUrl = LoanResource::listCollectionSegmentUrl('arrears');
+        $collectedUrl = LoanResource::listTabUrl('emi_collected');
+        $collectionRate = ($collectedCount + $missingMembers) > 0
+            ? (int) round(($collectedCount / ($collectedCount + $missingMembers)) * 100)
+            : 0;
 
         return [
             'currency' => $currency,
             'open_period' => ['label' => $periodLabel],
             'hero' => [
-                'tone' => $arrearsCount > 0 ? 'danger' : 'success',
-                'title' => $arrearsCount > 0
-                    ? __('EMI arrears need attention')
-                    : __('No EMI arrears'),
-                'subtitle' => $arrearsCount > 0
+                'tone' => $missingMembers > 0 ? 'danger' : 'success',
+                'title' => $missingMembers > 0
+                    ? __('Arrears for :period', ['period' => $periodLabel])
+                    : __('No arrears for :period', ['period' => $periodLabel]),
+                'subtitle' => $missingMembers > 0
                     ? trans_choice(
-                        ':count unpaid installment before :period across :members member(s)|:count unpaid installments before :period across :members member(s)',
-                        $arrearsCount,
-                        ['count' => $arrearsCount, 'period' => $periodLabel, 'members' => $arrearsMembers],
+                        ':count member still to collect for :period|:count members still to collect for :period',
+                        $missingMembers,
+                        ['count' => $missingMembers, 'period' => $periodLabel],
                     )
-                    : __('All labelled EMI cycles before :period are current.', ['period' => $periodLabel]),
-                'cta_label' => $arrearsCount > 0 ? __('Review arrears') : null,
-                'cta_url' => $arrearsCount > 0 ? $arrearsUrl : null,
+                    : __('All collectable installments for :period are paid from member cash.', ['period' => $periodLabel]),
+                'cta_label' => $missingMembers > 0 ? __('Review arrears') : null,
+                'cta_url' => $missingMembers > 0 ? $arrearsUrl : null,
             ],
             'kpis' => InsightKpi::linkMany([
-                ['key' => 'arrears', 'label' => __('Arrears'), 'value' => (string) $arrearsCount, 'sub' => __('Installments'), 'icon' => 'heroicon-o-calendar-days', 'accent' => 'rose', 'active' => $arrearsCount > 0, 'value_class' => $arrearsCount > 0 ? 'text-rose-600 dark:text-rose-400' : null],
-                ['key' => 'members', 'label' => __('Members'), 'value' => (string) $arrearsMembers, 'sub' => __('With arrears'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $arrearsMembers > 0],
-                ['key' => 'collect', 'label' => __('To collect'), 'value' => (string) $metrics['pending_members'], 'sub' => $periodLabel, 'icon' => 'heroicon-o-arrow-down-tray', 'accent' => 'sky', 'active' => $metrics['pending_members'] > 0],
-                ['key' => 'collected', 'label' => __('Collected'), 'value' => (string) $metrics['collected_count'], 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => $metrics['collected_count'] > 0],
+                ['key' => 'arrears', 'label' => __('Arrears'), 'value' => (string) $missingMembers, 'sub' => $periodLabel, 'icon' => 'heroicon-o-calendar-days', 'accent' => 'rose', 'active' => $missingMembers > 0, 'value_class' => $missingMembers > 0 ? 'text-rose-600 dark:text-rose-400' : null],
+                ['key' => 'members', 'label' => __('Members'), 'value' => (string) $missingMembers, 'sub' => __('With arrears'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $missingMembers > 0],
+                ['key' => 'collected', 'label' => __('Collected'), 'value' => (string) $collectedCount, 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => $collectedCount > 0],
                 ['key' => 'pending_emis', 'label' => __('Pending EMIs'), 'value' => (string) $metrics['total_pending_emis'], 'sub' => $periodLabel, 'icon' => 'heroicon-o-clock', 'accent' => 'violet', 'active' => $metrics['total_pending_emis'] > 0],
+                ['key' => 'rate', 'label' => __('Collection'), 'value' => $collectionRate.'%', 'sub' => $periodSub, 'icon' => 'heroicon-o-chart-pie', 'accent' => 'sky', 'active' => true],
                 [
                     'key' => 'overdue',
                     'label' => __('Overdue'),
@@ -587,29 +639,31 @@ final class LoanInsightsService
             ], [
                 'arrears' => $arrearsUrl,
                 'members' => $arrearsUrl,
-                'collect' => LoanResource::listTabUrl('emi_collect'),
-                'collected' => LoanResource::listTabUrl('emi_collected'),
-                'pending_emis' => LoanResource::listTabUrl('emi_collect'),
+                'collected' => $collectedUrl,
+                'pending_emis' => $arrearsUrl,
+                'rate' => $arrearsUrl,
                 'overdue' => LoanResource::listTabUrl('overdue_installments'),
             ]),
-            'collection_amounts' => $this->emiCycleCollectionAmounts($catalog, $month, $year),
+            'collection_amounts' => $this->emiCycleCollectionAmounts($catalog, $month, $year, $isOpen, $metrics),
         ];
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function emiCollectedSnapshot(): array
+    public function emiCollectedSnapshot(?string $cycleKey = null): array
     {
         $catalog = app(LoanEmiCollectionCatalogService::class);
-        [$month, $year] = LoanResource::resolveListCycle();
+        [$month, $year, $periodLabel, $isOpen] = $this->resolveEmiPeriod($cycleKey);
         $currency = Setting::get('general', 'currency', 'USD');
-        $periodLabel = $catalog->periodLabel($month, $year);
         $metrics = $this->aggregateEmiCollectMetrics($catalog, $month, $year);
 
         $collectedCount = $metrics['collected_count'];
         $collectedAmount = $metrics['collected_amount'];
         $pendingMembers = $metrics['pending_members'];
+        $outstandingUrl = $isOpen
+            ? LoanResource::listTabUrl('emi_collect')
+            : LoanResource::listCollectionSegmentUrl('arrears');
 
         $collectedUrl = LoanResource::listTabUrl('emi_collected');
 
@@ -627,14 +681,13 @@ final class LoanInsightsService
                     ? ' · '.trans_choice(':count member still on EMI collection|:count members still on EMI collection', $pendingMembers, ['count' => $pendingMembers])
                     : ''),
                 'cta_label' => $pendingMembers > 0 ? __('EMI collection') : null,
-                'cta_url' => $pendingMembers > 0 ? LoanResource::listTabUrl('emi_collect') : null,
+                'cta_url' => $pendingMembers > 0 ? $outstandingUrl : null,
             ],
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'collected', 'label' => __('Collected'), 'value' => (string) $collectedCount, 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => $collectedCount > 0],
                 ['key' => 'amount', 'label' => __('Amount'), ...InsightKpi::moneyValue($collectedAmount, $currency), 'sub' => $periodLabel, 'icon' => 'heroicon-o-currency-dollar', 'accent' => 'teal', 'active' => $collectedAmount > 0],
-                ['key' => 'remaining', 'label' => __('Remaining'), 'value' => (string) $pendingMembers, 'sub' => __('Members'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $pendingMembers > 0],
                 ['key' => 'pending_emis', 'label' => __('Pending EMIs'), 'value' => (string) $metrics['total_pending_emis'], 'sub' => __('Installments'), 'icon' => 'heroicon-o-clock', 'accent' => 'sky', 'active' => $metrics['total_pending_emis'] > 0],
-                ['key' => 'collect', 'label' => __('To collect'), 'value' => (string) $pendingMembers, 'sub' => __('Open period'), 'icon' => 'heroicon-o-arrow-down-tray', 'accent' => 'violet', 'active' => $pendingMembers > 0],
+                ['key' => 'collect', 'label' => $isOpen ? __('To collect') : __('Arrears'), 'value' => (string) $pendingMembers, 'sub' => __('Members'), 'icon' => 'heroicon-o-arrow-down-tray', 'accent' => 'violet', 'active' => $pendingMembers > 0],
                 [
                     'key' => 'overdue',
                     'label' => __('Overdue'),
@@ -650,12 +703,11 @@ final class LoanInsightsService
             ], [
                 'collected' => $collectedUrl,
                 'amount' => $collectedUrl,
-                'remaining' => LoanResource::listTabUrl('emi_collect'),
-                'pending_emis' => LoanResource::listTabUrl('emi_collect'),
-                'collect' => LoanResource::listTabUrl('emi_collect'),
+                'pending_emis' => $outstandingUrl,
+                'collect' => $outstandingUrl,
                 'overdue' => LoanResource::listTabUrl('overdue_installments'),
             ]),
-            'collection_amounts' => $this->emiCycleCollectionAmounts($catalog, $month, $year),
+            'collection_amounts' => $this->emiCycleCollectionAmounts($catalog, $month, $year, $isOpen, $metrics),
         ];
     }
 
@@ -1128,63 +1180,53 @@ final class LoanInsightsService
      */
     private function aggregateEmiCollectMetrics(LoanEmiCollectionCatalogService $catalog, int $month, int $year): array
     {
-        $pendingMembers = $catalog->pendingMemberCount($month, $year);
-        $collectedCount = $catalog->collectedInstallmentsQuery($month, $year)->count();
+        $pending = $catalog->periodPendingCollectionMetrics($month, $year);
+        $collectedCount = $catalog->collectedInstallmentCount($month, $year);
         $collectedAmount = $catalog->collectedInstallmentsCashTotal($month, $year);
-        $totalPendingEmis = 0;
-        $readyWithCash = 0;
-        $readyCashTotal = 0.0;
-        $requiredCashTotal = 0.0;
-        $uncoveredAmount = 0.0;
 
-        foreach ($catalog->membersWithCollectableEmisQuery($month, $year)->get() as $member) {
-            $pending = $catalog->pendingInstallmentCountForMember($member, $month, $year);
-
-            if ($pending === 0) {
-                continue;
-            }
-
-            $totalPendingEmis += $pending;
-            $requiredCash = $catalog->requiredCashForMember($member, $month, $year);
-            $requiredCashTotal += $requiredCash;
-            $coveredCash = min(max(0.0, $member->getCashBalance()), $requiredCash);
-
-            if ($catalog->memberHasSufficientCash($member, $month, $year)) {
-                $readyWithCash++;
-                $readyCashTotal += $requiredCash;
-            } else {
-                $readyCashTotal += $coveredCash;
-                $uncoveredAmount += max(0.0, $requiredCash - $coveredCash);
-            }
-        }
-
-        $denominator = $collectedCount + $totalPendingEmis;
+        $denominator = $collectedCount + $pending['total_pending_emis'];
         $collectionRate = $denominator > 0
             ? (int) round(($collectedCount / $denominator) * 100)
             : 0;
 
         return [
-            'pending_members' => $pendingMembers,
+            'pending_members' => $pending['pending_members'],
             'collected_count' => $collectedCount,
             'collected_amount' => $collectedAmount,
-            'total_pending_emis' => $totalPendingEmis,
-            'ready_with_cash' => $readyWithCash,
-            'ready_cash_total' => round($readyCashTotal, 2),
-            'required_cash_total' => $requiredCashTotal,
-            'uncovered_amount' => round($uncoveredAmount, 2),
+            'total_pending_emis' => $pending['total_pending_emis'],
+            'ready_with_cash' => $pending['ready_with_cash'],
+            'ready_cash_total' => $pending['ready_cash_total'],
+            'required_cash_total' => $pending['required_cash_total'],
+            'uncovered_amount' => $pending['uncovered_amount'],
+            'unrecovered_amount' => $pending['unrecovered_amount'],
             'collection_rate' => $collectionRate,
         ];
     }
 
     /**
+     * @param  array<string, mixed>  $metrics
      * @return array{arrears_amount: float, recovered_amount: float, unrecovered_amount: float}
      */
-    private function emiCycleCollectionAmounts(LoanEmiCollectionCatalogService $catalog, int $month, int $year): array
-    {
+    private function emiCycleCollectionAmounts(
+        LoanEmiCollectionCatalogService $catalog,
+        int $month,
+        int $year,
+        ?bool $live = null,
+        array $metrics = [],
+    ): array {
         return [
-            'arrears_amount' => $catalog->emiArrearsAmountTotal($month, $year, LoanResource::isViewingOpenCycle()),
-            'recovered_amount' => $catalog->collectedInstallmentsCashTotal($month, $year),
-            'unrecovered_amount' => $catalog->collectableInstallmentsAmountTotal($month, $year),
+            'arrears_amount' => (float) TenantRuntimeCache::remember(
+                sprintf(
+                    'loan_emi_insights:prior_arrears_amount:%04d-%02d:%d',
+                    $year,
+                    $month,
+                    ($live ?? LoanResource::isViewingOpenCycle()) ? 1 : 0,
+                ),
+                60,
+                fn (): float => $catalog->emiArrearsAmountTotal($month, $year, $live),
+            ),
+            'recovered_amount' => (float) ($metrics['collected_amount'] ?? $catalog->collectedInstallmentsCashTotal($month, $year)),
+            'unrecovered_amount' => (float) ($metrics['unrecovered_amount'] ?? $catalog->collectableInstallmentsAmountTotal($month, $year)),
         ];
     }
 

@@ -584,6 +584,24 @@ html.fi.fi-panel-tenant #nprogress .peg {
   transition: box-shadow 0.25s ease;
 }
 
+/* Loans list — denser insights strip above the table */
+.fi-body.fi-panel-tenant .ff-tenant-loans-workspace .fi-header-widgets {
+  margin-bottom: 0.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-loan-insights.ff-app-insights {
+  margin-bottom: 0;
+}
+
+/* Contributions list — denser insights strip above the table */
+.fi-body.fi-panel-tenant .ff-tenant-contributions-workspace .fi-header-widgets {
+  margin-bottom: 0.5rem;
+}
+
+.fi-body.fi-panel-tenant .ff-contribution-insights.ff-app-insights {
+  margin-bottom: 0;
+}
+
 /* Main dashboard — full content width */
 .fi-body.fi-panel-tenant .fi-page-tenant-dashboard .fi-main.fi-width-full {
     max-width: 100%;

@@ -36,4 +36,5 @@
 @include('filament.tenant.widgets.partials.insights-head', [
     'hero' => $hero,
     'kpis' => $kpis,
+    'compact' => $compact ?? false,
 ])

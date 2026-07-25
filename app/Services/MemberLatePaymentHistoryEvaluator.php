@@ -9,11 +9,14 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
+use App\Support\ContributionPolicySettings;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 
 /**
  * Counts contribution/repayment cycles settled after their deadline (is_late).
+ *
+ * Contribution and EMI late history use separate settings thresholds for loan eligibility.
  */
 class MemberLatePaymentHistoryEvaluator
 {
@@ -30,6 +33,8 @@ class MemberLatePaymentHistoryEvaluator
 
     /**
      * @return array{
+     *   contribution: array{trailing_consecutive: int, rolling_total: int},
+     *   repayment: array{trailing_consecutive: int, rolling_total: int},
      *   trailing_consecutive: int,
      *   rolling_total: int,
      *   last_closed_month: int|null,
@@ -49,17 +54,69 @@ class MemberLatePaymentHistoryEvaluator
             : Carbon::parse($member->joined_at)->startOfMonth();
 
         if ($this->periodKey($lastYear, $lastMonth) < $this->periodKey((int) $joined->year, (int) $joined->month)) {
-            return [
-                'trailing_consecutive' => 0,
-                'rolling_total' => 0,
-                'last_closed_month' => null,
-                'last_closed_year' => null,
-            ];
+            return $this->emptyResult();
         }
 
-        $lookback = LoanSettings::latePaymentLookbackMonths();
+        $lookback = max(
+            ContributionPolicySettings::lateSettlementLookbackMonths(),
+            LoanSettings::latePaymentLookbackMonths(),
+        );
         $this->warmPeriodCaches($member, $joined, $lastMonth, $lastYear, $lookback);
 
+        $contribution = $this->statsForPeriods(
+            $this->lateContributionPeriods,
+            $joined,
+            $lastMonth,
+            $lastYear,
+            ContributionPolicySettings::lateSettlementLookbackMonths(),
+        );
+        $repayment = $this->statsForPeriods(
+            $this->lateRepaymentPeriods,
+            $joined,
+            $lastMonth,
+            $lastYear,
+            LoanSettings::latePaymentLookbackMonths(),
+        );
+
+        return [
+            'contribution' => $contribution,
+            'repayment' => $repayment,
+            // Combined (union of late types per period) — useful for digests; loan gate uses split checks.
+            'trailing_consecutive' => max($contribution['trailing_consecutive'], $repayment['trailing_consecutive']),
+            'rolling_total' => $contribution['rolling_total'] + $repayment['rolling_total'],
+            'last_closed_month' => $lastMonth,
+            'last_closed_year' => $lastYear,
+        ];
+    }
+
+    /**
+     * @return array{trailing_consecutive: int, rolling_total: int, last_closed_month: null, last_closed_year: null, contribution: array{trailing_consecutive: int, rolling_total: int}, repayment: array{trailing_consecutive: int, rolling_total: int}}
+     */
+    private function emptyResult(): array
+    {
+        $zero = ['trailing_consecutive' => 0, 'rolling_total' => 0];
+
+        return [
+            'contribution' => $zero,
+            'repayment' => $zero,
+            'trailing_consecutive' => 0,
+            'rolling_total' => 0,
+            'last_closed_month' => null,
+            'last_closed_year' => null,
+        ];
+    }
+
+    /**
+     * @param  array<string, bool>  $latePeriods
+     * @return array{trailing_consecutive: int, rolling_total: int}
+     */
+    private function statsForPeriods(
+        array $latePeriods,
+        Carbon $joined,
+        int $lastMonth,
+        int $lastYear,
+        int $lookback,
+    ): array {
         $rollingTotal = 0;
         $cursor = Carbon::create($lastYear, $lastMonth, 1)->startOfMonth();
         for ($i = 0; $i < $lookback; $i++) {
@@ -70,7 +127,7 @@ class MemberLatePaymentHistoryEvaluator
                 break;
             }
 
-            if ($this->periodHadLatePayment($month, $year)) {
+            if ($latePeriods[$this->monthKey($month, $year)] ?? false) {
                 $rollingTotal++;
             }
 
@@ -87,7 +144,7 @@ class MemberLatePaymentHistoryEvaluator
                 break;
             }
 
-            if (! $this->periodHadLatePayment($month, $year)) {
+            if (!($latePeriods[$this->monthKey($month, $year)] ?? false)) {
                 break;
             }
 
@@ -98,23 +155,34 @@ class MemberLatePaymentHistoryEvaluator
         return [
             'trailing_consecutive' => $trailing,
             'rolling_total' => $rollingTotal,
-            'last_closed_month' => $lastMonth,
-            'last_closed_year' => $lastYear,
         ];
     }
 
-    public function shouldBlockLoanEligibility(int $trailingConsecutive, int $rollingTotal): bool
+    /**
+     * @param  array{contribution: array{trailing_consecutive: int, rolling_total: int}, repayment: array{trailing_consecutive: int, rolling_total: int}}  $history
+     */
+    public function shouldBlockLoanEligibility(array $history): bool
     {
-        return $trailingConsecutive >= LoanSettings::latePaymentConsecutiveThreshold()
-            || $rollingTotal >= LoanSettings::latePaymentRollingThreshold();
+        return $this->shouldBlockFromLateContributions($history['contribution'])
+            || $this->shouldBlockFromLateRepayments($history['repayment']);
     }
 
-    protected function periodHadLatePayment(int $month, int $year): bool
+    /**
+     * @param  array{trailing_consecutive: int, rolling_total: int}  $stats
+     */
+    public function shouldBlockFromLateContributions(array $stats): bool
     {
-        $key = $this->monthKey($month, $year);
+        return $stats['trailing_consecutive'] >= ContributionPolicySettings::lateSettlementConsecutiveThreshold()
+            || $stats['rolling_total'] >= ContributionPolicySettings::lateSettlementRollingThreshold();
+    }
 
-        return ($this->lateContributionPeriods[$key] ?? false)
-            || ($this->lateRepaymentPeriods[$key] ?? false);
+    /**
+     * @param  array{trailing_consecutive: int, rolling_total: int}  $stats
+     */
+    public function shouldBlockFromLateRepayments(array $stats): bool
+    {
+        return $stats['trailing_consecutive'] >= LoanSettings::latePaymentConsecutiveThreshold()
+            || $stats['rolling_total'] >= LoanSettings::latePaymentRollingThreshold();
     }
 
     protected function warmPeriodCaches(

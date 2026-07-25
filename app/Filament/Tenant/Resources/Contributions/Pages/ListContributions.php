@@ -55,10 +55,14 @@ class ListContributions extends ListRecords
             [$month, $year] = $cycles->currentOpenPeriod();
             $this->selectedCycle = $cycles->contributionCycleKey($month, $year);
         }
+
+        $this->cycleSegment = ContributionResource::normalizeCycleSegment($this->cycleSegment, $this->selectedCycle);
     }
 
     public function updatedSelectedCycle(): void
     {
+        $this->cycleSegment = ContributionResource::normalizeCycleSegment($this->cycleSegment, $this->selectedCycle);
+
         if (
             ContributionResource::resolvePrimaryTab() === 'cycle'
             || (ContributionResource::resolvePrimaryTab() === 'ledger' && ContributionResource::resolveLedgerView() === 'arrears')
@@ -66,19 +70,20 @@ class ListContributions extends ListRecords
             $this->reconfigureTableForActiveTab();
         }
 
-        ContributionResource::dispatchInsightsRefresh($this);
+        ContributionResource::dispatchInsightsRefresh($this, invalidateInsights: false);
     }
 
     public function updatedCycleSegment(): void
     {
+        $this->cycleSegment = ContributionResource::normalizeCycleSegment($this->cycleSegment, $this->selectedCycle);
         $this->reconfigureTableForActiveTab();
-        ContributionResource::dispatchInsightsRefresh($this);
+        ContributionResource::dispatchInsightsRefresh($this, invalidateInsights: false);
     }
 
     public function updatedLedgerView(): void
     {
         $this->reconfigureTableForActiveTab();
-        ContributionResource::dispatchInsightsRefresh($this);
+        ContributionResource::dispatchInsightsRefresh($this, invalidateInsights: false);
     }
 
     protected function makeTable(): Table
@@ -173,7 +178,7 @@ class ListContributions extends ListRecords
             'collected' => __('Contributions already posted for :period.', [
                 'period' => $periodLabel,
             ]),
-            'arrears' => __('Unposted contribution periods before :period (since each member joined).', [
+            'arrears' => __('Members who still owe for :period. Apply from cash balance or post manually on the ledger.', [
                 'period' => $periodLabel,
             ]),
             default => __('Members who still owe for :period. Apply from cash balance or post manually on the ledger.', [
@@ -203,6 +208,7 @@ class ListContributions extends ListRecords
         return [
             ...parent::getPageClasses(),
             'fi-page-collections',
+            'ff-tenant-contributions-workspace',
         ];
     }
 
@@ -226,6 +232,7 @@ class ListContributions extends ListRecords
         return [
             ...parent::getWidgetData(),
             'context' => ContributionResource::resolveInsightsContext(),
+            'selectedCycle' => $this->selectedCycle,
         ];
     }
 
@@ -243,7 +250,7 @@ class ListContributions extends ListRecords
 
     protected function cycleTabBadge(): ?string
     {
-        if (ContributionResource::resolveCycleSegment() !== 'collect') {
+        if (! in_array(ContributionResource::resolveCycleSegment(), ['collect', 'arrears'], true)) {
             return null;
         }
 

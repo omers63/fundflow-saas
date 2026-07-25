@@ -1,6 +1,9 @@
-@props(['kpis', 'sparkline' => null, 'sparklineMax' => 1])
-
 @php
+    $kpis = $kpis ?? [];
+    $sparkline = $sparkline ?? null;
+    $sparklineMax = $sparklineMax ?? 1;
+    $compact = (bool) ($compact ?? false);
+
     $accentText = [
         'amber' => 'text-amber-600 dark:text-amber-400',
         'emerald' => 'text-emerald-600 dark:text-emerald-400',
@@ -14,13 +17,20 @@
     ];
     $count = count($kpis);
     $gridCols = match (true) {
+        $compact && $count <= 5 => 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-5',
+        $compact && $count <= 6 => 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-6',
         $count <= 4 => 'grid-cols-2 sm:grid-cols-4',
         $count <= 6 => 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-4',
         default => 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-4',
     };
 @endphp
 
-<div class="ff-app-insights-kpi-strip w-full min-w-0 grid {{ $gridCols }} gap-2.5">
+<div @class([
+    'ff-app-insights-kpi-strip w-full min-w-0 grid',
+    $gridCols,
+    'gap-1.5' => $compact,
+    'gap-2.5' => !$compact,
+])>
     @foreach ($kpis as $i => $card)
         @php
             $accent = $card['accent'] ?? 'gray';
@@ -52,7 +62,9 @@
         <{{ $tag }}
             @if ($tag === 'a') href="{{ $card['url'] }}" @endif
             @class([
-                'ff-app-insights-kpi group flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-sky-700',
+                'ff-app-insights-kpi group flex min-w-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-sky-700',
+                'gap-0 px-2.5 py-1.5' => $compact,
+                'gap-0.5 px-3 py-2.5' => !$compact,
                 $dimmed,
             ])
             style="animation: ff-stat-in 0.3s ease-out {{ 0.02 + ($i * 0.03) }}s forwards">
@@ -64,14 +76,20 @@
                     :currency="$currency" :precision="$valuePrecision" :compact="$valueCompact" @class([
                         'min-w-0 flex-1 truncate',
                         $card['value_class'] ?? 'text-gray-900 dark:text-white',
-                        'text-base font-bold tabular-nums leading-none sm:text-lg xl:text-[22px]',
+                        'text-sm font-bold tabular-nums leading-none sm:text-base' => $compact,
+                        'text-base font-bold tabular-nums leading-none sm:text-lg xl:text-[22px]' => !$compact,
                     ]) />
                 @if (!empty($card['suffix'] ?? null))
                     <span class="shrink-0 text-[11px] font-normal text-gray-400">{{ $card['suffix'] }}</span>
                 @endif
             </div>
             <x-ff-stat-line :text="$subIsAmount ? null : $subText" :amount="$subIsAmount ? $subText : null"
-                :currency="$subIsAmount ? $currency : null" :precision="$subPrecision" @class(['min-w-0 truncate', $textClass, 'text-[11px] font-medium']) />
+                :currency="$subIsAmount ? $currency : null" :precision="$subPrecision" @class([
+                    'min-w-0 truncate',
+                    $textClass,
+                    'text-[10px] font-medium' => $compact,
+                    'text-[11px] font-medium' => !$compact,
+                ]) />
         </{{ $tag }}>
     @endforeach
 </div>

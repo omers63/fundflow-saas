@@ -48,4 +48,10 @@ test('member contribution and bank import export new actions are icon only', fun
     expect($portfolio)->toBeInstanceOf(ActionGroup::class)
         ->and($portfolio->isIconButton())->toBeTrue()
         ->and($portfolio->getTooltip())->toBe(__('Portfolio'));
+
+    $cycleCollection = ContributionListTableHeaderActions::cycleCollectionGroup();
+
+    expect($cycleCollection)->toBeInstanceOf(ActionGroup::class)
+        ->and($cycleCollection->isIconButton())->toBeTrue()
+        ->and($cycleCollection->getTooltip())->toBe(__('Cycle collection'));
 });

@@ -17,6 +17,8 @@ use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -24,73 +26,94 @@ use Livewire\Component;
 
 final class LoanEmiCollectionTables
 {
-    public static function configurePendingMembersTable(Table $table): Table
-    {
+    public static function configurePendingMembersTable(
+        Table $table,
+        ?string $heading = null,
+        bool $includeLoanNumber = false,
+        bool $includeCollectionFilters = false,
+    ): Table {
         $catalog = app(LoanEmiCollectionCatalogService::class);
         [$month, $year] = LoanResource::resolveListCycle();
         $currency = Setting::get('general', 'currency', 'USD');
 
+        $columns = [
+            MemberTableColumns::number(label: __('Member #'))
+                ->searchable(),
+            MemberTableColumns::name(label: __('Member'))
+                ->searchable()
+                ->sortable()
+                ->wrap(),
+        ];
+
+        if ($includeLoanNumber) {
+            $columns[] = TextColumn::make('loan_number')
+                ->label(__('Loan #'))
+                ->state(fn (Member $record): ?int => $catalog->primaryCollectableLoanIdForMember($record, $month, $year))
+                ->formatStateUsing(fn (?int $state): string => filled($state) ? '#'.$state : __('—'))
+                ->url(fn (Member $record): ?string => self::collectLoanViewUrl($catalog, $record, $month, $year))
+                ->searchable(false)
+                ->sortable(false);
+        }
+
+        $columns = [
+            ...$columns,
+            TextColumn::make('pending_emis')
+                ->label(__('Pending EMIs'))
+                ->state(fn (Member $record): int => $catalog->pendingInstallmentCountForMember($record, $month, $year))
+                ->alignEnd()
+                ->searchable(false)
+                ->sortable(false),
+            TextColumn::make('total_due')
+                ->label(__('Total due'))
+                ->state(fn (Member $record): float => $catalog->requiredCashForMember($record, $month, $year))
+                ->money($currency)
+                ->alignEnd()
+                ->searchable(false)
+                ->sortable(false),
+            TextColumn::make('loan_outstanding')
+                ->label(__('Loan outstanding'))
+                ->state(fn (Member $record): float => $catalog->outstandingLoanBalanceForMember($record, $month, $year))
+                ->money($currency)
+                ->alignEnd()
+                ->searchable(false)
+                ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByLoanOutstanding($direction)),
+            TextColumn::make('available_cash')
+                ->label(__('Cash balance'))
+                ->state(fn (Member $record): float => $record->getCashBalance())
+                ->money($currency)
+                ->color(fn (Member $record): string => $record->getCashBalance() < 0 ? 'danger' : 'gray')
+                ->alignEnd()
+                ->searchable(false)
+                ->sortable(false),
+            TextColumn::make('coverage')
+                ->label(__('Ready'))
+                ->state(function (Member $record) use ($catalog, $month, $year): string {
+                    return $catalog->memberHasSufficientCash($record, $month, $year)
+                        ? __('Yes')
+                        : __('Insufficient');
+                })
+                ->badge()
+                ->color(fn (string $state): string => $state === __('Yes') ? 'success' : 'warning')
+                ->searchable(false)
+                ->sortable(false),
+            TextColumn::make('parent.name')
+                ->label(__('Parent'))
+                ->placeholder(__('—'))
+                ->toggleable(),
+        ];
+
         return TableGrouping::apply(
             $table
                 ->query(fn () => $catalog->membersWithCollectableEmisQuery($month, $year))
-                ->heading(__('To collect – :period', [
+                ->heading($heading ?? __('To collect – :period', [
                     'period' => $catalog->periodLabel($month, $year),
                 ]))
                 ->defaultSort(fn (Builder $query, string $direction): Builder => MemberNumberSettings::applySequenceOrder($query, $direction))
                 ->headerActions([
                     LoanEmiCollectionHeaderActions::cycleCollectionGroup(),
                 ])
-                ->columns([
-                    MemberTableColumns::number(label: __('Member #'))
-                        ->searchable(),
-                    MemberTableColumns::name(label: __('Member'))
-                        ->searchable()
-                        ->sortable()
-                        ->wrap(),
-                    TextColumn::make('pending_emis')
-                        ->label(__('Pending EMIs'))
-                        ->state(fn (Member $record): int => $catalog->pendingInstallmentCountForMember($record, $month, $year))
-                        ->alignEnd()
-                        ->searchable(false)
-                        ->sortable(false),
-                    TextColumn::make('total_due')
-                        ->label(__('Total due'))
-                        ->state(fn (Member $record): float => $catalog->requiredCashForMember($record, $month, $year))
-                        ->money($currency)
-                        ->alignEnd()
-                        ->searchable(false)
-                        ->sortable(false),
-                    TextColumn::make('loan_outstanding')
-                        ->label(__('Loan outstanding'))
-                        ->state(fn (Member $record): float => $catalog->outstandingLoanBalanceForMember($record, $month, $year))
-                        ->money($currency)
-                        ->alignEnd()
-                        ->searchable(false)
-                        ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByLoanOutstanding($direction)),
-                    TextColumn::make('available_cash')
-                        ->label(__('Cash balance'))
-                        ->state(fn (Member $record): float => $record->getCashBalance())
-                        ->money($currency)
-                        ->color(fn (Member $record): string => $record->getCashBalance() < 0 ? 'danger' : 'gray')
-                        ->alignEnd()
-                        ->searchable(false)
-                        ->sortable(false),
-                    TextColumn::make('coverage')
-                        ->label(__('Ready'))
-                        ->state(function (Member $record) use ($catalog, $month, $year): string {
-                            return $catalog->memberHasSufficientCash($record, $month, $year)
-                                ? __('Yes')
-                                : __('Insufficient');
-                        })
-                        ->badge()
-                        ->color(fn (string $state): string => $state === __('Yes') ? 'success' : 'warning')
-                        ->searchable(false)
-                        ->sortable(false),
-                    TextColumn::make('parent.name')
-                        ->label(__('Parent'))
-                        ->placeholder(__('—'))
-                        ->toggleable(),
-                ])
+                ->columns($columns)
+                ->filters($includeCollectionFilters ? self::collectionMemberFilters($catalog, $month, $year) : [])
                 ->recordAction(null)
                 ->recordUrl(fn (Member $record): ?string => self::collectLoanViewUrl($catalog, $record, $month, $year))
                 ->recordActions(TableRecordActionGroups::wrap([
@@ -175,6 +198,65 @@ final class LoanEmiCollectionTables
                 ]),
             TableGrouping::members(),
         );
+    }
+
+    /**
+     * @return array<int, SelectFilter|TernaryFilter>
+     */
+    private static function collectionMemberFilters(
+        LoanEmiCollectionCatalogService $catalog,
+        int $month,
+        int $year,
+    ): array {
+        return [
+            MemberSelect::configureFilter(
+                SelectFilter::make('member_id')->label(__('Member')),
+                activeOnly: true,
+            )->query(function (Builder $query, array $data): Builder {
+                if (blank($data['value'] ?? null)) {
+                    return $query;
+                }
+
+                return $query->where('members.id', (int) $data['value']);
+            }),
+            TernaryFilter::make('ready')
+                ->label(__('Ready'))
+                ->trueLabel(__('Yes'))
+                ->falseLabel(__('Insufficient'))
+                ->queries(
+                    true: fn (Builder $query): Builder => self::constrainByEmiCashReadiness(
+                        $query,
+                        $catalog,
+                        $month,
+                        $year,
+                        ready: true,
+                    ),
+                    false: fn (Builder $query): Builder => self::constrainByEmiCashReadiness(
+                        $query,
+                        $catalog,
+                        $month,
+                        $year,
+                        ready: false,
+                    ),
+                ),
+        ];
+    }
+
+    private static function constrainByEmiCashReadiness(
+        Builder $query,
+        LoanEmiCollectionCatalogService $catalog,
+        int $month,
+        int $year,
+        bool $ready,
+    ): Builder {
+        $ids = $catalog->membersWithCollectableEmisQuery($month, $year)
+            ->get()
+            ->filter(
+                fn (Member $member): bool => $catalog->memberHasSufficientCash($member, $month, $year) === $ready,
+            )
+            ->modelKeys();
+
+        return $query->whereIn('members.id', $ids === [] ? [0] : $ids);
     }
 
     public static function configureCollectedTable(Table $table): Table
@@ -280,83 +362,13 @@ final class LoanEmiCollectionTables
     public static function configureArrearsTable(Table $table): Table
     {
         $catalog = app(LoanEmiCollectionCatalogService::class);
-        $currency = Setting::get('general', 'currency', 'USD');
+        [$month, $year] = LoanResource::resolveListCycle();
 
-        return TableGrouping::apply(
-            $table
-                ->query(function () use ($catalog): Builder {
-                    [$month, $year] = LoanResource::resolveListCycle();
-
-                    return $catalog->emiArrearsInstallmentsQuery(
-                        $month,
-                        $year,
-                        LoanResource::isViewingOpenCycle(),
-                    );
-                })
-                ->heading(__('Arrears – EMIs before :period', [
-                    'period' => $catalog->periodLabel(...LoanResource::resolveListCycle()),
-                ]))
-                ->columns([
-                    TextColumn::make('loan.member.member_number')
-                        ->label(__('Member #'))
-                        ->sortable(query: fn (Builder $query, string $direction): Builder => MemberNumberSettings::applyOrderByLoanInstallmentMember($query, $direction))
-                        ->url(fn (LoanInstallment $record): ?string => MemberTableColumns::resolveMemberUrl(
-                            'loan.member.name',
-                            $record,
-                        )),
-                    TextColumn::make('loan.member.name')
-                        ->label(__('Member'))
-                        ->wrap()
-                        ->sortable(query: fn (Builder $query, string $direction): Builder => self::sortCollectedByMemberName($query, $direction))
-                        ->url(fn (LoanInstallment $record): ?string => MemberTableColumns::resolveMemberUrl(
-                            'loan.member.name',
-                            $record,
-                        )),
-                    LoanInstallmentTableColumns::cycle(),
-                    TextColumn::make('loan_id')
-                        ->label(__('Loan'))
-                        ->formatStateUsing(fn (int $state): string => '#'.$state)
-                        ->sortable()
-                        ->url(fn (LoanInstallment $record): ?string => self::collectedLoanViewUrl($record)),
-                    TextColumn::make('installment_number')
-                        ->label(__('#'))
-                        ->sortable(),
-                    TextColumn::make('due_date')
-                        ->date()
-                        ->sortable(),
-                    TextColumn::make('amount')
-                        ->money($currency),
-                    LoanOutstandingColumn::fromLoanResolver(
-                        fn (LoanInstallment $record): ?Loan => $record->loan,
-                        $currency,
-                        sortQuery: fn (Builder $query, string $direction): Builder => $query->orderByLoanOutstanding($direction),
-                    ),
-                    TextColumn::make('late_fee_amount')
-                        ->label(__('Late fee'))
-                        ->money($currency)
-                        ->placeholder(__('—')),
-                    TextColumn::make('status')
-                        ->badge()
-                        ->formatStateUsing(fn (string $state): string => match ($state) {
-                            'overdue' => __('Overdue'),
-                            default => __('Pending'),
-                        })
-                        ->color(fn (string $state): string => $state === 'overdue' ? 'danger' : 'warning'),
-                ])
-                ->recordAction(null)
-                ->recordUrl(fn (LoanInstallment $record): ?string => self::collectedLoanViewUrl($record))
-                ->recordActions(TableRecordActionGroups::wrap([]))
-                ->toolbarActions([
-                    BulkActionGroup::make([
-                        TableToolbar::refreshBulkAction(),
-                    ]),
-                ])
-                ->defaultSort('due_date')
-                ->emptyStateHeading(__('No EMI arrears'))
-                ->emptyStateDescription(__('Unpaid installments from labelled cycles before :period appear here.', [
-                    'period' => $catalog->periodLabel(...LoanResource::resolveListCycle()),
-                ])),
-            TableGrouping::loanInstallments(includeLoanMember: true),
+        return self::configurePendingMembersTable(
+            $table,
+            __('Arrears – :period', ['period' => $catalog->periodLabel($month, $year)]),
+            includeLoanNumber: true,
+            includeCollectionFilters: true,
         );
     }
 }

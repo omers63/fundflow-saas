@@ -51,9 +51,8 @@ final class ContributionListTableHeaderActions
      */
     public static function arrears(): array
     {
-        return [
-            self::delinquencyToolsGroup('danger'),
-        ];
+        // Loan EMI tools (mark overdue, guarantor maintenance) live on Loans → Delinquency.
+        return [];
     }
 
     public static function importContributionsAction(): Action
@@ -162,23 +161,15 @@ final class ContributionListTableHeaderActions
 
     public static function cycleCollectionGroup(string $color = 'primary'): ActionGroup
     {
-        return ActionGroup::make([
-            ...ContributionCycleHeaderActions::make(),
-            self::generatePendingAction(),
-        ])
-            ->label(__('Cycle collection'))
-            ->icon('heroicon-o-arrow-path-rounded-square')
-            ->color($color)
-            ->button();
-    }
-
-    public static function delinquencyToolsGroup(string $color = 'warning'): ActionGroup
-    {
-        return ActionGroup::make(LoanDelinquencyHeaderActions::make())
-            ->label(__('Delinquencies'))
-            ->icon('heroicon-o-exclamation-triangle')
-            ->color($color)
-            ->button();
+        return TableHeaderIconAction::applyGroup(
+            ActionGroup::make([
+                ...ContributionCycleHeaderActions::make(),
+                self::generatePendingAction(),
+            ])
+                ->label(__('Cycle collection'))
+                ->icon('heroicon-o-arrow-path-rounded-square')
+                ->color($color),
+        );
     }
 
     public static function generatePendingAction(): Action

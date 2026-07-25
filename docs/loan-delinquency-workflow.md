@@ -59,11 +59,13 @@ Delinquency is no longer a standalone page. Use:
 | Policy thresholds | **Settings** → Contributions | Delinquency policy section |
 
 **Shared tables:** `app/Filament/Support/LoanDelinquencyTables.php`  
-**Maintenance actions:** `app/Filament/Support/LoanDelinquencyHeaderActions.php` on **Loans** (and **Contributions → Arrears** tab)
+**Maintenance actions:** `app/Filament/Support/LoanDelinquencyHeaderActions.php` on **Loans → Delinquency** only (not on Contributions)
 
 - **Run delinquency check** — full `runDailyMaintenance()`
 - **Mark overdue only** — `markOverdueInstallments()` only
 - **Send admin digest** — notifies tenant admins when there is activity to review
+
+Contribution ledger Arrears is an inventory/collection surface for unpaid contribution periods; loan EMI overdue tools stay on Loans.
 
 **Insights:** `LoanInsightsService::delinquencySnapshot()` on loan list tabs; KPI links route to the tabs above.
 

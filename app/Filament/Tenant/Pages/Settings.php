@@ -786,7 +786,7 @@ class Settings extends Page implements HasForms
                             ->default(true),
                     ]),
                 Section::make(__('Delinquency policy'))
-                    ->description(__('Daily arrears check flags active members who breach consecutive or rolling miss thresholds. Status is not changed.'))
+                    ->description(__('Daily arrears check flags active members who breach consecutive or rolling miss thresholds (unpaid closed cycles). Status is not changed automatically.'))
                     ->columns(3)
                     ->schema([
                         TextInput::make('delinquency_consecutive')
@@ -802,6 +802,29 @@ class Settings extends Page implements HasForms
                             ->maxValue(240)
                             ->required(),
                         TextInput::make('delinquency_lookback_months')
+                            ->label(__('Rolling window (months)'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(240)
+                            ->required(),
+                    ]),
+                Section::make(__('Late contribution thresholds'))
+                    ->description(__('Members with too many late-settled contribution cycles cannot apply for new loans. Counts posted contributions marked late after the cycle deadline.'))
+                    ->columns(3)
+                    ->schema([
+                        TextInput::make('contribution_late_settlement_consecutive')
+                            ->label(__('Consecutive late cycles'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(36)
+                            ->required(),
+                        TextInput::make('contribution_late_settlement_rolling')
+                            ->label(__('Late cycles (rolling window)'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(240)
+                            ->required(),
+                        TextInput::make('contribution_late_settlement_lookback_months')
                             ->label(__('Rolling window (months)'))
                             ->numeric()
                             ->minValue(1)
@@ -1178,8 +1201,8 @@ class Settings extends Page implements HasForms
                             ->label(__('Auto-allocate posted contributions to loan'))
                             ->helperText(__('After a contribution is posted, apply open-period loan repayment from member cash when possible.')),
                     ]),
-                Section::make(__('Missed EMI thresholds'))
-                    ->description(__('Members with too many late-settled cycles cannot apply for new loans.'))
+                Section::make(__('Late EMI thresholds'))
+                    ->description(__('Members with too many late-settled EMI cycles cannot apply for new loans. Counts paid installments marked late after the cycle deadline.'))
                     ->columns(3)
                     ->schema([
                         TextInput::make('loan_late_payment_consecutive')

@@ -264,6 +264,96 @@ class Member extends Model
     }
 
     /**
+     * Members who were active (or contribution-cycle participants) as of the labelled cycle start.
+     *
+     * Reconstructs membership from current row timestamps: members who later froze/withdrew
+     * remain included for cycles that opened before that exit. Limitation: a member who withdrew
+     * then reinstated looks active today, so past cycles during the withdrawn gap may still match.
+     */
+    public function scopeActiveAsOfPeriod(Builder $query, int $month, int $year): Builder
+    {
+        $cycleStart = app(ContributionCycleService::class)->cycleStartAt($month, $year);
+
+        return $query->where(function (Builder $subQuery) use ($cycleStart): void {
+            $subQuery
+                ->where('status', 'active')
+                ->orWhere(function (Builder $inner): void {
+                    $inner->where('status', 'inactive')
+                        ->where('contribution_cycles_active', true);
+                })
+                ->orWhere(function (Builder $inner) use ($cycleStart): void {
+                    $inner->where('status', 'inactive')
+                        ->whereNotNull('frozen_at')
+                        ->where('frozen_at', '>=', $cycleStart);
+                })
+                ->orWhere(function (Builder $inner) use ($cycleStart): void {
+                    $inner->where('status', 'inactive')
+                        ->whereNull('frozen_at')
+                        ->where('contribution_cycles_active', false)
+                        ->where('status_changed_at', '>=', $cycleStart);
+                })
+                ->orWhere(function (Builder $inner) use ($cycleStart): void {
+                    $inner->where('status', 'withdrawn')
+                        ->where('status_changed_at', '>=', $cycleStart);
+                });
+        });
+    }
+
+    /**
+     * Whether this member was active / participating as of the labelled cycle start.
+     */
+    public function isActiveAsOfPeriod(int $month, int $year): bool
+    {
+        $cycleStart = app(ContributionCycleService::class)->cycleStartAt($month, $year);
+
+        if ($this->status === 'active') {
+            return true;
+        }
+
+        if ($this->status === 'inactive' && (bool) $this->contribution_cycles_active) {
+            return true;
+        }
+
+        if ($this->status === 'inactive' && $this->frozen_at !== null) {
+            return $this->frozen_at->greaterThanOrEqualTo($cycleStart);
+        }
+
+        if ($this->status === 'inactive' && $this->frozen_at === null && ! (bool) $this->contribution_cycles_active) {
+            return $this->status_changed_at !== null
+                && $this->status_changed_at->greaterThanOrEqualTo($cycleStart);
+        }
+
+        if ($this->status === 'withdrawn') {
+            return $this->status_changed_at !== null
+                && $this->status_changed_at->greaterThanOrEqualTo($cycleStart);
+        }
+
+        return false;
+    }
+
+    /**
+     * Contribution-cycle participants as of the labelled cycle start (not today's status alone).
+     */
+    public function scopeContributionCycleEligibleAsOfPeriod(Builder $query, int $month, int $year): Builder
+    {
+        return $query
+            ->where('monthly_contribution_amount', '>', 0)
+            ->activeAsOfPeriod($month, $year);
+    }
+
+    /**
+     * Whether this member was contribution-cycle eligible as of the labelled cycle start.
+     */
+    public function isContributionCycleEligibleAsOfPeriod(int $month, int $year): bool
+    {
+        if ((float) $this->monthly_contribution_amount <= 0) {
+            return false;
+        }
+
+        return $this->isActiveAsOfPeriod($month, $year);
+    }
+
+    /**
      * Members currently carrying unpaid EMI obligations (active / transferred loans).
      */
     public function scopeWithActiveLoanRepaymentObligation(Builder $query): Builder

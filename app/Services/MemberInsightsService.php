@@ -11,9 +11,10 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Services\Tenant\MemberListTabService;
 use App\Support\BusinessDay;
+use App\Support\CollectionInsightsCache;
 use App\Support\Insights\DualProgressTrendBuilder;
-use Carbon\Carbon;
 
 final class MemberInsightsService
 {
@@ -22,44 +23,70 @@ final class MemberInsightsService
      */
     public function snapshot(): array
     {
+        return CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_MEMBERS,
+            'roster',
+            fn (): array => $this->computeSnapshot(),
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function computeSnapshot(): array
+    {
         $now = BusinessDay::now();
         $membersUrl = MemberResource::getUrl('index');
-
-        $total = Member::query()->count();
-        $active = Member::query()->active()->count();
+        $tabs = app(MemberListTabService::class)->tabCounts();
         $delinquency = app(LoanDelinquencyService::class);
-        $delinquent = count($delinquency->delinquentMemberIds());
-        $inactive = Member::query()->where('status', 'inactive')->count();
-        $withdrawn = Member::query()->where('status', 'withdrawn')->count();
+
+        $total = (int) ($tabs['all'] ?? 0);
+        $active = (int) ($tabs['active'] ?? 0);
+        $inactive = (int) ($tabs['inactive'] ?? 0);
+        $withdrawn = (int) ($tabs['withdrawn'] ?? 0);
+        $migrationPending = (int) ($tabs['migration_pending'] ?? 0);
+
+        // Align with Members "Arrears" tab / nav badge (outstanding contribution + EMI), not policy-only.
+        $arrearsMemberIds = $delinquency->membersWithOutstandingArrearsIds();
+        $arrearsCount = count($arrearsMemberIds);
 
         $newThisMonth = Member::query()
             ->whereMonth('joined_at', $now->month)
             ->whereYear('joined_at', $now->year)
             ->count();
 
+        $lastMonth = $now->copy()->subMonthNoOverflow();
         $newLastMonth = Member::query()
-            ->whereMonth('joined_at', $now->copy()->subMonth()->month)
-            ->whereYear('joined_at', $now->copy()->subMonth()->year)
+            ->whereMonth('joined_at', $lastMonth->month)
+            ->whereYear('joined_at', $lastMonth->year)
             ->count();
 
         $dependents = Member::query()->withParent()->count();
-        $independent = Member::query()->independent()->count();
 
-        $withActiveLoans = Member::query()
-            ->whereHas('loans', fn ($query) => $query->where('status', 'active'))
-            ->count();
-
-        $loanExempt = Member::query()
-            ->active()
-            ->whereHas('loans', function ($query): void {
-                $query->where('status', 'active')
-                    ->whereHas('installments', fn ($installment) => $installment->whereIn('status', ['pending', 'overdue']));
-            })
-            ->count();
+        $withActiveLoans = (int) Loan::query()
+            ->where('status', 'active')
+            ->selectRaw('COUNT(DISTINCT member_id) as aggregate')
+            ->value('aggregate');
 
         $avgContribution = (float) (Member::query()->active()->avg('monthly_contribution_amount') ?? 0);
 
         $zeroCashMembers = Member::query()->activeWithZeroCash()->count();
+
+        $attentionScope = function ($query) use ($arrearsMemberIds): void {
+            if ($arrearsMemberIds !== []) {
+                $query->whereIn('id', $arrearsMemberIds);
+            } else {
+                $query->whereRaw('0 = 1');
+            }
+
+            $query->orWhere('status', 'inactive')
+                ->orWhereIn('id', Member::query()->activeWithZeroCash()->select('id'));
+        };
+
+        $needsAttention = Member::query()
+            ->whereNot('status', 'withdrawn')
+            ->where($attentionScope)
+            ->count();
 
         $statusCounts = Member::query()
             ->selectRaw('status, COUNT(*) as total')
@@ -75,14 +102,11 @@ final class MemberInsightsService
             ->values()
             ->all();
 
-        $delinquentMemberIds = $delinquency->delinquentMemberIds();
+        $arrearsIdLookup = array_fill_keys($arrearsMemberIds, true);
 
         $attentionQueue = Member::query()
             ->whereNot('status', 'withdrawn')
-            ->where(function ($query) use ($delinquentMemberIds): void {
-                $query->whereIn('id', $delinquentMemberIds)
-                    ->orWhere('status', 'inactive');
-            })
+            ->where($attentionScope)
             ->orderByRaw('CASE WHEN status = ? THEN 0 WHEN status = ? THEN 1 ELSE 2 END', ['active', 'inactive'])
             ->orderBy('name')
             ->limit(6)
@@ -92,30 +116,27 @@ final class MemberInsightsService
                 'name' => $member->name,
                 'status' => $member->adminStatusLabel(),
                 'status_key' => $member->status,
-                'has_arrears' => $delinquency->isDelinquent($member),
+                'has_arrears' => isset($arrearsIdLookup[(int) $member->id]),
                 'contribution_amount' => (float) $member->monthly_contribution_amount,
                 'view_url' => MemberResource::getUrl('view', ['record' => $member]),
             ])
             ->all();
-
-        $needsAttention = $delinquent + $inactive + $zeroCashMembers;
 
         $currency = Setting::get('general', 'currency', 'USD');
 
         return [
             'total' => $total,
             'active' => $active,
-            'delinquent' => $delinquent,
+            'delinquent' => $arrearsCount,
             'inactive' => $inactive,
             'withdrawn' => $withdrawn,
+            'migration_pending' => $migrationPending,
             'needs_attention' => $needsAttention,
             'new_this_month' => $newThisMonth,
             'new_last_month' => $newLastMonth,
             'mom_change' => $this->monthOverMonthChange($newThisMonth, $newLastMonth),
             'dependents' => $dependents,
-            'independent' => $independent,
             'with_active_loans' => $withActiveLoans,
-            'loan_exempt' => $loanExempt,
             'avg_contribution' => $avgContribution,
             'zero_cash_members' => $zeroCashMembers,
             'status_breakdown' => $statusBreakdown,
@@ -126,17 +147,17 @@ final class MemberInsightsService
                 'currency' => $currency,
                 'avg_contribution' => $avgContribution,
                 'active_loans' => Loan::query()->where('status', 'active')->count(),
-                'loan_exempt' => $loanExempt,
                 'zero_cash' => $zeroCashMembers,
             ],
             'pipeline' => [
                 'active_members' => $active,
-                'delinquent_members' => $delinquent,
+                'delinquent_members' => $arrearsCount,
                 'dependents' => $dependents,
                 'members_url' => $membersUrl,
                 'members_active_url' => MemberResource::listUrl('all', ['status' => ['value' => 'active']]),
                 'members_inactive_url' => MemberResource::listTabUrl('inactive'),
                 'members_withdrawn_url' => MemberResource::listTabUrl('withdrawn'),
+                'members_migration_url' => MemberResource::listTabUrl('migration_pending'),
                 'members_arrears_url' => MemberResource::listTabUrl('delinquent'),
                 'applications_url' => MembershipApplicationResource::getUrl('index'),
                 'applications_pending_url' => MembershipApplicationResource::listTabUrl('pending'),
@@ -163,29 +184,20 @@ final class MemberInsightsService
     {
         $now = BusinessDay::now();
         $oldestMonth = $now->copy()->subMonths(5)->startOfMonth();
-        $monthCounts = [];
 
-        Member::query()
+        $monthCounts = Member::query()
             ->whereNotNull('joined_at')
             ->whereDate('joined_at', '>=', $oldestMonth)
-            ->get(['joined_at'])
-            ->each(function (Member $member) use (&$monthCounts): void {
-                $joinedAt = $member->joined_at;
-
-                if ($joinedAt === null) {
-                    return;
-                }
-
-                $key = Carbon::parse((string) $joinedAt)->startOfMonth()->format('Y-m');
-                $monthCounts[$key] = ($monthCounts[$key] ?? 0) + 1;
-            });
+            ->selectRaw("DATE_FORMAT(joined_at, '%Y-%m') as month_key, COUNT(*) as total")
+            ->groupBy('month_key')
+            ->pluck('total', 'month_key');
 
         $trend = [];
 
         for ($i = 5; $i >= 0; $i--) {
             $month = $now->copy()->subMonths($i)->startOfMonth();
             $key = $month->format('Y-m');
-            $total = $monthCounts[$key] ?? 0;
+            $total = (int) ($monthCounts[$key] ?? 0);
 
             $trend[] = [
                 'label' => $month->format('M'),
@@ -207,28 +219,19 @@ final class MemberInsightsService
         $now = BusinessDay::now();
         $oldestWeekStart = $now->copy()->subWeeks(7)->startOfWeek();
         $currentWeekEnd = $now->copy()->endOfWeek();
-        $weekCounts = [];
 
-        Member::query()
+        $weekCounts = Member::query()
             ->whereNotNull('joined_at')
             ->whereBetween('joined_at', [$oldestWeekStart, $currentWeekEnd])
-            ->get(['joined_at'])
-            ->each(function (Member $member) use (&$weekCounts): void {
-                $joinedAt = $member->joined_at;
-
-                if ($joinedAt === null) {
-                    return;
-                }
-
-                $key = Carbon::parse((string) $joinedAt)->startOfWeek()->toDateString();
-                $weekCounts[$key] = ($weekCounts[$key] ?? 0) + 1;
-            });
+            ->selectRaw('DATE(DATE_SUB(joined_at, INTERVAL WEEKDAY(joined_at) DAY)) as week_start, COUNT(*) as total')
+            ->groupBy('week_start')
+            ->pluck('total', 'week_start');
 
         $points = [];
 
         for ($i = 7; $i >= 0; $i--) {
             $start = $now->copy()->subWeeks($i)->startOfWeek()->toDateString();
-            $points[] = $weekCounts[$start] ?? 0;
+            $points[] = (int) ($weekCounts[$start] ?? 0);
         }
 
         return $points;

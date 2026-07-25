@@ -13,7 +13,10 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Support\BusinessDay;
+use App\Support\CollectionInsightsCache;
 use App\Support\Insights\InsightKpi;
+use App\Support\TenantRuntimeCache;
+use InvalidArgumentException;
 
 final class ContributionInsightsService
 {
@@ -24,128 +27,176 @@ final class ContributionInsightsService
     /**
      * @return array<string, mixed>
      */
-    public function forContext(string $context): array
+    public function forContext(string $context, ?string $cycleKey = null): array
     {
-        return match ($context) {
-            'collect' => $this->collectSnapshot(),
-            'collected' => $this->collectedSnapshot(),
-            'arrears' => $this->arrearsSnapshot(),
-            'contributions', 'ledger' => $this->ledgerSnapshot(),
-            default => $this->ledgerSnapshot(),
-        };
+        $resolvedCycle = $cycleKey;
+
+        if (! filled($resolvedCycle)) {
+            $resolvedCycle = ContributionResource::resolveListCycleKey() ?? '';
+        }
+
+        return CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_CONTRIBUTIONS,
+            "{$context}:{$resolvedCycle}",
+            fn (): array => match ($context) {
+                'collect' => $this->collectSnapshot($cycleKey),
+                'collected' => $this->collectedSnapshot($cycleKey),
+                'arrears' => $this->arrearsSnapshot($cycleKey),
+                'contributions', 'ledger' => $this->ledgerSnapshot($cycleKey),
+                default => $this->ledgerSnapshot($cycleKey),
+            },
+        );
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function snapshot(): array
+    public function snapshot(?string $cycleKey = null): array
     {
-        return $this->ledgerSnapshot();
+        return $this->ledgerSnapshot($cycleKey);
+    }
+
+    /**
+     * @return array{0: int, 1: int, 2: string, 3: bool}
+     */
+    private function resolvePeriod(?string $cycleKey = null): array
+    {
+        if (filled($cycleKey)) {
+            try {
+                [$month, $year] = $this->cycles->parseContributionCycleKey($cycleKey);
+            } catch (InvalidArgumentException) {
+                [$month, $year] = ContributionResource::resolveListCycle();
+            }
+        } else {
+            [$month, $year] = ContributionResource::resolveListCycle();
+        }
+
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $isOpen = $month === $openMonth && $year === $openYear;
+        $periodLabel = $this->cycles->periodLabel($month, $year);
+
+        return [$month, $year, $periodLabel, $isOpen];
+    }
+
+    /**
+     * Outstanding unpaid members for the selected cycle (To collect / cycle Arrears).
+     */
+    private function outstandingCount(int $month, int $year): int
+    {
+        return ContributionResource::pendingCountForPeriod($month, $year);
+    }
+
+    /**
+     * Posted contribution rows that belong on the cycle Collected workspace.
+     */
+    private function collectedCount(int $month, int $year): int
+    {
+        return $this->cycles->postedContributionCount($month, $year);
+    }
+
+    private function outstandingSegmentUrl(bool $isOpen): string
+    {
+        return ContributionResource::listTabUrl($isOpen ? 'collect' : 'arrears');
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function collectSnapshot(): array
+    public function collectSnapshot(?string $cycleKey = null): array
     {
-        [$openMonth, $openYear] = ContributionResource::resolveListCycle();
+        [$month, $year, $periodLabel, $isOpen] = $this->resolvePeriod($cycleKey);
         $currency = Setting::get('general', 'currency', 'USD');
-        $periodLabel = $this->cycles->periodLabel($openMonth, $openYear);
 
-        $missingOpenPeriod = ContributionResource::pendingCountForPeriod($openMonth, $openYear);
-        $postedOpenPeriod = Contribution::query()
-            ->forPeriod($openMonth, $openYear)
-            ->posted()
-            ->count();
-        $pendingOpenPeriod = Contribution::query()
-            ->forPeriod($openMonth, $openYear)
+        $missingMembers = $this->outstandingCount($month, $year);
+        $postedMembers = $this->collectedCount($month, $year);
+        $pendingRows = Contribution::query()
+            ->forPeriod($month, $year)
             ->pending()
             ->count();
-        $lateOpenPeriod = Contribution::query()
-            ->forPeriod($openMonth, $openYear)
+        $lateRows = Contribution::query()
+            ->forPeriod($month, $year)
             ->pending()
             ->where('is_late', true)
             ->count();
 
-        $openDenominator = $postedOpenPeriod + $missingOpenPeriod;
-        $collectionRate = $openDenominator > 0
-            ? (int) round(($postedOpenPeriod / $openDenominator) * 100)
+        $denominator = $postedMembers + $missingMembers;
+        $collectionRate = $denominator > 0
+            ? (int) round(($postedMembers / $denominator) * 100)
             : 0;
 
+        $outstandingUrl = $this->outstandingSegmentUrl($isOpen);
+        $collectedUrl = ContributionResource::listTabUrl('collected');
+        $periodSub = $isOpen ? __('Open period') : $periodLabel;
         $arrearsPeriods = ContributionResource::contributionArrearsPeriodCount();
-
-        $collectUrl = ContributionResource::listTabUrl('collect');
 
         return [
             'currency' => $currency,
             'open_period' => [
                 'label' => $periodLabel,
                 'collection_rate' => $collectionRate,
-                'missing_members' => $missingOpenPeriod,
+                'missing_members' => $missingMembers,
             ],
             'hero' => [
-                'tone' => $missingOpenPeriod > 0 ? 'amber' : 'success',
-                'title' => $missingOpenPeriod > 0
-                    ? __('Open period collection in progress')
-                    : __('Open period fully collected'),
-                'subtitle' => $missingOpenPeriod > 0
+                'tone' => $missingMembers > 0 ? 'amber' : 'success',
+                'title' => $missingMembers > 0
+                    ? ($isOpen
+                        ? __('Open period collection in progress')
+                        : __('Collection in progress for :period', ['period' => $periodLabel]))
+                    : ($isOpen
+                        ? __('Open period fully collected')
+                        : __('Fully collected for :period', ['period' => $periodLabel])),
+                'subtitle' => $missingMembers > 0
                     ? trans_choice(
                         ':count member still to collect for :period|:count members still to collect for :period',
-                        $missingOpenPeriod,
-                        ['count' => $missingOpenPeriod, 'period' => $periodLabel],
+                        $missingMembers,
+                        ['count' => $missingMembers, 'period' => $periodLabel],
                     )
                     : __('All members have posted for :period.', ['period' => $periodLabel]),
-                'cta_label' => $missingOpenPeriod > 0 ? __('To collect') : null,
-                'cta_url' => $missingOpenPeriod > 0 ? $collectUrl : null,
+                'cta_label' => $missingMembers > 0 ? ($isOpen ? __('To collect') : __('Arrears')) : null,
+                'cta_url' => $missingMembers > 0 ? $outstandingUrl : null,
             ],
             'kpis' => InsightKpi::linkMany([
-                ['key' => 'missing', 'label' => __('To collect'), 'value' => (string) $missingOpenPeriod, 'sub' => __('Members'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $missingOpenPeriod > 0],
-                ['key' => 'posted', 'label' => __('Posted'), 'value' => (string) $postedOpenPeriod, 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => true],
-                ['key' => 'pending', 'label' => __('Pending rows'), 'value' => (string) $pendingOpenPeriod, 'sub' => __('Ledger'), 'icon' => 'heroicon-o-clock', 'accent' => 'sky', 'active' => $pendingOpenPeriod > 0],
-                ['key' => 'rate', 'label' => __('Collection'), 'value' => $collectionRate.'%', 'sub' => __('Open period'), 'icon' => 'heroicon-o-chart-pie', 'accent' => 'violet', 'active' => true],
-                ['key' => 'late', 'label' => __('Late'), 'value' => (string) $lateOpenPeriod, 'sub' => __('Open period'), 'icon' => 'heroicon-o-exclamation-triangle', 'accent' => 'rose', 'active' => $lateOpenPeriod > 0],
+                ['key' => 'missing', 'label' => $isOpen ? __('To collect') : __('Arrears'), 'value' => (string) $missingMembers, 'sub' => __('Members'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $missingMembers > 0],
+                ['key' => 'posted', 'label' => __('Collected'), 'value' => (string) $postedMembers, 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => true],
+                ['key' => 'pending', 'label' => __('Pending rows'), 'value' => (string) $pendingRows, 'sub' => __('Ledger'), 'icon' => 'heroicon-o-clock', 'accent' => 'sky', 'active' => $pendingRows > 0],
+                ['key' => 'rate', 'label' => __('Collection'), 'value' => $collectionRate.'%', 'sub' => $periodSub, 'icon' => 'heroicon-o-chart-pie', 'accent' => 'violet', 'active' => true],
+                ['key' => 'late', 'label' => __('Late'), 'value' => (string) $lateRows, 'sub' => $periodSub, 'icon' => 'heroicon-o-exclamation-triangle', 'accent' => 'rose', 'active' => $lateRows > 0],
                 ['key' => 'arrears', 'label' => __('Arrears'), 'value' => (string) $arrearsPeriods, 'sub' => __('Past periods'), 'icon' => 'heroicon-o-banknotes', 'accent' => 'rose', 'active' => $arrearsPeriods > 0],
             ], [
-                'missing' => $collectUrl,
-                'posted' => ContributionResource::listTabUrl('collected'),
+                'missing' => $outstandingUrl,
+                'posted' => $collectedUrl,
                 'pending' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'pending']]),
-                'rate' => $collectUrl,
+                'rate' => $outstandingUrl,
                 'late' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'pending']]),
                 'arrears' => ContributionResource::listTabUrl('arrears'),
             ]),
             'pipeline' => [
-                'missing_open_period' => $missingOpenPeriod,
-                'posted_open_period' => $postedOpenPeriod,
-                'pending_open_period' => $pendingOpenPeriod,
+                'missing_open_period' => $missingMembers,
+                'posted_open_period' => $postedMembers,
+                'pending_open_period' => $pendingRows,
                 'arrears_periods' => $arrearsPeriods,
-                'collect_url' => $collectUrl,
-                'collected_url' => ContributionResource::listTabUrl('collected'),
+                'collect_url' => $outstandingUrl,
+                'collected_url' => $collectedUrl,
                 'arrears_url' => ContributionResource::listTabUrl('arrears'),
                 'ledger_pending_url' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'pending']]),
             ],
-            'collection_amounts' => $this->contributionCycleCollectionAmounts($openMonth, $openYear),
+            'collection_amounts' => $this->contributionCycleCollectionAmounts($month, $year),
         ];
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function collectedSnapshot(): array
+    public function collectedSnapshot(?string $cycleKey = null): array
     {
-        [$openMonth, $openYear] = ContributionResource::resolveListCycle();
+        [$month, $year, $periodLabel, $isOpen] = $this->resolvePeriod($cycleKey);
         $currency = Setting::get('general', 'currency', 'USD');
-        $periodLabel = $this->cycles->periodLabel($openMonth, $openYear);
 
-        $postedOpenPeriod = Contribution::query()
-            ->forPeriod($openMonth, $openYear)
-            ->posted()
-            ->count();
-        $postedAmount = (float) Contribution::query()
-            ->forPeriod($openMonth, $openYear)
-            ->posted()
+        $postedMembers = $this->collectedCount($month, $year);
+        $postedAmount = (float) $this->cycles->postedContributionsQueryForPeriod($month, $year)
             ->sum('amount');
-        $missingOpenPeriod = ContributionResource::pendingCountForPeriod($openMonth, $openYear);
-
+        $missingMembers = $this->outstandingCount($month, $year);
+        $outstandingUrl = $this->outstandingSegmentUrl($isOpen);
         $collectedUrl = ContributionResource::listTabUrl('collected');
 
         return [
@@ -156,47 +207,101 @@ final class ContributionInsightsService
                 'title' => __('Collected for :period', ['period' => $periodLabel]),
                 'subtitle' => trans_choice(
                     ':count posted contribution row|:count posted contribution rows',
-                    $postedOpenPeriod,
-                    ['count' => $postedOpenPeriod],
-                ).($missingOpenPeriod > 0
-                    ? ' · '.trans_choice(':count member still on To collect|:count members still on To collect', $missingOpenPeriod, ['count' => $missingOpenPeriod])
+                    $postedMembers,
+                    ['count' => $postedMembers],
+                ).($missingMembers > 0
+                    ? ' · '.trans_choice(
+                        $isOpen
+                        ? ':count member still on To collect|:count members still on To collect'
+                        : ':count member still in Arrears|:count members still in Arrears',
+                        $missingMembers,
+                        ['count' => $missingMembers],
+                    )
                     : ''),
-                'cta_label' => $missingOpenPeriod > 0 ? __('To collect') : null,
-                'cta_url' => $missingOpenPeriod > 0 ? ContributionResource::listTabUrl('collect') : null,
+                'cta_label' => $missingMembers > 0 ? ($isOpen ? __('To collect') : __('Arrears')) : null,
+                'cta_url' => $missingMembers > 0 ? $outstandingUrl : null,
             ],
             'kpis' => InsightKpi::linkMany([
-                ['key' => 'posted', 'label' => __('Posted'), 'value' => (string) $postedOpenPeriod, 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => true],
+                ['key' => 'posted', 'label' => __('Collected'), 'value' => (string) $postedMembers, 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => true],
                 ['key' => 'amount', 'label' => __('Amount'), 'value' => $postedAmount, 'currency' => $currency, 'value_is_amount' => true, 'value_precision' => 0, 'sub' => $periodLabel, 'icon' => 'heroicon-o-currency-dollar', 'accent' => 'teal', 'active' => $postedAmount > 0],
-                ['key' => 'remaining', 'label' => __('Remaining'), 'value' => (string) $missingOpenPeriod, 'sub' => __('Members'), 'icon' => 'heroicon-o-user-group', 'accent' => 'amber', 'active' => $missingOpenPeriod > 0],
                 ['key' => 'contributions', 'label' => __('Contributions'), 'value' => (string) Contribution::query()->posted()->count(), 'sub' => __('All time'), 'icon' => 'heroicon-o-book-open', 'accent' => 'sky', 'active' => true],
-                ['key' => 'collect', 'label' => __('To collect'), 'value' => (string) $missingOpenPeriod, 'sub' => __('Open period'), 'icon' => 'heroicon-o-arrow-down-tray', 'accent' => 'violet', 'active' => $missingOpenPeriod > 0],
+                ['key' => 'collect', 'label' => $isOpen ? __('To collect') : __('Arrears'), 'value' => (string) $missingMembers, 'sub' => __('Members'), 'icon' => 'heroicon-o-arrow-down-tray', 'accent' => 'violet', 'active' => $missingMembers > 0],
                 ['key' => 'arrears', 'label' => __('Arrears'), 'value' => (string) ContributionResource::contributionArrearsPeriodCount(), 'sub' => __('Past periods'), 'icon' => 'heroicon-o-banknotes', 'accent' => 'rose', 'active' => true],
             ], [
                 'posted' => $collectedUrl,
                 'amount' => $collectedUrl,
-                'remaining' => ContributionResource::listTabUrl('collect'),
                 'contributions' => ContributionResource::listUrl('contributions'),
-                'collect' => ContributionResource::listTabUrl('collect'),
+                'collect' => $outstandingUrl,
                 'arrears' => ContributionResource::listTabUrl('arrears'),
             ]),
             'pipeline' => [
-                'posted_open_period' => $postedOpenPeriod,
-                'missing_open_period' => $missingOpenPeriod,
+                'posted_open_period' => $postedMembers,
+                'missing_open_period' => $missingMembers,
                 'collected_url' => $collectedUrl,
-                'collect_url' => ContributionResource::listTabUrl('collect'),
+                'collect_url' => $outstandingUrl,
             ],
-            'collection_amounts' => $this->contributionCycleCollectionAmounts($openMonth, $openYear),
+            'collection_amounts' => $this->contributionCycleCollectionAmounts($month, $year),
         ];
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function arrearsSnapshot(): array
+    public function arrearsSnapshot(?string $cycleKey = null): array
     {
+        [$month, $year, $periodLabel, $isOpen] = $this->resolvePeriod($cycleKey);
+        $currency = Setting::get('general', 'currency', 'USD');
+        $onCycleWorkspace = ContributionResource::resolvePrimaryTab() === 'cycle';
+
+        if ($onCycleWorkspace) {
+            $missingMembers = $this->outstandingCount($month, $year);
+            $postedMembers = $this->collectedCount($month, $year);
+            $outstandingUrl = $this->outstandingSegmentUrl($isOpen);
+            $collectedUrl = ContributionResource::listTabUrl('collected');
+            $periodSub = $isOpen ? __('Open period') : $periodLabel;
+
+            return [
+                'currency' => $currency,
+                'open_period' => ['label' => $periodLabel],
+                'hero' => [
+                    'tone' => $missingMembers > 0 ? 'danger' : 'success',
+                    'title' => $missingMembers > 0
+                        ? __('Arrears for :period', ['period' => $periodLabel])
+                        : __('No arrears for :period', ['period' => $periodLabel]),
+                    'subtitle' => $missingMembers > 0
+                        ? trans_choice(
+                            ':count member still to collect for :period|:count members still to collect for :period',
+                            $missingMembers,
+                            ['count' => $missingMembers, 'period' => $periodLabel],
+                        )
+                        : __('All liable members have posted for :period.', ['period' => $periodLabel]),
+                    'cta_label' => $missingMembers > 0 ? __('Arrears') : null,
+                    'cta_url' => $missingMembers > 0 ? $outstandingUrl : null,
+                ],
+                'kpis' => InsightKpi::linkMany([
+                    ['key' => 'arrears', 'label' => __('Arrears'), 'value' => (string) $missingMembers, 'sub' => $periodLabel, 'icon' => 'heroicon-o-banknotes', 'accent' => 'rose', 'active' => $missingMembers > 0],
+                    ['key' => 'posted', 'label' => __('Collected'), 'value' => (string) $postedMembers, 'sub' => $periodLabel, 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => true],
+                    ['key' => 'rate', 'label' => __('Collection'), 'value' => (($postedMembers + $missingMembers) > 0 ? (int) round(($postedMembers / ($postedMembers + $missingMembers)) * 100) : 0).'%', 'sub' => $periodSub, 'icon' => 'heroicon-o-chart-pie', 'accent' => 'violet', 'active' => true],
+                    ['key' => 'ledger', 'label' => __('Ledger arrears'), 'value' => (string) ContributionResource::contributionArrearsPeriodCount(), 'sub' => __('Past periods'), 'icon' => 'heroicon-o-book-open', 'accent' => 'amber', 'active' => true],
+                ], [
+                    'arrears' => $outstandingUrl,
+                    'posted' => $collectedUrl,
+                    'rate' => $outstandingUrl,
+                    'ledger' => ContributionResource::listUrl('ledger', view: 'arrears'),
+                ]),
+                'pipeline' => [
+                    'arrears_periods' => $missingMembers,
+                    'arrears_members' => $missingMembers,
+                    'collect_url' => $outstandingUrl,
+                    'collected_url' => $collectedUrl,
+                    'arrears_url' => $outstandingUrl,
+                ],
+                'collection_amounts' => $this->contributionCycleCollectionAmounts($month, $year),
+            ];
+        }
+
         $delinquency = app(LoanDelinquencyService::class);
-        [$month, $year] = ContributionResource::resolveListCycle();
-        $live = ContributionResource::isViewingOpenCycle();
+        $live = $isOpen;
         $arrearsPeriods = ContributionResource::contributionArrearsPeriodCount();
         $arrearsMembers = $delinquency->countContributionArrearsMembers($month, $year, $live);
         $delinquentMembers = count($delinquency->delinquentMemberIds());
@@ -206,9 +311,7 @@ final class ContributionInsightsService
             ->count();
         $guarantorAtRisk = $delinquency->loansAtGuarantorRiskCount();
 
-        $arrearsUrl = ContributionResource::listTabUrl('arrears');
-        $currency = Setting::get('general', 'currency', 'USD');
-        $periodLabel = $this->cycles->periodLabel($month, $year);
+        $arrearsUrl = ContributionResource::listUrl('ledger', view: 'arrears');
 
         return [
             'currency' => $currency,
@@ -262,10 +365,10 @@ final class ContributionInsightsService
     /**
      * @return array<string, mixed>
      */
-    public function ledgerSnapshot(): array
+    public function ledgerSnapshot(?string $cycleKey = null): array
     {
         $now = BusinessDay::now();
-        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        [$month, $year, $periodLabel] = $this->resolvePeriod($cycleKey);
 
         $pending = Contribution::query()->where('status', 'pending')->count();
         $posted = Contribution::query()->where('status', 'posted')->count();
@@ -294,19 +397,16 @@ final class ContributionInsightsService
             ->where('is_late', true)
             ->count();
 
-        $missingOpenPeriod = ContributionResource::pendingCountForPeriod($openMonth, $openYear);
-        $postedOpenPeriod = Contribution::query()
-            ->forPeriod($openMonth, $openYear)
-            ->posted()
-            ->count();
-        $pendingOpenPeriod = Contribution::query()
-            ->forPeriod($openMonth, $openYear)
+        $missingMembers = $this->outstandingCount($month, $year);
+        $postedMembers = $this->collectedCount($month, $year);
+        $pendingRows = Contribution::query()
+            ->forPeriod($month, $year)
             ->pending()
             ->count();
 
-        $openDenominator = $postedOpenPeriod + $missingOpenPeriod;
-        $collectionRate = $openDenominator > 0
-            ? (int) round(($postedOpenPeriod / $openDenominator) * 100)
+        $denominator = $postedMembers + $missingMembers;
+        $collectionRate = $denominator > 0
+            ? (int) round(($postedMembers / $denominator) * 100)
             : 0;
 
         $currency = Setting::get('general', 'currency', 'USD');
@@ -323,13 +423,13 @@ final class ContributionInsightsService
             'posted_this_month' => $postedThisMonth,
             'late_count' => $lateCount,
             'open_period' => [
-                'label' => $this->cycles->periodLabel($openMonth, $openYear),
-                'month' => $openMonth,
-                'year' => $openYear,
-                'is_late' => $this->cycles->isLate($openMonth, $openYear),
-                'posted' => $postedOpenPeriod,
-                'pending_rows' => $pendingOpenPeriod,
-                'missing_members' => $missingOpenPeriod,
+                'label' => $periodLabel,
+                'month' => $month,
+                'year' => $year,
+                'is_late' => $this->cycles->isLate($month, $year),
+                'posted' => $postedMembers,
+                'pending_rows' => $pendingRows,
+                'missing_members' => $missingMembers,
                 'collection_rate' => $collectionRate,
             ],
             'cycle' => [
@@ -341,7 +441,7 @@ final class ContributionInsightsService
             'pipeline' => [
                 'pending_contributions' => $pending,
                 'posted_contributions' => $posted,
-                'missing_open_period' => $missingOpenPeriod,
+                'missing_open_period' => $missingMembers,
                 'arrears_periods' => $arrearsPeriods,
                 'contributions_url' => $contributionsUrl,
                 'contributions_pending_url' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'pending']]),
@@ -364,37 +464,59 @@ final class ContributionInsightsService
         [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
         $live = $month === $openMonth && $year === $openYear;
 
-        $recoveredAmount = (float) Contribution::query()
-            ->forPeriod($month, $year)
-            ->posted()
-            ->selectRaw('COALESCE(SUM(amount + COALESCE(late_fee_amount, 0)), 0) as total')
-            ->value('total');
+        $collectedIds = $this->cycles->collectedContributionIdsForPeriod($month, $year);
+        // Match Collected list / Amount KPI: principal cash posted for the cycle (not assessed late fees).
+        $recoveredAmount = $collectedIds === []
+            ? 0.0
+            : (float) Contribution::query()
+                ->whereIn('id', $collectedIds)
+                ->sum('amount');
 
         $unrecoveredAmount = 0.0;
         $pendingIds = $this->cycles->pendingMemberIdsForPeriod($month, $year);
 
         if ($pendingIds !== []) {
-            Member::query()
-                ->whereIn('id', $pendingIds)
-                ->with([
-                    'cashAccount',
-                    'contributions' => fn ($query) => $query
-                        ->forPeriod($month, $year)
-                        ->where('status', 'pending'),
-                ])
-                ->orderBy('id')
-                ->each(function (Member $member) use ($month, $year, &$unrecoveredAmount): void {
-                    $unrecoveredAmount += $this->cycles->requiredCollectionCashForMemberPeriod(
-                        $member,
-                        $month,
-                        $year,
-                        syncLateFees: false,
-                    );
-                });
+            // Set-based paint path: avoid per-member standing sync + late-fee txn sums.
+            $pendingRows = Contribution::query()
+                ->whereIn('member_id', $pendingIds)
+                ->forPeriod($month, $year)
+                ->where('status', 'pending')
+                ->get(['member_id', 'amount', 'amount_due', 'amount_collected', 'late_fee_amount']);
+
+            $memberIdsWithPendingRow = [];
+
+            foreach ($pendingRows as $row) {
+                $memberIdsWithPendingRow[(int) $row->member_id] = true;
+                $principalShortfall = max(
+                    0.0,
+                    (float) ($row->amount_due ?? $row->amount) - (float) ($row->amount_collected ?? 0),
+                );
+                $unrecoveredAmount += $principalShortfall + max(0.0, (float) ($row->late_fee_amount ?? 0));
+            }
+
+            $withoutRows = array_values(array_filter(
+                $pendingIds,
+                fn (int $memberId): bool => ! isset($memberIdsWithPendingRow[$memberId]),
+            ));
+
+            if ($withoutRows !== []) {
+                $unrecoveredAmount += (float) Member::query()
+                    ->whereIn('id', $withoutRows)
+                    ->sum('monthly_contribution_amount');
+            }
         }
 
         return [
-            'arrears_amount' => $delinquency->contributionArrearsAmountTotal(null, $month, $year, $live),
+            'arrears_amount' => (float) TenantRuntimeCache::remember(
+                sprintf(
+                    'contribution_insights:arrears_amount:%04d-%02d:%d',
+                    $year,
+                    $month,
+                    $live ? 1 : 0,
+                ),
+                60,
+                fn (): float => $delinquency->contributionArrearsAmountTotal(null, $month, $year, $live),
+            ),
             'recovered_amount' => round($recoveredAmount, 2),
             'unrecovered_amount' => round($unrecoveredAmount, 2),
         ];

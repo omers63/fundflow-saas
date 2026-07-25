@@ -15,6 +15,7 @@ use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
+use App\Support\Lang;
 use App\Support\MemberNumberSettings;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
@@ -81,7 +82,7 @@ test('legacy overdue installments tab url maps to delinquency view', function ()
     $this->get('http://'.$this->domain.$path.($query ? '?'.$query : ''))
         ->assertSuccessful()
         ->assertSee(__('Delinquency'), false)
-        ->assertSee(__('Overdue installments'), false);
+        ->assertSee(Lang::formatUiLabel(__('Overdue installments')), false);
 });
 
 test('legacy guarantor exposure tab url maps to delinquency guarantor view', function () {
@@ -601,7 +602,8 @@ test('collected list uses actual repayment cash for final legacy top-up installm
     $collected = $catalog->collectedInstallmentsQuery(12, 2025)->get();
 
     expect($collected->pluck('id'))->toContain($installment->id)
-        ->and($collected->firstWhere('id', $installment->id)?->collectedCashAmount())->toBe(900.0);
+        ->and($collected->firstWhere('id', $installment->id)?->collectedCashAmount())->toBe(900.0)
+        ->and($catalog->collectedInstallmentsCashTotal(12, 2025))->toBe(900.0);
 });
 
 test('delinquency tab exposes maintenance actions on overdue view', function () {
@@ -613,27 +615,156 @@ test('delinquency tab exposes maintenance actions on overdue view', function () 
         ->assertNotified();
 });
 
-test('collection arrears segment lists unpaid installments before selected cycle', function () {
+test('collection arrears segment lists unpaid members for the selected past cycle', function () {
     Setting::set('contribution', 'cycle_start_day', '6');
 
-    Carbon::setTestNow(Carbon::parse('2025-10-15'));
+    Carbon::setTestNow(Carbon::parse('2025-11-20'));
 
     $cycles = app(ContributionCycleService::class);
     $octoberKey = $cycles->contributionCycleKey(10, 2025);
     $accounting = app(AccountingService::class);
     $catalog = app(LoanEmiCollectionCatalogService::class);
 
-    $member = Member::create([
+    $owing = Member::create([
         'member_number' => 'LOAN-ARR-1',
         'name' => 'EMI Arrears Borrower',
         'monthly_contribution_amount' => 0,
         'joined_at' => Carbon::parse('2024-01-01'),
         'status' => 'active',
     ]);
-    $accounting->createMemberAccounts($member);
+    $accounting->createMemberAccounts($owing);
 
-    $loan = Loan::create([
-        'member_id' => $member->id,
+    $paid = Member::create([
+        'member_number' => 'LOAN-ARR-PAID',
+        'name' => 'EMI Paid Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($paid);
+
+    $owingLoan = Loan::create([
+        'member_id' => $owing->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2024-01-01'),
+        'disbursed_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    $paidLoan = Loan::create([
+        'member_id' => $paid->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 1000,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2024-01-01'),
+        'disbursed_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $owingLoan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-09-05'),
+        'status' => 'pending',
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $owingLoan->id,
+        'installment_number' => 2,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-11-05'),
+        'status' => 'pending',
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $paidLoan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-11-05'),
+        'status' => 'paid',
+        'paid_at' => Carbon::parse('2025-10-20'),
+    ]);
+
+    expect(LoanResource::availableCycleSegments($octoberKey))->toBe(['arrears', 'collected'])
+        ->and(LoanResource::listTabUrl('arrears', cycle: $octoberKey))->toContain('segment=arrears')
+        ->and($catalog->pendingMemberCount(10, 2025))->toBe(1)
+        ->and($catalog->emiArrearsInstallmentCount(10, 2025, false))->toBe(1);
+
+    Livewire::test(ListLoans::class)
+        ->set('selectedCycle', $octoberKey)
+        ->set('collectionSegment', 'arrears')
+        ->assertSuccessful()
+        ->assertSet('collectionSegment', 'arrears')
+        ->assertSee(__('Arrears'), false)
+        ->assertSee(__('Arrears – :period', [
+            'period' => $cycles->periodLabel(10, 2025),
+        ]), false)
+        ->assertSee(__('Members who still owe EMI for :period. Apply from cash balance.', [
+            'period' => $cycles->periodLabel(10, 2025),
+        ]), false)
+        ->assertCanSeeTableRecords([$owing])
+        ->assertCanNotSeeTableRecords([$paid]);
+
+    Carbon::setTestNow();
+});
+
+test('loan cycle arrears table shows loan number and supports member filter', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+
+    Carbon::setTestNow(Carbon::parse('2025-11-20'));
+
+    $cycles = app(ContributionCycleService::class);
+    $octoberKey = $cycles->contributionCycleKey(10, 2025);
+    $accounting = app(AccountingService::class);
+
+    $alpha = Member::create([
+        'member_number' => 'LOAN-ARR-A',
+        'name' => 'Alpha Arrears Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($alpha);
+
+    $beta = Member::create([
+        'member_number' => 'LOAN-ARR-B',
+        'name' => 'Beta Arrears Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($beta);
+
+    $alphaLoan = Loan::create([
+        'member_id' => $alpha->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2024-01-01'),
+        'disbursed_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    $betaLoan = Loan::create([
+        'member_id' => $beta->id,
         'amount' => 12_000,
         'amount_requested' => 12_000,
         'amount_approved' => 12_000,
@@ -648,45 +779,67 @@ test('collection arrears segment lists unpaid installments before selected cycle
     ]);
 
     LoanInstallment::create([
-        'loan_id' => $loan->id,
+        'loan_id' => $alphaLoan->id,
         'installment_number' => 1,
-        'amount' => 1000,
-        'due_date' => Carbon::parse('2025-09-05'),
-        'status' => 'pending',
-    ]);
-
-    LoanInstallment::create([
-        'loan_id' => $loan->id,
-        'installment_number' => 2,
         'amount' => 1000,
         'due_date' => Carbon::parse('2025-11-05'),
         'status' => 'pending',
     ]);
 
-    expect(LoanResource::emiArrearsInstallmentCount())->toBe(1)
-        ->and(LoanResource::listTabUrl('arrears'))->toContain('segment=arrears');
+    LoanInstallment::create([
+        'loan_id' => $betaLoan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-11-05'),
+        'status' => 'pending',
+    ]);
 
-    $component = Livewire::test(ListLoans::class)
+    Livewire::test(ListLoans::class)
         ->set('selectedCycle', $octoberKey)
         ->set('collectionSegment', 'arrears')
         ->assertSuccessful()
+        ->assertCanSeeTableRecords([$alpha, $beta])
+        ->assertSee('#'.$alphaLoan->id, false)
+        ->assertSee('#'.$betaLoan->id, false)
+        ->assertSee(__('Loan #'), false)
+        ->filterTable('member_id', $alpha->id)
+        ->assertCanSeeTableRecords([$alpha])
+        ->assertCanNotSeeTableRecords([$beta]);
+
+    Carbon::setTestNow();
+});
+
+test('open cycle shows to collect not arrears; past cycle shows arrears not to collect', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $openKey = $cycles->contributionCycleKey($openMonth, $openYear);
+    $previous = Carbon::create($openYear, $openMonth, 1)->subMonthNoOverflow();
+    $previousKey = $cycles->contributionCycleKey((int) $previous->month, (int) $previous->year);
+
+    Livewire::test(ListLoans::class)
+        ->set('selectedCycle', $openKey)
+        ->set('collectionSegment', 'collect')
+        ->assertSuccessful()
+        ->assertSee(__('To collect'), false)
+        ->assertSet('collectionSegment', 'collect');
+
+    expect(LoanResource::availableCycleSegments($openKey))->toBe(['collect', 'collected'])
+        ->and(LoanResource::normalizeCycleSegment('arrears', $openKey))->toBe('collect');
+
+    Livewire::test(ListLoans::class)
+        ->set('selectedCycle', $previousKey)
+        ->set('collectionSegment', 'collect')
         ->assertSet('collectionSegment', 'arrears')
+        ->assertSuccessful()
         ->assertSee(__('Arrears'), false)
-        ->assertSee(__('Unpaid installments from labelled cycles before :period.', [
-            'period' => $cycles->periodLabel(10, 2025),
+        ->assertSee(__('Arrears – :period', [
+            'period' => $cycles->periodLabel((int) $previous->month, (int) $previous->year),
         ]), false);
 
-    $arrearsInstallment = $catalog->emiArrearsInstallmentsQuery(10, 2025, true)->first();
-    $arrearsInstallment?->loadMissing('loan');
-
-    $outstandingColumn = $component->instance()->getTable()->getColumn('outstanding')->record($arrearsInstallment);
-    $formattedOutstanding = $outstandingColumn->formatState($outstandingColumn->getState());
-
-    expect($arrearsInstallment)->not->toBeNull()
-        ->and($outstandingColumn->getState())->toBeInstanceOf(Loan::class)
-        ->and((string) $formattedOutstanding)->toContain('ff-loan-outstanding-cell');
-
-    expect($catalog->emiArrearsInstallmentCount(10, 2025, true))->toBe(1);
+    expect(LoanResource::availableCycleSegments($previousKey))->toBe(['arrears', 'collected'])
+        ->and(LoanResource::normalizeCycleSegment('collect', $previousKey))->toBe('arrears');
 
     Carbon::setTestNow();
 });

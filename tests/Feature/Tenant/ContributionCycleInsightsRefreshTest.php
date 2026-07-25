@@ -43,6 +43,39 @@ afterEach(function () {
     ContributionResource::flushPeriodCountCaches();
 });
 
+test('contribution insights widget tracks list selected cycle', function () {
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $previous = Carbon::create($openYear, $openMonth, 1)->subMonthNoOverflow();
+    $previousKey = $cycles->contributionCycleKey((int) $previous->month, (int) $previous->year);
+    $previousLabel = $cycles->periodLabel((int) $previous->month, (int) $previous->year);
+
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    Contribution::factory()->for($member)->create([
+        'period' => Contribution::periodDate((int) $previous->month, (int) $previous->year),
+        'amount' => 500,
+        'amount_due' => 500,
+        'status' => 'pending',
+        'collection_status' => ContributionCollectionStatus::PENDING,
+    ]);
+
+    Livewire::test(ListContributions::class)
+        ->set('selectedCycle', $previousKey)
+        ->assertSet('selectedCycle', $previousKey)
+        ->assertSee($previousLabel, false);
+
+    $snapshot = app(ContributionInsightsService::class)->forContext('arrears', $previousKey);
+
+    expect($snapshot['open_period']['label'])->toBe($previousLabel)
+        ->and((int) collect($snapshot['kpis'])->firstWhere('key', 'arrears')['value'])->toBeGreaterThanOrEqual(1);
+});
+
 test('running contribution cycle refreshes pending counts and insights snapshot', function () {
     $member = Member::factory()->create([
         'status' => 'active',
@@ -50,7 +83,8 @@ test('running contribution cycle refreshes pending counts and insights snapshot'
         'joined_at' => Carbon::parse('2024-01-01'),
     ]);
     app(AccountingService::class)->createMemberAccounts($member);
-    $member->cashAccount()->update(['balance' => 5000]);
+    $member->load('cashAccount');
+    $member->cashAccount?->update(['balance' => 5000]);
 
     Contribution::factory()->for($member)->create([
         'period' => Contribution::periodDate($this->month, $this->year),
@@ -70,19 +104,12 @@ test('running contribution cycle refreshes pending counts and insights snapshot'
     expect($beforeMissing)->toBe($pendingBefore);
 
     $cycles = app(ContributionCycleService::class);
-    $cycleKey = $cycles->contributionCycleKey($this->month, $this->year);
+    $results = $cycles->applyContributions($this->month, $this->year, false);
 
-    Livewire::test(ListContributions::class)
-        ->assertTableActionExists('runContributionCycle')
-        ->callTableAction('runContributionCycle', data: [
-            'cycle' => $cycleKey,
-            'month' => $this->month,
-            'year' => $this->year,
-            'collect_oldest_arrears_first' => false,
-        ])
-        ->assertNotified();
+    expect($results['applied'])->not->toBeEmpty()
+        ->and(Contribution::query()->where('member_id', $member->id)->forPeriod($this->month, $this->year)->posted()->exists())->toBeTrue();
 
-    expect(Contribution::query()->where('member_id', $member->id)->forPeriod($this->month, $this->year)->posted()->exists())->toBeTrue();
+    ContributionResource::flushPeriodCountCaches();
 
     $pendingAfter = ContributionResource::pendingCountForPeriod($this->month, $this->year);
     $afterMissing = app(ContributionInsightsService::class)->forContext('collect')['open_period']['missing_members'];

@@ -21,11 +21,6 @@ use Illuminate\Support\Collection;
  */
 class LoanEmiCollectionCatalogService
 {
-    public function __construct(
-        protected ContributionCycleService $cycles,
-        protected LoanInstallmentCollectionService $installmentCollection,
-    ) {}
-
     /**
      * @var array<string, Collection<int, LoanInstallment>>
      */
@@ -35,6 +30,34 @@ class LoanEmiCollectionCatalogService
      * @var array<string, Collection<int, LoanInstallment>>
      */
     private array $emiArrearsInstallmentsCache = [];
+
+    /**
+     * @var array<string, array{
+     *     pending_members: int,
+     *     total_pending_emis: int,
+     *     unrecovered_amount: float,
+     *     ready_with_cash: int,
+     *     ready_cash_total: float,
+     *     required_cash_total: float,
+     *     uncovered_amount: float
+     * }>
+     */
+    private array $periodPendingMetricsCache = [];
+
+    /**
+     * @var array<string, array<int, Collection<int, LoanInstallment>>>
+     */
+    private array $periodInstallmentsByMember = [];
+
+    /**
+     * @var array<string, array<int, true>>
+     */
+    private array $periodContributionBlockingMemberIds = [];
+
+    public function __construct(
+        protected ContributionCycleService $cycles,
+        protected LoanInstallmentCollectionService $installmentCollection,
+    ) {}
 
     /**
      * @return array{0: int, 1: int}
@@ -54,7 +77,7 @@ class LoanEmiCollectionCatalogService
         [$start, $end] = $this->cycles->cycleDueDateBounds($month, $year);
 
         return Member::query()
-            ->active()
+            ->activeAsOfPeriod($month, $year)
             ->whereHas('loans', function (Builder $loan) use ($start, $end): void {
                 $loan->whereIn('status', ['active', 'transferred'])
                     ->whereHas('installments', function (Builder $installment) use ($start, $end): void {
@@ -96,7 +119,6 @@ class LoanEmiCollectionCatalogService
     public function collectableLoansForMember(Member $member, int $month, int $year): Collection
     {
         return $this->collectableInstallmentsForMember($member, $month, $year)
-            ->loadMissing('loan')
             ->map(fn (LoanInstallment $installment): ?Loan => $installment->loan)
             ->filter()
             ->unique('id')
@@ -124,12 +146,159 @@ class LoanEmiCollectionCatalogService
 
     public function collectedInstallmentsCashTotal(int $month, int $year): float
     {
-        return round(
-            $this->collectedInstallmentsQuery($month, $year)
-                ->get()
-                ->sum(fn (LoanInstallment $installment): float => $installment->collectedCashAmount()),
-            2,
+        // Prefer set-based sum when amount_collected is populated; fall back to row cash for legacy.
+        $base = $this->collectedInstallmentsQuery($month, $year);
+
+        $withCollected = (float) (clone $base)
+            ->where('amount_collected', '>', 0)
+            ->sum('amount_collected');
+
+        $legacyRows = (clone $base)
+            ->where(function (Builder $query): void {
+                $query->whereNull('amount_collected')
+                    ->orWhere('amount_collected', '<=', 0);
+            })
+            ->get();
+
+        $legacyTotal = $legacyRows->sum(
+            fn (LoanInstallment $installment): float => $installment->collectedCashAmount(),
         );
+
+        return round($withCollected + (float) $legacyTotal, 2);
+    }
+
+    /**
+     * Batched pending-EMI metrics for the labelled cycle (one installment query + in-memory group).
+     *
+     * @return array{
+     *     pending_members: int,
+     *     total_pending_emis: int,
+     *     unrecovered_amount: float,
+     *     ready_with_cash: int,
+     *     ready_cash_total: float,
+     *     required_cash_total: float,
+     *     uncovered_amount: float
+     * }
+     */
+    public function periodPendingCollectionMetrics(int $month, int $year): array
+    {
+        $cacheKey = sprintf('%04d-%02d', $year, $month);
+
+        if (array_key_exists($cacheKey, $this->periodPendingMetricsCache)) {
+            return $this->periodPendingMetricsCache[$cacheKey];
+        }
+
+        $members = $this->membersWithCollectableEmisQuery($month, $year)->get();
+
+        if ($members->isEmpty()) {
+            return $this->periodPendingMetricsCache[$cacheKey] = [
+                'pending_members' => 0,
+                'total_pending_emis' => 0,
+                'unrecovered_amount' => 0.0,
+                'ready_with_cash' => 0,
+                'ready_cash_total' => 0.0,
+                'required_cash_total' => 0.0,
+                'uncovered_amount' => 0.0,
+            ];
+        }
+
+        [$start, $end] = $this->cycles->cycleDueDateBounds($month, $year);
+        $memberIds = $members->pluck('id')->map(fn (mixed $id): int => (int) $id)->all();
+
+        $installmentsByMember = LoanInstallment::query()
+            ->whereIn('status', ['pending', 'overdue'])
+            ->where(function (Builder $query): void {
+                $query->whereNull('collection_status')
+                    ->orWhereIn('collection_status', InstallmentCollectionStatus::openCollectionStates());
+            })
+            ->whereBetween('due_date', [$start, $end])
+            ->whereHas('loan', function (Builder $loan) use ($memberIds): void {
+                $loan->whereIn('status', ['active', 'transferred'])
+                    ->whereIn('member_id', $memberIds);
+            })
+            ->with('loan')
+            ->orderBy('due_date')
+            ->get()
+            ->groupBy(fn (LoanInstallment $installment): int => (int) ($installment->loan?->member_id ?? 0));
+
+        $blockingMemberIds = Contribution::query()
+            ->whereIn('member_id', $memberIds)
+            ->forPeriod($month, $year)
+            ->where(function (Builder $query): void {
+                $query->where('status', 'posted')
+                    ->orWhere('collection_status', ContributionCollectionStatus::COLLECTED);
+            })
+            ->pluck('member_id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->flip()
+            ->all();
+
+        $pendingMembers = 0;
+        $totalPendingEmis = 0;
+        $unrecoveredAmount = 0.0;
+        $readyWithCash = 0;
+        $readyCashTotal = 0.0;
+        $requiredCashTotal = 0.0;
+        $uncoveredAmount = 0.0;
+
+        foreach ($members as $member) {
+            $memberId = (int) $member->id;
+            $rows = $installmentsByMember->get($memberId, collect());
+
+            if ($rows->isEmpty()) {
+                continue;
+            }
+
+            if (isset($blockingMemberIds[$memberId]) && ! $member->isExemptFromContributions($month, $year)) {
+                continue;
+            }
+
+            $pending = $rows->count();
+
+            if ($pending === 0) {
+                continue;
+            }
+
+            $pendingMembers++;
+            $totalPendingEmis += $pending;
+
+            $amountDue = 0.0;
+            $requiredCash = 0.0;
+
+            foreach ($rows as $installment) {
+                $amountDue += (float) $installment->amount + (float) ($installment->late_fee_amount ?? 0);
+                $requiredCash += $this->installmentCollection->requiredCashForInstallment($installment);
+            }
+
+            $unrecoveredAmount += $amountDue;
+            $requiredCashTotal += $requiredCash;
+            $cashBalance = $member->getCashBalance();
+            $coveredCash = min(max(0.0, $cashBalance), $requiredCash);
+
+            if ($requiredCash <= 0.00001 || $cashBalance >= $requiredCash - 0.00001) {
+                $readyWithCash++;
+                $readyCashTotal += $requiredCash;
+            } else {
+                $readyCashTotal += $coveredCash;
+                $uncoveredAmount += max(0.0, $requiredCash - $coveredCash);
+            }
+        }
+
+        return $this->periodPendingMetricsCache[$cacheKey] = [
+            'pending_members' => $pendingMembers,
+            'total_pending_emis' => $totalPendingEmis,
+            'unrecovered_amount' => round($unrecoveredAmount, 2),
+            'ready_with_cash' => $readyWithCash,
+            'ready_cash_total' => round($readyCashTotal, 2),
+            'required_cash_total' => round($requiredCashTotal, 2),
+            'uncovered_amount' => round($uncoveredAmount, 2),
+        ];
+    }
+
+    public function collectableInstallmentsAmountTotal(int $month, int $year): float
+    {
+        return $this->periodPendingCollectionMetrics($month, $year)['unrecovered_amount'];
     }
 
     /**
@@ -198,32 +367,92 @@ class LoanEmiCollectionCatalogService
             return $this->collectableInstallmentsCache[$cacheKey];
         }
 
+        $this->prefetchCollectableInstallmentsForPeriod($month, $year);
+
+        $periodKey = sprintf('%04d-%02d', $year, $month);
+        $rows = $this->periodInstallmentsByMember[$periodKey][(int) $member->id] ?? collect();
+
+        $blocking = $this->contributionBlockingMemberIdsForPeriod($month, $year);
+
+        if (
+            $rows->isNotEmpty()
+            && isset($blocking[(int) $member->id])
+            && ! $member->isExemptFromContributions($month, $year)
+        ) {
+            $rows = collect();
+        }
+
+        return $this->collectableInstallmentsCache[$cacheKey] = $rows->values();
+    }
+
+    /**
+     * One installment query for the whole labelled cycle — table columns and metrics share the cache.
+     */
+    private function prefetchCollectableInstallmentsForPeriod(int $month, int $year): void
+    {
+        $periodKey = sprintf('%04d-%02d', $year, $month);
+
+        if (isset($this->periodInstallmentsByMember[$periodKey])) {
+            return;
+        }
+
         [$start, $end] = $this->cycles->cycleDueDateBounds($month, $year);
 
-        return $this->collectableInstallmentsCache[$cacheKey] = LoanInstallment::query()
+        $installments = LoanInstallment::query()
             ->whereIn('status', ['pending', 'overdue'])
             ->where(function (Builder $query): void {
                 $query->whereNull('collection_status')
                     ->orWhereIn('collection_status', InstallmentCollectionStatus::openCollectionStates());
             })
-            ->whereHas('loan', function (Builder $loan) use ($member): void {
-                $loan->whereIn('status', ['active', 'transferred'])
-                    ->where('member_id', $member->id);
-            })
             ->whereBetween('due_date', [$start, $end])
+            ->whereHas('loan', function (Builder $loan): void {
+                $loan->whereIn('status', ['active', 'transferred']);
+            })
             ->with('loan')
             ->orderBy('due_date')
-            ->get()
-            ->filter(function (LoanInstallment $installment) use ($member): bool {
-                if ($installment->due_date === null) {
-                    return false;
-                }
+            ->get();
 
-                [$cycleMonth, $cycleYear] = $this->cycles->cyclePeriodForDueDate($installment->due_date);
+        $grouped = [];
 
-                return ! Contribution::blocksLoanRepaymentForMemberPeriod($member, $cycleMonth, $cycleYear);
+        foreach ($installments as $installment) {
+            $memberId = (int) ($installment->loan?->member_id ?? 0);
+
+            if ($memberId <= 0 || $installment->due_date === null) {
+                continue;
+            }
+
+            $grouped[$memberId][] = $installment;
+        }
+
+        $this->periodInstallmentsByMember[$periodKey] = [];
+
+        foreach ($grouped as $memberId => $rows) {
+            $this->periodInstallmentsByMember[$periodKey][$memberId] = collect($rows)->values();
+        }
+    }
+
+    /**
+     * @return array<int, true>
+     */
+    private function contributionBlockingMemberIdsForPeriod(int $month, int $year): array
+    {
+        $periodKey = sprintf('%04d-%02d', $year, $month);
+
+        if (isset($this->periodContributionBlockingMemberIds[$periodKey])) {
+            return $this->periodContributionBlockingMemberIds[$periodKey];
+        }
+
+        return $this->periodContributionBlockingMemberIds[$periodKey] = Contribution::query()
+            ->forPeriod($month, $year)
+            ->where(function (Builder $query): void {
+                $query->where('status', 'posted')
+                    ->orWhere('collection_status', ContributionCollectionStatus::COLLECTED);
             })
-            ->values();
+            ->pluck('member_id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->flip()
+            ->all();
     }
 
     public function pendingInstallmentCountForMemberInPeriod(Member $member, int $month, int $year): int
@@ -342,6 +571,9 @@ class LoanEmiCollectionCatalogService
                 unset($this->collectableInstallmentsCache[$key]);
             }
         }
+
+        // Force period prefetch to re-run so paid/removed installments are not served stale.
+        $this->periodInstallmentsByMember = [];
     }
 
     public function pendingInstallmentCountForMemberThroughPeriod(Member $member, int $month, int $year): int
@@ -505,7 +737,7 @@ class LoanEmiCollectionCatalogService
         $end = $this->cycles->cycleDueEndAt($month, $year)->toDateString();
 
         return Member::query()
-            ->active()
+            ->activeAsOfPeriod($month, $year)
             ->whereHas('loans', function (Builder $loan) use ($end): void {
                 $loan->whereIn('status', ['active', 'transferred'])
                     ->whereHas('installments', function (Builder $installment) use ($end): void {
@@ -705,20 +937,6 @@ class LoanEmiCollectionCatalogService
         );
     }
 
-    public function collectableInstallmentsAmountTotal(int $month, int $year): float
-    {
-        $total = 0.0;
-
-        $this->membersWithCollectableEmisQuery($month, $year)
-            ->each(function (Member $member) use ($month, $year, &$total): void {
-                foreach ($this->collectableInstallmentsForMemberInPeriod($member, $month, $year) as $installment) {
-                    $total += (float) $installment->amount + (float) ($installment->late_fee_amount ?? 0);
-                }
-            });
-
-        return round($total, 2);
-    }
-
     public function collectedInstallmentsQuery(int $month, int $year): Builder
     {
         [$start, $end] = $this->cycles->cycleDueDateBounds($month, $year);
@@ -726,8 +944,10 @@ class LoanEmiCollectionCatalogService
         return LoanInstallment::query()
             ->where('status', 'paid')
             ->whereBetween('due_date', [$start, $end])
-            ->whereHas('loan', fn (Builder $loan): Builder => $loan
-                ->whereIn('status', ['active', 'transferred', 'completed', 'early_settled']))
+            ->whereHas('loan', function (Builder $loan) use ($month, $year): void {
+                $loan->whereIn('status', ['active', 'transferred', 'completed', 'early_settled'])
+                    ->whereHas('member', fn (Builder $member): Builder => $member->activeAsOfPeriod($month, $year));
+            })
             ->with(['loan.member']);
     }
 }

@@ -317,6 +317,143 @@ class LoanDelinquencyService
     }
 
     /**
+     * Members with outstanding contribution and/or loan EMI arrears for any labelled cycle.
+     *
+     * Broader than {@see delinquentMemberIds()} (policy breach): any unpaid contribution
+     * period in the arrears ledger, or unpaid EMI due before the open cycle (or overdue).
+     *
+     * @return list<int>
+     */
+    public function membersWithOutstandingArrearsIds(): array
+    {
+        return TenantRuntimeCache::remember(
+            'loan_delinquency:members_with_outstanding_arrears_ids',
+            60,
+            function (): array {
+                $ids = array_values(array_unique(array_merge(
+                    $this->contributionArrearsMemberIds(),
+                    $this->loanEmiArrearsMemberIds(),
+                )));
+
+                sort($ids);
+
+                return $ids;
+            },
+        );
+    }
+
+    /**
+     * Members with unpaid EMIs assigned to labelled cycles before the open period, or overdue.
+     *
+     * @return list<int>
+     */
+    public function loanEmiArrearsMemberIds(): array
+    {
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $openCycleStart = $this->cycles->cycleStartAt($openMonth, $openYear)->toDateString();
+
+        return LoanInstallment::query()
+            ->whereIn('loan_installments.status', ['pending', 'overdue'])
+            ->where(function ($query) use ($openCycleStart): void {
+                $query->where('loan_installments.status', 'overdue')
+                    ->orWhereDate('loan_installments.due_date', '<', $openCycleStart);
+            })
+            ->whereHas(
+                'loan',
+                fn ($loan) => $loan->whereIn('status', ['active', 'transferred']),
+            )
+            ->join('loans', 'loans.id', '=', 'loan_installments.loan_id')
+            ->distinct()
+            ->pluck('loans.member_id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Inventory rows for a member arrears modal (contributions + EMIs).
+     *
+     * @return list<array{
+     *     type: string,
+     *     type_label: string,
+     *     period_label: string,
+     *     detail: string,
+     *     amount: float,
+     *     status_label: string,
+     *     status_color: string
+     * }>
+     */
+    public function memberArrearsInventory(Member $member): array
+    {
+        $rows = [];
+
+        foreach ($this->unpaidContributionPeriods($member) as $period) {
+            $amount = (float) $member->monthly_contribution_amount + (float) ($period['late_fee'] ?? 0);
+
+            $rows[] = [
+                'type' => 'contribution',
+                'type_label' => __('Contribution'),
+                'period_label' => (string) $period['period_label'],
+                'detail' => __('Monthly contribution'),
+                'amount' => round($amount, 2),
+                'status_label' => $this->contributionStatusLabel((string) $period['contribution_status']),
+                'status_color' => $this->contributionStatusColor((string) $period['contribution_status']),
+            ];
+        }
+
+        foreach ($this->memberEmiArrearsInstallments($member) as $installment) {
+            $amount = (float) $installment->amount + (float) ($installment->late_fee_amount ?? 0);
+            $periodLabel = $installment->due_date !== null
+                ? $this->cycles->periodLabel(...$this->cycles->cyclePeriodForDueDate($installment->due_date))
+                : __('—');
+
+            $rows[] = [
+                'type' => 'emi',
+                'type_label' => __('Loan EMI'),
+                'period_label' => $periodLabel,
+                'detail' => __('Loan #:id · EMI #:number', [
+                    'id' => $installment->loan_id,
+                    'number' => $installment->installment_number,
+                ]),
+                'amount' => round($amount, 2),
+                'status_label' => $installment->status === 'overdue' ? __('Overdue') : __('Pending'),
+                'status_color' => $installment->status === 'overdue' ? 'danger' : 'warning',
+            ];
+        }
+
+        usort($rows, function (array $left, array $right): int {
+            return [$left['period_label'], $left['type']] <=> [$right['period_label'], $right['type']];
+        });
+
+        return $rows;
+    }
+
+    /**
+     * @return Collection<int, LoanInstallment>
+     */
+    public function memberEmiArrearsInstallments(Member $member): Collection
+    {
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $openCycleStart = $this->cycles->cycleStartAt($openMonth, $openYear)->toDateString();
+
+        return LoanInstallment::query()
+            ->whereIn('status', ['pending', 'overdue'])
+            ->where(function ($query) use ($openCycleStart): void {
+                $query->where('status', 'overdue')
+                    ->orWhereDate('due_date', '<', $openCycleStart);
+            })
+            ->whereHas(
+                'loan',
+                fn ($loan) => $loan
+                    ->where('member_id', $member->id)
+                    ->whereIn('status', ['active', 'transferred']),
+            )
+            ->with('loan')
+            ->orderBy('due_date')
+            ->get();
+    }
+
+    /**
      * @return list<int>
      */
     private function computeDelinquentMemberIds(): array
@@ -377,6 +514,18 @@ class LoanDelinquencyService
         unset($this->memberBreachResultCache[$memberId]);
 
         TenantRuntimeCache::forget(self::memberBreachCacheKey($memberId));
+        $this->forgetArrearsAggregateCaches();
+    }
+
+    /**
+     * Drop cached member-id aggregates used by Members nav badge, Arrears tab, and insights.
+     */
+    public function forgetArrearsAggregateCaches(): void
+    {
+        $this->delinquentMemberIdsCache = null;
+
+        TenantRuntimeCache::forget('loan_delinquency:delinquent_member_ids');
+        TenantRuntimeCache::forget('loan_delinquency:members_with_outstanding_arrears_ids');
     }
 
     private static function memberBreachCacheKey(int $memberId): string

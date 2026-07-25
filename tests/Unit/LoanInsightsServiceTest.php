@@ -8,6 +8,7 @@ use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Services\LoanInsightsService;
 use App\Support\BusinessDay;
+use App\Support\CollectionInsightsCache;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
@@ -18,6 +19,7 @@ beforeEach(function () {
     $this->initializeTenancy();
     Filament::setCurrentPanel('tenant');
     $this->service = app(LoanInsightsService::class);
+    CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_LOAN_EMI);
 
     Loan::query()->delete();
     FundTier::query()->delete();
@@ -153,5 +155,9 @@ test('emi collected snapshot includes collection amount stats', function () {
             'arrears_amount',
             'recovered_amount',
             'unrecovered_amount',
-        ]);
+        ])
+        ->and(collect($snapshot['kpis'])->pluck('key')->all())
+        ->not->toContain('remaining')
+        ->and(collect($snapshot['kpis'])->pluck('key')->all())
+        ->toContain('collect');
 });

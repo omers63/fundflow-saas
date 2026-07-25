@@ -14,7 +14,6 @@ use App\Services\Loans\LateFeeService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Support\BusinessDay;
 use App\Support\ContributionExemptionPolicy;
-use App\Support\MemberMembershipPolicy;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -260,7 +259,7 @@ class ContributionCycleService
 
     public function memberIsLiableForContributionPeriod(Member $member, int $month, int $year): bool
     {
-        if (! app(MemberMembershipPolicy::class)->canParticipateInContributionCycles($member)) {
+        if (! $member->isContributionCycleEligibleAsOfPeriod($month, $year)) {
             return false;
         }
 
@@ -296,6 +295,14 @@ class ContributionCycleService
      */
     private array $pendingMemberIdsByPeriod = [];
 
+    /**
+     * Posted contribution ids for the cycle Collected workspace:
+     * as-of eligible, not loan-exempt, and posted for the period.
+     *
+     * @var array<string, list<int>>
+     */
+    private array $collectedContributionIdsByPeriod = [];
+
     public function pendingMembersQueryForPeriod(int $month, int $year): Builder
     {
         $ids = $this->pendingMemberIdsForPeriod($month, $year);
@@ -323,7 +330,7 @@ class ContributionCycleService
         $policy = app(ContributionExemptionPolicy::class);
 
         $eligibilityIds = Member::query()
-            ->contributionCycleEligible()
+            ->contributionCycleEligibleAsOfPeriod($month, $year)
             ->collectibleForContributionPeriod($month, $year)
             ->whereDoesntHave('contributions', function (Builder $query) use ($month, $year): Builder {
                 return $query->forPeriod($month, $year)->posted();
@@ -341,7 +348,7 @@ class ContributionCycleService
         $pendingRecordIds = Contribution::query()
             ->forPeriod($month, $year)
             ->pending()
-            ->whereHas('member', fn (Builder $query): Builder => $query->contributionCycleEligible())
+            ->whereHas('member', fn (Builder $query): Builder => $query->contributionCycleEligibleAsOfPeriod($month, $year))
             ->pluck('member_id')
             ->map(fn (mixed $id): int => (int) $id)
             ->unique()
@@ -379,15 +386,65 @@ class ContributionCycleService
 
     public function postedContributionsQueryForPeriod(int $month, int $year): Builder
     {
+        $ids = $this->collectedContributionIdsForPeriod($month, $year);
+
+        if ($ids === []) {
+            return Contribution::query()->whereRaw('0 = 1');
+        }
+
         return Contribution::query()
-            ->forPeriod($month, $year)
-            ->posted()
+            ->whereIn('id', $ids)
             ->with('member');
     }
 
     public function postedContributionCount(int $month, int $year): int
     {
-        return $this->postedContributionsQueryForPeriod($month, $year)->count();
+        return count($this->collectedContributionIdsForPeriod($month, $year));
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function collectedContributionIdsForPeriod(int $month, int $year): array
+    {
+        $cacheKey = sprintf('%04d-%02d', $year, $month);
+
+        if (array_key_exists($cacheKey, $this->collectedContributionIdsByPeriod)) {
+            return $this->collectedContributionIdsByPeriod[$cacheKey];
+        }
+
+        $posted = Contribution::query()
+            ->forPeriod($month, $year)
+            ->posted()
+            ->with(['member.loans'])
+            ->get();
+
+        if ($posted->isEmpty()) {
+            return $this->collectedContributionIdsByPeriod[$cacheKey] = [];
+        }
+
+        $policy = app(ContributionExemptionPolicy::class);
+
+        $ids = $posted
+            ->filter(function (Contribution $contribution) use ($policy, $month, $year): bool {
+                $member = $contribution->member;
+
+                if (! $member instanceof Member) {
+                    return false;
+                }
+
+                if (! $member->isContributionCycleEligibleAsOfPeriod($month, $year)) {
+                    return false;
+                }
+
+                return ! $policy->isContributionExemptForCycle($member, $month, $year);
+            })
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->values()
+            ->all();
+
+        return $this->collectedContributionIdsByPeriod[$cacheKey] = $ids;
     }
 
     /**
@@ -403,7 +460,6 @@ class ContributionCycleService
             ->all();
 
         $postedIds = $this->postedContributionsQueryForPeriod($month, $year)
-            ->whereHas('member', fn (Builder $query): Builder => $query->contributionCycleEligible())
             ->pluck('member_id')
             ->map(fn (mixed $id): int => (int) $id)
             ->all();
@@ -631,20 +687,20 @@ class ContributionCycleService
             ->first();
 
         if ($contribution !== null) {
-            $contribution = $this->syncPendingContributionDueToCurrentStanding($contribution, $member);
-
-            if ($member->relationLoaded('contributions')) {
-                $member->setRelation(
-                    'contributions',
-                    $member->contributions->map(
-                        fn (Contribution $row): Contribution => (int) $row->id === (int) $contribution->id
-                        ? $contribution
-                        : $row,
-                    ),
-                );
-            }
-
             if ($syncLateFees) {
+                $contribution = $this->syncPendingContributionDueToCurrentStanding($contribution, $member);
+
+                if ($member->relationLoaded('contributions')) {
+                    $member->setRelation(
+                        'contributions',
+                        $member->contributions->map(
+                            fn (Contribution $row): Contribution => (int) $row->id === (int) $contribution->id
+                            ? $contribution
+                            : $row,
+                        ),
+                    );
+                }
+
                 app(ContributionCollectionCycleService::class)
                     ->syncContributionLateFeesBeforeCollection($contribution);
 
@@ -656,7 +712,9 @@ class ContributionCycleService
                 (float) ($contribution->amount_due ?? $contribution->amount) - (float) ($contribution->amount_collected ?? 0),
             );
             $lateFeeAssessed = (float) ($contribution->late_fee_amount ?? 0);
-            $lateFeeDue = max(0.0, $lateFeeAssessed - $this->accounting->contributionLateFeeCollectedAmount($contribution));
+            $lateFeeDue = $syncLateFees
+                ? max(0.0, $lateFeeAssessed - $this->accounting->contributionLateFeeCollectedAmount($contribution))
+                : max(0.0, $lateFeeAssessed);
 
             return $principalShortfall + $lateFeeDue;
         }

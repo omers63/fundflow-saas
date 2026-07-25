@@ -6,14 +6,15 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Setting;
 use App\Services\MemberLatePaymentHistoryEvaluator;
 use App\Support\ContributionCollectionStatus;
+use App\Support\ContributionPolicySettings;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
@@ -48,9 +49,11 @@ test('late payment history counts consecutive closed cycles with late contributi
 
     $stats = $this->evaluator->evaluate($member);
 
-    expect($stats['trailing_consecutive'])->toBe(3)
-        ->and($stats['rolling_total'])->toBe(3)
-        ->and($this->evaluator->shouldBlockLoanEligibility($stats['trailing_consecutive'], $stats['rolling_total']))->toBeTrue();
+    expect($stats['contribution']['trailing_consecutive'])->toBe(3)
+        ->and($stats['contribution']['rolling_total'])->toBe(3)
+        ->and($stats['repayment']['trailing_consecutive'])->toBe(0)
+        ->and($this->evaluator->shouldBlockFromLateContributions($stats['contribution']))->toBeTrue()
+        ->and($this->evaluator->shouldBlockLoanEligibility($stats))->toBeTrue();
 
     Carbon::setTestNow();
 });
@@ -83,14 +86,14 @@ test('late payment history ignores on-time settlements', function () {
 
     $stats = $this->evaluator->evaluate($member);
 
-    expect($stats['trailing_consecutive'])->toBe(0)
-        ->and($stats['rolling_total'])->toBe(0)
-        ->and($this->evaluator->shouldBlockLoanEligibility($stats['trailing_consecutive'], $stats['rolling_total']))->toBeFalse();
+    expect($stats['contribution']['trailing_consecutive'])->toBe(0)
+        ->and($stats['contribution']['rolling_total'])->toBe(0)
+        ->and($this->evaluator->shouldBlockLoanEligibility($stats))->toBeFalse();
 
     Carbon::setTestNow();
 });
 
-test('late payment history includes late loan installments', function () {
+test('late payment history includes late loan installments under emi thresholds only', function () {
     Carbon::setTestNow(Carbon::create(2026, 6, 15));
 
     $member = Member::create([
@@ -130,20 +133,30 @@ test('late payment history includes late loan installments', function () {
 
     $stats = $this->evaluator->evaluate($member);
 
-    expect($stats['trailing_consecutive'])->toBe(3)
-        ->and($this->evaluator->shouldBlockLoanEligibility($stats['trailing_consecutive'], $stats['rolling_total']))->toBeTrue();
+    expect($stats['repayment']['trailing_consecutive'])->toBe(3)
+        ->and($stats['contribution']['trailing_consecutive'])->toBe(0)
+        ->and($this->evaluator->shouldBlockFromLateRepayments($stats['repayment']))->toBeTrue()
+        ->and($this->evaluator->shouldBlockFromLateContributions($stats['contribution']))->toBeFalse()
+        ->and($this->evaluator->shouldBlockLoanEligibility($stats))->toBeTrue();
 
     Carbon::setTestNow();
 });
 
-test('loan settings late payment thresholds are configurable', function () {
+test('contribution and emi late settlement thresholds are independently configurable', function () {
     LoanSettings::save([
         'late_payment_consecutive_threshold' => 2,
         'late_payment_rolling_threshold' => 4,
         'late_payment_lookback_months' => 12,
     ]);
 
+    Setting::set('delinquency', 'late_settlement_consecutive_threshold', '5');
+    Setting::set('delinquency', 'late_settlement_rolling_threshold', '8');
+    Setting::set('delinquency', 'late_settlement_lookback_months', '24');
+
     expect(LoanSettings::latePaymentConsecutiveThreshold())->toBe(2)
         ->and(LoanSettings::latePaymentRollingThreshold())->toBe(4)
-        ->and(LoanSettings::latePaymentLookbackMonths())->toBe(12);
+        ->and(LoanSettings::latePaymentLookbackMonths())->toBe(12)
+        ->and(ContributionPolicySettings::lateSettlementConsecutiveThreshold())->toBe(5)
+        ->and(ContributionPolicySettings::lateSettlementRollingThreshold())->toBe(8)
+        ->and(ContributionPolicySettings::lateSettlementLookbackMonths())->toBe(24);
 });

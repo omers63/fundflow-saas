@@ -22,7 +22,7 @@ class ListMembers extends ListRecords
     {
         return match (MemberResource::resolveListTab()) {
             'inactive' => __('Members with inactive status — frozen or on administrative hold.'),
-            'delinquent' => __('Active members with arrears. Status stays active; portal access is blocked until obligations are cleared.'),
+            'delinquent' => __('Members with contribution or loan EMI arrears for any labelled cycle. Open a row to review each unpaid period.'),
             'withdrawn' => __('Members with withdrawn status.'),
             'migration_pending' => __('Imported members awaiting contribution cycle clearance before full go-live.'),
             default => __('Manage the member roster, household structure, status, and contribution commitments.'),

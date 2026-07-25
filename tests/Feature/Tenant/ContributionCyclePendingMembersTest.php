@@ -205,6 +205,144 @@ test('pending members exclude members who were emi exempt during a completed loa
         ->and($novemberPendingIds)->toContain($dueAfterLoan->id);
 });
 
+test('pending members include members who withdrew after the cycle opened', function () {
+    $month = 11;
+    $year = 2025;
+    $cycleStart = $this->cycles->cycleStartAt($month, $year);
+
+    $withdrawnAfter = Member::create([
+        'member_number' => 'MEM-WD-AFTER',
+        'name' => 'Withdrew After Cycle',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'withdrawn',
+        'contribution_cycles_active' => false,
+        'status_changed_at' => $cycleStart->copy()->addDays(10),
+    ]);
+    $this->accounting->createMemberAccounts($withdrawnAfter);
+
+    $withdrawnBefore = Member::create([
+        'member_number' => 'MEM-WD-BEFORE',
+        'name' => 'Withdrew Before Cycle',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'withdrawn',
+        'contribution_cycles_active' => false,
+        'status_changed_at' => $cycleStart->copy()->subDay(),
+    ]);
+    $this->accounting->createMemberAccounts($withdrawnBefore);
+
+    $novemberIds = $this->cycles->pendingMembersQueryForPeriod($month, $year)->pluck('id');
+    $januaryIds = $this->cycles->pendingMembersQueryForPeriod(1, 2026)->pluck('id');
+
+    expect($novemberIds)->toContain($withdrawnAfter->id)
+        ->and($novemberIds)->not->toContain($withdrawnBefore->id)
+        ->and($januaryIds)->not->toContain($withdrawnAfter->id)
+        ->and($this->cycles->memberIsLiableForContributionPeriod($withdrawnAfter, $month, $year))->toBeTrue()
+        ->and($this->cycles->memberIsLiableForContributionPeriod($withdrawnBefore, $month, $year))->toBeFalse();
+});
+
+test('pending members include members frozen after cycle open and exclude earlier freezes', function () {
+    $month = 11;
+    $year = 2025;
+    $cycleStart = $this->cycles->cycleStartAt($month, $year);
+
+    $frozenAfter = Member::create([
+        'member_number' => 'MEM-FRZ-AFTER',
+        'name' => 'Frozen After Cycle',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'inactive',
+        'contribution_cycles_active' => false,
+        'frozen_at' => $cycleStart->copy()->addDays(3),
+        'status_changed_at' => $cycleStart->copy()->addDays(3),
+    ]);
+    $this->accounting->createMemberAccounts($frozenAfter);
+
+    $frozenBefore = Member::create([
+        'member_number' => 'MEM-FRZ-BEFORE',
+        'name' => 'Frozen Before Cycle',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'inactive',
+        'contribution_cycles_active' => false,
+        'frozen_at' => $cycleStart->copy()->subDay(),
+        'status_changed_at' => $cycleStart->copy()->subDay(),
+    ]);
+    $this->accounting->createMemberAccounts($frozenBefore);
+
+    $pendingIds = $this->cycles->pendingMembersQueryForPeriod($month, $year)->pluck('id');
+
+    expect($pendingIds)->toContain($frozenAfter->id)
+        ->and($pendingIds)->not->toContain($frozenBefore->id);
+});
+
+test('collected contributions exclude loan-exempt members for the period', function () {
+    $month = 6;
+    $year = 2025;
+
+    $liable = Member::create([
+        'member_number' => 'MEM-COLLECTED',
+        'name' => 'Collected Liable',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($liable);
+
+    $exempt = Member::create([
+        'member_number' => 'MEM-EX-POST',
+        'name' => 'Exempt Posted',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($exempt);
+
+    Loan::create([
+        'member_id' => $exempt->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
+        'interest_rate' => 10,
+        'term_months' => 5,
+        'monthly_repayment' => 2000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2025-06-01'),
+        'disbursed_at' => Carbon::parse('2025-06-01'),
+        'first_repayment_month' => 6,
+        'first_repayment_year' => 2025,
+    ]);
+
+    $liablePost = Contribution::create([
+        'member_id' => $liable->id,
+        'period' => Contribution::periodDate($month, $year),
+        'amount' => 500,
+        'status' => 'posted',
+        'posted_at' => now(),
+        'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
+    ]);
+
+    Contribution::withoutEvents(function () use ($exempt, $month, $year): void {
+        Contribution::create([
+            'member_id' => $exempt->id,
+            'period' => Contribution::periodDate($month, $year),
+            'amount' => 500,
+            'status' => 'posted',
+            'posted_at' => now(),
+            'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
+        ]);
+    });
+
+    $collectedIds = $this->cycles->postedContributionsQueryForPeriod($month, $year)->pluck('id');
+
+    expect($collectedIds)->toContain($liablePost->id)
+        ->and($this->cycles->postedContributionCount($month, $year))->toBe(1)
+        ->and($exempt->fresh()->isExemptFromContributions($month, $year))->toBeTrue();
+});
+
 test('pending members exclude periods before import arrears cut-off', function () {
     $member = Member::create([
         'member_number' => 'MEM-CUTOFF',

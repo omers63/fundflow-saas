@@ -7,6 +7,7 @@ namespace App\Filament\Tenant\Widgets;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Services\ContributionInsightsService;
 use Filament\Widgets\Widget;
+use Livewire\Attributes\On;
 
 class ContributionInsightsWidget extends Widget
 {
@@ -20,6 +21,20 @@ class ContributionInsightsWidget extends Widget
 
     public string $context = 'collect';
 
+    public ?string $selectedCycle = null;
+
+    #[On('refresh-contribution-insights')]
+    public function refreshInsights(?string $cycle = null, ?string $context = null): void
+    {
+        if (filled($cycle)) {
+            $this->selectedCycle = $cycle;
+        }
+
+        if (filled($context)) {
+            $this->context = $context;
+        }
+    }
+
     public function resolvedContext(): string
     {
         return ContributionResource::resolveInsightsContext();
@@ -30,6 +45,13 @@ class ContributionInsightsWidget extends Widget
      */
     public function getData(): array
     {
-        return app(ContributionInsightsService::class)->forContext($this->resolvedContext());
+        $cycleKey = filled($this->selectedCycle)
+            ? $this->selectedCycle
+            : ContributionResource::resolveListCycleKey();
+
+        return app(ContributionInsightsService::class)->forContext(
+            $this->resolvedContext(),
+            $cycleKey,
+        );
     }
 }

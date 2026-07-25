@@ -54,7 +54,6 @@ final class TenantDashboardService
         protected MasterAccountsInsightsService $masterAccounts,
         protected BankAccountsInsightsService $bankAccounts,
         protected LoanDelinquencyService $delinquency,
-        protected CollectionArrearsCatalogService $collectionArrears,
         protected TreasuryForecastService $treasuryForecasts,
         protected LoanQueueService $loanQueue,
     ) {}
@@ -96,7 +95,15 @@ final class TenantDashboardService
             ? LoanEligibilityOverrideRequest::pending()->count()
             : 0;
         $openReconciliationCount = $this->openReconciliationCount();
-        $collectionArrears = $this->collectionArrears->openCycleSnapshot();
+
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $openPeriodLabel = $this->cycles->periodLabel($openMonth, $openYear);
+        $collectionArrears = $this->liteOpenCycleArrearsSnapshot(
+            $openMonth,
+            $openYear,
+            $openPeriodLabel,
+            $delinquencyCounts,
+        );
         $openCycleArrearsTotal = (int) ($collectionArrears['total_items'] ?? 0);
         $attentionTotal = $pendingContributions + $pendingDeposits + $pendingApplications + $loanQueueCount
             + $pendingEligibilityReviews
@@ -104,8 +111,6 @@ final class TenantDashboardService
             + $openCycleArrearsTotal
             + $openReconciliationCount;
 
-        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
-        $openPeriodLabel = $this->cycles->periodLabel($openMonth, $openYear);
         $collectionGauge = $this->contributionCollectionGauge($openMonth, $openYear, $activeMembers);
 
         return [
@@ -167,6 +172,50 @@ final class TenantDashboardService
             'collection_breakdown' => $this->collectionBreakdown($openMonth, $openYear, $activeMembers, $delinquencyCounts),
             'fund_tier_utilisation' => $this->fundTierUtilisation($masterBalance('fund')),
             'pool_health' => $this->poolHealth($masterBalance),
+        ];
+    }
+
+    /**
+     * Dashboard attention KPIs without loading full EMI arrears installment collections.
+     *
+     * @param  array<string, int>  $delinquencyCounts
+     * @return array{
+     *     month: int,
+     *     year: int,
+     *     period_label: string,
+     *     contribution_arrears_periods: int,
+     *     contribution_arrears_members: int,
+     *     emi_arrears_installments: int,
+     *     emi_arrears_members: int,
+     *     total_items: int
+     * }
+     */
+    private function liteOpenCycleArrearsSnapshot(
+        int $month,
+        int $year,
+        string $periodLabel,
+        array $delinquencyCounts,
+    ): array {
+        $cycleStart = $this->cycles->cycleStartAt($month, $year)->toDateString();
+
+        $emiArrearsInstallments = (int) LoanInstallment::query()
+            ->whereIn('status', ['pending', 'overdue'])
+            ->whereDate('due_date', '<', $cycleStart)
+            ->whereHas('loan', fn ($loan) => $loan->whereIn('status', ['active', 'transferred']))
+            ->count();
+
+        $contributionPeriods = (int) ($delinquencyCounts['contribution_arrears_periods'] ?? 0);
+        $contributionMembers = (int) ($delinquencyCounts['contribution_arrears_members'] ?? 0);
+
+        return [
+            'month' => $month,
+            'year' => $year,
+            'period_label' => $periodLabel,
+            'contribution_arrears_periods' => $contributionPeriods,
+            'contribution_arrears_members' => $contributionMembers,
+            'emi_arrears_installments' => $emiArrearsInstallments,
+            'emi_arrears_members' => 0,
+            'total_items' => $contributionPeriods + $emiArrearsInstallments,
         ];
     }
 

@@ -386,6 +386,50 @@ test('emi arrears installment count includes unpaid installments before selected
         ->and($this->catalog->emiArrearsInstallmentsQuery(10, 2025, true)->pluck('installment_number'))->not->toContain(2);
 });
 
+test('pending members query includes borrowers who withdrew after the cycle opened', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+
+    Carbon::setTestNow(Carbon::parse('2025-11-20'));
+
+    $member = Member::create([
+        'member_number' => 'EMI-ASOF-1',
+        'name' => 'Withdrawn After Cycle',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'withdrawn',
+        'status_changed_at' => Carbon::parse('2025-11-05'),
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2024-01-01'),
+        'disbursed_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-11-05'),
+        'status' => 'pending',
+    ]);
+
+    expect($this->catalog->pendingMemberCount(10, 2025))->toBe(1)
+        ->and($this->catalog->membersWithCollectableEmisQuery(10, 2025)->where('id', $member->id)->exists())->toBeTrue()
+        ->and($member->isActiveAsOfPeriod(10, 2025))->toBeTrue()
+        ->and($member->isActiveAsOfPeriod(11, 2025))->toBeFalse();
+});
+
 test('primary collectable loan resolver returns loan for outstanding column', function () {
     [$month, $year] = $this->cycles->currentOpenPeriod();
 

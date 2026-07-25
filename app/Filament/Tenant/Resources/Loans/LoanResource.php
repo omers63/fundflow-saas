@@ -25,6 +25,7 @@ use App\Models\Tenant\Member;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
+use App\Support\CollectionInsightsCache;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -152,15 +153,41 @@ class LoanResource extends Resource
     public static function emiArrearsInstallmentCount(): int
     {
         [$month, $year] = self::resolveListCycle();
-        $live = self::isViewingOpenCycle();
-        $cacheKey = sprintf('%04d-%02d:%d', $year, $month, $live ? 1 : 0);
+        $cacheKey = sprintf('%04d-%02d:cycle', $year, $month);
 
         if (array_key_exists($cacheKey, self::$emiArrearsCountCache)) {
             return self::$emiArrearsCountCache[$cacheKey];
         }
 
+        // Cycle Arrears uses the same outstanding population as To collect for that labelled period.
         return self::$emiArrearsCountCache[$cacheKey] = app(LoanEmiCollectionCatalogService::class)
-            ->emiArrearsInstallmentCount($month, $year, $live);
+            ->pendingMemberCount($month, $year);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function availableCycleSegments(?string $cycleKey = null): array
+    {
+        return self::isViewingOpenCycle($cycleKey)
+            ? ['collect', 'collected']
+            : ['arrears', 'collected'];
+    }
+
+    public static function defaultCycleSegment(?string $cycleKey = null): string
+    {
+        return self::isViewingOpenCycle($cycleKey) ? 'collect' : 'arrears';
+    }
+
+    public static function normalizeCycleSegment(?string $segment, ?string $cycleKey = null): string
+    {
+        $available = self::availableCycleSegments($cycleKey);
+
+        if (is_string($segment) && in_array($segment, $available, true)) {
+            return $segment;
+        }
+
+        return self::defaultCycleSegment($cycleKey);
     }
 
     public static function listTabUrl(string $tab, array $filters = [], ?string $cycle = null): string
@@ -321,10 +348,21 @@ class LoanResource extends Resource
         return app(ContributionCycleService::class)->periodLabel($month, $year);
     }
 
-    public static function isViewingOpenCycle(): bool
+    public static function isViewingOpenCycle(?string $cycleKey = null): bool
     {
         $cycles = app(ContributionCycleService::class);
-        [$selectedMonth, $selectedYear] = self::resolveListCycle();
+        $cycleKey ??= self::resolveListCycleKey();
+
+        if (filled($cycleKey)) {
+            try {
+                [$selectedMonth, $selectedYear] = $cycles->parseContributionCycleKey($cycleKey);
+            } catch (InvalidArgumentException) {
+                [$selectedMonth, $selectedYear] = self::resolveListCycle();
+            }
+        } else {
+            [$selectedMonth, $selectedYear] = self::resolveListCycle();
+        }
+
         [$openMonth, $openYear] = $cycles->currentOpenPeriod();
 
         return $selectedMonth === $openMonth && $selectedYear === $openYear;
@@ -372,23 +410,25 @@ class LoanResource extends Resource
         $livewire = Livewire::current();
 
         if ($livewire instanceof ListLoans && filled($livewire->collectionSegment)) {
-            return in_array($livewire->collectionSegment, ['collect', 'collected', 'arrears'], true)
+            $segment = in_array($livewire->collectionSegment, ['collect', 'collected', 'arrears'], true)
                 ? $livewire->collectionSegment
-                : 'collect';
+                : self::defaultCycleSegment();
+
+            return self::normalizeCycleSegment($segment);
         }
 
         $segment = request()->string('segment')->toString();
 
         if (in_array($segment, ['collect', 'collected', 'arrears'], true)) {
-            return $segment;
+            return self::normalizeCycleSegment($segment);
         }
 
-        return match (request()->string('tab')->toString()) {
+        return self::normalizeCycleSegment(match (request()->string('tab')->toString()) {
             'emi_collected', 'collected' => 'collected',
             'emi_collect', 'collect' => 'collect',
             'arrears' => 'arrears',
-            default => 'collect',
-        };
+            default => self::defaultCycleSegment(),
+        });
     }
 
     public static function resolveDelinquencyView(): string
@@ -533,13 +573,31 @@ class LoanResource extends Resource
         ];
     }
 
-    public static function flushListCountCaches(): void
+    public static function flushListCountCaches(bool $bumpInsights = true): void
     {
         self::$pendingEmiCountCache = [];
         self::$collectedEmiCountCache = [];
         self::$emiArrearsCountCache = [];
         self::$overdueInstallmentsCountCache = [];
         self::$guarantorExposureCountCache = null;
+
+        if ($bumpInsights) {
+            CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_LOAN_EMI);
+        }
+    }
+
+    /**
+     * Flush only cycle-scoped collection badge caches (safe on cycle browse).
+     */
+    public static function flushCycleCollectionCountCaches(bool $bumpInsights = false): void
+    {
+        self::$pendingEmiCountCache = [];
+        self::$collectedEmiCountCache = [];
+        self::$emiArrearsCountCache = [];
+
+        if ($bumpInsights) {
+            CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_LOAN_EMI);
+        }
     }
 
     public static function overdueInstallmentsCount(): int
@@ -562,15 +620,35 @@ class LoanResource extends Resource
         return self::$guarantorExposureCountCache = (int) app(LoanDelinquencyService::class)->loansAtGuarantorRiskCount();
     }
 
-    public static function dispatchInsightsRefresh(?Component $livewire): void
-    {
+    /**
+     * @param  bool  $invalidateInsights  When false (cycle/segment browse), keep CollectionInsightsCache
+     *                                    entries for other cycles; only clear request-local badge caches.
+     */
+    public static function dispatchInsightsRefresh(
+        ?Component $livewire,
+        bool $fullPageRefresh = false,
+        bool $invalidateInsights = true,
+    ): void {
         if ($livewire === null) {
             return;
         }
 
-        self::flushListCountCaches();
+        if ($livewire instanceof ListLoans) {
+            self::flushCycleCollectionCountCaches($invalidateInsights);
+        } else {
+            self::flushListCountCaches($invalidateInsights);
+        }
 
         static::refreshLoanPageRecord($livewire);
+
+        $cycle = null;
+        $context = self::resolveInsightsContext();
+
+        if ($livewire instanceof ListLoans) {
+            $cycle = $livewire->selectedCycle;
+        }
+
+        $livewire->dispatch('refresh-loan-insights', cycle: $cycle, context: $context);
 
         $factory = app('livewire.factory');
         $widgetNames = array_map(
@@ -589,7 +667,14 @@ class LoanResource extends Resource
             $widgetNames,
         ));
 
-        $livewire->js('setTimeout(() => { '.$refreshWidgetsJs.' $wire.$refresh(); }, 0)');
+        // Cycle / segment switches only need the insights widget; avoid a second full list render.
+        if ($fullPageRefresh || ! ($livewire instanceof ListLoans)) {
+            $livewire->js('setTimeout(() => { '.$refreshWidgetsJs.' $wire.$refresh(); }, 0)');
+
+            return;
+        }
+
+        $livewire->js('setTimeout(() => { '.$refreshWidgetsJs.' }, 0)');
     }
 
     private static function refreshLoanPageRecord(Component $livewire): void

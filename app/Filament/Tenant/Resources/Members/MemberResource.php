@@ -21,6 +21,7 @@ use App\Filament\Tenant\Widgets\MemberInsightsWidget;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Tenant\MemberListTabService;
+use App\Support\CollectionInsightsCache;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -50,7 +51,7 @@ class MemberResource extends Resource
 
     public static function getNavigationBadge(): ?string
     {
-        $count = count(app(LoanDelinquencyService::class)->delinquentMemberIds());
+        $count = count(app(LoanDelinquencyService::class)->membersWithOutstandingArrearsIds());
 
         return $count > 0 ? (string) $count : null;
     }
@@ -176,6 +177,9 @@ class MemberResource extends Resource
 
     public static function dispatchInsightsRefresh(?Component $livewire): void
     {
+        CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_MEMBERS);
+        app(LoanDelinquencyService::class)->forgetArrearsAggregateCaches();
+
         if ($livewire === null) {
             return;
         }

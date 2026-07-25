@@ -3,16 +3,18 @@
 namespace App\Filament\Tenant\Resources\Members\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberArrearsInventory;
 use App\Filament\Support\MemberDelinquencyActions;
 use App\Filament\Support\MemberFilamentActions;
 use App\Filament\Support\MemberListTableHeaderActions;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
-use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -108,10 +110,50 @@ class MembersTable
             ])
             ->defaultSort('name');
 
-        return TableRecordActionGroups::apply(
-            TableGrouping::apply($table, TableGrouping::members()),
-            MemberFilamentActions::forMemberListRow(),
-            fn (Member $record): string => MemberResource::getUrl('view', ['record' => $record]),
-        );
+        $table = TableGrouping::apply($table, TableGrouping::members());
+
+        // Always register arrears actions so row-click / mount resolve on the Arrears tab
+        // even when table configure ran before the tab query param was applied.
+        $viewArrears = self::viewArrearsAction();
+
+        return $table
+            ->recordUrl(function (Member $record): ?string {
+                if (MemberResource::resolveListTab() === 'delinquent') {
+                    return null;
+                }
+
+                return MemberResource::getUrl('view', ['record' => $record]);
+            })
+            ->recordAction(fn (): ?string => MemberResource::resolveListTab() === 'delinquent'
+                ? 'viewArrears'
+                : null)
+            ->recordActions([
+                ActionGroup::make([
+                    $viewArrears,
+                    Action::make('openProfile')
+                        ->label(__('Open profile'))
+                        ->icon('heroicon-o-user')
+                        ->url(fn (Member $record): string => MemberResource::getUrl('view', ['record' => $record])),
+                    ...MemberFilamentActions::forMemberListRow(),
+                ])
+                    ->label(__('Actions'))
+                    ->icon('heroicon-o-ellipsis-vertical')
+                    ->button()
+                    ->visible(fn (): bool => MemberResource::resolveListTab() === 'delinquent'),
+            ]);
+    }
+
+    private static function viewArrearsAction(): Action
+    {
+        return Action::make('viewArrears')
+            ->label(__('View arrears'))
+            ->icon('heroicon-o-banknotes')
+            ->color('danger')
+            ->slideOver()
+            ->modalHeading(fn (Member $record): string => __('Arrears – :name', ['name' => $record->name]))
+            ->modalDescription(__('Outstanding contribution and loan EMI arrears by labelled cycle.'))
+            ->modalContent(fn (Member $record) => MemberArrearsInventory::modalContent($record))
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel(__('Close'));
     }
 }

@@ -25,6 +25,9 @@ final class ContributionPolicySettings
             'consecutive_miss_threshold' => 3,
             'total_miss_threshold' => 15,
             'total_miss_lookback_months' => 60,
+            'late_settlement_consecutive_threshold' => 3,
+            'late_settlement_rolling_threshold' => 15,
+            'late_settlement_lookback_months' => 60,
         ];
     }
 
@@ -154,6 +157,21 @@ final class ContributionPolicySettings
         return max(1, (int) self::delinquencyGet('total_miss_lookback_months', 60));
     }
 
+    public static function lateSettlementConsecutiveThreshold(): int
+    {
+        return max(1, (int) self::delinquencyGet('late_settlement_consecutive_threshold', 3));
+    }
+
+    public static function lateSettlementRollingThreshold(): int
+    {
+        return max(1, (int) self::delinquencyGet('late_settlement_rolling_threshold', 15));
+    }
+
+    public static function lateSettlementLookbackMonths(): int
+    {
+        return max(1, (int) self::delinquencyGet('late_settlement_lookback_months', 60));
+    }
+
     public static function annualSubscriptionFee(): float
     {
         return max(0.0, (float) Setting::get(self::GROUP_SUBSCRIPTION, 'annual_fee', 0));
@@ -172,6 +190,12 @@ final class ContributionPolicySettings
             'delinquency_consecutive' => $delinquency['consecutive_miss_threshold'],
             'delinquency_total' => $delinquency['total_miss_threshold'],
             'delinquency_lookback_months' => $delinquency['total_miss_lookback_months'],
+            'contribution_late_settlement_consecutive' => $delinquency['late_settlement_consecutive_threshold']
+                ?? self::delinquencyDefaults()['late_settlement_consecutive_threshold'],
+            'contribution_late_settlement_rolling' => $delinquency['late_settlement_rolling_threshold']
+                ?? self::delinquencyDefaults()['late_settlement_rolling_threshold'],
+            'contribution_late_settlement_lookback_months' => $delinquency['late_settlement_lookback_months']
+                ?? self::delinquencyDefaults()['late_settlement_lookback_months'],
             'late_fee_contribution_1d' => $lateFee['contribution_day_1'],
             'late_fee_contribution_10d' => $lateFee['contribution_day_10'],
             'late_fee_contribution_20d' => $lateFee['contribution_day_20'],
@@ -205,6 +229,9 @@ final class ContributionPolicySettings
         Setting::set(self::GROUP_DELINQUENCY, 'consecutive_miss_threshold', max(1, min(36, (int) ($state['delinquency_consecutive'] ?? 3))));
         Setting::set(self::GROUP_DELINQUENCY, 'total_miss_threshold', max(1, min(240, (int) ($state['delinquency_total'] ?? 15))));
         Setting::set(self::GROUP_DELINQUENCY, 'total_miss_lookback_months', max(1, min(240, (int) ($state['delinquency_lookback_months'] ?? 60))));
+        Setting::set(self::GROUP_DELINQUENCY, 'late_settlement_consecutive_threshold', max(1, min(36, (int) ($state['contribution_late_settlement_consecutive'] ?? 3))));
+        Setting::set(self::GROUP_DELINQUENCY, 'late_settlement_rolling_threshold', max(1, min(240, (int) ($state['contribution_late_settlement_rolling'] ?? 15))));
+        Setting::set(self::GROUP_DELINQUENCY, 'late_settlement_lookback_months', max(1, min(240, (int) ($state['contribution_late_settlement_lookback_months'] ?? 60))));
 
         foreach (self::lateFeeDefaults() as $key => $default) {
             $formKey = match ($key) {

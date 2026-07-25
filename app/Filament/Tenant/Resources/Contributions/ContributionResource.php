@@ -17,6 +17,8 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Support\CollectionInsightsCache;
+use App\Support\TenantRuntimeCache;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -99,7 +101,7 @@ class ContributionResource extends Resource
     public static function listTabLabel(string $tab): string
     {
         return match ($tab) {
-            'cycle' => __('Collection'),
+            'cycle' => __('Contributions'),
             'ledger', 'contributions' => __('Ledger'),
             'collect' => __('To collect'),
             'collected' => __('Collected'),
@@ -258,23 +260,25 @@ class ContributionResource extends Resource
         $livewire = Livewire::current();
 
         if ($livewire instanceof ListContributions && filled($livewire->cycleSegment)) {
-            return in_array($livewire->cycleSegment, ['collect', 'collected', 'arrears'], true)
+            $segment = in_array($livewire->cycleSegment, ['collect', 'collected', 'arrears'], true)
                 ? $livewire->cycleSegment
-                : 'collect';
+                : self::defaultCycleSegment();
+
+            return self::normalizeCycleSegment($segment);
         }
 
         $segment = request()->string('segment')->toString();
 
         if (in_array($segment, ['collect', 'collected', 'arrears'], true)) {
-            return $segment;
+            return self::normalizeCycleSegment($segment);
         }
 
-        return match (request()->string('tab')->toString()) {
+        return self::normalizeCycleSegment(match (request()->string('tab')->toString()) {
             'collected' => 'collected',
             'collect' => 'collect',
             'arrears' => 'arrears',
-            default => 'collect',
-        };
+            default => self::defaultCycleSegment(),
+        });
     }
 
     public static function resolveLedgerView(): ?string
@@ -358,13 +362,50 @@ class ContributionResource extends Resource
         return app(ContributionCycleService::class)->periodLabel($month, $year);
     }
 
-    public static function isViewingOpenCycle(): bool
+    public static function isViewingOpenCycle(?string $cycleKey = null): bool
     {
         $cycles = app(ContributionCycleService::class);
-        [$selectedMonth, $selectedYear] = self::resolveListCycle();
+        $cycleKey ??= self::resolveListCycleKey();
+
+        if (filled($cycleKey)) {
+            try {
+                [$selectedMonth, $selectedYear] = $cycles->parseContributionCycleKey($cycleKey);
+            } catch (InvalidArgumentException) {
+                [$selectedMonth, $selectedYear] = self::resolveListCycle();
+            }
+        } else {
+            [$selectedMonth, $selectedYear] = self::resolveListCycle();
+        }
+
         [$openMonth, $openYear] = $cycles->currentOpenPeriod();
 
         return $selectedMonth === $openMonth && $selectedYear === $openYear;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function availableCycleSegments(?string $cycleKey = null): array
+    {
+        return self::isViewingOpenCycle($cycleKey)
+            ? ['collect', 'collected']
+            : ['arrears', 'collected'];
+    }
+
+    public static function defaultCycleSegment(?string $cycleKey = null): string
+    {
+        return self::isViewingOpenCycle($cycleKey) ? 'collect' : 'arrears';
+    }
+
+    public static function normalizeCycleSegment(?string $segment, ?string $cycleKey = null): string
+    {
+        $available = self::availableCycleSegments($cycleKey);
+
+        if (is_string($segment) && in_array($segment, $available, true)) {
+            return $segment;
+        }
+
+        return self::defaultCycleSegment($cycleKey);
     }
 
     public static function pendingCountForPeriod(int $month, int $year): int
@@ -380,10 +421,14 @@ class ContributionResource extends Resource
             ->count();
     }
 
-    public static function flushPeriodCountCaches(): void
+    public static function flushPeriodCountCaches(bool $bumpInsights = true): void
     {
         self::$pendingCountCache = [];
         self::$arrearsPeriodCountCache = [];
+
+        if ($bumpInsights) {
+            CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_CONTRIBUTIONS);
+        }
     }
 
     public static function collectedContributionCount(): int
@@ -396,10 +441,16 @@ class ContributionResource extends Resource
 
     public static function openCyclePendingCount(): int
     {
-        $cycles = app(ContributionCycleService::class);
-        [$month, $year] = $cycles->currentOpenPeriod();
+        return (int) TenantRuntimeCache::remember(
+            'contribution_resource:open_cycle_pending_count',
+            60,
+            function (): int {
+                $cycles = app(ContributionCycleService::class);
+                [$month, $year] = $cycles->currentOpenPeriod();
 
-        return self::pendingCountForPeriod($month, $year);
+                return self::pendingCountForPeriod($month, $year);
+            },
+        );
     }
 
     public static function tableLayoutKey(): string
@@ -441,9 +492,7 @@ class ContributionResource extends Resource
         if (self::resolvePrimaryTab() === 'cycle') {
             return match (self::resolveCycleSegment()) {
                 'collected' => ContributionCycleTables::configureCollectedTable($table),
-                'arrears' => LoanDelinquencyTables::configureContributionArrearsTable(
-                    $table->pluralModelLabel(UiLabelIcons::tableModelLabel(__('Contribution arrears'))),
-                ),
+                'arrears' => ContributionCycleTables::configureCycleArrearsTable($table),
                 default => ContributionCycleTables::configurePendingMembersTable($table),
             };
         }
@@ -466,13 +515,30 @@ class ContributionResource extends Resource
         ];
     }
 
-    public static function dispatchInsightsRefresh(?Component $livewire): void
+    /**
+     * @param  bool  $invalidateInsights  When false (cycle/segment browse), keep CollectionInsightsCache
+     *                                    entries for other cycles; only clear request-local badge caches.
+     */
+    public static function dispatchInsightsRefresh(?Component $livewire, bool $invalidateInsights = true): void
     {
-        self::flushPeriodCountCaches();
+        self::flushPeriodCountCaches($invalidateInsights);
+
+        if ($invalidateInsights) {
+            TenantRuntimeCache::forget('contribution_resource:open_cycle_pending_count');
+        }
 
         if ($livewire === null) {
             return;
         }
+
+        $cycle = null;
+        $context = self::resolveInsightsContext();
+
+        if ($livewire instanceof ListContributions) {
+            $cycle = $livewire->selectedCycle;
+        }
+
+        $livewire->dispatch('refresh-contribution-insights', cycle: $cycle, context: $context);
 
         $targetName = json_encode(
             app('livewire.factory')->resolveComponentName(ContributionInsightsWidget::class),
