@@ -108,3 +108,35 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* Member view workspace: Cash/Fund amounts stay inside cards when status chips wrap */
+.fi-body .ff-member-workspace-summary .ff-member-workspace-balance,
+.fi-body .ff-member-detail-shell a[href] {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.fi-body .ff-member-workspace-summary .ff-stat-line,
+.fi-body .ff-member-detail-shell .ff-stat-line {
+    display: block;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fi-body .ff-member-workspace-summary .ff-stat-line .ff-member-amount,
+.fi-body .ff-member-detail-shell .ff-stat-line .ff-member-amount {
+    display: inline-flex;
+    max-width: 100%;
+    min-width: 0;
+    vertical-align: bottom;
+}
+
+.fi-body .ff-member-workspace-summary .ff-stat-line .ff-member-amount__digits,
+.fi-body .ff-member-detail-shell .ff-stat-line .ff-member-amount__digits {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

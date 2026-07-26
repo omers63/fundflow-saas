@@ -6,6 +6,7 @@ namespace App\Services\Loans;
 
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
+use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\DelinquencyDigestNotification;
 use App\Support\AutomationScheduleSettings;
@@ -27,7 +28,10 @@ class DelinquencyDigestService
 
         $total = $counts['overdue_installments']
             + $counts['contribution_arrears_periods']
-            + $counts['guarantor_at_risk'];
+            + $counts['members_in_arrears']
+            + $counts['delinquent_members']
+            + $counts['guarantor_at_risk']
+            + $counts['guarantor_transferred'];
 
         if ($total === 0) {
             return 0;
@@ -55,10 +59,18 @@ class DelinquencyDigestService
             return LoanResource::listTabUrl('overdue_installments');
         }
 
+        if (($counts['members_in_arrears'] ?? 0) > 0) {
+            return MemberResource::listTabUrl('delinquent');
+        }
+
         if (($counts['contribution_arrears_periods'] ?? 0) > 0) {
             return ContributionResource::listTabUrl('arrears');
         }
 
-        return LoanResource::listTabUrl('guarantor_exposure');
+        if (($counts['guarantor_at_risk'] ?? 0) > 0 || ($counts['guarantor_transferred'] ?? 0) > 0) {
+            return LoanResource::listTabUrl('guarantor_exposure');
+        }
+
+        return MemberResource::listTabUrl('delinquent');
     }
 }

@@ -357,11 +357,11 @@ Every snapshot mode runs these **ledger integrity** checks (severity per check: 
 | `global_trial` | Σ credits vs Σ debits across all ledger lines (raw Δ always shown; warning only when unexpected unbalanced referenced groups or unexpected null-reference lines remain) |
 | `paired_control_totals` | Master cash/fund pool vs Σ member mirrors (tolerance-aware) |
 | `bank_statement_vs_book` | Optional: `master_cash` vs declared statement balance (skipped if not configured) |
-| `contributions_ledger` | Contribution rows have ledger lines; master fund credits match contribution totals |
+| `contributions_ledger` | **Posted** contribution rows have ledger lines; master fund credits match posted contribution totals |
 | `member_portal_posting_integrity` | Accepted fund postings credited member + master cash correctly |
 | `bank_transaction_posting_integrity` | Imported bank lines posted to ledger with expected legs |
 | `sms_transaction_posting_integrity` | Skipped in SaaS (SMS import not used) |
-| `contribution_flow_integrity` | Contribution cycle paired fund/cash legs |
+| `contribution_flow_integrity` | **Posted** contributions: paired fund/cash legs by payment type (pending excluded) |
 | `membership_application_fee_integrity` | Enrollment fee → cash + master fees |
 | `subscription_fee_integrity` | Annual subscription fee → master fees |
 | `active_loans_schedule_vs_ledger` | Active loans: loan account outstanding vs expected (schedule − partial paid) |

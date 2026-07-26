@@ -133,6 +133,7 @@ class LoanDelinquencyService
      *     overdue_installments: int,
      *     contribution_arrears_periods: int,
      *     contribution_arrears_members: int,
+     *     members_in_arrears: int,
      *     delinquent_members: int,
      *     guarantor_at_risk: int,
      *     guarantor_transferred: int
@@ -149,6 +150,7 @@ class LoanDelinquencyService
                 ->count(),
             'contribution_arrears_periods' => $arrears['periods'],
             'contribution_arrears_members' => $arrears['members'],
+            'members_in_arrears' => count($this->membersWithOutstandingArrearsIds()),
             'delinquent_members' => count($this->delinquentMemberIds()),
             'guarantor_at_risk' => $this->loansAtGuarantorRiskCount(),
             'guarantor_transferred' => (int) Loan::query()
@@ -518,14 +520,17 @@ class LoanDelinquencyService
     }
 
     /**
-     * Drop cached member-id aggregates used by Members nav badge, Arrears tab, and insights.
+     * Drop cached member-id aggregates used by Members nav badge, Arrears tab, insights, and digests.
      */
     public function forgetArrearsAggregateCaches(): void
     {
         $this->delinquentMemberIdsCache = null;
+        $this->contributionArrearsDigestStatsCache = null;
+        $this->contributionArrearsPeriodCountCache = null;
 
         TenantRuntimeCache::forget('loan_delinquency:delinquent_member_ids');
         TenantRuntimeCache::forget('loan_delinquency:members_with_outstanding_arrears_ids');
+        TenantRuntimeCache::forget('loan_delinquency:contribution_arrears_digest');
     }
 
     private static function memberBreachCacheKey(int $memberId): string

@@ -44,6 +44,8 @@ test('view member workspace shell renders inline summary without insights widget
         ->test(ViewMember::class, ['record' => $member->getRouteKey()])
         ->assertSuccessful()
         ->assertSee('ff-member-workspace-summary', false)
+        ->assertSee('ff-member-workspace-balance', false)
+        ->assertSee('ff-stat-line', false)
         ->assertDontSee('ff-member-detail-shell', false)
         ->assertDontSee('ff-app-insights-kpi-strip', false);
 });

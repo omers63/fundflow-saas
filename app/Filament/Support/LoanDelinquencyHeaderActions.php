@@ -88,7 +88,7 @@ final class LoanDelinquencyHeaderActions
             ->icon('heroicon-o-bell-alert')
             ->color('info')
             ->requiresConfirmation()
-            ->modalDescription(__('Notifies tenant administrators when overdue installments, contribution arrears, or guarantor exposure need attention.'))
+            ->modalDescription(__('Notifies tenant administrators of overdue installments, members in arrears, contribution arrears, policy delinquents, and guarantor exposure.'))
             ->action(function (DelinquencyDigestService $digest): void {
                 $count = $digest->notifyAdminsIfNeeded();
 
@@ -96,7 +96,7 @@ final class LoanDelinquencyHeaderActions
                     ->title($count > 0 ? __('Digest sent') : __('Nothing to report'))
                     ->body($count > 0
                         ? __(':count administrator(s) notified.', ['count' => $count])
-                        : __('No overdue installments, contribution arrears, or guarantor exposure.'))
+                        : __('No overdue installments, members in arrears, contribution arrears, or guarantor exposure.'))
                     ->color($count > 0 ? 'success' : 'info')
                     ->send();
             });

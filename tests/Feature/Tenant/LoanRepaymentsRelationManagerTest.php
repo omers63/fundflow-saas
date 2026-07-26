@@ -149,3 +149,95 @@ test('backfill is skipped when settlement repayment already exists', function ()
 
     expect($loan->fresh()->repayments()->count())->toBe(1);
 });
+
+test('completed loan with existing repayments is not backfilled as full early settlement', function () {
+    $member = Member::factory()->create(['status' => 'active']);
+    $settledAt = now()->subDays(3);
+
+    $loan = Loan::factory()->for($member)->create([
+        'status' => 'completed',
+        'settled_at' => $settledAt,
+    ]);
+
+    LoanInstallment::query()->create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => $settledAt,
+        'status' => 'paid',
+        'paid_at' => $settledAt,
+        'amount_collected' => 1000,
+    ]);
+
+    $loan->repayments()->create([
+        'amount' => 1000,
+        'paid_at' => $settledAt,
+        'notes' => 'legacy-import repayment',
+    ]);
+
+    expect(RepaymentsRelationManager::canViewForRecord($loan->fresh(), ViewLoan::class))->toBeTrue();
+
+    $loan->refresh();
+
+    expect($loan->repayments()->count())->toBe(1)
+        ->and($loan->repayments()->where('notes', 'like', '%settlement:%')->count())->toBe(0);
+});
+
+test('spurious completed settlement backfill is pruned when sibling repayments exist', function () {
+    $member = Member::factory()->create(['status' => 'active']);
+    $settledAt = now()->subDays(3);
+
+    $loan = Loan::factory()->for($member)->create([
+        'status' => 'completed',
+        'settled_at' => $settledAt,
+    ]);
+
+    $loan->repayments()->create([
+        'amount' => 12000,
+        'paid_at' => $settledAt->copy()->subMonth(),
+        'notes' => 'legacy-import repayment',
+    ]);
+
+    $loan->repayments()->create([
+        'amount' => 1000,
+        'paid_at' => $settledAt,
+        'notes' => LoanRepaymentNote::fullEarlySettlement(),
+    ]);
+
+    expect($loan->repayments()->count())->toBe(2);
+
+    $deleted = app(LoanRepaymentLogService::class)
+        ->pruneSpuriousCompletedSettlementBackfills($loan->fresh());
+
+    expect($deleted)->toBe(1)
+        ->and($loan->fresh()->repayments()->count())->toBe(1)
+        ->and($loan->fresh()->repayments()->first()->notes)->toBe('legacy-import repayment');
+});
+
+test('early settled settlement row is kept when prior emi repayment logs exist', function () {
+    $member = Member::factory()->create(['status' => 'active']);
+    $settledAt = now()->subDays(3);
+
+    $loan = Loan::factory()->for($member)->create([
+        'status' => 'early_settled',
+        'settled_at' => $settledAt,
+    ]);
+
+    $loan->repayments()->create([
+        'amount' => 1000,
+        'paid_at' => $settledAt->copy()->subMonths(2),
+        'notes' => LoanRepaymentNote::installment(1),
+    ]);
+
+    $loan->repayments()->create([
+        'amount' => 2000,
+        'paid_at' => $settledAt,
+        'notes' => LoanRepaymentNote::fullEarlySettlement(),
+    ]);
+
+    $deleted = app(LoanRepaymentLogService::class)
+        ->pruneSpuriousCompletedSettlementBackfills($loan->fresh());
+
+    expect($deleted)->toBe(0)
+        ->and($loan->fresh()->repayments()->count())->toBe(2);
+});

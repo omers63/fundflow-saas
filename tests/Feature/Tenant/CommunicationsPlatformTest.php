@@ -86,6 +86,26 @@ test('restore defaults overwrites edited template rows', function () {
         ->and($row->body_markdown)->toContain('{{amount}}');
 });
 
+test('delinquency digest default template includes enriched arrears metrics', function () {
+    NotificationTemplate::query()->where('key', 'delinquency_digest')->delete();
+    NotificationTemplateCatalog::seedMissingDefaults();
+
+    $en = NotificationTemplateCatalog::defaultContent('delinquency_digest', 'en');
+    $row = NotificationTemplate::query()
+        ->where('key', 'delinquency_digest')
+        ->where('locale', 'en')
+        ->where('channel_family', NotificationTemplate::FAMILY_IN_APP)
+        ->first();
+
+    expect($en)->not->toBeNull()
+        ->and($en['body'])->toContain('{{members_in_arrears}}')
+        ->and($en['body'])->toContain('{{arrears_members}}')
+        ->and($en['body'])->toContain('{{guarantor}}')
+        ->and($en['body'])->toContain('{{transferred}}')
+        ->and($row)->not->toBeNull()
+        ->and($row->body_markdown)->toBe($en['body']);
+});
+
 test('contribution due notification honors member channel preferences', function () {
     Notification::fake();
 

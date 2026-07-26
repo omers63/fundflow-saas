@@ -77,13 +77,20 @@ final class LoanRepaymentLogService
         ]);
     }
 
+    /**
+     * Display-only history for early-settled loans that never got a settlement log row.
+     *
+     * Do not invent a settlement line when repayment history already exists (legacy import /
+     * EMI observer rows) — that double-counts against paid installments in reconciliation.
+     * Completed (non-early) loans are never backfilled as "Full early settlement".
+     */
     public function backfillSettlementRepaymentIfMissing(Loan $loan): ?LoanRepayment
     {
-        if (! in_array($loan->status, ['early_settled', 'completed'], true) || $loan->settled_at === null) {
+        if ($loan->status !== 'early_settled' || $loan->settled_at === null) {
             return null;
         }
 
-        if ($loan->repayments()->where('notes', 'like', '%settlement:%')->exists()) {
+        if ($loan->repayments()->exists()) {
             return null;
         }
 
@@ -119,9 +126,49 @@ final class LoanRepaymentLogService
         return $this->recordSettlementRepayment(
             $loan,
             $amount,
-            $loan->status === 'early_settled' ? 'full' : 'full',
+            'full',
             null,
             $settledAt,
         );
+    }
+
+    /**
+     * Remove synthetic "Full early settlement" rows on completed loans that already had
+     * repayment history (typical legacy-import false backfill).
+     *
+     * Live early settlements use status `early_settled` and are left alone even when
+     * earlier EMI repayment logs exist.
+     *
+     * @return int Number of repayment rows deleted
+     */
+    public function pruneSpuriousCompletedSettlementBackfills(?Loan $loan = null): int
+    {
+        $query = LoanRepayment::query()
+            ->where('notes', 'like', '%settlement:%')
+            ->whereHas('loan', function ($loanQuery) use ($loan): void {
+                $loanQuery->where('status', 'completed');
+
+                if ($loan !== null) {
+                    $loanQuery->whereKey($loan->getKey());
+                }
+            });
+
+        $deleted = 0;
+
+        foreach ($query->get() as $repayment) {
+            $hasSiblingRepayments = LoanRepayment::query()
+                ->where('loan_id', $repayment->loan_id)
+                ->whereKeyNot($repayment->getKey())
+                ->exists();
+
+            if (! $hasSiblingRepayments) {
+                continue;
+            }
+
+            $repayment->delete();
+            $deleted++;
+        }
+
+        return $deleted;
     }
 }

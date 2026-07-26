@@ -212,7 +212,7 @@ On **Members → View** (`MemberDelinquencyActions` + infolist section):
 |-------|--------|
 | Notification | `DelinquencyDigestNotification` (database + mail when admin email is set) |
 | Recipients | All tenant users with `is_admin = true` |
-| Content | Counts of overdue installments, contribution arrears periods, delinquent members; link to delinquency workspace |
+| Content | Overdue installments, **members in arrears**, contribution arrears (members + periods), policy-delinquent members, guarantor exposure / transferred; link to the most relevant review tab |
 | Command | `php artisan delinquency:send-digest` |
 | Schedule | Daily **07:30** (after `loans:check-defaults` at 07:00) |
 | Manual trigger | **Send admin digest** header action on delinquency page |

@@ -171,7 +171,9 @@
 .ff-member-contribution-option .ff-member-amount,
 .ff-member-exposure-stat .ff-member-amount,
 .ff-member-accounts-insights .grid > a .ff-member-amount,
-.ff-member-profile-stat .ff-member-amount {
+.ff-member-profile-stat .ff-member-amount,
+.ff-member-workspace-summary .ff-member-amount,
+.ff-member-detail-shell .ff-member-amount {
     max-width: 100%;
     min-width: 0;
 }
@@ -184,7 +186,9 @@
 .ff-member-contribution-option .ff-member-amount__digits,
 .ff-member-exposure-stat .ff-member-amount__digits,
 .ff-member-accounts-insights .grid > a .ff-member-amount__digits,
-.ff-member-profile-stat .ff-member-amount__digits {
+.ff-member-profile-stat .ff-member-amount__digits,
+.ff-member-workspace-summary .ff-member-amount__digits,
+.ff-member-detail-shell .ff-member-amount__digits {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;

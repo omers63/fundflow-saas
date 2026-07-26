@@ -58,7 +58,8 @@ class DelinquencyDigestNotification extends Notification
     {
         return $this->withRecipientLocale($notifiable, function () use ($notifiable): MailMessage {
             $copy = $this->adminTemplatedCopy($notifiable, NotificationTemplate::FAMILY_EMAIL);
-            $guarantor = $this->counts['guarantor_at_risk'] ?? 0;
+            $guarantor = (int) ($this->counts['guarantor_at_risk'] ?? 0);
+            $transferred = (int) ($this->counts['guarantor_transferred'] ?? 0);
 
             $message = (new MailMessage)
                 ->subject($copy['title'] !== '' ? $copy['title'] : __('Delinquency digest'))
@@ -68,6 +69,10 @@ class DelinquencyDigestNotification extends Notification
 
             if ($guarantor > 0) {
                 $message->line(__(':guarantor loan(s) with guarantor exposure', ['guarantor' => $guarantor]));
+            }
+
+            if ($transferred > 0) {
+                $message->line(__(':transferred loan(s) with guarantor liability transferred', ['transferred' => $transferred]));
             }
 
             return $message->action(__('Review in admin'), $this->absoluteDelinquencyUrl());
@@ -105,8 +110,11 @@ class DelinquencyDigestNotification extends Notification
         return [
             'overdue' => (string) ($this->counts['overdue_installments'] ?? 0),
             'arrears' => (string) ($this->counts['contribution_arrears_periods'] ?? 0),
+            'arrears_members' => (string) ($this->counts['contribution_arrears_members'] ?? 0),
+            'members_in_arrears' => (string) ($this->counts['members_in_arrears'] ?? 0),
             'delinquent' => (string) ($this->counts['delinquent_members'] ?? 0),
             'guarantor' => (string) ($this->counts['guarantor_at_risk'] ?? 0),
+            'transferred' => (string) ($this->counts['guarantor_transferred'] ?? 0),
             'action_url' => $this->absoluteDelinquencyUrl(),
             'action_label' => __('Review in admin'),
         ];
@@ -114,11 +122,18 @@ class DelinquencyDigestNotification extends Notification
 
     protected function fallbackBody(): string
     {
-        return __(':overdue overdue installment(s) · :arrears contribution period(s) in arrears · :delinquent delinquent member(s).', [
-            'overdue' => $this->counts['overdue_installments'] ?? 0,
-            'arrears' => $this->counts['contribution_arrears_periods'] ?? 0,
-            'delinquent' => $this->counts['delinquent_members'] ?? 0,
-        ]);
+        return __(
+            ':overdue overdue installment(s) · :members_in_arrears member(s) in arrears · :arrears_members with contribution arrears · :arrears contribution period(s) · :delinquent policy-delinquent member(s) · :guarantor guarantor exposure · :transferred guarantor transferred.',
+            [
+                'overdue' => $this->counts['overdue_installments'] ?? 0,
+                'members_in_arrears' => $this->counts['members_in_arrears'] ?? 0,
+                'arrears_members' => $this->counts['contribution_arrears_members'] ?? 0,
+                'arrears' => $this->counts['contribution_arrears_periods'] ?? 0,
+                'delinquent' => $this->counts['delinquent_members'] ?? 0,
+                'guarantor' => $this->counts['guarantor_at_risk'] ?? 0,
+                'transferred' => $this->counts['guarantor_transferred'] ?? 0,
+            ],
+        );
     }
 
     protected function absoluteDelinquencyUrl(): string

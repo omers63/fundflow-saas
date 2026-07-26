@@ -10,6 +10,7 @@ use App\Models\Tenant\User;
 use App\Notifications\Tenant\DelinquencyDigestNotification;
 use App\Services\AccountingService;
 use App\Services\Loans\DelinquencyDigestService;
+use App\Services\Loans\LoanDelinquencyService;
 use App\Support\AutomationScheduleSettings;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Notification;
@@ -22,6 +23,7 @@ beforeEach(function () {
     $this->initializeTenancy();
     Filament::setCurrentPanel('tenant');
     $this->digest = app(DelinquencyDigestService::class);
+    app(LoanDelinquencyService::class)->forgetArrearsAggregateCaches();
 
     config([
         'webpush.vapid.public_key' => 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U',
@@ -102,7 +104,11 @@ test('delinquency digest notifies admins via database and mail when email is set
                 && (
                     str_starts_with($notification->delinquencyUrl, '/')
                     || str_starts_with($notification->delinquencyUrl, 'http')
-                );
+                )
+                && ($notification->counts['overdue_installments'] ?? 0) === 1
+                && ($notification->counts['members_in_arrears'] ?? 0) === 1
+                && array_key_exists('contribution_arrears_members', $notification->counts)
+                && array_key_exists('guarantor_transferred', $notification->counts);
         },
     );
 });

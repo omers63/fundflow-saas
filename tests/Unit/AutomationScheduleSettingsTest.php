@@ -156,7 +156,7 @@ it('defaults automation notification toggles to on', function () {
         ->and(AutomationScheduleSettings::notifyAnnouncements())->toBeTrue()
         ->and(AutomationScheduleSettings::notifyOnboardingGreeting())->toBeTrue()
         ->and(AutomationScheduleSettings::dispatchAnnouncementsEnabled())->toBeTrue()
-        ->and(AutomationScheduleSettings::onboardingGreetingEnabled())->toBeFalse();
+        ->and(AutomationScheduleSettings::onboardingGreetingEnabled())->toBeTrue();
 });
 
 it('uses a dedicated statements schedule that can differ from month-boundary', function () {

@@ -257,6 +257,7 @@ class ReconciliationReportService
         $missingLedgerContributions = [];
         if ($masterFund !== null) {
             Contribution::query()
+                ->posted()
                 ->whereNull('deleted_at')
                 ->orderBy('id')
                 ->chunkById(200, function ($rows) use ($contribMorph, &$missingLedgerContributions): void {
@@ -289,7 +290,10 @@ class ReconciliationReportService
                 ->where('type', 'credit')
                 ->sum('amount');
 
-            $contribSum = (float) Contribution::query()->whereNull('deleted_at')->sum('amount');
+            $contribSum = (float) Contribution::query()
+                ->posted()
+                ->whereNull('deleted_at')
+                ->sum('amount');
             $masterDelta = abs($ledgerContribMaster - $contribSum);
             $masterMatch = $masterDelta <= self::AMOUNT_TOLERANCE;
 
@@ -308,7 +312,7 @@ class ReconciliationReportService
                 'sum_contribution_rows' => round($contribSum, 2),
                 'sum_master_fund_credits_sourced_contribution' => round($ledgerContribMaster, 2),
                 'master_fund_delta' => round($ledgerContribMaster - $contribSum, 2),
-                'note' => 'Each contribution should post paired master+member fund credits; missing lines indicate failed posting or data repair needs.',
+                'note' => 'Posted contributions only: each should have paired master+member fund credits. Pending/failed rows are excluded until posted.',
             ];
         } else {
             $checks['contributions_ledger'] = [
@@ -528,6 +532,7 @@ class ReconciliationReportService
         // --- 4d) Contribution posting flow integrity (all expected legs by type) ---
         $contributionFlowIssues = [];
         Contribution::query()
+            ->posted()
             ->whereNull('deleted_at')
             ->with('member')
             ->orderBy('id')
@@ -631,6 +636,7 @@ class ReconciliationReportService
             'issue_count' => count($contributionFlowIssues),
             'issues' => array_slice($contributionFlowIssues, 0, 120),
             'issues_truncated' => count($contributionFlowIssues) > 120,
+            'note' => 'Posted contributions only. Pending cycle rows are expected to lack ledger legs until collected.',
         ];
 
         // --- 4e) Membership application subscription fee posting integrity ---

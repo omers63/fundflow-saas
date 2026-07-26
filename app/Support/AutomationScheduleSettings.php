@@ -22,9 +22,9 @@ final class AutomationScheduleSettings
     {
         return [
             // Days after cycle open (0 = open day) when due notifications fire.
-            'contribution_due_notify_days' => '0,7,14,21',
+            'contribution_due_notify_days' => '0,7,14,21,28',
             'contribution_due_notify_time' => '09:00',
-            'loan_due_notify_days' => '0,7,14,21',
+            'loan_due_notify_days' => '0,7,14,21,28',
             'loan_due_notify_time' => '09:00',
             // One or two HH:MM times (comma-separated) while the cycle is open.
             'contribution_apply_times' => '06:00',
@@ -50,7 +50,7 @@ final class AutomationScheduleSettings
             // Messaging / chained maintenance.
             'dispatch_announcements_enabled' => true,
             'dispatch_announcements_interval_minutes' => 1,
-            'onboarding_greeting_enabled' => false,
+            'onboarding_greeting_enabled' => true,
             'onboarding_greeting_time' => '10:00',
             'late_fees_enabled' => true,
             'late_fees_time' => '06:05',
@@ -163,7 +163,7 @@ final class AutomationScheduleSettings
             'dispatch_announcements_interval_minutes',
             (string) self::normalizeIntervalMinutes($state['automation_dispatch_announcements_interval_minutes'] ?? null),
         );
-        Setting::set(self::GROUP, 'onboarding_greeting_enabled', ($state['automation_onboarding_greeting_enabled'] ?? false) ? '1' : '0');
+        Setting::set(self::GROUP, 'onboarding_greeting_enabled', ($state['automation_onboarding_greeting_enabled'] ?? true) ? '1' : '0');
         Setting::set(self::GROUP, 'onboarding_greeting_time', self::normalizeClockTime($state['automation_onboarding_greeting_time'] ?? null) ?? '10:00');
         Setting::set(self::GROUP, 'late_fees_enabled', ($state['automation_late_fees_enabled'] ?? true) ? '1' : '0');
         Setting::set(self::GROUP, 'late_fees_time', self::normalizeClockTime($state['automation_late_fees_time'] ?? null) ?? '06:05');

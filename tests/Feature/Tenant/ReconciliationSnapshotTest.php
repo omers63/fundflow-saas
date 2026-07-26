@@ -77,6 +77,59 @@ test('reconciliation report includes legacy check keys and control layer', funct
         ->and($report['verdict'])->toHaveKeys(['pass', 'critical_issues', 'warnings']);
 });
 
+test('contribution integrity checks ignore pending rows and flag posted rows missing legs', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-CONTRIB-RECON',
+        'name' => 'Contribution Recon Member',
+        'email' => 'contrib-recon@fund.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    Contribution::create([
+        'member_id' => $member->id,
+        'period' => now()->startOfMonth()->toDateString(),
+        'amount' => 500,
+        'status' => 'pending',
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+    ]);
+
+    $reportPendingOnly = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    expect($reportPendingOnly['checks']['contribution_flow_integrity']['severity'])->toBe('ok')
+        ->and($reportPendingOnly['checks']['contribution_flow_integrity']['issue_count'])->toBe(0)
+        ->and($reportPendingOnly['checks']['contributions_ledger']['severity'])->toBe('ok')
+        ->and($reportPendingOnly['checks']['contributions_ledger']['missing_ledger_count'])->toBe(0);
+
+    $postedMissingLegs = Contribution::create([
+        'member_id' => $member->id,
+        'period' => now()->subMonthNoOverflow()->startOfMonth()->toDateString(),
+        'amount' => 500,
+        'status' => 'posted',
+        'posted_at' => now()->subDay(),
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+    ]);
+
+    $reportWithPostedGap = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $flowIssues = collect($reportWithPostedGap['checks']['contribution_flow_integrity']['issues']);
+
+    expect($reportWithPostedGap['checks']['contribution_flow_integrity']['severity'])->toBe('critical')
+        ->and($reportWithPostedGap['checks']['contribution_flow_integrity']['issue_count'])->toBeGreaterThan(0)
+        ->and($flowIssues->pluck('contribution_id')->unique()->all())->toContain($postedMissingLegs->id)
+        ->and($reportWithPostedGap['checks']['contributions_ledger']['severity'])->toBe('critical')
+        ->and($reportWithPostedGap['checks']['contributions_ledger']['missing_ledger_count'])->toBe(1)
+        ->and($reportWithPostedGap['checks']['contributions_ledger']['missing_ledger_sample'][0]['contribution_id'])
+        ->toBe($postedMissingLegs->id);
+});
+
 test('global trial diagnostics surface suspected unbalanced posting groups', function () {
     $masterCash = Account::masterCash();
     expect($masterCash)->not->toBeNull();

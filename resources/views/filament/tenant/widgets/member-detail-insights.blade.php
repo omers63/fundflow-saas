@@ -40,36 +40,40 @@
                         </p>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-3">
+                    <div class="grid min-w-0 grid-cols-2 gap-3">
                         <a href="{{ $d['balances']['cash']['url'] ?? '#' }}"
                             @class([
-                                'block rounded-xl border border-gray-200/90 bg-white/80 px-3 py-2.5 transition hover:bg-white dark:border-white/10 dark:bg-gray-900/50 dark:hover:bg-gray-900/70',
+                                'block min-w-0 overflow-hidden rounded-xl border border-gray-200/90 bg-white/80 px-3 py-2.5 transition hover:bg-white dark:border-white/10 dark:bg-gray-900/50 dark:hover:bg-gray-900/70',
                                 'pointer-events-none opacity-70' => empty($d['balances']['cash']['url']),
                             ])>
-                            <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('Cash') }}</p>
-                            <p @class([
-                                'mt-0.5 text-xl font-extrabold tabular-nums tracking-tight',
-                                $d['balances']['cash']['negative']
-                                    ? 'text-rose-600 dark:text-rose-400'
-                                    : 'text-emerald-600 dark:text-emerald-400',
-                            ])>
-                                <x-member::amount :value="$d['balances']['cash']['amount']" :currency="$currency" />
-                            </p>
+                            <p class="truncate text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('Cash') }}</p>
+                            <x-ff-stat-line
+                                :amount="$d['balances']['cash']['amount']"
+                                :currency="$currency"
+                                @class([
+                                    'mt-0.5 text-lg font-extrabold tabular-nums tracking-tight sm:text-xl',
+                                    $d['balances']['cash']['negative']
+                                        ? 'text-rose-600 dark:text-rose-400'
+                                        : 'text-emerald-600 dark:text-emerald-400',
+                                ])
+                            />
                         </a>
                         <a href="{{ $d['balances']['fund']['url'] ?? '#' }}"
                             @class([
-                                'block rounded-xl border border-gray-200/90 bg-white/80 px-3 py-2.5 transition hover:bg-white dark:border-white/10 dark:bg-gray-900/50 dark:hover:bg-gray-900/70',
+                                'block min-w-0 overflow-hidden rounded-xl border border-gray-200/90 bg-white/80 px-3 py-2.5 transition hover:bg-white dark:border-white/10 dark:bg-gray-900/50 dark:hover:bg-gray-900/70',
                                 'pointer-events-none opacity-70' => empty($d['balances']['fund']['url']),
                             ])>
-                            <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('Fund') }}</p>
-                            <p @class([
-                                'mt-0.5 text-xl font-extrabold tabular-nums tracking-tight',
-                                $d['balances']['fund']['negative']
-                                    ? 'text-rose-600 dark:text-rose-400'
-                                    : 'text-indigo-600 dark:text-indigo-400',
-                            ])>
-                                <x-member::amount :value="$d['balances']['fund']['amount']" :currency="$currency" />
-                            </p>
+                            <p class="truncate text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ __('Fund') }}</p>
+                            <x-ff-stat-line
+                                :amount="$d['balances']['fund']['amount']"
+                                :currency="$currency"
+                                @class([
+                                    'mt-0.5 text-lg font-extrabold tabular-nums tracking-tight sm:text-xl',
+                                    $d['balances']['fund']['negative']
+                                        ? 'text-rose-600 dark:text-rose-400'
+                                        : 'text-indigo-600 dark:text-indigo-400',
+                                ])
+                            />
                         </a>
                     </div>
 
