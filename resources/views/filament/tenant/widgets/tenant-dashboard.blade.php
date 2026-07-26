@@ -1,15 +1,16 @@
 @php
 $d = $this->getData();
-$breakdown = $d['collection_breakdown'];
-$loanQueue = $d['loan_queue_preview'];
-$loanRunning = $d['loan_running_preview'] ?? [];
-$activity = $d['recent_activity'];
-$pipeline = $d['loan_pipeline'];
 $loanPortfolio = $d['loan_portfolio'];
-$lifetime = $d['lifetime_fund_activity'];
-$forecast = $d['forecast_summary'];
 $greeting = $d['greeting'];
-$pool = $d['pool_health'];
+$pipeline = $d['loan_pipeline'];
+$analyticsUnfolded = $this->isSectionUnfolded('analytics');
+$breakdown = $analyticsUnfolded ? ($d['collection_breakdown'] ?? []) : [];
+$loanQueue = $analyticsUnfolded ? ($d['loan_queue_preview'] ?? []) : [];
+$loanRunning = $analyticsUnfolded ? ($d['loan_running_preview'] ?? []) : [];
+$activity = $analyticsUnfolded ? ($d['recent_activity'] ?? []) : [];
+$lifetime = $analyticsUnfolded ? ($d['lifetime_fund_activity'] ?? []) : [];
+$forecast = $analyticsUnfolded ? ($d['forecast_summary'] ?? []) : [];
+$pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
 @endphp
     
     <div class="w-full max-w-none space-y-3 pb-6">
@@ -95,46 +96,6 @@ $pool = $d['pool_health'];
                 </a>
             @endforeach
         </div>
-    
-        <div
-            class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-            <div
-                class="flex flex-col gap-2 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
-                <div class="flex items-center gap-2">
-                    <x-heroicon-o-sparkles class="h-4 w-4 text-violet-500" />
-                    <span
-                        class="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Forecast summary') }}</span>
-                </div>
-                <span @class([
-    'inline-flex items-center rounded-lg px-2.5 py-1 text-[10px] font-semibold ring-1 ring-inset',
-    'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/30 dark:text-red-300 dark:ring-red-800/40' => ($forecast['top_risk']['tone'] ?? '') === 'danger',
-    'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-800/40' => ($forecast['top_risk']['tone'] ?? '') === 'warning',
-    'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-800/40' => !in_array(($forecast['top_risk']['tone'] ?? ''), ['danger', 'warning'], true),
-])>
-                {{ $forecast['top_risk']['label'] }} · {{ $forecast['top_risk']['secondary'] }}
-                </span>
-            </div>
-            <div class="grid grid-cols-1 gap-3 p-4 lg:grid-cols-3">
-                @foreach ($forecast['cards'] as $card)
-                    <a href="{{ $card['url'] }}"
-                        class="group rounded-xl border border-gray-200/80 bg-gray-50/70 px-3 py-3 transition hover:-translate-y-0.5 hover:border-sky-200 hover:bg-white hover:shadow-sm dark:border-gray-700 dark:bg-gray-800/70 dark:hover:border-sky-800/50 dark:hover:bg-gray-800">
-                        <div class="flex items-center justify-between gap-2">
-                            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                {{ $card['label'] }}</p>
-                            <span @class([
-        'rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase',
-        'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' => ($card['tone'] ?? '') === 'danger',
-        'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' => ($card['tone'] ?? '') === 'warning',
-        'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' => !in_array(($card['tone'] ?? ''), ['danger', 'warning'], true),
-    ])>{{ $card['secondary'] }}</span>
-                        </div>
-                        <p class="mt-2 text-lg font-bold tabular-nums text-gray-900 dark:text-white">{{ $card['primary'] }}</p>
-                        <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">{{ $card['detail'] }}</p>
-                        <p class="mt-1 text-[11px] text-gray-400">{{ $card['meta'] }}</p>
-                    </a>
-                @endforeach
-            </div>
-        </div>
 
     {{-- ── Active loan portfolio ── --}}
     <div
@@ -201,6 +162,53 @@ $pool = $d['pool_health'];
         </div>
     </div>
 
+
+    <x-ff-lazy-fold
+        section="analytics"
+        :unfolded="$analyticsUnfolded"
+        :title="__('More analytics')"
+        :hint="__('Expand to load forecasts, pool health, queues, trends, and recent activity.')"
+    >
+@if ($analyticsUnfolded)
+        <div
+            class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+            <div
+                class="flex flex-col gap-2 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
+                <div class="flex items-center gap-2">
+                    <x-heroicon-o-sparkles class="h-4 w-4 text-violet-500" />
+                    <span
+                        class="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Forecast summary') }}</span>
+                </div>
+                <span @class([
+    'inline-flex items-center rounded-lg px-2.5 py-1 text-[10px] font-semibold ring-1 ring-inset',
+    'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/30 dark:text-red-300 dark:ring-red-800/40' => ($forecast['top_risk']['tone'] ?? '') === 'danger',
+    'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-800/40' => ($forecast['top_risk']['tone'] ?? '') === 'warning',
+    'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-800/40' => !in_array(($forecast['top_risk']['tone'] ?? ''), ['danger', 'warning'], true),
+])>
+                {{ $forecast['top_risk']['label'] }} · {{ $forecast['top_risk']['secondary'] }}
+                </span>
+            </div>
+            <div class="grid grid-cols-1 gap-3 p-4 lg:grid-cols-3">
+                @foreach ($forecast['cards'] as $card)
+                    <a href="{{ $card['url'] }}"
+                        class="group rounded-xl border border-gray-200/80 bg-gray-50/70 px-3 py-3 transition hover:-translate-y-0.5 hover:border-sky-200 hover:bg-white hover:shadow-sm dark:border-gray-700 dark:bg-gray-800/70 dark:hover:border-sky-800/50 dark:hover:bg-gray-800">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                {{ $card['label'] }}</p>
+                            <span @class([
+        'rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase',
+        'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' => ($card['tone'] ?? '') === 'danger',
+        'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' => ($card['tone'] ?? '') === 'warning',
+        'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' => !in_array(($card['tone'] ?? ''), ['danger', 'warning'], true),
+    ])>{{ $card['secondary'] }}</span>
+                        </div>
+                        <p class="mt-2 text-lg font-bold tabular-nums text-gray-900 dark:text-white">{{ $card['primary'] }}</p>
+                        <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">{{ $card['detail'] }}</p>
+                        <p class="mt-1 text-[11px] text-gray-400">{{ $card['meta'] }}</p>
+                    </a>
+                @endforeach
+            </div>
+        </div>
     {{-- ── Lifetime fund activity ── --}}
     <div
         class="ff-tenant-lifetime-activity rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
@@ -702,6 +710,10 @@ $lateFeeTiers = [
         </div>
     </div>
 
+
+@endif
+    </x-ff-lazy-fold>
+
     {{-- ── Row 5: Workspace quick-access links ── --}}
     <div>
         <h3 class="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">{{ __('Workspace') }}</h3>
@@ -728,4 +740,4 @@ $lateFeeTiers = [
         </div>
     </div>
 
-</div>
+    </div>

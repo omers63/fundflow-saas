@@ -79,6 +79,8 @@ final class LoanDelinquencyTables
 
         return TableGrouping::apply($table
             ->query($query)
+            ->queryStringIdentifier('delinquency_overdue')
+            ->deferLoading()
             ->columnManager(true)
             ->columns([
                 MemberTableColumns::loanMemberNumber(),
@@ -159,6 +161,8 @@ final class LoanDelinquencyTables
 
         return TableGrouping::apply($table
             ->query(self::guarantorExposureQuery())
+            ->queryStringIdentifier('delinquency_guarantor')
+            ->deferLoading()
             ->columnManager(true)
             ->columns([
                 MemberTableColumns::relationNumber()
@@ -241,6 +245,8 @@ final class LoanDelinquencyTables
                     ->whereIn('id', $ids === [] ? [0] : $ids)
                     ->with(['cashAccount', 'fundAccount']),
             )
+            ->queryStringIdentifier('delinquency_policy')
+            ->deferLoading()
             ->columnManager(true)
             ->columns([
                 MemberTableColumns::number(label: __('Member #'))

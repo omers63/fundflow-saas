@@ -336,6 +336,18 @@ final class LoanInsightsService
      */
     public function delinquencySnapshot(): array
     {
+        return TenantRuntimeCache::remember(
+            'loan_insights:delinquency_snapshot',
+            60,
+            fn(): array => $this->buildDelinquencySnapshot(),
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildDelinquencySnapshot(): array
+    {
         $currency = Setting::get('general', 'currency', 'USD');
         $delinquency = app(LoanDelinquencyService::class);
 

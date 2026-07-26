@@ -1,9 +1,9 @@
-<laravel-boost-guidelines>
+<agent-guidelines>
 === foundation rules ===
 
-# Laravel Boost Guidelines
+# Agent Guidelines
 
-The Laravel Boost guidelines are specifically curated by Laravel maintainers for this application. These guidelines should be followed closely to ensure the best experience when building Laravel applications.
+These guidelines should be followed closely to ensure the best experience when building this Laravel application.
 
 ## Foundational Context
 
@@ -14,8 +14,6 @@ This application is a Laravel application and its main Laravel ecosystems packag
 - laravel/framework (LARAVEL) - v12
 - laravel/prompts (PROMPTS) - v0
 - livewire/livewire (LIVEWIRE) - v4
-- laravel/boost (BOOST) - v2
-- laravel/mcp (MCP) - v0
 - laravel/pail (PAIL) - v1
 - laravel/pint (PINT) - v1
 - laravel/sail (SAIL) - v1
@@ -32,6 +30,10 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - You must follow all existing code conventions used in this application. When creating or editing a file, check sibling files for the correct structure, approach, and naming.
 - Use descriptive names for variables and methods. For example, `isRegisteredForDiscounts`, not `discount()`.
 - Check for existing components to reuse before writing a new one.
+- **Mobile-first UI:** Design for small viewports first. Filament uses shared `resources/css/filament/mobile-panels.css` plus global `TextColumn` / `TextEntry` defaults (wrapped cell text, compact `TextSize::ExtraSmall`, wrapped column headers). Prefer narrow layouts that do not rely on horizontal scrolling for critical information. Only override wrap/size when there is a deliberate reason.
+- **Table totals row:** For every table, show **one** footer row for the **full filtered result set** (not a separate per-page totals row). Only **Sum** summarizers are attached automatically, and only for clearly monetary / quantity-style columns (`isMoney()`, `*_amount`, or an allow-listed base name such as `balance`, `price`, `quantity`, import row counts, etc.). Each sum uses the **column’s own label** as its summarizer label. Count and average are not used globally. Tables may still show Filament’s default summary heading; grouped tables may add group summary rows.
+- **Table column headers:** Resolved header labels (string labels) are normalized with **`Str::ucfirst()`** so the first character is uppercase (e.g. translations that return lowercase). Implemented via container bindings in `AppServiceProvider` and `App\Filament\Tables\Columns\*` / `CapitalizesTableColumnHeaderLabel`. `Htmlable` labels are left unchanged.
+- **Striped tables:** Every Filament table uses **`->striped()`** by default (alternating row backgrounds). Opt out on a specific table with `->striped(false)` if needed.
 
 ## Verification Scripts
 
@@ -54,41 +56,14 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 - Be concise in your explanations - focus on what's important rather than explaining obvious details.
 
-=== boost rules ===
+=== artisan rules ===
 
-# Laravel Boost
-
-## Tools
-
-- Laravel Boost is an MCP server with tools designed specifically for this application. Prefer Boost tools over manual alternatives like shell commands or file reads.
-- Use `database-query` to run read-only queries against the database instead of writing raw SQL in tinker.
-- Use `database-schema` to inspect table structure before writing migrations or models.
-- Use `get-absolute-url` to resolve the correct scheme, domain, and port for project URLs. Always use this before sharing a URL with the user.
-- Use `browser-logs` to read browser logs, errors, and exceptions. Only recent logs are useful, ignore old entries.
-
-## Searching Documentation (IMPORTANT)
-
-- Always use `search-docs` before making code changes. Do not skip this step. It returns version-specific docs based on installed packages automatically.
-- Pass a `packages` array to scope results when you know which packages are relevant.
-- Use multiple broad, topic-based queries: `['rate limiting', 'routing rate limiting', 'routing']`. Expect the most relevant results first.
-- Do not add package names to queries because package info is already shared. Use `test resource table`, not `filament 4 test resource table`.
-
-### Search Syntax
-
-1. Use words for auto-stemmed AND logic: `rate limit` matches both "rate" AND "limit".
-2. Use `"quoted phrases"` for exact position matching: `"infinite scroll"` requires adjacent words in order.
-3. Combine words and phrases for mixed queries: `middleware "rate limit"`.
-4. Use multiple queries for OR logic: `queries=["authentication", "middleware"]`.
-
-## Artisan
+# Artisan & Tinker
 
 - Run Artisan commands directly via the command line (e.g., `php artisan route:list`). Use `php artisan list` to discover available commands and `php artisan [command] --help` to check parameters.
 - Inspect routes with `php artisan route:list`. Filter with: `--method=GET`, `--name=users`, `--path=api`, `--except-vendor`, `--only-vendor`.
 - Read configuration values using dot notation: `php artisan config:show app.name`, `php artisan config:show database.default`. Or read config files directly from the `config/` directory.
 - To check environment variables, read the `.env` file directly.
-
-## Tinker
-
 - Execute PHP in app context for debugging and testing code. Do not create models without user approval, prefer tests with factories instead. Prefer existing Artisan commands over custom tinker code.
 - Always use single quotes to prevent shell expansion: `php artisan tinker --execute 'Your::code();'`
   - Double quotes for PHP strings inside: `php artisan tinker --execute 'User::where("active", true)->count();'`
@@ -115,7 +90,8 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 # Test Enforcement
 
 - Every change must be programmatically tested. Write a new test or update an existing test, then run the affected tests to make sure they pass.
-- Run the minimum number of tests needed to ensure code quality and speed. Use `php artisan test --compact` with a specific filename or filter.
+- Run the minimum number of tests needed to ensure code quality and speed. Prefer `composer test` or `bash bin/test --compact` (hard wall-clock timeout + kill). Scope with a specific filename or `--filter=`.
+- Never leave Pest/PHPUnit running in the background. If a run hangs or is interrupted, kill it: `pkill -KILL -f 'vendor/pestphp/pest/bin/pest'` and `pkill -KILL -f 'vendor/phpunit/phpunit/phpunit'`.
 
 === laravel/core rules ===
 
@@ -151,7 +127,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 # Laravel 12
 
-- CRITICAL: ALWAYS use `search-docs` tool for version-specific Laravel documentation and updated code examples.
+- Prefer version-specific Laravel / Filament documentation for the installed package versions before relying on memory for APIs.
 - Since Laravel 11, Laravel has a new streamlined file structure which this project uses.
 
 ## Laravel 12 Structure
@@ -185,7 +161,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 - This project uses Pest for testing. Create tests: `php artisan make:test --pest {name}`.
 - The `{name}` argument should not include the test suite directory. Use `php artisan make:test --pest SomeFeatureTest` instead of `php artisan make:test --pest Feature/SomeFeatureTest`.
-- Run tests: `php artisan test --compact` or filter: `php artisan test --compact --filter=testName`.
+- Run tests via `composer test` / `bash bin/test --compact` (15-minute suite timeout by default, `FF_TEST_TIMEOUT` to override). PHPUnit also enforces per-test time limits (`enforceTimeLimit` in `phpunit.xml`).
 - Do NOT delete tests without approval.
 
-</laravel-boost-guidelines>
+</agent-guidelines>

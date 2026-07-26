@@ -130,6 +130,9 @@ test('admin dashboard http response includes redesign chrome', function () {
         ->test(TenantDashboardWidget::class)
         ->assertSuccessful()
         ->assertSee('ff-tenant-dashboard-hero', false)
+        ->assertSee(__('More analytics', locale: 'ar'), false)
+        ->assertDontSee(__('Fund pool health', locale: 'ar'), false)
+        ->call('unfoldSection', 'analytics')
         ->assertSee(__('Fund pool health', locale: 'ar'), false)
         ->assertSee(__('Loan pipeline', locale: 'ar'), false);
 });

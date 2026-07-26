@@ -200,6 +200,38 @@ test('tenant dashboard snapshot includes greeting and workspace links', function
                 ->pluck('url')
                 ->every(fn ($url): bool => is_string($url) && $url !== '')
         )->toBeTrue();
+
+    expect($this->service->coreSnapshot())->toHaveKeys(['greeting', 'kpi_stats', 'loan_portfolio', 'workspace_sections'])
+        ->and($this->service->coreSnapshot())->not->toHaveKey('pool_health')
+        ->and($this->service->coreSnapshot())->not->toHaveKey('contribution_trend')
+        ->and($this->service->detailsSnapshot())->toHaveKeys([
+                'pool_health',
+                'contribution_trend',
+                'lifetime_fund_activity',
+                'forecast_summary',
+            ]);
+});
+
+test('tenant dashboard widget defers analytics until unfolded', function () {
+    $user = User::create([
+        'name' => 'Fund Admin',
+        'email' => 'dashboard-fold@fund.test',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 1000, 'is_master' => true]);
+    Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 5000, 'is_master' => true]);
+    Account::create(['type' => 'bank', 'name' => 'Master Bank', 'balance' => 2000, 'is_master' => true]);
+
+    $this->actingAs($user, 'tenant');
+
+    Livewire::test(TenantDashboardWidget::class)
+        ->assertSuccessful()
+        ->assertSee(__('More analytics'))
+        ->assertDontSee(__('Fund pool health'))
+        ->call('unfoldSection', 'analytics')
+        ->assertSee(__('Fund pool health'));
 });
 
 test('tenant dashboard resolves filament page urls', function () {
@@ -274,6 +306,7 @@ test('tenant dashboard pool health renders readable variance status markup', fun
 
     $html = Livewire::test(TenantDashboardWidget::class)
         ->assertSuccessful()
+        ->call('unfoldSection', 'analytics')
         ->html();
 
     expect($html)
@@ -429,6 +462,7 @@ test('tenant dashboard loan queue preview includes pipeline stages and running l
 
     Livewire::test(TenantDashboardWidget::class)
         ->assertSuccessful()
+        ->call('unfoldSection', 'analytics')
         ->assertSee(__('Running loans'))
         ->assertSee('Queue Preview Borrower');
 });
@@ -512,6 +546,7 @@ test('tenant dashboard lifetime fund activity summarizes loans contributions and
 
     $html = Livewire::test(TenantDashboardWidget::class)
         ->assertSuccessful()
+        ->call('unfoldSection', 'analytics')
         ->html();
 
     expect($html)

@@ -20,10 +20,35 @@ class TenantDashboardWidget extends Widget
     protected int|string|array $columnSpan = 'full';
 
     /**
+     * @var array<string, bool>
+     */
+    public array $unfoldedSections = [];
+
+    public function unfoldSection(string $section): void
+    {
+        $this->unfoldedSections = [
+            ...$this->unfoldedSections,
+            $section => true,
+        ];
+    }
+
+    public function isSectionUnfolded(string $section): bool
+    {
+        return (bool) ($this->unfoldedSections[$section] ?? false);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function getData(): array
     {
-        return app(TenantDashboardService::class)->snapshot();
+        $service = app(TenantDashboardService::class);
+        $data = $service->coreSnapshot();
+
+        if ($this->isSectionUnfolded('analytics')) {
+            $data = array_merge($data, $service->detailsSnapshot());
+        }
+
+        return $data;
     }
 }

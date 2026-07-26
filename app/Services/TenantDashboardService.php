@@ -60,17 +60,51 @@ final class TenantDashboardService
     ) {}
 
     /**
+     * Full dashboard payload (core + deferred analytics). Prefer {@see coreSnapshot()} / {@see detailsSnapshot()} for progressive UI.
+     *
      * @return array<string, mixed>
      */
     public function snapshot(): array
     {
-        return TenantRuntimeCache::remember('tenant_dashboard_snapshot', 60, fn (): array => $this->buildSnapshot());
+        return TenantRuntimeCache::remember(
+            'tenant_dashboard_snapshot',
+            60,
+            fn(): array => array_merge($this->buildCoreSnapshot(), $this->buildDetailsSnapshot()),
+        );
+    }
+
+    /**
+     * First-paint dashboard data (hero, KPIs, gauges, attention).
+     *
+     * @return array<string, mixed>
+     */
+    public function coreSnapshot(): array
+    {
+        return TenantRuntimeCache::remember(
+            'tenant_dashboard_core',
+            60,
+            fn(): array => $this->buildCoreSnapshot(),
+        );
+    }
+
+    /**
+     * Heavier analytics loaded when the dashboard “More analytics” fold is expanded.
+     *
+     * @return array<string, mixed>
+     */
+    public function detailsSnapshot(): array
+    {
+        return TenantRuntimeCache::remember(
+            'tenant_dashboard_details',
+            60,
+            fn(): array => $this->buildDetailsSnapshot(),
+        );
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function buildSnapshot(): array
+    private function buildCoreSnapshot(): array
     {
         $now = BusinessDay::now();
         $currency = InsightFormatter::currency();
@@ -83,7 +117,6 @@ final class TenantDashboardService
         $loanPortfolio = $this->loanInsights->dashboardPortfolioSlice();
         $masterSnapshot = $this->masterAccounts->dashboardGaugeSlice();
         $bankSnapshot = $this->bankAccounts->dashboardPostGaugeSlice();
-        $treasuryForecast = $this->treasuryForecasts->snapshot();
         $delinquencyCounts = $this->delinquency->digestCounts();
         $queueKpis = $this->loanQueue->kpis();
 
@@ -136,12 +169,11 @@ final class TenantDashboardService
                 $openPeriodLabel,
             ),
             'balances' => $this->balances($masters, $masterBalance, $currency),
-            'gauges' => [
-                $this->fundCoverageGauge($masterSnapshot),
-                $collectionGauge,
-                $this->bankPostGauge($bankSnapshot),
-                $this->loanHealthGauge($loanPortfolio, $delinquencyCounts),
-            ],
+            'loan_pipeline' => $this->loanQueuePipelineSummary($loanPortfolio, $queueKpis),
+            'loan_portfolio' => $this->loanPortfolioSummary($loanPortfolio, $queueKpis),
+            'open_period_label' => $openPeriodLabel,
+            'workspace_sections' => $this->workspaceSections(),
+            // Kept on core so attention KPIs stay accurate without waiting for the analytics fold.
             'attention_cards' => $this->attentionCards(
                 $pendingDeposits,
                 $pendingApplications,
@@ -152,10 +184,34 @@ final class TenantDashboardService
                 $bankSnapshot,
                 $openReconciliationCount,
             ),
+            'gauges' => [
+                $this->fundCoverageGauge($masterSnapshot),
+                $collectionGauge,
+                $this->bankPostGauge($bankSnapshot),
+                $this->loanHealthGauge($loanPortfolio, $delinquencyCounts),
+            ],
+            'sparkline' => $masterSnapshot['sparkline'] ?? [],
+            'sparkline_max' => $masterSnapshot['sparkline_max'] ?? 1,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildDetailsSnapshot(): array
+    {
+        $now = BusinessDay::now();
+        $masters = Account::master()->get()->keyBy('type');
+        $masterBalance = fn(string $type): float => (float) ($masters->get($type)?->balance ?? 0);
+        $loanPortfolio = $this->loanInsights->dashboardPortfolioSlice();
+        $treasuryForecast = $this->treasuryForecasts->snapshot();
+        $delinquencyCounts = $this->delinquency->digestCounts();
+        $activeMembers = Member::active()->count();
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+
+        return [
             'contribution_trend' => $this->contributionTrend($now),
             'loan_trend' => $this->loanInsights->sixMonthLoanVolumeTrend(),
-            'loan_pipeline' => $this->loanQueuePipelineSummary($loanPortfolio, $queueKpis),
-            'loan_portfolio' => $this->loanPortfolioSummary($loanPortfolio, $queueKpis),
             'forecast_summary' => $this->forecastSummary(
                 [],
                 $loanPortfolio['forecast'] ?? [],
@@ -163,10 +219,6 @@ final class TenantDashboardService
                 $treasuryForecast,
             ),
             'lifetime_fund_activity' => $this->lifetimeFundActivity(),
-            'workspace_sections' => $this->workspaceSections(),
-            'sparkline' => $masterSnapshot['sparkline'] ?? [],
-            'sparkline_max' => $masterSnapshot['sparkline_max'] ?? 1,
-            'open_period_label' => $openPeriodLabel,
             'loan_queue_preview' => $this->loanQueue->actionPreview(5),
             'loan_running_preview' => $this->loanQueue->runningLoansPreview(5),
             'recent_activity' => $this->recentActivity(),

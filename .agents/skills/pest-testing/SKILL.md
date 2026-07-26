@@ -43,9 +43,11 @@ it('is true', function () {
 
 ### Running Tests
 
-- Run minimal tests with filter before finalizing: `php artisan test --compact --filter=testName`.
-- Run all tests: `php artisan test --compact`.
-- Run file: `php artisan test --compact tests/Feature/ExampleTest.php`.
+- Prefer `composer test` or `bash bin/test --compact` — wraps Pest in GNU `timeout` (default 900s, override with `FF_TEST_TIMEOUT`) and kills hung runners on exit.
+- Scope runs: `bash bin/test --compact --filter=testName` or `bash bin/test --compact tests/Feature/ExampleTest.php`.
+- PHPUnit `enforceTimeLimit` is on in `phpunit.xml` (default 120s per test).
+- Never leave Pest running in the background. If a run hangs: `pkill -KILL -f 'vendor/pestphp/pest/bin/pest'` and `pkill -KILL -f 'vendor/phpunit/phpunit/phpunit'`.
+- Avoid bare `php artisan test` for long suites on shared hosts — use `bin/test` so a hang cannot burn CPU forever.
 
 ## Assertions
 

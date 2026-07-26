@@ -38,7 +38,7 @@ class LoanDelinquencyService
 
     private ?int $contributionArrearsPeriodCountCache = null;
 
-    /** @var array{periods: int, members: int}|null */
+    /** @var array{periods: int, members: int, member_ids: list<int>}|null */
     private ?array $contributionArrearsDigestStatsCache = null;
 
     /** @var list<int>|null */
@@ -631,12 +631,8 @@ class LoanDelinquencyService
                 : [];
         }
 
-        return $this->contributionArrearsTableRecords()
-            ->pluck('member_id')
-            ->unique()
-            ->map(fn ($id): int => (int) $id)
-            ->values()
-            ->all();
+        // Reuse digest stats — do not materialize full arrears table rows just for IDs.
+        return $this->contributionArrearsDigestStats()['member_ids'];
     }
 
     /**
@@ -792,28 +788,49 @@ class LoanDelinquencyService
     }
 
     /**
-     * @return array{periods: int, members: int}
+     * @return array{periods: int, members: int, member_ids: list<int>}
      */
     private function contributionArrearsDigestStats(): array
     {
         if ($this->contributionArrearsDigestStatsCache !== null) {
-            return $this->contributionArrearsDigestStatsCache;
+            return $this->normalizeContributionArrearsDigestStats($this->contributionArrearsDigestStatsCache);
         }
 
-        return $this->contributionArrearsDigestStatsCache = TenantRuntimeCache::remember(
-            'loan_delinquency:contribution_arrears_digest',
-            60,
-            fn (): array => $this->computeContributionArrearsDigestStats(),
+        return $this->contributionArrearsDigestStatsCache = $this->normalizeContributionArrearsDigestStats(
+            TenantRuntimeCache::remember(
+                'loan_delinquency:contribution_arrears_digest',
+                60,
+                fn(): array => $this->computeContributionArrearsDigestStats(),
+            ),
         );
     }
 
     /**
-     * @return array{periods: int, members: int}
+     * @param  array{periods?: int, members?: int, member_ids?: list<int>}  $stats
+     * @return array{periods: int, members: int, member_ids: list<int>}
+     */
+    private function normalizeContributionArrearsDigestStats(array $stats): array
+    {
+        $memberIds = array_values(array_map(
+            static fn(mixed $id): int => (int) $id,
+            $stats['member_ids'] ?? [],
+        ));
+
+        return [
+            'periods' => (int) ($stats['periods'] ?? 0),
+            'members' => (int) ($stats['members'] ?? count($memberIds)),
+            'member_ids' => $memberIds,
+        ];
+    }
+
+    /**
+     * @return array{periods: int, members: int, member_ids: list<int>}
      */
     private function computeContributionArrearsDigestStats(): array
     {
         $periods = 0;
         $membersWithArrears = 0;
+        $arrearsMemberIds = [];
 
         $members = Member::query()
             ->select(['id', 'monthly_contribution_amount', 'joined_at', 'contribution_arrears_cutoff_date'])
@@ -845,6 +862,7 @@ class LoanDelinquencyService
 
             $membersWithArrears++;
             $periods += $unpaidCount;
+            $arrearsMemberIds[] = (int) $member->id;
         }
 
         $this->contributionArrearsPeriodCountCache = $periods;
@@ -852,6 +870,7 @@ class LoanDelinquencyService
         return [
             'periods' => $periods,
             'members' => $membersWithArrears,
+            'member_ids' => $arrearsMemberIds,
         ];
     }
 

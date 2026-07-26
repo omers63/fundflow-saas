@@ -18,6 +18,7 @@ use App\Models\Tenant\Member;
 use App\Services\LoanInsightsService;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Support\AutomationScheduleSettings;
+use App\Support\TenantRuntimeCache;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -60,6 +61,13 @@ class DelinquencyWorkspacePage extends Page implements HasTable
     #[Url]
     public ?int $memberId = null;
 
+    /**
+     * Folded sections that have been expanded (lazy-load expensive content).
+     *
+     * @var array<string, bool>
+     */
+    public array $unfoldedSections = [];
+
     public static function canAccess(): bool
     {
         return auth()->guard('tenant')->check();
@@ -68,6 +76,19 @@ class DelinquencyWorkspacePage extends Page implements HasTable
     public function mount(): void
     {
         $this->sideTab = DelinquencyTabRegistry::normalize($this->sideTab);
+    }
+
+    public function unfoldSection(string $section): void
+    {
+        $this->unfoldedSections = [
+            ...$this->unfoldedSections,
+            $section => true,
+        ];
+    }
+
+    public function isSectionUnfolded(string $section): bool
+    {
+        return (bool) ($this->unfoldedSections[$section] ?? false);
     }
 
     public function getTitle(): string|Htmlable
@@ -308,13 +329,19 @@ class DelinquencyWorkspacePage extends Page implements HasTable
      */
     public function getTabBadges(): array
     {
-        $delinquency = app(LoanDelinquencyService::class);
+        return TenantRuntimeCache::remember(
+            'delinquency_workspace:tab_badges',
+            60,
+            function (): array {
+                $delinquency = app(LoanDelinquencyService::class);
 
-        return [
-            'overdue' => LoanResource::overdueInstallmentsCount(),
-            'guarantor' => LoanResource::guarantorExposureCount(),
-            'policy' => count($delinquency->delinquentMemberIds()),
-        ];
+                return [
+                    'overdue' => LoanResource::overdueInstallmentsCount(),
+                    'guarantor' => LoanResource::guarantorExposureCount(),
+                    'policy' => count($delinquency->delinquentMemberIds()),
+                ];
+            },
+        );
     }
 
     public function filteredMemberLabel(): ?string
@@ -387,6 +414,8 @@ class DelinquencyWorkspacePage extends Page implements HasTable
     {
         LoanResource::flushListCountCaches();
         app(LoanDelinquencyService::class)->forgetArrearsAggregateCaches();
+        TenantRuntimeCache::forget('delinquency_workspace:tab_badges');
+        TenantRuntimeCache::forget('loan_insights:delinquency_snapshot');
 
         if (method_exists($livewire, 'resetTable')) {
             $livewire->resetTable();
