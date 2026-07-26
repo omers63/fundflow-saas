@@ -189,7 +189,7 @@ Reference: `docs/prompts.txt` items 1–9, `docs/fund-flow-implementation.md`.
 | Delinquency tracking | Yes | `LoanDelinquencyService`, daily job | **Parity** | |
 | Transfer liability to guarantor | Yes | Admin actions + `guarantor_liability_transferred_at` | **Parity** | |
 | Restore borrower liability | Yes | Admin action | **Parity** | |
-| Delinquency workspace (3 tabs) | Ad-hoc in legacy | Loans → Delinquency | **New / better** | Overdue installments, contribution arrears, guarantor exposure. |
+| Delinquency workspace (5 panels) | Ad-hoc in legacy | Operations → Delinquency | **New / better** | Overview, overdue installments, guarantor exposure, policy breaches, related deep-links. |
 | Admin delinquency digest | Email/digest | `delinquency:send-digest` + mail channel | **Parity** | |
 | Member arrears banner | Unknown | `MemberArrearsAlert` on member dashboard | **New** | |
 

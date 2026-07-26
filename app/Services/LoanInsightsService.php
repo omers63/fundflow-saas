@@ -12,6 +12,7 @@ use App\Filament\Tenant\Resources\LoanEligibilityOverrides\LoanEligibilityOverri
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
+use App\Filament\Tenant\Support\DelinquencyTabRegistry;
 use App\Filament\Tenant\Support\SettingsTabRegistry;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\FundTier;
@@ -290,7 +291,7 @@ final class LoanInsightsService
                 'pending' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'pending']]),
                 'active' => LoanResource::listUrl('portfolio', ['status' => ['value' => 'active']]),
                 'outstanding' => LoanResource::listUrl(),
-                'overdue' => LoanResource::listTabUrl('overdue_installments'),
+                'overdue' => DelinquencyTabRegistry::url('overdue'),
                 'new' => LoanResource::listUrl(),
                 'disbursed' => LoanResource::listUrl(),
             ]),
@@ -375,7 +376,7 @@ final class LoanInsightsService
                     ])
                     : __('No overdue installments or contribution arrears in the current lookback.'),
                 'cta_label' => $totalIssues > 0 ? __('Review overdue') : null,
-                'cta_url' => $totalIssues > 0 ? LoanResource::listTabUrl('overdue_installments') : null,
+                'cta_url' => $totalIssues > 0 ? DelinquencyTabRegistry::url('overdue') : null,
             ],
             'kpis' => InsightKpi::linkMany([
                 ['key' => 'overdue', 'label' => __('Overdue'), 'value' => (string) $overdueInstallments, 'sub' => __('Installments'), 'icon' => 'heroicon-o-calendar-days', 'accent' => 'rose', 'active' => $overdueInstallments > 0, 'value_class' => $overdueInstallments > 0 ? 'text-rose-600 dark:text-rose-400' : null],
@@ -385,12 +386,12 @@ final class LoanInsightsService
                 ['key' => 'guarantor', 'label' => __('Guarantor'), 'value' => (string) $guarantorTransferred, 'sub' => __('Liability transferred'), 'icon' => 'heroicon-o-shield-exclamation', 'accent' => 'sky', 'active' => $guarantorTransferred > 0],
                 ['key' => 'exposure', 'label' => __('Exposure'), 'value' => (string) $guarantorAtRisk, 'sub' => __('Past grace'), 'icon' => 'heroicon-o-exclamation-circle', 'accent' => 'rose', 'active' => $guarantorAtRisk > 0],
             ], [
-                'overdue' => LoanResource::listTabUrl('overdue_installments'),
-                'at_risk' => LoanResource::listTabUrl('overdue_installments'),
+                'overdue' => DelinquencyTabRegistry::url('overdue'),
+                'at_risk' => DelinquencyTabRegistry::url('overdue'),
                 'arrears' => ContributionResource::listTabUrl('arrears'),
-                'delinquent' => MemberResource::listTabUrl('delinquent'),
-                'guarantor' => LoanResource::listTabUrl('guarantor_exposure'),
-                'exposure' => LoanResource::listTabUrl('guarantor_exposure'),
+                'delinquent' => DelinquencyTabRegistry::url('policy'),
+                'guarantor' => DelinquencyTabRegistry::url('guarantor'),
+                'exposure' => DelinquencyTabRegistry::url('guarantor'),
             ]),
             'pipeline' => [
                 'overdue_installments' => $overdueInstallments,
@@ -398,10 +399,10 @@ final class LoanInsightsService
                 'guarantor_at_risk' => $guarantorAtRisk,
                 'guarantor_transferred' => $guarantorTransferred,
                 'delinquent_members' => $delinquentMembers,
-                'delinquency_url' => LoanResource::listTabUrl('overdue_installments'),
-                'delinquency_installments_url' => LoanResource::listTabUrl('overdue_installments'),
+                'delinquency_url' => DelinquencyTabRegistry::url('overdue'),
+                'delinquency_installments_url' => DelinquencyTabRegistry::url('overdue'),
                 'delinquency_contributions_url' => ContributionResource::listTabUrl('arrears'),
-                'delinquency_guarantor_url' => LoanResource::listTabUrl('guarantor_exposure'),
+                'delinquency_guarantor_url' => DelinquencyTabRegistry::url('guarantor'),
                 'delinquency_members_url' => MemberResource::listTabUrl('delinquent'),
             ],
         ];
@@ -576,7 +577,7 @@ final class LoanInsightsService
                 'pending_emis' => $outstandingUrl,
                 'rate' => $outstandingUrl,
                 'ready_cash' => $outstandingUrl,
-                'overdue' => LoanResource::listTabUrl('overdue_installments'),
+                'overdue' => DelinquencyTabRegistry::url('overdue'),
             ]),
             'collection_amounts' => $this->emiCycleCollectionAmounts($catalog, $month, $year, $isOpen, $metrics),
         ];
@@ -642,7 +643,7 @@ final class LoanInsightsService
                 'collected' => $collectedUrl,
                 'pending_emis' => $arrearsUrl,
                 'rate' => $arrearsUrl,
-                'overdue' => LoanResource::listTabUrl('overdue_installments'),
+                'overdue' => DelinquencyTabRegistry::url('overdue'),
             ]),
             'collection_amounts' => $this->emiCycleCollectionAmounts($catalog, $month, $year, $isOpen, $metrics),
         ];
@@ -705,7 +706,7 @@ final class LoanInsightsService
                 'amount' => $collectedUrl,
                 'pending_emis' => $outstandingUrl,
                 'collect' => $outstandingUrl,
-                'overdue' => LoanResource::listTabUrl('overdue_installments'),
+                'overdue' => DelinquencyTabRegistry::url('overdue'),
             ]),
             'collection_amounts' => $this->emiCycleCollectionAmounts($catalog, $month, $year, $isOpen, $metrics),
         ];

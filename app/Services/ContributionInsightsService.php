@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
-use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
+use App\Filament\Tenant\Support\DelinquencyTabRegistry;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
@@ -343,8 +343,8 @@ final class ContributionInsightsService
                 'members' => $arrearsUrl,
                 'delinquent' => MemberResource::listTabUrl('delinquent'),
                 'collect' => ContributionResource::listTabUrl('collect'),
-                'overdue' => LoanResource::listTabUrl('overdue_installments'),
-                'guarantor' => LoanResource::listTabUrl('guarantor_exposure'),
+                'overdue' => DelinquencyTabRegistry::url('overdue'),
+                'guarantor' => DelinquencyTabRegistry::url('guarantor'),
             ]),
             'pipeline' => [
                 'arrears_periods' => $arrearsPeriods,
@@ -355,8 +355,8 @@ final class ContributionInsightsService
                 'arrears_url' => $arrearsUrl,
                 'collect_url' => ContributionResource::listTabUrl('collect'),
                 'delinquent_url' => MemberResource::listTabUrl('delinquent'),
-                'overdue_url' => LoanResource::listTabUrl('overdue_installments'),
-                'guarantor_url' => LoanResource::listTabUrl('guarantor_exposure'),
+                'overdue_url' => DelinquencyTabRegistry::url('overdue'),
+                'guarantor_url' => DelinquencyTabRegistry::url('guarantor'),
             ],
             'collection_amounts' => $this->contributionCycleCollectionAmounts($month, $year),
         ];

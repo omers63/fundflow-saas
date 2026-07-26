@@ -45,29 +45,33 @@ Previously, most logic lived in services and cron but was **not wired end-to-end
 
 `loans:check-defaults` now runs: **mark overdue → sync members → warnings / guarantor debits**.
 
-### 2. Admin UI (distributed by domain)
+### 2. Admin UI (Operations → Delinquency + related)
 
-Delinquency is no longer a standalone page. Use:
+Primary risk workspace: **Operations → Delinquency** (`DelinquencyWorkspacePage`). See also `docs/delinquency-tabs-ux.md`.
 
-| Concern | Where | Tab / action |
+| Concern | Where | Panel / action |
 |--------|--------|----------------|
-| Overdue loan installments | **Loans** list | **Overdue installments** |
-| Guarantor exposure | **Loans** list | **Guarantor exposure** |
-| Contribution arrears | **Contributions** list | **Arrears** |
-| Delinquent members | **Members** list | **Delinquent** |
+| Overdue loan installments | **Operations → Delinquency** | **Overdue** |
+| Guarantor exposure | **Operations → Delinquency** | **Guarantor** |
+| Policy breaches | **Operations → Delinquency** | **Policy breaches** |
+| Contribution arrears | **Contributions** list | Ledger → **Arrears** |
+| Members in arrears | **Members** list | **Arrears** |
 | Member status (sync / restore) | **Member** edit | **Delinquency** action group |
-| Policy thresholds | **Settings** → Contributions | Delinquency policy section |
+| Policy thresholds | **Settings** → Collection | Delinquency policy section |
+| Digest / check schedule | **Settings** → Collection | Automation times + notify toggles |
 
 **Shared tables:** `app/Filament/Support/LoanDelinquencyTables.php`  
-**Maintenance actions:** `app/Filament/Support/LoanDelinquencyHeaderActions.php` on **Loans → Delinquency** only (not on Contributions)
+**Maintenance actions:** `app/Filament/Support/LoanDelinquencyHeaderActions.php` on **Operations → Delinquency** only (not on Contributions)
 
 - **Run delinquency check** — full `runDailyMaintenance()`
 - **Mark overdue only** — `markOverdueInstallments()` only
 - **Send admin digest** — notifies tenant admins when there is activity to review
 
-Contribution ledger Arrears is an inventory/collection surface for unpaid contribution periods; loan EMI overdue tools stay on Loans.
+Contribution ledger Arrears is an inventory/collection surface for unpaid contribution periods; loan EMI overdue tools stay on Delinquency.
 
-**Insights:** `LoanInsightsService::delinquencySnapshot()` on loan list tabs; KPI links route to the tabs above.
+**Insights:** `LoanInsightsService::delinquencySnapshot()` on the Delinquency workspace; KPI links use `DelinquencyTabRegistry`.
+
+Dashboard, Reports, Jobs, and digest notifications deep-link into the workspace; they do not host maintenance tools themselves.
 
 ### 3. Loan view actions
 
@@ -200,7 +204,7 @@ On **Members → View** (`MemberDelinquencyActions` + infolist section):
 | Sync delinquency status | `syncMemberDelinquencyStatusForMember()` — promote to delinquent or restore when arrears clear |
 | Mark delinquent | Manual delinquent flag (blocks member portal) |
 | Restore active | Restore when arrears cleared; optional **force** restore |
-| Delinquency workspace | Opens Loans → Delinquency |
+| Delinquency workspace | Opens Operations → Delinquency |
 
 **Delinquency** infolist block: overdue installment count, unpaid contribution period labels.
 

@@ -3,10 +3,9 @@
 declare(strict_types=1);
 
 use App\Filament\Tenant\Pages\AuditSystemPage;
-use App\Filament\Tenant\Pages\CollectionCalendarPage;
 use App\Filament\Tenant\Pages\Dashboard;
+use App\Filament\Tenant\Pages\DelinquencyWorkspacePage;
 use App\Filament\Tenant\Pages\DisbursementsPage;
-use App\Filament\Tenant\Pages\MessagesInboxPage;
 use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Filament\Tenant\Pages\ReportsPage;
 use App\Filament\Tenant\Pages\Settings;
@@ -52,6 +51,7 @@ const ADMIN_PORTAL_HTTP_SMOKE_ROUTES = [
     ['path' => '/admin/loan-queue', 'label' => 'loan queue'],
     ['path' => '/admin/contributions', 'label' => 'collections'],
     ['path' => '/admin/disbursements', 'label' => 'disbursements'],
+    ['path' => '/admin/delinquency', 'label' => 'delinquency'],
     ['path' => '/admin/bank-accounts', 'label' => 'bank clearing'],
     ['path' => '/admin/transactions', 'label' => 'transactions'],
     ['path' => '/admin/reconciliation', 'label' => 'reconciliation'],
@@ -212,13 +212,12 @@ test('tenant admin redesign livewire pages render without error', function (stri
 })->with([
     Dashboard::class,
     DisbursementsPage::class,
+    DelinquencyWorkspacePage::class,
     ReportsPage::class,
     ReconciliationOverviewPage::class,
     ListTransactions::class,
     AuditSystemPage::class,
     Settings::class,
-    MessagesInboxPage::class,
-    CollectionCalendarPage::class,
 ]);
 
 test('consolidated sidebar registry matches live navigation labels in english', function () {
@@ -233,7 +232,7 @@ test('consolidated sidebar registry matches live navigation labels in english', 
         ->values()
         ->all();
 
-    expect($labels)->toHaveCount(18);
+    expect($labels)->toHaveCount(20);
 
     foreach (TenantSidebarRegistry::consolidatedNavigationLabels() as $label) {
         expect($labels)->toContain($label);

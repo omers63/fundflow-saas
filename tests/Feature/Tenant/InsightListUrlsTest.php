@@ -51,11 +51,12 @@ test('loan list url uses filters and includes tab when not default', function ()
         ->toContain('filters')
         ->not->toContain('tableFilters');
 
-    $overdueUrl = LoanResource::listUrl('overdue_installments', ['status' => ['value' => 'overdue']]);
+    $overdueUrl = LoanResource::listUrl('overdue_installments', ['member_id' => ['value' => '7']]);
 
     expect($overdueUrl)
-        ->toContain('tab=delinquency')
-        ->toContain('filters')
+        ->toContain('/admin/delinquency')
+        ->toContain('sideTab=overdue')
+        ->toContain('memberId=7')
         ->not->toContain('?tab=overdue_installments?');
 });
 

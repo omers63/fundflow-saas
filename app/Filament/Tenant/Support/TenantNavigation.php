@@ -32,13 +32,15 @@ final class TenantNavigation
 
     public const SORT_DISBURSEMENTS = 15;
 
-    public const SORT_DEPOSITS = 16;
+    public const SORT_DELINQUENCY = 16;
 
-    public const SORT_CASH_OUTS = 17;
+    public const SORT_DEPOSITS = 17;
 
-    public const SORT_CASH_TRANSFERS = 18;
+    public const SORT_CASH_OUTS = 18;
 
-    public const SORT_MEMBER_REQUESTS = 19;
+    public const SORT_CASH_TRANSFERS = 19;
+
+    public const SORT_MEMBER_REQUESTS = 20;
 
     /** Consolidated sidebar — Finance */
     public const SORT_BANK_CLEARING = 10;

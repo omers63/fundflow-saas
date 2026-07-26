@@ -51,7 +51,7 @@ final class ContributionListTableHeaderActions
      */
     public static function arrears(): array
     {
-        // Loan EMI tools (mark overdue, guarantor maintenance) live on Loans → Delinquency.
+        // Loan EMI tools (mark overdue, guarantor maintenance) live on Operations → Delinquency.
         return [];
     }
 

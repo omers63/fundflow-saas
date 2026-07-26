@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Support\LoanListTableHeaderActions;
+use App\Filament\Tenant\Pages\DelinquencyWorkspacePage;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Loans\Pages\ListLoans;
 use App\Filament\Tenant\Resources\Members\MemberResource;
@@ -15,7 +16,6 @@ use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
-use App\Support\Lang;
 use App\Support\MemberNumberSettings;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
@@ -71,24 +71,25 @@ test('legacy emi collect tab url redirects to collection segment', function () {
         ->assertSee(__('To collect'), false);
 });
 
-test('legacy overdue installments tab url maps to delinquency view', function () {
+test('legacy overdue installments tab url maps to delinquency workspace', function () {
     expect(LoanResource::listTabUrl('overdue_installments'))
-        ->toContain('tab=delinquency')
+        ->toContain('/admin/delinquency')
+        ->toContain('sideTab=overdue')
         ->not->toContain('tab=overdue_installments');
 
-    $path = parse_url(LoanResource::listTabUrl('overdue_installments'), PHP_URL_PATH) ?? '/admin/loans';
+    $path = parse_url(LoanResource::listTabUrl('overdue_installments'), PHP_URL_PATH) ?? '/admin/delinquency';
     $query = parse_url(LoanResource::listTabUrl('overdue_installments'), PHP_URL_QUERY);
 
     $this->get('http://'.$this->domain.$path.($query ? '?'.$query : ''))
         ->assertSuccessful()
         ->assertSee(__('Delinquency'), false)
-        ->assertSee(Lang::formatUiLabel(__('Overdue installments')), false);
+        ->assertSee(__('Overdue'), false);
 });
 
 test('legacy guarantor exposure tab url maps to delinquency guarantor view', function () {
     expect(LoanResource::listTabUrl('guarantor_exposure'))
-        ->toContain('tab=delinquency')
-        ->toContain('view=guarantor');
+        ->toContain('/admin/delinquency')
+        ->toContain('sideTab=guarantor');
 });
 
 test('legacy eligibility reviews tab url maps to portfolio eligibility view', function () {
@@ -606,12 +607,11 @@ test('collected list uses actual repayment cash for final legacy top-up installm
         ->and($catalog->collectedInstallmentsCashTotal(12, 2025))->toBe(900.0);
 });
 
-test('delinquency tab exposes maintenance actions on overdue view', function () {
-    Livewire::test(ListLoans::class)
-        ->set('activeTab', 'delinquency')
-        ->set('delinquencyView', 'overdue')
-        ->mountTableAction('markOverdueInstallments')
-        ->callMountedTableAction()
+test('delinquency workspace exposes maintenance actions on overdue view', function () {
+    Livewire::test(DelinquencyWorkspacePage::class, ['sideTab' => 'overdue'])
+        ->assertSuccessful()
+        ->mountAction('markOverdueInstallments')
+        ->callMountedAction()
         ->assertNotified();
 });
 

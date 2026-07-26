@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Filament\Tenant\Pages\DelinquencyWorkspacePage;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Services\Loans\DelinquencyDigestService;
 use App\Services\Loans\LoanDelinquencyService;
@@ -37,6 +38,8 @@ final class LoanDelinquencyHeaderActions
             ->action(function (LoanDelinquencyService $delinquency, Component $livewire): void {
                 $result = $delinquency->runDailyMaintenance();
 
+                DelinquencyWorkspacePage::rememberMaintenanceResult($result);
+
                 Notification::make()
                     ->title(__('Delinquency check complete'))
                     ->body(__('Overdue: :overdue · Arrears: :arrears · Clear: :cleared · Warnings: :warned · Guarantor debits: :debited', [
@@ -49,11 +52,7 @@ final class LoanDelinquencyHeaderActions
                     ->success()
                     ->send();
 
-                LoanResource::dispatchInsightsRefresh($livewire);
-
-                if (method_exists($livewire, 'resetTable')) {
-                    $livewire->resetTable();
-                }
+                self::refreshLivewire($livewire);
             });
     }
 
@@ -73,11 +72,7 @@ final class LoanDelinquencyHeaderActions
                     ->success()
                     ->send();
 
-                LoanResource::dispatchInsightsRefresh($livewire);
-
-                if (method_exists($livewire, 'resetTable')) {
-                    $livewire->resetTable();
-                }
+                self::refreshLivewire($livewire);
             });
     }
 
@@ -100,5 +95,20 @@ final class LoanDelinquencyHeaderActions
                     ->color($count > 0 ? 'success' : 'info')
                     ->send();
             });
+    }
+
+    private static function refreshLivewire(Component $livewire): void
+    {
+        if ($livewire instanceof DelinquencyWorkspacePage) {
+            DelinquencyWorkspacePage::refreshAfterAction($livewire);
+
+            return;
+        }
+
+        LoanResource::dispatchInsightsRefresh($livewire);
+
+        if (method_exists($livewire, 'resetTable')) {
+            $livewire->resetTable();
+        }
     }
 }

@@ -42,15 +42,14 @@ test('contribution arrears url for member uses tab and filters query keys', func
         ->not->toContain('tableFilters');
 });
 
-test('overdue installments url for member uses tab and member filter', function () {
+test('overdue installments url for member uses delinquency workspace member filter', function () {
     $member = Member::factory()->create();
 
     $url = LoanResource::overdueInstallmentsUrlForMember($member);
 
     expect($url)
-        ->toContain('tab=delinquency')
-        ->toContain('filters')
-        ->toContain('member_id')
-        ->toContain((string) $member->id)
+        ->toContain('/admin/delinquency')
+        ->toContain('sideTab=overdue')
+        ->toContain('memberId='.$member->id)
         ->not->toContain('tableFilters');
 });

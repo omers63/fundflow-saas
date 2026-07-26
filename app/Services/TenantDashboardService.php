@@ -19,6 +19,7 @@ use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
+use App\Filament\Tenant\Support\DelinquencyTabRegistry;
 use App\Filament\Tenant\Support\SettingsTabRegistry;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
@@ -353,7 +354,7 @@ final class TenantDashboardService
             'loans_url' => $pipeline['loans_url'] ?? LoanResource::getUrl('index'),
             'active_loans_url' => $pipeline['loans_active_url'] ?? LoanResource::listUrl('portfolio', ['status' => ['value' => 'active']]),
             'outstanding_url' => LoanResource::listUrl(),
-            'overdue_url' => LoanResource::listTabUrl('overdue_installments'),
+            'overdue_url' => DelinquencyTabRegistry::url('overdue'),
             'queue_url' => LoanResource::queueUrl(),
             'queue_tiers_url' => LoanQueueWorkbenchPage::getUrl(['tab' => 'tiers']),
         ];
@@ -590,7 +591,7 @@ final class TenantDashboardService
                 'label' => Lang::ui('Delinquency'),
                 'description' => Lang::ui('Arrears & overdue'),
                 'icon' => 'heroicon-o-exclamation-triangle',
-                'url' => LoanResource::listTabUrl('overdue_installments'),
+                'url' => DelinquencyTabRegistry::url('overdue'),
                 'tone' => 'delinquency',
                 'badge' => $delinquencyTotal > 0 ? (string) $delinquencyTotal : null,
             ],
@@ -839,7 +840,7 @@ final class TenantDashboardService
                 'body' => Lang::uiText(trans_choice(':count overdue installment|:count overdue installments', $overdue, ['count' => $overdue])),
                 'tone' => 'rose',
                 'icon' => 'heroicon-o-exclamation-triangle',
-                'url' => LoanResource::listTabUrl('overdue_installments'),
+                'url' => DelinquencyTabRegistry::url('overdue'),
             ];
         }
 
@@ -1193,7 +1194,7 @@ final class TenantDashboardService
                 'links' => [
                     ['label' => Lang::ui('All loans'), 'icon' => 'heroicon-o-banknotes', 'url' => LoanResource::getUrl('index')],
                     ['label' => Lang::ui('Loan queue'), 'icon' => 'heroicon-o-queue-list', 'url' => LoanResource::queueUrl()],
-                    ['label' => Lang::ui('Overdue installments'), 'icon' => 'heroicon-o-calendar-days', 'url' => LoanResource::listTabUrl('overdue_installments')],
+                    ['label' => Lang::ui('Overdue installments'), 'icon' => 'heroicon-o-calendar-days', 'url' => DelinquencyTabRegistry::url('overdue')],
                     ['label' => Lang::ui('Contribution arrears'), 'icon' => 'heroicon-o-banknotes', 'url' => ContributionResource::listTabUrl('arrears')],
                     ['label' => Lang::ui('Delinquent members'), 'icon' => 'heroicon-o-user-minus', 'url' => MemberResource::listTabUrl('delinquent')],
                     ['label' => Lang::ui('Loan tiers'), 'icon' => 'heroicon-o-squares-2x2', 'url' => SettingsTabRegistry::url('loans::tab')],

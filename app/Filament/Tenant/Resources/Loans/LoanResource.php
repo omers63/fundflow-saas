@@ -6,6 +6,7 @@ use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Support\LoanDelinquencyTables;
 use App\Filament\Support\LoanEmiCollectionTables;
 use App\Filament\Tenant\Clusters\LoansCluster;
+use App\Filament\Tenant\Pages\DelinquencyWorkspacePage;
 use App\Filament\Tenant\Pages\LoanQueueWorkbenchPage;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\Tables\LoanEligibilityOverrideRequestsTable;
 use App\Filament\Tenant\Resources\Loans\Pages\CreateLoan;
@@ -18,6 +19,7 @@ use App\Filament\Tenant\Resources\Loans\RelationManagers\RepaymentsRelationManag
 use App\Filament\Tenant\Resources\Loans\Schemas\LoanForm;
 use App\Filament\Tenant\Resources\Loans\Tables\LoansTable;
 use App\Filament\Tenant\Resources\Loans\Widgets\LoanViewInsights;
+use App\Filament\Tenant\Support\DelinquencyTabRegistry;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
@@ -76,7 +78,7 @@ class LoanResource extends Resource
      */
     public static function primaryTabKeys(): array
     {
-        return ['collection', 'portfolio', 'delinquency'];
+        return ['collection', 'portfolio'];
     }
 
     /**
@@ -108,8 +110,9 @@ class LoanResource extends Resource
     {
         return match ($tab) {
             'emi_collect', 'emi_collected', 'collection', null, '' => 'collection',
-            'overdue_installments', 'guarantor_exposure', 'delinquency' => 'delinquency',
             'eligibility_reviews', 'portfolio' => 'portfolio',
+            // Legacy delinquency tabs redirect via listTabUrl / ListLoans::mount.
+            'overdue_installments', 'guarantor_exposure', 'delinquency' => 'collection',
             default => in_array($tab, self::primaryTabKeys(), true) ? $tab : 'collection',
         };
     }
@@ -198,11 +201,26 @@ class LoanResource extends Resource
             'emi_collect' => static::listUrl('collection', $filters, segment: 'collect', cycle: $cycle),
             'emi_collected' => static::listUrl('collection', $filters, segment: 'collected', cycle: $cycle),
             'emi_arrears', 'arrears' => static::listUrl('collection', $filters, segment: 'arrears', cycle: $cycle),
-            'overdue_installments' => static::listUrl('delinquency', $filters, view: 'overdue', cycle: $cycle),
-            'guarantor_exposure' => static::listUrl('delinquency', $filters, view: 'guarantor', cycle: $cycle),
+            'overdue_installments', 'delinquency' => DelinquencyTabRegistry::url('overdue', self::delinquencyUrlParameters($filters)),
+            'guarantor_exposure' => DelinquencyTabRegistry::url('guarantor', self::delinquencyUrlParameters($filters)),
             'eligibility_reviews' => static::listUrl('portfolio', $filters, portfolioView: 'eligibility', cycle: $cycle),
             default => static::listUrl($tab, $filters, cycle: $cycle),
         };
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $filters
+     * @return array<string, mixed>
+     */
+    private static function delinquencyUrlParameters(array $filters = []): array
+    {
+        $memberId = $filters['member_id']['value'] ?? null;
+
+        if (blank($memberId)) {
+            return [];
+        }
+
+        return ['memberId' => (int) $memberId];
     }
 
     /**
@@ -246,8 +264,16 @@ class LoanResource extends Resource
             default => null,
         };
 
-        if ($primaryTab === 'delinquency' && filled($view) && $view !== 'overdue') {
-            $parameters['view'] = $view;
+        if (
+            $tab === 'delinquency'
+            || in_array($tab, ['overdue_installments', 'guarantor_exposure', 'overdue', 'guarantor'], true)
+        ) {
+            return DelinquencyTabRegistry::url(
+                ($view === 'guarantor' || $tab === 'guarantor_exposure' || $tab === 'guarantor')
+                ? 'guarantor'
+                : 'overdue',
+                self::delinquencyUrlParameters($filters),
+            );
         }
 
         $portfolioView ??= $tab === 'eligibility_reviews' ? 'eligibility' : null;
@@ -270,7 +296,7 @@ class LoanResource extends Resource
 
     public static function listDelinquencyViewUrl(string $view): string
     {
-        return static::listUrl('delinquency', view: $view);
+        return DelinquencyTabRegistry::url($view === 'guarantor' ? 'guarantor' : 'overdue');
     }
 
     public static function listPortfolioViewUrl(?string $portfolioView = null): string
@@ -374,14 +400,13 @@ class LoanResource extends Resource
 
         return match ($primary) {
             'portfolio' => self::listUrl('portfolio', cycle: $cycleKey, portfolioView: self::resolvePortfolioView()),
-            'delinquency' => self::listUrl('delinquency', cycle: $cycleKey, view: self::resolveDelinquencyView()),
             default => self::listUrl('collection', cycle: $cycleKey, segment: self::resolveCollectionSegment()),
         };
     }
 
     public static function overdueInstallmentsUrlForMember(int|Member $member): string
     {
-        return static::listUrl('delinquency', static::memberFilter($member), view: 'overdue');
+        return DelinquencyTabRegistry::overdueUrlForMember($member);
     }
 
     public static function resolvePrimaryTab(): string
@@ -431,31 +456,20 @@ class LoanResource extends Resource
         });
     }
 
+    /**
+     * @deprecated Delinquency lives on {@see DelinquencyWorkspacePage}.
+     */
     public static function resolveDelinquencyView(): string
     {
-        if (self::resolvePrimaryTab() !== 'delinquency') {
-            return 'overdue';
-        }
-
-        $livewire = Livewire::current();
-
-        if ($livewire instanceof ListLoans && filled($livewire->delinquencyView)) {
-            return in_array($livewire->delinquencyView, ['overdue', 'guarantor'], true)
-                ? $livewire->delinquencyView
-                : 'overdue';
-        }
-
         $view = request()->string('view')->toString();
 
         if (in_array($view, ['overdue', 'guarantor'], true)) {
             return $view;
         }
 
-        return match (request()->string('tab')->toString()) {
-            'guarantor_exposure', 'guarantor' => 'guarantor',
-            'overdue_installments', 'overdue' => 'overdue',
-            default => 'overdue',
-        };
+        $sideTab = request()->string('sideTab')->toString();
+
+        return $sideTab === 'guarantor' ? 'guarantor' : 'overdue';
     }
 
     public static function resolvePortfolioView(): ?string
@@ -485,7 +499,6 @@ class LoanResource extends Resource
     {
         return match (self::resolvePrimaryTab()) {
             'collection' => 'collection|'.self::resolveCollectionSegment(),
-            'delinquency' => 'delinquency|'.self::resolveDelinquencyView(),
             'portfolio' => self::resolvePortfolioView() === 'eligibility'
             ? 'portfolio|eligibility'
             : 'portfolio',
@@ -499,7 +512,6 @@ class LoanResource extends Resource
             'collection|collect' => 'emi_collect',
             'collection|collected' => 'emi_collected',
             'collection|arrears' => 'emi_arrears',
-            'delinquency|overdue', 'delinquency|guarantor' => 'delinquency',
             'portfolio|eligibility' => 'eligibility_reviews',
             default => 'portfolio',
         };
@@ -512,17 +524,10 @@ class LoanResource extends Resource
 
     public static function table(Table $table): Table
     {
-        $livewire = Livewire::current();
-
         return match (self::tableLayoutKey()) {
             'collection|collect' => LoanEmiCollectionTables::configurePendingMembersTable($table),
             'collection|collected' => LoanEmiCollectionTables::configureCollectedTable($table),
             'collection|arrears' => LoanEmiCollectionTables::configureArrearsTable($table),
-            'delinquency|overdue' => LoanDelinquencyTables::configureOverdueInstallmentsTable($table),
-            'delinquency|guarantor' => LoanDelinquencyTables::configureGuarantorExposureTable(
-                $table,
-                $livewire instanceof ListLoans ? $livewire : null,
-            ),
             'portfolio|eligibility' => LoanEligibilityOverrideRequestsTable::configure($table),
             default => LoansTable::configure($table),
         };

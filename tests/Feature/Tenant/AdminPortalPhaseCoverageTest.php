@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Tenant\Pages\AuditSystemPage;
+use App\Filament\Tenant\Pages\DelinquencyWorkspacePage;
 use App\Filament\Tenant\Pages\DisbursementsPage;
 use App\Filament\Tenant\Pages\ReconciliationOverviewPage;
 use App\Filament\Tenant\Pages\ReportsPage;
@@ -37,6 +38,7 @@ test('phase coverage pages are reachable for tenant admin', function (string $pa
         ->assertSuccessful();
 })->with([
     DisbursementsPage::class,
+    DelinquencyWorkspacePage::class,
     ReportsPage::class,
     ReconciliationOverviewPage::class,
     AuditSystemPage::class,

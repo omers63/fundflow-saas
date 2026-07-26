@@ -706,7 +706,7 @@ class Settings extends Page implements HasForms
                             ->label(__('Delinquency digest time'))
                             ->required()
                             ->placeholder('07:30')
-                            ->helperText(__('Daily admin digest of delinquency status.')),
+                            ->helperText(__('Daily admin digest of delinquency status. Review queues under Operations → Delinquency.')),
                         TextInput::make('automation_bank_auto_match_time')
                             ->label(__('Bank auto-match time'))
                             ->required()
@@ -721,7 +721,7 @@ class Settings extends Page implements HasForms
                             ->label(__('Loan delinquency check time'))
                             ->required()
                             ->placeholder('06:05')
-                            ->helperText(__('Daily delinquency/guarantor maintenance (also runs after each Apply loan repayments when enabled).')),
+                            ->helperText(__('Daily delinquency/guarantor maintenance (also runs after each Apply loan repayments when enabled). Review results under Operations → Delinquency.')),
                         TextInput::make('automation_onboarding_greeting_time')
                             ->label(__('Onboarding greeting catch-up time'))
                             ->required()
@@ -786,7 +786,7 @@ class Settings extends Page implements HasForms
                             ->default(true),
                     ]),
                 Section::make(__('Delinquency policy'))
-                    ->description(__('Daily arrears check flags active members who breach consecutive or rolling miss thresholds (unpaid closed cycles). Status is not changed automatically.'))
+                    ->description(__('Daily arrears check flags active members who breach consecutive or rolling miss thresholds (unpaid closed cycles). Status is not changed automatically. Review flagged members under Operations → Delinquency → Policy breaches.'))
                     ->columns(3)
                     ->schema([
                         TextInput::make('delinquency_consecutive')

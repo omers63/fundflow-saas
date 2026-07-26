@@ -3,7 +3,6 @@
 namespace App\Filament\Tenant\Resources\Loans\Pages;
 
 use App\Filament\Support\CollectionCalendarHeaderAction;
-use App\Filament\Support\LoanDelinquencyTables;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Widgets\LoanInsightsWidget;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
@@ -30,9 +29,6 @@ class ListLoans extends ListRecords
     #[Url(as: 'segment', except: 'collect')]
     public ?string $collectionSegment = 'collect';
 
-    #[Url(as: 'view')]
-    public ?string $delinquencyView = null;
-
     #[Url(as: 'portfolioView')]
     public ?string $portfolioView = null;
 
@@ -42,6 +38,21 @@ class ListLoans extends ListRecords
     public function mount(): void
     {
         $legacyTab = request()->query('tab');
+
+        if (
+            is_string($legacyTab) && in_array($legacyTab, [
+                'delinquency',
+                'overdue_installments',
+                'guarantor_exposure',
+            ], true)
+        ) {
+            $this->redirect(
+                LoanResource::listTabUrl($legacyTab),
+                navigate: true,
+            );
+
+            return;
+        }
 
         if (is_string($legacyTab) && in_array($legacyTab, LoanResource::legacyTabKeys(), true)) {
             $this->redirect(
@@ -80,12 +91,6 @@ class ListLoans extends ListRecords
         LoanResource::dispatchInsightsRefresh($this, invalidateInsights: false);
     }
 
-    public function updatedDelinquencyView(): void
-    {
-        $this->reconfigureTableForActiveTab();
-        LoanResource::dispatchInsightsRefresh($this, invalidateInsights: false);
-    }
-
     public function updatedPortfolioView(): void
     {
         $this->reconfigureTableForActiveTab();
@@ -99,10 +104,6 @@ class ListLoans extends ListRecords
 
     public function updatedActiveTab(): void
     {
-        if ($this->activeTab !== 'delinquency') {
-            $this->delinquencyView = null;
-        }
-
         if ($this->activeTab !== 'portfolio') {
             $this->portfolioView = null;
         }
@@ -155,10 +156,6 @@ class ListLoans extends ListRecords
                 default => __('Members with pending EMIs for :period. Apply from cash balance.', [
                     'period' => LoanResource::resolveListCycleLabel(),
                 ]),
-            },
-            'delinquency' => match (LoanResource::resolveDelinquencyView()) {
-                'guarantor' => __('Loans in warning or with liability transferred to the guarantor.'),
-                default => __('Active loans with installments past due. Run the delinquency check after cycle close to refresh statuses.'),
             },
             'portfolio' => LoanResource::resolvePortfolioView() === 'eligibility'
             ? __('Review member requests to bypass loan eligibility rules. Approved requests create standing overrides.')
@@ -214,9 +211,6 @@ class ListLoans extends ListRecords
             'portfolio' => Tab::make(LoanResource::listTabLabel('portfolio'))
                 ->badge(fn (): ?string => $this->portfolioEligibilityBadge())
                 ->badgeColor('warning'),
-            'delinquency' => Tab::make(LoanResource::listTabLabel('delinquency'))
-                ->badge(fn (): ?string => $this->delinquencyBadge())
-                ->badgeColor('danger'),
         ];
     }
 
@@ -229,13 +223,6 @@ class ListLoans extends ListRecords
         $pending = LoanResource::pendingEmiCollectionMemberCount();
 
         return $pending > 0 ? (string) $pending : null;
-    }
-
-    protected function delinquencyBadge(): ?string
-    {
-        $total = LoanResource::overdueInstallmentsCount() + LoanResource::guarantorExposureCount();
-
-        return $total > 0 ? (string) $total : null;
     }
 
     protected function portfolioEligibilityBadge(): ?string
@@ -280,8 +267,6 @@ class ListLoans extends ListRecords
     protected function getTableQuery(): Builder
     {
         return match (LoanResource::tableLayoutKey()) {
-            'delinquency|overdue' => LoanDelinquencyTables::overdueInstallmentsQuery(),
-            'delinquency|guarantor' => LoanDelinquencyTables::guarantorExposureQuery(),
             'portfolio|eligibility' => LoanEligibilityOverrideRequest::query()->with(['member', 'reviewer']),
             default => parent::getTableQuery(),
         };

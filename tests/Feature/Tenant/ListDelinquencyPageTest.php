@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Tenant\Pages\DelinquencyWorkspacePage;
 use App\Filament\Tenant\Pages\LoanQueueWorkbenchPage;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Contributions\Pages\ListContributions;
@@ -76,30 +77,27 @@ test('emi collection segment loads on loans list', function () {
         ->assertSee(__('To collect'), false);
 });
 
-test('loans list exposes delinquency maintenance actions on delinquency tab', function () {
-    Livewire::test(ListLoans::class)
-        ->set('activeTab', 'delinquency')
-        ->set('delinquencyView', 'overdue')
-        ->mountTableAction('markOverdueInstallments')
-        ->callMountedTableAction()
+test('loans list exposes delinquency maintenance actions on delinquency workspace', function () {
+    Livewire::test(DelinquencyWorkspacePage::class, ['sideTab' => 'overdue'])
+        ->assertSuccessful()
+        ->mountAction('markOverdueInstallments')
+        ->callMountedAction()
         ->assertNotified();
 });
 
-test('overdue installments view loads on loans list', function () {
-    $path = parse_url(LoanResource::listTabUrl('overdue_installments'), PHP_URL_PATH) ?? '/admin/loans';
+test('overdue installments view loads on delinquency workspace', function () {
+    $path = parse_url(LoanResource::listTabUrl('overdue_installments'), PHP_URL_PATH) ?? '/admin/delinquency';
     $query = parse_url(LoanResource::listTabUrl('overdue_installments'), PHP_URL_QUERY);
 
     $this->get('http://'.$this->domain.$path.($query ? '?'.$query : ''))
         ->assertSuccessful()
-        ->assertSee(Lang::formatUiLabel(__('Overdue installments')), false);
+        ->assertSee(__('Overdue'), false);
 });
 
 test('contribution arrears tab loads without summary sql errors', function () {
-    $url = ContributionResource::listTabUrl('arrears');
-    $path = parse_url($url, PHP_URL_PATH) ?? '/admin/contributions';
-    $query = parse_url($url, PHP_URL_QUERY);
-
-    $this->get('http://'.$this->domain.$path.($query ? '?'.$query : ''))
+    Livewire::test(ListContributions::class)
+        ->set('activeTab', 'ledger')
+        ->set('ledgerView', 'arrears')
         ->assertSuccessful()
         ->assertSee(__('Arrears'), false);
 });
@@ -348,7 +346,7 @@ test('delinquent members tab loads on members list', function () {
         ->assertSuccessful()
         ->assertSee(__('Arrears'), false);
 
-    expect(LoanResource::listTabUrl('overdue_installments'))->toContain('tab=delinquency');
+    expect(LoanResource::listTabUrl('overdue_installments'))->toContain('/admin/delinquency');
 });
 
 test('member workspace exposes arrears header actions', function () {

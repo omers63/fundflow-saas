@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Services\Loans;
 
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
-use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
+use App\Filament\Tenant\Support\DelinquencyTabRegistry;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\DelinquencyDigestNotification;
 use App\Support\AutomationScheduleSettings;
@@ -56,7 +56,15 @@ class DelinquencyDigestService
     protected function primaryReviewUrl(array $counts): string
     {
         if (($counts['overdue_installments'] ?? 0) > 0) {
-            return LoanResource::listTabUrl('overdue_installments');
+            return DelinquencyTabRegistry::url('overdue');
+        }
+
+        if (($counts['guarantor_at_risk'] ?? 0) > 0 || ($counts['guarantor_transferred'] ?? 0) > 0) {
+            return DelinquencyTabRegistry::url('guarantor');
+        }
+
+        if (($counts['delinquent_members'] ?? 0) > 0) {
+            return DelinquencyTabRegistry::url('policy');
         }
 
         if (($counts['members_in_arrears'] ?? 0) > 0) {
@@ -67,10 +75,6 @@ class DelinquencyDigestService
             return ContributionResource::listTabUrl('arrears');
         }
 
-        if (($counts['guarantor_at_risk'] ?? 0) > 0 || ($counts['guarantor_transferred'] ?? 0) > 0) {
-            return LoanResource::listTabUrl('guarantor_exposure');
-        }
-
-        return MemberResource::listTabUrl('delinquent');
+        return DelinquencyTabRegistry::url('overview');
     }
 }

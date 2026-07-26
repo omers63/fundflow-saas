@@ -1,165 +1,112 @@
-# Delinquency tabs — Loans vs Contributions (UX notes)
+# Delinquency workspace — UX notes
 
-Product notes on where delinquency lives, how the Loans Delinquency tab works, and why Contributions does not use the same primary-tab name.
+Product notes for the standalone **Operations → Delinquency** workspace, and how it relates to Contributions Arrears, Members Arrears, and other admin surfaces.
 
 ---
 
-## 1. Loans → Delinquency tab
+## 1. Operations → Delinquency
 
 ### Role
 
-On the Loans page, Delinquency sits beside **Collection** (period operations) and **Portfolio** (lifecycle). It is the **risk / enforcement** workspace:
+Delinquency is the **risk / enforcement** workspace (not cycle-scoped):
 
-| View | What it lists |
-|------|----------------|
-| **Overdue installments** | EMI rows with `status = overdue` on **active** loans |
-| **Guarantor exposure** | Active loans with a guarantor that are past grace **or** already transferred |
+| Panel | What it lists / does |
+|-------|----------------------|
+| **Overview** | Insights KPIs, last maintenance run, next-step cards |
+| **Overdue** | EMI rows with `status = overdue` on **active** loans |
+| **Guarantor** | Active loans with a guarantor past grace **or** already transferred |
+| **Policy breaches** | Members failing consecutive/rolling missed-cycle policy |
+| **Related** | Deep-links to Contributions Arrears, Members Arrears, Settings |
 
-Loan-level actions belong here (mark overdue, transfer/restore guarantor liability).
+Header **Delinquency tools**: Run delinquency check, Mark overdue only, Send admin digest, Export guarantor exposure. **Policy → Sync policy breaches** re-evaluates active members.
+
+Loan-level transfer/restore guarantor liability remains on the Guarantor table **and** on View Loan.
+
+### Navigation
+
+- Sidebar: **Operations**, after **Disbursements** (`TenantNavigation::SORT_DELINQUENCY`)
+- Slug: `/admin/delinquency?sideTab=…`
+- Legacy Loans URLs (`?tab=delinquency`, `overdue_installments`, `guarantor_exposure`) redirect here via `LoanResource` / `DelinquencyTabRegistry`
 
 ### Is it cycle-based?
 
-**No.** The cycle picker / cycle header only appears on **Collection**. Delinquency queries ignore `selectedCycle`.
+**No.** Delinquency queries ignore contribution cycle. Cycle close is an *input* to marking installments overdue, not a filter on these queues.
 
-Cycle close is an *input* to marking installments overdue, not a filter on the Delinquency lists. Overdue and guarantor risk are **portfolio-wide** signals; scoping them to a single contribution cycle would hide older risk and understate exposure.
-
-(`?cycle=` may still appear in the URL when navigating from Collection; it does not filter Delinquency data.)
-
-### How “Overdue installments” is determined
+### How “Overdue” is determined
 
 A row appears only when:
 
 1. `loan_installments.status = 'overdue'`
 2. The loan’s `status = 'active'`
 
-**Past due alone is not enough.** Something must flip `pending` → `overdue` after the **contribution-cycle deadline** for that EMI’s due date (via `ContributionCycleService`, not merely the calendar due day):
+**Past due alone is not enough.** Something must flip `pending` → `overdue` after the contribution-cycle deadline (header tools, `loans:check-defaults`, EMI window close).
 
-- Header tools: **Run delinquency check** / **Mark overdue only**
-- Scheduled `loans:check-defaults`
-- EMI window close (`loans:close-emi-window`)
+Until that runs, **Loans → Collection → Arrears** can still show unpaid EMIs while **Delinquency → Overdue** stays empty.
 
-Until that runs, **Collection → Arrears** can still show members with unpaid EMIs while **Delinquency → Overdue** stays empty.
+### How “Guarantor” is determined
 
-### How “Guarantor exposure” is determined
+Active loan + guarantor + (liability transferred **or** late≥grace with overdue installments).
 
-A loan appears when it is **active**, has a **guarantor**, and either:
+### Why the queues can look empty
 
-- liability already transferred (`guarantor_liability_transferred_at` set), **or**
-- `late_repayment_count >=` grace cycles (setting `default_grace_cycles`, default **2**) **and** at least one installment is still `overdue`
-
-So you typically need marked overdues **and** a history of late repayments (or an explicit transfer)—not just “someone owes this month.”
-
-### Why the tab can look empty
-
-Most common causes:
-
-- Delinquency check / EMI close has never run → installments still `pending` past the deadline
-- No guarantors on loans, or grace threshold not reached
-- Loans not in `active` status
-
-Empty Delinquency ≠ “no one owes.” It often means “not yet escalated to overdue status.” Use **Delinquency tools → Run delinquency check** (or Mark overdue only) after a cycle deadline if you expect rows.
+Empty Delinquency ≠ “no one owes.” Often installments were never escalated to `overdue`. Use **Run delinquency check** after a cycle deadline.
 
 ### UX fit vs Collection / Members Arrears
 
 | Surface | Job |
 |---------|-----|
-| **Loans → Collection → Arrears** | Collect unpaid EMIs for a **selected period** (includes still-`pending`) |
-| **Loans → Delinquency** | After mark-overdue: risk, late fees, guarantor workflow |
+| **Loans → Collection → Arrears** | Collect unpaid EMIs for a **selected period** |
+| **Delinquency** | After mark-overdue: risk, guarantor workflow, policy breaches |
 | **Members → Arrears** | Person rollup (contributions + EMIs) |
-
-Delinquency belongs on Loans and should **not** be cycle-based. Name overlap with Collection “Arrears” is intentional but easy to confuse: the populations differ on purpose.
+| **Contributions → Ledger → Arrears** | Unpaid contribution periods |
 
 ### Implementation pointers
 
+- Page: `app/Filament/Tenant/Pages/DelinquencyWorkspacePage.php`
 - Tables: `app/Filament/Support/LoanDelinquencyTables.php`
-- Marking / maintenance: `app/Services/Loans/LoanDelinquencyService.php`
-- Page wiring: `app/Filament/Tenant/Resources/Loans/Pages/ListLoans.php`, `LoanResource.php`
+- Tools: `app/Filament/Support/LoanDelinquencyHeaderActions.php`
+- URLs: `app/Filament/Tenant/Support/DelinquencyTabRegistry.php`
+- Service: `app/Services/Loans/LoanDelinquencyService.php`
 - Broader workflow: `docs/loan-delinquency-workflow.md`
 
 ---
 
-## 2. Should Contributions have a Delinquency tab?
+## 2. Contributions / Members (stay on source pages)
 
-### Short answer
+Contribution delinquency inventory stays **Contributions → Ledger → Arrears** (Apply / Clear tooling). Members **Arrears** stays the person rollup. Delinquency **Related** only deep-links those queues.
 
-**Yes, contributions need a delinquency surface — and they already have one.** It is named **Arrears**, not **Delinquency**.
-
-### Where contribution delinquency lives today
-
-| Concern | Where it lives |
-|---------|----------------|
-| Unpaid contribution periods (cross-cycle inventory) | **Contributions → Ledger → Arrears** |
-| Unpaid for a selected period (collect) | **Contributions → Contributions tab → Arrears** segment |
-| Policy breach / administrative hold | **Members** (Inactive hold) + Settings → Delinquency policy |
-| Loan overdue status + guarantor | **Loans → Delinquency** |
-
-### Why Loans gets a tab named “Delinquency” and Contributions does not
-
-Loan delinquency needs machinery contributions do not:
-
-- Flip EMI `pending` → `overdue` after cycle deadline
-- Late-repayment counts / grace
-- Guarantor transfer / restore
-
-Contribution “delinquency” is simpler: **missing posted periods after the deadline** (plus late fees when posting). There is no guarantor path and no separate installment status machine, so the inventory lives under **Contributions → Arrears**.
-
-### Should we add a Contributions primary “Delinquency” tab?
-
-**Usually no.** A new primary tab would duplicate **Ledger → Arrears** and blur:
-
-- **Cycle Arrears** — period collection ops  
-- **Ledger Arrears** — cross-cycle risk inventory (the real contribution equivalent of Loans → Delinquency)
-
-Better UX alignment (if desired later):
-
-- Treat **Ledger → Arrears** as the contribution counterpart to Loans → Delinquency (optional rename of the pill for parity)
-- Keep cycle **Arrears** for collection only
-
-### Bottom line
-
-Contributions already have a delinquency surface (**Arrears**). Loans need a separate **Delinquency** tab because of overdue status escalation and guarantor workflows that do not apply to contributions the same way.
-
-Loan EMI tools (**Mark overdue**, full delinquency check, admin digest) belong only on **Loans → Delinquency** — not on Contributions header actions.
-
-### Loan eligibility — late settlement thresholds
-
-Two independent Settings sections block new loan applications after too many **late-settled** cycles (posted/paid with `is_late`):
-
-| Settings section | Tab | Counts |
-|------------------|-----|--------|
-| **Late contribution thresholds** | Contributions | Late posted contributions |
-| **Late EMI thresholds** (formerly “Missed EMI thresholds”) | Loans | Late paid EMIs |
-
-Outstanding unpaid contribution/EMI arrears (excluding the open cycle) still block loans separately, before late-history checks.
-
-**Delinquency policy** (consecutive / rolling **missed unpaid** closed cycles) remains a flagging signal for daily arrears checks; it does not replace the late-settlement loan gate.
+Loan EMI tools (mark overdue, full check, digest) belong **only** on Delinquency — not on Contributions header actions.
 
 ---
 
-## 3. “Run delinquency check” toast — what the numbers mean
+## 3. Cross-surface links (dashboard, jobs, settings, reports, …)
 
-The toast looks like:
+After extracting Delinquency from Loans, most other admin surfaces needed **copy / URL clarity**, not new tooling:
+
+| Surface | Status | Notes |
+|---------|--------|--------|
+| **Dashboard** | Linked | Overdue KPIs / quick links use `DelinquencyTabRegistry::url('overdue')` |
+| **Loan / contribution insights** | Linked | Overdue + guarantor KPIs open the workspace panels |
+| **Reports** | Linked | Guarantor exposure card opens **Delinquency → Guarantor** |
+| **Digest / notifications / templates** | Linked | `delinquency_digest` action URLs open the workspace; Communications template catalog unchanged |
+| **Settings → Collection** | Config only | Policy + digest/check schedule; helper text points to **Operations → Delinquency** for review |
+| **Jobs / scheduled job registry** | Config only | `loans:check-defaults` and `delinquency:send-digest` descriptions mention reviewing under Delinquency |
+| **Audit & System** | No change | No delinquency-specific deep-links |
+
+**Do not** re-host Settings forms, Apply/Clear contribution arrears, or member inventory modals on the Delinquency page — deep-link from **Related** instead.
+
+---
+
+## 4. “Run delinquency check” toast
 
 > Overdue: *N* · Arrears: *N* · Clear: *N* · Warnings: *N* · Guarantor debits: *N*
 
-These are **results of that run**, not always a dedicated list for each metric.
-
 | Result | Meaning | Where to check |
 |--------|---------|----------------|
-| **Overdue** | How many EMIs were **newly** flipped to `overdue` this run | **Loans → Delinquency → Overdue installments**. `0` = none new this time (already overdue earlier, or none past deadline yet). |
-| **Arrears** | Misleading label — **policy-breach count** among active members (Settings → Delinquency policy consecutive/rolling **missed unpaid** cycles), **not** the Contributions Arrears table | No separate list for this counter. Related queues: **Members → Arrears** or **Contributions → Ledger → Arrears** for outstanding unpaid items. |
-| **Clear** | Active members who **do not** breach that policy (scanned this run) | Not a UI queue — just “looked fine vs policy.” |
-| **Warnings** | Borrower **warning notifications** for overdue EMIs still within grace | **Notification logs** (admin) and the **member’s notifications**; related loans under **Loans → Delinquency → Overdue** / loan installments. |
-| **Guarantor debits** | Times a **guarantor’s fund was debited** for overdue EMIs past grace | **Loans → Delinquency → Guarantor exposure**; open the loan → installments (`paid_by_guarantor`); guarantor **fund ledger** / transactions; guarantor notification logs. |
+| **Overdue** | EMIs newly flipped to `overdue` | Delinquency → Overdue |
+| **Arrears** | Policy-breach count (not Contributions Arrears) | Delinquency → Policy breaches |
+| **Clear** | Active members clear of that policy this run | — |
+| **Warnings** | Borrower warning notifications within grace | Notification logs |
+| **Guarantor debits** | Guarantor fund debited past grace | Delinquency → Guarantor |
 
-### Example
-
-`Overdue: 0 · Arrears: 0 · Clear: 85 · Warnings: 19 · Guarantor debits: 9` means:
-
-- No **new** EMI overdues this pass.
-- 85 active members clear of policy breach; 0 currently counted as policy-breaching.
-- 19 warning notices and 9 guarantor debits **already ran** — review **Guarantor exposure** + **Notification logs**, not Contributions Arrears.
-
-### Label caveat
-
-The toast keys **Arrears** / **Clear** come from `syncMemberDelinquencyStatus()` (`delinquent_count` / `cleared_count`) and are easy to confuse with contribution or collection arrears. Prefer reading them as **policy breaches** / **policy clear** until the toast copy is renamed.
+Overview also shows the last run from this workspace when available.

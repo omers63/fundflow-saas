@@ -8,6 +8,7 @@ use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
+use App\Filament\Tenant\Support\DelinquencyTabRegistry;
 use App\Filament\Tenant\Support\SettingsTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Services\Tenant\TenantAdminReportExportService;
@@ -121,9 +122,9 @@ class ReportsPage extends Page
             ],
             [
                 'title' => __('Guarantor exposure report'),
-                'description' => __('Export guarantor exposure or open the delinquency guarantor tab.'),
+                'description' => __('Export guarantor exposure or open Operations → Delinquency → Guarantor.'),
                 'icon' => 'heroicon-o-shield-check',
-                'url' => LoanResource::listUrl('guarantor_exposure'),
+                'url' => DelinquencyTabRegistry::url('guarantor'),
                 'badge' => null,
             ],
             [

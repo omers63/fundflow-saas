@@ -130,7 +130,7 @@ final class LoanListTableHeaderActions
     }
 
     /**
-     * @deprecated Prefer {@see delinquencyGroup()} on Loans → Delinquency.
+     * @deprecated Prefer {@see delinquencyGroup()} on Operations → Delinquency.
      */
     public static function delinquencyToolsGroup(): ActionGroup
     {

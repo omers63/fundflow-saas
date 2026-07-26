@@ -8,6 +8,7 @@ use App\Filament\Tenant\Clusters\LoansCluster;
 use App\Filament\Tenant\Pages\AuditSystemPage;
 use App\Filament\Tenant\Pages\CommunicationsWorkspacePage;
 use App\Filament\Tenant\Pages\Dashboard;
+use App\Filament\Tenant\Pages\DelinquencyWorkspacePage;
 use App\Filament\Tenant\Pages\DisbursementsPage;
 use App\Filament\Tenant\Pages\LoanQueueWorkbenchPage;
 use App\Filament\Tenant\Pages\MessagesInboxPage;
@@ -62,6 +63,7 @@ final class TenantSidebarRegistry
             LoansCluster::class,
             LoanQueueWorkbenchPage::class,
             DisbursementsPage::class,
+            DelinquencyWorkspacePage::class,
             FundPostingResource::class,
             CashOutRequestResource::class,
             MemberCashTransferRequestResource::class,
@@ -88,6 +90,7 @@ final class TenantSidebarRegistry
             Lang::formatUiLabel(__('Loans')),
             Lang::formatUiLabel(__('Loan queue')),
             Lang::formatUiLabel(__('Disbursements')),
+            Lang::formatUiLabel(__('Delinquency')),
             Lang::formatUiLabel(__('Deposits')),
             Lang::formatUiLabel(__('Cash outs')),
             Lang::formatUiLabel(__('Cash transfers')),

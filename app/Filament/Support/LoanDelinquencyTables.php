@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Filament\Tenant\Pages\DelinquencyWorkspacePage;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
+use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
@@ -57,13 +59,20 @@ final class LoanDelinquencyTables
             ]);
     }
 
-    public static function configureOverdueInstallmentsTable(Table $table): Table
+    public static function configureOverdueInstallmentsTable(Table $table, ?int $memberId = null): Table
     {
         $currency = Setting::get('general', 'currency', 'USD');
+        $query = self::overdueInstallmentsQuery();
+
+        if ($memberId !== null) {
+            $query->whereHas(
+                'loan',
+                fn (Builder $loan): Builder => $loan->where('member_id', $memberId),
+            );
+        }
 
         return TableGrouping::apply($table
-            ->query(self::overdueInstallmentsQuery())
-            ->headerActions(LoanListTableHeaderActions::delinquency())
+            ->query($query)
             ->columnManager(true)
             ->columns([
                 MemberTableColumns::loanMemberNumber(),
@@ -91,7 +100,7 @@ final class LoanDelinquencyTables
                     ->label(__('Guarantor #'))
                     ->placeholder(__('—'))
                     ->toggleable()
-                    ->url(fn(mixed $state, mixed $record): ?string => MemberTableColumns::resolveMemberUrl(
+                    ->url(fn (mixed $state, mixed $record): ?string => MemberTableColumns::resolveMemberUrl(
                         'loan.guarantor.name',
                         $record,
                     )),
@@ -140,13 +149,24 @@ final class LoanDelinquencyTables
         $restoreAction = LoanFilamentActions::restoreBorrowerLiability();
 
         if ($livewire !== null) {
-            $transferAction = $transferAction->after(fn (): mixed => LoanResource::dispatchInsightsRefresh($livewire));
-            $restoreAction = $restoreAction->after(fn (): mixed => LoanResource::dispatchInsightsRefresh($livewire));
+            $transferAction = $transferAction->after(function () use ($livewire): void {
+                if ($livewire instanceof DelinquencyWorkspacePage) {
+                    DelinquencyWorkspacePage::refreshAfterAction($livewire);
+                } else {
+                    LoanResource::dispatchInsightsRefresh($livewire);
+                }
+            });
+            $restoreAction = $restoreAction->after(function () use ($livewire): void {
+                if ($livewire instanceof DelinquencyWorkspacePage) {
+                    DelinquencyWorkspacePage::refreshAfterAction($livewire);
+                } else {
+                    LoanResource::dispatchInsightsRefresh($livewire);
+                }
+            });
         }
 
         return TableGrouping::apply($table
             ->query(self::guarantorExposureQuery())
-            ->headerActions(LoanListTableHeaderActions::delinquency())
             ->columnManager(true)
             ->columns([
                 MemberTableColumns::relationNumber()
@@ -213,6 +233,65 @@ final class LoanDelinquencyTables
             ])
             ->emptyStateHeading(__('No guarantor exposure'))
             ->emptyStateDescription(__('Loans at warning stage or with liability transferred to the guarantor appear here.')), TableGrouping::delinquencyGuarantorLoans());
+    }
+
+    public static function configurePolicyBreachesTable(Table $table, ?Component $livewire = null): Table
+    {
+        $currency = Setting::get('general', 'currency', 'USD');
+        $ids = app(LoanDelinquencyService::class)->delinquentMemberIds();
+
+        return TableGrouping::apply($table
+            ->query(
+                Member::query()
+                    ->whereIn('id', $ids === [] ? [0] : $ids)
+                    ->with(['cashAccount', 'fundAccount']),
+            )
+            ->columnManager(true)
+            ->columns([
+                MemberTableColumns::number(label: __('Member #'))
+                    ->searchable(),
+                MemberTableColumns::name()
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('status')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state, Member $record): string => $record->adminStatusLabel())
+                    ->color(fn (Member $record): string => $record->adminStatusBadgeColor()),
+                TextColumn::make('cash_balance')
+                    ->label(__('Cash'))
+                    ->state(fn (Member $record): float => $record->getCashBalance())
+                    ->money($currency)
+                    ->searchable(false)
+                    ->sortable(false),
+                TextColumn::make('fund_balance')
+                    ->label(__('Fund'))
+                    ->state(fn (Member $record): float => $record->getFundBalance())
+                    ->money($currency)
+                    ->searchable(false)
+                    ->sortable(false),
+            ])
+            ->defaultSort('name')
+            ->filters([
+                MemberSelect::configureFilter(
+                    SelectFilter::make('id')->label(__('Member')),
+                ),
+            ])
+            ->recordActions(TableRecordActionGroups::wrap([
+                Action::make('viewMember')
+                    ->label(__('View member'))
+                    ->icon(Heroicon::OutlinedEye)
+                    ->url(fn (Member $record): string => MemberResource::getUrl('view', ['record' => $record])),
+                MemberDelinquencyActions::checkArrears(),
+                MemberDelinquencyActions::openArrearsWorkspace(),
+            ]))
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    ...MemberDelinquencyActions::forMemberListBulk(),
+                    TableToolbar::refreshBulkAction(),
+                ]),
+            ])
+            ->emptyStateHeading(__('No policy breaches'))
+            ->emptyStateDescription(__('Members appear here when consecutive or rolling missed closed cycles exceed Settings → Delinquency policy.')), TableGrouping::members());
     }
 
     public static function configureContributionArrearsTable(Table $table): Table
