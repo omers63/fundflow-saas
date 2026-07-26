@@ -65,6 +65,10 @@ test('tenant admin can access system maintenance and notification log pages', fu
         ->test(SystemMaintenancePage::class, ['embedded' => true])
         ->assertSuccessful()
         ->assertSee(__('Database backups'))
+        ->assertSee(__('Recent database changes'))
+        ->assertSee(__('Loans: Loan Transfer tracking columns'))
+        ->assertSee(__('Member cash transfer requests'))
+        ->assertSee(__('Portal access logs'))
         ->assertDontSee(__('Purge database (destructive)'));
 
     Livewire::actingAs($this->admin, 'tenant')

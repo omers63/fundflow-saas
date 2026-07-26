@@ -71,4 +71,11 @@ test('loan view page header actions are icon buttons', function () {
         expect($action->isIconButton())->toBeTrue()
             ->and($action->getTooltip())->not->toBeEmpty();
     }
+
+    $names = collect($headerActions)->map(fn ($action) => $action->getName())->all();
+
+    expect($names)
+        ->not->toContain('transferLoanAdmin')
+        ->not->toContain('transferGuarantorLiability')
+        ->not->toContain('restoreBorrowerLiability');
 });

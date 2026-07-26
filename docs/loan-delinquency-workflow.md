@@ -73,14 +73,19 @@ Contribution ledger Arrears is an inventory/collection surface for unpaid contri
 
 Dashboard, Reports, Jobs, and digest notifications deep-link into the workspace; they do not host maintenance tools themselves.
 
-### 3. Loan view actions
+### 3. Transfer actions (Delinquency workspace)
 
 **File:** `app/Filament/Support/LoanFilamentActions.php`
 
-- **Transfer liability to guarantor** (requires overdue installments + assigned guarantor)
-- **Restore borrower liability**
+| Action | Where | Effect |
+|--------|--------|--------|
+| **Loan Transfer** | Delinquency → **Overdue** row | Admin reassignment (`transferred_from_loan_id`, `admin_transfer_mode`, `admin_transferred_at`) |
+| **Guarantor Transfer** | Delinquency → **Guarantor** → **Delinquency transfer** group | Sets `guarantor_liability_transferred_at` (immediate guarantor collection path) |
+| **Restore borrower liability** | Same group | Clears `guarantor_liability_transferred_at` |
 
-**View loan summary** (`ViewLoan.php`): guarantor liability date, late repayment count.
+**Schema:** notable tenant migrations (including Loan Transfer columns) are listed under Audit & System → Maintenance → Recent database changes (`App\Support\TenantSchemaNotes`).
+
+**View loan summary** (`ViewLoan.php`): guarantor liability date, late repayment count (transfer actions are not on View Loan).
 
 ### 4. Tests
 
@@ -90,7 +95,7 @@ Covers: mark overdue, member delinquent sync, guarantor liability transfer, unpa
 
 ### 5. Localization
 
-Arabic strings for main UI labels in `lang/ar.json` (e.g. Delinquency, Overdue installments, Transfer liability to guarantor).
+Arabic strings for main UI labels in `lang/ar.json` (e.g. Delinquency, Overdue, Loan Transfer, Guarantor Transfer).
 
 ## How the workflow runs
 

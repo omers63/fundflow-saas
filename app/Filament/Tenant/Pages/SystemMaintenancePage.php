@@ -125,6 +125,14 @@ class SystemMaintenancePage extends Page
     }
 
     /**
+     * @return list<array{migration: string, title: string, body: string, applied: bool}>
+     */
+    public function recentSchemaNotes(): array
+    {
+        return app(DatabaseMaintenanceService::class)->recentSchemaNotes();
+    }
+
+    /**
      * @return array<string>
      */
     public function getPageClasses(): array

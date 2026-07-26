@@ -98,6 +98,8 @@ class DelinquencyWorkspacePage extends Page implements HasTable
         return 'danger';
     }
 
+    protected bool $applyingSideTabFromMethod = false;
+
     public function setSideTab(string $tab): void
     {
         $tab = DelinquencyTabRegistry::normalize($tab);
@@ -106,18 +108,81 @@ class DelinquencyWorkspacePage extends Page implements HasTable
             return;
         }
 
-        $this->sideTab = $tab;
+        $previousTab = $this->sideTab;
 
-        if ($tab !== 'overdue') {
+        $this->applyingSideTabFromMethod = true;
+
+        try {
+            $this->sideTab = $tab;
+
+            if ($tab !== 'overdue') {
+                $this->memberId = null;
+            }
+
+            $this->syncSideTabTableState($previousTab, $tab);
+        } finally {
+            $this->applyingSideTabFromMethod = false;
+        }
+    }
+
+    public function updatedSideTab(): void
+    {
+        $this->sideTab = DelinquencyTabRegistry::normalize($this->sideTab);
+
+        if ($this->applyingSideTabFromMethod) {
+            return;
+        }
+
+        if ($this->sideTab !== 'overdue') {
             $this->memberId = null;
         }
 
         if ($this->showsTable()) {
-            $this->cachedDefaultTableColumnState = null;
-            $this->tableColumns = [];
             $this->tableSort = null;
+            $this->reconfigureTableForSideTab();
             $this->resetTable();
         }
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function tableSideTabs(): array
+    {
+        return ['overdue', 'guarantor', 'policy'];
+    }
+
+    protected function syncSideTabTableState(string $from, string $to): void
+    {
+        $tableTabs = $this->tableSideTabs();
+
+        if (! in_array($from, $tableTabs, true) && ! in_array($to, $tableTabs, true)) {
+            return;
+        }
+
+        $this->tableSort = null;
+
+        if (in_array($from, $tableTabs, true)) {
+            $this->unmountTableAction(false);
+        }
+
+        $this->reconfigureTableForSideTab();
+        $this->resetTable();
+    }
+
+    protected function reconfigureTableForSideTab(): void
+    {
+        $this->table = $this->table($this->makeTable());
+
+        $this->cacheSchema('tableFiltersForm', $this->getTableFiltersForm(...));
+
+        $this->initTableColumnManager();
+
+        $this->tableColumns = [];
+        $this->cachedDefaultTableColumnState = null;
+
+        $this->tableFilters = [];
+        $this->getTableFiltersForm()->fill([]);
     }
 
     public function clearMemberFilter(): void
@@ -154,6 +219,7 @@ class DelinquencyWorkspacePage extends Page implements HasTable
             default => LoanDelinquencyTables::configureOverdueInstallmentsTable(
                 $table,
                 $this->memberId,
+                $this,
             ),
         };
     }

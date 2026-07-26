@@ -13,7 +13,7 @@
                     <span @class([
                         'inline-flex rounded-full px-2 py-0.5 text-xs font-semibold',
                         'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200' => $memberPortalMaintenanceEnabled,
-                        'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200' => ! $memberPortalMaintenanceEnabled,
+                        'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200' => !$memberPortalMaintenanceEnabled,
                     ])>
                         {{ $memberPortalMaintenanceEnabled ? __('Maintenance') : __('Online') }}
                     </span>
@@ -56,6 +56,46 @@
     <section aria-labelledby="ff-maintenance-overview-heading">
         @livewire(\App\Filament\Tenant\Widgets\DatabaseBackupOverviewWidget::class, key('system-maintenance-backup-overview'))
     </section>
+
+    @php($schemaNotes = $this->recentSchemaNotes())
+    @if ($schemaNotes !== [])
+        <section class="ff-maintenance-panel" aria-labelledby="ff-maintenance-schema-heading">
+            <header class="ff-maintenance-panel__header ff-maintenance-panel__header--muted">
+                <div class="ff-maintenance-panel__header-icon">
+                    <x-heroicon-o-circle-stack class="h-5 w-5 text-sky-600 dark:text-sky-400" />
+                </div>
+                <div class="min-w-0">
+                    <h2 id="ff-maintenance-schema-heading" class="text-base font-semibold text-gray-900 dark:text-white">
+                        {{ __('Recent database changes') }}
+                    </h2>
+                    <p class="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+                        {{ __('Tenant schema additions operators should know about. Apply with php artisan tenants:migrate when deploying.') }}
+                    </p>
+                </div>
+            </header>
+            <div class="ff-maintenance-panel__body">
+                <div class="ff-maintenance-scroll max-h-96 space-y-3">
+                    @foreach ($schemaNotes as $note)
+                        <div
+                            class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-gray-900/40">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ $note['title'] }}</p>
+                                <span @class([
+                                    'inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+                                    'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200' => $note['applied'],
+                                    'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200' => !$note['applied'],
+                                ])>
+                                    {{ $note['applied'] ? __('Applied') : __('Pending migrate') }}
+                                </span>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">{{ $note['body'] }}</p>
+                            <p class="mt-1 font-mono text-[11px] text-gray-400">{{ $note['migration'] }}</p>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </section>
+    @endif
 
     {{-- Backup guide --}}
     <section class="ff-maintenance-panel" aria-labelledby="ff-maintenance-backups-heading">

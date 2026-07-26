@@ -39,7 +39,7 @@ The sidebar is grouped into three areas:
 
 | Group | Items |
 |-------|--------|
-| **Operations** | Members, Loans (cluster), Collections, Disbursements |
+| **Operations** | Members, Loans (cluster), Collections, Disbursements, Delinquency |
 | **Finance** | Bank clearing, SMS clearing*, Reconciliation*, Reports |
 | **System** | Audit & System, Settings |
 
@@ -152,7 +152,23 @@ Actions: approve, reject, adjust amount, set funding split, grace cycles.
 
 ### Loan list tabs
 
-EMI to collect, EMI collected, portfolio, overdue installments, guarantor exposure, eligibility reviews.
+Collection (EMI to collect / collected), portfolio, eligibility reviews. Overdue installments and guarantor exposure live under **Operations → Delinquency**.
+
+### Delinquency
+
+**Menu:** Operations → **Delinquency** → `/admin/delinquency`
+
+| Panel | Purpose |
+|-------|---------|
+| Overview | Insights + last maintenance run |
+| Overdue | EMI rows marked overdue; row action **Loan Transfer** |
+| Guarantor | Guarantor exposure; **Delinquency transfer** group (**Guarantor Transfer** / restore borrower liability) |
+| Policy breaches | Consecutive/rolling miss policy |
+| Related | Links to contribution/member arrears and settings |
+
+Tools (header): Run delinquency check, Mark overdue only, Send admin digest, Sync policy breaches.
+
+See [delinquency-tabs-ux.md](delinquency-tabs-ux.md) and [loan-delinquency-workflow.md](loan-delinquency-workflow.md).
 
 ### Loan detail
 
@@ -338,7 +354,7 @@ Changes here affect scheduled jobs and member portal behaviour.
 | **Audit log** | Who did what (admin, recon, loans, overrides) |
 | **Notification log** | Delivery history |
 | **Jobs** | Scheduled commands + manual run |
-| **Maintenance** | Backups, purge (admin only) |
+| **Maintenance** | Backups, purge (admin only), recent tenant schema notes (e.g. Loan Transfer columns on `loans`) |
 | **Migration** | Legacy data import wizard |
 | **Year-end close** | Fiscal close readiness and execution |
 

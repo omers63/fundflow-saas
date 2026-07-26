@@ -16,6 +16,7 @@ use App\Services\ContributionArrearsClearanceService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Forms\Components\Textarea;
@@ -59,7 +60,7 @@ final class LoanDelinquencyTables
             ]);
     }
 
-    public static function configureOverdueInstallmentsTable(Table $table, ?int $memberId = null): Table
+    public static function configureOverdueInstallmentsTable(Table $table, ?int $memberId = null, ?Component $livewire = null): Table
     {
         $currency = Setting::get('general', 'currency', 'USD');
         $query = self::overdueInstallmentsQuery();
@@ -70,6 +71,11 @@ final class LoanDelinquencyTables
                 fn (Builder $loan): Builder => $loan->where('member_id', $memberId),
             );
         }
+
+        $transferLoanAdmin = self::withDelinquencyRefresh(
+            LoanFilamentActions::transferLoanAdmin(),
+            $livewire,
+        );
 
         return TableGrouping::apply($table
             ->query($query)
@@ -131,6 +137,7 @@ final class LoanDelinquencyTables
             ])
             ->recordActions(TableRecordActionGroups::wrap([
                 self::viewLoanInstallmentAction(),
+                $transferLoanAdmin,
             ]))
             ->toolbarActions([
                 BulkActionGroup::make([
@@ -145,25 +152,10 @@ final class LoanDelinquencyTables
     {
         $currency = Setting::get('general', 'currency', 'USD');
 
-        $transferAction = LoanFilamentActions::transferGuarantorLiability();
-        $restoreAction = LoanFilamentActions::restoreBorrowerLiability();
-
-        if ($livewire !== null) {
-            $transferAction = $transferAction->after(function () use ($livewire): void {
-                if ($livewire instanceof DelinquencyWorkspacePage) {
-                    DelinquencyWorkspacePage::refreshAfterAction($livewire);
-                } else {
-                    LoanResource::dispatchInsightsRefresh($livewire);
-                }
-            });
-            $restoreAction = $restoreAction->after(function () use ($livewire): void {
-                if ($livewire instanceof DelinquencyWorkspacePage) {
-                    DelinquencyWorkspacePage::refreshAfterAction($livewire);
-                } else {
-                    LoanResource::dispatchInsightsRefresh($livewire);
-                }
-            });
-        }
+        $transferActions = array_map(
+            fn (Action $action): Action => self::withDelinquencyRefresh($action, $livewire),
+            LoanFilamentActions::guarantorLiabilityActions(),
+        );
 
         return TableGrouping::apply($table
             ->query(self::guarantorExposureQuery())
@@ -223,8 +215,11 @@ final class LoanDelinquencyTables
             ])
             ->recordActions(TableRecordActionGroups::wrap([
                 self::viewLoanAction(),
-                $transferAction,
-                $restoreAction,
+                ActionGroup::make($transferActions)
+                    ->label(__('Delinquency transfer'))
+                    ->icon('heroicon-o-shield-exclamation')
+                    ->color('warning')
+                    ->button(),
             ]))
             ->toolbarActions([
                 BulkActionGroup::make([
@@ -618,5 +613,20 @@ final class LoanDelinquencyTables
             (int) $record['month'],
             (int) $record['year'],
         );
+    }
+
+    private static function withDelinquencyRefresh(Action $action, ?Component $livewire): Action
+    {
+        if ($livewire === null) {
+            return $action;
+        }
+
+        return $action->after(function () use ($livewire): void {
+            if ($livewire instanceof DelinquencyWorkspacePage) {
+                DelinquencyWorkspacePage::refreshAfterAction($livewire);
+            } else {
+                LoanResource::dispatchInsightsRefresh($livewire);
+            }
+        });
     }
 }

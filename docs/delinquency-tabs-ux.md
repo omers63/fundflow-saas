@@ -10,17 +10,17 @@ Product notes for the standalone **Operations → Delinquency** workspace, and h
 
 Delinquency is the **risk / enforcement** workspace (not cycle-scoped):
 
-| Panel | What it lists / does |
-|-------|----------------------|
-| **Overview** | Insights KPIs, last maintenance run, next-step cards |
-| **Overdue** | EMI rows with `status = overdue` on **active** loans |
-| **Guarantor** | Active loans with a guarantor past grace **or** already transferred |
-| **Policy breaches** | Members failing consecutive/rolling missed-cycle policy |
-| **Related** | Deep-links to Contributions Arrears, Members Arrears, Settings |
+| Panel                     | What it lists / does                                                     |
+| ------------------------- | ------------------------------------------------------------------------ |
+| **Overview**        | Insights KPIs, last maintenance run, next-step cards                     |
+| **Overdue**         | EMI rows with`status = overdue` on **active** loans              |
+| **Guarantor**       | Active loans with a guarantor past grace**or** already transferred |
+| **Policy breaches** | Members failing consecutive/rolling missed-cycle policy                  |
+| **Related**         | Deep-links to Contributions Arrears, Members Arrears, Settings           |
 
 Header **Delinquency tools**: Run delinquency check, Mark overdue only, Send admin digest, Export guarantor exposure. **Policy → Sync policy breaches** re-evaluates active members.
 
-Loan-level transfer/restore guarantor liability remains on the Guarantor table **and** on View Loan.
+Loan-level **Loan Transfer** is on **Overdue** rows. On **Guarantor**, the **Delinquency transfer** group holds **Guarantor Transfer** and restore borrower liability.
 
 ### Navigation
 
@@ -53,12 +53,12 @@ Empty Delinquency ≠ “no one owes.” Often installments were never escalated
 
 ### UX fit vs Collection / Members Arrears
 
-| Surface | Job |
-|---------|-----|
-| **Loans → Collection → Arrears** | Collect unpaid EMIs for a **selected period** |
-| **Delinquency** | After mark-overdue: risk, guarantor workflow, policy breaches |
-| **Members → Arrears** | Person rollup (contributions + EMIs) |
-| **Contributions → Ledger → Arrears** | Unpaid contribution periods |
+| Surface                                      | Job                                                           |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| **Loans → Collection → Arrears**     | Collect unpaid EMIs for a**selected period**            |
+| **Delinquency**                        | After mark-overdue: risk, guarantor workflow, policy breaches |
+| **Members → Arrears**                 | Person rollup (contributions + EMIs)                          |
+| **Contributions → Ledger → Arrears** | Unpaid contribution periods                                   |
 
 ### Implementation pointers
 
@@ -83,15 +83,15 @@ Loan EMI tools (mark overdue, full check, digest) belong **only** on Delinquency
 
 After extracting Delinquency from Loans, most other admin surfaces needed **copy / URL clarity**, not new tooling:
 
-| Surface | Status | Notes |
-|---------|--------|--------|
-| **Dashboard** | Linked | Overdue KPIs / quick links use `DelinquencyTabRegistry::url('overdue')` |
-| **Loan / contribution insights** | Linked | Overdue + guarantor KPIs open the workspace panels |
-| **Reports** | Linked | Guarantor exposure card opens **Delinquency → Guarantor** |
-| **Digest / notifications / templates** | Linked | `delinquency_digest` action URLs open the workspace; Communications template catalog unchanged |
-| **Settings → Collection** | Config only | Policy + digest/check schedule; helper text points to **Operations → Delinquency** for review |
-| **Jobs / scheduled job registry** | Config only | `loans:check-defaults` and `delinquency:send-digest` descriptions mention reviewing under Delinquency |
-| **Audit & System** | No change | No delinquency-specific deep-links |
+| Surface                                      | Status      | Notes                                                                                                     |
+| -------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------- |
+| **Dashboard**                          | Linked      | Overdue KPIs / quick links use`DelinquencyTabRegistry::url('overdue')`                                  |
+| **Loan / contribution insights**       | Linked      | Overdue + guarantor KPIs open the workspace panels                                                        |
+| **Reports**                            | Linked      | Guarantor exposure card opens**Delinquency → Guarantor**                                           |
+| **Digest / notifications / templates** | Linked      | `delinquency_digest` action URLs open the workspace; Communications template catalog unchanged          |
+| **Settings → Collection**             | Config only | Policy + digest/check schedule; helper text points to**Operations → Delinquency** for review       |
+| **Jobs / scheduled job registry**      | Config only | `loans:check-defaults` and `delinquency:send-digest` descriptions mention reviewing under Delinquency |
+| **Audit & System**                     | No change   | No delinquency-specific deep-links                                                                        |
 
 **Do not** re-host Settings forms, Apply/Clear contribution arrears, or member inventory modals on the Delinquency page — deep-link from **Related** instead.
 
@@ -101,12 +101,12 @@ After extracting Delinquency from Loans, most other admin surfaces needed **copy
 
 > Overdue: *N* · Arrears: *N* · Clear: *N* · Warnings: *N* · Guarantor debits: *N*
 
-| Result | Meaning | Where to check |
-|--------|---------|----------------|
-| **Overdue** | EMIs newly flipped to `overdue` | Delinquency → Overdue |
-| **Arrears** | Policy-breach count (not Contributions Arrears) | Delinquency → Policy breaches |
-| **Clear** | Active members clear of that policy this run | — |
-| **Warnings** | Borrower warning notifications within grace | Notification logs |
-| **Guarantor debits** | Guarantor fund debited past grace | Delinquency → Guarantor |
+| Result                     | Meaning                                         | Where to check                 |
+| -------------------------- | ----------------------------------------------- | ------------------------------ |
+| **Overdue**          | EMIs newly flipped to`overdue`                | Delinquency → Overdue         |
+| **Arrears**          | Policy-breach count (not Contributions Arrears) | Delinquency → Policy breaches |
+| **Clear**            | Active members clear of that policy this run    | —                             |
+| **Warnings**         | Borrower warning notifications within grace     | Notification logs              |
+| **Guarantor debits** | Guarantor fund debited past grace               | Delinquency → Guarantor       |
 
 Overview also shows the last run from this workspace when available.

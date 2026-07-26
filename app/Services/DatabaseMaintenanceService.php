@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Tenant\DatabaseBackup;
+use App\Support\TenantSchemaNotes;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Config;
@@ -44,6 +45,29 @@ class DatabaseMaintenanceService
             'job_batches',
             'failed_jobs',
         ], $permissionTables)));
+    }
+
+    /**
+     * Operator-facing notes for recent tenant schema additions (newest first).
+     *
+     * @return list<array{migration: string, title: string, body: string, applied: bool}>
+     */
+    public function recentSchemaNotes(): array
+    {
+        return array_map(function (array $note): array {
+            $note['applied'] = $this->tenantMigrationIsApplied($note['migration']);
+
+            return $note;
+        }, TenantSchemaNotes::catalog());
+    }
+
+    public function tenantMigrationIsApplied(string $migrationName): bool
+    {
+        if (!Schema::hasTable('migrations')) {
+            return false;
+        }
+
+        return DB::table('migrations')->where('migration', $migrationName)->exists();
     }
 
     /**
