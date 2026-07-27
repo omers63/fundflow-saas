@@ -200,4 +200,15 @@ class SystemJobRunnerService
 
         return $normalized;
     }
+
+    /**
+     * Delete finished run-history rows for the current tenant.
+     * Rows still marked running are kept so an in-flight job is not orphaned.
+     */
+    public function clearRunHistory(): int
+    {
+        return (int) SystemJobRun::query()
+            ->where('status', '!=', SystemJobRun::STATUS_RUNNING)
+            ->delete();
+    }
 }

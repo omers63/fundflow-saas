@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Widgets;
 
 use App\Services\MemberInsightsService;
 use Filament\Widgets\Widget;
+use Livewire\Attributes\On;
 
 class MemberInsightsWidget extends Widget
 {
@@ -16,6 +17,12 @@ class MemberInsightsWidget extends Widget
     protected string $view = 'filament.tenant.widgets.member-insights';
 
     protected int|string|array $columnSpan = 'full';
+
+    #[On('refresh-member-insights')]
+    public function refreshInsights(): void
+    {
+        // Re-render with a fresh snapshot after roster / arrears mutations.
+    }
 
     /**
      * @return array<string, mixed>

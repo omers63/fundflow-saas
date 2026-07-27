@@ -10,13 +10,15 @@ use App\Models\Tenant\Setting;
  * Canonical tenant Settings defaults (Samman production policy shape).
  *
  * Runtime fallbacks live in each {@see *Settings}::defaults() class. This helper
- * persists those defaults on fresh tenant provision so every Settings UI tab matches
- * the live Samman configuration without waiting for a first save.
+ * persists those defaults on fresh tenant provision so every Settings UI tab and
+ * Automation → Schedule form matches the live Samman configuration without waiting
+ * for a first save.
  *
- * Covered tabs: General, Collection, Loans, Guarantor rules, Fiscal calendar,
- * Public page, Statements, Communication, Notifications, Reconciliation.
- * Fund tiers / bank templates / SMS notification templates are seeded separately
- * ({@see DefaultFundAndLoanTiers}, {@see TenantDatabaseSeeder}, {@see NotificationTemplateCatalog}).
+ * Covered tabs: General, Collection (policy), Automation schedule, Loans, Guarantor
+ * rules, Fiscal calendar, Public page, Statements, Communication, Notifications,
+ * Reconciliation. Fund tiers / bank templates / SMS notification templates are seeded
+ * separately ({@see DefaultFundAndLoanTiers}, {@see TenantDatabaseSeeder},
+ * {@see NotificationTemplateCatalog}).
  *
  * Excluded from seeding: frozen business day, Twilio secrets, legacy migration
  * state, and operational halt flags.
@@ -38,8 +40,8 @@ final class DefaultTenantSettings
         Setting::set('general', 'fund_name', (string) $public['fund_name_en']);
         Setting::set('contribution', 'cycle_start_day', (string) self::CYCLE_START_DAY);
 
-        // Collection tab — automation schedule + contribution/late-fee/delinquency policy
-        AutomationScheduleSettings::saveFromForm(AutomationScheduleSettings::allForForm());
+        // Automation → Schedule (job clocks, behaviour, notification suppressions)
+        AutomationScheduleSettings::seedDefaults();
         ContributionPolicySettings::saveFromForm(ContributionPolicySettings::allForForm());
 
         // Loans + guarantor rules + loan queue projection

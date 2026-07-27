@@ -24,7 +24,7 @@ beforeEach(function () {
     $this->initializeTenancy();
     Filament::setCurrentPanel('tenant');
 
-    CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_MEMBERS);
+    CollectionInsightsCache::bumpAll();
     TenantRuntimeCache::forget('loan_delinquency:members_with_outstanding_arrears_ids');
     TenantRuntimeCache::forget('loan_delinquency:delinquent_member_ids');
 

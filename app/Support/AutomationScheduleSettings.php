@@ -38,12 +38,33 @@ final class AutomationScheduleSettings
             // EMI window close (null day → cycle start day).
             'emi_close_day' => null,
             'emi_close_time' => '00:45',
-            // Daily fund / bank / delinquency jobs.
+            // Daily fund / bank / delinquency jobs (legacy single-time, kept for backward compatibility).
             'master_invariants_time' => '06:00',
             'daily_reconcile_time' => '06:20',
             'nightly_reconcile_time' => '06:30',
             'bank_auto_match_time' => '08:00',
             'delinquency_digest_time' => '07:30',
+            // Cron-like cadence for scoped reconciliation/maintenance jobs.
+            'master_invariants_frequency' => 'daily',
+            'master_invariants_weekdays' => '',
+            'master_invariants_month_days' => '',
+            'master_invariants_times' => '06:00',
+            'daily_reconcile_frequency' => 'daily',
+            'daily_reconcile_weekdays' => '',
+            'daily_reconcile_month_days' => '',
+            'daily_reconcile_times' => '06:20',
+            'nightly_reconcile_frequency' => 'daily',
+            'nightly_reconcile_weekdays' => '',
+            'nightly_reconcile_month_days' => '',
+            'nightly_reconcile_times' => '06:30',
+            'bank_auto_match_frequency' => 'daily',
+            'bank_auto_match_weekdays' => '',
+            'bank_auto_match_month_days' => '',
+            'bank_auto_match_times' => '08:00',
+            'delinquency_digest_frequency' => 'daily',
+            'delinquency_digest_weekdays' => '',
+            'delinquency_digest_month_days' => '',
+            'delinquency_digest_times' => '07:30',
             // Statements (defaults follow month-boundary day/time when unset).
             'statements_day' => null,
             'statements_time' => '00:30',
@@ -92,11 +113,26 @@ final class AutomationScheduleSettings
             'automation_cycle_init_time' => self::cycleInitTime(),
             'automation_emi_close_day' => self::emiCloseDay(),
             'automation_emi_close_time' => self::emiCloseTime(),
-            'automation_master_invariants_time' => self::masterInvariantsTime(),
-            'automation_daily_reconcile_time' => self::dailyReconcileTime(),
-            'automation_nightly_reconcile_time' => self::nightlyReconcileTime(),
-            'automation_bank_auto_match_time' => self::bankAutoMatchTime(),
-            'automation_delinquency_digest_time' => self::delinquencyDigestTime(),
+            'automation_master_invariants_frequency' => self::masterInvariantsFrequency(),
+            'automation_master_invariants_weekdays' => self::masterInvariantsWeekdays(),
+            'automation_master_invariants_month_days' => self::masterInvariantsMonthDays(),
+            'automation_master_invariants_times' => implode(',', self::masterInvariantsTimes()),
+            'automation_daily_reconcile_frequency' => self::dailyReconcileFrequency(),
+            'automation_daily_reconcile_weekdays' => self::dailyReconcileWeekdays(),
+            'automation_daily_reconcile_month_days' => self::dailyReconcileMonthDays(),
+            'automation_daily_reconcile_times' => implode(',', self::dailyReconcileTimes()),
+            'automation_nightly_reconcile_frequency' => self::nightlyReconcileFrequency(),
+            'automation_nightly_reconcile_weekdays' => self::nightlyReconcileWeekdays(),
+            'automation_nightly_reconcile_month_days' => self::nightlyReconcileMonthDays(),
+            'automation_nightly_reconcile_times' => implode(',', self::nightlyReconcileTimes()),
+            'automation_bank_auto_match_frequency' => self::bankAutoMatchFrequency(),
+            'automation_bank_auto_match_weekdays' => self::bankAutoMatchWeekdays(),
+            'automation_bank_auto_match_month_days' => self::bankAutoMatchMonthDays(),
+            'automation_bank_auto_match_times' => implode(',', self::bankAutoMatchTimes()),
+            'automation_delinquency_digest_frequency' => self::delinquencyDigestFrequency(),
+            'automation_delinquency_digest_weekdays' => self::delinquencyDigestWeekdays(),
+            'automation_delinquency_digest_month_days' => self::delinquencyDigestMonthDays(),
+            'automation_delinquency_digest_times' => implode(',', self::delinquencyDigestTimes()),
             'automation_statements_day' => self::statementsDay(),
             'automation_statements_time' => self::statementsTime(),
             'automation_dispatch_announcements_enabled' => self::dispatchAnnouncementsEnabled(),
@@ -115,6 +151,54 @@ final class AutomationScheduleSettings
             'automation_notify_announcements' => self::notifyAnnouncements(),
             'automation_notify_onboarding_greeting' => self::notifyOnboardingGreeting(),
         ];
+    }
+
+    /**
+     * Persist canonical automation schedule defaults for a tenant.
+     *
+     * Used on fresh tenant seed and by migrations that backfill missing keys.
+     * When {@see $onlyMissing} is true, existing tenant values are left unchanged.
+     *
+     * @return int Number of setting rows written
+     */
+    public static function seedDefaults(bool $onlyMissing = false): int
+    {
+        $written = 0;
+        $existing = Setting::getGroup(self::GROUP);
+
+        // Derive cadence *_times from legacy *_time for existing tenants so custom times are preserved.
+        $legacyTimeMap = [
+            'master_invariants_times' => 'master_invariants_time',
+            'daily_reconcile_times' => 'daily_reconcile_time',
+            'nightly_reconcile_times' => 'nightly_reconcile_time',
+            'bank_auto_match_times' => 'bank_auto_match_time',
+            'delinquency_digest_times' => 'delinquency_digest_time',
+        ];
+
+        foreach (self::defaults() as $key => $value) {
+            if ($onlyMissing && array_key_exists($key, $existing)) {
+                continue;
+            }
+
+            // When backfilling cadence *_times on an existing tenant, derive from their stored legacy *_time.
+            if ($onlyMissing && isset($legacyTimeMap[$key])) {
+                $legacyKey = $legacyTimeMap[$key];
+                $legacyStored = $existing[$legacyKey] ?? null;
+
+                if ($legacyStored !== null && $legacyStored !== '') {
+                    $normalized = self::normalizeClockTime($legacyStored);
+                    Setting::set(self::GROUP, $key, $normalized ?? (string) $value);
+                    $written++;
+
+                    continue;
+                }
+            }
+
+            Setting::set(self::GROUP, $key, self::serializeDefaultValue($value));
+            $written++;
+        }
+
+        return $written;
     }
 
     /**
@@ -145,11 +229,29 @@ final class AutomationScheduleSettings
         Setting::set(self::GROUP, 'emi_close_day', $emiDay !== null ? (string) $emiDay : null);
         Setting::set(self::GROUP, 'emi_close_time', self::normalizeClockTime($state['automation_emi_close_time'] ?? null) ?? '00:45');
 
-        Setting::set(self::GROUP, 'master_invariants_time', self::normalizeClockTime($state['automation_master_invariants_time'] ?? null) ?? '06:00');
-        Setting::set(self::GROUP, 'daily_reconcile_time', self::normalizeClockTime($state['automation_daily_reconcile_time'] ?? null) ?? '06:20');
-        Setting::set(self::GROUP, 'nightly_reconcile_time', self::normalizeClockTime($state['automation_nightly_reconcile_time'] ?? null) ?? '06:30');
-        Setting::set(self::GROUP, 'bank_auto_match_time', self::normalizeClockTime($state['automation_bank_auto_match_time'] ?? null) ?? '08:00');
-        Setting::set(self::GROUP, 'delinquency_digest_time', self::normalizeClockTime($state['automation_delinquency_digest_time'] ?? null) ?? '07:30');
+        foreach ([
+            'master_invariants' => ['default_times' => '06:00'],
+            'daily_reconcile' => ['default_times' => '06:20'],
+            'nightly_reconcile' => ['default_times' => '06:30'],
+            'bank_auto_match' => ['default_times' => '08:00'],
+            'delinquency_digest' => ['default_times' => '07:30'],
+        ] as $job => $meta) {
+            $freq = self::normalizeCadenceFrequency($state["automation_{$job}_frequency"] ?? 'daily');
+            Setting::set(self::GROUP, "{$job}_frequency", $freq);
+            Setting::set(
+                self::GROUP,
+                "{$job}_weekdays",
+                self::serializeCadenceList(self::parseCadenceWeekdays($state["automation_{$job}_weekdays"] ?? [])),
+            );
+            Setting::set(
+                self::GROUP,
+                "{$job}_month_days",
+                self::serializeCadenceList(self::parseCadenceMonthDays($state["automation_{$job}_month_days"] ?? [])),
+            );
+            $timesRaw = $state["automation_{$job}_times"] ?? $meta['default_times'];
+            $times = self::parseCadenceTimes($timesRaw, $meta['default_times']);
+            Setting::set(self::GROUP, "{$job}_times", self::serializeCadenceList($times) ?: $meta['default_times']);
+        }
 
         $statementsDay = isset($state['automation_statements_day']) && $state['automation_statements_day'] !== ''
             ? max(1, min(28, (int) $state['automation_statements_day']))
@@ -288,6 +390,125 @@ final class AutomationScheduleSettings
     public static function delinquencyDigestTime(): string
     {
         return self::normalizeClockTime(self::get('delinquency_digest_time', '07:30')) ?? '07:30';
+    }
+
+    // -------------------------------------------------------------------------
+    // Cron-like cadence getters for the 5 scoped reconciliation/maintenance jobs
+    // -------------------------------------------------------------------------
+
+    public static function masterInvariantsFrequency(): string
+    {
+        return self::normalizeCadenceFrequency(self::get('master_invariants_frequency', 'daily'));
+    }
+
+    /** @return list<int> */
+    public static function masterInvariantsWeekdays(): array
+    {
+        return self::parseCadenceWeekdays(self::get('master_invariants_weekdays', ''));
+    }
+
+    /** @return list<int> */
+    public static function masterInvariantsMonthDays(): array
+    {
+        return self::parseCadenceMonthDays(self::get('master_invariants_month_days', ''));
+    }
+
+    /** @return list<string> */
+    public static function masterInvariantsTimes(): array
+    {
+        return self::parseCadenceTimes(self::get('master_invariants_times', ''), self::masterInvariantsTime());
+    }
+
+    public static function dailyReconcileFrequency(): string
+    {
+        return self::normalizeCadenceFrequency(self::get('daily_reconcile_frequency', 'daily'));
+    }
+
+    /** @return list<int> */
+    public static function dailyReconcileWeekdays(): array
+    {
+        return self::parseCadenceWeekdays(self::get('daily_reconcile_weekdays', ''));
+    }
+
+    /** @return list<int> */
+    public static function dailyReconcileMonthDays(): array
+    {
+        return self::parseCadenceMonthDays(self::get('daily_reconcile_month_days', ''));
+    }
+
+    /** @return list<string> */
+    public static function dailyReconcileTimes(): array
+    {
+        return self::parseCadenceTimes(self::get('daily_reconcile_times', ''), self::dailyReconcileTime());
+    }
+
+    public static function nightlyReconcileFrequency(): string
+    {
+        return self::normalizeCadenceFrequency(self::get('nightly_reconcile_frequency', 'daily'));
+    }
+
+    /** @return list<int> */
+    public static function nightlyReconcileWeekdays(): array
+    {
+        return self::parseCadenceWeekdays(self::get('nightly_reconcile_weekdays', ''));
+    }
+
+    /** @return list<int> */
+    public static function nightlyReconcileMonthDays(): array
+    {
+        return self::parseCadenceMonthDays(self::get('nightly_reconcile_month_days', ''));
+    }
+
+    /** @return list<string> */
+    public static function nightlyReconcileTimes(): array
+    {
+        return self::parseCadenceTimes(self::get('nightly_reconcile_times', ''), self::nightlyReconcileTime());
+    }
+
+    public static function bankAutoMatchFrequency(): string
+    {
+        return self::normalizeCadenceFrequency(self::get('bank_auto_match_frequency', 'daily'));
+    }
+
+    /** @return list<int> */
+    public static function bankAutoMatchWeekdays(): array
+    {
+        return self::parseCadenceWeekdays(self::get('bank_auto_match_weekdays', ''));
+    }
+
+    /** @return list<int> */
+    public static function bankAutoMatchMonthDays(): array
+    {
+        return self::parseCadenceMonthDays(self::get('bank_auto_match_month_days', ''));
+    }
+
+    /** @return list<string> */
+    public static function bankAutoMatchTimes(): array
+    {
+        return self::parseCadenceTimes(self::get('bank_auto_match_times', ''), self::bankAutoMatchTime());
+    }
+
+    public static function delinquencyDigestFrequency(): string
+    {
+        return self::normalizeCadenceFrequency(self::get('delinquency_digest_frequency', 'daily'));
+    }
+
+    /** @return list<int> */
+    public static function delinquencyDigestWeekdays(): array
+    {
+        return self::parseCadenceWeekdays(self::get('delinquency_digest_weekdays', ''));
+    }
+
+    /** @return list<int> */
+    public static function delinquencyDigestMonthDays(): array
+    {
+        return self::parseCadenceMonthDays(self::get('delinquency_digest_month_days', ''));
+    }
+
+    /** @return list<string> */
+    public static function delinquencyDigestTimes(): array
+    {
+        return self::parseCadenceTimes(self::get('delinquency_digest_times', ''), self::delinquencyDigestTime());
     }
 
     public static function notifyContributionDue(): bool
@@ -452,27 +673,57 @@ final class AutomationScheduleSettings
 
     public static function isMasterInvariantsSlot(?Carbon $wallClock = null): bool
     {
-        return self::isWallClockSlot(self::masterInvariantsTime(), $wallClock);
+        return self::isCadenceSlot(
+            self::masterInvariantsFrequency(),
+            self::masterInvariantsWeekdays(),
+            self::masterInvariantsMonthDays(),
+            self::masterInvariantsTimes(),
+            $wallClock,
+        );
     }
 
     public static function isDailyReconcileSlot(?Carbon $wallClock = null): bool
     {
-        return self::isWallClockSlot(self::dailyReconcileTime(), $wallClock);
+        return self::isCadenceSlot(
+            self::dailyReconcileFrequency(),
+            self::dailyReconcileWeekdays(),
+            self::dailyReconcileMonthDays(),
+            self::dailyReconcileTimes(),
+            $wallClock,
+        );
     }
 
     public static function isNightlyReconcileSlot(?Carbon $wallClock = null): bool
     {
-        return self::isWallClockSlot(self::nightlyReconcileTime(), $wallClock);
+        return self::isCadenceSlot(
+            self::nightlyReconcileFrequency(),
+            self::nightlyReconcileWeekdays(),
+            self::nightlyReconcileMonthDays(),
+            self::nightlyReconcileTimes(),
+            $wallClock,
+        );
     }
 
     public static function isBankAutoMatchSlot(?Carbon $wallClock = null): bool
     {
-        return self::isWallClockSlot(self::bankAutoMatchTime(), $wallClock);
+        return self::isCadenceSlot(
+            self::bankAutoMatchFrequency(),
+            self::bankAutoMatchWeekdays(),
+            self::bankAutoMatchMonthDays(),
+            self::bankAutoMatchTimes(),
+            $wallClock,
+        );
     }
 
     public static function isDelinquencyDigestSlot(?Carbon $wallClock = null): bool
     {
-        return self::isWallClockSlot(self::delinquencyDigestTime(), $wallClock);
+        return self::isCadenceSlot(
+            self::delinquencyDigestFrequency(),
+            self::delinquencyDigestWeekdays(),
+            self::delinquencyDigestMonthDays(),
+            self::delinquencyDigestTimes(),
+            $wallClock,
+        );
     }
 
     public static function isStatementsSlot(?Carbon $businessDay = null, ?Carbon $wallClock = null): bool
@@ -552,27 +803,52 @@ final class AutomationScheduleSettings
 
     public static function masterInvariantsScheduleLabel(): string
     {
-        return __('Daily at :time', ['time' => self::masterInvariantsTime()]);
+        return self::cadenceScheduleLabel(
+            self::masterInvariantsFrequency(),
+            self::masterInvariantsWeekdays(),
+            self::masterInvariantsMonthDays(),
+            self::masterInvariantsTimes(),
+        );
     }
 
     public static function dailyReconcileScheduleLabel(): string
     {
-        return __('Daily at :time', ['time' => self::dailyReconcileTime()]);
+        return self::cadenceScheduleLabel(
+            self::dailyReconcileFrequency(),
+            self::dailyReconcileWeekdays(),
+            self::dailyReconcileMonthDays(),
+            self::dailyReconcileTimes(),
+        );
     }
 
     public static function nightlyReconcileScheduleLabel(): string
     {
-        return __('Daily at :time', ['time' => self::nightlyReconcileTime()]);
+        return self::cadenceScheduleLabel(
+            self::nightlyReconcileFrequency(),
+            self::nightlyReconcileWeekdays(),
+            self::nightlyReconcileMonthDays(),
+            self::nightlyReconcileTimes(),
+        );
     }
 
     public static function bankAutoMatchScheduleLabel(): string
     {
-        return __('Daily at :time', ['time' => self::bankAutoMatchTime()]);
+        return self::cadenceScheduleLabel(
+            self::bankAutoMatchFrequency(),
+            self::bankAutoMatchWeekdays(),
+            self::bankAutoMatchMonthDays(),
+            self::bankAutoMatchTimes(),
+        );
     }
 
     public static function delinquencyDigestScheduleLabel(): string
     {
-        return __('Daily at :time', ['time' => self::delinquencyDigestTime()]);
+        return self::cadenceScheduleLabel(
+            self::delinquencyDigestFrequency(),
+            self::delinquencyDigestWeekdays(),
+            self::delinquencyDigestMonthDays(),
+            self::delinquencyDigestTimes(),
+        );
     }
 
     public static function statementsScheduleLabel(): string
@@ -706,6 +982,189 @@ final class AutomationScheduleSettings
         }
 
         return self::isWallClockSlot($time, $wallClock);
+    }
+
+    /**
+     * Cadence-based slot check for scoped reconciliation/maintenance jobs.
+     *
+     * @param  list<int>  $weekdays  ISO weekdays (1=Mon … 7=Sun) for weekly cadence
+     * @param  list<int>  $monthDays  Day-of-month (1–28) for monthly cadence
+     * @param  list<string>  $times  HH:MM times list
+     */
+    private static function isCadenceSlot(
+        string $frequency,
+        array $weekdays,
+        array $monthDays,
+        array $times,
+        ?Carbon $wallClock = null,
+    ): bool {
+        if ($frequency === 'disabled') {
+            return false;
+        }
+
+        $wallClock = $wallClock ?? Carbon::now();
+
+        if (! in_array($wallClock->format('H:i'), $times, true)) {
+            return false;
+        }
+
+        return match ($frequency) {
+            'weekly' => in_array((int) $wallClock->isoWeekday(), $weekdays, true),
+            'monthly' => in_array((int) $wallClock->day, $monthDays, true),
+            default => true, // daily
+        };
+    }
+
+    /**
+     * @param  list<int>  $weekdays
+     * @param  list<int>  $monthDays
+     * @param  list<string>  $times
+     */
+    private static function cadenceScheduleLabel(
+        string $frequency,
+        array $weekdays,
+        array $monthDays,
+        array $times,
+    ): string {
+        if ($frequency === 'disabled') {
+            return __('Disabled');
+        }
+
+        $timesStr = implode(', ', $times) ?: '—';
+
+        if ($frequency === 'weekly') {
+            $dayNames = array_map(fn (int $d) => Carbon::now()->startOfWeek()->addDays($d - 1)->isoFormat('ddd'), $weekdays);
+
+            return __('Weekly on :days at :times', [
+                'days' => implode(', ', $dayNames),
+                'times' => $timesStr,
+            ]);
+        }
+
+        if ($frequency === 'monthly') {
+            return __('Monthly on day(s) :days at :times', [
+                'days' => implode(', ', $monthDays),
+                'times' => $timesStr,
+            ]);
+        }
+
+        return __('Daily at :times', ['times' => $timesStr]);
+    }
+
+    private static function normalizeCadenceFrequency(mixed $value): string
+    {
+        $allowed = ['daily', 'weekly', 'monthly', 'disabled'];
+        $value = trim((string) $value);
+
+        return in_array($value, $allowed, true) ? $value : 'daily';
+    }
+
+    /**
+     * Parse a comma-separated weekday list (ISO 1–7).
+     *
+     * @return list<int>
+     */
+    private static function parseCadenceWeekdays(mixed $value): array
+    {
+        if (is_array($value)) {
+            $parts = $value;
+        } else {
+            $parts = preg_split('/[,\s]+/', trim((string) $value)) ?: [];
+        }
+
+        $days = [];
+
+        foreach ($parts as $part) {
+            if ($part === '' || ! is_numeric($part)) {
+                continue;
+            }
+
+            $day = (int) $part;
+
+            if ($day >= 1 && $day <= 7) {
+                $days[$day] = $day;
+            }
+        }
+
+        $days = array_values($days);
+        sort($days);
+
+        return $days;
+    }
+
+    /**
+     * Parse a comma-separated month-day list (1–28).
+     *
+     * @return list<int>
+     */
+    private static function parseCadenceMonthDays(mixed $value): array
+    {
+        if (is_array($value)) {
+            $parts = $value;
+        } else {
+            $parts = preg_split('/[,\s]+/', trim((string) $value)) ?: [];
+        }
+
+        $days = [];
+
+        foreach ($parts as $part) {
+            if ($part === '' || ! is_numeric($part)) {
+                continue;
+            }
+
+            $day = (int) $part;
+
+            if ($day >= 1 && $day <= 28) {
+                $days[$day] = $day;
+            }
+        }
+
+        $days = array_values($days);
+        sort($days);
+
+        return $days;
+    }
+
+    /**
+     * Parse a comma-separated times list, falling back to $legacyTime when empty.
+     *
+     * @return list<string>
+     */
+    private static function parseCadenceTimes(mixed $value, string $legacyTime): array
+    {
+        if (is_array($value)) {
+            $parts = $value;
+        } else {
+            $parts = preg_split('/[,\s]+/', trim((string) $value)) ?: [];
+        }
+
+        $times = [];
+
+        foreach ($parts as $part) {
+            $normalized = self::normalizeClockTime($part);
+
+            if ($normalized !== null) {
+                $times[$normalized] = $normalized;
+            }
+        }
+
+        if ($times === []) {
+            $fallback = self::normalizeClockTime($legacyTime);
+
+            if ($fallback !== null) {
+                $times[$fallback] = $fallback;
+            }
+        }
+
+        $times = array_values($times);
+        sort($times);
+
+        return $times;
+    }
+
+    private static function serializeCadenceList(array $values): string
+    {
+        return implode(',', $values);
     }
 
     private static function isWallClockSlot(string $time, ?Carbon $wallClock = null): bool
@@ -870,5 +1329,18 @@ final class AutomationScheduleSettings
         }
 
         return filter_var($value, FILTER_VALIDATE_BOOL);
+    }
+
+    private static function serializeDefaultValue(mixed $value): mixed
+    {
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+
+        if ($value === null) {
+            return null;
+        }
+
+        return (string) $value;
     }
 }

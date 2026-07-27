@@ -12,7 +12,6 @@ use App\Filament\Tenant\Resources\Contributions\Pages\ListContributions;
 use App\Filament\Tenant\Resources\Contributions\Schemas\ContributionForm;
 use App\Filament\Tenant\Resources\Contributions\Tables\ContributionsTable;
 use App\Filament\Tenant\Support\TenantNavigation;
-use App\Filament\Tenant\Widgets\ContributionInsightsWidget;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Services\ContributionCycleService;
@@ -428,6 +427,7 @@ class ContributionResource extends Resource
 
         if ($bumpInsights) {
             CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_CONTRIBUTIONS);
+            CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_MEMBERS);
         }
     }
 
@@ -539,14 +539,5 @@ class ContributionResource extends Resource
         }
 
         $livewire->dispatch('refresh-contribution-insights', cycle: $cycle, context: $context);
-
-        $targetName = json_encode(
-            app('livewire.factory')->resolveComponentName(ContributionInsightsWidget::class),
-            JSON_THROW_ON_ERROR
-        );
-
-        $livewire->js(
-            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
-        );
     }
 }

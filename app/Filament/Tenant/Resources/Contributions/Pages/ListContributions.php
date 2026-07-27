@@ -61,13 +61,18 @@ class ListContributions extends ListRecords
 
     public function updatedSelectedCycle(): void
     {
+        $layoutBefore = ContributionResource::tableLayoutKey();
         $this->cycleSegment = ContributionResource::normalizeCycleSegment($this->cycleSegment, $this->selectedCycle);
 
         if (
             ContributionResource::resolvePrimaryTab() === 'cycle'
             || (ContributionResource::resolvePrimaryTab() === 'ledger' && ContributionResource::resolveLedgerView() === 'arrears')
         ) {
-            $this->reconfigureTableForActiveTab();
+            if (ContributionResource::tableLayoutKey() !== $layoutBefore) {
+                $this->reconfigureTableForActiveTab();
+            } else {
+                $this->resetTable();
+            }
         }
 
         ContributionResource::dispatchInsightsRefresh($this, invalidateInsights: false);

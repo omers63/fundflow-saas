@@ -809,6 +809,91 @@ test('loan cycle arrears table shows loan number and supports member filter', fu
     Carbon::setTestNow();
 });
 
+test('loan to collect table shows loan number and supports member filter', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $cycles = app(ContributionCycleService::class);
+    [$month, $year] = $cycles->currentOpenPeriod();
+    $accounting = app(AccountingService::class);
+
+    $alpha = Member::create([
+        'member_number' => 'LOAN-COL-A',
+        'name' => 'Alpha Collect Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($alpha);
+
+    $beta = Member::create([
+        'member_number' => 'LOAN-COL-B',
+        'name' => 'Beta Collect Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($beta);
+
+    $alphaLoan = Loan::create([
+        'member_id' => $alpha->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    $betaLoan = Loan::create([
+        'member_id' => $beta->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $alphaLoan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::create($year, $month, 10),
+        'status' => 'pending',
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $betaLoan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::create($year, $month, 10),
+        'status' => 'pending',
+    ]);
+
+    Livewire::test(ListLoans::class)
+        ->set('collectionSegment', 'collect')
+        ->assertSuccessful()
+        ->assertCanSeeTableRecords([$alpha, $beta])
+        ->assertSee('#'.$alphaLoan->id, false)
+        ->assertSee('#'.$betaLoan->id, false)
+        ->assertSee(__('Loan #'), false)
+        ->filterTable('member_id', $alpha->id)
+        ->assertCanSeeTableRecords([$alpha])
+        ->assertCanNotSeeTableRecords([$beta]);
+
+    Carbon::setTestNow();
+});
+
 test('open cycle shows to collect not arrears; past cycle shows arrears not to collect', function () {
     Carbon::setTestNow(Carbon::create(2026, 5, 20));
 

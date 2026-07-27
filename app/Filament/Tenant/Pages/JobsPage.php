@@ -6,12 +6,15 @@ namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Concerns\InteractsWithAdvancedUi;
+use App\Filament\Tenant\Concerns\InteractsWithAutomationScheduleForm;
 use App\Filament\Tenant\Concerns\InteractsWithJobsTable;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Jobs\Tenant\RunReconciliationJob;
 use App\Support\BatchPostingGate;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -20,9 +23,11 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use UnitEnum;
 
-class JobsPage extends Page implements HasTable
+class JobsPage extends Page implements HasForms, HasTable
 {
     use InteractsWithAdvancedUi;
+    use InteractsWithAutomationScheduleForm;
+    use InteractsWithForms;
     use InteractsWithJobsTable;
     use InteractsWithTable;
     use TranslatesPageNavigationLabel;
@@ -49,8 +54,9 @@ class JobsPage extends Page implements HasTable
     public function mount(): void
     {
         $this->mountAdvancedUi();
+        $this->mountAutomationScheduleForm();
 
-        if (! in_array($this->jobsTab, ['status', 'catalog', 'history'], true)) {
+        if (! in_array($this->jobsTab, ['status', 'schedule', 'catalog', 'history'], true)) {
             $this->jobsTab = 'status';
         }
     }
@@ -75,6 +81,12 @@ class JobsPage extends Page implements HasTable
             return __('Batch posting halted: :reason', ['reason' => $gate->reason() ?? __('Critical reconciliation issue')]);
         }
 
+        if ($this->automationSchedulerIsPaused()) {
+            return __('Scheduler paused: :reason', [
+                'reason' => $this->automationSchedulerPauseReason() ?? __('Paused from Automation'),
+            ]);
+        }
+
         return __('Monitor scheduled fund operations for this tenant.');
     }
 
@@ -93,6 +105,7 @@ class JobsPage extends Page implements HasTable
         $gate = app(BatchPostingGate::class);
 
         return [
+            ...$this->jobsAutomationControlActions(),
             Action::make('clear_halt')
                 ->label(__('Clear posting halt'))
                 ->icon('heroicon-o-play')

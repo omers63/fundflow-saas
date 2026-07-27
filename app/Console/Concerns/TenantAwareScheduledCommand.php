@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Concerns;
 
 use App\Listeners\RecordSystemJobRunListener;
+use App\Support\AutomationSchedulerGate;
 use App\Support\ScheduledJobRegistry;
 use Stancl\Tenancy\Concerns\HasATenantsOption;
 use Stancl\Tenancy\Concerns\TenantAwareCommand;
@@ -37,6 +38,16 @@ trait TenantAwareScheduledCommand
 
             $result = (int) $tenant->run(function () use ($definition, $started) {
                 $this->skipScheduledRunRecording = false;
+
+                if (app(AutomationSchedulerGate::class)->isPaused()) {
+                    $this->skipScheduledRunRecording = true;
+                    $this->warn(__('Skipping :command — scheduled automation is paused for this tenant.', [
+                        'command' => $this->getName() ?? 'command',
+                    ]));
+
+                    return self::SUCCESS;
+                }
+
                 $result = (int) $this->laravel->call([$this, 'handle']);
 
                 if (

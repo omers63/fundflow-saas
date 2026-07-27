@@ -76,10 +76,16 @@ class ListLoans extends ListRecords
 
     public function updatedSelectedCycle(): void
     {
+        $layoutBefore = LoanResource::tableLayoutKey();
         $this->collectionSegment = LoanResource::normalizeCycleSegment($this->collectionSegment, $this->selectedCycle);
 
         if (LoanResource::resolvePrimaryTab() === 'collection') {
-            $this->reconfigureTableForActiveTab();
+            if (LoanResource::tableLayoutKey() !== $layoutBefore) {
+                $this->reconfigureTableForActiveTab();
+            } else {
+                $this->resetTable();
+            }
+
             LoanResource::dispatchInsightsRefresh($this, invalidateInsights: false);
         }
     }

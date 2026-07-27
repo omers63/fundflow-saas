@@ -65,6 +65,7 @@ test('tenant admin can access system maintenance and notification log pages', fu
         ->test(SystemMaintenancePage::class, ['embedded' => true])
         ->assertSuccessful()
         ->assertSee(__('Database backups'))
+        ->assertSee(__('Server logs'))
         ->assertSee(__('Recent database changes'))
         ->assertSee(__('Loans: Loan Transfer tracking columns'))
         ->assertSee(__('Member cash transfer requests'))

@@ -15,7 +15,6 @@ use App\Services\Loans\LoanDelinquencyService;
 use App\Support\BusinessDay;
 use App\Support\CollectionInsightsCache;
 use App\Support\Insights\InsightKpi;
-use App\Support\TenantRuntimeCache;
 use InvalidArgumentException;
 
 final class ContributionInsightsService
@@ -507,16 +506,7 @@ final class ContributionInsightsService
         }
 
         return [
-            'arrears_amount' => (float) TenantRuntimeCache::remember(
-                sprintf(
-                    'contribution_insights:arrears_amount:%04d-%02d:%d',
-                    $year,
-                    $month,
-                    $live ? 1 : 0,
-                ),
-                60,
-                fn (): float => $delinquency->contributionArrearsAmountTotal(null, $month, $year, $live),
-            ),
+            'arrears_amount' => $delinquency->contributionArrearsStatsForCycle($month, $year, $live)['amount'],
             'recovered_amount' => round($recoveredAmount, 2),
             'unrecovered_amount' => round($unrecoveredAmount, 2),
         ];

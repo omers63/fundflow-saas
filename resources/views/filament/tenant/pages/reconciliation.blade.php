@@ -311,7 +311,7 @@
                         <li>{{ $schedule['monthly'] }}</li>
                     </ul>
                     <p class="text-sm text-gray-600 dark:text-gray-400">
-                        {{ __('Declared bank balance, critical variance, digests, and match tolerances are under Settings → Reconciliation. The monthly day is under Settings → Collection (Automation).') }}
+                        {{ __('Declared bank balance, critical variance, digests, and match tolerances are under Settings → Reconciliation. Cycle and job schedules are under Audit & System → Automation → Schedule.') }}
                     </p>
 
                     <h4 class="mt-6 text-sm font-semibold text-gray-900 dark:text-white">{{ __('Key checks') }}</h4>

@@ -14,10 +14,9 @@ use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Tenant\MemberListTabService;
-use App\Support\TenantRuntimeCache;
+use App\Support\CollectionInsightsCache;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
-use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
@@ -30,10 +29,7 @@ beforeEach(function () {
     Filament::setCurrentPanel('tenant');
     app()->setLocale('en');
 
-    Cache::forget('loan_delinquency:members_with_outstanding_arrears_ids');
-    Cache::forget('loan_delinquency:delinquent_member_ids');
-    TenantRuntimeCache::forget('loan_delinquency:members_with_outstanding_arrears_ids');
-    TenantRuntimeCache::forget('loan_delinquency:delinquent_member_ids');
+    CollectionInsightsCache::bumpAll();
 
     Account::query()->delete();
     Member::query()->delete();

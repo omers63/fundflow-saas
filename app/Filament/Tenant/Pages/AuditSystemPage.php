@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Concerns\InteractsWithAdvancedUi;
+use App\Filament\Tenant\Concerns\InteractsWithAutomationScheduleForm;
 use App\Filament\Tenant\Concerns\InteractsWithJobsTable;
 use App\Filament\Tenant\Resources\FundAuditLogs\Tables\FundAuditLogsTable;
 use App\Filament\Tenant\Resources\NotificationLogs\Tables\NotificationLogsTable;
@@ -24,6 +25,8 @@ use App\Support\BatchPostingGate;
 use App\Support\SystemLoggingSettings;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -36,9 +39,11 @@ use Livewire\Attributes\Url;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use UnitEnum;
 
-class AuditSystemPage extends Page implements HasTable
+class AuditSystemPage extends Page implements HasForms, HasTable
 {
     use InteractsWithAdvancedUi;
+    use InteractsWithAutomationScheduleForm;
+    use InteractsWithForms;
     use InteractsWithJobsTable;
     use InteractsWithTable;
     use TranslatesPageNavigationLabel;
@@ -134,9 +139,11 @@ class AuditSystemPage extends Page implements HasTable
             $this->auditFilter = 'all';
         }
 
-        if (! in_array($this->jobsTab, ['status', 'catalog', 'history'], true)) {
+        if (! in_array($this->jobsTab, ['status', 'schedule', 'catalog', 'history'], true)) {
             $this->jobsTab = 'status';
         }
+
+        $this->mountAutomationScheduleForm();
 
         $this->auditLoggingEnabled = SystemLoggingSettings::fundAuditLogEnabled();
         $this->notificationLoggingEnabled = SystemLoggingSettings::notificationLogEnabled();
@@ -392,6 +399,7 @@ class AuditSystemPage extends Page implements HasTable
         $gate = app(BatchPostingGate::class);
 
         return [
+            ...$this->jobsAutomationControlActions(),
             Action::make('clear_halt')
                 ->label(__('Clear posting halt'))
                 ->icon('heroicon-o-play')

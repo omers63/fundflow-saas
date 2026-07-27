@@ -13,6 +13,7 @@ use App\Notifications\Tenant\ContributionDueNotification;
 use App\Services\Loans\LateFeeService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Support\BusinessDay;
+use App\Support\CollectionInsightsCache;
 use App\Support\ContributionExemptionPolicy;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -327,6 +328,21 @@ class ContributionCycleService
             return $this->pendingMemberIdsByPeriod[$cacheKey];
         }
 
+        /** @var list<int> $ids */
+        $ids = CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_CONTRIBUTIONS,
+            "pending_member_ids:{$cacheKey}",
+            fn (): array => $this->computePendingMemberIdsForPeriod($month, $year),
+        );
+
+        return $this->pendingMemberIdsByPeriod[$cacheKey] = $ids;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function computePendingMemberIdsForPeriod(int $month, int $year): array
+    {
         $policy = app(ContributionExemptionPolicy::class);
 
         $eligibilityIds = Member::query()
@@ -357,7 +373,7 @@ class ContributionCycleService
         $mergedIds = array_values(array_unique(array_merge($eligibilityIds, $pendingRecordIds)));
 
         if ($mergedIds === []) {
-            return $this->pendingMemberIdsByPeriod[$cacheKey] = [];
+            return [];
         }
 
         $postedMemberIds = Contribution::query()
@@ -370,7 +386,7 @@ class ContributionCycleService
             ->all();
         $postedLookup = array_fill_keys($postedMemberIds, true);
 
-        $candidateIds = Member::query()
+        return Member::query()
             ->whereIn('id', $mergedIds)
             ->with(['parent', 'cashAccount', 'loans'])
             ->get()
@@ -380,8 +396,6 @@ class ContributionCycleService
             ->map(fn (mixed $id): int => (int) $id)
             ->values()
             ->all();
-
-        return $this->pendingMemberIdsByPeriod[$cacheKey] = $candidateIds;
     }
 
     public function postedContributionsQueryForPeriod(int $month, int $year): Builder
@@ -413,6 +427,21 @@ class ContributionCycleService
             return $this->collectedContributionIdsByPeriod[$cacheKey];
         }
 
+        /** @var list<int> $ids */
+        $ids = CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_CONTRIBUTIONS,
+            "collected_contribution_ids:{$cacheKey}",
+            fn (): array => $this->computeCollectedContributionIdsForPeriod($month, $year),
+        );
+
+        return $this->collectedContributionIdsByPeriod[$cacheKey] = $ids;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function computeCollectedContributionIdsForPeriod(int $month, int $year): array
+    {
         $posted = Contribution::query()
             ->forPeriod($month, $year)
             ->posted()
@@ -420,12 +449,12 @@ class ContributionCycleService
             ->get();
 
         if ($posted->isEmpty()) {
-            return $this->collectedContributionIdsByPeriod[$cacheKey] = [];
+            return [];
         }
 
         $policy = app(ContributionExemptionPolicy::class);
 
-        $ids = $posted
+        return $posted
             ->filter(function (Contribution $contribution) use ($policy, $month, $year): bool {
                 $member = $contribution->member;
 
@@ -443,8 +472,6 @@ class ContributionCycleService
             ->map(fn (mixed $id): int => (int) $id)
             ->values()
             ->all();
-
-        return $this->collectedContributionIdsByPeriod[$cacheKey] = $ids;
     }
 
     /**

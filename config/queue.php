@@ -138,7 +138,7 @@ return [
     */
 
     'worker_watchdog' => [
-        'enabled' => env('QUEUE_WORKER_WATCHDOG_ENABLED', true),
+        'enabled' => env('QUEUE_WORKER_WATCHDOG_ENABLED', false), // OFF BY DEFAULT
         'connection' => env('QUEUE_WORKER_CONNECTION'),
         'sleep' => (int) env('QUEUE_WORKER_SLEEP', 3),
         'tries' => (int) env('QUEUE_WORKER_TRIES', 3),

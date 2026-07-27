@@ -8,8 +8,9 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// All tenant automation jobs run every minute; each command matches configured
-// day/time slots from Settings → Collection → Automation schedule.
+// Tenant automation commands wake every minute; each gates itself via Automation →
+// Schedule settings (daily/weekly/monthly cadence, cycle days, polling intervals).
+// queue:ensure-worker is a host-level watchdog, not tenant-scoped.
 Schedule::command('fund:assert-master-invariants')->everyMinute()->withoutOverlapping();
 Schedule::command('fund:reconcile --daily')->everyMinute()->withoutOverlapping();
 Schedule::command('fund:nightly-reconciliation')->everyMinute()->withoutOverlapping();

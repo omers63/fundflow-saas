@@ -21,8 +21,8 @@ class FundAssertMasterInvariantsCommand extends Command
     {
         if (! $this->option('force') && ! AutomationScheduleSettings::isMasterInvariantsSlot()) {
             $this->skipScheduledRunRecording = true;
-            $this->info(__('Skipped: not the configured master invariants slot (:time).', [
-                'time' => AutomationScheduleSettings::masterInvariantsTime(),
+            $this->info(__('Skipped: :schedule.', [
+                'schedule' => AutomationScheduleSettings::masterInvariantsScheduleLabel(),
             ]));
 
             return self::SUCCESS;

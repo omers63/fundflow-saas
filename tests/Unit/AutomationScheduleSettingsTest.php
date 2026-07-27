@@ -69,14 +69,19 @@ it('matches month-boundary jobs on the configured day and time', function () {
         ->and(AutomationScheduleSettings::isMonthBoundarySlot())->toBeTrue();
 });
 
-it('matches daily automation slots at configured wall-clock times', function () {
+it('matches daily automation slots at configured cadence times', function () {
     AutomationScheduleSettings::saveFromForm([
         ...AutomationScheduleSettings::allForForm(),
-        'automation_master_invariants_time' => '06:05',
-        'automation_daily_reconcile_time' => '06:25',
-        'automation_nightly_reconcile_time' => '06:35',
-        'automation_bank_auto_match_time' => '08:10',
-        'automation_delinquency_digest_time' => '07:40',
+        'automation_master_invariants_frequency' => 'daily',
+        'automation_master_invariants_times' => '06:05',
+        'automation_daily_reconcile_frequency' => 'daily',
+        'automation_daily_reconcile_times' => '06:25',
+        'automation_nightly_reconcile_frequency' => 'daily',
+        'automation_nightly_reconcile_times' => '06:35',
+        'automation_bank_auto_match_frequency' => 'daily',
+        'automation_bank_auto_match_times' => '08:10',
+        'automation_delinquency_digest_frequency' => 'daily',
+        'automation_delinquency_digest_times' => '07:40',
         'automation_emi_close_day' => 6,
         'automation_emi_close_time' => '00:50',
     ]);
@@ -93,6 +98,77 @@ it('matches daily automation slots at configured wall-clock times', function () 
 
     Carbon::setTestNow(Carbon::parse('2026-07-07 00:50:00'));
     expect(AutomationScheduleSettings::isEmiCloseSlot())->toBeFalse();
+});
+
+it('nightly reconcile slot respects weekly cadence', function () {
+    AutomationScheduleSettings::saveFromForm([
+        ...AutomationScheduleSettings::allForForm(),
+        'automation_nightly_reconcile_frequency' => 'weekly',
+        'automation_nightly_reconcile_weekdays' => [1, 3], // Monday, Wednesday
+        'automation_nightly_reconcile_times' => '06:30',
+    ]);
+
+    // Monday 2026-07-27 = isoWeekday 1
+    Carbon::setTestNow(Carbon::parse('2026-07-27 06:30:00'));
+    expect(AutomationScheduleSettings::isNightlyReconcileSlot())->toBeTrue();
+
+    // Tuesday 2026-07-28 = isoWeekday 2 (not configured)
+    Carbon::setTestNow(Carbon::parse('2026-07-28 06:30:00'));
+    expect(AutomationScheduleSettings::isNightlyReconcileSlot())->toBeFalse();
+
+    // Wednesday 2026-07-29 = isoWeekday 3
+    Carbon::setTestNow(Carbon::parse('2026-07-29 06:30:00'));
+    expect(AutomationScheduleSettings::isNightlyReconcileSlot())->toBeTrue();
+});
+
+it('nightly reconcile slot respects monthly cadence', function () {
+    AutomationScheduleSettings::saveFromForm([
+        ...AutomationScheduleSettings::allForForm(),
+        'automation_nightly_reconcile_frequency' => 'monthly',
+        'automation_nightly_reconcile_month_days' => [6, 20],
+        'automation_nightly_reconcile_times' => '06:30',
+    ]);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-06 06:30:00'));
+    expect(AutomationScheduleSettings::isNightlyReconcileSlot())->toBeTrue();
+
+    Carbon::setTestNow(Carbon::parse('2026-07-10 06:30:00'));
+    expect(AutomationScheduleSettings::isNightlyReconcileSlot())->toBeFalse();
+
+    Carbon::setTestNow(Carbon::parse('2026-07-20 06:30:00'));
+    expect(AutomationScheduleSettings::isNightlyReconcileSlot())->toBeTrue();
+});
+
+it('nightly reconcile slot is disabled when frequency is disabled', function () {
+    AutomationScheduleSettings::saveFromForm([
+        ...AutomationScheduleSettings::allForForm(),
+        'automation_nightly_reconcile_frequency' => 'disabled',
+        'automation_nightly_reconcile_times' => '06:30',
+    ]);
+
+    Carbon::setTestNow(Carbon::parse('2026-07-27 06:30:00'));
+    expect(AutomationScheduleSettings::isNightlyReconcileSlot())->toBeFalse();
+});
+
+it('nightly reconcile schedule label reflects cadence configuration', function () {
+    AutomationScheduleSettings::saveFromForm([
+        ...AutomationScheduleSettings::allForForm(),
+        'automation_nightly_reconcile_frequency' => 'weekly',
+        'automation_nightly_reconcile_weekdays' => [1, 5],
+        'automation_nightly_reconcile_times' => '06:30',
+    ]);
+
+    $label = AutomationScheduleSettings::nightlyReconcileScheduleLabel();
+    expect($label)->toContain('06:30')
+        ->and($label)->not->toBe(__('Disabled'))
+        ->and($label)->not->toStartWith(__('Daily at :times', ['times' => '06:30']));
+
+    AutomationScheduleSettings::saveFromForm([
+        ...AutomationScheduleSettings::allForForm(),
+        'automation_nightly_reconcile_frequency' => 'disabled',
+        'automation_nightly_reconcile_times' => '06:30',
+    ]);
+    expect(AutomationScheduleSettings::nightlyReconcileScheduleLabel())->toBe(__('Disabled'));
 });
 
 it('falls back month-boundary day to cycle start day when unset', function () {
@@ -210,6 +286,8 @@ it('honours announcement dispatch polling interval', function () {
 
     Carbon::setTestNow($aligned->copy()->addMinute());
     expect(AutomationScheduleSettings::isAnnouncementsDispatchSlot())->toBeFalse();
+
+    Carbon::setTestNow();
 
     AutomationScheduleSettings::saveFromForm([
         ...AutomationScheduleSettings::allForForm(),

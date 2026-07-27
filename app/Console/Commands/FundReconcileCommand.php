@@ -52,8 +52,8 @@ class FundReconcileCommand extends Command
             && ! AutomationScheduleSettings::isDailyReconcileSlot()
         ) {
             $this->skipScheduledRunRecording = true;
-            $this->info(__('Skipped: daily reconciliation runs at :time.', [
-                'time' => AutomationScheduleSettings::dailyReconcileTime(),
+            $this->info(__('Skipped: :schedule.', [
+                'schedule' => AutomationScheduleSettings::dailyReconcileScheduleLabel(),
             ]));
 
             return self::SUCCESS;

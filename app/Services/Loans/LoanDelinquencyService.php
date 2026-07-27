@@ -13,6 +13,7 @@ use App\Services\ContributionCycleService;
 use App\Services\FundAuditLogService;
 use App\Services\MemberDelinquencyEvaluator;
 use App\Support\BusinessDay;
+use App\Support\CollectionInsightsCache;
 use App\Support\InstallmentCollectionStatus;
 use App\Support\LegacyImportedLoan;
 use App\Support\TenantRuntimeCache;
@@ -328,9 +329,10 @@ class LoanDelinquencyService
      */
     public function membersWithOutstandingArrearsIds(): array
     {
-        return TenantRuntimeCache::remember(
-            'loan_delinquency:members_with_outstanding_arrears_ids',
-            60,
+        /** @var list<int> */
+        return CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_MEMBERS,
+            'outstanding_arrears_member_ids',
             function (): array {
                 $ids = array_values(array_unique(array_merge(
                     $this->contributionArrearsMemberIds(),
@@ -531,6 +533,9 @@ class LoanDelinquencyService
         TenantRuntimeCache::forget('loan_delinquency:delinquent_member_ids');
         TenantRuntimeCache::forget('loan_delinquency:members_with_outstanding_arrears_ids');
         TenantRuntimeCache::forget('loan_delinquency:contribution_arrears_digest');
+
+        CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_MEMBERS);
+        CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_CONTRIBUTIONS);
     }
 
     private static function memberBreachCacheKey(int $memberId): string
@@ -712,10 +717,54 @@ class LoanDelinquencyService
             $live ??= true;
         }
 
+        if ($memberId === null) {
+            return $this->contributionArrearsStatsForCycle($throughMonth, $throughYear, $live)['amount'];
+        }
+
         return round(
             $this->contributionArrearsTableRecords($memberId, $throughMonth, $throughYear, $live)
                 ->sum(fn (array $row): float => (float) ($row['monthly_contribution_amount'] ?? 0) + (float) ($row['late_fee'] ?? 0)),
             2,
+        );
+    }
+
+    /**
+     * Single matrix walk for cycle insights: unpaid period count + total arrears amount.
+     *
+     * @return array{periods: int, amount: float}
+     */
+    public function contributionArrearsStatsForCycle(int $month, int $year, ?bool $live = null): array
+    {
+        $context = $this->contributionArrearsEvaluationContext($month, $year, $live);
+        $suffix = sprintf(
+            'arrears_stats:%04d-%02d:%s',
+            $context['anchor_year'],
+            $context['anchor_month'],
+            $context['as_of']->toDateString(),
+        );
+
+        /** @var array{periods: int, amount: float} */
+        return CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_CONTRIBUTIONS,
+            $suffix,
+            function () use ($context): array {
+                $periods = 0;
+                $amount = 0.0;
+
+                $this->eachContributionArrearsUnpaidPeriod(
+                    null,
+                    $context,
+                    function (Member $member, array $period) use (&$periods, &$amount): void {
+                        $periods++;
+                        $amount += (float) $member->monthly_contribution_amount + (float) ($period['late_fee'] ?? 0);
+                    },
+                );
+
+                return [
+                    'periods' => $periods,
+                    'amount' => round($amount, 2),
+                ];
+            },
         );
     }
 
@@ -740,6 +789,10 @@ class LoanDelinquencyService
         ?bool $live = null,
     ): int {
         if ($throughMonth !== null && $throughYear !== null) {
+            if ($memberId === null) {
+                return $this->contributionArrearsStatsForCycle($throughMonth, $throughYear, $live)['periods'];
+            }
+
             $context = $this->contributionArrearsEvaluationContext($throughMonth, $throughYear, $live);
             $cacheKey = $this->contributionArrearsScopedCacheKey($memberId, $context);
 
@@ -796,13 +849,16 @@ class LoanDelinquencyService
             return $this->normalizeContributionArrearsDigestStats($this->contributionArrearsDigestStatsCache);
         }
 
-        return $this->contributionArrearsDigestStatsCache = $this->normalizeContributionArrearsDigestStats(
-            TenantRuntimeCache::remember(
-                'loan_delinquency:contribution_arrears_digest',
-                60,
-                fn(): array => $this->computeContributionArrearsDigestStats(),
+        /** @var array{periods: int, members: int, member_ids: list<int>} $stats */
+        $stats = CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_CONTRIBUTIONS,
+            'arrears_digest',
+            fn (): array => $this->normalizeContributionArrearsDigestStats(
+                $this->computeContributionArrearsDigestStats(),
             ),
         );
+
+        return $this->contributionArrearsDigestStatsCache = $stats;
     }
 
     /**
@@ -812,7 +868,7 @@ class LoanDelinquencyService
     private function normalizeContributionArrearsDigestStats(array $stats): array
     {
         $memberIds = array_values(array_map(
-            static fn(mixed $id): int => (int) $id,
+            static fn (mixed $id): int => (int) $id,
             $stats['member_ids'] ?? [],
         ));
 

@@ -17,11 +17,9 @@ use App\Filament\Tenant\Resources\Members\RelationManagers\RepaymentsRelationMan
 use App\Filament\Tenant\Resources\Members\Schemas\MemberForm;
 use App\Filament\Tenant\Resources\Members\Tables\MembersTable;
 use App\Filament\Tenant\Support\TenantNavigation;
-use App\Filament\Tenant\Widgets\MemberInsightsWidget;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Tenant\MemberListTabService;
-use App\Support\CollectionInsightsCache;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -177,21 +175,13 @@ class MemberResource extends Resource
 
     public static function dispatchInsightsRefresh(?Component $livewire): void
     {
-        CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_MEMBERS);
         app(LoanDelinquencyService::class)->forgetArrearsAggregateCaches();
 
         if ($livewire === null) {
             return;
         }
 
-        $targetName = json_encode(
-            app('livewire.factory')->resolveComponentName(MemberInsightsWidget::class),
-            JSON_THROW_ON_ERROR
-        );
-
-        $livewire->js(
-            'setTimeout(() => window.Livewire.getByName('.$targetName.').forEach(w => w.$refresh()), 0)'
-        );
+        $livewire->dispatch('refresh-member-insights');
     }
 
     public static function dispatchMemberDetailInsightsRefresh(?Component $livewire, ?int $memberId = null): void

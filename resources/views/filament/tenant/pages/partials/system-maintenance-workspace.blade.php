@@ -158,6 +158,72 @@
         @livewire(\App\Filament\Tenant\Widgets\DatabaseBackupsTableWidget::class, key('system-maintenance-backups-table'))
     </section>
 
+    {{-- Application / host logs --}}
+    @php($logCatalog = $this->applicationLogCatalog())
+    <section class="ff-maintenance-panel" aria-labelledby="ff-maintenance-logs-heading">
+        <header class="ff-maintenance-panel__header ff-maintenance-panel__header--muted">
+            <div class="ff-maintenance-panel__header-icon">
+                <x-heroicon-o-document-text class="h-5 w-5 text-violet-600 dark:text-violet-400" />
+            </div>
+            <div class="min-w-0 flex-1">
+                <h2 id="ff-maintenance-logs-heading" class="text-base font-semibold text-gray-900 dark:text-white">
+                    {{ __('Server logs') }}
+                </h2>
+                <p class="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+                    {{ __('Truncate allow-listed log files. Application logs under storage/logs are always available; Nginx can be cleared when writable. PHP-FPM and syslog require host operator access.') }}
+                </p>
+            </div>
+        </header>
+
+        <div class="ff-maintenance-panel__body space-y-4">
+            <div class="ff-maintenance-scroll max-h-96 space-y-2">
+                @foreach ($logCatalog as $log)
+                    <div
+                        class="flex flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between dark:border-white/10 dark:bg-gray-900/40">
+                        <div class="min-w-0">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ $log['label'] }}</p>
+                                <span @class([
+                                    'inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+                                    'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200' => $log['writable'],
+                                    'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200' => !$log['writable'] && $log['exists'],
+                                    'bg-gray-200 text-gray-600 dark:bg-white/10 dark:text-gray-300' => !$log['exists'],
+                                ])>
+                                    {{ $log['writable'] ? __('Writable') : ($log['exists'] ? __('Host only') : __('Missing')) }}
+                                </span>
+                                <span class="text-[11px] tabular-nums text-gray-500 dark:text-gray-400">{{ $log['size_label'] }}</span>
+                            </div>
+                            <p class="mt-0.5 text-xs text-gray-600 dark:text-gray-300">{{ $log['description'] }}</p>
+                            <p class="mt-0.5 break-all font-mono text-[11px] text-gray-400">{{ $log['path'] }}</p>
+                        </div>
+                        <div class="flex shrink-0 flex-wrap items-center gap-2">
+                            @if ($log['readable'])
+                                <button type="button"
+                                    wire:click="mountAction('viewApplicationLog', { key: '{{ $log['key'] }}' })"
+                                    class="ff-tenant-btn ff-tenant-btn--secondary shrink-0 px-3 py-1.5 text-xs">
+                                    {{ __('View') }}
+                                </button>
+                            @endif
+                            @if ($log['writable'])
+                                <button type="button"
+                                    wire:click="clearApplicationLog('{{ $log['key'] }}')"
+                                    wire:confirm="{{ __('Truncate :label now?', ['label' => $log['label']]) }}"
+                                    class="ff-tenant-btn ff-tenant-btn--secondary shrink-0 px-3 py-1.5 text-xs">
+                                    {{ __('Clear') }}
+                                </button>
+                            @endif
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+
+            @include('filament.tenant.partials.audit-system.workspace-actions', [
+                'names' => ['clearAppLogs', 'clearWritableLogs'],
+                'class' => 'pt-1',
+            ])
+        </div>
+    </section>
+
     @if ($this->advancedUi)
         {{-- Purge database --}}
         <section class="space-y-6" aria-labelledby="ff-maintenance-purge-heading">

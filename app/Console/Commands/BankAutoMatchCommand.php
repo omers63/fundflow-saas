@@ -22,8 +22,8 @@ class BankAutoMatchCommand extends Command
     {
         if (! $this->option('force') && ! AutomationScheduleSettings::isBankAutoMatchSlot()) {
             $this->skipScheduledRunRecording = true;
-            $this->info(__('Skipped: bank auto-match runs at :time.', [
-                'time' => AutomationScheduleSettings::bankAutoMatchTime(),
+            $this->info(__('Skipped: :schedule.', [
+                'schedule' => AutomationScheduleSettings::bankAutoMatchScheduleLabel(),
             ]));
 
             return self::SUCCESS;

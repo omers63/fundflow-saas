@@ -9,11 +9,13 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\ContributionCycleService;
+use App\Support\CollectionInsightsCache;
 use App\Support\ContributionCollectionStatus;
 use App\Support\ContributionExemptionPolicy;
 use App\Support\InstallmentCollectionStatus;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Collection;
 
 /**
@@ -141,10 +143,27 @@ class LoanEmiCollectionCatalogService
 
     public function collectedInstallmentCount(int $month, int $year): int
     {
-        return $this->collectedInstallmentsQuery($month, $year)->count();
+        $cacheKey = sprintf('%04d-%02d', $year, $month);
+
+        return (int) CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_LOAN_EMI,
+            "collected_installment_count:{$cacheKey}",
+            fn (): int => $this->collectedInstallmentsQuery($month, $year)->count(),
+        );
     }
 
     public function collectedInstallmentsCashTotal(int $month, int $year): float
+    {
+        $cacheKey = sprintf('%04d-%02d', $year, $month);
+
+        return (float) CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_LOAN_EMI,
+            "collected_installments_cash_total:{$cacheKey}",
+            fn (): float => $this->computeCollectedInstallmentsCashTotal($month, $year),
+        );
+    }
+
+    private function computeCollectedInstallmentsCashTotal(int $month, int $year): float
     {
         // Prefer set-based sum when amount_collected is populated; fall back to row cash for legacy.
         $base = $this->collectedInstallmentsQuery($month, $year);
@@ -188,10 +207,41 @@ class LoanEmiCollectionCatalogService
             return $this->periodPendingMetricsCache[$cacheKey];
         }
 
+        /** @var array{
+         *     pending_members: int,
+         *     total_pending_emis: int,
+         *     unrecovered_amount: float,
+         *     ready_with_cash: int,
+         *     ready_cash_total: float,
+         *     required_cash_total: float,
+         *     uncovered_amount: float
+         * } $metrics */
+        $metrics = CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_LOAN_EMI,
+            "pending_metrics:{$cacheKey}",
+            fn (): array => $this->computePeriodPendingCollectionMetrics($month, $year),
+        );
+
+        return $this->periodPendingMetricsCache[$cacheKey] = $metrics;
+    }
+
+    /**
+     * @return array{
+     *     pending_members: int,
+     *     total_pending_emis: int,
+     *     unrecovered_amount: float,
+     *     ready_with_cash: int,
+     *     ready_cash_total: float,
+     *     required_cash_total: float,
+     *     uncovered_amount: float
+     * }
+     */
+    private function computePeriodPendingCollectionMetrics(int $month, int $year): array
+    {
         $members = $this->membersWithCollectableEmisQuery($month, $year)->get();
 
         if ($members->isEmpty()) {
-            return $this->periodPendingMetricsCache[$cacheKey] = [
+            return [
                 'pending_members' => 0,
                 'total_pending_emis' => 0,
                 'unrecovered_amount' => 0.0,
@@ -285,7 +335,7 @@ class LoanEmiCollectionCatalogService
             }
         }
 
-        return $this->periodPendingMetricsCache[$cacheKey] = [
+        return [
             'pending_members' => $pendingMembers,
             'total_pending_emis' => $totalPendingEmis,
             'unrecovered_amount' => round($unrecoveredAmount, 2),
@@ -695,7 +745,7 @@ class LoanEmiCollectionCatalogService
             ->active()
             ->whereNull('parent_member_id')
             ->whereHas('dependents', fn (Builder $query) => $query->where('status', 'active'))
-            ->with(['dependents' => fn (Builder $query) => $query->where('status', 'active')->orderBy('member_number')])
+            ->with(['dependents' => fn (Relation $query) => $query->where('status', 'active')->orderBy('member_number')])
             ->orderBy('id')
             ->each(function (Member $parent) use ($month, $year, $collectOldestArrearsFirst, &$results, &$householdMemberIds): void {
                 $dependents = $parent->dependents;
@@ -930,10 +980,18 @@ class LoanEmiCollectionCatalogService
 
     public function emiArrearsAmountTotal(int $month, int $year, ?bool $live = null): float
     {
-        return round(
-            $this->emiArrearsInstallmentsForPeriod($month, $year, $live)
-                ->sum(fn (LoanInstallment $installment): float => (float) $installment->amount + (float) ($installment->late_fee_amount ?? 0)),
-            2,
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $live ??= $month === $openMonth && $year === $openYear;
+        $cacheKey = sprintf('%04d-%02d:%d', $year, $month, $live ? 1 : 0);
+
+        return (float) CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_LOAN_EMI,
+            "emi_arrears_amount_total:{$cacheKey}",
+            fn (): float => round(
+                $this->emiArrearsInstallmentsForPeriod($month, $year, $live)
+                    ->sum(fn (LoanInstallment $installment): float => (float) $installment->amount + (float) ($installment->late_fee_amount ?? 0)),
+                2,
+            ),
         );
     }
 

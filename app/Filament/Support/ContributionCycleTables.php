@@ -28,7 +28,7 @@ final class ContributionCycleTables
     public static function configurePendingMembersTable(
         Table $table,
         ?string $heading = null,
-        bool $includeCollectionFilters = false,
+        bool $includeCollectionFilters = true,
     ): Table {
         $cycles = app(ContributionCycleService::class);
         [$month, $year] = ContributionResource::resolveListCycle();

@@ -8,6 +8,7 @@ use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Concerns\EmbedsAsAuditWorkspacePanel;
 use App\Filament\Tenant\Concerns\InteractsWithAdvancedUi;
 use App\Filament\Tenant\Support\TenantNavigation;
+use App\Services\ApplicationLogMaintenanceService;
 use App\Services\DatabaseMaintenanceService;
 use App\Support\MemberPortalMaintenance;
 use BackedEnum;
@@ -17,6 +18,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\HtmlString;
 use UnitEnum;
 
 class SystemMaintenancePage extends Page
@@ -133,6 +135,33 @@ class SystemMaintenancePage extends Page
     }
 
     /**
+     * @return list<array{
+     *     key: string,
+     *     label: string,
+     *     path: string,
+     *     group: string,
+     *     description: string,
+     *     exists: bool,
+     *     readable: bool,
+     *     writable: bool,
+     *     size_bytes: int,
+     *     size_label: string
+     * }>
+     */
+    public function applicationLogCatalog(): array
+    {
+        return app(ApplicationLogMaintenanceService::class)->catalog();
+    }
+
+    public function clearApplicationLog(string $key): void
+    {
+        abort_unless(auth('tenant')->user()?->is_admin === true, 403);
+
+        $result = app(ApplicationLogMaintenanceService::class)->clear([$key]);
+        $this->notifyLogClearResult($result);
+    }
+
+    /**
      * @return array<string>
      */
     public function getPageClasses(): array
@@ -187,6 +216,52 @@ class SystemMaintenancePage extends Page
                 ->icon(Heroicon::OutlinedArrowDownTray)
                 ->color('primary')
                 ->url(route('tenant.admin.system.backup-download')),
+            Action::make('viewApplicationLog')
+                ->label(__('View'))
+                ->icon(Heroicon::OutlinedEye)
+                ->color('gray')
+                ->modalHeading(function (array $arguments): string {
+                    $key = (string) ($arguments['key'] ?? '');
+                    $label = app(ApplicationLogMaintenanceService::class)->definitions()[$key]['label'] ?? __('Log');
+
+                    return __('View :label', ['label' => $label]);
+                })
+                ->modalWidth(Width::FiveExtraLarge)
+                ->modalSubmitAction(false)
+                ->modalCancelActionLabel(__('Close'))
+                ->modalContent(function (array $arguments): HtmlString {
+                    abort_unless(auth('tenant')->user()?->is_admin === true, 403);
+
+                    $key = (string) ($arguments['key'] ?? '');
+                    $payload = app(ApplicationLogMaintenanceService::class)->readTail($key);
+
+                    return new HtmlString(view('filament.tenant.pages.partials.application-log-viewer', [
+                        'payload' => $payload,
+                    ])->render());
+                }),
+            Action::make('clearAppLogs')
+                ->label(__('Clear app logs'))
+                ->icon(Heroicon::OutlinedDocumentText)
+                ->color('warning')
+                ->requiresConfirmation()
+                ->modalHeading(__('Clear application logs?'))
+                ->modalDescription(__('Truncates Laravel, scheduler, queue worker, and Reverb logs under storage/logs. In-progress writers keep the same files.'))
+                ->action(function (): void {
+                    $result = app(ApplicationLogMaintenanceService::class)->clear();
+                    $this->notifyLogClearResult($result);
+                }),
+            Action::make('clearWritableLogs')
+                ->label(__('Clear all writable logs'))
+                ->icon(Heroicon::OutlinedTrash)
+                ->color('danger')
+                ->visible(fn (): bool => $this->advancedUi)
+                ->requiresConfirmation()
+                ->modalHeading(__('Clear all writable logs?'))
+                ->modalDescription(__('Truncates every allow-listed log file this process can write, including Nginx access/error when permitted. PHP-FPM and syslog stay host-managed.'))
+                ->action(function (): void {
+                    $result = app(ApplicationLogMaintenanceService::class)->clearWritable();
+                    $this->notifyLogClearResult($result);
+                }),
             Action::make('purge')
                 ->label(__('Purge now'))
                 ->icon(Heroicon::OutlinedTrash)
@@ -221,6 +296,45 @@ class SystemMaintenancePage extends Page
                     $this->refreshTableLists($service);
                 }),
         ];
+    }
+
+    /**
+     * @param  array{cleared: list<string>, skipped: list<string>, failed: list<string>}  $result
+     */
+    private function notifyLogClearResult(array $result): void
+    {
+        $cleared = count($result['cleared']);
+        $failed = count($result['failed']);
+
+        if ($cleared === 0 && $failed === 0) {
+            Notification::make()
+                ->title(__('No logs cleared'))
+                ->body(__('Nothing was writable or selected.'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        if ($failed > 0) {
+            Notification::make()
+                ->title(__('Log clear partially failed'))
+                ->body(__('Cleared :cleared · Failed :failed · Skipped :skipped', [
+                    'cleared' => $cleared,
+                    'failed' => $failed,
+                    'skipped' => count($result['skipped']),
+                ]))
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        Notification::make()
+            ->title(__('Logs cleared'))
+            ->body(__('Truncated :count log file(s).', ['count' => $cleared]))
+            ->success()
+            ->send();
     }
 
     private function refreshTableLists(DatabaseMaintenanceService $service): void

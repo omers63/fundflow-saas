@@ -18,9 +18,7 @@ use App\Filament\Tenant\Resources\Loans\RelationManagers\InstallmentsRelationMan
 use App\Filament\Tenant\Resources\Loans\RelationManagers\RepaymentsRelationManager;
 use App\Filament\Tenant\Resources\Loans\Schemas\LoanForm;
 use App\Filament\Tenant\Resources\Loans\Tables\LoansTable;
-use App\Filament\Tenant\Resources\Loans\Widgets\LoanViewInsights;
 use App\Filament\Tenant\Support\DelinquencyTabRegistry;
-use App\Filament\Tenant\Widgets\LoanInsightsWidget;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanEligibilityOverrideRequest;
 use App\Models\Tenant\Member;
@@ -588,6 +586,8 @@ class LoanResource extends Resource
 
         if ($bumpInsights) {
             CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_LOAN_EMI);
+            CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_CONTRIBUTIONS);
+            CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_MEMBERS);
         }
     }
 
@@ -602,6 +602,8 @@ class LoanResource extends Resource
 
         if ($bumpInsights) {
             CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_LOAN_EMI);
+            CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_CONTRIBUTIONS);
+            CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_MEMBERS);
         }
     }
 
@@ -655,31 +657,9 @@ class LoanResource extends Resource
 
         $livewire->dispatch('refresh-loan-insights', cycle: $cycle, context: $context);
 
-        $factory = app('livewire.factory');
-        $widgetNames = array_map(
-            fn (string $class): string => json_encode(
-                $factory->resolveComponentName($class),
-                JSON_THROW_ON_ERROR,
-            ),
-            [
-                LoanInsightsWidget::class,
-                LoanViewInsights::class,
-            ],
-        );
-
-        $refreshWidgetsJs = implode('', array_map(
-            fn (string $name): string => "window.Livewire.getByName({$name}).forEach(w => w.\$refresh());",
-            $widgetNames,
-        ));
-
-        // Cycle / segment switches only need the insights widget; avoid a second full list render.
-        if ($fullPageRefresh || ! ($livewire instanceof ListLoans)) {
-            $livewire->js('setTimeout(() => { '.$refreshWidgetsJs.' $wire.$refresh(); }, 0)');
-
-            return;
+        if ($fullPageRefresh) {
+            $livewire->js('setTimeout(() => $wire.$refresh(), 0)');
         }
-
-        $livewire->js('setTimeout(() => { '.$refreshWidgetsJs.' }, 0)');
     }
 
     private static function refreshLoanPageRecord(Component $livewire): void

@@ -23,8 +23,8 @@ class DelinquencySendDigestCommand extends Command
     {
         if (! $this->option('force') && ! AutomationScheduleSettings::isDelinquencyDigestSlot()) {
             $this->skipScheduledRunRecording = true;
-            $this->info(__('Skipped: delinquency digest runs at :time.', [
-                'time' => AutomationScheduleSettings::delinquencyDigestTime(),
+            $this->info(__('Skipped: :schedule.', [
+                'schedule' => AutomationScheduleSettings::delinquencyDigestScheduleLabel(),
             ]));
 
             return self::SUCCESS;

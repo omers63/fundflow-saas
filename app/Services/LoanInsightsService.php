@@ -339,7 +339,7 @@ final class LoanInsightsService
         return TenantRuntimeCache::remember(
             'loan_insights:delinquency_snapshot',
             60,
-            fn(): array => $this->buildDelinquencySnapshot(),
+            fn (): array => $this->buildDelinquencySnapshot(),
         );
     }
 
@@ -1228,16 +1228,7 @@ final class LoanInsightsService
         array $metrics = [],
     ): array {
         return [
-            'arrears_amount' => (float) TenantRuntimeCache::remember(
-                sprintf(
-                    'loan_emi_insights:prior_arrears_amount:%04d-%02d:%d',
-                    $year,
-                    $month,
-                    ($live ?? LoanResource::isViewingOpenCycle()) ? 1 : 0,
-                ),
-                60,
-                fn (): float => $catalog->emiArrearsAmountTotal($month, $year, $live),
-            ),
+            'arrears_amount' => (float) $catalog->emiArrearsAmountTotal($month, $year, $live),
             'recovered_amount' => (float) ($metrics['collected_amount'] ?? $catalog->collectedInstallmentsCashTotal($month, $year)),
             'unrecovered_amount' => (float) ($metrics['unrecovered_amount'] ?? $catalog->collectableInstallmentsAmountTotal($month, $year)),
         ];

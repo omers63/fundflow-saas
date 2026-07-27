@@ -38,8 +38,8 @@ final class AuditSystemTabRegistry
         return $tabs;
     }
 
-    public static function url(string $sideTab): string
+    public static function url(string $sideTab, array $query = []): string
     {
-        return AuditSystemPage::getUrl(['sideTab' => $sideTab]);
+        return AuditSystemPage::getUrl(array_merge(['sideTab' => $sideTab], $query));
     }
 }

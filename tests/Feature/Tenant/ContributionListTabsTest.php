@@ -14,6 +14,7 @@ use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\ContributionInsightsService;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Support\CollectionInsightsCache;
 use App\Support\ContributionCollectionStatus;
 use App\Support\MemberNumberSettings;
 use Carbon\Carbon;
@@ -26,6 +27,7 @@ uses(InitializesTenancy::class);
 beforeEach(function () {
     $this->initializeTenancy();
     Filament::setCurrentPanel('tenant');
+    CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_CONTRIBUTIONS);
 
     $tenant = Tenant::find('testing');
     $this->domain = 'testing.localhost';
@@ -523,6 +525,45 @@ test('contribution cycle arrears table supports member filter', function () {
         ->set('activeTab', 'cycle')
         ->set('selectedCycle', $julyKey)
         ->set('cycleSegment', 'arrears')
+        ->assertSuccessful()
+        ->assertCanSeeTableRecords([$alpha, $beta])
+        ->filterTable('member_id', $alpha->id)
+        ->assertCanSeeTableRecords([$alpha])
+        ->assertCanNotSeeTableRecords([$beta]);
+
+    Carbon::setTestNow();
+});
+
+test('contribution to collect table supports member and ready filters', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+
+    $cycles = app(ContributionCycleService::class);
+    [$month, $year] = $cycles->currentOpenPeriod();
+    $accounting = app(AccountingService::class);
+
+    $alpha = Member::factory()->create([
+        'name' => 'Alpha Contribution Collect',
+        'status' => 'active',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+    ]);
+    $beta = Member::factory()->create([
+        'name' => 'Beta Contribution Collect',
+        'status' => 'active',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    $accounting->createMemberAccounts($alpha);
+    $accounting->createMemberAccounts($beta);
+
+    expect($cycles->pendingMembersQueryForPeriod($month, $year)->pluck('id'))
+        ->toContain($alpha->id)
+        ->toContain($beta->id);
+
+    Livewire::test(ListContributions::class)
+        ->set('activeTab', 'cycle')
+        ->set('cycleSegment', 'collect')
         ->assertSuccessful()
         ->assertCanSeeTableRecords([$alpha, $beta])
         ->filterTable('member_id', $alpha->id)

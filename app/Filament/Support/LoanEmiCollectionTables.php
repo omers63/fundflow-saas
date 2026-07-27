@@ -29,8 +29,8 @@ final class LoanEmiCollectionTables
     public static function configurePendingMembersTable(
         Table $table,
         ?string $heading = null,
-        bool $includeLoanNumber = false,
-        bool $includeCollectionFilters = false,
+        bool $includeLoanNumber = true,
+        bool $includeCollectionFilters = true,
     ): Table {
         $catalog = app(LoanEmiCollectionCatalogService::class);
         [$month, $year] = LoanResource::resolveListCycle();

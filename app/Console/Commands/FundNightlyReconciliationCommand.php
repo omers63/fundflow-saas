@@ -24,8 +24,8 @@ class FundNightlyReconciliationCommand extends Command
     {
         if (! $this->option('force') && ! AutomationScheduleSettings::isNightlyReconcileSlot()) {
             $this->skipScheduledRunRecording = true;
-            $this->info(__('Skipped: nightly reconciliation runs at :time.', [
-                'time' => AutomationScheduleSettings::nightlyReconcileTime(),
+            $this->info(__('Skipped: :schedule.', [
+                'schedule' => AutomationScheduleSettings::nightlyReconcileScheduleLabel(),
             ]));
 
             return self::SUCCESS;

@@ -21,7 +21,7 @@ final class CollectionInsightsCache
 
     public const DOMAIN_MEMBERS = 'member_insights';
 
-    private const TTL_SECONDS = 60;
+    private const TTL_SECONDS = 300;
 
     private const GENERATION_TTL_SECONDS = 3600;
 

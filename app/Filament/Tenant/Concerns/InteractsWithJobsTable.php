@@ -10,6 +10,7 @@ use App\Filament\Support\TableToolbar;
 use App\Models\Tenant\SystemJobRun;
 use App\Services\Loans\LoanManualScheduleGracePushService;
 use App\Services\SystemJobRunnerService;
+use App\Support\AutomationSchedulerGate;
 use App\Support\ScheduledJobRegistry;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -32,7 +33,7 @@ trait InteractsWithJobsTable
 
     public function setJobsTab(string $tab): void
     {
-        if (! in_array($tab, ['status', 'catalog', 'history'], true)) {
+        if (! in_array($tab, ['status', 'schedule', 'catalog', 'history'], true)) {
             return;
         }
 
@@ -43,13 +44,19 @@ trait InteractsWithJobsTable
         $this->jobsTab = $tab;
         $this->tableSort = null;
 
+        if ($tab === 'schedule' && method_exists($this, 'fillAutomationScheduleForm')) {
+            $this->fillAutomationScheduleForm();
+        }
+
         if (method_exists($this, 'reconfigureTableForSideTab')) {
             $this->reconfigureTableForSideTab();
         } else {
             $this->resetJobsTableColumns();
         }
 
-        $this->resetTable();
+        if ($tab !== 'schedule') {
+            $this->resetTable();
+        }
     }
 
     protected function resetJobsTableColumns(): void
@@ -68,6 +75,7 @@ trait InteractsWithJobsTable
             return $this->configureJobsCatalogTable($table);
         }
 
+        // Status + schedule tabs use custom views, not the Filament table.
         return $table
             ->query(SystemJobRun::query()->whereRaw('1 = 0'))
             ->paginated(false);
@@ -299,5 +307,78 @@ trait InteractsWithJobsTable
     protected function getJobsTableQueryStringIdentifier(): ?string
     {
         return 'jobs_'.$this->jobsTab;
+    }
+
+    public function automationSchedulerIsPaused(): bool
+    {
+        return app(AutomationSchedulerGate::class)->isPaused();
+    }
+
+    public function automationSchedulerPauseReason(): ?string
+    {
+        return app(AutomationSchedulerGate::class)->reason();
+    }
+
+    /**
+     * Pause / resume scheduler + clear run history (shared by Jobs and Audit → Jobs).
+     *
+     * @return list<Action>
+     */
+    protected function jobsAutomationControlActions(): array
+    {
+        $scheduler = app(AutomationSchedulerGate::class);
+
+        return [
+            Action::make('pause_scheduler')
+                ->label(__('Pause scheduler'))
+                ->icon('heroicon-o-pause')
+                ->color('warning')
+                ->visible(fn (): bool => ! $scheduler->isPaused())
+                ->requiresConfirmation()
+                ->modalHeading(__('Pause scheduled automation?'))
+                ->modalDescription(__('Cron will keep waking every minute, but this tenant’s scheduled jobs will skip until you resume. Manual “Run now” still works.'))
+                ->action(function () use ($scheduler): void {
+                    $scheduler->pause();
+                    Notification::make()
+                        ->title(__('Scheduler paused'))
+                        ->body(__('Scheduled automation is paused for this tenant.'))
+                        ->warning()
+                        ->send();
+                }),
+            Action::make('resume_scheduler')
+                ->label(__('Resume scheduler'))
+                ->icon('heroicon-o-play')
+                ->color('success')
+                ->visible(fn (): bool => $scheduler->isPaused())
+                ->requiresConfirmation()
+                ->modalHeading(__('Resume scheduled automation?'))
+                ->modalDescription(__('Scheduled jobs for this tenant will run again on the next cron tick.'))
+                ->action(function () use ($scheduler): void {
+                    $scheduler->resume();
+                    Notification::make()
+                        ->title(__('Scheduler resumed'))
+                        ->success()
+                        ->send();
+                }),
+            Action::make('clear_run_history')
+                ->label(__('Clear run history'))
+                ->icon('heroicon-o-trash')
+                ->color('danger')
+                ->visible(fn (): bool => $this->jobsTab === 'history' && $this->jobsAdvancedUi())
+                ->requiresConfirmation()
+                ->modalHeading(__('Clear run history?'))
+                ->modalDescription(__('Deletes finished automation runs for this tenant. In-progress runs are kept.'))
+                ->action(function (): void {
+                    $deleted = app(SystemJobRunnerService::class)->clearRunHistory();
+
+                    Notification::make()
+                        ->title(__('Run history cleared'))
+                        ->body(__(':count run(s) deleted.', ['count' => $deleted]))
+                        ->success()
+                        ->send();
+
+                    $this->resetTable();
+                }),
+        ];
     }
 }

@@ -6,6 +6,7 @@ namespace App\Services\Tenant;
 
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Support\CollectionInsightsCache;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -46,19 +47,29 @@ final class MemberListTabService
      */
     public function tabCounts(): array
     {
-        return once(function (): array {
-            $migrationPendingIds = $this->migrationPendingMemberIds();
-            $arrearsIds = $this->outstandingArrearsMemberIds();
+        return CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_MEMBERS,
+            'tab_counts',
+            fn (): array => $this->computeTabCounts(),
+        );
+    }
 
-            return [
-                'all' => Member::query()->count(),
-                'active' => Member::query()->where('status', 'active')->count(),
-                'inactive' => Member::query()->where('status', 'inactive')->count(),
-                'withdrawn' => Member::query()->where('status', 'withdrawn')->count(),
-                'delinquent' => count($arrearsIds),
-                'migration_pending' => count($migrationPendingIds),
-            ];
-        });
+    /**
+     * @return array<string, int>
+     */
+    private function computeTabCounts(): array
+    {
+        $migrationPendingIds = $this->migrationPendingMemberIds();
+        $arrearsIds = $this->outstandingArrearsMemberIds();
+
+        return [
+            'all' => Member::query()->count(),
+            'active' => Member::query()->where('status', 'active')->count(),
+            'inactive' => Member::query()->where('status', 'inactive')->count(),
+            'withdrawn' => Member::query()->where('status', 'withdrawn')->count(),
+            'delinquent' => count($arrearsIds),
+            'migration_pending' => count($migrationPendingIds),
+        ];
     }
 
     public function applyTabFilter(Builder $query, string $tab): Builder
@@ -107,7 +118,7 @@ final class MemberListTabService
      */
     public function outstandingArrearsMemberIds(): array
     {
-        return once(fn (): array => app(LoanDelinquencyService::class)->membersWithOutstandingArrearsIds());
+        return app(LoanDelinquencyService::class)->membersWithOutstandingArrearsIds();
     }
 
     /**

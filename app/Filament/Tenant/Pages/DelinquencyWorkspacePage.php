@@ -11,6 +11,7 @@ use App\Filament\Support\LoanListTableHeaderActions;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
+use App\Filament\Tenant\Support\AuditSystemTabRegistry;
 use App\Filament\Tenant\Support\DelinquencyTabRegistry;
 use App\Filament\Tenant\Support\SettingsTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
@@ -309,7 +310,7 @@ class DelinquencyWorkspacePage extends Page implements HasTable
             [
                 'label' => __('Automation schedule'),
                 'description' => __('Digest time and daily loan delinquency check.'),
-                'url' => SettingsTabRegistry::url('collection::tab'),
+                'url' => AuditSystemTabRegistry::url('jobs', ['jobsTab' => 'schedule']),
                 'badge' => null,
                 'tone' => 'gray',
             ],
