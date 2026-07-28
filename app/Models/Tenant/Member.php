@@ -532,6 +532,68 @@ class Member extends Model
         ];
     }
 
+    /**
+     * Admin roster filter options matching {@see adminStatusLabel()} variants.
+     *
+     * @return array<string, string>
+     */
+    public static function adminStatusFilterOptions(): array
+    {
+        return [
+            'active' => __('Active'),
+            'active_arrears' => __('Active').' · '.__('arrears'),
+            'inactive' => __('Inactive'),
+            'inactive_frozen' => __('Inactive').' · '.__('frozen'),
+            'withdrawn' => __('Withdrawn'),
+            'withdrawn_payout_hold' => __('Withdrawn').' · '.__('payout hold'),
+        ];
+    }
+
+    /**
+     * Restrict the query to one {@see adminStatusFilterOptions()} key.
+     */
+    public function scopeAdminStatusFilter(Builder $query, ?string $value): Builder
+    {
+        if (! filled($value)) {
+            return $query;
+        }
+
+        return match ($value) {
+            'active' => $query
+                ->where('status', 'active')
+                ->whereNotIn('id', self::delinquentMemberIdsForFilter()),
+            'active_arrears' => $query
+                ->where('status', 'active')
+                ->whereIn('id', self::delinquentMemberIdsForFilter()),
+            'inactive' => $query
+                ->where('status', 'inactive')
+                ->whereNull('frozen_at'),
+            'inactive_frozen' => $query
+                ->where('status', 'inactive')
+                ->whereNotNull('frozen_at'),
+            'withdrawn' => $query
+                ->where('status', 'withdrawn')
+                ->whereNull('payout_frozen_at'),
+            'withdrawn_payout_hold' => $query
+                ->where('status', 'withdrawn')
+                ->whereNotNull('payout_frozen_at'),
+            default => array_key_exists($value, self::statusOptions())
+            ? $query->where('status', $value)
+            : $query,
+        };
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function delinquentMemberIdsForFilter(): array
+    {
+        $ids = app(LoanDelinquencyService::class)->delinquentMemberIds();
+
+        // Empty whereIn/whereNotIn is awkward in SQL; keep a non-matching sentinel.
+        return $ids === [] ? [0] : $ids;
+    }
+
     public static function statusBadgeColor(string $state): string
     {
         return match ($state) {

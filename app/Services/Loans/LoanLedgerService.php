@@ -386,6 +386,62 @@ final class LoanLedgerService
         );
     }
 
+    public function topUpBorrowerCashFromGuarantorFund(
+        Member $guarantor,
+        Member $borrower,
+        LoanInstallment $installment,
+        float $amount,
+        ?CarbonInterface $transactedAt = null,
+    ): void {
+        if ($amount <= 0.00001) {
+            return;
+        }
+
+        $this->ensureMemberAccounts($guarantor);
+        $this->ensureMemberAccounts($borrower);
+
+        $guarantor->loadMissing('fundAccount');
+        $borrower->loadMissing('cashAccount');
+
+        $guarantorFund = $guarantor->fundAccount;
+        $borrowerCash = $borrower->cashAccount;
+
+        if ($guarantorFund === null) {
+            throw new RuntimeException(__('Guarantor fund account is missing.'));
+        }
+
+        if ($borrowerCash === null) {
+            throw new RuntimeException(__('Borrower cash account is missing.'));
+        }
+
+        $description = __('Guarantor top-up – loan #:id installment #:num', [
+            'id' => $installment->loan_id,
+            'num' => $installment->installment_number,
+        ]);
+
+        $at = $transactedAt ?? BusinessDay::now();
+
+        $this->accounting->debitMemberFundWithMasterMirror(
+            $guarantorFund,
+            $amount,
+            $description,
+            __('(guarantor top-up mirror)'),
+            $installment,
+            $at,
+            $guarantor->id,
+        );
+
+        $this->accounting->creditMemberCashWithMasterMirror(
+            $borrowerCash,
+            $amount,
+            $description,
+            __('(guarantor top-up mirror)'),
+            $installment,
+            $at,
+            $borrower->id,
+        );
+    }
+
     private function postLoanPrincipalRepayment(
         Loan $loan,
         float $amount,

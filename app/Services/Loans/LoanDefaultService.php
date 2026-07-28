@@ -10,6 +10,7 @@ use App\Notifications\Tenant\LoanDefaultBorrowerGuarantorPaidNotification;
 use App\Notifications\Tenant\LoanDefaultGuarantorNotification;
 use App\Notifications\Tenant\LoanDefaultWarningNotification;
 use App\Notifications\Tenant\LoanSettledNotification;
+use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Support\BusinessDay;
 use Illuminate\Notifications\Notification;
@@ -142,24 +143,59 @@ class LoanDefaultService
 
     private function debitGuarantorForInstallment(Loan $loan, LoanInstallment $installment, string $errorMessage): bool
     {
-        try {
-            DB::transaction(function () use ($loan, $installment): void {
-                $this->ledger->debitGuarantorFundForDefault($loan->guarantor, $installment);
+        $guarantorCovered = false;
 
+        try {
+            DB::transaction(function () use ($loan, $installment, &$guarantorCovered): void {
                 $due = $installment->due_date;
                 $deadline = $this->cycles->deadline((int) $due->month, (int) $due->year);
                 $days = $this->lateFees->daysPastDue($deadline, BusinessDay::now());
                 $feeAmount = $this->lateFees->repaymentLateFeeForDays($days);
 
                 $isLate = $days >= 1;
+                $principalOutstanding = max(
+                    0.0,
+                    (float) $installment->amount - (float) ($installment->amount_collected ?? 0),
+                );
+                $requiredCash = $principalOutstanding + $feeAmount;
+                $borrower = $loan->member;
+                $guarantor = $loan->guarantor;
 
-                $installment->update([
-                    'status' => 'paid',
-                    'paid_at' => BusinessDay::now(),
-                    'paid_by_guarantor' => true,
-                    'is_late' => $isLate,
-                    'late_fee_amount' => $feeAmount > 0.00001 ? $feeAmount : 0,
-                ]);
+                if ($borrower === null || $guarantor === null) {
+                    throw new \RuntimeException(__('Borrower or guarantor is missing.'));
+                }
+
+                $borrowerCash = (float) $borrower->fresh()->getCashBalance();
+                $guarantorTopUp = max(0.0, $requiredCash - $borrowerCash);
+                $guarantorCovered = $guarantorTopUp > 0.00001;
+
+                AccountingService::withoutMemberCashCollection(function () use ($installment, $borrower, $guarantor, $principalOutstanding, $feeAmount, $guarantorTopUp, $guarantorCovered, $isLate): void {
+                    if ($guarantorTopUp > 0.00001) {
+                        $this->ledger->topUpBorrowerCashFromGuarantorFund(
+                            $guarantor,
+                            $borrower,
+                            $installment,
+                            $guarantorTopUp,
+                        );
+                    }
+
+                    $this->ledger->debitCashForRepayment(
+                        $borrower,
+                        $installment,
+                        $feeAmount,
+                        null,
+                        $principalOutstanding,
+                    );
+
+                    $installment->update([
+                        'status' => 'paid',
+                        'paid_at' => BusinessDay::now(),
+                        'paid_by_guarantor' => $guarantorCovered,
+                        'is_late' => $isLate,
+                        'late_fee_amount' => $feeAmount > 0.00001 ? $feeAmount : 0,
+                        'amount_collected' => (float) $installment->amount,
+                    ]);
+                });
 
                 if ($isLate) {
                     $amount = (float) $installment->amount;
@@ -181,10 +217,12 @@ class LoanDefaultService
             return false;
         }
 
-        $this->notifyUserIfPresent(
-            $loan->guarantor?->user,
-            new LoanDefaultGuarantorNotification($loan, $installment)
-        );
+        if ($guarantorCovered) {
+            $this->notifyUserIfPresent(
+                $loan->guarantor?->user,
+                new LoanDefaultGuarantorNotification($loan, $installment)
+            );
+        }
 
         $loan->loadMissing(['member.user', 'guarantor']);
 
@@ -192,14 +230,14 @@ class LoanDefaultService
         $guarantorUserId = $loan->guarantor?->user?->id;
 
         // Avoid a duplicate alert when the borrower and guarantor share the same login.
-        if ($borrowerUser !== null && $borrowerUser->id !== $guarantorUserId) {
+        if ($guarantorCovered && $borrowerUser !== null && $borrowerUser->id !== $guarantorUserId) {
             $this->notifyUserIfPresent(
                 $borrowerUser,
                 new LoanDefaultBorrowerGuarantorPaidNotification($loan, $installment)
             );
         }
 
-        return true;
+        return $guarantorCovered;
     }
 
     private function notifyUserIfPresent(?User $user, Notification $notification): void

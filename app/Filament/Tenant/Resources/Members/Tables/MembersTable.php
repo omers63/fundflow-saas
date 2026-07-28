@@ -82,7 +82,10 @@ class MembersTable
             ])
             ->filters([
                 SelectFilter::make('status')
-                    ->options(Member::statusOptions()),
+                    ->options(Member::adminStatusFilterOptions())
+                    ->query(fn (Builder $query, array $data): Builder => $query->adminStatusFilter(
+                        isset($data['value']) ? (string) $data['value'] : null,
+                    )),
                 SelectFilter::make('cycle_obligation')
                     ->label(__('Cycle obligation'))
                     ->options([

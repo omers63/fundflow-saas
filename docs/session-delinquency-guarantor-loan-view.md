@@ -14,8 +14,6 @@ The Delinquency page overdues table shown table with rows consisting of checkbox
 
 Investigating the overdue table column setup — likely related to the recent tab-switch reconfigure change.
 
-
-
 ---
 
 ### Response
@@ -104,7 +102,7 @@ On **2026-07-27 15:49:58** (samman), installment **#20** on loan **176** was col
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | Installment   | `#20` (id `2345`), due `2026-02-05`, amount `3,000`                                                                        |
 | Trigger       | `LoanDefaultService::processDefaults()` (part of **Run delinquency check** / `loans:check-defaults`)                     |
-| Who paid      | Guarantor**#7** عبدالرحمن بهجت عبدالرحمن زاهد — fund debit                                        |
+| Who paid      | Guarantor**#7** عبدالرحمن بهجت عبدالرحمن زاهد — fund debit                                              |
 | Borrower      | **#54** مهند بهجت عبدالرحمن زاهد                                                                        |
 | Ledger        | `Guarantor default – loan #176 installment #20` (txns `46763`–`46767`)                                                     |
 | Repayment row | `loan_repayments` id `2274`, notes `ff:installment:20` (created by the installment observer when status flipped to `paid`) |
@@ -353,25 +351,3 @@ Done. On the loan view page:
 **Header subheading** now shows `Name (member#)` for the borrower and `Guarantor: Name (member#)` when present — both link to the member view page — then the loan status.
 
 **Details sections** also show name + number together on the member and guarantor fields, with the numbers linked as well.
-
----
-
-## Prompt 11
-
-I already have a badge for the gaurantor in the loan progress card, why list it again on top.
-
-### Response
-
-Removing the guarantor from the header subheading — it already appears on the progress card.
-
----
-
-### Response
-
-Removing guarantor from the header and adding the number + member link on the progress-card badge instead.
-
----
-
-### Response
-
-Removed the guarantor from the page header. It stays only on the progress-card badge, now with member number and a link to their profile. The header still shows the linked borrower name + number and status.

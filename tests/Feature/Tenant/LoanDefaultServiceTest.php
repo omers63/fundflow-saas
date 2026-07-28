@@ -158,6 +158,68 @@ test('process defaults debits guarantor when defaults exceed grace cycles', func
     Notification::assertSentTo($borrower->user, LoanDefaultBorrowerGuarantorPaidNotification::class);
 });
 
+test('process defaults debits guarantor only for the overdue top-up shortfall', function () {
+    Notification::fake();
+    Setting::set('loan', 'default_grace_cycles', 1);
+    Setting::set('late_fee', 'repayment_day_30', 0);
+
+    $accounting = app(AccountingService::class);
+    $borrower = createUserAndMemberForDefaults($accounting);
+    $guarantor = createUserAndMemberForDefaults($accounting, ['member_number' => 'G-' . uniqid()]);
+
+    $borrower->cashAccount()->update(['balance' => 1000]);
+    $guarantor->fundAccount()->update(['balance' => 50000]);
+
+    $loan = Loan::query()->create([
+        'member_id' => $borrower->id,
+        'guarantor_member_id' => $guarantor->id,
+        'amount' => 12000,
+        'amount_requested' => 12000,
+        'amount_approved' => 12000,
+        'amount_disbursed' => 12000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 2400,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'late_repayment_count' => 2,
+        'applied_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    $installment = LoanInstallment::query()->create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 2400,
+        'due_date' => Carbon::now()->subMonths(3),
+        'status' => 'overdue',
+        'paid_by_guarantor' => false,
+    ]);
+
+    $guarantorFundBefore = (float) $guarantor->fresh()->fundAccount?->balance;
+    $borrowerCashBefore = (float) $borrower->fresh()->cashAccount?->balance;
+    $borrowerFundBefore = (float) $borrower->fresh()->fundAccount?->balance;
+
+    $result = app(LoanDefaultService::class)->processDefaults();
+
+    $installment->refresh();
+    $guarantorFundAfter = (float) $guarantor->fresh()->fundAccount?->balance;
+    $borrowerCashAfter = (float) $borrower->fresh()->cashAccount?->balance;
+    $borrowerFundAfter = (float) $borrower->fresh()->fundAccount?->balance;
+
+    expect($result['warned'])->toBe(0)
+        ->and($result['debited_from_guarantor'])->toBe(1)
+        ->and($installment->status)->toBe('paid')
+        ->and($installment->paid_by_guarantor)->toBeTrue()
+        ->and($guarantorFundAfter)->toBe($guarantorFundBefore - 1400.0)
+        ->and($borrowerCashAfter)->toBe($borrowerCashBefore - 2400.0 + 1400.0)
+        ->and($borrowerFundAfter)->toBe($borrowerFundBefore + 2400.0)
+        ->and($loan->repayments()->first()?->notes)->toBe(LoanRepaymentNote::installment(1, true));
+
+    Notification::assertSentTo($guarantor->user, LoanDefaultGuarantorNotification::class);
+    Notification::assertSentTo($borrower->user, LoanDefaultBorrowerGuarantorPaidNotification::class);
+});
+
 test('process defaults debits guarantor for every overdue installment once past grace', function () {
     Notification::fake();
     Setting::set('loan', 'default_grace_cycles', 2);

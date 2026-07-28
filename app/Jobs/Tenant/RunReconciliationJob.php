@@ -44,12 +44,11 @@ final class RunReconciliationJob implements ShouldQueue
         public array $options = [],
         public ?int $notifyUserId = null,
         public ?string $uiRunToken = null,
-    ) {
-    }
+    ) {}
 
     public static function uiRunCacheKey(string $token): string
     {
-        return 'reconciliation:ui_run:' . $token;
+        return 'reconciliation:ui_run:'.$token;
     }
 
     public static function uiRunStatus(mixed $cached): ?string
@@ -70,7 +69,7 @@ final class RunReconciliationJob implements ShouldQueue
      */
     public static function uiRunToast(mixed $cached): ?array
     {
-        if (!is_array($cached)) {
+        if (! is_array($cached)) {
             return null;
         }
 
@@ -78,7 +77,7 @@ final class RunReconciliationJob implements ShouldQueue
         $body = $cached['body'] ?? null;
         $color = $cached['color'] ?? null;
 
-        if (!is_string($title) || $title === '' || !is_string($body) || !is_string($color)) {
+        if (! is_string($title) || $title === '' || ! is_string($body) || ! is_string($color)) {
             return null;
         }
 
@@ -145,7 +144,7 @@ final class RunReconciliationJob implements ShouldQueue
                 $periodEnd = $anchor->copy()->endOfMonth();
                 $report = $reports->buildReport($this->mode, $now, $periodStart, $periodEnd, $this->options);
             } else {
-                throw new \InvalidArgumentException('Unsupported reconciliation mode: ' . $this->mode);
+                throw new \InvalidArgumentException('Unsupported reconciliation mode: '.$this->mode);
             }
 
             $snapshot = $reports->persistSnapshot(
@@ -156,17 +155,26 @@ final class RunReconciliationJob implements ShouldQueue
             $pass = $report['verdict']['pass'] ?? false;
 
             $message = $this->localizeForRequester(function () use ($pass, $report, $snapshot): array {
+                $summaryBody = __('Snapshot #:id — critical: :critical, warnings: :warnings', [
+                    'id' => $snapshot->id,
+                    'critical' => ($report['verdict']['critical_issues'] ?? 0),
+                    'warnings' => ($report['verdict']['warnings'] ?? 0),
+                ]);
+                $affectedLoanSummary = $this->affectedLoanIdsSummary($report);
+
+                if ($affectedLoanSummary !== null) {
+                    $summaryBody .= ' '.__('Affected loans: :loans', [
+                        'loans' => $affectedLoanSummary,
+                    ]);
+                }
+
                 return [
                     'title' => $pass
                         ? __('Reconciliation passed')
                         : __('Reconciliation found critical issues'),
-                    'body' => __('Snapshot #:id — critical: :critical, warnings: :warnings', [
-                        'id' => $snapshot->id,
-                        'critical' => ($report['verdict']['critical_issues'] ?? 0),
-                        'warnings' => ($report['verdict']['warnings'] ?? 0),
-                    ]),
+                    'body' => $summaryBody,
                     'color' => $pass ? 'success' : 'danger',
-                    'critical' => !$pass,
+                    'critical' => ! $pass,
                 ];
             });
 
@@ -276,5 +284,61 @@ final class RunReconciliationJob implements ShouldQueue
             reconciliationUrl: ReconciliationOverviewPage::getUrl(['sideTab' => $sideTab], panel: 'tenant'),
             critical: $critical,
         ));
+    }
+
+    /**
+     * @param  array<string, mixed>  $report
+     */
+    private function affectedLoanIdsSummary(array $report): ?string
+    {
+        $checks = $report['checks'] ?? null;
+
+        if (! is_array($checks)) {
+            return null;
+        }
+
+        $loanIds = [];
+
+        foreach ($checks as $check) {
+            if (! is_array($check)) {
+                continue;
+            }
+
+            if (($check['severity'] ?? null) !== 'critical') {
+                continue;
+            }
+
+            $issues = $check['issues'] ?? null;
+            if (! is_array($issues)) {
+                continue;
+            }
+
+            foreach ($issues as $issue) {
+                if (! is_array($issue)) {
+                    continue;
+                }
+
+                $loanId = $issue['loan_id'] ?? null;
+                if (is_numeric($loanId) && (int) $loanId > 0) {
+                    $loanIds[(int) $loanId] = true;
+                }
+            }
+        }
+
+        if ($loanIds === []) {
+            return null;
+        }
+
+        $ids = array_keys($loanIds);
+        sort($ids);
+
+        $visibleIds = array_slice($ids, 0, 10);
+        $labels = array_map(static fn (int $id): string => '#'.$id, $visibleIds);
+
+        if (count($ids) > count($visibleIds)) {
+            $labels[] = __('+ :count more', ['count' => count($ids) - count($visibleIds)]);
+        }
+
+        return implode(', ', $labels);
     }
 }
