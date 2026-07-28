@@ -241,3 +241,60 @@ test('early settled settlement row is kept when prior emi repayment logs exist',
     expect($deleted)->toBe(0)
         ->and($loan->fresh()->repayments()->count())->toBe(2);
 });
+
+test('guarantor paid installment repayment logs use guarantor paid type', function () {
+    $member = Member::factory()->create(['status' => 'active']);
+    $loan = Loan::factory()->for($member)->create(['status' => 'active']);
+
+    $installment = LoanInstallment::query()->create([
+        'loan_id' => $loan->id,
+        'installment_number' => 20,
+        'amount' => 3000,
+        'due_date' => now()->subMonths(2),
+        'status' => 'overdue',
+        'paid_by_guarantor' => false,
+    ]);
+
+    $installment->update([
+        'status' => 'paid',
+        'paid_at' => now(),
+        'paid_by_guarantor' => true,
+    ]);
+
+    // Observer may have logged with stale paid_by_guarantor=false if update order matters;
+    // force the repayment note path used by LoanRepaymentLogService.
+    $loan->repayments()->delete();
+
+    $repayment = app(LoanRepaymentLogService::class)->recordInstallmentRepayment($installment->fresh());
+
+    expect($repayment->notes)->toBe(LoanRepaymentNote::installment(20, true))
+        ->and(LoanRepaymentNote::label($repayment->notes))->toBe(__('Guarantor paid'))
+        ->and(LoanRepaymentNote::badgeColor($repayment->notes))->toBe('warning');
+});
+
+test('sync guarantor repayment notes upgrades legacy emi notes', function () {
+    $member = Member::factory()->create(['status' => 'active']);
+    $loan = Loan::factory()->for($member)->create(['status' => 'active']);
+
+    LoanInstallment::query()->create([
+        'loan_id' => $loan->id,
+        'installment_number' => 20,
+        'amount' => 3000,
+        'due_date' => now()->subMonths(2),
+        'status' => 'paid',
+        'paid_at' => now(),
+        'paid_by_guarantor' => true,
+    ]);
+
+    $loan->repayments()->create([
+        'amount' => 3000,
+        'paid_at' => now(),
+        'notes' => LoanRepaymentNote::installment(20),
+    ]);
+
+    $updated = app(LoanRepaymentLogService::class)->syncGuarantorRepaymentNotes($loan->fresh());
+
+    expect($updated)->toBe(1)
+        ->and($loan->fresh()->repayments()->first()->notes)->toBe(LoanRepaymentNote::installment(20, true))
+        ->and(LoanRepaymentNote::label($loan->fresh()->repayments()->first()->notes))->toBe(__('Guarantor paid'));
+});

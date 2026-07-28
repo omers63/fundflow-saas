@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Tenant\Resources\Loans\Pages\ViewLoan;
+use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
@@ -44,10 +45,41 @@ test('loan view page shows lifecycle insights and detail sections', function () 
         ->assertSuccessful()
         ->assertSee('Home renovation', false)
         ->assertSee('Witness One', false)
-        ->assertSeeHtml('ff-loan-detail-shell')
-        ->assertSeeHtml('ff-loan-stepper')
         ->assertSee(__('Application & purpose'), false)
         ->assertSee(__('Details'), false);
+});
+
+test('loan view page subheading links member with number and omits guarantor', function () {
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'name' => 'Borrower One',
+        'member_number' => 'M-100',
+    ]);
+    $guarantor = Member::factory()->create([
+        'status' => 'active',
+        'name' => 'Guarantor One',
+        'member_number' => 'M-200',
+    ]);
+
+    $loan = Loan::factory()->for($member)->create([
+        'status' => 'active',
+        'guarantor_member_id' => $guarantor->id,
+        'amount_requested' => 12000,
+        'amount_approved' => 12000,
+        'amount_disbursed' => 12000,
+        'disbursed_at' => now(),
+    ]);
+
+    $component = Livewire::test(ViewLoan::class, ['record' => $loan->getKey()])
+        ->assertSuccessful();
+
+    $subheading = (string) $component->instance()->getSubheading();
+
+    expect($subheading)
+        ->toContain('Borrower One (M-100)')
+        ->toContain(MemberResource::getUrl('view', ['record' => $member]))
+        ->not->toContain('Guarantor One')
+        ->not->toContain(e(__('Guarantor')));
 });
 
 test('loan view page header actions are icon buttons', function () {

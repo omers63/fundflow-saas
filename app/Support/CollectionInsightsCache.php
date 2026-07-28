@@ -21,6 +21,8 @@ final class CollectionInsightsCache
 
     public const DOMAIN_MEMBERS = 'member_insights';
 
+    public const DOMAIN_DELINQUENCY = 'delinquency_insights';
+
     private const TTL_SECONDS = 300;
 
     private const GENERATION_TTL_SECONDS = 3600;
@@ -50,6 +52,7 @@ final class CollectionInsightsCache
         self::bump(self::DOMAIN_CONTRIBUTIONS);
         self::bump(self::DOMAIN_LOAN_EMI);
         self::bump(self::DOMAIN_MEMBERS);
+        self::bump(self::DOMAIN_DELINQUENCY);
     }
 
     private static function generation(string $domain): int

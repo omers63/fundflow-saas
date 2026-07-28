@@ -428,6 +428,7 @@ class ContributionResource extends Resource
         if ($bumpInsights) {
             CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_CONTRIBUTIONS);
             CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_MEMBERS);
+            CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_DELINQUENCY);
         }
     }
 

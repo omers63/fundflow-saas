@@ -132,6 +132,7 @@ class LoanDelinquencyService
     /**
      * @return array{
      *     overdue_installments: int,
+     *     overdue_amount: float,
      *     contribution_arrears_periods: int,
      *     contribution_arrears_members: int,
      *     members_in_arrears: int,
@@ -142,23 +143,41 @@ class LoanDelinquencyService
      */
     public function digestCounts(): array
     {
-        $arrears = $this->contributionArrearsDigestStats();
+        /** @var array{
+         *     overdue_installments: int,
+         *     overdue_amount: float,
+         *     contribution_arrears_periods: int,
+         *     contribution_arrears_members: int,
+         *     members_in_arrears: int,
+         *     delinquent_members: int,
+         *     guarantor_at_risk: int,
+         *     guarantor_transferred: int
+         * } */
+        return CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_DELINQUENCY,
+            'digest_counts',
+            function (): array {
+                $arrears = $this->contributionArrearsDigestStats();
 
-        return [
-            'overdue_installments' => (int) LoanInstallment::query()
-                ->where('status', 'overdue')
-                ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
-                ->count(),
-            'contribution_arrears_periods' => $arrears['periods'],
-            'contribution_arrears_members' => $arrears['members'],
-            'members_in_arrears' => count($this->membersWithOutstandingArrearsIds()),
-            'delinquent_members' => count($this->delinquentMemberIds()),
-            'guarantor_at_risk' => $this->loansAtGuarantorRiskCount(),
-            'guarantor_transferred' => (int) Loan::query()
-                ->where('status', 'active')
-                ->whereNotNull('guarantor_liability_transferred_at')
-                ->count(),
-        ];
+                $overdueBase = LoanInstallment::query()
+                    ->where('status', 'overdue')
+                    ->whereHas('loan', fn ($q) => $q->where('status', 'active'));
+
+                return [
+                    'overdue_installments' => (int) (clone $overdueBase)->count(),
+                    'overdue_amount' => round((float) (clone $overdueBase)->sum('amount'), 2),
+                    'contribution_arrears_periods' => $arrears['periods'],
+                    'contribution_arrears_members' => $arrears['members'],
+                    'members_in_arrears' => count($this->membersWithOutstandingArrearsIds()),
+                    'delinquent_members' => count($this->delinquentMemberIds()),
+                    'guarantor_at_risk' => $this->loansAtGuarantorRiskCount(),
+                    'guarantor_transferred' => (int) Loan::query()
+                        ->where('status', 'active')
+                        ->whereNotNull('guarantor_liability_transferred_at')
+                        ->count(),
+                ];
+            },
+        );
     }
 
     /**
@@ -312,11 +331,14 @@ class LoanDelinquencyService
             return $this->delinquentMemberIdsCache;
         }
 
-        return $this->delinquentMemberIdsCache = TenantRuntimeCache::remember(
-            'loan_delinquency:delinquent_member_ids',
-            60,
+        /** @var list<int> $ids */
+        $ids = CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_DELINQUENCY,
+            'delinquent_member_ids',
             fn (): array => $this->computeDelinquentMemberIds(),
         );
+
+        return $this->delinquentMemberIdsCache = $ids;
     }
 
     /**
@@ -536,6 +558,7 @@ class LoanDelinquencyService
 
         CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_MEMBERS);
         CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_CONTRIBUTIONS);
+        CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_DELINQUENCY);
     }
 
     private static function memberBreachCacheKey(int $memberId): string
@@ -1185,15 +1208,21 @@ class LoanDelinquencyService
 
     public function loansAtGuarantorRiskCount(): int
     {
-        $grace = Setting::loanDefaultGraceCycles();
+        return (int) CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_DELINQUENCY,
+            'guarantor_at_risk_count',
+            function (): int {
+                $grace = Setting::loanDefaultGraceCycles();
 
-        return Loan::query()
-            ->where('status', 'active')
-            ->whereNotNull('guarantor_member_id')
-            ->whereNull('guarantor_liability_transferred_at')
-            ->whereHas('installments', fn ($q) => $q->where('status', 'overdue'))
-            ->where('late_repayment_count', '>=', $grace)
-            ->count();
+                return Loan::query()
+                    ->where('status', 'active')
+                    ->whereNotNull('guarantor_member_id')
+                    ->whereNull('guarantor_liability_transferred_at')
+                    ->whereHas('installments', fn ($q) => $q->where('status', 'overdue'))
+                    ->where('late_repayment_count', '>=', $grace)
+                    ->count();
+            },
+        );
     }
 
     private function memberCanOweContributions(Member $member): bool

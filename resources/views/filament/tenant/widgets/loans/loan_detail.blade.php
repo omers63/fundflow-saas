@@ -1,11 +1,11 @@
 @php
-    $currency = $d['currency'];
-    $snapshot = $d['snapshot'] ?? [];
-    $status = $d['status'] ?? '';
-    $isPending = $status === 'pending';
-    $isPreDisburse = in_array($status, ['pending', 'approved', 'partially_disbursed'], true);
-    $showRepayProgress = (int) ($snapshot['installments_total'] ?? 0) > 0;
-    $showDisburseProgress = (float) ($snapshot['approved'] ?? 0) > 0 || $isPreDisburse;
+$currency = $d['currency'];
+$snapshot = $d['snapshot'] ?? [];
+$status = $d['status'] ?? '';
+$isPending = $status === 'pending';
+$isPreDisburse = in_array($status, ['pending', 'approved', 'partially_disbursed'], true);
+$showRepayProgress = (int) ($snapshot['installments_total'] ?? 0) > 0;
+$showDisburseProgress = (float) ($snapshot['approved'] ?? 0) > 0 || $isPreDisburse;
 @endphp
 
 <section
@@ -33,16 +33,16 @@
                         {{ $d['status_label'] ?? '' }}
                     @endif
                 </p>
-            @elseif ($isPreDisburse && ! $showRepayProgress)
+            @elseif ($isPreDisburse && !$showRepayProgress)
                 <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ __('Approved amount') }}</p>
                 <p class="mt-1 text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white sm:text-3xl">
                     <x-member::amount :value="$snapshot['approved'] ?? $snapshot['requested'] ?? 0" :currency="$currency" />
                 </p>
                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                     {{ __(':disbursed disbursed · :remaining remaining', [
-                        'disbursed' => $snapshot['disbursed_formatted'] ?? '—',
-                        'remaining' => $snapshot['remaining_formatted'] ?? '—',
-                    ]) }}
+        'disbursed' => $snapshot['disbursed_formatted'] ?? '—',
+        'remaining' => $snapshot['remaining_formatted'] ?? '—',
+    ]) }}
                 </p>
             @else
                 <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ __('Outstanding balance') }}</p>
@@ -60,9 +60,9 @@
                 <p @class(['mt-1 text-xs text-gray-500 dark:text-gray-400', 'mt-2' => $snapshot['outstanding_breakdown']['has_split'] ?? false])>
                     @if ($showRepayProgress)
                         {{ __(':paid of :total installments paid', [
-                            'paid' => $snapshot['installments_paid'] ?? 0,
-                            'total' => $snapshot['installments_total'] ?? 0,
-                        ]) }}
+            'paid' => $snapshot['installments_paid'] ?? 0,
+            'total' => $snapshot['installments_total'] ?? 0,
+        ]) }}
                         @if ((int) ($snapshot['installments_overdue'] ?? 0) > 0)
                             · <span class="text-rose-600 dark:text-rose-400">{{ trans_choice(':count overdue|:count overdue', (int) $snapshot['installments_overdue'], ['count' => (int) $snapshot['installments_overdue']]) }}</span>
                         @endif
@@ -112,10 +112,10 @@
 
             @if ($d['next_due'] ?? null)
                 <span @class([
-                    'inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold',
-                    'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/35 dark:bg-amber-950/35 dark:text-amber-200' => $d['next_due']['is_overdue'],
-                    'border-gray-200 bg-gray-50 text-gray-700 dark:border-white/10 dark:bg-gray-800/70 dark:text-gray-200' => ! $d['next_due']['is_overdue'],
-                ])>
+            'inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold',
+            'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/35 dark:bg-amber-950/35 dark:text-amber-200' => $d['next_due']['is_overdue'],
+            'border-gray-200 bg-gray-50 text-gray-700 dark:border-white/10 dark:bg-gray-800/70 dark:text-gray-200' => !$d['next_due']['is_overdue'],
+        ])>
                     <x-heroicon-o-calendar-days class="h-3.5 w-3.5 shrink-0" />
                     <span>
                         {{ __('Next EMI') }}
@@ -129,10 +129,22 @@
             @endif
 
             @if ($d['guarantor'] ?? null)
-                <span class="inline-flex max-w-full items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[11px] font-semibold text-gray-700 dark:border-white/10 dark:bg-gray-800/70 dark:text-gray-200">
+                @php
+                    $guarantorLabel = filled($d['guarantor']['member_number'] ?? null)
+                        ? $d['guarantor']['name'] . ' (' . $d['guarantor']['member_number'] . ')'
+                        : $d['guarantor']['name'];
+                @endphp
+                <span
+                    class="inline-flex max-w-full items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[11px] font-semibold text-gray-700 dark:border-white/10 dark:bg-gray-800/70 dark:text-gray-200">
                     <x-heroicon-o-user-group class="h-3.5 w-3.5 shrink-0" />
                     <span>
-                        {{ __('Guarantor') }}: {{ $d['guarantor']['name'] }}
+                        {{ __('Guarantor') }}:
+                        @if (filled($d['guarantor']['url'] ?? null))
+                            <a href="{{ $d['guarantor']['url'] }}"
+                                class="text-primary-600 underline hover:decoration-primary-600 dark:text-primary-400">{{ $guarantorLabel }}</a>
+                        @else
+                            {{ $guarantorLabel }}
+                        @endif
                         @if ($d['guarantor']['released'])
                             · <span class="text-emerald-600 dark:text-emerald-400">{{ __('Released') }}</span>
                         @elseif ($d['guarantor']['liability_transferred'])

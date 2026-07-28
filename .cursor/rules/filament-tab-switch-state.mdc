@@ -1,0 +1,51 @@
+---
+description: Filament Livewire tab switches — refresh header actions and table column manager state
+alwaysApply: true
+---
+
+# Filament tab-switch state (do not regress)
+
+Filament **caches** page header actions and table column-manager state on the Livewire component. Side/hub tab switches that only change a property (e.g. `sideTab`, `jobsTab`, `hubTab`) **do not** rebuild that cache unless you do it explicitly. We have hit this repeatedly (checkbox-only tables; header actions on the wrong tab or missing).
+
+## 1. Header actions that depend on the active tab
+
+If `getHeaderActions()` returns different actions (or `[]`) by tab:
+
+- After changing the tab in `setSideTab` / `setHubTab` / equivalent, **rebuild** the cache.
+- Reference: `AuditSystemPage::refreshHeaderActions()`, `ListMyLoans::refreshHeaderActions()`.
+
+```php
+foreach ($this->cachedHeaderActions as $previous) {
+    if ($previous instanceof Action) {
+        unset($this->cachedActions[$previous->getName()]);
+    }
+    if ($previous instanceof ActionGroup) {
+        foreach ($previous->getFlatActions() as $flat) {
+            unset($this->cachedActions[$flat->getName()]);
+        }
+    }
+}
+$this->cachedHeaderActions = [];
+$this->cacheInteractsWithHeaderActions();
+```
+
+**Symptom if skipped:** actions stick after leaving the tab, or never appear when entering it (depends on which tab mounted first).
+
+## 2. Tables with different columns per tab
+
+When `reconfigureTableForSideTab()` (or similar) rebuilds the table:
+
+1. Clear `$this->tableColumns = []` and `$this->cachedDefaultTableColumnState = null`
+2. **Then** call `$this->initTableColumnManager()`
+
+**Never** init the column manager and clear afterward.
+
+Reference order: `DelinquencyWorkspacePage`, `ListBankAccounts`.
+
+**Symptom if wrong:** rows show **selection checkboxes only** (every data column treated as hidden).
+
+## Checklist for new tabbed Filament pages
+
+- [ ] Tab change → refresh header actions if they are tab-scoped
+- [ ] Tab change → clear column state **before** `initTableColumnManager()`
+- [ ] Pest: assert actions empty off-tab / visible on-tab; assert data columns after a Livewire tab switch

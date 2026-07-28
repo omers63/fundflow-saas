@@ -6,6 +6,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
+use App\Notifications\Tenant\LoanDefaultBorrowerGuarantorPaidNotification;
 use App\Notifications\Tenant\LoanDefaultGuarantorNotification;
 use App\Notifications\Tenant\LoanDefaultWarningNotification;
 use App\Notifications\Tenant\LoanSettledNotification;
@@ -23,10 +24,11 @@ class LoanDefaultService
     ) {}
 
     /**
-     * For each overdue installment across all active loans:
-     *  - Count total defaults on the loan.
-     *  - 2 defaults (cumulative) → warn borrower.
-     *  - 3rd+ default → debit guarantor's fund account + notify guarantor.
+     * For each active loan with overdue installments:
+     *  - Within grace (cumulative late + overdue count) → warn borrower only.
+     *  - Past grace, guarantor liability transferred, or guarantor already paid
+     *    any installment → debit the guarantor's fund for every remaining overdue
+     *    installment (not only the installment that crossed the threshold).
      */
     public function processDefaults(): array
     {
@@ -47,39 +49,42 @@ class LoanDefaultService
                     return;
                 }
 
-                $totalDefaults = $loan->late_repayment_count;
-
+                $projectedDefaults = (int) $loan->late_repayment_count + $overdueInstallments->count();
                 $guarantorLiabilityFlag = $loan->guarantor_liability_transferred_at !== null;
+                // Once the guarantor fund has already paid any installment, keep collecting
+                // remaining overdues — do not fall back into grace after a partial run.
+                $guarantorAlreadyCollecting = $loan->installments->contains(
+                    fn (LoanInstallment $installment): bool => (bool) $installment->paid_by_guarantor
+                );
+                $shouldDebitGuarantor = $guarantorLiabilityFlag
+                    || $guarantorAlreadyCollecting
+                    || $projectedDefaults > $grace;
+                $canDebitGuarantor = $loan->guarantor_member_id
+                    && ! $loan->isGuarantorReleased()
+                    && $loan->guarantor !== null;
+
+                if ($shouldDebitGuarantor && $canDebitGuarantor) {
+                    $errorMessage = $guarantorLiabilityFlag
+                        ? 'LoanDefaultService: guarantor debit failed (delinquency liability)'
+                        : 'LoanDefaultService: guarantor debit failed';
+
+                    foreach ($overdueInstallments as $installment) {
+                        if ($this->debitGuarantorForInstallment($loan, $installment, $errorMessage)) {
+                            $debited++;
+                        }
+                    }
+
+                    return;
+                }
+
+                // Still within grace, or no guarantor available to debit: warn only.
+                $totalDefaults = (int) $loan->late_repayment_count;
 
                 foreach ($overdueInstallments as $installment) {
                     $totalDefaults++;
 
-                    if ($guarantorLiabilityFlag) {
-                        // Delinquency suspension: prefer immediate guarantor collection when a guarantor exists.
-                        if ($loan->guarantor_member_id && ! $loan->isGuarantorReleased()) {
-                            if ($this->debitGuarantorForInstallment($loan, $installment, 'LoanDefaultService: guarantor debit failed (delinquency liability)')) {
-                                $debited++;
-                            }
-                        } elseif ($totalDefaults <= $grace) {
-                            if ($this->warnBorrower($loan, $installment, $totalDefaults, $grace)) {
-                                $warned++;
-                            }
-                        }
-
-                        continue;
-                    }
-
-                    if ($totalDefaults <= $grace) {
-                        if ($this->warnBorrower($loan, $installment, $totalDefaults, $grace)) {
-                            $warned++;
-                        }
-                    } else {
-                        // Debit guarantor's fund + notify guarantor
-                        if ($loan->guarantor_member_id && ! $loan->isGuarantorReleased()) {
-                            if ($this->debitGuarantorForInstallment($loan, $installment, 'LoanDefaultService: guarantor debit failed')) {
-                                $debited++;
-                            }
-                        }
+                    if ($this->warnBorrower($loan, $installment, $totalDefaults, $grace)) {
+                        $warned++;
                     }
                 }
             });
@@ -146,13 +151,23 @@ class LoanDefaultService
                 $days = $this->lateFees->daysPastDue($deadline, BusinessDay::now());
                 $feeAmount = $this->lateFees->repaymentLateFeeForDays($days);
 
+                $isLate = $days >= 1;
+
                 $installment->update([
                     'status' => 'paid',
                     'paid_at' => BusinessDay::now(),
                     'paid_by_guarantor' => true,
-                    'is_late' => $days >= 1,
+                    'is_late' => $isLate,
                     'late_fee_amount' => $feeAmount > 0.00001 ? $feeAmount : 0,
                 ]);
+
+                if ($isLate) {
+                    $amount = (float) $installment->amount;
+                    $loan->increment('late_repayment_count');
+                    $loan->increment('late_repayment_amount', $amount);
+                    $loan->member?->increment('late_repayment_count');
+                    $loan->member?->increment('late_repayment_amount', $amount);
+                }
 
                 $loan->releaseGuarantorIfDue();
             });
@@ -170,6 +185,19 @@ class LoanDefaultService
             $loan->guarantor?->user,
             new LoanDefaultGuarantorNotification($loan, $installment)
         );
+
+        $loan->loadMissing(['member.user', 'guarantor']);
+
+        $borrowerUser = $loan->member?->user;
+        $guarantorUserId = $loan->guarantor?->user?->id;
+
+        // Avoid a duplicate alert when the borrower and guarantor share the same login.
+        if ($borrowerUser !== null && $borrowerUser->id !== $guarantorUserId) {
+            $this->notifyUserIfPresent(
+                $borrowerUser,
+                new LoanDefaultBorrowerGuarantorPaidNotification($loan, $installment)
+            );
+        }
 
         return true;
     }

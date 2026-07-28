@@ -30,12 +30,24 @@ final class LoanViewInfolist
                     ->schema([
                         TextEntry::make('member.name')
                             ->label(__('Member'))
+                            ->formatStateUsing(function (?string $state, Loan $record): string {
+                                $number = $record->member?->member_number;
+
+                                if (filled($state) && filled($number)) {
+                                    return $state.' ('.$number.')';
+                                }
+
+                                return $state ?? __('—');
+                            })
                             ->url(fn (Loan $record): ?string => $record->member_id
                                 ? MemberResource::getUrl('view', ['record' => $record->member_id])
                                 : null),
                         TextEntry::make('member.member_number')
                             ->label(__('Member number'))
-                            ->placeholder(__('—')),
+                            ->placeholder(__('—'))
+                            ->url(fn (Loan $record): ?string => $record->member_id
+                                ? MemberResource::getUrl('view', ['record' => $record->member_id])
+                                : null),
                         TextEntry::make('is_emergency')
                             ->label(__('Emergency loan'))
                             ->badge()
@@ -222,6 +234,15 @@ final class LoanViewInfolist
                     ->schema([
                         TextEntry::make('guarantor.name')
                             ->label(__('Guarantor (matched member)'))
+                            ->formatStateUsing(function (?string $state, Loan $record): string {
+                                $number = $record->guarantor?->member_number;
+
+                                if (filled($state) && filled($number)) {
+                                    return $state.' ('.$number.')';
+                                }
+
+                                return $state ?? __('—');
+                            })
                             ->url(fn (Loan $record): ?string => $record->guarantor_member_id
                                 ? MemberResource::getUrl('view', ['record' => $record->guarantor_member_id])
                                 : null)
@@ -235,6 +256,9 @@ final class LoanViewInfolist
                         TextEntry::make('guarantor.member_number')
                             ->label(__('Guarantor member number'))
                             ->placeholder(__('—'))
+                            ->url(fn (Loan $record): ?string => $record->guarantor_member_id
+                                ? MemberResource::getUrl('view', ['record' => $record->guarantor_member_id])
+                                : null)
                             ->visible(fn (Loan $record): bool => $record->guarantor_member_id !== null),
                         TextEntry::make('guarantor_liability')
                             ->label(__('Liability status'))

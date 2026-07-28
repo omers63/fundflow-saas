@@ -50,8 +50,43 @@ final class LoanRepaymentLogService
             'loan_id' => $installment->loan_id,
             'amount' => round($principal + $lateFee, 2),
             'paid_at' => $installment->paid_at ?? BusinessDay::now(),
-            'notes' => LoanRepaymentNote::installment((int) $installment->installment_number),
+            'notes' => LoanRepaymentNote::installment(
+                (int) $installment->installment_number,
+                (bool) $installment->paid_by_guarantor,
+            ),
         ]);
+    }
+
+    /**
+     * Ensure EMI repayment logs for guarantor-funded installments carry the guarantor type note.
+     *
+     * @return int Number of repayment rows updated
+     */
+    public function syncGuarantorRepaymentNotes(?Loan $loan = null): int
+    {
+        $installmentQuery = LoanInstallment::query()
+            ->where('status', 'paid')
+            ->where('paid_by_guarantor', true);
+
+        if ($loan !== null) {
+            $installmentQuery->where('loan_id', $loan->getKey());
+        }
+
+        $updated = 0;
+
+        foreach ($installmentQuery->get(['loan_id', 'installment_number']) as $installment) {
+            $legacyNote = LoanRepaymentNote::installment((int) $installment->installment_number);
+            $guarantorNote = LoanRepaymentNote::installment((int) $installment->installment_number, true);
+
+            $count = LoanRepayment::query()
+                ->where('loan_id', $installment->loan_id)
+                ->where('notes', $legacyNote)
+                ->update(['notes' => $guarantorNote]);
+
+            $updated += $count;
+        }
+
+        return $updated;
     }
 
     public function recordSettlementRepayment(

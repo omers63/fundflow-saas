@@ -19,7 +19,7 @@ use App\Models\Tenant\Member;
 use App\Services\LoanInsightsService;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Support\AutomationScheduleSettings;
-use App\Support\TenantRuntimeCache;
+use App\Support\CollectionInsightsCache;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -162,7 +162,6 @@ class DelinquencyWorkspacePage extends Page implements HasTable
         if ($this->showsTable()) {
             $this->tableSort = null;
             $this->reconfigureTableForSideTab();
-            $this->resetTable();
         }
     }
 
@@ -177,19 +176,23 @@ class DelinquencyWorkspacePage extends Page implements HasTable
     protected function syncSideTabTableState(string $from, string $to): void
     {
         $tableTabs = $this->tableSideTabs();
+        $fromIsTable = in_array($from, $tableTabs, true);
+        $toIsTable = in_array($to, $tableTabs, true);
 
-        if (! in_array($from, $tableTabs, true) && ! in_array($to, $tableTabs, true)) {
+        if (! $fromIsTable && ! $toIsTable) {
             return;
         }
 
         $this->tableSort = null;
 
-        if (in_array($from, $tableTabs, true)) {
+        if ($fromIsTable) {
             $this->unmountTableAction(false);
         }
 
-        $this->reconfigureTableForSideTab();
-        $this->resetTable();
+        // Reconfigure only when landing on a table tab; avoid a second resetTable rebuild.
+        if ($toIsTable) {
+            $this->reconfigureTableForSideTab();
+        }
     }
 
     protected function reconfigureTableForSideTab(): void
@@ -198,10 +201,12 @@ class DelinquencyWorkspacePage extends Page implements HasTable
 
         $this->cacheSchema('tableFiltersForm', $this->getTableFiltersForm(...));
 
-        $this->initTableColumnManager();
-
+        // Column manager keeps Livewire + session state keyed by page class. Overdue,
+        // guarantor, and policy define different columns; clear before init so names
+        // missing from the prior tab's state are not treated as hidden.
         $this->tableColumns = [];
         $this->cachedDefaultTableColumnState = null;
+        $this->initTableColumnManager();
 
         $this->tableFilters = [];
         $this->getTableFiltersForm()->fill([]);
@@ -330,9 +335,9 @@ class DelinquencyWorkspacePage extends Page implements HasTable
      */
     public function getTabBadges(): array
     {
-        return TenantRuntimeCache::remember(
-            'delinquency_workspace:tab_badges',
-            60,
+        return CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_DELINQUENCY,
+            'tab_badges',
             function (): array {
                 $delinquency = app(LoanDelinquencyService::class);
 
@@ -415,8 +420,7 @@ class DelinquencyWorkspacePage extends Page implements HasTable
     {
         LoanResource::flushListCountCaches();
         app(LoanDelinquencyService::class)->forgetArrearsAggregateCaches();
-        TenantRuntimeCache::forget('delinquency_workspace:tab_badges');
-        TenantRuntimeCache::forget('loan_insights:delinquency_snapshot');
+        CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_DELINQUENCY);
 
         if (method_exists($livewire, 'resetTable')) {
             $livewire->resetTable();

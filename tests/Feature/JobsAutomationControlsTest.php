@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Tenant\Pages\AuditSystemPage;
 use App\Filament\Tenant\Pages\JobsPage;
 use App\Models\Tenant\SystemJobRun;
 use App\Models\Tenant\User;
@@ -29,9 +30,16 @@ beforeEach(function () {
 });
 
 test('jobs page can pause and resume the scheduler', function () {
-    Livewire::test(JobsPage::class)
+    $component = Livewire::test(JobsPage::class)
         ->assertActionVisible('pause_scheduler')
-        ->assertActionHidden('resume_scheduler')
+        ->assertActionHidden('resume_scheduler');
+
+    foreach ($component->instance()->getCachedHeaderActions() as $action) {
+        expect($action->isIconButton())->toBeTrue()
+            ->and($action->getTooltip())->not->toBeEmpty();
+    }
+
+    $component
         ->callAction('pause_scheduler')
         ->assertSuccessful();
 
@@ -45,6 +53,26 @@ test('jobs page can pause and resume the scheduler', function () {
         ->assertSuccessful();
 
     expect(app(AutomationSchedulerGate::class)->isPaused())->toBeFalse();
+});
+
+test('audit system header actions appear only on the automation tab', function () {
+    $component = Livewire::test(AuditSystemPage::class)
+        ->assertSet('sideTab', 'audit');
+
+    expect($component->instance()->getCachedHeaderActions())->toBeEmpty();
+
+    $component->call('setSideTab', 'jobs')
+        ->assertSet('sideTab', 'jobs')
+        ->assertActionVisible('pause_scheduler');
+
+    expect(collect($component->instance()->getCachedHeaderActions())->map->getName()->all())
+        ->toContain('pause_scheduler')
+        ->toContain('open_reconciliation');
+
+    $component->call('setSideTab', 'notifications')
+        ->assertSet('sideTab', 'notifications');
+
+    expect($component->instance()->getCachedHeaderActions())->toBeEmpty();
 });
 
 test('jobs page clears finished run history from the history tab', function () {

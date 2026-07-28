@@ -314,10 +314,10 @@ class ReconciliationOverviewPage extends Page implements HasTable
 
         $this->cacheSchema('tableFiltersForm', $this->getTableFiltersForm(...));
 
-        $this->initTableColumnManager();
-
+        // Clear before init — otherwise prior-tab column names stay "hidden".
         $this->tableColumns = [];
         $this->cachedDefaultTableColumnState = null;
+        $this->initTableColumnManager();
 
         $this->tableFilters = [];
         $this->getTableFiltersForm()->fill([]);

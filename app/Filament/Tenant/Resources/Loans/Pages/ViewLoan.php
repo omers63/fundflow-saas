@@ -9,7 +9,9 @@ use App\Filament\Support\LoanFilamentActions;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Loans\Schemas\LoanViewInfolist;
 use App\Filament\Tenant\Resources\Loans\Widgets\LoanViewInsights;
+use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\Member;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
@@ -17,6 +19,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\HtmlString;
 
 class ViewLoan extends ViewRecord
 {
@@ -31,13 +34,27 @@ class ViewLoan extends ViewRecord
 
     public function getSubheading(): string|Htmlable|null
     {
+        /** @var Loan $loan */
         $loan = $this->getRecord();
         $status = Loan::statusOptions()[$loan->status] ?? $loan->status;
 
-        return __(':member · :status', [
-            'member' => $loan->member?->name ?? __('Unknown member'),
-            'status' => $status,
-        ]);
+        return new HtmlString(implode(' · ', [
+            $this->linkedMemberLabelHtml($loan->member),
+            e((string) $status),
+        ]));
+    }
+
+    private function linkedMemberLabelHtml(?Member $member): string
+    {
+        if ($member === null) {
+            return e(__('Unknown member'));
+        }
+
+        $label = filled($member->member_number)
+            ? e((string) $member->name).' ('.e((string) $member->member_number).')'
+            : e((string) $member->name);
+
+        return '<a href="'.e(MemberResource::getUrl('view', ['record' => $member])).'" class="text-primary-600 underline hover:decoration-primary-600 dark:text-primary-400">'.$label.'</a>';
     }
 
     public function hasCombinedRelationManagerTabsWithContent(): bool

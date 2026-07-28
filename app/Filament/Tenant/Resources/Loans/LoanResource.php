@@ -588,6 +588,7 @@ class LoanResource extends Resource
             CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_LOAN_EMI);
             CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_CONTRIBUTIONS);
             CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_MEMBERS);
+            CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_DELINQUENCY);
         }
     }
 
@@ -615,7 +616,11 @@ class LoanResource extends Resource
             return self::$overdueInstallmentsCountCache[$cacheKey];
         }
 
-        return self::$overdueInstallmentsCountCache[$cacheKey] = LoanDelinquencyTables::overdueInstallmentsQuery()->count();
+        return self::$overdueInstallmentsCountCache[$cacheKey] = (int) CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_DELINQUENCY,
+            'overdue_installments_count',
+            fn (): int => LoanDelinquencyTables::overdueInstallmentsQuery()->count(),
+        );
     }
 
     public static function guarantorExposureCount(): int

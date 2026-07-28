@@ -109,6 +109,8 @@ class JobsPage extends Page implements HasForms, HasTable
             Action::make('clear_halt')
                 ->label(__('Clear posting halt'))
                 ->icon('heroicon-o-play')
+                ->iconButton()
+                ->tooltip(__('Clear posting halt'))
                 ->color('warning')
                 ->visible($gate->isHalted())
                 ->requiresConfirmation()
@@ -119,10 +121,14 @@ class JobsPage extends Page implements HasForms, HasTable
             Action::make('open_reconciliation')
                 ->label(__('Open issues'))
                 ->icon('heroicon-o-shield-exclamation')
+                ->iconButton()
+                ->tooltip(__('Open issues'))
                 ->url(ReconciliationOverviewPage::getUrl(['sideTab' => 'exceptions'])),
             Action::make('run_reconciliation')
                 ->label(__('Run reconciliation'))
                 ->icon('heroicon-o-shield-check')
+                ->iconButton()
+                ->tooltip(__('Run reconciliation'))
                 ->color('primary')
                 ->visible(fn (): bool => $this->advancedUi)
                 ->action(function (): void {

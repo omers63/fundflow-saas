@@ -19,6 +19,7 @@ uses(InitializesTenancy::class);
 beforeEach(function () {
     $this->initializeTenancy();
     Filament::setCurrentPanel('tenant');
+    app()->setLocale('en');
 
     $admin = User::create([
         'name' => 'Delinquency Tabs Admin',
@@ -51,7 +52,7 @@ it('switches delinquency side tabs via setSideTab', function () {
         ->assertSuccessful();
 });
 
-it('renders delinquency tab pills as navigable links', function () {
+it('switches delinquency side tabs via Livewire without full navigation', function () {
     $html = Livewire::test(DelinquencyWorkspacePage::class)->html();
 
     foreach (array_keys(DelinquencyTabRegistry::tabs()) as $tab) {
@@ -60,7 +61,7 @@ it('renders delinquency tab pills as navigable links', function () {
 
     expect($html)
         ->toContain('ff-tenant-tab-pills__item no-underline')
-        ->not->toContain('wire:click="setSideTab');
+        ->toContain('wire:click.prevent="setSideTab');
 });
 
 it('exposes admin loan transfer on overdue and guarantor liability on guarantor', function () {
@@ -88,6 +89,51 @@ it('defers delinquency insights until the section is unfolded', function () {
         ->assertDontSee(__('Collections are current'))
         ->call('unfoldSection', 'insights')
         ->assertSee(__('Collections are current'));
+});
+
+it('shows overdue columns after Livewire tab switch from overview', function () {
+    $accounting = app(AccountingService::class);
+
+    $member = Member::create([
+        'member_number' => 'MEM-DEL-COLS',
+        'name' => 'Column Visibility Member',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 5_000,
+        'amount_requested' => 5_000,
+        'amount_approved' => 5_000,
+        'amount_disbursed' => 5_000,
+        'interest_rate' => 10,
+        'term_months' => 5,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => now()->subYear(),
+        'disbursed_at' => now()->subYear(),
+    ]);
+
+    $installment = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => now()->subMonths(2)->startOfMonth(),
+        'status' => 'overdue',
+    ]);
+
+    Livewire::test(DelinquencyWorkspacePage::class, ['sideTab' => 'overview'])
+        ->assertSuccessful()
+        ->call('setSideTab', 'overdue')
+        ->assertSet('sideTab', 'overdue')
+        ->call('loadTable')
+        ->assertCanSeeTableRecords([$installment])
+        ->assertSee('Column Visibility Member', false)
+        ->assertSee('#'.$loan->id, false);
 });
 
 it('paginates overdue installments without resetting to page one', function () {

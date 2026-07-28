@@ -25,6 +25,7 @@ use App\Support\BatchPostingGate;
 use App\Support\SystemLoggingSettings;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
@@ -184,6 +185,28 @@ class AuditSystemPage extends Page implements HasForms, HasTable
             $this->reconfigureTableForSideTab();
             $this->resetTable();
         }
+
+        // Header actions are Filament-cached on boot; rebuild so Automation-only
+        // actions appear when entering that tab and disappear when leaving it.
+        $this->refreshHeaderActions();
+    }
+
+    protected function refreshHeaderActions(): void
+    {
+        foreach ($this->cachedHeaderActions as $previous) {
+            if ($previous instanceof Action) {
+                unset($this->cachedActions[$previous->getName()]);
+            }
+
+            if ($previous instanceof ActionGroup) {
+                foreach ($previous->getFlatActions() as $flatAction) {
+                    unset($this->cachedActions[$flatAction->getName()]);
+                }
+            }
+        }
+
+        $this->cachedHeaderActions = [];
+        $this->cacheInteractsWithHeaderActions();
     }
 
     public function tenantUserIsAdmin(): bool
@@ -352,10 +375,10 @@ class AuditSystemPage extends Page implements HasForms, HasTable
 
         $this->cacheSchema('tableFiltersForm', $this->getTableFiltersForm(...));
 
-        $this->initTableColumnManager();
-
+        // Clear before init — otherwise prior-tab column names stay "hidden".
         $this->tableColumns = [];
         $this->cachedDefaultTableColumnState = null;
+        $this->initTableColumnManager();
 
         $this->tableFilters = [];
         $this->getTableFiltersForm()->fill([]);
@@ -403,6 +426,8 @@ class AuditSystemPage extends Page implements HasForms, HasTable
             Action::make('clear_halt')
                 ->label(__('Clear posting halt'))
                 ->icon('heroicon-o-play')
+                ->iconButton()
+                ->tooltip(__('Clear posting halt'))
                 ->color('warning')
                 ->visible($gate->isHalted())
                 ->requiresConfirmation()
@@ -413,6 +438,8 @@ class AuditSystemPage extends Page implements HasForms, HasTable
             Action::make('open_reconciliation')
                 ->label(__('Reconciliation queue'))
                 ->icon('heroicon-o-shield-exclamation')
+                ->iconButton()
+                ->tooltip(__('Reconciliation queue'))
                 ->url(ReconciliationOverviewPage::getUrl(['sideTab' => 'exceptions'])),
         ];
     }

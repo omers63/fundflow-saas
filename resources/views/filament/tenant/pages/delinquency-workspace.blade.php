@@ -7,29 +7,30 @@ $showOverviewExtras = in_array($sideTab, ['overview', 'related'], true);
 
     <div class="ff-tenant-tab-pills mb-4 flex flex-wrap gap-2" wire:key="delinquency-tab-pills">
         @foreach ($this->getTabLabels() as $tab => $label)
-            @php
-    $count = $badges[$tab] ?? 0;
-            @endphp
-            <a
-                href="{{ \App\Filament\Tenant\Support\DelinquencyTabRegistry::url($tab) }}"
-                wire:key="delinquency-tab-{{ $tab }}"
-                @class([
-        'ff-tenant-tab-pills__item no-underline',
-        'ff-tenant-tab-pills__item--active' => $sideTab === $tab,
-        'ff-tenant-tab-pills__item--danger' => $sideTab !== $tab && $tab === 'overdue' && $count > 0,
-        'ff-tenant-tab-pills__item--warning' => $sideTab !== $tab && in_array($tab, ['guarantor', 'policy'], true) && $count > 0,
-    ])
-            >
-                <x-ff-tab-pill-label :label="$label" :key="$tab" />
-                @if ($count > 0)
-                    <span @class([
-            'ms-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums',
-            'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200' => $sideTab === $tab,
-            'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200' => $sideTab !== $tab && $tab === 'overdue',
-            'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => $sideTab !== $tab && $tab !== 'overdue',
-        ])>{{ $count }}</span>
-                @endif
-            </a>
+                    @php
+            $count = $badges[$tab] ?? 0;
+                    @endphp
+                    <a
+                        href="{{ \App\Filament\Tenant\Support\DelinquencyTabRegistry::url($tab) }}"
+                        wire:click.prevent="setSideTab(@js($tab))"
+                        wire:key="delinquency-tab-{{ $tab }}"
+                        @class([
+                'ff-tenant-tab-pills__item no-underline',
+                'ff-tenant-tab-pills__item--active' => $sideTab === $tab,
+                'ff-tenant-tab-pills__item--danger' => $sideTab !== $tab && $tab === 'overdue' && $count > 0,
+                'ff-tenant-tab-pills__item--warning' => $sideTab !== $tab && in_array($tab, ['guarantor', 'policy'], true) && $count > 0,
+            ])
+                    >
+                        <x-ff-tab-pill-label :label="$label" :key="$tab" />
+                        @if ($count > 0)
+                            <span @class([
+                    'ms-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums',
+                    'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200' => $sideTab === $tab,
+                    'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200' => $sideTab !== $tab && $tab === 'overdue',
+                    'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => $sideTab !== $tab && $tab !== 'overdue',
+                ])>{{ $count }}</span>
+                        @endif
+                    </a>
         @endforeach
     </div>
 
@@ -42,13 +43,13 @@ $showOverviewExtras = in_array($sideTab, ['overview', 'related'], true);
                         :hint="__('Expand to load KPIs and risk summary.')"
                     >
                         @php
-            $snapshot = $this->insightsSnapshot();
+    $snapshot = $this->insightsSnapshot();
                         @endphp
                         @include('filament.tenant.widgets.partials.insights-head', [
-                'hero' => $snapshot['hero'] ?? null,
-                'kpis' => $snapshot['kpis'] ?? null,
-                'compact' => false,
-            ])
+        'hero' => $snapshot['hero'] ?? null,
+        'kpis' => $snapshot['kpis'] ?? null,
+        'compact' => false,
+    ])
                     </x-ff-lazy-fold>
 
                     <x-ff-lazy-fold
@@ -58,20 +59,20 @@ $showOverviewExtras = in_array($sideTab, ['overview', 'related'], true);
                         :hint="__('Expand to load schedule and last run details.')"
                     >
                         @php
-                            $lastRun = $this->lastMaintenanceRun();
+    $lastRun = $this->lastMaintenanceRun();
                         @endphp
                         <div class="rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-slate-800">
                             <p class="text-sm text-gray-700 dark:text-gray-200">{{ $this->scheduleHint() }}</p>
                             @if ($lastRun)
                                                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
                                                     {{ __('Last run :at — Overdue: :overdue · Policy breaches: :arrears · Clear: :cleared · Warnings: :warned · Guarantor debits: :debited', [
-                                    'at' => \Illuminate\Support\Carbon::parse($lastRun['at'])->timezone(config('app.timezone'))->toDayDateTimeString(),
-                                    'overdue' => $lastRun['result']['marked_overdue'] ?? 0,
-                                    'arrears' => $lastRun['result']['delinquent_count'] ?? 0,
-                                    'cleared' => $lastRun['result']['cleared_count'] ?? 0,
-                                    'warned' => $lastRun['result']['warned'] ?? 0,
-                                    'debited' => $lastRun['result']['debited_from_guarantor'] ?? 0,
-                                ]) }}
+            'at' => \Illuminate\Support\Carbon::parse($lastRun['at'])->timezone(config('app.timezone'))->toDayDateTimeString(),
+            'overdue' => $lastRun['result']['marked_overdue'] ?? 0,
+            'arrears' => $lastRun['result']['delinquent_count'] ?? 0,
+            'cleared' => $lastRun['result']['cleared_count'] ?? 0,
+            'warned' => $lastRun['result']['warned'] ?? 0,
+            'debited' => $lastRun['result']['debited_from_guarantor'] ?? 0,
+        ]) }}
                                                 </p>
                             @else
                                 <p class="mt-2 text-sm text-gray-500">{{ __('No delinquency check has been run from this workspace yet.') }}</p>
@@ -83,11 +84,11 @@ $showOverviewExtras = in_array($sideTab, ['overview', 'related'], true);
         @if ($sideTab === 'overview')
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 @foreach ([
-                        ['tab' => 'overdue', 'label' => __('Review overdue installments'), 'description' => __('Flip pending EMIs to overdue and work the risk queue.')],
-                        ['tab' => 'guarantor', 'label' => __('Review guarantor exposure'), 'description' => __('Transfer or restore liability on loans past grace.')],
-                        ['tab' => 'policy', 'label' => __('Review policy breaches'), 'description' => __('Members exceeding consecutive or rolling miss thresholds.')],
-                        ['tab' => 'related', 'label' => __('Open related queues'), 'description' => __('Contribution arrears, members arrears, and settings.')],
-                    ] as $card)
+        ['tab' => 'overdue', 'label' => __('Review overdue installments'), 'description' => __('Flip pending EMIs to overdue and work the risk queue.')],
+        ['tab' => 'guarantor', 'label' => __('Review guarantor exposure'), 'description' => __('Transfer or restore liability on loans past grace.')],
+        ['tab' => 'policy', 'label' => __('Review policy breaches'), 'description' => __('Members exceeding consecutive or rolling miss thresholds.')],
+        ['tab' => 'related', 'label' => __('Open related queues'), 'description' => __('Contribution arrears, members arrears, and settings.')],
+    ] as $card)
                         <a
                             href="{{ \App\Filament\Tenant\Support\DelinquencyTabRegistry::url($card['tab']) }}"
                             class="rounded-xl border border-gray-200 bg-white p-4 text-start no-underline shadow-sm transition hover:border-sky-300 dark:border-white/10 dark:bg-slate-800 dark:hover:border-sky-700"

@@ -66,6 +66,10 @@ final class LateSettledArrearsTableStyling
 
     public static function installmentStatusLabel(LoanInstallment $installment): string
     {
+        if ($installment->status === 'paid' && $installment->paid_by_guarantor) {
+            return __('Guarantor paid');
+        }
+
         if (self::installmentWasSettledLate($installment)) {
             return __('Paid (late)');
         }
@@ -81,6 +85,10 @@ final class LateSettledArrearsTableStyling
 
     public static function installmentStatusColor(LoanInstallment $installment): string
     {
+        if ($installment->status === 'paid' && $installment->paid_by_guarantor) {
+            return 'warning';
+        }
+
         if (self::installmentWasSettledLate($installment)) {
             return 'danger';
         }

@@ -32,7 +32,6 @@ use App\Support\Insights\DualProgressTrendBuilder;
 use App\Support\Insights\InsightKpi;
 use App\Support\LoanEligibilityGate;
 use App\Support\Loans\LoanUserFacingStage;
-use App\Support\TenantRuntimeCache;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use InvalidArgumentException;
@@ -336,9 +335,9 @@ final class LoanInsightsService
      */
     public function delinquencySnapshot(): array
     {
-        return TenantRuntimeCache::remember(
-            'loan_insights:delinquency_snapshot',
-            60,
+        return CollectionInsightsCache::remember(
+            CollectionInsightsCache::DOMAIN_DELINQUENCY,
+            'snapshot',
             fn (): array => $this->buildDelinquencySnapshot(),
         );
     }
@@ -350,26 +349,15 @@ final class LoanInsightsService
     {
         $currency = Setting::get('general', 'currency', 'USD');
         $delinquency = app(LoanDelinquencyService::class);
-
-        $overdueInstallments = (int) LoanInstallment::query()
-            ->where('status', 'overdue')
-            ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
-            ->count();
-
-        $overdueAmount = (float) LoanInstallment::query()
-            ->where('status', 'overdue')
-            ->whereHas('loan', fn ($q) => $q->where('status', 'active'))
-            ->sum('amount');
-
         $counts = $delinquency->digestCounts();
+
+        $overdueInstallments = $counts['overdue_installments'];
+        $overdueAmount = $counts['overdue_amount'];
         $delinquentMembers = $counts['delinquent_members'];
         $contributionArrears = $counts['contribution_arrears_periods'];
         $contributionArrearsMembers = $counts['contribution_arrears_members'];
-        $guarantorTransferred = (int) Loan::query()
-            ->where('status', 'active')
-            ->whereNotNull('guarantor_liability_transferred_at')
-            ->count();
-        $guarantorAtRisk = $delinquency->loansAtGuarantorRiskCount();
+        $guarantorTransferred = $counts['guarantor_transferred'];
+        $guarantorAtRisk = $counts['guarantor_at_risk'];
 
         $totalIssues = $overdueInstallments + $contributionArrears;
 
@@ -1014,6 +1002,8 @@ final class LoanInsightsService
             ] : null,
             'guarantor' => $loan->guarantor ? [
                 'name' => $loan->guarantor->name,
+                'member_number' => $loan->guarantor->member_number,
+                'url' => MemberResource::getUrl('view', ['record' => $loan->guarantor]),
                 'released' => $loan->isGuarantorReleased(),
                 'liability_transferred' => $loan->guarantor_liability_transferred_at !== null,
             ] : null,

@@ -23,6 +23,7 @@ use App\Notifications\Tenant\LoanAdminTransferAdminNotification;
 use App\Notifications\Tenant\LoanAdminTransferNotification;
 use App\Notifications\Tenant\LoanApprovedNotification;
 use App\Notifications\Tenant\LoanCancelledNotification;
+use App\Notifications\Tenant\LoanDefaultBorrowerGuarantorPaidNotification;
 use App\Notifications\Tenant\LoanDefaultGuarantorNotification;
 use App\Notifications\Tenant\LoanDefaultWarningNotification;
 use App\Notifications\Tenant\LoanDisbursedNotification;
@@ -921,6 +922,10 @@ MD,
                 'category' => NotificationPreferenceService::LOAN_ALERTS,
             ],
             LoanDefaultGuarantorNotification::class => [
+                'key' => 'generic_member_alert',
+                'category' => NotificationPreferenceService::LOAN_ALERTS,
+            ],
+            LoanDefaultBorrowerGuarantorPaidNotification::class => [
                 'key' => 'generic_member_alert',
                 'category' => NotificationPreferenceService::LOAN_ALERTS,
             ],
