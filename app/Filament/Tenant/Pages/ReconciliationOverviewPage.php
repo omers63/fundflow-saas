@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Pages\Page;
 use App\Filament\Support\MoneyDisplay;
 use App\Filament\Tenant\Concerns\EmbedsAsAuditWorkspacePanel;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
@@ -26,7 +27,6 @@ use App\Support\Reconciliation\ReconciliationHealthSummary;
 use BackedEnum;
 use Carbon\Carbon;
 use Filament\Notifications\Notification;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;

@@ -13,6 +13,7 @@ use App\Services\SystemJobRunnerService;
 use App\Support\AutomationSchedulerGate;
 use App\Support\ScheduledJobRegistry;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
@@ -319,6 +320,24 @@ trait InteractsWithJobsTable
         return app(AutomationSchedulerGate::class)->reason();
     }
 
+    protected function refreshHeaderActions(): void
+    {
+        foreach ($this->cachedHeaderActions as $previous) {
+            if ($previous instanceof Action) {
+                unset($this->cachedActions[$previous->getName()]);
+            }
+
+            if ($previous instanceof ActionGroup) {
+                foreach ($previous->getFlatActions() as $flatAction) {
+                    unset($this->cachedActions[$flatAction->getName()]);
+                }
+            }
+        }
+
+        $this->cachedHeaderActions = [];
+        $this->cacheInteractsWithHeaderActions();
+    }
+
     /**
      * Pause / resume scheduler + clear run history (shared by Jobs and Audit → Jobs).
      *
@@ -326,43 +345,46 @@ trait InteractsWithJobsTable
      */
     protected function jobsAutomationControlActions(): array
     {
-        $scheduler = app(AutomationSchedulerGate::class);
-
         return [
-            Action::make('pause_scheduler')
-                ->label(__('Pause scheduler'))
-                ->icon('heroicon-o-pause')
+            Action::make('toggle_scheduler')
+                ->label(fn (): string => app(AutomationSchedulerGate::class)->isPaused()
+                    ? __('Resume scheduler')
+                    : __('Pause scheduler'))
+                ->icon(fn (): string => app(AutomationSchedulerGate::class)->isPaused()
+                    ? 'heroicon-o-play'
+                    : 'heroicon-o-pause')
                 ->iconButton()
-                ->tooltip(__('Pause scheduler'))
-                ->color('warning')
-                ->visible(fn (): bool => ! $scheduler->isPaused())
+                ->tooltip(fn (): string => app(AutomationSchedulerGate::class)->isPaused()
+                    ? __('Resume scheduler')
+                    : __('Pause scheduler'))
+                ->color(fn (): string => app(AutomationSchedulerGate::class)->isPaused() ? 'success' : 'warning')
                 ->requiresConfirmation()
-                ->modalHeading(__('Pause scheduled automation?'))
-                ->modalDescription(__('Cron will keep waking every minute, but this tenant’s scheduled jobs will skip until you resume. Manual “Run now” still works.'))
-                ->action(function () use ($scheduler): void {
-                    $scheduler->pause();
-                    Notification::make()
-                        ->title(__('Scheduler paused'))
-                        ->body(__('Scheduled automation is paused for this tenant.'))
-                        ->warning()
-                        ->send();
-                }),
-            Action::make('resume_scheduler')
-                ->label(__('Resume scheduler'))
-                ->icon('heroicon-o-play')
-                ->iconButton()
-                ->tooltip(__('Resume scheduler'))
-                ->color('success')
-                ->visible(fn (): bool => $scheduler->isPaused())
-                ->requiresConfirmation()
-                ->modalHeading(__('Resume scheduled automation?'))
-                ->modalDescription(__('Scheduled jobs for this tenant will run again on the next cron tick.'))
-                ->action(function () use ($scheduler): void {
-                    $scheduler->resume();
-                    Notification::make()
-                        ->title(__('Scheduler resumed'))
-                        ->success()
-                        ->send();
+                ->modalHeading(fn (): string => app(AutomationSchedulerGate::class)->isPaused()
+                    ? __('Resume scheduled automation?')
+                    : __('Pause scheduled automation?'))
+                ->modalDescription(fn (): string => app(AutomationSchedulerGate::class)->isPaused()
+                    ? __('Scheduled jobs for this tenant will run again on the next cron tick.')
+                    : __('Cron will keep waking every minute, but this tenant’s scheduled jobs will skip until you resume. Manual “Run now” still works.'))
+                ->action(function (): void {
+                    $scheduler = app(AutomationSchedulerGate::class);
+
+                    if ($scheduler->isPaused()) {
+                        $scheduler->resume();
+                        Notification::make()
+                            ->title(__('Scheduler resumed'))
+                            ->success()
+                            ->send();
+                    } else {
+                        $scheduler->pause();
+                        Notification::make()
+                            ->title(__('Scheduler paused'))
+                            ->body(__('Scheduled automation is paused for this tenant.'))
+                            ->warning()
+                            ->send();
+                    }
+
+                    $this->refreshHeaderActions();
+                    $this->forceRender();
                 }),
             Action::make('clear_run_history')
                 ->label(__('Clear run history'))

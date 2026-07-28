@@ -1,0 +1,96 @@
+---
+description: Recurring Filament v5 / Livewire v4 state bugs and UI standards — header actions, confirms, tables, icon-only headers
+alwaysApply: true
+---
+
+# Filament / Livewire gotchas (do not regress)
+
+We keep rediscovering the same Filament **cache / configure timing / modal** bugs. Treat these as required checklist items whenever you touch Filament pages, header actions, tables, or confirmation modals.
+
+## 0. Page header actions are icon-only (app standard)
+
+Page header actions and header `ActionGroup`s are **icon-only** with a tooltip from the label. Do not ship labeled header buttons (`->button()` with visible text) on page headers.
+
+- Extend `App\Filament\Pages\Page` (not `Filament\Pages\Page`) — it normalizes headers via `TableHeaderIconAction::normalize()`
+- Or call `TableHeaderIconAction::apply()` / `applyGroup()` / `applyMany()` explicitly (table toolbars already do)
+- Always set `->icon(...)` and a meaningful `->label(...)` (label becomes the tooltip)
+
+Reference: `App\Filament\Pages\Page`, `TableHeaderIconAction`, Delinquency / Automation headers.
+
+## 1. Header actions are cached — rebuild after visibility drivers change
+
+`getHeaderActions()` is cached on the Livewire component. Changing a property alone does **not** rebuild that cache.
+
+Prefer a **single toggle action** whose label/icon/color are closures over two mutually exclusive `visible()` actions (pause vs resume) — header morphing often fails to swap icon buttons cleanly.
+
+After tab or state changes: `refreshHeaderActions()` + `forceRender()` when needed.
+
+Reference: `InteractsWithJobsTable::refreshHeaderActions()`, `toggle_scheduler`.
+
+## 2. Tables with different columns per tab
+
+When rebuilding a table for a side tab:
+
+1. Clear `$this->tableColumns = []` and `$this->cachedDefaultTableColumnState = null`
+2. **Then** call `$this->initTableColumnManager()`
+
+**Never** init the column manager and clear afterward.
+
+**Symptom if wrong:** rows show **selection checkboxes only**.
+
+## 3. HasTable pages skip page action modals (clicks do nothing)
+
+Filament’s page layout only renders `<x-filament-actions::modals />` when the page does **not** implement `HasTable` (`vendor/filament/filament/resources/views/components/page/index.blade.php`). Tables include their own modals host — but custom workspace pages that **conditionally hide** `{{ $this->table }}` (Status / Schedule / Overview / templates / tiers) leave **no modal host in the DOM**.
+
+**Symptom:** header / workspace actions with `requiresConfirmation()` mount in Livewire but the browser shows **no confirmation at all** (looks like the click did nothing). Cross-browser.
+
+**Fix:** always include the shared partial at the end of the page view:
+
+`@include('filament.tenant.partials.page-workspace-action-modals')`
+
+Safe when the table is also rendered — `hasActionsModalRendered` prevents a duplicate host.
+
+Pest: on the **non-table** default tab, `assertSeeHtml('wire:partial="action-modals"')`.
+
+Reference: Jobs, Delinquency, Audit & System, Reconciliation, Communications, Loan queue workbench.
+
+## 4. Confirm modals — app-wide delinquency-style chrome
+
+Every `requiresConfirmation()` action is wired in `AppServiceProvider` via `TenantPortalActionModal::applyConfirmation()` on **tenant, member, and admin** panels.
+
+UI standard (matches delinquency check):
+
+- Native Filament heading / description / icon (centered)
+- Compact card window + equal-width Cancel / Confirm
+- Field-less confirms: `formWrapper(false)` + `modalAutofocus(false)`
+- Long-running only: progress footer (“Ready to run” → “Working…”) via `longRunning()` / `longRunningMessage()`
+- Shared CSS: `resources/css/filament/confirm-modals.css` (imported by all panel themes)
+
+`Action::configureUsing()` runs inside `Action::make()` **before** `->requiresConfirmation()` / `->longRunning()`. Defer modal wiring with `bootUsing()`.
+
+### `modalSubmitAction` parameter must be named `$action`
+
+```php
+->modalSubmitAction(fn (Action $action) => $action->color('danger'));
+```
+
+Filament injects the **footer submit button** by the parameter name `action`. A differently named `Action $submit` receives the **parent** action by type-hint, so Confirm becomes the original action (auto-runs / no Confirm).
+
+After PHP/CSS changes: `php artisan optimize:clear`, `npm run build`, `systemctl reload php8.4-fpm`.
+
+
+## 5. Single primary row-click actions — seed then clear `recordActions`
+
+`TableRecordActionGroups::configureSinglePrimaryActionRowClick()` must seed `recordActions([$action])` before `recordAction($name)` + `recordActions([])`. Otherwise Livewire throws `Public method [view] not found`.
+
+## Checklist (new or edited Filament UI)
+
+- [ ] Page extends `App\Filament\Pages\Page` (icon-only headers)
+- [ ] Header actions have icons + labels (tooltip); no labeled header buttons
+- [ ] Tab / visibility change → `refreshHeaderActions()` when actions are tab- or state-scoped
+- [ ] Tab change → clear column state **before** `initTableColumnManager()`
+- [ ] `HasTable` page that can hide the table → include `page-workspace-action-modals`
+- [ ] Long-running confirm → `longRunning()` + progress footer; never custom body + hidden header
+- [ ] `requiresConfirmation()` gets app-wide confirm chrome (bootUsing / TenantPortalActionModal)
+- [ ] View-only row click → `TableRecordActionGroups::apply` / `wrap`
+- [ ] Pest: icon-only headers; `action-modals` on non-table tabs; confirm mounts with progress footer; scheduler toggle; columns after tab switch

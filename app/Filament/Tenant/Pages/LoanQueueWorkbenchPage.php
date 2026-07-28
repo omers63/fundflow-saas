@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Pages\Page;
 use App\Filament\Support\LoanQueueTable;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\Loan;
 use App\Services\Loans\LoanQueueService;
 use BackedEnum;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;

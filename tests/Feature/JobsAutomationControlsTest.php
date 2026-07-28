@@ -31,8 +31,8 @@ beforeEach(function () {
 
 test('jobs page can pause and resume the scheduler', function () {
     $component = Livewire::test(JobsPage::class)
-        ->assertActionVisible('pause_scheduler')
-        ->assertActionHidden('resume_scheduler');
+        ->assertSeeHtml('wire:partial="action-modals"')
+        ->assertActionVisible('toggle_scheduler');
 
     foreach ($component->instance()->getCachedHeaderActions() as $action) {
         expect($action->isIconButton())->toBeTrue()
@@ -40,16 +40,13 @@ test('jobs page can pause and resume the scheduler', function () {
     }
 
     $component
-        ->callAction('pause_scheduler')
+        ->callAction('toggle_scheduler')
         ->assertSuccessful();
 
     expect(app(AutomationSchedulerGate::class)->isPaused())->toBeTrue();
 
-    Livewire::test(JobsPage::class)
-        ->assertSee(__('Scheduler paused'))
-        ->assertActionVisible('resume_scheduler')
-        ->assertActionHidden('pause_scheduler')
-        ->callAction('resume_scheduler')
+    $component
+        ->callAction('toggle_scheduler')
         ->assertSuccessful();
 
     expect(app(AutomationSchedulerGate::class)->isPaused())->toBeFalse();
@@ -63,10 +60,10 @@ test('audit system header actions appear only on the automation tab', function (
 
     $component->call('setSideTab', 'jobs')
         ->assertSet('sideTab', 'jobs')
-        ->assertActionVisible('pause_scheduler');
+        ->assertActionVisible('toggle_scheduler');
 
     expect(collect($component->instance()->getCachedHeaderActions())->map->getName()->all())
-        ->toContain('pause_scheduler')
+        ->toContain('toggle_scheduler')
         ->toContain('open_reconciliation');
 
     $component->call('setSideTab', 'notifications')

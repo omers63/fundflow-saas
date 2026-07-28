@@ -1,22 +1,31 @@
 @php
-$resolvedIconColor = is_array($iconColor) ? ($iconColor[0] ?? 'primary') : ($iconColor ?? 'primary');
-$resolvedTone = $tone ?? 'primary';
+    $resolvedIconColor = is_array($iconColor) ? ($iconColor[0] ?? 'primary') : ($iconColor ?? 'primary');
+    $resolvedTone = $tone ?? 'primary';
+    $showProgress = (bool) ($showProgress ?? false);
+    $progressMessage = $progressMessage ?? null;
 @endphp
     
     <div @class(['ff-confirm-modal', "ff-confirm-modal--{$resolvedTone}"])>
         <div @class(['ff-confirm-modal__hero', "ff-confirm-modal__hero--{$resolvedTone}"]) aria-hidden="true">
-        <div @class(['ff-confirm-modal__icon', "ff-confirm-modal__icon--{$resolvedIconColor}"])>
-            <span class="ff-confirm-modal__icon-ring">
-                {{ \Filament\Support\generate_icon_html($icon, size: \Filament\Support\Enums\IconSize::Large) }}
-            </span>
+            <div @class(['ff-confirm-modal__icon', "ff-confirm-modal__icon--{$resolvedIconColor}"])>
+                <span class="ff-confirm-modal__icon-ring">
+                    {{ \Filament\Support\generate_icon_html($icon, size: \Filament\Support\Enums\IconSize::Large) }}
+                </span>
             </div>
-            </div>
-            
-            <div class="ff-confirm-modal__body">
-                <h2 class="ff-confirm-modal__title">{{ $heading }}</h2>
-            
-                @if (filled($description))
-                    <p class="ff-confirm-modal__description">{{ $description }}</p>
-                @endif
-            </div>
-            </div>
+        </div>
+    
+        <div class="ff-confirm-modal__body">
+            <h2 class="ff-confirm-modal__title">{{ $heading }}</h2>
+    
+            @if (filled($description))
+                <p class="ff-confirm-modal__description">{{ $description }}</p>
+            @endif
+        </div>
+    
+        @if ($showProgress)
+            @include('filament.tenant.partials.action-modal-progress', [
+                'message' => $progressMessage,
+                'active' => true,
+            ])
+        @endif
+</div>

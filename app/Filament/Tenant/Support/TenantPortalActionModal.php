@@ -8,52 +8,68 @@ use App\Filament\Support\Action as AppAction;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Support\Enums\Width;
-use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View;
 
+/**
+ * App-wide confirmation / long-running modal helpers (all Filament panels).
+ *
+ * Confirmation uses Filament's native heading/description/icon. We only add
+ * window classes + an always-visible progress footer for long-running work.
+ * Replacing modal content while CSS hides `.fi-modal-header` caused blank modals.
+ *
+ * Critical: `modalSubmitAction(fn (Action $action) => …)` must name the parameter
+ * `$action`. Filament injects the footer submit button by that name. A differently
+ * named `Action` parameter receives the *parent* action by type-hint and replaces
+ * Confirm with the original action (auto-run / missing Confirm).
+ */
 final class TenantPortalActionModal
 {
+    /**
+     * @var list<string>
+     */
+    private const STYLED_PANELS = ['tenant', 'member', 'admin'];
+
     public static function applyConfirmation(Action $action): Action
     {
-        if (! $action->hasModalContent()) {
-            $action = $action->modalContent(
-                fn (Action $action): ?View => self::onTenantPanel()
-                ? view(
-                    'filament.tenant.partials.action-confirm-modal',
-                    self::confirmModalViewData($action),
-                )
-                : null,
-            );
-        }
+        $parent = $action;
 
-        $action = $action
-            ->modalWidth(fn (): Width|string => self::onTenantPanel()
-                ? self::confirmationModalWidth($action)
+        $action = $parent
+            ->modalAutofocus(fn(): bool => !self::shouldStyle())
+            ->formWrapper(fn(): bool => self::shouldStyle()
+                ? self::hasFormFields($parent)
+                : true)
+            ->modalWidth(fn(): Width|string => self::shouldStyle()
+                ? self::confirmationModalWidth($parent)
                 : Width::Medium)
             ->extraModalWindowAttributes(
-                fn (): array => self::onTenantPanel()
-                ? ['class' => self::confirmWindowClasses($action)]
+                fn(): array => self::shouldStyle()
+                ? ['class' => self::confirmWindowClasses($parent)]
                 : [],
                 merge: true,
             )
-            ->modalSubmitAction(function (Action $submit) use ($action): Action {
-                if (! self::onTenantPanel()) {
-                    return $submit;
-                }
-
-                return $submit
-                    ->color(self::confirmationSubmitColor($action))
-                    ->extraAttributes([
-                        'wire:loading.attr' => 'disabled',
-                        'wire:target' => 'callMountedAction',
-                    ], merge: true);
+            ->modalSubmitAction(function (Action $action) use ($parent): Action {
+                return self::decorateConfirmSubmit($action, $parent);
             });
 
-        if (self::shouldShowProgress($action)) {
-            $action = self::applyProgressFooter($action);
+        if (self::shouldShowProgress($parent)) {
+            return self::applyProgressFooter($action);
         }
 
         return $action;
+    }
+
+    private static function decorateConfirmSubmit(Action $submit, Action $parent): Action
+    {
+        if (!self::shouldStyle()) {
+            return $submit;
+        }
+
+        return $submit
+            ->color(self::confirmationSubmitColor($parent))
+            ->extraAttributes([
+                'wire:loading.attr' => 'disabled',
+                'wire:target' => 'callMountedAction',
+            ], merge: true);
     }
 
     public static function applyProgressFooter(Action $action): Action
@@ -63,7 +79,7 @@ final class TenantPortalActionModal
         }
 
         return $action->modalContentFooter(
-            fn (Action $action): ?View => self::onTenantPanel() && self::shouldShowProgress($action)
+            fn(Action $action): ?View => self::shouldStyle() && self::shouldShowProgress($action)
             ? self::progressFooterView($action)
             : null,
         );
@@ -84,73 +100,25 @@ final class TenantPortalActionModal
 
     public static function progressFooterView(Action $action): View
     {
-        return view('filament.tenant.partials.action-modal-progress', [
+        return view('filament.partials.action-modal-progress', [
             'message' => self::progressMessage($action),
+            'active' => true,
         ]);
     }
 
+    /**
+     * @deprecated Use shouldStyle() — kept for callers that still check the tenant panel only.
+     */
     public static function onTenantPanel(): bool
     {
         return Filament::getCurrentPanel()?->getId() === 'tenant';
     }
 
-    /**
-     * @return array{
-     *     heading: string|Htmlable,
-     *     description: string|Htmlable|null,
-     *     icon: mixed,
-     *     iconColor: string|array<string>,
-     *     tone: string
-     * }
-     */
-    private static function confirmModalViewData(Action $action): array
+    public static function shouldStyle(): bool
     {
-        $tone = self::confirmationTone($action);
+        $panelId = Filament::getCurrentPanel()?->getId();
 
-        return [
-            'heading' => self::confirmationHeading($action),
-            'description' => $action->getModalDescription(),
-            'icon' => self::confirmationIcon($action),
-            'iconColor' => $action->getModalIconColor() ?? $tone,
-            'tone' => $tone,
-        ];
-    }
-
-    private static function confirmationIcon(Action $action): mixed
-    {
-        if (self::confirmationTone($action) === 'danger') {
-            return 'heroicon-o-exclamation-triangle';
-        }
-
-        $icon = $action->getIcon();
-
-        if (filled($icon)) {
-            return $icon;
-        }
-
-        return match (self::confirmationTone($action)) {
-            'warning' => 'heroicon-o-exclamation-circle',
-            default => 'heroicon-o-question-mark-circle',
-        };
-    }
-
-    private static function confirmationTone(Action $action): string
-    {
-        return match ($action->getColor()) {
-            'danger' => 'danger',
-            'warning' => 'warning',
-            'success' => 'success',
-            default => 'primary',
-        };
-    }
-
-    private static function confirmationHeading(Action $action): string|Htmlable
-    {
-        if ($action->hasCustomModalHeading()) {
-            return $action->getCustomModalHeading();
-        }
-
-        return $action->getLabel();
+        return filled($panelId) && in_array($panelId, self::STYLED_PANELS, true);
     }
 
     private static function progressMessage(Action $action): string
@@ -172,24 +140,30 @@ final class TenantPortalActionModal
         };
     }
 
-    private static function isDangerConfirmation(Action $action): bool
+    private static function confirmationTone(Action $action): string
     {
-        return self::confirmationTone($action) === 'danger';
+        return match ($action->getColor()) {
+            'danger' => 'danger',
+            'warning' => 'warning',
+            'success' => 'success',
+            default => 'primary',
+        };
     }
 
     private static function confirmWindowClasses(Action $action): string
     {
         $classes = [
-            'ff-tenant-confirm-modal-window',
-            'ff-tenant-confirm-modal-window--'.self::confirmationTone($action),
+            'ff-confirm-modal-window',
+            'ff-confirm-modal-window--native',
+            'ff-confirm-modal-window--' . self::confirmationTone($action),
         ];
 
         if (self::shouldShowProgress($action)) {
-            $classes[] = 'ff-tenant-confirm-modal-window--long-running';
+            $classes[] = 'ff-confirm-modal-window--long-running';
         }
 
         if (self::hasFormFields($action)) {
-            $classes[] = 'ff-tenant-confirm-modal-window--with-fields';
+            $classes[] = 'ff-confirm-modal-window--with-fields';
         }
 
         return implode(' ', $classes);
@@ -201,12 +175,9 @@ final class TenantPortalActionModal
             return Width::Medium;
         }
 
-        return self::isDangerConfirmation($action) ? Width::ExtraSmall : Width::Small;
+        return self::confirmationTone($action) === 'danger' ? Width::ExtraSmall : Width::Small;
     }
 
-    /**
-     * Confirmations that embed selects / date pickers need a wider, overflow-safe window.
-     */
     private static function hasFormFields(Action $action): bool
     {
         $schema = \Closure::bind(

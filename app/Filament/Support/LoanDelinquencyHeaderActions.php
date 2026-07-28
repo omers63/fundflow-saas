@@ -8,7 +8,6 @@ use App\Filament\Tenant\Pages\DelinquencyWorkspacePage;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Services\Loans\DelinquencyDigestService;
 use App\Services\Loans\LoanDelinquencyService;
-use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Livewire\Component;
 
@@ -33,6 +32,8 @@ final class LoanDelinquencyHeaderActions
             ->icon('heroicon-o-arrow-path')
             ->color('warning')
             ->requiresConfirmation()
+            ->longRunning()
+            ->longRunningMessage(__('Running delinquency check. This can take a minute on large funds.'))
             ->modalHeading(__('Run delinquency check'))
             ->modalDescription(__('Marks overdue installments, refreshes arrears signals, and processes default warnings or guarantor debits per fund rules.'))
             ->action(function (LoanDelinquencyService $delinquency, Component $livewire): void {
@@ -42,14 +43,9 @@ final class LoanDelinquencyHeaderActions
 
                 Notification::make()
                     ->title(__('Delinquency check complete'))
-                    ->body(__('Overdue: :overdue · Arrears: :arrears · Clear: :cleared · Warnings: :warned · Guarantor debits: :debited', [
-                        'overdue' => $result['marked_overdue'],
-                        'arrears' => $result['delinquent_count'],
-                        'cleared' => $result['cleared_count'],
-                        'warned' => $result['warned'],
-                        'debited' => $result['debited_from_guarantor'],
-                    ]))
+                    ->body(LoanDelinquencyService::formatMaintenanceSummary($result))
                     ->success()
+                    ->persistent()
                     ->send();
 
                 self::refreshLivewire($livewire);
@@ -63,13 +59,23 @@ final class LoanDelinquencyHeaderActions
             ->icon('heroicon-o-clock')
             ->color('gray')
             ->requiresConfirmation()
+            ->longRunning()
+            ->longRunningMessage(__('Marking overdue installments. This may take a moment.'))
             ->action(function (LoanDelinquencyService $delinquency, Component $livewire): void {
-                $count = $delinquency->markOverdueInstallments();
+                $result = $delinquency->markOverdueInstallments();
+                $count = $result['count'];
+                $loanSummary = LoanDelinquencyService::formatAffectedLoansLine(
+                    __('Marked overdue'),
+                    $result['loan_ids'],
+                );
 
                 Notification::make()
                     ->title(__('Installments updated'))
-                    ->body(__(':count installment(s) marked overdue.', ['count' => $count]))
+                    ->body($loanSummary !== null
+                        ? __(':count installment(s) marked overdue.', ['count' => $count]).' '.$loanSummary
+                        : __(':count installment(s) marked overdue.', ['count' => $count]))
                     ->success()
+                    ->persistent()
                     ->send();
 
                 self::refreshLivewire($livewire);

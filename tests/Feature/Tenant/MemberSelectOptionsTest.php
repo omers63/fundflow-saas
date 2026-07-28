@@ -64,5 +64,5 @@ test('post to member confirmation modal uses with-fields window class', function
     $attributes = $action->getExtraModalWindowAttributes();
 
     expect($attributes['class'] ?? '')
-        ->toContain('ff-tenant-confirm-modal-window--with-fields');
+        ->toContain('ff-confirm-modal-window--with-fields');
 });

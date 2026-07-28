@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Pages\Page;
 use App\Filament\Support\LoanFilamentActions;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\MoneyDisplay;
@@ -17,7 +18,6 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\Setting;
 use BackedEnum;
 use Filament\Actions\BulkActionGroup;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;

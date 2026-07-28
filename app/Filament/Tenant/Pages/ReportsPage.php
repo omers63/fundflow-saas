@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Pages\Page;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
@@ -14,7 +15,6 @@ use App\Filament\Tenant\Support\TenantNavigation;
 use App\Services\Tenant\TenantAdminReportExportService;
 use BackedEnum;
 use Filament\Notifications\Notification;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use UnitEnum;
 

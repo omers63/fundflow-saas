@@ -7,6 +7,7 @@ namespace App\Filament\Member\Pages;
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Resources\MyStatements\MyStatementResource;
 use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Pages\Page;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Transaction;
@@ -15,7 +16,6 @@ use App\Support\Insights\InsightFormatter;
 use App\Support\LoanSettings;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 
 class FundAccountPage extends Page

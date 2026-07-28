@@ -30,16 +30,25 @@ class LoanDefaultService
      *  - Past grace, guarantor liability transferred, or guarantor already paid
      *    any installment → debit the guarantor's fund for every remaining overdue
      *    installment (not only the installment that crossed the threshold).
+     *
+     * @return array{
+     *     warned: int,
+     *     debited_from_guarantor: int,
+     *     warned_loan_ids: list<int>,
+     *     debited_loan_ids: list<int>
+     * }
      */
     public function processDefaults(): array
     {
         $grace = Setting::loanDefaultGraceCycles();
         $warned = 0;
         $debited = 0;
+        $warnedLoanIds = [];
+        $debitedLoanIds = [];
 
         Loan::active()
             ->with(['member.user', 'guarantor.user', 'installments'])
-            ->each(function (Loan $loan) use ($grace, &$warned, &$debited) {
+            ->each(function (Loan $loan) use ($grace, &$warned, &$debited, &$warnedLoanIds, &$debitedLoanIds) {
                 $overdueInstallments = $loan->installments()
                     ->where('status', 'overdue')
                     ->where('paid_by_guarantor', false)
@@ -69,10 +78,17 @@ class LoanDefaultService
                         ? 'LoanDefaultService: guarantor debit failed (delinquency liability)'
                         : 'LoanDefaultService: guarantor debit failed';
 
+                    $loanDebited = false;
+
                     foreach ($overdueInstallments as $installment) {
                         if ($this->debitGuarantorForInstallment($loan, $installment, $errorMessage)) {
                             $debited++;
+                            $loanDebited = true;
                         }
+                    }
+
+                    if ($loanDebited) {
+                        $debitedLoanIds[(int) $loan->id] = true;
                     }
 
                     return;
@@ -80,17 +96,33 @@ class LoanDefaultService
 
                 // Still within grace, or no guarantor available to debit: warn only.
                 $totalDefaults = (int) $loan->late_repayment_count;
+                $loanWarned = false;
 
                 foreach ($overdueInstallments as $installment) {
                     $totalDefaults++;
 
                     if ($this->warnBorrower($loan, $installment, $totalDefaults, $grace)) {
                         $warned++;
+                        $loanWarned = true;
                     }
+                }
+
+                if ($loanWarned) {
+                    $warnedLoanIds[(int) $loan->id] = true;
                 }
             });
 
-        return ['warned' => $warned, 'debited_from_guarantor' => $debited];
+        $warnedIds = array_keys($warnedLoanIds);
+        $debitedIds = array_keys($debitedLoanIds);
+        sort($warnedIds);
+        sort($debitedIds);
+
+        return [
+            'warned' => $warned,
+            'debited_from_guarantor' => $debited,
+            'warned_loan_ids' => $warnedIds,
+            'debited_loan_ids' => $debitedIds,
+        ];
     }
 
     /**

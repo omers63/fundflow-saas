@@ -13,6 +13,7 @@ use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Support\BusinessDaySettings;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\App;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -81,7 +82,8 @@ test('pending installment past cycle deadline is marked overdue', function () {
     $marked = $this->delinquency->markOverdueInstallments();
 
     $installment->refresh();
-    expect($marked)->toBe(1)
+    expect($marked['count'])->toBe(1)
+        ->and($marked['loan_ids'])->toBe([(int) $loan->id])
         ->and($installment->status)->toBe('overdue')
         ->and($installment->is_late)->toBeTrue();
 });
@@ -129,7 +131,8 @@ test('overdue marking uses labelled cycle deadline not calendar month of due dat
 
     $marked = $this->delinquency->markOverdueInstallments();
 
-    expect($marked)->toBe(1)
+    expect($marked['count'])->toBe(1)
+        ->and($marked['loan_ids'])->toBe([(int) $loan->id])
         ->and($pastDue->fresh()->status)->toBe('overdue')
         ->and($currentCycleDue->fresh()->status)->toBe('pending');
 
@@ -369,4 +372,43 @@ test('contribution arrears can be scoped to a selected past collection cycle', f
         ))->toBeTrue();
 
     Carbon::setTestNow();
+});
+
+test('maintenance summary lists affected loan ids and empty-run clarity', function () {
+    App::setLocale('en');
+
+    $empty = LoanDelinquencyService::formatMaintenanceSummary([
+        'marked_overdue' => 0,
+        'delinquent_count' => 0,
+        'cleared_count' => 2,
+        'warned' => 0,
+        'debited_from_guarantor' => 0,
+        'transferred_to_guarantor' => 0,
+        'overdue_loan_ids' => [],
+        'warned_loan_ids' => [],
+        'debited_loan_ids' => [],
+        'transferred_loan_ids' => [],
+    ]);
+
+    expect($empty)->toContain('No loans were changed in this run.')
+        ->and($empty)->not->toContain('Affected loans:');
+
+    $withLoans = LoanDelinquencyService::formatMaintenanceSummary([
+        'marked_overdue' => 2,
+        'delinquent_count' => 1,
+        'cleared_count' => 0,
+        'warned' => 1,
+        'debited_from_guarantor' => 1,
+        'transferred_to_guarantor' => 0,
+        'overdue_loan_ids' => [195, 132],
+        'warned_loan_ids' => [132],
+        'debited_loan_ids' => [195],
+        'transferred_loan_ids' => [],
+    ]);
+
+    expect($withLoans)->toContain('Affected loans:')
+        ->and($withLoans)->toContain('Marked overdue: #132, #195')
+        ->and($withLoans)->toContain('Warnings: #132')
+        ->and($withLoans)->toContain('Guarantor debits: #195')
+        ->and($withLoans)->not->toContain('No loans were changed in this run.');
 });

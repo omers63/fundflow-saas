@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Clusters;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Pages\Page;
 use App\Filament\Tenant\Pages\LoanQueueWorkbenchPage;
 use BackedEnum;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 
 /**

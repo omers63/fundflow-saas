@@ -236,15 +236,25 @@ class AppServiceProvider extends ServiceProvider
                 return TenantPortalViewModal::apply($action);
             }
 
-            if ($action->isConfirmationRequired()) {
-                return TenantPortalActionModal::applyConfirmation($action);
-            }
+            // configureUsing runs inside Action::make() BEFORE ->requiresConfirmation() /
+            // ->longRunning() are chained. Defer modal wiring until boot so those flags exist.
+            $action->bootUsing(function (FilamentAction $action): void {
+                if ($action instanceof ViewAction) {
+                    return;
+                }
 
-            $action = TenantPortalViewModal::applyToForm($action);
+                if ($action->isConfirmationRequired()) {
+                    TenantPortalActionModal::applyConfirmation($action);
 
-            if (TenantPortalActionModal::shouldShowProgress($action)) {
-                return TenantPortalActionModal::applyProgressFooter($action);
-            }
+                    return;
+                }
+
+                TenantPortalViewModal::applyToForm($action);
+
+                if (TenantPortalActionModal::shouldShowProgress($action)) {
+                    TenantPortalActionModal::applyProgressFooter($action);
+                }
+            });
 
             return $action;
         });

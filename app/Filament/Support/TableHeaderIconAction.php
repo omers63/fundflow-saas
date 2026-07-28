@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Filament\Pages\Page;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 
 /**
- * Icon-only table header actions (Import / Export / New) with tooltips from labels.
+ * Icon-only header actions (page headers and table headers) with tooltips from labels.
+ *
+ * Application standard: page header actions and header ActionGroups are icon-only.
+ * Use {@see apply()} / {@see applyGroup()} / {@see applyMany()}, or extend
+ * {@see Page} which normalizes header actions automatically.
  */
 final class TableHeaderIconAction
 {
@@ -20,16 +25,42 @@ final class TableHeaderIconAction
             $action->tableIcon($icon);
         }
 
-        return $action
-            ->iconButton()
-            ->tooltip(fn (): mixed => $action->getLabel());
+        $action = $action->iconButton();
+
+        if (blank($action->getTooltip())) {
+            $action->tooltip(fn (): mixed => $action->getLabel());
+        }
+
+        return $action;
     }
 
     public static function applyGroup(ActionGroup $group): ActionGroup
     {
-        return $group
-            ->iconButton()
-            ->tooltip(fn (): mixed => $group->getLabel());
+        $group = $group->iconButton();
+
+        if (blank($group->getTooltip())) {
+            $group->tooltip(fn (): mixed => $group->getLabel());
+        }
+
+        return $group;
+    }
+
+    /**
+     * @param  list<Action|ActionGroup>  $actions
+     * @return list<Action|ActionGroup>
+     */
+    public static function normalize(array $actions): array
+    {
+        return array_map(
+            function (Action|ActionGroup $action): Action|ActionGroup {
+                if ($action instanceof ActionGroup) {
+                    return self::applyGroup($action);
+                }
+
+                return self::apply($action);
+            },
+            $actions,
+        );
     }
 
     /**

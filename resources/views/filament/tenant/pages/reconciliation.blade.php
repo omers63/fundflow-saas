@@ -335,4 +335,6 @@
             @endif
         </div>
     </section>
+
+    @include('filament.tenant.partials.page-workspace-action-modals')
 </x-filament-panels::page>

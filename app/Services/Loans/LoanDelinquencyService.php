@@ -58,7 +58,18 @@ class LoanDelinquencyService
     /**
      * Daily pipeline: mark overdue → sync member status → process defaults (warnings / guarantor debits).
      *
-     * @return array{marked_overdue: int, delinquent_count: int, cleared_count: int, warned: int, debited_from_guarantor: int}
+     * @return array{
+     *     marked_overdue: int,
+     *     delinquent_count: int,
+     *     cleared_count: int,
+     *     warned: int,
+     *     debited_from_guarantor: int,
+     *     transferred_to_guarantor: int,
+     *     overdue_loan_ids: list<int>,
+     *     warned_loan_ids: list<int>,
+     *     debited_loan_ids: list<int>,
+     *     transferred_loan_ids: list<int>
+     * }
      */
     public function runDailyMaintenance(): array
     {
@@ -68,22 +79,92 @@ class LoanDelinquencyService
         $transferred = $this->evaluateMissedEmiTransfers();
 
         return [
-            'marked_overdue' => $markedOverdue,
+            'marked_overdue' => $markedOverdue['count'],
             'delinquent_count' => $memberSync['delinquent_count'],
             'cleared_count' => $memberSync['cleared_count'],
             'warned' => $defaults['warned'] ?? 0,
             'debited_from_guarantor' => $defaults['debited_from_guarantor'] ?? 0,
-            'transferred_to_guarantor' => $transferred,
+            'transferred_to_guarantor' => $transferred['count'],
+            'overdue_loan_ids' => $markedOverdue['loan_ids'],
+            'warned_loan_ids' => $defaults['warned_loan_ids'] ?? [],
+            'debited_loan_ids' => $defaults['debited_loan_ids'] ?? [],
+            'transferred_loan_ids' => $transferred['loan_ids'],
         ];
     }
 
     /**
-     * Auto-transfer loans to guarantor when missed EMI threshold is reached (spec Y).
+     * Build a concise post-run summary for UI toasts and the last-run panel.
+     *
+     * @param  array<string, mixed>  $result
      */
-    public function evaluateMissedEmiTransfers(): int
+    public static function formatMaintenanceSummary(array $result): string
+    {
+        $counts = __('Overdue: :overdue · Arrears: :arrears · Clear: :cleared · Warnings: :warned · Guarantor debits: :debited · Transfers: :transferred', [
+            'overdue' => (int) ($result['marked_overdue'] ?? 0),
+            'arrears' => (int) ($result['delinquent_count'] ?? 0),
+            'cleared' => (int) ($result['cleared_count'] ?? 0),
+            'warned' => (int) ($result['warned'] ?? 0),
+            'debited' => (int) ($result['debited_from_guarantor'] ?? 0),
+            'transferred' => (int) ($result['transferred_to_guarantor'] ?? 0),
+        ]);
+
+        $loanLines = array_values(array_filter([
+            self::formatAffectedLoansLine(__('Marked overdue'), $result['overdue_loan_ids'] ?? []),
+            self::formatAffectedLoansLine(__('Warnings'), $result['warned_loan_ids'] ?? []),
+            self::formatAffectedLoansLine(__('Guarantor debits'), $result['debited_loan_ids'] ?? []),
+            self::formatAffectedLoansLine(__('Transferred'), $result['transferred_loan_ids'] ?? []),
+        ]));
+
+        if ($loanLines === []) {
+            return $counts.' '.__('No loans were changed in this run.');
+        }
+
+        return $counts.' '.__('Affected loans:').' '.implode(' · ', $loanLines);
+    }
+
+    /**
+     * @param  list<int|string>|mixed  $loanIds
+     */
+    public static function formatAffectedLoansLine(string $label, mixed $loanIds): ?string
+    {
+        if (! is_array($loanIds) || $loanIds === []) {
+            return null;
+        }
+
+        $ids = [];
+        foreach ($loanIds as $loanId) {
+            if (is_numeric($loanId) && (int) $loanId > 0) {
+                $ids[(int) $loanId] = true;
+            }
+        }
+
+        if ($ids === []) {
+            return null;
+        }
+
+        $sorted = array_keys($ids);
+        sort($sorted);
+
+        $visible = array_slice($sorted, 0, 10);
+        $labels = array_map(static fn (int $id): string => '#'.$id, $visible);
+
+        if (count($sorted) > count($visible)) {
+            $labels[] = __('+ :count more', ['count' => count($sorted) - count($visible)]);
+        }
+
+        return $label.': '.implode(', ', $labels);
+    }
+
+    /**
+     * Auto-transfer loans to guarantor when missed EMI threshold is reached (spec Y).
+     *
+     * @return array{count: int, loan_ids: list<int>}
+     */
+    public function evaluateMissedEmiTransfers(): array
     {
         $threshold = Setting::loanGuarantorTransferMissedThreshold();
         $transferred = 0;
+        $loanIds = [];
 
         Loan::query()
             ->where('status', 'active')
@@ -91,16 +172,23 @@ class LoanDelinquencyService
             ->whereNull('transferred_to_guarantor_at')
             ->where('late_repayment_count', '>=', $threshold)
             ->whereHas('installments', fn ($q) => $q->where('status', 'overdue'))
-            ->each(function (Loan $loan) use (&$transferred): void {
+            ->each(function (Loan $loan) use (&$transferred, &$loanIds): void {
                 try {
                     app(LoanGuarantorTransferService::class)->transferToGuarantor($loan);
                     $transferred++;
+                    $loanIds[(int) $loan->id] = true;
                 } catch (InvalidArgumentException) {
                     // Skip loans that fail validation (already transferred, no guarantor, etc.)
                 }
             });
 
-        return $transferred;
+        $ids = array_keys($loanIds);
+        sort($ids);
+
+        return [
+            'count' => $transferred,
+            'loan_ids' => $ids,
+        ];
     }
 
     public function reinstateSuspendedBorrower(Loan $loan): void
@@ -233,16 +321,19 @@ class LoanDelinquencyService
      *
      * Legacy-imported loans are still marked overdue for schedule/collection accuracy,
      * but late fees stay at zero (automated fee posting remains skipped elsewhere).
+     *
+     * @return array{count: int, loan_ids: list<int>}
      */
-    public function markOverdueInstallments(): int
+    public function markOverdueInstallments(): array
     {
         $marked = 0;
+        $loanIds = [];
 
         LoanInstallment::query()
             ->where('status', 'pending')
             ->whereHas('loan', fn ($q) => $q->whereIn('status', ['active', 'transferred']))
             ->with('loan')
-            ->each(function (LoanInstallment $installment) use (&$marked): void {
+            ->each(function (LoanInstallment $installment) use (&$marked, &$loanIds): void {
                 if (! $this->installmentIsPastDeadline($installment)) {
                     return;
                 }
@@ -265,9 +356,16 @@ class LoanDelinquencyService
                 ]);
 
                 $marked++;
+                $loanIds[(int) $installment->loan_id] = true;
             });
 
-        return $marked;
+        $ids = array_keys($loanIds);
+        sort($ids);
+
+        return [
+            'count' => $marked,
+            'loan_ids' => $ids,
+        ];
     }
 
     /**

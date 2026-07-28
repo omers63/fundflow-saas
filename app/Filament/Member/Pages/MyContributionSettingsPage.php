@@ -7,6 +7,7 @@ namespace App\Filament\Member\Pages;
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Pages\Page;
 use App\Filament\Support\AdminNotificationActions;
 use App\Filament\Support\MemberContributionFilamentActions;
 use App\Filament\Support\RecipientDatabaseNotification;
@@ -18,7 +19,6 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 
 class MyContributionSettingsPage extends Page

@@ -6,6 +6,7 @@ namespace App\Filament\Member\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Pages\Page;
 use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Setting;
@@ -14,7 +15,6 @@ use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Attributes\Computed;

@@ -6,13 +6,13 @@ namespace App\Filament\Member\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Pages\Page;
 use App\Models\Tenant\MemberCommunicationPreference;
 use App\Services\Tenant\NotificationPreferenceService;
 use App\Support\CommunicationSettings;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
 use Filament\Notifications\Notification;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Livewire\Attributes\Computed;
 

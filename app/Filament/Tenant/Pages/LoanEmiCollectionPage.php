@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Pages\Page;
 use App\Filament\Support\LoanEmiCollectionTables;
 use App\Filament\Tenant\Clusters\LoansCluster;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;

@@ -67,11 +67,7 @@ class LoansApplyRepaymentsCommand extends Command
         if (AutomationScheduleSettings::loanDefaultsEnabled()) {
             $delinquencyResult = $delinquency->runDailyMaintenance();
 
-            $this->info(__('Delinquency after apply — overdue: :overdue, delinquent: :delinquent, transfers: :transferred', [
-                'overdue' => $delinquencyResult['marked_overdue'],
-                'delinquent' => $delinquencyResult['delinquent_count'],
-                'transferred' => $delinquencyResult['transferred_to_guarantor'] ?? 0,
-            ]));
+            $this->info(LoanDelinquencyService::formatMaintenanceSummary($delinquencyResult));
         }
 
         return self::SUCCESS;

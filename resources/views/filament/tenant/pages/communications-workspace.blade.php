@@ -32,10 +32,10 @@
                                             </p>
                                             @foreach ($options as $key => $label)
                                                 <button type="button" wire:click="selectTemplate('{{ $key }}')" @class([
-                                                    'block w-full rounded-lg px-3 py-2 text-start text-sm',
-                                                    'bg-primary-50 text-primary-700 dark:bg-primary-500/20 dark:text-primary-200' => $this->selectedTemplateKey === $key,
-                                                    'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/5' => $this->selectedTemplateKey !== $key,
-                                                ])>
+                    'block w-full rounded-lg px-3 py-2 text-start text-sm',
+                    'bg-primary-50 text-primary-700 dark:bg-primary-500/20 dark:text-primary-200' => $this->selectedTemplateKey === $key,
+                    'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/5' => $this->selectedTemplateKey !== $key,
+                ])>
                                                     {{ $label }}
                                                 </button>
                                             @endforeach
@@ -48,9 +48,9 @@
                                 <div class="ff-tenant-tab-pills flex flex-wrap gap-2">
                                     @foreach ($this->channelFamilyOptions() as $familyKey => $familyLabel)
                                         <button type="button" wire:click="selectChannelFamily('{{ $familyKey }}')" @class([
-                    'ff-tenant-tab-pills__item',
-                    'ff-tenant-tab-pills__item--active' => $this->selectedChannelFamily === $familyKey,
-                ])>
+            'ff-tenant-tab-pills__item',
+            'ff-tenant-tab-pills__item--active' => $this->selectedChannelFamily === $familyKey,
+        ])>
                                             <x-ff-tab-pill-label :label="$familyLabel" :key="$familyKey" />
                                         </button>
                                     @endforeach
@@ -147,4 +147,5 @@
             @endif
         </div>
     </section>
+@include('filament.tenant.partials.page-workspace-action-modals')
 </x-filament-panels::page>

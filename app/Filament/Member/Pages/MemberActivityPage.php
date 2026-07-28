@@ -6,10 +6,10 @@ namespace App\Filament\Member\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Pages\Page;
 use App\Services\MemberActivityFeedService;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Livewire\Attributes\Url;
 

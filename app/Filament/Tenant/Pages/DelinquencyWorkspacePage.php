@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Pages\Page;
 use App\Filament\Support\LoanDelinquencyHeaderActions;
 use App\Filament\Support\LoanDelinquencyTables;
 use App\Filament\Support\LoanListTableHeaderActions;
@@ -24,7 +25,6 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Notifications\Notification;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -260,7 +260,7 @@ class DelinquencyWorkspacePage extends Page implements HasTable
     }
 
     /**
-     * @return array{at: string, result: array<string, int>}|null
+     * @return array{at: string, result: array<string, mixed>}|null
      */
     public function lastMaintenanceRun(): ?array
     {
@@ -376,8 +376,7 @@ class DelinquencyWorkspacePage extends Page implements HasTable
             ])
                 ->label(__('Delinquency tools'))
                 ->icon('heroicon-o-exclamation-triangle')
-                ->color('gray')
-                ->button(),
+                ->color('gray'),
             ActionGroup::make([
                 Action::make('syncPolicyBreaches')
                     ->label(__('Sync policy breaches'))
@@ -403,8 +402,7 @@ class DelinquencyWorkspacePage extends Page implements HasTable
             ])
                 ->label(__('Policy'))
                 ->icon(Heroicon::OutlinedShieldExclamation)
-                ->color('gray')
-                ->button(),
+                ->color('gray'),
         ];
     }
 

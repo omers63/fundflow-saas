@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Pages\Page;
 use App\Filament\Tenant\Concerns\HidesFromTenantSidebar;
 use App\Filament\Tenant\Support\CommunicationsTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use BackedEnum;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 
 /**

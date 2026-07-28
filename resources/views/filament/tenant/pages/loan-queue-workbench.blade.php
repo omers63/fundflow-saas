@@ -35,48 +35,48 @@ $money = fn($amount) => \App\Filament\Support\MoneyDisplay::format((float) $amou
 
     @if ($queueTab === 'tiers')
                 @php
-        $tierCards = $this->getTierQueues();
-        $tierSummary = $this->getTierQueueSummary($tierCards);
+    $tierCards = $this->getTierQueues();
+    $tierSummary = $this->getTierQueueSummary($tierCards);
                 @endphp
                 <div class="space-y-3">
                     @forelse ($tierCards as $card)
                                                     @php
-                        $tier = $card['tier'];
-                        $allocated = max(0.0, (float) $card['allocated']);
-                        $cardQueuedRemaining = array_sum(array_column($card['loans'], 'remaining'));
-                        $cardRunningOutstanding = array_sum(array_column($card['running'], 'outstanding'));
+        $tier = $card['tier'];
+        $allocated = max(0.0, (float) $card['allocated']);
+        $cardQueuedRemaining = array_sum(array_column($card['loans'], 'remaining'));
+        $cardRunningOutstanding = array_sum(array_column($card['running'], 'outstanding'));
                                                     @endphp
                                                     <details
                                                         class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
                                                         @if (count($card['loans']) > 0 || count($card['running']) > 0) open @endif
                                                     >
                                                         @php
-                        $queuedDemand = max(0.0, (float) $cardQueuedRemaining);
-                        $runningCommitted = max(0.0, (float) $card['committed'] - $queuedDemand);
-                        $headroom = max(0.0, (float) $card['available']);
-                        $poolBase = max($allocated, 0.01);
-                        $runningPct = min(100, ($runningCommitted / $poolBase) * 100);
-                        $queuedPct = min(100 - $runningPct, ($queuedDemand / $poolBase) * 100);
-                        $usedPct = min(100, (((float) $card['committed']) / $poolBase) * 100);
-                        $headroomPct = max(0, 100 - $runningPct - $queuedPct);
-                        $overCommitted = (float) $card['committed'] > $allocated + 0.005;
-                        $heatTone = match (true) {
-                            $overCommitted || $usedPct >= 95 => 'danger',
-                            $usedPct >= 70 => 'warning',
-                            default => 'ok',
-                        };
+        $queuedDemand = max(0.0, (float) $cardQueuedRemaining);
+        $runningCommitted = max(0.0, (float) $card['committed'] - $queuedDemand);
+        $headroom = max(0.0, (float) $card['available']);
+        $poolBase = max($allocated, 0.01);
+        $runningPct = min(100, ($runningCommitted / $poolBase) * 100);
+        $queuedPct = min(100 - $runningPct, ($queuedDemand / $poolBase) * 100);
+        $usedPct = min(100, (((float) $card['committed']) / $poolBase) * 100);
+        $headroomPct = max(0, 100 - $runningPct - $queuedPct);
+        $overCommitted = (float) $card['committed'] > $allocated + 0.005;
+        $heatTone = match (true) {
+            $overCommitted || $usedPct >= 95 => 'danger',
+            $usedPct >= 70 => 'warning',
+            default => 'ok',
+        };
 
-                        $repayWeight = 0.0;
-                        $repayWeighted = 0.0;
-                        foreach ($card['running'] as $runningRow) {
-                            $weight = max(0.01, (float) ($runningRow['loan']->amount_approved ?? 0));
-                            $repayWeight += $weight;
-                            $repayWeighted += $weight * (int) $runningRow['repay_percent'];
-                        }
-                        $repayProgressPct = $repayWeight > 0
-                            ? (int) round($repayWeighted / $repayWeight)
-                            : 0;
-                        $hasRunningRepayment = count($card['running']) > 0 && $runningPct > 0;
+        $repayWeight = 0.0;
+        $repayWeighted = 0.0;
+        foreach ($card['running'] as $runningRow) {
+            $weight = max(0.01, (float) ($runningRow['loan']->amount_approved ?? 0));
+            $repayWeight += $weight;
+            $repayWeighted += $weight * (int) $runningRow['repay_percent'];
+        }
+        $repayProgressPct = $repayWeight > 0
+            ? (int) round($repayWeighted / $repayWeight)
+            : 0;
+        $hasRunningRepayment = count($card['running']) > 0 && $runningPct > 0;
                                                         @endphp
                                                         <summary class="ff-tier-heat-summary cursor-pointer list-none px-3 py-2.5 [&::-webkit-details-marker]:hidden">
                                                             <div class="flex flex-wrap items-center justify-between gap-2">
@@ -103,11 +103,11 @@ $money = fn($amount) => \App\Filament\Support\MoneyDisplay::format((float) $amou
                                                                         </span>
                                                                     @endif
                                                                     <span @class([
-                            'ff-tier-heat__badge',
-                            'ff-tier-heat__badge--danger' => $heatTone === 'danger',
-                            'ff-tier-heat__badge--warning' => $heatTone === 'warning',
-                            'ff-tier-heat__badge--ok' => $heatTone === 'ok',
-                        ])>
+            'ff-tier-heat__badge',
+            'ff-tier-heat__badge--danger' => $heatTone === 'danger',
+            'ff-tier-heat__badge--warning' => $heatTone === 'warning',
+            'ff-tier-heat__badge--ok' => $heatTone === 'ok',
+        ])>
                                                                         {{ __(':percent% used', ['percent' => (int) round($usedPct)]) }}
                                                                     </span>
                                                                 </span>
@@ -118,14 +118,14 @@ $money = fn($amount) => \App\Filament\Support\MoneyDisplay::format((float) $amou
                                                                 data-tone="{{ $heatTone }}"
                                                                 role="img"
                                                                 aria-label="{{ __('Allocated :allocated · Committed :committed · Tier headroom :disbursable', [
-                            'allocated' => $money($card['allocated']),
-                            'committed' => $money($card['committed']),
-                            'disbursable' => $money($card['disbursable']),
-                        ]) . (
-                            $hasRunningRepayment
-                            ? ' · ' . __(':percent% repaid', ['percent' => $repayProgressPct])
-                            : ''
-                        ) }}"
+            'allocated' => $money($card['allocated']),
+            'committed' => $money($card['committed']),
+            'disbursable' => $money($card['disbursable']),
+        ]) . (
+            $hasRunningRepayment
+            ? ' · ' . __(':percent% repaid', ['percent' => $repayProgressPct])
+            : ''
+        ) }}"
                                                             >
                                                                 <div class="ff-tier-heat__track">
                                                                     @if ($runningPct > 0)
@@ -250,10 +250,10 @@ $money = fn($amount) => \App\Filament\Support\MoneyDisplay::format((float) $amou
                                                                                 </div>
                                                                                 <span class="shrink-0 text-[11px] font-semibold tabular-nums text-teal-700 dark:text-teal-300">
                                                                                     {{ __(':paid/:total EMIs · :percent%', [
-                                    'paid' => $row['installments_paid'],
-                                    'total' => $row['installments_total'],
-                                    'percent' => $row['repay_percent'],
-                                ]) }}
+                    'paid' => $row['installments_paid'],
+                    'total' => $row['installments_total'],
+                    'percent' => $row['repay_percent'],
+                ]) }}
                                                                                 </span>
                                                                             </div>
                                                                         </li>
@@ -295,4 +295,6 @@ $money = fn($amount) => \App\Filament\Support\MoneyDisplay::format((float) $amou
     @else
         {{ $this->table }}
     @endif
+
+    @include('filament.tenant.partials.page-workspace-action-modals')
 </x-filament-panels::page>

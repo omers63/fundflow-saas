@@ -10,7 +10,6 @@ use App\Services\Loans\EmiCollectionSummaryExportService;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Services\Loans\LoanRepaymentService;
-use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Notifications\Notification;
 use Livewire\Component;
@@ -125,15 +124,25 @@ final class LoanEmiCollectionHeaderActions
             ->icon('heroicon-o-arrow-path')
             ->color('info')
             ->requiresConfirmation()
+            ->longRunning()
+            ->longRunningMessage(__('Marking overdue installments. This may take a moment.'))
             ->modalHeading(__('Prepare overdue EMIs'))
             ->modalDescription(__('Marks pending installments past their cycle deadline as overdue and refreshes late fees so they appear in EMI collection.'))
             ->action(function (LoanDelinquencyService $delinquency, Component $livewire): void {
-                $count = $delinquency->markOverdueInstallments();
+                $result = $delinquency->markOverdueInstallments();
+                $count = $result['count'];
+                $loanSummary = LoanDelinquencyService::formatAffectedLoansLine(
+                    __('Marked overdue'),
+                    $result['loan_ids'],
+                );
 
                 Notification::make()
                     ->title(__('Overdue EMIs prepared'))
-                    ->body(__(':count installment(s) marked overdue.', ['count' => $count]))
+                    ->body($loanSummary !== null
+                        ? __(':count installment(s) marked overdue.', ['count' => $count]).' '.$loanSummary
+                        : __(':count installment(s) marked overdue.', ['count' => $count]))
                     ->success()
+                    ->persistent()
                     ->send();
 
                 LoanResource::dispatchInsightsRefresh($livewire);

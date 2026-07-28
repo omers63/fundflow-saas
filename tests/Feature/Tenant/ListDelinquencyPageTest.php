@@ -12,6 +12,8 @@ use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\Members\Pages\ViewMember;
 use App\Models\Central\Tenant;
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
@@ -21,6 +23,7 @@ use App\Support\Lang;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
@@ -83,6 +86,67 @@ test('loans list exposes delinquency maintenance actions on delinquency workspac
         ->mountAction('markOverdueInstallments')
         ->callMountedAction()
         ->assertNotified();
+});
+
+test('delinquency workspace header actions are icon only', function () {
+    $component = Livewire::test(DelinquencyWorkspacePage::class, ['sideTab' => 'overview'])
+        ->assertSuccessful();
+
+    foreach ($component->instance()->getCachedHeaderActions() as $action) {
+        expect($action->isIconButton())->toBeTrue()
+            ->and($action->getTooltip())->not->toBeEmpty();
+    }
+});
+
+test('run delinquency check notification lists affected loan ids', function () {
+    $accounting = app(AccountingService::class);
+    $member = Member::create([
+        'member_number' => 'DEL-CHK-'.uniqid(),
+        'name' => 'Delinquency Check Member',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subMonths(18),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($member);
+    $member->cashAccount()->update(['balance' => 50000]);
+    $member->fundAccount()->update(['balance' => 50000]);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
+        'interest_rate' => 0,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(3),
+        'disbursed_at' => now()->subMonths(3),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => now()->subMonths(2)->startOfMonth(),
+        'status' => 'pending',
+    ]);
+
+    Livewire::test(DelinquencyWorkspacePage::class, ['sideTab' => 'overdue'])
+        ->assertSuccessful()
+        ->mountAction('runDelinquencyMaintenance')
+        ->callMountedAction()
+        ->assertNotified(__('Delinquency check complete'));
+
+    $cached = Cache::get(DelinquencyWorkspacePage::LAST_MAINTENANCE_CACHE_KEY);
+    $summary = LoanDelinquencyService::formatMaintenanceSummary($cached['result'] ?? []);
+
+    expect($cached)->toBeArray()
+        ->and($cached['result']['overdue_loan_ids'] ?? [])->toContain((int) $loan->id)
+        ->and($summary)->toContain('Marked overdue: #'.$loan->id)
+        ->and($summary)->toContain('Affected loans:');
 });
 
 test('overdue installments view loads on delinquency workspace', function () {

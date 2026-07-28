@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Pages\Page;
 use App\Filament\Tenant\Resources\SmsClearing\Pages\ListSmsClearing;
 use App\Filament\Tenant\Resources\SmsClearing\SmsClearingResource;
 use App\Filament\Tenant\Support\SmsClearingTabRegistry;
-use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
 
 /**

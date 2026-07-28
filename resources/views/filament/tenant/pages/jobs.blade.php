@@ -22,28 +22,28 @@
 
 <div class="ff-tenant-tab-pills mb-4 flex flex-wrap gap-2">
     <button type="button" wire:click="setJobsTab('status')" @class([
-        'ff-tenant-tab-pills__item',
-        'ff-tenant-tab-pills__item--active' => $jobsTab === 'status',
-    ])>
+    'ff-tenant-tab-pills__item',
+    'ff-tenant-tab-pills__item--active' => $jobsTab === 'status',
+])>
         <x-ff-tab-pill-label :label="__('Status')" key="status" />
     </button>
     <button type="button" wire:click="setJobsTab('schedule')" @class([
-        'ff-tenant-tab-pills__item',
-        'ff-tenant-tab-pills__item--active' => $jobsTab === 'schedule',
-    ])>
+    'ff-tenant-tab-pills__item',
+    'ff-tenant-tab-pills__item--active' => $jobsTab === 'schedule',
+])>
         <x-ff-tab-pill-label :label="__('Schedule')" key="schedule" />
     </button>
     @if ($this->advancedUi)
         <button type="button" wire:click="setJobsTab('catalog')" @class([
-            'ff-tenant-tab-pills__item',
-            'ff-tenant-tab-pills__item--active' => $jobsTab === 'catalog',
-        ])>
+        'ff-tenant-tab-pills__item',
+        'ff-tenant-tab-pills__item--active' => $jobsTab === 'catalog',
+    ])>
             <x-ff-tab-pill-label :label="__('Job catalog')" key="catalog" />
         </button>
         <button type="button" wire:click="setJobsTab('history')" @class([
-            'ff-tenant-tab-pills__item',
-            'ff-tenant-tab-pills__item--active' => $jobsTab === 'history',
-        ])>
+        'ff-tenant-tab-pills__item',
+        'ff-tenant-tab-pills__item--active' => $jobsTab === 'history',
+    ])>
             <x-ff-tab-pill-label :label="__('Run history')" key="history" />
         </button>
     @endif
@@ -58,4 +58,5 @@
         {{ $this->table }}
     </div>
 @endif
+@include('filament.tenant.partials.page-workspace-action-modals')
 </x-filament-panels::page>

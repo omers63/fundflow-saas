@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Pages\Page;
 use App\Filament\Tenant\Concerns\InteractsWithAdvancedUi;
 use App\Filament\Tenant\Concerns\InteractsWithAutomationScheduleForm;
 use App\Filament\Tenant\Concerns\InteractsWithJobsTable;
@@ -25,11 +26,9 @@ use App\Support\BatchPostingGate;
 use App\Support\SystemLoggingSettings;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -189,24 +188,6 @@ class AuditSystemPage extends Page implements HasForms, HasTable
         // Header actions are Filament-cached on boot; rebuild so Automation-only
         // actions appear when entering that tab and disappear when leaving it.
         $this->refreshHeaderActions();
-    }
-
-    protected function refreshHeaderActions(): void
-    {
-        foreach ($this->cachedHeaderActions as $previous) {
-            if ($previous instanceof Action) {
-                unset($this->cachedActions[$previous->getName()]);
-            }
-
-            if ($previous instanceof ActionGroup) {
-                foreach ($previous->getFlatActions() as $flatAction) {
-                    unset($this->cachedActions[$flatAction->getName()]);
-                }
-            }
-        }
-
-        $this->cachedHeaderActions = [];
-        $this->cacheInteractsWithHeaderActions();
     }
 
     public function tenantUserIsAdmin(): bool
@@ -434,6 +415,8 @@ class AuditSystemPage extends Page implements HasForms, HasTable
                 ->action(function () use ($gate): void {
                     $gate->clear();
                     Notification::make()->title(__('Batch posting halt cleared'))->success()->send();
+                    $this->refreshHeaderActions();
+                    $this->forceRender();
                 }),
             Action::make('open_reconciliation')
                 ->label(__('Reconciliation queue'))

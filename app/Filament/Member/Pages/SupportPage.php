@@ -8,9 +8,9 @@ use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Support\MemberNavigation;
 use App\Filament\Member\Support\SubmitSupportRequestAction;
 use App\Filament\Member\Widgets\MyMemberRequestsTableWidget;
+use App\Filament\Pages\Page;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 
 class SupportPage extends Page

@@ -4,11 +4,11 @@ namespace App\Filament\Member\Pages;
 
 use App\Filament\Member\Support\ReturnToParentPortalAction;
 use App\Filament\Member\Support\SwitchHouseholdProfileAction;
+use App\Filament\Pages\Page;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 
 class MyProfilePage extends Page

@@ -3,6 +3,7 @@
 @import '../stat-widget-tooltips.css';
 @import '../currency-display.css';
 @import '../portal-topbar-shortcuts.css';
+@import '../confirm-modals.css';
 @import './tenant-portal-components.css';
 
 @source '../../../../vendor/bezhansalleh/filament-language-switch/resources/views/**/*.blade.php';

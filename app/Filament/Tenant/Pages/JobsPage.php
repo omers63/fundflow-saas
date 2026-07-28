@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
+use App\Filament\Pages\Page;
 use App\Filament\Tenant\Concerns\InteractsWithAdvancedUi;
 use App\Filament\Tenant\Concerns\InteractsWithAutomationScheduleForm;
 use App\Filament\Tenant\Concerns\InteractsWithJobsTable;
@@ -16,7 +17,6 @@ use Filament\Actions\Action;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -117,6 +117,9 @@ class JobsPage extends Page implements HasForms, HasTable
                 ->action(function () use ($gate): void {
                     $gate->clear();
                     Notification::make()->title(__('Batch posting halt cleared'))->success()->send();
+
+                    $this->refreshHeaderActions();
+                    $this->forceRender();
                 }),
             Action::make('open_reconciliation')
                 ->label(__('Open issues'))

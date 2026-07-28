@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Pages\Page;
 use App\Filament\Support\BankWorkspaceImportTableHeaderActions;
 use App\Filament\Support\ContributionListTableHeaderActions;
 use App\Filament\Support\LoanListTableHeaderActions;
@@ -28,6 +29,36 @@ test('table header icon action applies icon button and tooltip from label', func
 
     expect($action->isIconButton())->toBeTrue()
         ->and($action->getTooltip())->toBe(__('Import'));
+});
+
+test('app page base normalizes header actions to icon only', function () {
+    $page = new class extends Page
+    {
+        protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-home';
+
+        protected string $view = 'filament-panels::page';
+
+        protected function getHeaderActions(): array
+        {
+            return [
+                Action::make('tools')
+                    ->label(__('Tools'))
+                    ->icon('heroicon-o-wrench'),
+                ActionGroup::make([
+                    Action::make('nested')->label(__('Nested'))->icon('heroicon-o-cog-6-tooth'),
+                ])
+                    ->label(__('More'))
+                    ->icon('heroicon-o-ellipsis-horizontal'),
+            ];
+        }
+    };
+
+    $page->cacheInteractsWithHeaderActions();
+
+    foreach ($page->getCachedHeaderActions() as $action) {
+        expect($action->isIconButton())->toBeTrue()
+            ->and($action->getTooltip())->not->toBeEmpty();
+    }
 });
 
 test('member contribution and bank import export new actions are icon only', function () {

@@ -1,0 +1,327 @@
+/* ── App-wide confirmation modals (tenant / member / admin) ── */
+/* Aliases: .ff-tenant-confirm-modal-window kept for older markup. */
+
+.fi-body .fi-modal-window.ff-confirm-modal-window,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window {
+    width: 100%;
+    max-width: min(26rem, 92vw) !important;
+    border-radius: 1rem;
+    border: 1px solid var(--ff-border, #e5e7eb);
+    box-shadow:
+        0 20px 40px -16px rgb(15 23 42 / 0.28),
+        0 8px 16px -8px rgb(15 23 42 / 0.12);
+    overflow: hidden;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window--danger,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window--danger {
+    max-width: min(24rem, 90vw) !important;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window--long-running,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window--long-running {
+    max-width: min(28rem, 94vw) !important;
+}
+
+.fi-body .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-confirm-modal-window--with-fields,
+.fi-body .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-tenant-confirm-modal-window--with-fields {
+    max-width: min(32rem, 94vw) !important;
+    overflow: visible;
+}
+
+.fi-body .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-confirm-modal-window--with-fields
+    > .fi-modal-content,
+.fi-body .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-tenant-confirm-modal-window--with-fields
+    > .fi-modal-content {
+    overflow: visible;
+    padding-bottom: 0.25rem;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window--with-fields .fi-select-input .fi-dropdown-panel,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window--with-fields .fi-select-input .fi-dropdown-panel {
+    max-height: min(16rem, 40dvh);
+}
+
+.dark .fi-body .fi-modal-window.ff-confirm-modal-window,
+.dark .fi-body .fi-modal-window.ff-tenant-confirm-modal-window {
+    border-color: rgb(255 255 255 / 0.1);
+    box-shadow:
+        0 24px 48px -16px rgb(0 0 0 / 0.55),
+        0 8px 16px -8px rgb(0 0 0 / 0.3);
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window > .fi-modal-header,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window > .fi-modal-header {
+    display: none;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window--native > .fi-modal-header,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window--native > .fi-modal-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    text-align: center;
+    padding: 1.25rem 1.25rem 0.875rem;
+    background: var(--ff-surface, #fff);
+    border-bottom: 1px solid var(--ff-border, #e5e7eb);
+}
+
+.dark .fi-body .fi-modal-window.ff-confirm-modal-window--native > .fi-modal-header,
+.dark .fi-body .fi-modal-window.ff-tenant-confirm-modal-window--native > .fi-modal-header {
+    background: #1e293b;
+    border-bottom-color: rgb(255 255 255 / 0.08);
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window--native .fi-modal-heading,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window--native .fi-modal-heading {
+    font-size: 1.0625rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.35;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window--native .fi-modal-description,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window--native .fi-modal-description {
+    font-size: 0.8125rem;
+    line-height: 1.55;
+    color: var(--ff-muted, #64748b);
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window > .fi-modal-content,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window > .fi-modal-content {
+    padding: 0;
+    background: var(--ff-surface, #fff);
+}
+
+.dark .fi-body .fi-modal-window.ff-confirm-modal-window > .fi-modal-content,
+.dark .fi-body .fi-modal-window.ff-tenant-confirm-modal-window > .fi-modal-content {
+    background: #1e293b;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window > .fi-modal-footer,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window > .fi-modal-footer {
+    padding: 0.875rem 1rem 1rem;
+    background: var(--ff-page-bg, #f8fafc);
+    border-top: 1px solid var(--ff-border, #e5e7eb);
+}
+
+.dark .fi-body .fi-modal-window.ff-confirm-modal-window > .fi-modal-footer,
+.dark .fi-body .fi-modal-window.ff-tenant-confirm-modal-window > .fi-modal-footer {
+    background: #0f172a;
+    border-top-color: rgb(255 255 255 / 0.08);
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions .fi-btn,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions .fi-btn {
+    min-width: 0;
+    justify-content: center;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding-inline: 0.75rem;
+    min-height: 2.375rem;
+    border-radius: 0.625rem;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-primary:not(.fi-outlined),
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-primary:not(.fi-outlined) {
+    background: var(--ff-primary, #0284c7) !important;
+    border-color: var(--ff-primary, #0284c7) !important;
+    color: #fff !important;
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--ff-primary, #0284c7) 25%, transparent) !important;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-primary:not(.fi-outlined):hover,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-primary:not(.fi-outlined):hover {
+    background: var(--ff-primary-dark, #0369a1) !important;
+    border-color: var(--ff-primary-dark, #0369a1) !important;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-warning:not(.fi-outlined),
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-warning:not(.fi-outlined) {
+    background: #d97706 !important;
+    border-color: #d97706 !important;
+    color: #fff !important;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-warning:not(.fi-outlined):hover,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-warning:not(.fi-outlined):hover {
+    background: #b45309 !important;
+    border-color: #b45309 !important;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-danger:not(.fi-outlined),
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-danger:not(.fi-outlined) {
+    background: var(--ff-danger, #e24b4a) !important;
+    border-color: var(--ff-danger, #e24b4a) !important;
+    color: #fff !important;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-danger:not(.fi-outlined):hover,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-danger:not(.fi-outlined):hover {
+    filter: brightness(0.92);
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-success:not(.fi-outlined),
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-success:not(.fi-outlined) {
+    background: var(--ff-success, #1d9e75) !important;
+    border-color: var(--ff-success, #1d9e75) !important;
+    color: #fff !important;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-gray,
+.fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-secondary,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-gray,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-secondary {
+    background: var(--ff-surface, #fff) !important;
+    border-color: var(--ff-border, #e5e7eb) !important;
+    color: #475569 !important;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-gray:hover,
+.fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-secondary:hover,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-gray:hover,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-secondary:hover {
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+    color: #334155 !important;
+}
+
+.dark .fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-gray,
+.dark .fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-secondary,
+.dark .fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-gray,
+.dark .fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions .fi-btn.fi-color-secondary {
+    background: #1e293b !important;
+    border-color: rgb(255 255 255 / 0.12) !important;
+    color: #cbd5e1 !important;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-content:has(.ff-action-modal-progress),
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-content:has(.ff-action-modal-progress) {
+    padding-inline: 1rem;
+    padding-bottom: 0.25rem;
+}
+
+.fi-body .ff-confirm-modal-window .ff-action-modal-progress,
+.fi-body .ff-tenant-confirm-modal-window .ff-action-modal-progress {
+    margin-top: 0;
+    margin-bottom: 0.375rem;
+    padding: 0.75rem 0.875rem;
+}
+
+/* ── Action progress (long-running submits) ── */
+.fi-body .ff-action-modal-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding: 0.75rem 0.875rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--ff-primary-border, #bae6fd);
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--ff-primary-light, #f0f9ff) 85%, white),
+        var(--ff-page-bg, #f8fafc)
+    );
+}
+
+.dark .fi-body .ff-action-modal-progress {
+    border-color: color-mix(in srgb, var(--ff-primary, #0284c7) 35%, transparent);
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--ff-primary, #0284c7) 14%, transparent),
+        rgb(15 23 42 / 0.5)
+    );
+}
+
+.fi-body .ff-action-modal-progress__head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.fi-body .ff-action-modal-progress__spinner {
+    width: 0.875rem;
+    height: 0.875rem;
+    border-radius: 9999px;
+    border: 2px solid color-mix(in srgb, var(--ff-primary, #0284c7) 25%, transparent);
+    border-top-color: color-mix(in srgb, var(--ff-primary, #0284c7) 45%, transparent);
+    flex-shrink: 0;
+}
+
+.fi-body .ff-action-modal-progress--running .ff-action-modal-progress__spinner {
+    border-top-color: var(--ff-primary, #0284c7);
+    animation: ff-action-modal-spin 0.75s linear infinite;
+}
+
+.fi-body .ff-action-modal-progress__label {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--ff-primary-dark, #0369a1);
+}
+
+.dark .fi-body .ff-action-modal-progress__label {
+    color: var(--ff-primary-border, #7dd3fc);
+}
+
+.fi-body .ff-action-modal-progress__track {
+    position: relative;
+    height: 0.375rem;
+    overflow: hidden;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--ff-primary, #0284c7) 12%, transparent);
+}
+
+.fi-body .ff-action-modal-progress__bar {
+    position: absolute;
+    inset-block: 0;
+    width: 12%;
+    border-radius: inherit;
+    background: color-mix(in srgb, var(--ff-primary, #0284c7) 35%, transparent);
+}
+
+.fi-body .ff-action-modal-progress--running .ff-action-modal-progress__bar {
+    width: 42%;
+    background: linear-gradient(90deg, var(--ff-primary-border, #38bdf8), var(--ff-primary, #0284c7));
+    animation: ff-action-modal-indeterminate 1.35s ease-in-out infinite;
+}
+
+.fi-body .ff-action-modal-progress__hint {
+    margin: 0;
+    font-size: 0.6875rem;
+    line-height: 1.45;
+    color: var(--ff-muted, #64748b);
+}
+
+@keyframes ff-action-modal-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes ff-action-modal-indeterminate {
+    0% {
+        transform: translateX(-120%);
+    }
+
+    100% {
+        transform: translateX(280%);
+    }
+}
