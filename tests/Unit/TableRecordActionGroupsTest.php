@@ -9,9 +9,6 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
-use Tests\TestCase;
-
-uses(TestCase::class);
 
 test('is single primary action when only view or edit action is present', function () {
     expect(TableRecordActionGroups::isSinglePrimaryAction([ViewAction::make()]))->toBeTrue()
@@ -63,7 +60,8 @@ test('normalize removes actions column for a single edit action', function () {
     $normalized = TableRecordActionGroups::normalizeSinglePrimaryActionRowClick($table);
 
     expect($normalized->getRecordActions())->toBe([])
-        ->and($normalized->getRecordAction([]))->toBe(EditAction::getDefaultName());
+        ->and($normalized->getRecordAction([]))->toBe(EditAction::getDefaultName())
+        ->and($normalized->hasAction(EditAction::getDefaultName()))->toBeTrue();
 });
 
 test('normalize keeps record url and clears actions for a single view action', function () {
@@ -101,5 +99,6 @@ test('apply configures row click for a single view action without record url', f
     $configured = TableRecordActionGroups::apply($table, [ViewAction::make()]);
 
     expect($configured->getRecordActions())->toBe([])
-        ->and($configured->getRecordAction([]))->toBe(ViewAction::getDefaultName());
+        ->and($configured->getRecordAction([]))->toBe(ViewAction::getDefaultName())
+        ->and($configured->hasAction(ViewAction::getDefaultName()))->toBeTrue();
 });

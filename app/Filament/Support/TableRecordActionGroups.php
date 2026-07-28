@@ -147,7 +147,11 @@ final class TableRecordActionGroups
             return $table->recordActions([]);
         }
 
+        // Seed the flat action cache first, then clear the visible actions column.
+        // Filament row-click checks `$table->getAction($recordAction)` and otherwise
+        // falls back to `$wire->{action}(recordKey)` (e.g. `view(...)`), which 500s.
         return $table
+            ->recordActions([$action])
             ->recordUrl(fn (): ?string => null)
             ->recordAction($action->getName())
             ->recordActions([]);

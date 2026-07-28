@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Filament\Member\Pages\FundAccountPage;
 use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Member\Widgets\MemberFundLedgerTableWidget;
 use App\Models\Central\Tenant;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
@@ -13,6 +14,7 @@ use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use Filament\Facades\Filament;
+use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -95,4 +97,32 @@ test('fund account page is registered in member navigation', function () {
 
     expect(FundAccountPage::getNavigationGroup())->toBe(MemberNavigation::GROUP_MY_ACCOUNTS)
         ->and(FundAccountPage::getNavigationSort())->toBe(MemberNavigation::SORT_FUND_ACCOUNT);
+});
+
+test('fund ledger row click mounts the view table action instead of a livewire view method', function () {
+    Filament::setCurrentPanel('member');
+    $this->actingAs($this->memberUser, 'tenant');
+
+    $this->member->fundAccount()->update(['balance' => 5000]);
+
+    $transaction = Transaction::create([
+        'account_id' => $this->member->fundAccount->id,
+        'member_id' => $this->member->id,
+        'type' => 'credit',
+        'amount' => 5000,
+        'balance_after' => 5000,
+        'description' => 'Fund contribution',
+        'transacted_at' => now(),
+    ]);
+
+    $component = Livewire::test(MemberFundLedgerTableWidget::class, [
+        'accountId' => $this->member->fundAccount->id,
+    ])
+        ->assertSuccessful()
+        ->call('mountTableAction', 'view', (string) $transaction->getKey())
+        ->assertHasNoErrors();
+
+    expect($component->instance()->getMountedAction()?->getName())->toBe('view')
+        ->and($component->instance()->getTable()->hasAction('view'))->toBeTrue()
+        ->and($component->instance()->getTable()->getRecordActions())->toBe([]);
 });
