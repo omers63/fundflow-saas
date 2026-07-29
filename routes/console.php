@@ -27,6 +27,7 @@ Schedule::command('loans:check-defaults')->everyMinute()->withoutOverlapping();
 Schedule::command('loans:close-emi-window')->everyMinute()->withoutOverlapping();
 Schedule::command('bank:auto-match')->everyMinute()->withoutOverlapping();
 Schedule::command('delinquency:send-digest')->everyMinute()->withoutOverlapping();
+Schedule::command('fund:send-status-digest')->everyMinute()->withoutOverlapping();
 Schedule::command('announcements:dispatch-scheduled')
     ->everyMinute()
     ->withoutOverlapping()

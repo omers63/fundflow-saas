@@ -18,6 +18,7 @@ use App\Services\MemberStatusService;
 use App\Services\MemberWithdrawalSettlementService;
 use App\Services\OpenCycleContributionOverrideService;
 use App\Services\OperationalReviewWorkflowService;
+use App\Services\VoluntaryContributionRequestService;
 use App\Support\BusinessDay;
 use App\Support\MemberUserEmail;
 use App\Support\TenantAbsoluteUrl;
@@ -33,6 +34,7 @@ class MemberRequestService
         private readonly DependentAllocationService $allocations,
         private readonly MemberStatusService $statuses,
         private readonly OpenCycleContributionOverrideService $openCycleOverrides,
+        private readonly VoluntaryContributionRequestService $voluntaryContributions,
         private readonly OperationalReviewWorkflowService $reviewWorkflow,
     ) {}
 
@@ -40,6 +42,8 @@ class MemberRequestService
     {
         if ($type === MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION) {
             $payload = $this->openCycleOverrides->normalizePayload($requester, $payload);
+        } elseif ($type === MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION) {
+            $payload = $this->voluntaryContributions->normalizePayload($requester, $payload);
         } else {
             $this->validatePayload($requester, $type, $payload);
             $this->assertNoPendingDuplicate($requester, $type);
@@ -83,6 +87,7 @@ class MemberRequestService
             MemberRequest::TYPE_REINSTATE_MEMBERSHIP => $this->validateReinstateMembership($requester),
             MemberRequest::TYPE_RELEASE_PAYOUT => $this->validateReleasePayout($requester),
             MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION => null,
+            MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION => null,
             default => throw ValidationException::withMessages(['type' => __('Invalid request type.')]),
         };
     }
@@ -280,6 +285,7 @@ class MemberRequestService
                 MemberRequest::TYPE_REINSTATE_MEMBERSHIP => $this->applyReinstateMembership($requester, $payload),
                 MemberRequest::TYPE_RELEASE_PAYOUT => $this->applyReleasePayout($requester, $payload),
                 MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION => $this->openCycleOverrides->applyApproved($requester, $payload),
+                MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION => $this->voluntaryContributions->applyApproved($requester, $payload),
                 default => throw ValidationException::withMessages(['type' => __('Unknown request type.')]),
             };
 
@@ -495,7 +501,12 @@ class MemberRequestService
             return MyDependentResource::getUrl('index', panel: 'member');
         }
 
-        if ($request->type === MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION) {
+        if (
+            in_array($request->type, [
+                MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION,
+                MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION,
+            ], true)
+        ) {
             return MyContributionResource::getUrl('index', panel: 'member');
         }
 

@@ -131,6 +131,7 @@ final class AutomationScheduleFormSchema
                     ...self::cadenceFields('daily_reconcile', __('Daily reconciliation'), __('Ledger audit snapshot.')),
                     ...self::cadenceFields('nightly_reconcile', __('Nightly reconciliation'), __('Master, contributions, EMI, and bank checks.')),
                     ...self::cadenceFields('delinquency_digest', __('Delinquency digest'), __('Admin digest of delinquency status. Review queues under Operations → Delinquency.')),
+                    ...self::cadenceFields('fund_status_digest', __('Fund status digest'), __('Admin digest of balances, pending queues, and open operational issues.')),
                     ...self::cadenceFields('bank_auto_match', __('Bank auto-match'), __('Matching of imported bank lines to uncleared postings.')),
                     TextInput::make('automation_late_fees_time')
                         ->label(__('Apply late fees time'))
@@ -194,6 +195,10 @@ final class AutomationScheduleFormSchema
                     Toggle::make('automation_notify_delinquency_digest')
                         ->label(__('Delinquency digest'))
                         ->helperText(__('Daily admin digest when arrears or overdue EMIs exist.'))
+                        ->default(true),
+                    Toggle::make('automation_notify_fund_status_digest')
+                        ->label(__('Fund status digest'))
+                        ->helperText(__('Daily admin summary of fund balances, pending deposits/requests, and open operational issues.'))
                         ->default(true),
                     Toggle::make('automation_notify_reconciliation_digest')
                         ->label(__('Reconciliation digests'))

@@ -26,6 +26,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\MonthlyStatement;
 use App\Models\Tenant\Transaction;
 use App\Services\Concerns\EnrichesMemberPortalDashboard;
@@ -142,6 +143,22 @@ final class MemberPortalInsightsService
         $overrideRequests = app(LoanEligibilityOverrideRequestService::class);
         $canRequestOverride = $overrideRequests->canSubmit($member);
         $hasPendingOverrideRequest = $overrideRequests->pendingRequestFor($member) !== null;
+
+        $canVoluntaryTopUp = $member->status === 'active'
+            && $member->monthly_contribution_amount > 0
+            && $cycles->memberIsLiableForContributionPeriod($member, $curMonth, $curYear)
+            && ! Contribution::periodFullyPosted($member->id, $curMonth, $curYear)
+            && ! MemberRequest::query()
+                ->where('status', MemberRequest::STATUS_PENDING)
+                ->where('type', MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION)
+                ->get()
+                ->contains(function (MemberRequest $req) use ($member, $curMonth, $curYear): bool {
+                    $p = $req->payload ?? [];
+
+                    return (int) ($p['target_member_id'] ?? $req->requester_member_id) === (int) $member->id
+                        && (int) ($p['period_month'] ?? 0) === $curMonth
+                        && (int) ($p['period_year'] ?? 0) === $curYear;
+                });
 
         $hero = $this->buildHero(
             $member,
@@ -376,6 +393,7 @@ final class MemberPortalInsightsService
                 $unreadMessages,
                 $canRequestOverride,
                 $hasPendingOverrideRequest,
+                $canVoluntaryTopUp,
             ),
             'recent_deposits' => FundPosting::query()
                 ->where('member_id', $member->id)
@@ -1016,6 +1034,7 @@ final class MemberPortalInsightsService
         int $unreadMessages = 0,
         bool $canRequestOverride = false,
         bool $hasPendingOverrideRequest = false,
+        bool $canVoluntaryTopUp = false,
     ): array {
         return [
             [
@@ -1027,6 +1046,16 @@ final class MemberPortalInsightsService
                 'tone' => 'deposit',
                 'badge' => null,
                 'visible' => true,
+            ],
+            [
+                'label' => __('Voluntary top-up'),
+                'subtitle' => __('Add extra to this cycle\'s contribution'),
+                'description' => __('Add extra to this cycle\'s contribution'),
+                'url' => MyContributionResource::getUrl('index'),
+                'icon' => 'heroicon-o-arrow-trending-up',
+                'tone' => 'deposit',
+                'badge' => null,
+                'visible' => $canVoluntaryTopUp,
             ],
             [
                 'label' => __('Apply for loan'),

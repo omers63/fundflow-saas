@@ -41,6 +41,8 @@ class MemberRequest extends Model
 
     public const TYPE_OPEN_CYCLE_CONTRIBUTION = 'open_cycle_contribution';
 
+    public const TYPE_VOLUNTARY_CONTRIBUTION = 'voluntary_contribution';
+
     protected $fillable = [
         'requester_member_id',
         'type',
@@ -88,6 +90,7 @@ class MemberRequest extends Model
             self::TYPE_REINSTATE_MEMBERSHIP => __('Reinstate membership'),
             self::TYPE_RELEASE_PAYOUT => __('Release payout'),
             self::TYPE_OPEN_CYCLE_CONTRIBUTION => __('Open-cycle contribution amount'),
+            self::TYPE_VOLUNTARY_CONTRIBUTION => __('Voluntary top-up contribution'),
             default => $type,
         };
     }
@@ -148,6 +151,7 @@ class MemberRequest extends Model
             self::TYPE_REINSTATE_MEMBERSHIP => self::typeLabel(self::TYPE_REINSTATE_MEMBERSHIP),
             self::TYPE_RELEASE_PAYOUT => self::typeLabel(self::TYPE_RELEASE_PAYOUT),
             self::TYPE_OPEN_CYCLE_CONTRIBUTION => self::typeLabel(self::TYPE_OPEN_CYCLE_CONTRIBUTION),
+            self::TYPE_VOLUNTARY_CONTRIBUTION => self::typeLabel(self::TYPE_VOLUNTARY_CONTRIBUTION),
         ];
     }
 
@@ -222,6 +226,7 @@ class MemberRequest extends Model
             self::TYPE_REINSTATE_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Request to rejoin'),
             self::TYPE_RELEASE_PAYOUT => trim((string) ($payload['reason'] ?? '')) ?: __('Request payout release'),
             self::TYPE_OPEN_CYCLE_CONTRIBUTION => $this->formatOpenCycleContributionPayload($payload),
+            self::TYPE_VOLUNTARY_CONTRIBUTION => $this->formatVoluntaryContributionPayload($payload),
             default => __('—'),
         };
     }
@@ -247,6 +252,44 @@ class MemberRequest extends Model
             __('Member: :name', ['name' => $target]),
             __('Requested: :amount', ['amount' => $amount]),
         ];
+
+        if ($standing !== null) {
+            $parts[] = __('Standing allocation unchanged: :amount', ['amount' => $standing]);
+        }
+
+        if (filled($payload['note'] ?? null)) {
+            $parts[] = (string) $payload['note'];
+        }
+
+        return implode(' · ', $parts);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function formatVoluntaryContributionPayload(array $payload): string
+    {
+        $amount = isset($payload['amount']) ? number_format((float) $payload['amount'], 2) : __('—');
+        $standing = isset($payload['standing_amount']) ? number_format((float) $payload['standing_amount'], 2) : null;
+        $extra = (isset($payload['amount']) && isset($payload['standing_amount']))
+            ? number_format(round((float) $payload['amount'] - (float) $payload['standing_amount'], 2), 2)
+            : null;
+        $month = (int) ($payload['period_month'] ?? 0);
+        $year = (int) ($payload['period_year'] ?? 0);
+        $period = ($month > 0 && $year > 0)
+            ? app(ContributionCycleService::class)->periodLabel($month, $year)
+            : __('—');
+        $target = $this->formatDependentLabel($payload['target_member_id'] ?? $this->requester_member_id);
+
+        $parts = [
+            __('Period: :period', ['period' => $period]),
+            __('Member: :name', ['name' => $target]),
+            __('Total due: :amount', ['amount' => $amount]),
+        ];
+
+        if ($extra !== null) {
+            $parts[] = __('Top-up: +:extra', ['extra' => $extra]);
+        }
 
         if ($standing !== null) {
             $parts[] = __('Standing allocation unchanged: :amount', ['amount' => $standing]);

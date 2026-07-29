@@ -65,6 +65,10 @@ final class AutomationScheduleSettings
             'delinquency_digest_weekdays' => '',
             'delinquency_digest_month_days' => '',
             'delinquency_digest_times' => '07:30',
+            'fund_status_digest_frequency' => 'daily',
+            'fund_status_digest_weekdays' => '',
+            'fund_status_digest_month_days' => '',
+            'fund_status_digest_times' => '07:15',
             // Statements (defaults follow month-boundary day/time when unset).
             'statements_day' => null,
             'statements_time' => '00:30',
@@ -82,6 +86,7 @@ final class AutomationScheduleSettings
             'notify_loan_due' => true,
             'notify_delinquency_digest' => true,
             'notify_reconciliation_digest' => true,
+            'notify_fund_status_digest' => true,
             'notify_monthly_statements' => true,
             'notify_announcements' => true,
             'notify_onboarding_greeting' => true,
@@ -133,6 +138,10 @@ final class AutomationScheduleSettings
             'automation_delinquency_digest_weekdays' => self::delinquencyDigestWeekdays(),
             'automation_delinquency_digest_month_days' => self::delinquencyDigestMonthDays(),
             'automation_delinquency_digest_times' => implode(',', self::delinquencyDigestTimes()),
+            'automation_fund_status_digest_frequency' => self::fundStatusDigestFrequency(),
+            'automation_fund_status_digest_weekdays' => self::fundStatusDigestWeekdays(),
+            'automation_fund_status_digest_month_days' => self::fundStatusDigestMonthDays(),
+            'automation_fund_status_digest_times' => implode(',', self::fundStatusDigestTimes()),
             'automation_statements_day' => self::statementsDay(),
             'automation_statements_time' => self::statementsTime(),
             'automation_dispatch_announcements_enabled' => self::dispatchAnnouncementsEnabled(),
@@ -147,6 +156,7 @@ final class AutomationScheduleSettings
             'automation_notify_loan_due' => self::notifyLoanDue(),
             'automation_notify_delinquency_digest' => self::notifyDelinquencyDigest(),
             'automation_notify_reconciliation_digest' => self::notifyReconciliationDigest(),
+            'automation_notify_fund_status_digest' => self::notifyFundStatusDigest(),
             'automation_notify_monthly_statements' => self::notifyMonthlyStatements(),
             'automation_notify_announcements' => self::notifyAnnouncements(),
             'automation_notify_onboarding_greeting' => self::notifyOnboardingGreeting(),
@@ -235,6 +245,7 @@ final class AutomationScheduleSettings
             'nightly_reconcile' => ['default_times' => '06:30'],
             'bank_auto_match' => ['default_times' => '08:00'],
             'delinquency_digest' => ['default_times' => '07:30'],
+            'fund_status_digest' => ['default_times' => '07:15'],
         ] as $job => $meta) {
             $freq = self::normalizeCadenceFrequency($state["automation_{$job}_frequency"] ?? 'daily');
             Setting::set(self::GROUP, "{$job}_frequency", $freq);
@@ -276,6 +287,7 @@ final class AutomationScheduleSettings
         Setting::set(self::GROUP, 'notify_loan_due', ($state['automation_notify_loan_due'] ?? true) ? '1' : '0');
         Setting::set(self::GROUP, 'notify_delinquency_digest', ($state['automation_notify_delinquency_digest'] ?? true) ? '1' : '0');
         Setting::set(self::GROUP, 'notify_reconciliation_digest', ($state['automation_notify_reconciliation_digest'] ?? true) ? '1' : '0');
+        Setting::set(self::GROUP, 'notify_fund_status_digest', ($state['automation_notify_fund_status_digest'] ?? true) ? '1' : '0');
         Setting::set(self::GROUP, 'notify_monthly_statements', ($state['automation_notify_monthly_statements'] ?? true) ? '1' : '0');
         Setting::set(self::GROUP, 'notify_announcements', ($state['automation_notify_announcements'] ?? true) ? '1' : '0');
         Setting::set(self::GROUP, 'notify_onboarding_greeting', ($state['automation_notify_onboarding_greeting'] ?? true) ? '1' : '0');
@@ -511,6 +523,29 @@ final class AutomationScheduleSettings
         return self::parseCadenceTimes(self::get('delinquency_digest_times', ''), self::delinquencyDigestTime());
     }
 
+    public static function fundStatusDigestFrequency(): string
+    {
+        return self::normalizeCadenceFrequency(self::get('fund_status_digest_frequency', 'daily'));
+    }
+
+    /** @return list<int> */
+    public static function fundStatusDigestWeekdays(): array
+    {
+        return self::parseCadenceWeekdays(self::get('fund_status_digest_weekdays', ''));
+    }
+
+    /** @return list<int> */
+    public static function fundStatusDigestMonthDays(): array
+    {
+        return self::parseCadenceMonthDays(self::get('fund_status_digest_month_days', ''));
+    }
+
+    /** @return list<string> */
+    public static function fundStatusDigestTimes(): array
+    {
+        return self::parseCadenceTimes(self::get('fund_status_digest_times', ''), '07:15');
+    }
+
     public static function notifyContributionDue(): bool
     {
         return self::boolFromStored(self::get('notify_contribution_due', null), (bool) self::defaults()['notify_contribution_due']);
@@ -529,6 +564,11 @@ final class AutomationScheduleSettings
     public static function notifyReconciliationDigest(): bool
     {
         return self::boolFromStored(self::get('notify_reconciliation_digest', null), (bool) self::defaults()['notify_reconciliation_digest']);
+    }
+
+    public static function notifyFundStatusDigest(): bool
+    {
+        return self::boolFromStored(self::get('notify_fund_status_digest', null), (bool) self::defaults()['notify_fund_status_digest']);
     }
 
     public static function notifyMonthlyStatements(): bool
@@ -726,6 +766,17 @@ final class AutomationScheduleSettings
         );
     }
 
+    public static function isFundStatusDigestSlot(?Carbon $wallClock = null): bool
+    {
+        return self::isCadenceSlot(
+            self::fundStatusDigestFrequency(),
+            self::fundStatusDigestWeekdays(),
+            self::fundStatusDigestMonthDays(),
+            self::fundStatusDigestTimes(),
+            $wallClock,
+        );
+    }
+
     public static function isStatementsSlot(?Carbon $businessDay = null, ?Carbon $wallClock = null): bool
     {
         return self::isCalendarDayTimeSlot(self::statementsDay(), self::statementsTime(), $businessDay, $wallClock);
@@ -848,6 +899,16 @@ final class AutomationScheduleSettings
             self::delinquencyDigestWeekdays(),
             self::delinquencyDigestMonthDays(),
             self::delinquencyDigestTimes(),
+        );
+    }
+
+    public static function fundStatusDigestScheduleLabel(): string
+    {
+        return self::cadenceScheduleLabel(
+            self::fundStatusDigestFrequency(),
+            self::fundStatusDigestWeekdays(),
+            self::fundStatusDigestMonthDays(),
+            self::fundStatusDigestTimes(),
         );
     }
 

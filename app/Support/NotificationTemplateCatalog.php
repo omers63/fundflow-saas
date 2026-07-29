@@ -18,6 +18,7 @@ use App\Notifications\Tenant\DependentAllocationChangedNotification;
 use App\Notifications\Tenant\FundPostingAcceptedNotification;
 use App\Notifications\Tenant\FundPostingBankClearedNotification;
 use App\Notifications\Tenant\FundPostingRejectedNotification;
+use App\Notifications\Tenant\FundStatusDigestNotification;
 use App\Notifications\Tenant\GuarantorLoanApplicationNotification;
 use App\Notifications\Tenant\LoanAdminTransferAdminNotification;
 use App\Notifications\Tenant\LoanAdminTransferNotification;
@@ -589,6 +590,21 @@ MD,
                     'body' => '{{overdue}} قسط(أقساط) متأخر · {{members_in_arrears}} عضو(أعضاء) في المتأخرات · {{arrears_members}} لديهم متأخرات مساهمات · {{arrears}} فترة(فترات) مساهمات · {{delinquent}} عضو(أعضاء) متعثرون بالسياسة · {{guarantor}} تعرّض كفيل · {{transferred}} منقول للكفيل.',
                 ],
             ],
+            'fund_status_digest' => [
+                'audience' => 'admin',
+                'category' => 'automation',
+                'label' => 'Fund status digest (automation)',
+                'variables' => ['title', 'summary', 'action_url'],
+                'supported' => $bellPushEmail,
+                'en' => [
+                    'subject' => '{{title}}',
+                    'body' => '{{summary}}',
+                ],
+                'ar' => [
+                    'subject' => '{{title}}',
+                    'body' => '{{summary}}',
+                ],
+            ],
             'reconciliation_exception' => [
                 'audience' => 'admin',
                 'category' => 'automation',
@@ -967,6 +983,10 @@ MD,
             ],
             DelinquencyDigestNotification::class => [
                 'key' => 'delinquency_digest',
+                'category' => 'automation',
+            ],
+            FundStatusDigestNotification::class => [
+                'key' => 'fund_status_digest',
                 'category' => 'automation',
             ],
             ReconciliationExceptionRaisedNotification::class => [
