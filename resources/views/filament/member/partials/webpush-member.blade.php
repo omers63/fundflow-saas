@@ -79,7 +79,7 @@ $user = auth('tenant')->user();
 
                 const registration = await navigator.serviceWorker.ready;
                 const subVersionKey = 'ff-webpush-sub-version';
-                const subVersion = '2';
+                const subVersion = '3';
                 let subscription = await registration.pushManager.getSubscription();
 
                 // Drop browser-local subscriptions that FCM may have already expired (410 Gone),
@@ -101,7 +101,9 @@ $user = auth('tenant')->user();
             };
 
             window.addEventListener('load', () => {
-                registerPushSubscription().catch(() => { });
+                registerPushSubscription().catch((error) => {
+                    console.warn('[FundFlow] Web push subscription failed', error);
+                });
             });
         })();
     </script>

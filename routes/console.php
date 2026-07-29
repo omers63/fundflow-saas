@@ -32,7 +32,10 @@ Schedule::command('announcements:dispatch-scheduled')
     ->withoutOverlapping()
     ->runInBackground();
 Schedule::command('members:send-onboarding-greeting')->everyMinute()->withoutOverlapping();
+// Host-level queue watchdog only — never schedule when Supervisor owns queue:work.
+// Calling queue:restart every minute would bounce the supervisor worker on a failed pgrep.
 Schedule::command('queue:ensure-worker')
     ->everyMinute()
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground()
+    ->when(fn (): bool => (bool) config('queue.worker_watchdog.enabled'));

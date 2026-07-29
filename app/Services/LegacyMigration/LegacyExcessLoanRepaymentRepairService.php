@@ -12,7 +12,9 @@ use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\ContributionService;
 use App\Services\Loans\LoanLedgerService;
+use App\Support\LoanRepaymentNote;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -52,57 +54,27 @@ final class LegacyExcessLoanRepaymentRepairService
         $loan->loadMissing('member');
         $member = $loan->member;
         $target = LegacyLoanRepaymentTarget::forLoan($loan);
-        $cumulative = 0.0;
 
         $repayments = $loan->repayments()
             ->orderBy('paid_at')
             ->orderBy('id')
             ->get();
 
-        ContributionService::withoutPostedNotifications(function () use ($member, $loan, $repayments, $target, &$cumulative, &$stats): void {
-            ContributionService::withoutLiveCollectionGuards(function () use ($member, $loan, $repayments, $target, &$cumulative, &$stats): void {
-                AccountingService::withoutMemberCashCollection(function () use ($member, $loan, $repayments, $target, &$cumulative, &$stats): void {
-                    foreach ($repayments as $repayment) {
-                        $amount = (float) $repayment->amount;
-                        $allowed = LegacyLoanRepaymentTarget::remainingFundPortionObligation($target, $cumulative);
+        $excess = round((float) $repayments->sum('amount') - $target, 2);
 
-                        if ($allowed <= LegacyLoanRepaymentTarget::AMOUNT_TOLERANCE) {
-                            $this->reverseRepaymentToContribution($loan, $member, $repayment);
-                            $stats['repayments_reversed']++;
-                            $stats['contributions_posted']++;
+        ContributionService::withoutPostedNotifications(function () use ($member, $loan, $repayments, &$excess, &$stats): void {
+            ContributionService::withoutLiveCollectionGuards(function () use ($member, $loan, $repayments, &$excess, &$stats): void {
+                AccountingService::withoutMemberCashCollection(function () use ($member, $loan, $repayments, &$excess, &$stats): void {
+                    // Prefer peeling excess from legacy/import rows so later EMI / guarantor
+                    // installment logs (ff:installment:…) stay tied to the schedule they paid.
+                    $this->peelExcessToContributions($loan, $member, $repayments, $excess, $stats, skipProtectedOperational: true);
 
-                            continue;
-                        }
-
-                        if ($amount > $allowed + LegacyLoanRepaymentTarget::AMOUNT_TOLERANCE) {
-                            $excess = round($amount - $allowed, 2);
-                            $paidAt = Carbon::parse((string) $repayment->paid_at);
-                            $notes = $repayment->notes ?: __('Legacy migration loan repayment');
-
-                            $this->reverseImportedLoanRepayment($loan, $repayment);
-
-                            if ($allowed > LegacyLoanRepaymentTarget::AMOUNT_TOLERANCE) {
-                                $affectedLoanIds = [];
-                                $cumulativeRepaidByLoanKey = [];
-                                $this->paymentImport->postAllocatedLoanRepaymentForRepair(
-                                    $loan,
-                                    $allowed,
-                                    $paidAt,
-                                    $notes,
-                                    $affectedLoanIds,
-                                    $cumulativeRepaidByLoanKey,
-                                );
-                            }
-
-                            $this->postContributionRemainder($member, $excess, $paidAt, $notes);
-                            $stats['repayments_resplit']++;
-                            $stats['contributions_posted']++;
-                            $cumulative += $allowed;
-
-                            continue;
-                        }
-
-                        $cumulative += $amount;
+                    if ($excess > LegacyLoanRepaymentTarget::AMOUNT_TOLERANCE) {
+                        $remaining = $loan->repayments()
+                            ->orderBy('paid_at')
+                            ->orderBy('id')
+                            ->get();
+                        $this->peelExcessToContributions($loan, $member, $remaining, $excess, $stats, skipProtectedOperational: false);
                     }
                 });
             });
@@ -157,6 +129,98 @@ final class LegacyExcessLoanRepaymentRepairService
         }
 
         return $totals;
+    }
+
+    /**
+     * @param  Collection<int, LoanRepayment>  $repayments
+     * @param  array{
+     *     loans_processed: int,
+     *     repayments_reversed: int,
+     *     repayments_resplit: int,
+     *     contributions_posted: int,
+     *     installments_marked: int
+     * }  $stats
+     */
+    private function peelExcessToContributions(
+        Loan $loan,
+        Member $member,
+        Collection $repayments,
+        float &$excess,
+        array &$stats,
+        bool $skipProtectedOperational,
+    ): void {
+        if ($excess <= LegacyLoanRepaymentTarget::AMOUNT_TOLERANCE) {
+            return;
+        }
+
+        $ordered = $repayments
+            ->sortBy([
+                ['paid_at', 'desc'],
+                ['id', 'desc'],
+            ])
+            ->values();
+
+        foreach ($ordered as $repayment) {
+            if ($excess <= LegacyLoanRepaymentTarget::AMOUNT_TOLERANCE) {
+                break;
+            }
+
+            if (!$repayment instanceof LoanRepayment) {
+                continue;
+            }
+
+            if ($skipProtectedOperational && $this->isProtectedOperationalRepayment($repayment)) {
+                continue;
+            }
+
+            $amount = round((float) $repayment->amount, 2);
+
+            if ($amount <= LegacyLoanRepaymentTarget::AMOUNT_TOLERANCE) {
+                continue;
+            }
+
+            if ($amount <= $excess + LegacyLoanRepaymentTarget::AMOUNT_TOLERANCE) {
+                $this->reverseRepaymentToContribution($loan, $member, $repayment);
+                $stats['repayments_reversed']++;
+                $stats['contributions_posted']++;
+                $excess = round($excess - $amount, 2);
+
+                continue;
+            }
+
+            $keep = round($amount - $excess, 2);
+            $move = $excess;
+            $paidAt = Carbon::parse((string) $repayment->paid_at);
+            $notes = $repayment->notes ?: __('Legacy migration loan repayment');
+
+            $this->reverseImportedLoanRepayment($loan, $repayment);
+
+            if ($keep > LegacyLoanRepaymentTarget::AMOUNT_TOLERANCE) {
+                $affectedLoanIds = [];
+                $cumulativeRepaidByLoanKey = [];
+                $this->paymentImport->postAllocatedLoanRepaymentForRepair(
+                    $loan,
+                    $keep,
+                    $paidAt,
+                    $notes,
+                    $affectedLoanIds,
+                    $cumulativeRepaidByLoanKey,
+                );
+            }
+
+            $this->postContributionRemainder($member, $move, $paidAt, $notes);
+            $stats['repayments_resplit']++;
+            $stats['contributions_posted']++;
+            $excess = 0.0;
+        }
+    }
+
+    private function isProtectedOperationalRepayment(LoanRepayment $repayment): bool
+    {
+        $notes = (string) $repayment->notes;
+
+        return LoanRepaymentNote::installmentNumber($notes) !== null
+            || LoanRepaymentNote::isSettlement($notes);
     }
 
     private function reverseRepaymentToContribution(Loan $loan, Member $member, LoanRepayment $repayment): void

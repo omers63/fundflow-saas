@@ -97,8 +97,8 @@ sudo chmod 2775 storage/logs
 
 ## Queue worker watchdog
 
-`queue:ensure-worker` runs **every minute** via the Laravel scheduler. It uses `pgrep` to detect a `queue:work` process for this app; if none is found, it runs `queue:restart` and starts `queue:work` in the background.
+`queue:ensure-worker` is scheduled **only when** `QUEUE_WORKER_WATCHDOG_ENABLED=true`. It uses `pgrep` to detect a `queue:work` process for this app and starts one in the background if missing. It does **not** call `queue:restart` (that would bounce Supervisor-managed workers every minute on a false miss).
 
 - Listed in **Automation → Scheduled jobs** as **Ensure queue worker**
 - Config: `config/queue.php` → `worker_watchdog` (env: `QUEUE_WORKER_WATCHDOG_ENABLED`, `QUEUE_WORKER_CONNECTION`, etc.)
-- **Disable** (`QUEUE_WORKER_WATCHDOG_ENABLED=false`) when Supervisor already manages `queue:work`, to avoid duplicate workers
+- **Keep disabled** (default) when Supervisor already manages `queue:work` — this production host uses `deploy/supervisor/fundflow-queue.conf`

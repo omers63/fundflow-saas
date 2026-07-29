@@ -43,6 +43,7 @@ use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
@@ -4595,6 +4596,112 @@ test('legacy excess loan repayment repair moves repayments beyond fund portion t
     expect($stats['repayments_reversed'])->toBe(1)
         ->and((float) $loan->repayments()->sum('amount'))->toBe(7_500.0)
         ->and((float) $loan->repaid_to_master)->toBe(7_500.0);
+});
+
+test('legacy excess loan repayment repair peels legacy overpayment before guarantor installment rows', function () {
+    Notification::fake();
+
+    $accounting = app(AccountingService::class);
+
+    $borrower = Member::create([
+        'member_number' => 'LEG-EXCESS-GUAR',
+        'name' => 'Excess Guarantor Repair Borrower',
+        'email' => 'excess-guar-repair@fund.test',
+        'monthly_contribution_amount' => 3000,
+        'joined_at' => now()->subYears(8),
+        'status' => 'active',
+    ]);
+    $guarantor = Member::create([
+        'member_number' => 'LEG-EXCESS-GUAR-G',
+        'name' => 'Excess Guarantor Repair Guarantor',
+        'email' => 'excess-guar-repair-g@fund.test',
+        'monthly_contribution_amount' => 3000,
+        'joined_at' => now()->subYears(8),
+        'status' => 'active',
+    ]);
+
+    $accounting->createMemberAccounts($borrower);
+    $accounting->createMemberAccounts($guarantor);
+    $accounting->credit($guarantor->fresh()->fundAccount, 20_000, 'Seed guarantor fund');
+    Account::masterCash()->update(['balance' => 500_000]);
+    Account::masterFund()->update(['balance' => 500_000]);
+
+    $loan = Loan::create([
+        'member_id' => $borrower->id,
+        'guarantor_member_id' => $guarantor->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 0,
+        'term_months' => 2,
+        'monthly_repayment' => 3000,
+        'total_repaid' => 0,
+        'master_portion' => 6_000,
+        'member_portion' => 6_000,
+        'settlement_threshold' => 0,
+        'status' => 'completed',
+        'disbursed_at' => '2022-01-09',
+        'approved_at' => '2022-01-09',
+        'applied_at' => '2022-01-09',
+        'installments_count' => 2,
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 3000,
+        'due_date' => '2022-02-05',
+        'status' => 'paid',
+        'paid_at' => '2022-03-16',
+    ]);
+
+    $legacyRepayment = $loan->repayments()->create([
+        'amount' => 4500,
+        'paid_at' => '2022-03-16',
+        'notes' => 'ترحيل البيانات التاريخية [legacy-import:1|excess-guar-repair@fund.test|2022-03-16|4500|loan_repayment||' . $loan->id . ']',
+    ]);
+
+    app(LoanLedgerService::class)->postImportedLoanRepaymentWithCashFlow(
+        $loan->fresh(),
+        $legacyRepayment,
+        4500.0,
+        Carbon::parse('2022-03-16'),
+    );
+
+    $guarantorInstallment = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 2,
+        'amount' => 3000,
+        'due_date' => '2022-04-05',
+        'status' => 'overdue',
+    ]);
+
+    $ledger = app(LoanLedgerService::class);
+    DB::transaction(function () use ($ledger, $loan, $guarantorInstallment): void {
+        $ledger->debitGuarantorFundForDefault($loan->fresh()->guarantor, $guarantorInstallment);
+        $guarantorInstallment->update([
+            'status' => 'paid',
+            'paid_at' => '2022-05-05',
+            'paid_by_guarantor' => true,
+        ]);
+    });
+
+    $loan->refresh();
+
+    expect((float) $loan->repayments()->sum('amount'))->toBe(7_500.0)
+        ->and($loan->repayments()->where('notes', 'like', 'ff:installment:%')->count())->toBe(1);
+
+    $stats = app(LegacyExcessLoanRepaymentRepairService::class)->repairLoan($loan->fresh());
+
+    $loan->refresh();
+
+    expect($stats['repayments_resplit'])->toBe(1)
+        ->and((float) $loan->repayments()->sum('amount'))->toBe(6_000.0)
+        ->and($loan->repayments()->where('notes', 'like', 'ff:installment:%')->count())->toBe(1)
+        ->and((float) $loan->repayments()->where('notes', 'like', 'ff:installment:%')->sum('amount'))->toBe(3_000.0)
+        ->and((float) $loan->repayments()->where('notes', 'like', '%legacy-import:%')->sum('amount'))->toBe(3_000.0)
+        ->and((float) Contribution::query()->where('member_id', $borrower->id)->sum('amount'))->toBe(1_500.0);
 });
 
 test('legacy excess loan repayment repair reverses all repayments and completes fully member-funded loans', function () {

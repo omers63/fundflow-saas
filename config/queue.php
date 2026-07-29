@@ -133,12 +133,13 @@ return [
     |
     | When enabled, queue:ensure-worker checks every minute for a running
     | queue:work process for this application and starts one if missing.
-    | Disable when Supervisor or another process manager owns the worker.
+    | It never issues queue:restart (that would bounce Supervisor workers).
+    | Keep disabled when Supervisor or another process manager owns the worker.
     |
     */
 
     'worker_watchdog' => [
-        'enabled' => env('QUEUE_WORKER_WATCHDOG_ENABLED', false), // OFF BY DEFAULT
+        'enabled' => env('QUEUE_WORKER_WATCHDOG_ENABLED', false), // OFF BY DEFAULT — Supervisor owns workers
         'connection' => env('QUEUE_WORKER_CONNECTION'),
         'sleep' => (int) env('QUEUE_WORKER_SLEEP', 3),
         'tries' => (int) env('QUEUE_WORKER_TRIES', 3),

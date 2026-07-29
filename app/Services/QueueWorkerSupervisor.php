@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Process;
 use Symfony\Component\Process\PhpExecutableFinder;
 
@@ -48,11 +47,11 @@ final class QueueWorkerSupervisor
             return ['restarted' => false, 'started' => false];
         }
 
-        Artisan::call('queue:restart');
-
+        // Do not call queue:restart — that signals every worker (including Supervisor-
+        // managed ones) to exit. Only start a detached worker when none is detected.
         $this->startWorkerInBackground();
 
-        return ['restarted' => true, 'started' => true];
+        return ['restarted' => false, 'started' => true];
     }
 
     /**

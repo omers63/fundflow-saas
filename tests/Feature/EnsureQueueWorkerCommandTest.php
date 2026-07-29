@@ -57,7 +57,7 @@ test('queue worker supervisor starts worker when none is running', function (): 
     $result = app(QueueWorkerSupervisor::class)->ensureWorkerRunning();
 
     expect($result)->toBe([
-        'restarted' => true,
+        'restarted' => false,
         'started' => true,
     ]);
 });
@@ -69,15 +69,22 @@ test('queue ensure worker command starts worker when none is running', function 
     ]);
 
     $this->artisan('queue:ensure-worker')
-        ->expectsOutputToContain(__('Queue worker was not running. Issued queue:restart and started queue:work in the background.'))
+        ->expectsOutputToContain(__('Queue worker was not running. Started queue:work in the background.'))
         ->assertSuccessful();
 });
 
-test('queue ensure worker command is scheduled every minute', function (): void {
+test('queue ensure worker is scheduled only when the watchdog is enabled', function (): void {
+    config(['queue.worker_watchdog.enabled' => true]);
+
     $event = collect(app(Schedule::class)->events())
         ->first(fn ($scheduled): bool => str_contains((string) $scheduled->command, 'queue:ensure-worker'));
 
-    expect($event)->not->toBeNull();
+    expect($event)->not->toBeNull()
+        ->and($event->filtersPass(app()))->toBeTrue();
+
+    config(['queue.worker_watchdog.enabled' => false]);
+
+    expect($event->filtersPass(app()))->toBeFalse();
 });
 
 test('queue worker supervisor skips sync queue driver', function (): void {

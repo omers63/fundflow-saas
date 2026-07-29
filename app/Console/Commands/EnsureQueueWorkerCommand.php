@@ -11,7 +11,7 @@ class EnsureQueueWorkerCommand extends Command
 {
     protected $signature = 'queue:ensure-worker';
 
-    protected $description = 'Ensure a queue worker process is running; restart and start one if not';
+    protected $description = 'Ensure a queue worker process is running; start one in the background if missing (does not restart existing workers)';
 
     public function handle(QueueWorkerSupervisor $supervisor): int
     {
@@ -24,7 +24,7 @@ class EnsureQueueWorkerCommand extends Command
         $result = $supervisor->ensureWorkerRunning();
 
         if ($result['started']) {
-            $this->info(__('Queue worker was not running. Issued queue:restart and started queue:work in the background.'));
+            $this->info(__('Queue worker was not running. Started queue:work in the background.'));
 
             return self::SUCCESS;
         }

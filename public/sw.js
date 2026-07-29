@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'fundflow-v7';
+const CACHE_VERSION = 'fundflow-v8';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 
@@ -100,15 +100,18 @@ self.addEventListener('push', (event) => {
         body: data.body || '',
         icon: data.icon || '/icons/notification-icon-192x192.png',
         badge: data.badge || '/icons/notification-badge-96x96.png',
-        tag: data.tag,
+        tag: data.tag || 'fundflow',
+        renotify: true,
         data: data.data || { url: data.url },
-        actions: data.actions || [],
+        actions: Array.isArray(data.actions) ? data.actions : [],
     };
 
     event.waitUntil(
         self.registration.showNotification(title, {
             ...options,
             body: stripHtmlForNotification(options.body || ''),
+        }).catch((error) => {
+            console.error('[FundFlow SW] showNotification failed', error);
         }),
     );
 });
