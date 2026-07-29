@@ -18,6 +18,7 @@ use App\Filament\Member\Resources\MyGuaranteedLoans\MyGuaranteedLoanResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Member\Resources\MyMessages\MyMessageResource;
 use App\Filament\Member\Resources\MyStatements\MyStatementResource;
+use App\Filament\Support\MemberContributionFilamentActions;
 use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DirectMessage;
@@ -26,7 +27,6 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
-use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\MonthlyStatement;
 use App\Models\Tenant\Transaction;
 use App\Services\Concerns\EnrichesMemberPortalDashboard;
@@ -144,21 +144,7 @@ final class MemberPortalInsightsService
         $canRequestOverride = $overrideRequests->canSubmit($member);
         $hasPendingOverrideRequest = $overrideRequests->pendingRequestFor($member) !== null;
 
-        $canVoluntaryTopUp = $member->status === 'active'
-            && $member->monthly_contribution_amount > 0
-            && $cycles->memberIsLiableForContributionPeriod($member, $curMonth, $curYear)
-            && ! Contribution::periodFullyPosted($member->id, $curMonth, $curYear)
-            && ! MemberRequest::query()
-                ->where('status', MemberRequest::STATUS_PENDING)
-                ->where('type', MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION)
-                ->get()
-                ->contains(function (MemberRequest $req) use ($member, $curMonth, $curYear): bool {
-                    $p = $req->payload ?? [];
-
-                    return (int) ($p['target_member_id'] ?? $req->requester_member_id) === (int) $member->id
-                        && (int) ($p['period_month'] ?? 0) === $curMonth
-                        && (int) ($p['period_year'] ?? 0) === $curYear;
-                });
+        $canVoluntaryTopUp = MemberContributionFilamentActions::canRequestVoluntaryTopUpForHousehold($member);
 
         $hero = $this->buildHero(
             $member,
@@ -1048,7 +1034,7 @@ final class MemberPortalInsightsService
                 'visible' => true,
             ],
             [
-                'label' => __('Voluntary top-up'),
+                'label' => __('Contribution top-up'),
                 'subtitle' => __('Add extra to this cycle\'s contribution'),
                 'description' => __('Add extra to this cycle\'s contribution'),
                 'url' => MyContributionResource::getUrl('index'),

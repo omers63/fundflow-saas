@@ -3,17 +3,18 @@
 namespace App\Filament\Member\Resources\MyFundPostings\Schemas;
 
 use App\Filament\Support\MemberContributionFilamentActions;
-use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\VoluntaryContributionRequestService;
 use App\Support\BusinessDay;
 use App\Support\Tenant\CurrentMember;
+use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
@@ -53,94 +54,90 @@ class MyFundPostingForm
                     ->rows(3)
                     ->maxLength(1000)
                     ->placeholder(__('Any additional notes for the admin...')),
-                ...self::voluntaryTopUpSection(),
+                ...self::contributionTopUpSection(),
             ]);
     }
 
     /**
-     * Optional voluntary top-up section — only rendered when the current member
-     * is eligible to request a top-up for the active contribution cycle.
+     * Optional contribution top-up section — shown when the member may top up
+     * themselves and/or any eligible dependent for the open cycle.
      *
      * @return list<Section>
      */
-    private static function voluntaryTopUpSection(): array
+    private static function contributionTopUpSection(): array
     {
         $member = CurrentMember::get();
+        $targets = MemberContributionFilamentActions::eligibleVoluntaryTopUpTargets($member);
 
-        if (!MemberContributionFilamentActions::canRequestVoluntaryTopUp()) {
+        if ($targets === []) {
             return [];
         }
 
-        $isParent = $member?->isParent() ?? false;
+        $memberRows = [];
+
+        foreach ($targets as $target) {
+            $id = (string) $target->id;
+            $standing = (float) $target->monthly_contribution_amount;
+            $isSelf = (int) $target->id === (int) $member?->id;
+            $label = $isSelf
+                ? $target->name.' ('.__('yourself').')'
+                : $target->member_number.' — '.$target->name;
+
+            $extraOptions = [];
+            foreach (VoluntaryContributionRequestService::extraAmountOptions() as $extra => $extraLabel) {
+                $total = number_format($standing + $extra, 2);
+                $extraOptions[(string) $extra] = $extraLabel.' ('.__('total: :total', ['total' => $total]).')';
+            }
+
+            $memberRows[] = Grid::make([
+                'default' => 1,
+                'md' => 12,
+            ])
+                ->schema([
+                    Checkbox::make("contribution_topups.{$id}.include")
+                        ->label($label)
+                        ->helperText(__('Standing: :amount', ['amount' => number_format($standing, 2)]))
+                        ->live()
+                        ->default(false)
+                        ->columnSpan(['md' => 6]),
+                    Select::make("contribution_topups.{$id}.extra")
+                        ->label(__('Top-up amount'))
+                        ->options($extraOptions)
+                        ->placeholder(__('Choose amount'))
+                        ->visible(fn (Get $get): bool => (bool) $get("contribution_topups.{$id}.include"))
+                        ->required(fn (Get $get): bool => (bool) $get("contribution_topups.{$id}.include"))
+                        ->dehydrated(fn (Get $get): bool => (bool) $get("contribution_topups.{$id}.include"))
+                        ->helperText(__('Multiples of :step, up to +\ :max above standing.', [
+                            'step' => number_format(VoluntaryContributionRequestService::STEP),
+                            'max' => number_format(VoluntaryContributionRequestService::MAX_EXTRA),
+                        ]))
+                        ->columnSpan(['md' => 6]),
+                ]);
+        }
 
         return [
             Section::make(__('Contribution top-up'))
-                ->description(__('If this deposit includes an extra voluntary contribution for the current cycle, declare it here. Admin will raise your contribution due for this cycle only — your standing monthly allocation stays unchanged.'))
+                ->description(__('If this deposit includes an extra contribution for the current cycle, declare it here. Select each member and choose their top-up amount. Admin will raise the contribution due for this cycle only — standing monthly allocation stays unchanged.'))
                 ->collapsible()
                 ->collapsed()
                 ->schema([
-                    Toggle::make('voluntary_topup_enabled')
-                        ->label(__('Include a voluntary top-up with this deposit'))
+                    Toggle::make('contribution_topup_enabled')
+                        ->label(__('Include a contribution top-up with this deposit'))
                         ->live()
                         ->default(false),
 
-                    Select::make('voluntary_topup_target_member_id')
-                        ->label(__('For member'))
-                        ->options(function () use ($member): array {
-                            if ($member === null) {
-                                return [];
-                            }
+                    Section::make(__('Members'))
+                        ->description(__('Tick a member, then set a top-up amount for that member. Amounts can differ.'))
+                        ->schema($memberRows)
+                        ->visible(fn (Get $get): bool => (bool) $get('contribution_topup_enabled'))
+                        ->compact()
+                        ->contained(false),
 
-                            $options = [(string) $member->id => $member->name . ' (' . __('yourself') . ')'];
-
-                            $member->dependents()
-                                ->where('status', 'active')
-                                ->orderBy('name')
-                                ->get(['id', 'name', 'member_number'])
-                                ->each(function (Member $dep) use (&$options): void {
-                                    if (MemberContributionFilamentActions::canRequestVoluntaryTopUp($dep)) {
-                                        $options[(string) $dep->id] = $dep->member_number . ' — ' . $dep->name;
-                                    }
-                                });
-
-                            return $options;
-                        })
-                        ->default(fn(): ?string => $member !== null ? (string) $member->id : null)
-                        ->visible($isParent)
-                        ->visible(fn(Get $get): bool => (bool) $get('voluntary_topup_enabled') && $isParent)
-                        ->required(fn(Get $get): bool => (bool) $get('voluntary_topup_enabled') && $isParent),
-
-                    Select::make('voluntary_topup_amount')
-                        ->label(__('Extra amount'))
-                        ->options(function (Get $get) use ($member): array {
-                            $targetId = (int) ($get('voluntary_topup_target_member_id') ?? $member?->id);
-                            $target = $targetId && $targetId !== (int) $member?->id
-                                ? Member::query()->find($targetId)
-                                : $member;
-
-                            $standing = (float) ($target?->monthly_contribution_amount ?? 0);
-                            $options = [];
-
-                            foreach (VoluntaryContributionRequestService::extraAmountOptions() as $extra => $label) {
-                                $total = number_format($standing + $extra, 2);
-                                $options[(string) ($standing + $extra)] = $label . ' (' . __('total: :total', ['total' => $total]) . ')';
-                            }
-
-                            return $options;
-                        })
-                        ->live()
-                        ->visible(fn(Get $get): bool => (bool) $get('voluntary_topup_enabled'))
-                        ->required(fn(Get $get): bool => (bool) $get('voluntary_topup_enabled'))
-                        ->helperText(__('Multiples of :step, up to +\ :max above the monthly allocation.', [
-                            'step' => number_format(VoluntaryContributionRequestService::STEP),
-                            'max' => number_format(VoluntaryContributionRequestService::MAX_EXTRA),
-                        ])),
-
-                    Textarea::make('voluntary_topup_note')
+                    Textarea::make('contribution_topup_note')
                         ->label(__('Note (optional)'))
                         ->rows(2)
                         ->maxLength(500)
-                        ->visible(fn(Get $get): bool => (bool) $get('voluntary_topup_enabled')),
+                        ->visible(fn (Get $get): bool => (bool) $get('contribution_topup_enabled')),
                 ]),
         ];
     }

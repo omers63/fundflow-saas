@@ -107,7 +107,7 @@ class ViewMemberRequest extends ViewRecord
                     MemberRequest::TYPE_REINSTATE_MEMBERSHIP => __('The member will return to active membership. Cash and fund balances will be cleared to zero.'),
                     MemberRequest::TYPE_RELEASE_PAYOUT => __('Clears the payout hold only. Membership stays withdrawn until reinstated.'),
                     MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION => __('This cycle\'s contribution due will be replaced with the requested amount. The member\'s standing monthly allocation stays unchanged.'),
-                    MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION => __('This cycle\'s contribution due will be raised by the voluntary top-up amount. The member\'s standing monthly allocation stays unchanged. The combined total will be collected from the member\'s cash account on the normal collection day.'),
+                    MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION => __('This cycle\'s contribution due will be raised by the top-up amount. The member\'s standing monthly allocation stays unchanged. The combined total will be collected from the member\'s cash account on the normal collection day.'),
                     default => __('The change will be applied immediately for supported request types.'),
                 })
                 ->schema(function (): array {

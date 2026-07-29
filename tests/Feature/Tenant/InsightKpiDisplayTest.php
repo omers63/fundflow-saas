@@ -128,3 +128,53 @@ test('money sub labels still render when formatted with symbol', function () {
 
     expect($html)->toContain('ff-member-amount');
 });
+
+test('member kpi strip spreads columns evenly for four dependents stats', function () {
+    $kpi = [
+        'label' => 'Dependents',
+        'value' => '2',
+        'sub' => 'Funded',
+        'accent' => 'teal',
+        'icon' => 'heroicon-o-user-group',
+    ];
+
+    $html = Blade::render(<<<'BLADE'
+        @include('filament.member.widgets.partials.insights-kpi-strip', [
+            'kpis' => [$a, $b, $c, $d],
+        ])
+    BLADE, [
+        'a' => $kpi,
+        'b' => [...$kpi, 'label' => 'Set contributions'],
+        'c' => [...$kpi, 'label' => 'Cash to transfer'],
+        'd' => [...$kpi, 'label' => 'Contributions posted'],
+    ]);
+
+    expect($html)
+        ->toContain('sm:grid-cols-4')
+        ->not->toContain('xl:grid-cols-6');
+});
+
+test('member kpi strip uses six columns when six kpis are provided', function () {
+    $kpi = [
+        'label' => 'Cash',
+        'value' => '1',
+        'sub' => 'Balance',
+        'accent' => 'sky',
+        'icon' => 'heroicon-o-wallet',
+    ];
+
+    $html = Blade::render(<<<'BLADE'
+        @include('filament.member.widgets.partials.insights-kpi-strip', [
+            'kpis' => [$a, $b, $c, $d, $e, $f],
+        ])
+    BLADE, [
+        'a' => $kpi,
+        'b' => $kpi,
+        'c' => $kpi,
+        'd' => $kpi,
+        'e' => $kpi,
+        'f' => $kpi,
+    ]);
+
+    expect($html)->toContain('xl:grid-cols-6');
+});

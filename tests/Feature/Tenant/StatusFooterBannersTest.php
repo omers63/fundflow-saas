@@ -41,6 +41,57 @@ test('business day override renders flashing footer banner on tenant panel', fun
         ->assertSee('ff-status-footer-banner--business-day', false);
 });
 
+test('business day banner can be disabled on admin portal while override stays active', function () {
+    Setting::set('general', 'business_day', '2026-03-15');
+    Setting::set('general', 'business_day_banner_admin', '0');
+    Setting::set('general', 'business_day_banner_member', '1');
+
+    $admin = User::create([
+        'name' => 'Banner Admin Off',
+        'email' => 'banner-admin-off@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $this->actingAs($admin, 'tenant');
+
+    $this->get('http://' . $this->domain . '/admin')
+        ->assertSuccessful()
+        ->assertDontSee('ff-status-footer-banner--business-day', false);
+});
+
+test('business day banner can be disabled on member portal while override stays active', function () {
+    Setting::set('general', 'business_day', '2026-03-15');
+    Setting::set('general', 'business_day_banner_admin', '1');
+    Setting::set('general', 'business_day_banner_member', '0');
+
+    $member = Member::create([
+        'member_number' => 'MEM-BANNER' . uniqid(),
+        'name' => 'Banner Member',
+        'email' => 'banner-member-off@fund.test',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subMonths(12),
+        'status' => 'active',
+    ]);
+
+    $user = User::create([
+        'name' => $member->name,
+        'email' => $member->email,
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => false,
+    ]);
+
+    $member->update(['user_id' => $user->id]);
+
+    $this->actingAs($user, 'tenant');
+
+    $this->get('http://' . $this->domain . '/member')
+        ->assertSuccessful()
+        ->assertDontSee('ff-status-footer-banner--business-day', false);
+});
+
 test('impersonation renders footer banner with return action', function () {
     $parent = Member::create([
         'member_number' => 'MEM-P'.uniqid(),

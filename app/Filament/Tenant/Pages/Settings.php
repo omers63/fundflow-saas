@@ -205,6 +205,8 @@ class Settings extends Page implements HasForms
             ...LocalizationSettings::allForForm(),
             ...LedgerSettings::allForForm(),
             'business_day' => BusinessDaySettings::forForm(),
+            'business_day_banner_admin' => BusinessDaySettings::showBannerOnAdmin(),
+            'business_day_banner_member' => BusinessDaySettings::showBannerOnMember(),
             'reconciliation_bank_statement_balance' => $reconciliation['bank_statement_balance'] ?? null,
             'reconciliation_bank_statement_date' => $reconciliation['bank_statement_date'] ?? null,
             'reconciliation_bank_variance_critical' => filter_var($reconciliation['bank_variance_critical'] ?? false, FILTER_VALIDATE_BOOL),
@@ -357,6 +359,14 @@ class Settings extends Page implements HasForms
 
                                 return BusinessDay::calendarToday()->toFormattedDateString();
                             }),
+                        Toggle::make('business_day_banner_admin')
+                            ->label(__('Show banner on admin portal'))
+                            ->helperText(__('When a business day override is active, show the footer status banner for tenant admins.'))
+                            ->default(true),
+                        Toggle::make('business_day_banner_member')
+                            ->label(__('Show banner on member portal'))
+                            ->helperText(__('When a business day override is active, show the footer status banner for members.'))
+                            ->default(true),
                     ]),
                 Section::make(__('Member numbers'))
                     ->description(__('Controls how IDs are generated for new members (manual create and approved applications). Existing numbers are not changed.'))
@@ -1381,7 +1391,7 @@ class Settings extends Page implements HasForms
         Setting::set('reconciliation', 'bank_statement_date', $state['reconciliation_bank_statement_date'] ?? '');
         Setting::set('reconciliation', 'bank_variance_critical', ($state['reconciliation_bank_variance_critical'] ?? false) ? '1' : '0');
         ReconciliationDigestSettings::saveFromForm($state);
-        BusinessDaySettings::saveFromForm($state['business_day'] ?? null);
+        BusinessDaySettings::saveFromForm($state);
         FiscalSettings::saveFromForm([
             'fiscal_year_start_month' => $state['fiscal_year_start_month'],
             'fiscal_year_start_day' => $state['fiscal_year_start_day'],

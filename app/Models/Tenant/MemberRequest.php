@@ -90,7 +90,7 @@ class MemberRequest extends Model
             self::TYPE_REINSTATE_MEMBERSHIP => __('Reinstate membership'),
             self::TYPE_RELEASE_PAYOUT => __('Release payout'),
             self::TYPE_OPEN_CYCLE_CONTRIBUTION => __('Open-cycle contribution amount'),
-            self::TYPE_VOLUNTARY_CONTRIBUTION => __('Voluntary top-up contribution'),
+            self::TYPE_VOLUNTARY_CONTRIBUTION => __('Contribution top-up'),
             default => $type,
         };
     }

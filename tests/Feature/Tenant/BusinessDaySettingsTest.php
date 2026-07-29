@@ -31,6 +31,35 @@ test('business day setting can be saved and cleared', function () {
         ->and(BusinessDaySettings::isOverridden())->toBeFalse();
 });
 
+test('business day banner visibility defaults on and can be toggled per portal', function () {
+    BusinessDaySettings::saveFromForm([
+        'business_day' => '2026-08-15',
+        'business_day_banner_admin' => true,
+        'business_day_banner_member' => false,
+    ]);
+
+    expect(BusinessDaySettings::showBannerOnAdmin())->toBeTrue()
+        ->and(BusinessDaySettings::showBannerOnMember())->toBeFalse()
+        ->and(BusinessDaySettings::shouldShowFooterBanner('tenant'))->toBeTrue()
+        ->and(BusinessDaySettings::shouldShowFooterBanner('member'))->toBeFalse();
+
+    BusinessDaySettings::saveFromForm([
+        'business_day' => '2026-08-15',
+        'business_day_banner_admin' => false,
+        'business_day_banner_member' => true,
+    ]);
+
+    expect(BusinessDaySettings::shouldShowFooterBanner('tenant'))->toBeFalse()
+        ->and(BusinessDaySettings::shouldShowFooterBanner('member'))->toBeTrue();
+
+    // Clearing the date via string form still leaves banner prefs alone.
+    BusinessDaySettings::saveFromForm(null);
+
+    expect(BusinessDaySettings::isOverridden())->toBeFalse()
+        ->and(BusinessDaySettings::shouldShowFooterBanner('member'))->toBeFalse()
+        ->and(BusinessDaySettings::showBannerOnMember())->toBeTrue();
+});
+
 test('business day override resolves now and today without mutating the global clock', function () {
     Setting::set('general', 'business_day', '2026-09-01');
 

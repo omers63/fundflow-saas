@@ -3,6 +3,7 @@
 namespace App\Filament\Member\Resources\MyFundPostings\Pages;
 
 use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
+use App\Filament\Support\MemberContributionFilamentActions;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberRequest;
 use App\Services\FundPostingService;
@@ -28,30 +29,67 @@ class CreateMyFundPosting extends CreateRecord
             comments: $data['comments'] ?? null,
         );
 
-        if (! empty($data['voluntary_topup_enabled']) && ! empty($data['voluntary_topup_amount'])) {
-            $targetId = (int) ($data['voluntary_topup_target_member_id'] ?? $member->id);
-            $target = $targetId !== (int) $member->id
-                ? Member::query()->find($targetId) ?? $member
-                : $member;
+        if (! empty($data['contribution_topup_enabled'])) {
+            $eligibleById = collect(MemberContributionFilamentActions::eligibleVoluntaryTopUpTargets($member))
+                ->keyBy(fn (Member $candidate): int => (int) $candidate->id);
 
-            try {
-                app(MemberRequestService::class)->submit($member, MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION, [
-                    'amount' => (float) $data['voluntary_topup_amount'],
-                    'note' => $data['voluntary_topup_note'] ?? null,
-                    'target_member_id' => $target->id,
-                ]);
-            } catch (\Throwable) {
-                // Deposit already saved; surface failure as a warning notification instead of rolling back.
+            $rows = collect($data['contribution_topups'] ?? [])
+                ->filter(function (mixed $row, mixed $id) use ($eligibleById): bool {
+                    if (! is_array($row) || empty($row['include']) || empty($row['extra'])) {
+                        return false;
+                    }
+
+                    return $eligibleById->has((int) $id);
+                });
+
+            if ($rows->isEmpty()) {
                 Notification::make()
                     ->title(__('Deposit submitted — top-up not saved'))
-                    ->body(__('Your deposit was submitted but the voluntary top-up could not be recorded. Please submit it separately from the Contributions page.'))
+                    ->body(__('Your deposit was submitted but no members with a top-up amount were selected.'))
                     ->warning()
                     ->send();
 
                 return $posting;
             }
 
-            $this->topUpSubmitted = true;
+            $note = $data['contribution_topup_note'] ?? null;
+            $submitted = 0;
+            $failed = 0;
+
+            foreach ($rows as $targetId => $row) {
+                /** @var Member $target */
+                $target = $eligibleById->get((int) $targetId);
+                $extra = (float) $row['extra'];
+                $amount = round((float) $target->monthly_contribution_amount + $extra, 2);
+
+                try {
+                    app(MemberRequestService::class)->submit($member, MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION, [
+                        'amount' => $amount,
+                        'note' => $note,
+                        'target_member_id' => $target->id,
+                    ]);
+                    $submitted++;
+                } catch (\Throwable) {
+                    $failed++;
+                }
+            }
+
+            if ($submitted > 0) {
+                $this->topUpSubmitted = true;
+            }
+
+            if ($failed > 0) {
+                Notification::make()
+                    ->title($submitted > 0
+                        ? __('Deposit submitted — some top-ups not saved')
+                        : __('Deposit submitted — top-up not saved'))
+                    ->body(__('Your deposit was submitted but :failed of :total top-up request(s) could not be recorded. Please submit any missing ones separately from the Contributions page.', [
+                        'failed' => $failed,
+                        'total' => $submitted + $failed,
+                    ]))
+                    ->warning()
+                    ->send();
+            }
         }
 
         return $posting;
@@ -64,7 +102,7 @@ class CreateMyFundPosting extends CreateRecord
         $record = $this->getRecord();
 
         $topUpNote = $this->topUpSubmitted
-            ? ' '.__('Your voluntary top-up request has also been submitted for admin review.')
+            ? ' '.__('Your top-up request has also been submitted for admin review.')
             : '';
 
         if ($record?->status === 'accepted') {

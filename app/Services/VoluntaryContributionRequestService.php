@@ -102,7 +102,7 @@ final class VoluntaryContributionRequestService
 
         if ($extra > self::MAX_EXTRA) {
             throw ValidationException::withMessages([
-                'amount' => __('Voluntary top-up may not exceed :max above your monthly allocation.', [
+                'amount' => __('Top-up may not exceed :max above your monthly allocation.', [
                     'max' => number_format(self::MAX_EXTRA),
                 ]),
             ]);
@@ -110,7 +110,7 @@ final class VoluntaryContributionRequestService
 
         if (fmod($extra, self::STEP) > 0.001) {
             throw ValidationException::withMessages([
-                'amount' => __('Voluntary top-up must be in multiples of :step.', [
+                'amount' => __('Top-up must be in multiples of :step.', [
                     'step' => number_format(self::STEP),
                 ]),
             ]);
@@ -139,7 +139,7 @@ final class VoluntaryContributionRequestService
 
         if ($exists) {
             throw ValidationException::withMessages([
-                'type' => __('A pending voluntary top-up request already exists for this member and period.'),
+                'type' => __('A pending top-up request already exists for this member and period.'),
             ]);
         }
     }

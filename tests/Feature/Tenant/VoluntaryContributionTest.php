@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Member\Resources\MyDependents\Support\MyDependentTableActions;
+use App\Filament\Support\MemberContributionFilamentActions;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
@@ -342,6 +343,67 @@ test('submit voluntary top-up rejects third-party target', function () {
     ))->toThrow(ValidationException::class);
 });
 
+test('parent not eligible for self can still request voluntary top-up for eligible dependent', function () {
+    $parentUser = User::create([
+        'name' => 'Vol Contrib Parent Zero',
+        'email' => 'vol-contrib-parent-zero@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => false,
+    ]);
+
+    $parent = Member::create([
+        'user_id' => $parentUser->id,
+        'member_number' => 'VC-PARENT-ZERO',
+        'name' => 'Vol Contrib Parent Zero',
+        'email' => 'vol-contrib-parent-zero@fund.test',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($parent);
+
+    $dependentUser = User::create([
+        'name' => 'Vol Contrib Dependent Eligible',
+        'email' => 'vol-contrib-dep-eligible@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => false,
+    ]);
+
+    $dependent = Member::create([
+        'user_id' => $dependentUser->id,
+        'parent_member_id' => $parent->id,
+        'member_number' => 'VC-DEP-ELIG',
+        'name' => 'Vol Contrib Dependent Eligible',
+        'email' => 'vol-contrib-dep-eligible@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($dependent);
+
+    expect(MemberContributionFilamentActions::canRequestVoluntaryTopUp(null, $parent))->toBeFalse()
+        ->and(MemberContributionFilamentActions::canRequestVoluntaryTopUp($dependent, $parent))->toBeTrue()
+        ->and(MemberContributionFilamentActions::canRequestVoluntaryTopUpForHousehold($parent))->toBeTrue();
+
+    $targets = MemberContributionFilamentActions::eligibleVoluntaryTopUpTargets($parent);
+
+    expect($targets)->toHaveCount(1)
+        ->and((int) $targets[0]->id)->toBe((int) $dependent->id);
+
+    $request = app(MemberRequestService::class)->submit(
+        $parent,
+        MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION,
+        ['amount' => 1500, 'target_member_id' => $dependent->id],
+    );
+
+    expect($request->status)->toBe(MemberRequest::STATUS_PENDING)
+        ->and((int) $request->payload['target_member_id'])->toBe((int) $dependent->id);
+});
+
 // --- Deposit form + voluntary top-up bundled submission ---
 
 test('creating a deposit with voluntary_topup_enabled also submits a voluntary contribution request', function () {
@@ -366,28 +428,119 @@ test('creating a deposit with voluntary_topup_enabled also submits a voluntary c
         ->and((float) $request->payload['amount'])->toBe(3000.0);
 });
 
+test('parent can submit voluntary top-ups for some or all eligible dependents in one go', function () {
+    $parentUser = User::create([
+        'name' => 'Vol Contrib Multi Parent',
+        'email' => 'vol-contrib-multi-parent@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => false,
+    ]);
+
+    $parent = Member::create([
+        'user_id' => $parentUser->id,
+        'member_number' => 'VC-MULTI-PARENT',
+        'name' => 'Vol Contrib Multi Parent',
+        'email' => 'vol-contrib-multi-parent@fund.test',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($parent);
+
+    $dependents = collect([
+        ['number' => 'VC-MULTI-D1', 'email' => 'vol-contrib-multi-d1@fund.test', 'name' => 'Multi Dep One', 'amount' => 1000],
+        ['number' => 'VC-MULTI-D2', 'email' => 'vol-contrib-multi-d2@fund.test', 'name' => 'Multi Dep Two', 'amount' => 1500],
+        ['number' => 'VC-MULTI-D3', 'email' => 'vol-contrib-multi-d3@fund.test', 'name' => 'Multi Dep Three', 'amount' => 2000],
+    ])->map(function (array $row) use ($parent): Member {
+        $user = User::create([
+            'name' => $row['name'],
+            'email' => $row['email'],
+            'password' => bcrypt('password'),
+            'email_verified_at' => now(),
+            'is_admin' => false,
+        ]);
+
+        $dependent = Member::create([
+            'user_id' => $user->id,
+            'parent_member_id' => $parent->id,
+            'member_number' => $row['number'],
+            'name' => $row['name'],
+            'email' => $row['email'],
+            'monthly_contribution_amount' => $row['amount'],
+            'joined_at' => now()->subYear(),
+            'status' => 'active',
+        ]);
+
+        app(AccountingService::class)->createMemberAccounts($dependent);
+
+        return $dependent;
+    });
+
+    $targets = MemberContributionFilamentActions::eligibleVoluntaryTopUpTargets($parent);
+
+    expect($targets)->toHaveCount(3);
+
+    $extrasByIndex = [0 => 500.0, 1 => 1000.0];
+
+    foreach ($extrasByIndex as $index => $extra) {
+        $dependent = $dependents[$index];
+        app(MemberRequestService::class)->submit($parent, MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION, [
+            'amount' => round((float) $dependent->monthly_contribution_amount + $extra, 2),
+            'target_member_id' => $dependent->id,
+        ]);
+    }
+
+    $pending = MemberRequest::query()
+        ->where('type', MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION)
+        ->where('status', MemberRequest::STATUS_PENDING)
+        ->where('requester_member_id', $parent->id)
+        ->get();
+
+    expect($pending)->toHaveCount(2);
+
+    expect((float) $pending->first(
+        fn (MemberRequest $request): bool => (int) $request->payload['target_member_id'] === (int) $dependents[0]->id
+    )->payload['amount'])->toBe(1500.0)
+        ->and((float) $pending->first(
+            fn (MemberRequest $request): bool => (int) $request->payload['target_member_id'] === (int) $dependents[1]->id
+        )->payload['amount'])->toBe(2500.0);
+
+    expect(MemberContributionFilamentActions::canRequestVoluntaryTopUp($dependents[2], $parent))->toBeTrue()
+        ->and(MemberContributionFilamentActions::eligibleVoluntaryTopUpTargets($parent))->toHaveCount(1);
+});
+
 // --- Dependents table action ---
 
 test('voluntaryTopUpForDependentRow action name is registered on dependents table', function () {
-    $names = collect(MyDependentTableActions::recordActions())
-        ->map(
-            fn ($action) => $action instanceof ActionGroup
-            ? collect($action->getActions())->map(fn ($a) => $a->getName())->all()
-            : $action->getName()
-        )
-        ->flatten()
-        ->all();
+    $actions = collect(MyDependentTableActions::recordActions())
+        ->flatMap(function ($action) {
+            if ($action instanceof ActionGroup) {
+                return collect($action->getActions());
+            }
 
-    expect($names)->toContain('voluntaryTopUpForDependentRow');
+            return collect([$action]);
+        });
+
+    $names = $actions->map(fn ($action) => $action->getName())->all();
+
+    expect($names)->toContain('voluntaryTopUpForDependentRow')
+        ->and($names)->toContain('requestOpenCycleAmountForDependent');
+
+    expect($actions->first(fn ($action) => $action->getName() === 'voluntaryTopUpForDependentRow')->getLabel())
+        ->toBe(__('Add Standard Top-Up'))
+        ->and($actions->first(fn ($action) => $action->getName() === 'requestOpenCycleAmountForDependent')->getLabel())
+        ->toBe(__('Request Large Top-Up'));
 });
 
 // --- MemberRequest label / describePayload ---
 
-test('typeLabel returns a non-empty label for voluntary contribution', function () {
+test('typeLabel for contribution top-up does not say voluntary', function () {
     $label = MemberRequest::typeLabel(MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION);
 
-    expect($label)->not->toBe(MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION)
-        ->and($label)->not->toBeEmpty();
+    expect($label)->toBe(__('Contribution top-up'))
+        ->and(strtolower($label))->not->toContain('voluntary');
 });
 
 test('describePayload includes period, member name, total and top-up amount', function () {
