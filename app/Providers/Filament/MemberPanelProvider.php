@@ -85,9 +85,6 @@ class MemberPanelProvider extends PanelProvider
             ->renderHook(PanelsRenderHook::SIDEBAR_NAV_START, fn (): HtmlString => new HtmlString(
                 view('filament.member.partials.sidebar-profile')->render()
             ))
-            ->renderHook(PanelsRenderHook::FOOTER, fn (): HtmlString => new HtmlString(
-                view('partials.status-footer-banners')->render()
-            ))
             ->discoverResources(in: app_path('Filament/Member/Resources'), for: 'App\\Filament\\Member\\Resources')
             ->discoverPages(in: app_path('Filament/Member/Pages'), for: 'App\\Filament\\Member\\Pages')
             ->pages([
@@ -103,7 +100,9 @@ class MemberPanelProvider extends PanelProvider
                 .view('partials.pwa-head')->render()
             ))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(
-                view('partials.pwa-sw')->render()
+                view('partials.portal-bottom-bar')->render()
+                . view('partials.status-footer-banners')->render()
+                . view('partials.pwa-sw')->render()
                 .view('filament.member.partials.webpush-member')->render()
             ))
             ->middleware([

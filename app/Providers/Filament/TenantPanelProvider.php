@@ -66,16 +66,15 @@ class TenantPanelProvider extends PanelProvider
             ->renderHook(PanelsRenderHook::GLOBAL_SEARCH_AFTER, fn (): HtmlString => new HtmlString(
                 view('filament.tenant.partials.topbar-admin-shortcuts')->render()
             ))
-            ->renderHook(PanelsRenderHook::FOOTER, fn (): HtmlString => new HtmlString(
-                view('partials.status-footer-banners')->render()
-            ))
             ->renderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(
                 view('partials.arabic-fonts')->render()
                 .view('partials.arabic-display-body-class')->render()
                 .view('partials.pwa-head')->render()
             ))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(
-                view('partials.pwa-sw')->render()
+                view('partials.portal-bottom-bar')->render()
+                . view('partials.status-footer-banners')->render()
+                . view('partials.pwa-sw')->render()
                 .view('filament.tenant.partials.webpush-admin')->render()
             ))
             ->middleware([

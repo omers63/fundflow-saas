@@ -1,0 +1,226 @@
+/* Persistent portal bottom chrome — narrower counterpart to .fi-topbar */
+
+.fi-body.fi-panel-tenant,
+.fi-body.fi-panel-member {
+    /* Extra clearance so page-card shadows do not bleed into the bar */
+    --ff-portal-bottom-bar-height: 2rem;
+    --ff-portal-bottom-bar-clearance: 0.75rem;
+    padding-bottom: calc(
+        var(--ff-portal-bottom-bar-height) + var(--ff-portal-bottom-bar-clearance)
+    );
+}
+
+/* Keep the last sidebar items scrollable above the fixed bottom chrome */
+.fi-body.fi-panel-tenant .fi-sidebar-nav,
+.fi-body.fi-panel-member .fi-sidebar-nav {
+    padding-block-end: calc(
+        var(--ff-portal-bottom-bar-height, 2rem)
+        + var(--ff-portal-bottom-bar-clearance, 0.75rem)
+        + 0.5rem
+    );
+}
+
+.fi-body.fi-panel-tenant:has(.ff-status-footer-banners) .fi-sidebar-nav,
+.fi-body.fi-panel-member:has(.ff-status-footer-banners) .fi-sidebar-nav {
+    padding-block-end: calc(
+        var(--ff-portal-bottom-bar-height, 2rem)
+        + var(--ff-portal-bottom-bar-clearance, 0.75rem)
+        + 2.75rem
+        + 0.5rem
+    );
+}
+
+.fi-body.fi-panel-tenant:has(.ff-status-footer-banners--double) .fi-sidebar-nav,
+.fi-body.fi-panel-member:has(.ff-status-footer-banners--double) .fi-sidebar-nav {
+    padding-block-end: calc(
+        var(--ff-portal-bottom-bar-height, 2rem)
+        + var(--ff-portal-bottom-bar-clearance, 0.75rem)
+        + 5.5rem
+        + 0.5rem
+    );
+}
+
+.ff-portal-bottom-bar {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 50;
+    height: var(--ff-portal-bottom-bar-height, 2rem);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    isolation: isolate;
+    background: var(--ff-surface, #ffffff);
+    border-block-start: 1px solid var(--ff-border, #e5e7eb);
+    box-shadow: none;
+    pointer-events: auto;
+}
+
+/* Opaque mask so scrolled page shadows cannot show through the bar */
+.ff-portal-bottom-bar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: inherit;
+}
+
+.ff-portal-bottom-bar__accent {
+    position: relative;
+    z-index: 1;
+    height: 2px;
+    width: 100%;
+    flex-shrink: 0;
+    background: linear-gradient(
+        90deg,
+        var(--ff-primary, #0284c7) 0%,
+        color-mix(in srgb, var(--ff-primary, #0284c7) 55%, white) 50%,
+        var(--ff-primary, #0284c7) 100%
+    );
+}
+
+.ff-portal-bottom-bar__inner {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding-inline: 0.875rem;
+    padding-block: 0;
+    background: var(--ff-surface, #ffffff);
+}
+
+.ff-portal-bottom-bar__start,
+.ff-portal-bottom-bar__end {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.ff-portal-bottom-bar__end {
+    flex-shrink: 0;
+}
+
+.ff-portal-bottom-bar__fund {
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: var(--ff-primary-dark, #0369a1);
+}
+
+.ff-portal-bottom-bar__divider {
+    width: 1px;
+    height: 0.75rem;
+    flex-shrink: 0;
+    background: var(--ff-border, #e5e7eb);
+}
+
+.ff-portal-bottom-bar__portal {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ff-muted, #6b7280);
+    white-space: nowrap;
+}
+
+.ff-portal-bottom-bar__date {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--ff-muted, #6b7280);
+    white-space: nowrap;
+}
+
+.ff-portal-bottom-bar__date--override {
+    color: #92400e;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar,
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__inner {
+    background: #1e293b;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar {
+    border-block-start-color: rgb(255 255 255 / 0.08);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__fund {
+    color: #7dd3fc;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__portal,
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__date {
+    color: #94a3b8;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__divider {
+    background: rgb(255 255 255 / 0.12);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__date--override {
+    color: #fde68a;
+}
+
+/* Member panel keeps light chrome (matches topbar) */
+.fi-body.fi-panel-member .ff-portal-bottom-bar__fund {
+    color: var(--ff-primary-dark, #3c3489);
+}
+
+.fi-body.fi-panel-member .ff-portal-bottom-bar__inner {
+    background: var(--ff-surface, #ffffff);
+}
+
+/* Status banners sit above the persistent bottom bar */
+.ff-status-footer-banners {
+    bottom: var(--ff-portal-bottom-bar-height, 2rem);
+    z-index: 51;
+}
+
+.fi-body:has(.ff-status-footer-banners) {
+    padding-bottom: calc(
+        var(--ff-portal-bottom-bar-height, 2rem)
+        + var(--ff-portal-bottom-bar-clearance, 0.75rem)
+        + 2.75rem
+    );
+}
+
+.fi-body:has(.ff-status-footer-banners--double) {
+    padding-bottom: calc(
+        var(--ff-portal-bottom-bar-height, 2rem)
+        + var(--ff-portal-bottom-bar-clearance, 0.75rem)
+        + 5.5rem
+    );
+}
+
+@media (max-width: 639px) {
+    .fi-body.fi-panel-tenant,
+    .fi-body.fi-panel-member {
+        --ff-portal-bottom-bar-height: 1.875rem;
+        --ff-portal-bottom-bar-clearance: 0.5rem;
+    }
+
+    .ff-portal-bottom-bar__inner {
+        padding-inline: 0.625rem;
+    }
+
+    .ff-portal-bottom-bar__fund {
+        max-width: 8.5rem;
+    }
+
+    .ff-portal-bottom-bar__portal {
+        display: none;
+    }
+
+    .ff-portal-bottom-bar__divider {
+        display: none;
+    }
+}

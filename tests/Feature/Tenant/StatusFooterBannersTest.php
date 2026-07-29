@@ -38,7 +38,37 @@ test('business day override renders flashing footer banner on tenant panel', fun
 
     $this->get('http://'.$this->domain.'/admin')
         ->assertSuccessful()
-        ->assertSee('ff-status-footer-banner--business-day', false);
+        ->assertSee('ff-portal-bottom-bar', false)
+        ->assertSee('ff-status-footer-banner--business-day', false)
+        ->assertSee(__('Admin portal'), false);
+});
+
+test('member portal renders themed bottom bar chrome', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-BOT'.uniqid(),
+        'name' => 'Bottom Bar Member',
+        'email' => 'bottom-bar-member@fund.test',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subMonths(12),
+        'status' => 'active',
+    ]);
+
+    $user = User::create([
+        'name' => $member->name,
+        'email' => $member->email,
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => false,
+    ]);
+
+    $member->update(['user_id' => $user->id]);
+
+    $this->actingAs($user, 'tenant');
+
+    $this->get('http://'.$this->domain.'/member')
+        ->assertSuccessful()
+        ->assertSee('ff-portal-bottom-bar', false)
+        ->assertSee(__('Member portal'), false);
 });
 
 test('business day banner can be disabled on admin portal while override stays active', function () {
@@ -56,7 +86,7 @@ test('business day banner can be disabled on admin portal while override stays a
 
     $this->actingAs($admin, 'tenant');
 
-    $this->get('http://' . $this->domain . '/admin')
+    $this->get('http://'.$this->domain.'/admin')
         ->assertSuccessful()
         ->assertDontSee('ff-status-footer-banner--business-day', false);
 });
@@ -67,7 +97,7 @@ test('business day banner can be disabled on member portal while override stays 
     Setting::set('general', 'business_day_banner_member', '0');
 
     $member = Member::create([
-        'member_number' => 'MEM-BANNER' . uniqid(),
+        'member_number' => 'MEM-BANNER'.uniqid(),
         'name' => 'Banner Member',
         'email' => 'banner-member-off@fund.test',
         'monthly_contribution_amount' => 5000,
@@ -87,7 +117,7 @@ test('business day banner can be disabled on member portal while override stays 
 
     $this->actingAs($user, 'tenant');
 
-    $this->get('http://' . $this->domain . '/member')
+    $this->get('http://'.$this->domain.'/member')
         ->assertSuccessful()
         ->assertDontSee('ff-status-footer-banner--business-day', false);
 });

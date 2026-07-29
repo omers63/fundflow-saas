@@ -6367,5 +6367,6 @@
     "Show banner on admin portal": "إظهار الشريط في بوابة الإدارة",
     "Show banner on member portal": "إظهار الشريط في بوابة الأعضاء",
     "When a business day override is active, show the footer status banner for tenant admins.": "عند تفعيل تجاوز يوم العمل، أظهر شريط الحالة السفلي لمسؤولي المستأجر.",
-    "When a business day override is active, show the footer status banner for members.": "عند تفعيل تجاوز يوم العمل، أظهر شريط الحالة السفلي للأعضاء."
+    "When a business day override is active, show the footer status banner for members.": "عند تفعيل تجاوز يوم العمل، أظهر شريط الحالة السفلي للأعضاء.",
+    "Business day override active": "تجاوز يوم العمل مفعّل"
 }

@@ -438,18 +438,10 @@
 }
 
 /* Fixed footer status banners (business day override, impersonation) */
-.fi-body:has(.ff-status-footer-banners) {
-    padding-bottom: 2.75rem;
-}
-
-.fi-body:has(.ff-status-footer-banners--double) {
-    padding-bottom: 5.5rem;
-}
-
 .ff-status-footer-banners {
     position: fixed;
     inset-inline: 0;
-    bottom: 0;
+    bottom: var(--ff-portal-bottom-bar-height, 0px);
     z-index: 45;
     display: flex;
     flex-direction: column;

@@ -52,9 +52,12 @@ beforeEach(function () {
 test('member theme imports prototype chrome stylesheet', function () {
     $theme = file_get_contents(resource_path('css/filament/member/theme.css'));
 
-    expect($theme)->toContain("@import './member-portal-chrome.css'");
+    expect($theme)
+        ->toContain("@import './member-portal-chrome.css'")
+        ->toContain("@import '../portal-bottom-bar.css'");
 
     expect(file_exists(resource_path('css/filament/member/member-portal-chrome.css')))->toBeTrue();
+    expect(file_exists(resource_path('css/filament/portal-bottom-bar.css')))->toBeTrue();
 
     $chrome = file_get_contents(resource_path('css/filament/member/member-portal-chrome.css'));
 
@@ -62,6 +65,12 @@ test('member theme imports prototype chrome stylesheet', function () {
         ->toContain('--ff-primary: #534ab7')
         ->toContain('.fi-body.fi-panel-member')
         ->toMatch('/\.fi-body\.fi-panel-member\s+\.fi-sidebar/');
+
+    $bottomBar = file_get_contents(resource_path('css/filament/portal-bottom-bar.css'));
+
+    expect($bottomBar)
+        ->toContain('.ff-portal-bottom-bar')
+        ->toContain('--ff-portal-bottom-bar-height');
 });
 
 test('member panel primary color is prototype purple and tenant panel is unchanged', function () {
