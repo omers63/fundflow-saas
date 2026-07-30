@@ -9,7 +9,9 @@ use App\Filament\Member\Pages\FundAccountPage;
 use App\Filament\Member\Pages\LoanCalculatorPage;
 use App\Filament\Member\Pages\MemberActivityPage;
 use App\Filament\Member\Pages\MemberSettingsPage;
+use App\Filament\Member\Pages\RequestsPage;
 use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
+use App\Filament\Member\Support\MemberNavigation;
 use App\Filament\Member\Widgets\MyMemberRequestsTableWidget;
 use App\Filament\Member\Widgets\MySupportRequestsTableWidget;
 use App\Models\Central\Tenant;
@@ -60,6 +62,7 @@ test('member panel registers messages and account pages', function () {
 
     expect(filament()->getPanel('member')->getPages())
         ->toContain(CommunicationsPage::class)
+        ->toContain(RequestsPage::class)
         ->toContain(CashAccountPage::class)
         ->toContain(FundAccountPage::class)
         ->toContain(MemberActivityPage::class)
@@ -93,13 +96,16 @@ test('legacy member paths redirect to redesigned destinations', function () {
         ->assertRedirect('/member/cash-account');
 
     $this->get('http://'.$this->domain.'/member/support')
-        ->assertRedirect('/member/messages?tab=requests');
+        ->assertRedirect('/member/requests');
 
     $this->get('http://'.$this->domain.'/member/my-messages')
         ->assertRedirect('/member/messages?tab=messages');
 
     $this->get('http://' . $this->domain . '/member/help?tab=messages')
         ->assertRedirect('/member/messages?tab=messages');
+
+    $this->get('http://' . $this->domain . '/member/messages?tab=requests')
+        ->assertRedirect('/member/requests');
 });
 
 test('cash and fund account pages render redesigned layouts', function () {
@@ -119,19 +125,16 @@ test('cash and fund account pages render redesigned layouts', function () {
         ->assertSee(__('Fund transactions'), false);
 });
 
-test('communications help requests tab renders support and membership sections', function () {
+test('requests page renders support and membership sections', function () {
     Filament::setCurrentPanel('member');
     $this->actingAs($this->memberUser, 'tenant');
 
-    Livewire::test(CommunicationsPage::class)
-        ->set('activeTab', 'requests')
+    Livewire::test(RequestsPage::class)
         ->set('requestsSection', 'support')
-        ->assertSet('activeTab', 'requests')
         ->assertSet('requestsSection', 'support')
         ->assertSuccessful();
 
-    Livewire::test(CommunicationsPage::class)
-        ->set('activeTab', 'requests')
+    Livewire::test(RequestsPage::class)
         ->call('setRequestsSection', 'membership')
         ->assertSet('requestsSection', 'membership')
         ->assertSuccessful();
@@ -142,6 +145,16 @@ test('communications help requests tab renders support and membership sections',
 
     Livewire::test(MyMemberRequestsTableWidget::class)
         ->assertTableActionExists('requestFreezeMembership');
+});
+
+test('requests appears in sidebar after statements', function () {
+    Filament::setCurrentPanel('member');
+
+    expect(RequestsPage::getNavigationGroup())->toBe(MemberNavigation::GROUP_SELF_SERVICE)
+        ->and(RequestsPage::getNavigationSort())->toBe(MemberNavigation::SORT_REQUESTS)
+        ->and(MemberNavigation::SORT_REQUESTS)->toBeGreaterThan(MemberNavigation::SORT_STATEMENTS)
+        ->and(MemberNavigation::SORT_DEPENDENTS)->toBeGreaterThan(MemberNavigation::SORT_REQUESTS)
+        ->and(RequestsPage::shouldRegisterNavigation())->toBeTrue();
 });
 
 test('deposit create route remains available when list nav is hidden', function () {

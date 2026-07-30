@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Member\Pages\CommunicationsPage;
+use App\Filament\Member\Pages\RequestsPage;
 use App\Models\Central\Tenant;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\NotificationLog;
@@ -57,8 +58,9 @@ test('help page renders communications tabs including faq and alerts', function 
         ->assertSuccessful()
         ->assertSee('ff-member-communications', false)
         ->assertSee(__('Alerts'), false)
-        ->assertSee(__('FAQ'), false)
-        ->assertSee(__('Messages'), false);
+        ->assertSee('Faq', false)
+        ->assertSee(__('Messages'), false)
+        ->assertDontSee('wire:click="setTab(\'requests\')"', false);
 });
 
 test('legacy help path redirects to messages hub', function () {
@@ -121,11 +123,11 @@ test('member faq loads arabic entries when locale is ar', function () {
         ->and($items[0]['question'])->toContain('مساهمتي');
 });
 
-test('communications page switches to requests tab', function () {
+test('communications page redirects requests tab to requests page', function () {
     Filament::setCurrentPanel('member');
     $this->actingAs($this->memberUser, 'tenant');
 
     Livewire::test(CommunicationsPage::class)
         ->call('setTab', 'requests')
-        ->assertSet('activeTab', 'requests');
+        ->assertRedirect(RequestsPage::getUrl());
 });

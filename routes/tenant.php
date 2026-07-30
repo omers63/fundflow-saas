@@ -110,7 +110,7 @@ Route::middleware([
 
             return redirect('/member/messages'.($query !== null && $query !== '' ? '?'.$query : ''));
         });
-        Route::redirect('/member/support', '/member/messages?tab=requests');
+        Route::redirect('/member/support', '/member/requests');
         Route::redirect('/member/contribution-settings', '/member/settings?tab=contributions');
         Route::redirect('/member/notification-preferences', '/member/settings?tab=notifications');
         Route::redirect('/member/my-profile', '/member/settings?tab=profile');

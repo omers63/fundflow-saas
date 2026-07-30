@@ -24,6 +24,7 @@ use App\Support\BankTransactionWorkflow;
 use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
 use App\Support\LoanFundingStrategy;
+use App\Support\LoanRepaymentNote;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
@@ -1629,13 +1630,21 @@ class ReconciliationReportService
                     ->where(function ($query): void {
                         $query->where('status', 'paid')->orWhere('paid_by_guarantor', true);
                     })
-                    ->get(['id', 'amount']);
+                    ->get(['id', 'amount', 'paid_by_guarantor']);
                 $paidInstallmentSum = (float) $paidInstallments->sum('amount');
                 $repaymentSum = (float) $loan->repayments()->sum('amount');
 
                 if (abs($paidInstallmentSum - $repaymentSum) > self::AMOUNT_TOLERANCE) {
                     $partialAhead = $loan->getPartialRepaymentAheadOfSchedule();
-                    if (abs($repaymentSum - $paidInstallmentSum - $partialAhead) > self::AMOUNT_TOLERANCE) {
+                    $scheduleAligned = abs($repaymentSum - $paidInstallmentSum - $partialAhead) <= self::AMOUNT_TOLERANCE
+                        || $this->legacyImportedRepaymentScheduleDriftIsTolerable(
+                            $loan,
+                            $paidInstallments,
+                            $paidInstallmentSum,
+                            $repaymentSum,
+                        );
+
+                    if (! $scheduleAligned) {
                         $issues[] = [
                             'loan_id' => $loan->id,
                             'issue' => 'legacy imported paid installments vs repayment records mismatch',
@@ -1646,7 +1655,9 @@ class ReconciliationReportService
                         ];
                     }
 
-                    continue;
+                    if (! $scheduleAligned) {
+                        continue;
+                    }
                 }
 
                 $repaymentIds = $loan->repayments()->pluck('id');
@@ -1725,6 +1736,114 @@ class ReconciliationReportService
         }
 
         return $issues;
+    }
+
+    /**
+     * Legacy CSV imports sometimes logged partial repayments before installments were fully
+     * marked paid, and later guarantor defaults add ff: repayment rows. When the loan
+     * schedule is closed and loan-account credits match the repayment log, treat small
+     * log-vs-schedule overhang as audit carryover rather than a critical defect.
+     *
+     * @param  Collection<int, LoanInstallment>  $paidInstallments
+     */
+    private function legacyImportedRepaymentScheduleDriftIsTolerable(
+        Loan $loan,
+        Collection $paidInstallments,
+        float $paidInstallmentSum,
+        float $repaymentSum,
+    ): bool {
+        if ($repaymentSum + self::AMOUNT_TOLERANCE < $paidInstallmentSum) {
+            return false;
+        }
+
+        $overhang = round($repaymentSum - $paidInstallmentSum, 2);
+        if ($overhang <= self::AMOUNT_TOLERANCE) {
+            return true;
+        }
+
+        if ($loan->getScheduledOutstanding() > self::AMOUNT_TOLERANCE) {
+            return false;
+        }
+
+        $repaymentIds = $loan->repayments()->pluck('id');
+        if ($repaymentIds->isEmpty()) {
+            return false;
+        }
+
+        $loanAccountCredits = $this->sumLegacyLoanReferenceCredits(
+            LoanRepayment::class,
+            $repaymentIds,
+            LoanInstallment::class,
+            $paidInstallments->pluck('id'),
+            fn ($query) => $query
+                ->where('type', 'credit')
+                ->whereHas('account', fn ($accountQuery) => $accountQuery
+                    ->where('type', 'loan')
+                    ->where('loan_id', $loan->id)),
+        );
+
+        if (abs($loanAccountCredits - $repaymentSum) > self::AMOUNT_TOLERANCE) {
+            return false;
+        }
+
+        $maxInstallment = (float) $loan->installments()->max('amount');
+        if ($overhang > $maxInstallment + self::AMOUNT_TOLERANCE) {
+            return false;
+        }
+
+        $masterPortion = (float) $loan->master_portion;
+        if ($masterPortion > 0.01) {
+            $repaidToMaster = (float) $loan->repaid_to_master;
+
+            if (
+                abs($repaidToMaster - $paidInstallmentSum) > self::AMOUNT_TOLERANCE
+                && abs($repaidToMaster - $repaymentSum) > self::AMOUNT_TOLERANCE
+            ) {
+                return false;
+            }
+        }
+
+        $repayments = $loan->repayments()->get(['amount', 'notes']);
+        $borrowerInstallmentSum = (float) $paidInstallments
+            ->filter(fn (LoanInstallment $installment): bool => ! (bool) $installment->paid_by_guarantor)
+            ->sum('amount');
+        $guarantorInstallmentSum = (float) $paidInstallments
+            ->filter(fn (LoanInstallment $installment): bool => (bool) $installment->paid_by_guarantor)
+            ->sum('amount');
+
+        $legacyRepaymentSum = (float) $repayments
+            ->filter(fn (LoanRepayment $repayment): bool => $this->isLegacyImportRepaymentNote($repayment->notes))
+            ->sum('amount');
+        $postMigrationRepaymentSum = (float) $repayments
+            ->filter(fn (LoanRepayment $repayment): bool => ! $this->isLegacyImportRepaymentNote($repayment->notes))
+            ->sum('amount');
+
+        if (abs($guarantorInstallmentSum - $postMigrationRepaymentSum) > self::AMOUNT_TOLERANCE) {
+            return false;
+        }
+
+        if ($legacyRepaymentSum + self::AMOUNT_TOLERANCE < $borrowerInstallmentSum) {
+            return false;
+        }
+
+        $borrowerOverhang = round($legacyRepaymentSum - $borrowerInstallmentSum, 2);
+
+        return $borrowerOverhang <= $maxInstallment + self::AMOUNT_TOLERANCE;
+    }
+
+    private function isLegacyImportRepaymentNote(?string $notes): bool
+    {
+        if ($notes === null || $notes === '') {
+            return false;
+        }
+
+        if (str_starts_with($notes, LoanRepaymentNote::PREFIX)) {
+            return false;
+        }
+
+        return str_contains($notes, 'legacy-import:')
+            || str_contains($notes, 'Legacy migration')
+            || str_contains($notes, 'ترحيل البيانات التاريخية');
     }
 
     /**

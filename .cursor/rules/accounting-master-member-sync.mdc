@@ -33,7 +33,7 @@ Keep **member** and **master** ledger legs in sync wherever they represent the s
    - Before adding a member cash credit/debit, check sibling services and update invariants/tests if descriptions or reference types change.
    - Prefer shared patterns in `AccountingService` (`creditMemberCashWithMasterMirror`, `debitMemberCashWithMasterMirror`, `creditMemberFundWithMasterMirror`, `debitMemberFundWithMasterMirror`, `pairManualCredit` / `pairManualDebit`, `AccountingService::withoutMasterPoolMirror()` when posting an explicit paired journal) over one-off legs.
    - Reconciliation raises `MASTER_CASH_POOL_DRIFT` / `MASTER_FUND_POOL_DRIFT` when `master_*` balance ≠ sum(member `*_` balances) on nightly batch (not mid-mirror — realtime checks skip while `AccountingService::masterPoolMirrorInProgress()`).
-   - `MEMBER_CASH_DRIFT` / `MEMBER_FUND_DRIFT` use the §5.13 component formula (fund side includes contribution reversals, loan disbursement debits, guarantor instalment debits, EMI fund credits); realtime checks skip during pool mirroring.
+   - `MEMBER_CASH_DRIFT` / `MEMBER_FUND_DRIFT` use the §5.13 component formula (fund side includes contribution reversals, loan disbursement debits, guarantor instalment debits, EMI fund credits; cash side includes guarantor top-up cash credits on the borrower); realtime checks skip during pool mirroring.
    - `PENDING_PAST_WINDOW_CLOSE` is a **collection workflow** signal (pending contribution still uncollected after cycle due end), not a pool-mirror check; exempt members for that period are skipped.
 
 ## Reference implementations

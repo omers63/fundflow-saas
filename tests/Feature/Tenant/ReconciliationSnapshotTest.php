@@ -26,6 +26,7 @@ use App\Services\FundPostingService;
 use App\Services\Loans\LoanLedgerService;
 use App\Services\ReconciliationReportService;
 use App\Support\LoanFundingStrategy;
+use App\Support\LoanRepaymentNote;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -950,6 +951,131 @@ test('legacy imported loan integrity counts later installment-referenced guarant
 
     expect($report['checks']['loan_installment_flow_integrity']['severity'])->toBe('ok')
         ->and($report['checks']['loan_installment_flow_integrity']['legacy_import_loan_count'])->toBe(1)
+        ->and($report['checks']['loan_installment_flow_integrity']['issues'] ?? [])->toBeEmpty();
+});
+
+test('legacy imported loan tolerates partial repayment log overhang when ledger matches', function () {
+    $accounting = app(AccountingService::class);
+    $ledger = app(LoanLedgerService::class);
+
+    $borrower = Member::create([
+        'member_number' => 'RECON-LEGACY-PARTIAL',
+        'name' => 'Legacy Partial Recon Borrower',
+        'email' => 'legacy-partial-recon@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYears(3),
+        'status' => 'active',
+    ]);
+    $guarantor = Member::create([
+        'member_number' => 'RECON-LEGACY-PARTIAL-G',
+        'name' => 'Legacy Partial Recon Guarantor',
+        'email' => 'legacy-partial-recon-g@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYears(3),
+        'status' => 'active',
+    ]);
+
+    $accounting->createMemberAccounts($borrower);
+    $accounting->createMemberAccounts($guarantor);
+    $accounting->credit($guarantor->fresh()->fundAccount, 20_000, 'Seed guarantor fund');
+
+    $loan = Loan::create([
+        'member_id' => $borrower->id,
+        'guarantor_member_id' => $guarantor->id,
+        'amount' => 10_000,
+        'amount_requested' => 10_000,
+        'amount_approved' => 10_000,
+        'amount_disbursed' => 10_000,
+        'member_portion' => 0,
+        'master_portion' => 10_000,
+        'repaid_to_master' => 10_000,
+        'interest_rate' => 0,
+        'term_months' => 10,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'completed',
+        'disbursed_at' => now()->subYear(),
+        'approved_at' => now()->subYear(),
+        'applied_at' => now()->subYear(),
+        'installments_count' => 10,
+    ]);
+
+    foreach (range(1, 7) as $number) {
+        LoanInstallment::create([
+            'loan_id' => $loan->id,
+            'installment_number' => $number,
+            'amount' => 1000,
+            'due_date' => now()->subMonths(12 - $number)->toDateString(),
+            'status' => 'paid',
+            'paid_at' => now()->subMonths(12 - $number),
+            'paid_by_guarantor' => false,
+        ]);
+    }
+
+    $legacyRepayments = [
+        [500, now()->subMonths(11)],
+        ...array_map(fn (int $monthsAgo): array => [1000, now()->subMonths($monthsAgo)], range(10, 4)),
+    ];
+
+    foreach ($legacyRepayments as [$amount, $paidAt]) {
+        $repayment = LoanRepayment::create([
+            'loan_id' => $loan->id,
+            'amount' => $amount,
+            'paid_at' => $paidAt,
+            'notes' => 'legacy-import:test|legacy-partial-recon@fund.test|'.$paidAt->toDateString().'|'.$amount.'|loan_repayment|'.$paidAt->format('Y-m'),
+        ]);
+
+        $ledger->postImportedLoanRepaymentWithCashFlow(
+            $loan->fresh(),
+            $repayment,
+            $amount,
+            $paidAt,
+        );
+    }
+
+    foreach (range(8, 10) as $number) {
+        $installment = LoanInstallment::create([
+            'loan_id' => $loan->id,
+            'installment_number' => $number,
+            'amount' => 1000,
+            'due_date' => now()->subMonths(12 - $number)->toDateString(),
+            'status' => 'paid',
+            'paid_at' => now()->subMonth(),
+            'paid_by_guarantor' => true,
+            'amount_collected' => 1000,
+        ]);
+
+        DB::transaction(function () use ($ledger, $loan, $installment, $guarantor): void {
+            $ledger->topUpBorrowerCashFromGuarantorFund(
+                $guarantor->fresh(),
+                $loan->fresh()->member,
+                $installment,
+                1000,
+            );
+            $ledger->debitCashForRepayment($loan->fresh()->member, $installment, 0, null, 1000);
+            $ledger->postLoanRepayment($installment->fresh());
+        });
+
+        LoanRepayment::create([
+            'loan_id' => $loan->id,
+            'amount' => 1000,
+            'paid_at' => now()->subMonth(),
+            'notes' => LoanRepaymentNote::installment($number, true),
+        ]);
+    }
+
+    expect((float) $loan->fresh()->repayments()->sum('amount'))->toBe(10_500.0)
+        ->and((float) $loan->installments()
+            ->where(function ($query): void {
+                $query->where('status', 'paid')->orWhere('paid_by_guarantor', true);
+            })
+            ->sum('amount'))->toBe(10_000.0);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    expect($report['checks']['loan_installment_flow_integrity']['severity'])->toBe('ok')
         ->and($report['checks']['loan_installment_flow_integrity']['issues'] ?? [])->toBeEmpty();
 });
 

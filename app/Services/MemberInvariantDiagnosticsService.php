@@ -115,6 +115,7 @@ final class MemberInvariantDiagnosticsService
                 ['key' => 'dependent_transfers_in', 'label' => __('Dependent transfers in'), 'sign' => '+'],
                 ['key' => 'refunds_and_recon_credits', 'label' => __('Refunds and recon credits'), 'sign' => '+'],
                 ['key' => 'contributions_credited', 'label' => __('Contributions credited'), 'sign' => '+'],
+                ['key' => 'guarantor_topup_cash_credits', 'label' => __('Guarantor top-up cash credits'), 'sign' => '+'],
                 ['key' => 'contributions_debited', 'label' => __('Contributions debited'), 'sign' => '−'],
                 ['key' => 'loan_repayment_cash_credited', 'label' => __('Loan repayment cash credited'), 'sign' => '+'],
                 ['key' => 'emi_debited', 'label' => __('EMI debited (installment ref.)'), 'sign' => '−'],

@@ -647,10 +647,13 @@ class ReconciliationService
                 }
             });
 
+        $tolerance = ContributionPolicySettings::reconTolerance();
+        $installmentMorph = (new LoanInstallment)->getMorphClass();
+
         LoanInstallment::query()
             ->where('paid_by_guarantor', true)
             ->with(['loan.member', 'loan.guarantor'])
-            ->each(function (LoanInstallment $installment) use (&$count): void {
+            ->each(function (LoanInstallment $installment) use (&$count, $tolerance, $installmentMorph): void {
                 $loan = $installment->loan;
                 $borrowerId = $loan->member_id;
                 $guarantorId = $loan->guarantor_member_id;
@@ -659,31 +662,49 @@ class ReconciliationService
                     return;
                 }
 
-                $borrowerDebited = Transaction::query()
+                $borrowerCashDebited = (float) Transaction::query()
                     ->where('member_id', $borrowerId)
                     ->where('type', 'debit')
-                    ->where('reference_type', $installment->getMorphClass())
+                    ->where('reference_type', $installmentMorph)
                     ->where('reference_id', $installment->id)
                     ->whereHas('account', fn ($q) => $q->where('type', 'cash')->where('is_master', false))
-                    ->exists();
+                    ->sum('amount');
 
-                $guarantorDebited = Transaction::query()
+                $guarantorFundDebited = (float) Transaction::query()
                     ->where('member_id', $guarantorId)
                     ->where('type', 'debit')
-                    ->where('reference_type', $installment->getMorphClass())
+                    ->where('reference_type', $installmentMorph)
                     ->where('reference_id', $installment->id)
                     ->whereHas('account', fn ($q) => $q->where('type', 'fund')->where('is_master', false))
-                    ->exists();
+                    ->sum('amount');
 
-                if ($borrowerDebited && $guarantorDebited) {
-                    $this->raiseOnce('GUARANTOR_BORROWER_DUPLICATE_DEBIT', 'emi', 'high', (float) $installment->amount, [
-                        'installment_id' => $installment->id,
-                        'loan_id' => $loan->id,
-                        'borrower_id' => $borrowerId,
-                        'guarantor_id' => $guarantorId,
-                    ]);
-                    $count++;
+                if ($borrowerCashDebited <= 0.00001 || $guarantorFundDebited <= 0.00001) {
+                    return;
                 }
+
+                // Legitimate guarantor cover posts fund→borrower cash top-up then EMI cash debit.
+                // Raise only when that bridging cash credit is missing or materially short.
+                $borrowerCashTopUp = (float) Transaction::query()
+                    ->where('member_id', $borrowerId)
+                    ->where('type', 'credit')
+                    ->where('reference_type', $installmentMorph)
+                    ->where('reference_id', $installment->id)
+                    ->whereHas('account', fn ($q) => $q->where('type', 'cash')->where('is_master', false))
+                    ->sum('amount');
+
+                if ($borrowerCashTopUp + $tolerance >= $guarantorFundDebited) {
+                    return;
+                }
+
+                $this->raiseOnce('GUARANTOR_BORROWER_DUPLICATE_DEBIT', 'emi', 'high', (float) $installment->amount, [
+                    'installment_id' => $installment->id,
+                    'loan_id' => $loan->id,
+                    'borrower_id' => $borrowerId,
+                    'guarantor_id' => $guarantorId,
+                    'borrower_cash_top_up' => $borrowerCashTopUp,
+                    'guarantor_fund_debit' => $guarantorFundDebited,
+                ]);
+                $count++;
             });
 
         Loan::query()

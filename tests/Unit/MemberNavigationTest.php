@@ -10,6 +10,7 @@ use App\Filament\Member\Pages\MemberActivityPage;
 use App\Filament\Member\Pages\MemberSettingsPage;
 use App\Filament\Member\Pages\MyContributionSettingsPage;
 use App\Filament\Member\Pages\MyNotificationPreferencesPage;
+use App\Filament\Member\Pages\RequestsPage;
 use App\Filament\Member\Pages\SupportPage;
 use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
 use App\Filament\Member\Resources\MyCashOutRequests\MyCashOutRequestResource;
@@ -53,6 +54,7 @@ test('member resources use navigation groups and sort order', function (string $
     'cash out' => [MyCashOutRequestResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_CASH_OUTS],
             'cash transfer' => [MyCashTransferResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_CASH_TRANSFERS],
     'statements' => [MyStatementResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_STATEMENTS],
+            'requests' => [RequestsPage::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_REQUESTS],
     'deposits' => [MyFundPostingResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_DEPOSITS],
     'dependents' => [MyDependentResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_DEPENDENTS],
     'settings' => [MemberSettingsPage::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_SETTINGS],
@@ -88,4 +90,5 @@ test('restored member features register in navigation', function (string $class)
             'deposits' => [MyFundPostingResource::class],
             'loan calculator' => [LoanCalculatorPage::class],
             'cash transfer' => [MyCashTransferResource::class],
+            'requests' => [RequestsPage::class],
 ]);

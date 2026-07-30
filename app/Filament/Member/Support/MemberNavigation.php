@@ -46,13 +46,15 @@ final class MemberNavigation
 
     public const SORT_STATEMENTS = 4;
 
+    public const SORT_REQUESTS = 5;
+
     public const SORT_DEPOSITS = 1;
 
-    public const SORT_DEPENDENTS = 5;
+    public const SORT_DEPENDENTS = 6;
 
-    public const SORT_SETTINGS = 5;
+    public const SORT_SETTINGS = 7;
 
-    public const SORT_HELP = 6;
+    public const SORT_HELP = 8;
 
     /** Legacy hidden pages — group/sort retained for redirects and tests. */
     public const SORT_ACCOUNTS = 6;

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Tenant;
 
-use App\Filament\Member\Pages\CommunicationsPage;
+use App\Filament\Member\Pages\RequestsPage;
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Filament\Support\MemberDatabaseNotification;
@@ -512,8 +512,7 @@ class MemberRequestService
             return MyContributionResource::getUrl('index', panel: 'member');
         }
 
-        return CommunicationsPage::getUrl([
-            'tab' => 'requests',
+        return RequestsPage::getUrl([
             'section' => 'membership',
         ], panel: 'member');
     }

@@ -6374,5 +6374,9 @@
     ":count contribution top-up was applied for this cycle.|:count contribution top-ups were applied for this cycle.": "تم تطبيق مساهمة إضافية واحدة (:count) لهذه الدورة.|تم تطبيق :count مساهمات إضافية لهذه الدورة.",
     "Add a top-up to the :period cycle for :name and/or any eligible dependents. Select each member and choose their top-up amount — amounts can differ. Applied immediately; standing monthly allocations stay unchanged for future cycles.": "أضف مساهمة إضافية لدورة :period للعضو :name و/أو أي من المعالين المؤهلين. اختر كل عضو وعيّن مبلغ المساهمة الإضافية له — يمكن أن تختلف المبالغ. تُطبَّق فوراً؛ تبقى التخصيصات الشهرية الثابتة دون تغيير للدورات القادمة.",
     "Add a top-up to the :period cycle for :name on top of their standing monthly allocation (:standing). Applied immediately; standing monthly allocation stays unchanged for future cycles.": "أضف مساهمة إضافية لدورة :period للعضو :name فوق تخصيصه الشهري الثابت (:standing). تُطبَّق فوراً؛ يبقى التخصيص الشهري الثابت دون تغيير للدورات القادمة.",
-    "Today": "اليوم"
+    "Today": "اليوم",
+    "Guarantor cover without cash top-up": "تغطية الكفيل بدون تعبئة نقدية",
+    "Both guarantor fund and borrower cash were debited for this installment without a matching borrower cash top-up from the guarantor.": "تم خصم صندوق الكفيل ونقد المقترض لهذا القسط دون تعبئة نقدية مطابقة من الكفيل إلى المقترض.",
+    "Reverse the extra borrower or guarantor charge, or post the missing guarantor cash top-up bridge.": "اعكس الخصم الزائد على المقترض أو الكفيل، أو رحّل تعبئة النقد الناقصة من الكفيل.",
+    "Guarantor top-up cash credits": "أرصدة تعبئة النقد من الكفيل"
 }

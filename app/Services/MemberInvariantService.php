@@ -104,6 +104,10 @@ class MemberInvariantService
             ? $this->sumByReference($cashAccountId, $member->id, LoanInstallment::class, 'debit')
             : 0.0;
 
+        $guarantorTopUpCashCredits = $cashAccountId
+            ? $this->sumByReference($cashAccountId, $member->id, LoanInstallment::class, 'credit')
+            : 0.0;
+
         $loanRepaymentCashCredited = $cashAccountId
             ? $this->sumByReference($cashAccountId, $member->id, LoanRepayment::class, 'credit')
             : 0.0;
@@ -149,6 +153,7 @@ class MemberInvariantService
             + $dependentTransfersIn
             + $refundsAndCorrections
             + $contributionsCredited
+            + $guarantorTopUpCashCredits
             + $loanRepaymentCashCredited
             - $contributionsDebited
             - $emiDebited
@@ -191,6 +196,7 @@ class MemberInvariantService
                 'dependent_transfers_in' => $dependentTransfersIn,
                 'refunds_and_recon_credits' => $refundsAndCorrections,
                 'contributions_credited' => $contributionsCredited,
+                'guarantor_topup_cash_credits' => $guarantorTopUpCashCredits,
                 'contributions_debited' => $contributionsDebited,
                 'emi_debited' => $emiDebited,
                 'loan_repayment_cash_credited' => $loanRepaymentCashCredited,
