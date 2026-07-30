@@ -82,6 +82,7 @@ class ContributionsRelationManager extends RelationManager
                 ->recordClasses(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionRecordClasses($record))
                 ->headerActions([
                     $this->buildMemberContributeAction(),
+                    $this->buildMemberContributionTopUpAction(),
                 ])
                 ->recordUrl(fn (Contribution $record): string => ContributionResource::getUrl('edit', ['record' => $record]))
                 ->recordActions(TableRecordActionGroups::wrap([

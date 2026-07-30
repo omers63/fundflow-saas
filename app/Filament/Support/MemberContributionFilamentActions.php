@@ -8,11 +8,13 @@ use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberRequest;
+use App\Models\Tenant\User;
 use App\Services\ContributionCycleService;
 use App\Services\ContributionService;
 use App\Services\Tenant\MemberRequestService;
 use App\Services\VoluntaryContributionRequestService;
 use App\Support\Tenant\CurrentMember;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\Select;
@@ -636,6 +638,280 @@ final class MemberContributionFilamentActions
                         ->send();
                 }
             });
+    }
+
+    /**
+     * Admin: apply contribution top-up for a member and/or their eligible dependents.
+     * Creates an approved member-request audit trail without notifying admins.
+     */
+    public static function adminContributionTopUp(Closure $resolveMember): Action
+    {
+        $cycles = app(ContributionCycleService::class);
+
+        return Action::make('adminContributionTopUp')
+            ->label(__('Contribution top-up'))
+            ->icon('heroicon-o-plus-circle')
+            ->color('success')
+            ->visible(function () use ($resolveMember): bool {
+                $member = $resolveMember();
+
+                return $member instanceof Member
+                    && self::canRequestVoluntaryTopUpForHousehold($member);
+            })
+            ->modalHeading(__('Contribution top-up'))
+            ->modalDescription(function () use ($resolveMember, $cycles): string {
+                $member = $resolveMember();
+                [$month, $year] = $cycles->currentOpenPeriod();
+                $period = $cycles->periodLabel($month, $year);
+
+                if (! $member instanceof Member) {
+                    return '';
+                }
+
+                $targets = self::eligibleVoluntaryTopUpTargets($member);
+
+                if (count($targets) === 1 && (int) $targets[0]->id === (int) $member->id) {
+                    return __('Add a top-up to the :period cycle for :name on top of their standing monthly allocation (:standing). Applied immediately; standing monthly allocation stays unchanged for future cycles.', [
+                        'period' => $period,
+                        'name' => $member->name,
+                        'standing' => number_format((float) $member->monthly_contribution_amount, 2),
+                    ]);
+                }
+
+                return __('Add a top-up to the :period cycle for :name and/or any eligible dependents. Select each member and choose their top-up amount — amounts can differ. Applied immediately; standing monthly allocations stay unchanged for future cycles.', [
+                    'period' => $period,
+                    'name' => $member->name,
+                ]);
+            })
+            ->modalSubmitActionLabel(__('Apply top-up'))
+            ->schema(function () use ($resolveMember): array {
+                $member = $resolveMember();
+
+                if (! $member instanceof Member) {
+                    return [];
+                }
+
+                return self::topUpFormFields(
+                    targets: self::eligibleVoluntaryTopUpTargets($member),
+                    householdRoot: $member,
+                );
+            })
+            ->action(function (array $data) use ($resolveMember): void {
+                $member = $resolveMember();
+                $admin = auth('tenant')->user();
+
+                if (! $member instanceof Member || ! $admin instanceof User) {
+                    return;
+                }
+
+                self::applyAdminTopUpsFromForm(
+                    requester: $member,
+                    targets: self::eligibleVoluntaryTopUpTargets($member),
+                    data: $data,
+                    admin: $admin,
+                );
+            });
+    }
+
+    /**
+     * Admin row action: top up a household dependent from the parent's Household tab.
+     */
+    public static function adminContributionTopUpForDependentRow(Closure $resolveParent): Action
+    {
+        $cycles = app(ContributionCycleService::class);
+
+        return Action::make('adminContributionTopUpForDependent')
+            ->label(__('Contribution top-up'))
+            ->icon('heroicon-o-plus-circle')
+            ->color('success')
+            ->visible(function (Member $record) use ($resolveParent): bool {
+                $parent = $resolveParent();
+
+                return $parent instanceof Member
+                    && self::canRequestVoluntaryTopUp($record, $parent);
+            })
+            ->modalHeading(__('Contribution top-up'))
+            ->modalDescription(function (Member $record) use ($cycles): string {
+                [$month, $year] = $cycles->currentOpenPeriod();
+
+                return __('Add a top-up to the :period cycle for :name on top of their standing monthly allocation (:standing). Applied immediately; standing monthly allocation stays unchanged for future cycles.', [
+                    'period' => $cycles->periodLabel($month, $year),
+                    'name' => $record->name,
+                    'standing' => number_format((float) $record->monthly_contribution_amount, 2),
+                ]);
+            })
+            ->modalSubmitActionLabel(__('Apply top-up'))
+            ->schema(fn (Member $record): array => self::topUpFormFields(
+                targets: [$record],
+                householdRoot: $record,
+            ))
+            ->action(function (Member $record, array $data) use ($resolveParent): void {
+                $parent = $resolveParent();
+                $admin = auth('tenant')->user();
+
+                if (! $parent instanceof Member || ! $admin instanceof User) {
+                    return;
+                }
+
+                self::applyAdminTopUpsFromForm(
+                    requester: $parent,
+                    targets: [$record],
+                    data: $data,
+                    admin: $admin,
+                );
+            });
+    }
+
+    /**
+     * @param  list<Member>  $targets
+     * @return list<\Filament\Forms\Components\Component>
+     */
+    private static function topUpFormFields(array $targets, Member $householdRoot): array
+    {
+        $fields = [];
+
+        if (count($targets) > 1) {
+            foreach ($targets as $target) {
+                $id = (string) $target->id;
+                $standing = (float) $target->monthly_contribution_amount;
+                $label = (int) $target->id === (int) $householdRoot->id
+                    ? $target->name.' ('.__('member').')'
+                    : $target->member_number.' — '.$target->name;
+
+                $extraOptions = [];
+                foreach (VoluntaryContributionRequestService::extraAmountOptions() as $extra => $extraLabel) {
+                    $total = number_format($standing + $extra, 2);
+                    $extraOptions[(string) $extra] = $extraLabel.' ('.__('total: :total', ['total' => $total]).')';
+                }
+
+                $fields[] = Checkbox::make("topups.{$id}.include")
+                    ->label($label)
+                    ->helperText(__('Standing: :amount', ['amount' => number_format($standing, 2)]))
+                    ->live()
+                    ->default(false);
+
+                $fields[] = Select::make("topups.{$id}.extra")
+                    ->label(__('Top-up amount'))
+                    ->options($extraOptions)
+                    ->visible(fn (Get $get): bool => (bool) $get("topups.{$id}.include"))
+                    ->required(fn (Get $get): bool => (bool) $get("topups.{$id}.include"))
+                    ->dehydrated(fn (Get $get): bool => (bool) $get("topups.{$id}.include"));
+            }
+        } elseif ($targets !== []) {
+            $standing = (float) $targets[0]->monthly_contribution_amount;
+            $extraOptions = [];
+
+            foreach (VoluntaryContributionRequestService::extraAmountOptions() as $extra => $extraLabel) {
+                $total = number_format($standing + $extra, 2);
+                $extraOptions[(string) $extra] = $extraLabel.' ('.__('total: :total', ['total' => $total]).')';
+            }
+
+            $fields[] = Select::make('extra')
+                ->label(__('Top-up amount'))
+                ->options($extraOptions)
+                ->required()
+                ->helperText(__('Amount must be a multiple of :step (max +\ :max above your monthly allocation).', [
+                    'step' => number_format(VoluntaryContributionRequestService::STEP),
+                    'max' => number_format(VoluntaryContributionRequestService::MAX_EXTRA),
+                ]));
+        }
+
+        $fields[] = Textarea::make('note')
+            ->label(__('Note (optional)'))
+            ->rows(3)
+            ->maxLength(500);
+
+        return $fields;
+    }
+
+    /**
+     * @param  list<Member>  $targets
+     * @param  array<string, mixed>  $data
+     */
+    private static function applyAdminTopUpsFromForm(
+        Member $requester,
+        array $targets,
+        array $data,
+        User $admin,
+    ): void {
+        $eligibleById = collect($targets)->keyBy(fn (Member $candidate): int => (int) $candidate->id);
+
+        /** @var list<array{target: Member, extra: float}> $selections */
+        $selections = [];
+
+        if (count($targets) === 1) {
+            $extra = (float) ($data['extra'] ?? 0);
+            $target = $targets[0];
+
+            if ($extra > 0) {
+                $selections[] = ['target' => $target, 'extra' => $extra];
+            }
+        } else {
+            foreach ($data['topups'] ?? [] as $targetId => $row) {
+                if (! is_array($row) || empty($row['include']) || empty($row['extra'])) {
+                    continue;
+                }
+
+                $target = $eligibleById->get((int) $targetId);
+
+                if ($target instanceof Member) {
+                    $selections[] = ['target' => $target, 'extra' => (float) $row['extra']];
+                }
+            }
+        }
+
+        if ($selections === []) {
+            Notification::make()
+                ->title(__('Could not apply'))
+                ->body(__('Select at least one eligible member and a top-up amount.'))
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $service = app(MemberRequestService::class);
+        $submitted = 0;
+        $lastError = null;
+        $note = $data['note'] ?? null;
+
+        foreach ($selections as $selection) {
+            $target = $selection['target'];
+            $extra = $selection['extra'];
+
+            try {
+                $request = $service->submit($requester, MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION, [
+                    'amount' => round((float) $target->monthly_contribution_amount + $extra, 2),
+                    'note' => $note,
+                    'target_member_id' => $target->id,
+                ], notifyAdmins: false);
+
+                $service->approve($request, $admin);
+                $submitted++;
+            } catch (ValidationException $exception) {
+                $lastError = collect($exception->errors())->flatten()->first() ?? $exception->getMessage();
+            }
+        }
+
+        if ($submitted > 0) {
+            Notification::make()
+                ->title(__('Top-up applied'))
+                ->body(trans_choice(
+                    ':count contribution top-up was applied for this cycle.|:count contribution top-ups were applied for this cycle.',
+                    $submitted,
+                    ['count' => $submitted],
+                ))
+                ->success()
+                ->send();
+
+            return;
+        }
+
+        Notification::make()
+            ->title(__('Could not apply'))
+            ->body($lastError ?? __('Could not apply'))
+            ->danger()
+            ->send();
     }
 
     public static function refreshContributionViews(Component $livewire): void

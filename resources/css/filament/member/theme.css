@@ -270,6 +270,56 @@
     color: inherit;
 }
 
+.dark .fi-body.fi-panel-member .ff-dashboard-action,
+.dark .fi-body.fi-panel-member .ff-dashboard-action:hover,
+.dark .fi-body.fi-panel-member .ff-dashboard-action:focus-visible {
+    color: #fff !important;
+}
+
+.dark .fi-body.fi-panel-member .ff-dashboard-action span,
+.dark .fi-body.fi-panel-member .ff-dashboard-action svg {
+    color: #fff !important;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-quick-actions__heading {
+    color: #94a3b8;
+}
+
+.dark .fi-body.fi-panel-member .fi-wi-stats-overview-stat-value {
+    color: #f8fafc !important;
+}
+
+.dark .fi-body.fi-panel-member .fi-wi-stats-overview-stat-label {
+    color: #94a3b8 !important;
+}
+
+.dark .fi-body.fi-panel-member .fi-wi-stats-overview-stat-description {
+    color: #94a3b8 !important;
+}
+
+.dark .fi-body.fi-panel-member .fi-wi-stats-overview-stat-value .ff-member-amount,
+.dark .fi-body.fi-panel-member .fi-wi-stats-overview-stat-value .ff-member-amount__digits {
+    color: inherit !important;
+}
+
+.dark .fi-body.fi-panel-member .fi-section-header-heading,
+.dark .fi-body.fi-panel-member .fi-header-heading,
+.dark .fi-body.fi-panel-member .fi-ta-header-cell-label,
+.dark .fi-body.fi-panel-member .fi-fo-field-wrp-label,
+.dark .fi-body.fi-panel-member .fi-in-entry-wrp-label {
+    color: #e2e8f0;
+}
+
+.dark .fi-body.fi-panel-member .fi-fo-field-wrp-label {
+    color: #94a3b8;
+}
+
+.dark .fi-body.fi-panel-member .fi-in-text,
+.dark .fi-body.fi-panel-member .fi-ta-text,
+.dark .fi-body.fi-panel-member .fi-in-text-entry-content {
+    color: #f1f5f9;
+}
+
 /* List-page insight heroes — legacy text-sm / text-xs sizing */
 .fi-body.fi-panel-member .ff-app-insights-hero p.text-xs {
     font-size: 0.875rem !important;

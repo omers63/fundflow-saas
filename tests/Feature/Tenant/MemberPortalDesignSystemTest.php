@@ -104,11 +104,25 @@ test('vite build manifest includes member theme entry', function () {
 
 test('member portal chrome css defines prototype design tokens', function () {
     $chrome = file_get_contents(resource_path('css/filament/member/member-portal-chrome.css'));
+    $components = file_get_contents(resource_path('css/filament/member/member-portal-components.css'));
+    $theme = file_get_contents(resource_path('css/filament/member/theme.css'));
 
     expect($chrome)
         ->toContain('--ff-page-bg: #f9fafb')
         ->toContain('--ff-panel-radius: 14px')
-        ->toContain('color-scheme: light');
+        ->toContain('color-scheme: light dark')
+        ->toContain('.dark .fi-body.fi-panel-member')
+        ->toContain('--ff-page-bg: #0f172a')
+        ->not->toMatch('/\.dark\s+\.fi-body\.fi-panel-member\s*\{[^}]*color-scheme:\s*light;/s');
+
+    expect($components)
+        ->toContain('.ff-member-stat-card__value')
+        ->toContain('.dark .fi-body.fi-panel-member .ff-member-stat-card__value')
+        ->toContain('.dark .fi-body.fi-panel-member .ff-member-quick-action__title');
+
+    expect($theme)
+        ->toContain('.dark .fi-body.fi-panel-member .ff-dashboard-action')
+        ->toContain('.dark .fi-body.fi-panel-member .fi-wi-stats-overview-stat-value');
 });
 
 test('member sidebar profile block renders on dashboard', function () {

@@ -38,7 +38,7 @@ class MemberRequestService
         private readonly OperationalReviewWorkflowService $reviewWorkflow,
     ) {}
 
-    public function submit(Member $requester, string $type, array $payload): MemberRequest
+    public function submit(Member $requester, string $type, array $payload, bool $notifyAdmins = true): MemberRequest
     {
         if ($type === MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION) {
             $payload = $this->openCycleOverrides->normalizePayload($requester, $payload);
@@ -49,7 +49,7 @@ class MemberRequestService
             $this->assertNoPendingDuplicate($requester, $type);
         }
 
-        return DB::transaction(function () use ($requester, $type, $payload): MemberRequest {
+        return DB::transaction(function () use ($requester, $type, $payload, $notifyAdmins): MemberRequest {
             if ($type === MemberRequest::TYPE_ADD_DEPENDENT && $requester->isSponsoredDependent()) {
                 $newEmail = strtolower(trim((string) ($payload['new_email'] ?? '')));
 
@@ -64,7 +64,9 @@ class MemberRequestService
                 'payload' => $payload,
             ]);
 
-            $this->reviewWorkflow->notifyAdmins(new NewMemberRequestNotification($request, $requester));
+            if ($notifyAdmins) {
+                $this->reviewWorkflow->notifyAdmins(new NewMemberRequestNotification($request, $requester));
+            }
 
             return $request;
         });

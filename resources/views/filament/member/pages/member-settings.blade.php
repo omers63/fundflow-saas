@@ -10,7 +10,7 @@
                                         <button type="button" wire:click="setTab('{{ $tab }}')" @class([
                         'ff-member-tab-bar__item rounded-lg px-3 py-1.5 text-sm font-semibold transition',
                         'bg-primary-600 text-white' => $activeTab === $tab,
-                        'bg-gray-100 text-gray-700 hover:bg-gray-200' => $activeTab !== $tab,
+                        'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-white/10 dark:text-gray-200 dark:hover:bg-white/15' => $activeTab !== $tab,
                     ])>
                                                         <x-ff-tab-pill-label :label="$label" :key="$tab" />
                                             </button>

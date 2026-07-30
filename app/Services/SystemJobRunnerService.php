@@ -54,16 +54,18 @@ class SystemJobRunnerService
 
         $output = new BufferedOutput;
         $started = microtime(true);
+        [$artisanCommand, $commandParameters] = $this->parseCommandInvocation($definition['command']);
         $parameters = array_merge(
-            $this->artisanParametersFor($definition['command']),
-            $this->normalizeExtraParameters($definition['command'], $extraParameters),
+            $commandParameters,
+            $this->artisanParametersFor($artisanCommand),
+            $this->normalizeExtraParameters($artisanCommand, $extraParameters),
         );
 
         RecordSystemJobRunListener::suppressRecording();
 
         try {
             @set_time_limit(0);
-            $exitCode = Artisan::call($definition['command'], $parameters, $output);
+            $exitCode = Artisan::call($artisanCommand, $parameters, $output);
         } catch (\Throwable $exception) {
             $exitCode = 1;
             $output->writeln($exception->getMessage());
@@ -130,6 +132,38 @@ class SystemJobRunnerService
             'last_duration_ms' => $latest?->duration_ms,
             'last_exit_code' => $latest?->exit_code,
         ];
+    }
+
+    /**
+     * Split a registry command string (e.g. "fund:reconcile --daily") into the
+     * Artisan command name plus option parameters.
+     *
+     * @return array{0: string, 1: array<string, mixed>}
+     */
+    protected function parseCommandInvocation(string $command): array
+    {
+        $parts = preg_split('/\s+/', trim($command)) ?: [];
+        $name = (string) array_shift($parts);
+        $parameters = [];
+
+        foreach ($parts as $part) {
+            if (!str_starts_with($part, '--')) {
+                continue;
+            }
+
+            $flag = substr($part, 2);
+            $eqPos = strpos($flag, '=');
+
+            if ($eqPos === false) {
+                $parameters['--' . $flag] = true;
+
+                continue;
+            }
+
+            $parameters['--' . substr($flag, 0, $eqPos)] = substr($flag, $eqPos + 1);
+        }
+
+        return [$name, $parameters];
     }
 
     /**

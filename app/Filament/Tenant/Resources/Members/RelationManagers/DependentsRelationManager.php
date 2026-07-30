@@ -6,6 +6,7 @@ use App\Filament\Concerns\TranslatesRelationManagerTitle;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\HouseholdDependentFilamentActions;
+use App\Filament\Support\MemberContributionFilamentActions;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\MoneyDisplay;
 use App\Filament\Support\TableGrouping;
@@ -88,11 +89,15 @@ class DependentsRelationManager extends RelationManager
             ->headerActions([
                 ...HouseholdDependentFilamentActions::headerActions(fn (): Member => $this->getOwnerRecord()),
                 $this->buildMemberAllocateDependentsAction(),
+                $this->buildMemberContributionTopUpAction(),
             ])
             ->recordUrl(fn (Member $record): string => MemberResource::getUrl('view', ['record' => $record]))
-            ->recordActions(TableRecordActionGroups::wrap(
-                HouseholdDependentFilamentActions::forRow(fn (): Member => $this->getOwnerRecord()),
-            ))
+            ->recordActions(TableRecordActionGroups::wrap([
+                ...HouseholdDependentFilamentActions::forRow(fn (): Member => $this->getOwnerRecord()),
+                MemberContributionFilamentActions::adminContributionTopUpForDependentRow(
+                    fn (): Member => $this->getOwnerRecord(),
+                ),
+            ]))
             ->toolbarActions([
                 BulkActionGroup::make([
                     ...HouseholdDependentFilamentActions::forBulk(fn (): Member => $this->getOwnerRecord()),

@@ -42,26 +42,26 @@ $member = $member ?? $user?->member;
                                 @endphp
                     <div @class([
                         'flex flex-col items-center rounded-xl border p-3 text-center',
-                        'border-emerald-500 bg-emerald-50' => $isCurrent,
-                        'border-gray-200' => !$isCurrent,
+                        'border-emerald-500 bg-emerald-50 dark:border-emerald-400/50 dark:bg-emerald-950/40' => $isCurrent,
+                        'border-gray-200 dark:border-white/10' => !$isCurrent,
                     ])>
                         <span
-                            class="mb-2 flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-gray-200 text-sm font-bold text-gray-600">
+                            class="mb-2 flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-gray-200 text-sm font-bold text-gray-600 dark:bg-white/10 dark:text-gray-300">
                             @if ($profile->user?->avatarPublicUrl())
                                 <img src="{{ $profile->user->avatarPublicUrl() }}" alt="" class="h-full w-full object-cover">
                             @else
                                 {{ strtoupper(mb_substr($profile->user?->name ?? $profile->name, 0, 1)) }}
                             @endif
                         </span>
-                        <span class="text-xs font-semibold text-gray-900">{{ $profile->user?->name ?? $profile->name }}</span>
-                        <span class="mt-0.5 text-[10px] text-gray-500">
+                        <span class="text-xs font-semibold text-gray-900 dark:text-gray-100">{{ $profile->user?->name ?? $profile->name }}</span>
+                        <span class="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400">
                             {{ $profile->isParent() ? __('Parent') : __('Dependent') }}
                         </span>
                         @if ($isCurrent)
-                            <span class="mt-2 text-[10px] font-semibold text-emerald-600">{{ __('Current') }}</span>
+                            <span class="mt-2 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">{{ __('Current') }}</span>
                         @elseif (!$profile->isParent())
                             <a href="{{ route('tenant.member.dependents.impersonate', ['dependent' => $profile->id]) }}"
-                                class="mt-2 text-[10px] font-semibold text-sky-600 hover:underline">
+                                class="mt-2 text-[10px] font-semibold text-sky-600 hover:underline dark:text-sky-400">
                                 {{ __('Switch') }}
                             </a>
                         @endif

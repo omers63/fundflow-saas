@@ -12,6 +12,11 @@ final class WebPushNotification
     /** Full-color logo for the notification drawer (transparent background). */
     public const ICON_PATH = '/icons/notification-icon-192x192.png';
 
+    /** Keep UTF-8 push JSON under the ~4KB Web Push limit. */
+    public const MAX_TITLE_CHARS = 80;
+
+    public const MAX_BODY_CHARS = 160;
+
     public static function enabled(): bool
     {
         return filled(config('webpush.vapid.public_key'))
@@ -30,5 +35,16 @@ final class WebPushNotification
     public static function iconUrl(): string
     {
         return url(self::ICON_PATH);
+    }
+
+    public static function truncate(string $text, int $maxChars): string
+    {
+        $text = trim($text);
+
+        if ($text === '' || mb_strlen($text) <= $maxChars) {
+            return $text;
+        }
+
+        return rtrim(mb_substr($text, 0, max(1, $maxChars - 1))) . '…';
     }
 }

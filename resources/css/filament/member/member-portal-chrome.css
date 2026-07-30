@@ -1,7 +1,6 @@
 /**
- * Member portal prototype chrome — Phase 1.
+ * Member portal prototype chrome.
  * Every rule is scoped under .fi-body.fi-panel-member so tenant/admin panels are unaffected.
- * Light-mode shell only for v1 (matches HTML prototype).
  */
 
 .fi-body.fi-panel-member {
@@ -19,15 +18,29 @@
     --ff-border: #e5e7eb;
     --ff-muted: #6b7280;
     --ff-muted-light: #9ca3af;
+    --ff-text: #111827;
+    --ff-text-muted: #6b7280;
 
-    color-scheme: light;
+    color-scheme: light dark;
     font-size: 0.8125rem;
     line-height: 1.5;
     background: var(--ff-page-bg) !important;
 }
 
 .dark .fi-body.fi-panel-member {
-    color-scheme: light;
+    --ff-primary: #a5b4fc;
+    --ff-primary-dark: #c7d2fe;
+    --ff-primary-light: rgb(83 74 183 / 0.22);
+    --ff-primary-border: #818cf8;
+    --ff-surface: #1e293b;
+    --ff-page-bg: #0f172a;
+    --ff-border: rgb(255 255 255 / 0.08);
+    --ff-muted: #94a3b8;
+    --ff-muted-light: #64748b;
+    --ff-text: #f1f5f9;
+    --ff-text-muted: #94a3b8;
+
+    color-scheme: dark;
     background: var(--ff-page-bg) !important;
 }
 
@@ -84,6 +97,17 @@
     color: #111827;
 }
 
+.dark .fi-body.fi-panel-member .fi-sidebar-item.fi-active > .fi-sidebar-item-btn,
+.dark .fi-body.fi-panel-member .fi-sidebar-item.fi-sidebar-item-has-url > .fi-sidebar-item-btn:hover,
+.dark .fi-body.fi-panel-member .fi-sidebar-item.fi-sidebar-item-has-url > .fi-sidebar-item-btn:focus-visible {
+    background: rgb(83 74 183 / 0.22);
+}
+
+.dark .fi-body.fi-panel-member .fi-sidebar-item.fi-active > .fi-sidebar-item-btn > .fi-sidebar-item-label,
+.dark .fi-body.fi-panel-member .fi-sidebar-item.fi-active > .fi-sidebar-item-btn > .fi-icon {
+    color: #c7d2fe;
+}
+
 /* Topbar */
 .fi-body.fi-panel-member .fi-topbar {
     min-height: 3.125rem;
@@ -106,6 +130,15 @@
 .fi-body.fi-panel-member .fi-section-header-heading {
     font-size: 0.8125rem;
     font-weight: 600;
+}
+
+.dark .fi-body.fi-panel-member .fi-section-header-heading,
+.dark .fi-body.fi-panel-member .fi-header-heading {
+    color: #f1f5f9;
+}
+
+.dark .fi-body.fi-panel-member .fi-header-subheading {
+    color: var(--ff-muted);
 }
 
 /* Form fields */
@@ -162,6 +195,13 @@
     color: var(--ff-muted);
 }
 
+.dark .fi-body.fi-panel-member .fi-btn.fi-color-gray:hover,
+.dark .fi-body.fi-panel-member .fi-btn.fi-color-secondary:hover {
+    background: rgb(51 65 85) !important;
+    border-color: rgb(71 85 105) !important;
+    color: #e2e8f0 !important;
+}
+
 /* Tables */
 .fi-body.fi-panel-member .fi-ta-table > thead > tr > th {
     background: var(--ff-page-bg);
@@ -180,6 +220,14 @@
 
 .fi-body.fi-panel-member .fi-ta-table > tbody > tr:hover > td {
     background: #fafafa;
+}
+
+.dark .fi-body.fi-panel-member .fi-ta-table > tbody > tr > td {
+    border-block-end-color: rgb(255 255 255 / 0.06);
+}
+
+.dark .fi-body.fi-panel-member .fi-ta-table > tbody > tr:hover > td {
+    background: rgb(83 74 183 / 0.08);
 }
 
 .fi-body.fi-panel-member .fi-ta-header-cell .fi-ta-header-cell-label {
@@ -206,11 +254,19 @@
     color: #111827;
 }
 
+.dark .fi-body.fi-panel-member .fi-ta-text-summary > .fi-ta-text-summary-label {
+    color: #f1f5f9;
+}
+
 /* Tabs */
 .fi-body.fi-panel-member .fi-tabs-item.fi-active .fi-tabs-item-label {
     color: #111827;
     font-weight: 600;
     border-block-end-color: var(--ff-primary);
+}
+
+.dark .fi-body.fi-panel-member .fi-tabs-item.fi-active .fi-tabs-item-label {
+    color: #f1f5f9;
 }
 
 /* Widget stat cards — soften green hover glow toward purple */

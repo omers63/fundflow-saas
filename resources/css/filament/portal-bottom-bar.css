@@ -145,11 +145,14 @@
 }
 
 .dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar,
-.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__inner {
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__inner,
+.dark .fi-body.fi-panel-member .ff-portal-bottom-bar,
+.dark .fi-body.fi-panel-member .ff-portal-bottom-bar__inner {
     background: #1e293b;
 }
 
-.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar {
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar,
+.dark .fi-body.fi-panel-member .ff-portal-bottom-bar {
     border-block-start-color: rgb(255 255 255 / 0.08);
 }
 
@@ -157,20 +160,27 @@
     color: #7dd3fc;
 }
 
+.dark .fi-body.fi-panel-member .ff-portal-bottom-bar__fund {
+    color: #c7d2fe;
+}
+
 .dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__portal,
-.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__date {
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__date,
+.dark .fi-body.fi-panel-member .ff-portal-bottom-bar__portal,
+.dark .fi-body.fi-panel-member .ff-portal-bottom-bar__date {
     color: #94a3b8;
 }
 
-.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__divider {
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__divider,
+.dark .fi-body.fi-panel-member .ff-portal-bottom-bar__divider {
     background: rgb(255 255 255 / 0.12);
 }
 
-.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__date--override {
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__date--override,
+.dark .fi-body.fi-panel-member .ff-portal-bottom-bar__date--override {
     color: #fde68a;
 }
 
-/* Member panel keeps light chrome (matches topbar) */
 .fi-body.fi-panel-member .ff-portal-bottom-bar__fund {
     color: var(--ff-primary-dark, #3c3489);
 }

@@ -7,13 +7,13 @@
                     'alerts' => __('Alerts'),
                     'faq' => __('FAQ'),
                 ] as $tab => $label)
-                                    <button type="button" wire:click="setTab('{{ $tab }}')" @class([
-                        'ff-member-tab-bar__item rounded-lg px-3 py-1.5 text-sm font-semibold transition',
-                        'bg-primary-600 text-white' => $activeTab === $tab,
-                        'bg-gray-100 text-gray-700 hover:bg-gray-200' => $activeTab !== $tab,
-                    ])>
-                                        <x-ff-tab-pill-label :label="$label" :key="$tab" />
-                                    </button>
+                                                    <button type="button" wire:click="setTab('{{ $tab }}')" @class([
+                                                        'ff-member-tab-bar__item rounded-lg px-3 py-1.5 text-sm font-semibold transition',
+                                                        'bg-primary-600 text-white' => $activeTab === $tab,
+                                                        'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-white/10 dark:text-gray-200 dark:hover:bg-white/15' => $activeTab !== $tab,
+                                                    ])>
+                                                        <x-ff-tab-pill-label :label="$label" :key="$tab" />
+                                                    </button>
             @endforeach
         </div>
 
@@ -25,7 +25,7 @@
             @livewire(\App\Filament\Member\Widgets\MemberAlertHistoryTableWidget::class, key('member-help-alerts'))
         @else
             <x-member::panel :title="__('Frequently asked questions')">
-                <p class="mb-3 text-sm text-gray-600">
+                <p class="mb-3 text-sm text-gray-600 dark:text-gray-300">
                     {{ __('Quick answers about contributions, loans, deposits, and cash outs.') }}
                 </p>
                 <x-member::faq-accordion :items="$faqItems" />

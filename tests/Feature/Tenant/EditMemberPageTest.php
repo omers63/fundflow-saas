@@ -350,7 +350,7 @@ test('household relation manager exposes dependent row and bulk actions', functi
         ->map(fn ($action) => $action->getName())
         ->all();
 
-    expect($headerNames)->toContain('addDependent', 'allocateDependents');
+    expect($headerNames)->toContain('addDependent', 'allocateDependents', 'adminContributionTopUp');
 
     $component->callTableAction('addDependent', data: [
         'member_id' => $candidate->id,
@@ -362,7 +362,8 @@ test('household relation manager exposes dependent row and bulk actions', functi
         ->assertTableActionVisible('view', $dependent)
         ->assertTableActionVisible('setDependentAllocation', $dependent)
         ->assertTableActionVisible('fundDependentCash', $dependent)
-        ->assertTableActionVisible('dependentAllocationHistory', $dependent);
+        ->assertTableActionVisible('dependentAllocationHistory', $dependent)
+        ->assertTableActionVisible('adminContributionTopUpForDependent', $dependent);
 
     $bulkNames = collect($component->instance()->getTable()->getFlatBulkActions())
         ->map(fn ($action) => $action->getName())

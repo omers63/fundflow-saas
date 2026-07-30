@@ -162,8 +162,8 @@ trait DeliversToMemberChannels
             }
 
             $message = (new WebPushMessage)
-                ->title($title)
-                ->body($body)
+                ->title(WebPushNotification::truncate($title, WebPushNotification::MAX_TITLE_CHARS))
+                ->body(WebPushNotification::truncate($body, WebPushNotification::MAX_BODY_CHARS))
                 ->icon(WebPushNotification::iconUrl())
                 ->badge(WebPushNotification::badgeUrl())
                 ->options(['TTL' => 86400]);

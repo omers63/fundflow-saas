@@ -1512,3 +1512,212 @@
     font-weight: 600;
     color: #111827;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Dark mode — must follow light rules so they win over Tailwind utilities
+   (component CSS loads after Tailwind; hardcoded #111827 otherwise sticks).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.dark .fi-body.fi-panel-member {
+    --ff-text: #f1f5f9;
+    --ff-text-muted: #94a3b8;
+    --ff-text-subtle: #64748b;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-panel__title,
+.dark .fi-body.fi-panel-member .ff-member-stat-card__value,
+.dark .fi-body.fi-panel-member .ff-member-quick-action__title,
+.dark .fi-body.fi-panel-member .ff-member-detail-grid__value,
+.dark .fi-body.fi-panel-member .ff-member-sidebar-profile__name,
+.dark .fi-body.fi-panel-member .ff-member-dashboard-balance__value,
+.dark .fi-body.fi-panel-member .ff-member-dashboard-expandable summary,
+.dark .fi-body.fi-panel-member .ff-member-record-modal__hero-title,
+.dark .fi-body.fi-panel-member .ff-member-record-modal__hero-amount,
+.dark .fi-body.fi-panel-member .ff-member-amount:not(.ff-member-amount--danger):not(.ff-member-amount--success),
+.dark .fi-body.fi-panel-member .ff-stat-line,
+.dark .fi-body.fi-panel-member .ff-money-text {
+    color: #f1f5f9;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-stat-card__label,
+.dark .fi-body.fi-panel-member .ff-member-stat-card__hint,
+.dark .fi-body.fi-panel-member .ff-member-quick-action__subtitle,
+.dark .fi-body.fi-panel-member .ff-member-quick-actions__heading,
+.dark .fi-body.fi-panel-member .ff-member-dashboard-meta,
+.dark .fi-body.fi-panel-member .ff-member-dashboard-balance__label,
+.dark .fi-body.fi-panel-member .ff-member-detail-grid__label,
+.dark .fi-body.fi-panel-member .ff-member-panel__link,
+.dark .fi-body.fi-panel-member .ff-member-sidebar-profile__subtitle,
+.dark .fi-body.fi-panel-member .ff-member-record-modal__hero-subtitle,
+.dark .fi-body.fi-panel-member .ff-member-record-modal__hero-label {
+    color: #94a3b8;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-stat-card,
+.dark .fi-body.fi-panel-member .ff-app-insights-kpi {
+    color: #f1f5f9;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-stat-card .text-gray-900,
+.dark .fi-body.fi-panel-member .ff-member-stat-card .text-gray-800,
+.dark .fi-body.fi-panel-member .ff-app-insights-kpi .text-gray-900,
+.dark .fi-body.fi-panel-member .ff-app-insights-kpi .text-gray-800,
+.dark .fi-body.fi-panel-member .ff-app-insights .text-gray-900,
+.dark .fi-body.fi-panel-member .ff-app-insights .text-gray-800,
+.dark .fi-body.fi-panel-member .ff-member-dashboard .text-gray-900,
+.dark .fi-body.fi-panel-member .ff-member-dashboard .text-gray-800 {
+    color: #f1f5f9;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-stat-card .text-gray-500,
+.dark .fi-body.fi-panel-member .ff-member-stat-card .text-gray-400,
+.dark .fi-body.fi-panel-member .ff-app-insights-kpi .text-gray-500,
+.dark .fi-body.fi-panel-member .ff-app-insights-kpi .text-gray-400,
+.dark .fi-body.fi-panel-member .ff-app-insights .text-gray-500,
+.dark .fi-body.fi-panel-member .ff-app-insights .text-gray-400,
+.dark .fi-body.fi-panel-member .ff-member-dashboard .text-gray-500,
+.dark .fi-body.fi-panel-member .ff-member-dashboard .text-gray-400,
+.dark .fi-body.fi-panel-member .ff-member-dashboard .text-gray-600 {
+    color: #94a3b8;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-quick-action {
+    border-color: var(--ff-border);
+    color: #f1f5f9;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-quick-action:hover {
+    background: rgb(51 65 85 / 0.55);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-progress__track {
+    background: rgb(51 65 85);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-detail-grid__item {
+    border-block-end-color: rgb(255 255 255 / 0.08);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-dashboard-table th {
+    background: var(--ff-page-bg);
+    color: #94a3b8;
+    border-block-end-color: var(--ff-border);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-dashboard-table td {
+    border-block-end-color: rgb(255 255 255 / 0.06);
+    color: #e2e8f0;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-dashboard-table tbody tr:hover td {
+    background: rgb(83 74 183 / 0.08);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-dashboard-balance__value--fund:not(.ff-member-amount--danger) {
+    color: #c7d2fe;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-dashboard-balance__value--cash:not(.ff-member-amount--danger) {
+    color: #6ee7b7;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-dashboard-balance__label--fund {
+    color: #a5b4fc;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-dashboard-balance__label--cash {
+    color: #34d399;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-amount--danger,
+.dark .fi-body.fi-panel-member .ff-member-dashboard-balance__value.ff-member-amount--danger {
+    color: #f87171;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-amount--success {
+    color: #34d399;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-record-modal__hero {
+    border-color: rgb(129 140 248 / 0.35);
+    background: linear-gradient(135deg, rgb(83 74 183 / 0.28), rgb(15 23 42 / 0.9));
+}
+
+.dark .fi-body.fi-panel-member .ff-member-notice--amber {
+    background: rgb(120 53 15 / 0.35);
+    border-color: rgb(245 158 11 / 0.45);
+    color: #fde68a;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-notice--blue {
+    background: rgb(12 74 110 / 0.35);
+    border-color: rgb(56 189 248 / 0.4);
+    color: #bae6fd;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-notice--green {
+    background: rgb(6 78 59 / 0.35);
+    border-color: rgb(52 211 153 / 0.4);
+    color: #a7f3d0;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-notice--red {
+    background: rgb(127 29 29 / 0.35);
+    border-color: rgb(248 113 113 / 0.4);
+    color: #fecaca;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-chip--green {
+    background: rgb(6 78 59 / 0.45);
+    color: #a7f3d0;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-chip--amber {
+    background: rgb(120 53 15 / 0.45);
+    color: #fde68a;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-chip--red {
+    background: rgb(127 29 29 / 0.45);
+    color: #fecaca;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-chip--blue {
+    background: rgb(12 74 110 / 0.45);
+    color: #bae6fd;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-chip--purple {
+    background: rgb(83 74 183 / 0.35);
+    color: #c7d2fe;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-chip--gray {
+    background: rgb(51 65 85 / 0.7);
+    color: #cbd5e1;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-cash-stat {
+    border-color: var(--ff-border);
+    background: rgb(15 23 42 / 0.65);
+    color: #f1f5f9;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-cash-hero.ff-member-panel,
+.dark .fi-body.fi-panel-member .ff-member-fund-hero.ff-member-panel {
+    background: linear-gradient(135deg, rgb(30 41 59), rgb(15 23 42));
+    border-color: var(--ff-border);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-cash-hero .ff-member-panel__title,
+.dark .fi-body.fi-panel-member .ff-member-fund-hero .ff-member-panel__title {
+    color: #f1f5f9;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-cash-hero .ff-member-dashboard-meta {
+    color: #94a3b8;
+}
+
+.dark .fi-body.fi-panel-member .ff-member-tab-bar__item {
+    color: inherit;
+}

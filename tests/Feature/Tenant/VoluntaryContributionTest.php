@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 use App\Filament\Member\Resources\MyDependents\Support\MyDependentTableActions;
 use App\Filament\Support\MemberContributionFilamentActions;
+use App\Filament\Tenant\Resources\Members\Pages\ViewMember;
+use App\Filament\Tenant\Resources\Members\RelationManagers\ContributionsRelationManager;
+use App\Filament\Tenant\Resources\Members\RelationManagers\DependentsRelationManager;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
+use App\Notifications\Tenant\NewMemberRequestNotification;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\ContributionService;
@@ -19,7 +23,10 @@ use App\Services\VoluntaryContributionRequestService;
 use App\Support\ContributionCollectionStatus;
 use Carbon\Carbon;
 use Filament\Actions\ActionGroup;
+use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
+use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -555,4 +562,169 @@ test('describePayload includes period, member name, total and top-up amount', fu
     expect($description)
         ->toContain('3,000.00')
         ->toContain('1,000.00'); // extra
+});
+
+// --- Admin portal: quiet submit + approve ---
+
+test('admin quiet submit then approve applies top-up without notifying admins', function () {
+    Notification::fake();
+
+    $request = app(MemberRequestService::class)->submit(
+        $this->member,
+        MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION,
+        ['amount' => 3500],
+        notifyAdmins: false,
+    );
+
+    app(MemberRequestService::class)->approve($request->fresh(), $this->admin);
+
+    $contribution = Contribution::findForMemberPeriod($this->member->id, $this->month, $this->year);
+
+    expect($request->fresh()->status)->toBe(MemberRequest::STATUS_APPROVED)
+        ->and((float) $contribution->amount_due)->toBe(3500.0)
+        ->and((float) $this->member->fresh()->monthly_contribution_amount)->toBe(2000.0);
+
+    Notification::assertNotSentTo($this->admin, NewMemberRequestNotification::class);
+});
+
+test('admin can apply different top-ups for parent and dependents in one household pass', function () {
+    $dependentUser = User::create([
+        'name' => 'Admin TopUp Dependent',
+        'email' => 'vol-contrib-admin-dep@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => false,
+    ]);
+
+    $dependent = Member::create([
+        'user_id' => $dependentUser->id,
+        'parent_member_id' => $this->member->id,
+        'member_number' => 'VC-ADMIN-DEP',
+        'name' => 'Admin TopUp Dependent',
+        'email' => 'vol-contrib-admin-dep@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($dependent);
+
+    $service = app(MemberRequestService::class);
+    $selections = [
+        ['target' => $this->member, 'extra' => 1000.0],
+        ['target' => $dependent, 'extra' => 500.0],
+    ];
+
+    foreach ($selections as $selection) {
+        $target = $selection['target'];
+        $request = $service->submit($this->member, MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION, [
+            'amount' => round((float) $target->monthly_contribution_amount + $selection['extra'], 2),
+            'target_member_id' => $target->id,
+            'note' => 'Admin applied',
+        ], notifyAdmins: false);
+
+        $service->approve($request->fresh(), $this->admin);
+    }
+
+    $parentContribution = Contribution::findForMemberPeriod($this->member->id, $this->month, $this->year);
+    $dependentContribution = Contribution::findForMemberPeriod($dependent->id, $this->month, $this->year);
+
+    expect(MemberRequest::query()
+        ->where('type', MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION)
+        ->where('status', MemberRequest::STATUS_APPROVED)
+        ->count())->toBe(2)
+        ->and((float) $parentContribution->amount_due)->toBe(3000.0)
+        ->and((float) $dependentContribution->amount_due)->toBe(1500.0)
+        ->and((float) $this->member->fresh()->monthly_contribution_amount)->toBe(2000.0)
+        ->and((float) $dependent->fresh()->monthly_contribution_amount)->toBe(1000.0);
+});
+
+test('admin contributions relation manager exposes contribution top-up header action', function () {
+    Filament::setCurrentPanel('tenant');
+
+    $component = Livewire::actingAs($this->admin, 'tenant')
+        ->test(ContributionsRelationManager::class, [
+            'ownerRecord' => $this->member,
+            'pageClass' => ViewMember::class,
+        ])
+        ->assertSuccessful();
+
+    $headerNames = collect($component->instance()->getTable()->getHeaderActions())
+        ->map(fn ($action) => $action->getName())
+        ->all();
+
+    expect($headerNames)->toContain('adminContributionTopUp');
+
+    $component
+        ->callTableAction('adminContributionTopUp', data: [
+            'extra' => '1000',
+            'note' => 'Applied by admin',
+        ])
+        ->assertNotified();
+
+    $contribution = Contribution::findForMemberPeriod($this->member->id, $this->month, $this->year);
+    $request = MemberRequest::query()
+        ->where('type', MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION)
+        ->where('status', MemberRequest::STATUS_APPROVED)
+        ->first();
+
+    expect($request)->not->toBeNull()
+        ->and((float) $contribution->amount_due)->toBe(3000.0)
+        ->and((float) $request->payload['amount'])->toBe(3000.0);
+});
+
+test('admin dependents relation manager exposes household and row contribution top-up actions', function () {
+    $dependentUser = User::create([
+        'name' => 'Admin RM Dependent',
+        'email' => 'vol-contrib-rm-dep@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => false,
+    ]);
+
+    $dependent = Member::create([
+        'user_id' => $dependentUser->id,
+        'parent_member_id' => $this->member->id,
+        'member_number' => 'VC-RM-DEP',
+        'name' => 'Admin RM Dependent',
+        'email' => 'vol-contrib-rm-dep@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($dependent);
+
+    Filament::setCurrentPanel('tenant');
+
+    $component = Livewire::actingAs($this->admin, 'tenant')
+        ->test(DependentsRelationManager::class, [
+            'ownerRecord' => $this->member,
+            'pageClass' => ViewMember::class,
+        ])
+        ->assertSuccessful();
+
+    $headerNames = collect($component->instance()->getTable()->getHeaderActions())
+        ->map(fn ($action) => $action->getName())
+        ->all();
+
+    expect($headerNames)->toContain('adminContributionTopUp');
+
+    $component
+        ->assertTableActionVisible('adminContributionTopUpForDependent', $dependent)
+        ->callTableAction('adminContributionTopUpForDependent', $dependent, data: [
+            'extra' => '500',
+            'note' => 'Dependent top-up by admin',
+        ])
+        ->assertNotified();
+
+    $contribution = Contribution::findForMemberPeriod($dependent->id, $this->month, $this->year);
+    $request = MemberRequest::query()
+        ->where('type', MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION)
+        ->where('status', MemberRequest::STATUS_APPROVED)
+        ->first();
+
+    expect($request)->not->toBeNull()
+        ->and((int) $request->payload['target_member_id'])->toBe((int) $dependent->id)
+        ->and((float) $contribution->amount_due)->toBe(1500.0);
 });

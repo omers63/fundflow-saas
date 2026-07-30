@@ -6368,5 +6368,11 @@
     "Show banner on member portal": "إظهار الشريط في بوابة الأعضاء",
     "When a business day override is active, show the footer status banner for tenant admins.": "عند تفعيل تجاوز يوم العمل، أظهر شريط الحالة السفلي لمسؤولي المستأجر.",
     "When a business day override is active, show the footer status banner for members.": "عند تفعيل تجاوز يوم العمل، أظهر شريط الحالة السفلي للأعضاء.",
-    "Business day override active": "تجاوز يوم العمل مفعّل"
+    "Business day override active": "تجاوز يوم العمل مفعّل",
+    "Apply top-up": "تطبيق المساهمة الإضافية",
+    "Top-up applied": "تم تطبيق المساهمة الإضافية",
+    ":count contribution top-up was applied for this cycle.|:count contribution top-ups were applied for this cycle.": "تم تطبيق مساهمة إضافية واحدة (:count) لهذه الدورة.|تم تطبيق :count مساهمات إضافية لهذه الدورة.",
+    "Add a top-up to the :period cycle for :name and/or any eligible dependents. Select each member and choose their top-up amount — amounts can differ. Applied immediately; standing monthly allocations stay unchanged for future cycles.": "أضف مساهمة إضافية لدورة :period للعضو :name و/أو أي من المعالين المؤهلين. اختر كل عضو وعيّن مبلغ المساهمة الإضافية له — يمكن أن تختلف المبالغ. تُطبَّق فوراً؛ تبقى التخصيصات الشهرية الثابتة دون تغيير للدورات القادمة.",
+    "Add a top-up to the :period cycle for :name on top of their standing monthly allocation (:standing). Applied immediately; standing monthly allocation stays unchanged for future cycles.": "أضف مساهمة إضافية لدورة :period للعضو :name فوق تخصيصه الشهري الثابت (:standing). تُطبَّق فوراً؛ يبقى التخصيص الشهري الثابت دون تغيير للدورات القادمة.",
+    "Today": "اليوم"
 }

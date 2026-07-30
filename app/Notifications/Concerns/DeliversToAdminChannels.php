@@ -92,8 +92,8 @@ trait DeliversToAdminChannels
         ?string $tag = null,
     ): WebPushMessage {
         $message = (new WebPushMessage)
-            ->title(NotificationPlainText::from($title))
-            ->body(NotificationPlainText::from($body))
+            ->title(WebPushNotification::truncate(NotificationPlainText::from($title), WebPushNotification::MAX_TITLE_CHARS))
+            ->body(WebPushNotification::truncate(NotificationPlainText::from($body), WebPushNotification::MAX_BODY_CHARS))
             ->icon(WebPushNotification::iconUrl())
             ->badge(WebPushNotification::badgeUrl())
             ->options(['TTL' => 86400]);

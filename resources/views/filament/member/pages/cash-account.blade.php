@@ -9,8 +9,9 @@
                 </div>
 
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div class="ff-member-cash-stat min-w-0 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                        <p class="truncate text-xs font-semibold uppercase tracking-wide text-gray-500"
+                    <div
+                        class="ff-member-cash-stat min-w-0 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
+                        <p class="truncate text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
                             title="{{ __('Available to withdraw') }}">
                             {{ __('Available to withdraw') }}
                         </p>
@@ -20,8 +21,9 @@
                         </div>
                     </div>
                     @if (filled($reserved))
-                        <div class="ff-member-cash-stat min-w-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                            <p class="truncate text-xs font-semibold uppercase tracking-wide text-amber-800"
+                        <div
+                            class="ff-member-cash-stat min-w-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-500/30 dark:bg-amber-950/40">
+                            <p class="truncate text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200"
                                 title="{{ __('Reserved (next EMI)') }}">
                                 {{ __('Reserved (next EMI)') }}
                             </p>
