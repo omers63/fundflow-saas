@@ -27,7 +27,8 @@ class MonthlyStatementService
 {
     public function __construct(
         private readonly ContributionCycleService $cycles,
-    ) {}
+    ) {
+    }
 
     public function generateForAllMembers(string $period, bool $notify = false): int
     {
@@ -326,7 +327,7 @@ class MonthlyStatementService
     private function yearlyHistory(Member $member, Carbon $membershipStart, int $statementYear, int $statementMonth, Carbon $asOfEnd): array
     {
         [$throughMonth, $throughYear] = $this->activityThroughCycle($statementYear, $statementMonth, $asOfEnd);
-        $startYear = (int) $membershipStart->year;
+                $startYear = (int) $membershipStart->year;
         $rows = [];
 
         for ($year = $startYear; $year <= $throughYear; $year++) {
@@ -442,7 +443,7 @@ class MonthlyStatementService
                 ->get(['amount', 'paid_at', 'late_fee_amount']);
 
             $contributionDates = $contribs
-                ->map(fn (Contribution $c): ?string => $c->paid_at?->toDateString())
+                ->map(fn(Contribution $c): ?string => $c->paid_at?->toDateString())
                 ->filter()
                 ->values()
                 ->all();
@@ -598,7 +599,7 @@ class MonthlyStatementService
         return [
             'amount' => (float) $credits->sum('amount'),
             'dates' => $credits
-                ->map(fn (Transaction $tx): ?string => $tx->transacted_at?->toDateString())
+                ->map(fn(Transaction $tx): ?string => $tx->transacted_at?->toDateString())
                 ->filter()
                 ->values()
                 ->all(),

@@ -1,154 +1,154 @@
-@php
-    use App\Filament\Support\MoneyDisplay;
-    use App\Models\Tenant\Loan;
-    use App\Support\BusinessDay;
-    use App\Support\PublicPageSettings;
-    use App\Support\StatementSettings;
-    use Illuminate\Support\Carbon;
-    use Illuminate\Support\Str;
+                        @php
+        use App\Filament\Support\MoneyDisplay;
+        use App\Models\Tenant\Loan;
+        use App\Support\BusinessDay;
+        use App\Support\PublicPageSettings;
+        use App\Support\StatementSettings;
+        use Illuminate\Support\Carbon;
+        use Illuminate\Support\Str;
 
-    $d = $statement->details ?? [];
-    $m = $d['member_snapshot'] ?? [];
-    $currency = $d['currency'] ?? 'USD';
-    $accent = $cfg['accent_color'] ?? '#059669';
-    $isArabic = app()->getLocale() === 'ar';
-    $moneyHtml = function (float $amount, bool $signed = false, bool $asBalance = false, ?string $tone = null, ?string $symbolFill = null, ) use ($currency): string {
-        return MoneyDisplay::pdfHtml(
-            $amount,
-            $currency,
-            signed: $signed,
-            tone: $tone,
-            colorBySign: $asBalance,
-            symbolFill: $symbolFill,
-        )?->toHtml() ?? '—';
-    };
-    $fundName = (string) ($cfg['fund_name'] ?? $cfg['brand'] ?? config('app.name'));
-    $fundNameEn = trim((string) ($cfg['fund_name_en'] ?? $d['fund_name_en'] ?? ''));
-    $fundNameAr = trim((string) ($cfg['fund_name_ar'] ?? $d['fund_name_ar'] ?? ''));
-    if ($fundNameEn === '') {
-        $fundNameEn = PublicPageSettings::fundName(locale: 'en');
-    }
-    if ($fundNameAr === '') {
-        $fundNameAr = PublicPageSettings::fundName(locale: 'ar');
-    }
-    $pageFooterParts = [];
-    if ($fundNameEn !== '') {
-        $pageFooterParts[] = '<span dir="ltr">' . e($fundNameEn) . '</span>';
-    }
-    if ($fundNameAr !== '' && $fundNameAr !== $fundNameEn) {
-        $pageFooterParts[] = e($fundNameAr);
-    }
-    $pageFooterHtml = $pageFooterParts === [] ? '' : implode(' · ', $pageFooterParts);
-    $pageFooterNeedsAmiri = $fundNameAr !== ''
-        && StatementSettings::customFontPath(StatementSettings::FONT_AMIRI) !== null;
-    $pageFooterFont = $pageFooterNeedsAmiri
-        ? 'Amiri'
-        : ($pdfFont ?? StatementSettings::pdfFontFamily());
-    $loans = $d['loans'] ?? (isset($d['active_loan']) && is_array($d['active_loan']) ? [$d['active_loan']] : []);
-    $yearly = $d['yearly_history'] ?? [];
-    $months = $d['current_year_months'] ?? [];
-    $yearTotals = $d['current_year_totals'] ?? [];
-    $lifetime = $d['lifetime'] ?? [];
-    $fees = $d['fees'] ?? ['total' => 0, 'groups' => []];
-    $asOf = $d['as_of'] ?? $statement->generated_at?->toDateString() ?? BusinessDay::today()->toDateString();
-    $lifetimeAsOf = (string) ($lifetime['as_of'] ?? $asOf);
-
-    $periodParts = explode('-', (string) $statement->period);
-    $periodYear = $periodParts[0] ?? '';
-    $periodMonth = Carbon::create((int) ($periodParts[0] ?? 2000), (int) ($periodParts[1] ?? 1), 1)
-        ->locale(app()->getLocale())
-        ->translatedFormat('F');
-
-    $periodValueHtml = $isArabic
-        ? '<span dir="ltr">' . e($periodYear) . '</span> ' . e($periodMonth)
-        : e($periodMonth) . ' <span dir="ltr">' . e($periodYear) . '</span>';
-    $asOfValueHtml = '<span dir="ltr">' . e($asOf) . '</span>';
-
-    $phoneRows = array_filter([
-        ['label' => __('Mobile'), 'value' => $m['mobile_phone'] ?? $m['phone'] ?? null],
-        ['label' => __('Home'), 'value' => $m['home_phone'] ?? null],
-        ['label' => __('Work'), 'value' => $m['work_phone'] ?? null],
-    ], fn(array $row): bool => filled($row['value']));
-
-    $monthName = fn(int $month): string => Carbon::create(2000, $month, 1)->translatedFormat('M');
-
-    /** DomPDF does not reverse table columns for dir=rtl — mirror cell order manually. */
-    $rtlCells = function (array $cells) use ($isArabic): array {
-        return $isArabic ? array_reverse(array_values($cells)) : array_values($cells);
-    };
-
-    $kpiCards = [
-        [
-            'label' => __('Opening fund balance'),
-            'value' => $moneyHtml((float) $statement->opening_balance, asBalance: true),
-            'accent' => false,
-        ],
-        [
-            'label' => __('Contributions'),
-            'value' => $moneyHtml((float) $statement->total_contributions),
-            'accent' => false,
-        ],
-        [
-            'label' => __('Loan repayments'),
-            'value' => $moneyHtml((float) $statement->total_repayments),
-            'accent' => false,
-        ],
-        [
-            'label' => __('Closing fund balance'),
-            'value' => $moneyHtml((float) $statement->closing_balance, asBalance: true),
-            'accent' => false,
-        ],
-    ];
-    $kpiCards = $rtlCells($kpiCards);
-
-    $memberMetaRows = [
-        ['label' => __('Name'), 'html' => e($m['name'] ?? '—')],
-        ['label' => __('Member number'), 'html' => e($m['member_number'] ?? '—')],
-        ['label' => __('Status'), 'html' => e(__(ucfirst((string) ($m['status'] ?? '—'))))],
-        ['label' => __('Joined'), 'html' => e($m['joined_at'] ?? '—')],
-        ['label' => __('Email'), 'html' => e($m['email'] ?? '—')],
-    ];
-
-    if ($phoneRows === []) {
-        $memberMetaRows[] = ['label' => __('Phone'), 'html' => e($m['phone'] ?? '—')];
-    } else {
-        foreach ($phoneRows as $phone) {
-            $memberMetaRows[] = [
-                'label' => $phone['label'],
-                'html' => '<span dir="ltr">' . e($phone['value']) . '</span>',
-            ];
+        $d = $statement->details ?? [];
+        $m = $d['member_snapshot'] ?? [];
+        $currency = $d['currency'] ?? 'USD';
+        $accent = $cfg['accent_color'] ?? '#059669';
+        $isArabic = app()->getLocale() === 'ar';
+        $moneyHtml = function (float $amount, bool $signed = false, bool $asBalance = false, ?string $tone = null, ?string $symbolFill = null, ) use ($currency): string {
+            return MoneyDisplay::pdfHtml(
+                $amount,
+                $currency,
+                signed: $signed,
+                tone: $tone,
+                colorBySign: $asBalance,
+                symbolFill: $symbolFill,
+            )?->toHtml() ?? '—';
+        };
+        $fundName = (string) ($cfg['fund_name'] ?? $cfg['brand'] ?? config('app.name'));
+        $fundNameEn = trim((string) ($cfg['fund_name_en'] ?? $d['fund_name_en'] ?? ''));
+        $fundNameAr = trim((string) ($cfg['fund_name_ar'] ?? $d['fund_name_ar'] ?? ''));
+        if ($fundNameEn === '') {
+            $fundNameEn = PublicPageSettings::fundName(locale: 'en');
         }
-    }
+        if ($fundNameAr === '') {
+            $fundNameAr = PublicPageSettings::fundName(locale: 'ar');
+        }
+        $pageFooterParts = [];
+        if ($fundNameEn !== '') {
+            $pageFooterParts[] = '<span dir="ltr">' . e($fundNameEn) . '</span>';
+        }
+        if ($fundNameAr !== '' && $fundNameAr !== $fundNameEn) {
+            $pageFooterParts[] = e($fundNameAr);
+        }
+        $pageFooterHtml = $pageFooterParts === [] ? '' : implode(' · ', $pageFooterParts);
+        $pageFooterNeedsAmiri = $fundNameAr !== ''
+            && StatementSettings::customFontPath(StatementSettings::FONT_AMIRI) !== null;
+        $pageFooterFont = $pageFooterNeedsAmiri
+            ? 'Amiri'
+            : ($pdfFont ?? StatementSettings::pdfFontFamily());
+        $loans = $d['loans'] ?? (isset($d['active_loan']) && is_array($d['active_loan']) ? [$d['active_loan']] : []);
+        $yearly = $d['yearly_history'] ?? [];
+        $months = $d['current_year_months'] ?? [];
+        $yearTotals = $d['current_year_totals'] ?? [];
+        $lifetime = $d['lifetime'] ?? [];
+        $fees = $d['fees'] ?? ['total' => 0, 'groups' => []];
+        $asOf = $d['as_of'] ?? $statement->generated_at?->toDateString() ?? BusinessDay::today()->toDateString();
+        $lifetimeAsOf = (string) ($lifetime['as_of'] ?? $asOf);
 
-    $balancePill = function (float $amount, bool $asBalance = false) use ($moneyHtml): string {
-        $tone = match (true) {
-            $amount < 0 => 'danger',
-            $amount > 0 => 'success',
-            default => 'neutral',
+        $periodParts = explode('-', (string) $statement->period);
+        $periodYear = $periodParts[0] ?? '';
+        $periodMonth = Carbon::create((int) ($periodParts[0] ?? 2000), (int) ($periodParts[1] ?? 1), 1)
+            ->locale(app()->getLocale())
+            ->translatedFormat('F');
+
+        $periodValueHtml = $isArabic
+            ? '<span dir="ltr">' . e($periodYear) . '</span> ' . e($periodMonth)
+            : e($periodMonth) . ' <span dir="ltr">' . e($periodYear) . '</span>';
+        $asOfValueHtml = '<span dir="ltr">' . e($asOf) . '</span>';
+
+        $phoneRows = array_filter([
+            ['label' => __('Mobile'), 'value' => $m['mobile_phone'] ?? $m['phone'] ?? null],
+            ['label' => __('Home'), 'value' => $m['home_phone'] ?? null],
+            ['label' => __('Work'), 'value' => $m['work_phone'] ?? null],
+        ], fn(array $row): bool => filled($row['value']));
+
+        $monthName = fn(int $month): string => Carbon::create(2000, $month, 1)->translatedFormat('M');
+
+        /** DomPDF does not reverse table columns for dir=rtl — mirror cell order manually. */
+        $rtlCells = function (array $cells) use ($isArabic): array {
+            return $isArabic ? array_reverse(array_values($cells)) : array_values($cells);
         };
 
-        return '<span class="stmt-balance-pill stmt-balance-pill--' . $tone . '">'
-            . $moneyHtml(
-                $amount,
-                asBalance: $asBalance,
-                symbolFill: in_array($tone, ['danger', 'success'], true) ? '#ffffff' : null,
-            )
-            . '</span>';
-    };
+        $kpiCards = [
+            [
+                'label' => __('Opening fund balance'),
+                'value' => $moneyHtml((float) $statement->opening_balance, asBalance: true),
+                'accent' => false,
+            ],
+            [
+                'label' => __('Contributions'),
+                'value' => $moneyHtml((float) $statement->total_contributions),
+                'accent' => false,
+            ],
+            [
+                'label' => __('Loan repayments'),
+                'value' => $moneyHtml((float) $statement->total_repayments),
+                'accent' => false,
+            ],
+            [
+                'label' => __('Closing fund balance'),
+                'value' => $moneyHtml((float) $statement->closing_balance, asBalance: true),
+                'accent' => false,
+            ],
+        ];
+        $kpiCards = $rtlCells($kpiCards);
 
-    $bankingMetaRows = [
-        ['label' => __('IBAN'), 'html' => '<span dir="ltr">' . e($m['iban'] ?? '—') . '</span>'],
-        ['label' => __('Account number'), 'html' => '<span dir="ltr">' . e($m['bank_account_number'] ?? '—') . '</span>'],
-        ['label' => __('Monthly contribution'), 'html' => $balancePill((float) ($m['monthly_contrib'] ?? 0))],
-        ['label' => __('Cash at period end'), 'html' => $balancePill((float) ($d['cash_closing'] ?? 0), asBalance: true)],
-        ['label' => __('Fund at period end'), 'html' => $balancePill((float) ($d['fund_closing'] ?? 0))],
-    ];
+        $memberMetaRows = [
+            ['label' => __('Name'), 'html' => e($m['name'] ?? '—')],
+            ['label' => __('Member number'), 'html' => e($m['member_number'] ?? '—')],
+            ['label' => __('Status'), 'html' => e(__(ucfirst((string) ($m['status'] ?? '—'))))],
+            ['label' => __('Joined'), 'html' => e($m['joined_at'] ?? '—')],
+            ['label' => __('Email'), 'html' => e($m['email'] ?? '—')],
+        ];
 
-    $detailCards = [
-        ['title' => __('Member'), 'rows' => $memberMetaRows],
-        ['title' => __('Banking & balances'), 'rows' => $bankingMetaRows],
-    ];
-    $detailCards = $rtlCells($detailCards);
+        if ($phoneRows === []) {
+            $memberMetaRows[] = ['label' => __('Phone'), 'html' => e($m['phone'] ?? '—')];
+        } else {
+            foreach ($phoneRows as $phone) {
+                $memberMetaRows[] = [
+                    'label' => $phone['label'],
+                    'html' => '<span dir="ltr">' . e($phone['value']) . '</span>',
+                ];
+            }
+        }
+
+        $balancePill = function (float $amount, bool $asBalance = false) use ($moneyHtml): string {
+            $tone = match (true) {
+                $amount < 0 => 'danger',
+                $amount > 0 => 'success',
+                default => 'neutral',
+            };
+
+            return '<span class="stmt-balance-pill stmt-balance-pill--' . $tone . '">'
+                . $moneyHtml(
+                    $amount,
+                    asBalance: $asBalance,
+                    symbolFill: in_array($tone, ['danger', 'success'], true) ? '#ffffff' : null,
+                )
+                . '</span>';
+        };
+
+        $bankingMetaRows = [
+            ['label' => __('IBAN'), 'html' => '<span dir="ltr">' . e($m['iban'] ?? '—') . '</span>'],
+            ['label' => __('Account number'), 'html' => '<span dir="ltr">' . e($m['bank_account_number'] ?? '—') . '</span>'],
+            ['label' => __('Monthly contribution'), 'html' => $balancePill((float) ($m['monthly_contrib'] ?? 0))],
+            ['label' => __('Cash at period end'), 'html' => $balancePill((float) ($d['cash_closing'] ?? 0), asBalance: true)],
+            ['label' => __('Fund at period end'), 'html' => $balancePill((float) ($d['fund_closing'] ?? 0))],
+        ];
+
+        $detailCards = [
+            ['title' => __('Member'), 'rows' => $memberMetaRows],
+            ['title' => __('Banking & balances'), 'rows' => $bankingMetaRows],
+        ];
+        $detailCards = $rtlCells($detailCards);
 
     $activityMonthCount = max(1, (int) ($yearTotals['cycle_count'] ?? $yearTotals['month_count'] ?? count($months)));
     $activityFromMonth = (int) ($yearTotals['from_month'] ?? ($months[0]['month'] ?? 1));
@@ -297,14 +297,14 @@
     ];
     $contribColumns = $rtlCells($contribColumns);
 
-    $emiColumns = [
-        ['label' => __('Loan #'), 'key' => 'loan_id'],
-        ['label' => __('EMI #'), 'key' => 'installment_number'],
-        ['label' => __('Due'), 'key' => 'due'],
-        ['label' => __('Paid'), 'key' => 'paid'],
-        ['label' => __('Amount'), 'key' => 'amount'],
-    ];
-    $emiColumns = $rtlCells($emiColumns);
+        $emiColumns = [
+            ['label' => __('Loan #'), 'key' => 'loan_id'],
+            ['label' => __('EMI #'), 'key' => 'installment_number'],
+            ['label' => __('Due'), 'key' => 'due'],
+            ['label' => __('Paid'), 'key' => 'paid'],
+            ['label' => __('Amount'), 'key' => 'amount'],
+        ];
+        $emiColumns = $rtlCells($emiColumns);
 @endphp
 <!DOCTYPE html>
 <html lang="{{ app()->getLocale() }}" dir="{{ $isArabic ? 'rtl' : 'ltr' }}">
@@ -441,10 +441,10 @@
                             : '<span dir="ltr">' . e($activityDates->implode(', ')) . '</span>';
                         $activityCells = $rtlCells([
                             ['class' => '', 'html' => e($cycleLabel)],
-                                    ['class' => 'date', 'html' => $activityDateHtml],
-                                    ['class' => 'amount-col', 'html' => $moneyHtml((float) $row['contributions'])],
-                                    ['class' => 'amount-col', 'html' => $moneyHtml((float) $row['repayments'])],
-                                ]);
+                            ['class' => 'date', 'html' => $activityDateHtml],
+                            ['class' => 'amount-col', 'html' => $moneyHtml((float) $row['contributions'])],
+                            ['class' => 'amount-col', 'html' => $moneyHtml((float) $row['repayments'])],
+                        ]);
                     @endphp
                     <tr>
                         @foreach ($activityCells as $cell)
@@ -455,18 +455,18 @@
             </tbody>
             <tfoot>
                 @php
-                            $activityFooterCells = $rtlCells([
-                                ['class' => '', 'html' => '&nbsp;'],
-                                ['class' => '', 'html' => '&nbsp;'],
-                                [
-                                    'class' => 'amount-col',
-                        'html' => '<div class="stmt-tfoot-pill">' . e(__(':count-Cycle contributions', ['count' => $activityMonthCount])) . '</div>' . $moneyHtml((float) ($yearTotals['contributions'] ?? 0)),
-                    ],
-                    [
-                        'class' => 'amount-col',
-                        'html' => '<div class="stmt-tfoot-pill">' . e(__(':count-Cycle repayments', ['count' => $activityMonthCount])) . '</div>' . $moneyHtml((float) ($yearTotals['repayments'] ?? 0)),
-                                ],
-                            ]);
+                    $activityFooterCells = $rtlCells([
+                        ['class' => '', 'html' => '&nbsp;'],
+                        ['class' => '', 'html' => '&nbsp;'],
+                        [
+                            'class' => 'amount-col',
+                            'html' => '<div class="stmt-tfoot-pill">' . e(__(':count-Cycle contributions', ['count' => $activityMonthCount])) . '</div>' . $moneyHtml((float) ($yearTotals['contributions'] ?? 0)),
+                        ],
+                        [
+                            'class' => 'amount-col',
+                            'html' => '<div class="stmt-tfoot-pill">' . e(__(':count-Cycle repayments', ['count' => $activityMonthCount])) . '</div>' . $moneyHtml((float) ($yearTotals['repayments'] ?? 0)),
+                        ],
+                    ]);
                 @endphp
                 <tr>
                     @foreach ($activityFooterCells as $cell)
@@ -490,18 +490,18 @@
             <tbody>
                 @foreach ($yearly as $row)
                     @php
-                        $contributions = (float) $row['contributions'];
-                        $repayments = (float) $row['repayments'];
-                        $total = $contributions + $repayments;
+                                $contributions = (float) $row['contributions'];
+                                $repayments = (float) $row['repayments'];
+                                $total = $contributions + $repayments;
                         $yearLabel = (string) $row['year'];
-                        $cells = $rtlCells([
-                            ['class' => '', 'html' => e($yearLabel)],
-                            ['class' => 'amount-col', 'html' => $moneyHtml($contributions)],
-                            ['class' => 'amount-col', 'html' => $moneyHtml($repayments)],
-                            ['class' => 'amount-col', 'html' => $moneyHtml($total)],
-                            ['class' => 'amount-col', 'html' => $moneyHtml((float) ($row['cash_balance'] ?? 0), asBalance: true)],
-                            ['class' => 'amount-col', 'html' => $moneyHtml((float) ($row['fund_balance'] ?? 0), asBalance: true)],
-                        ]);
+                                $cells = $rtlCells([
+                                    ['class' => '', 'html' => e($yearLabel)],
+                                    ['class' => 'amount-col', 'html' => $moneyHtml($contributions)],
+                                    ['class' => 'amount-col', 'html' => $moneyHtml($repayments)],
+                                    ['class' => 'amount-col', 'html' => $moneyHtml($total)],
+                                    ['class' => 'amount-col', 'html' => $moneyHtml((float) ($row['cash_balance'] ?? 0), asBalance: true)],
+                                    ['class' => 'amount-col', 'html' => $moneyHtml((float) ($row['fund_balance'] ?? 0), asBalance: true)],
+                                ]);
                     @endphp
                     <tr>
                         @foreach ($cells as $cell)
