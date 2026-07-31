@@ -165,7 +165,7 @@ class MonthlyStatementService
         $allLoans = $this->loanSummaries($member);
         $yearlyHistory = $this->yearlyHistory($member, $membershipStart, $year, $month, $asOfEnd);
         $currentYearMonths = $this->activityMonths($member, $year, $month, $asOfEnd, window: 6);
-        $lifetime = $this->lifetimeStats($member, $asOf, $asOfEnd, $cashAtEnd, $fundAtEnd, $allLoans, $profile);
+        $lifetime = $this->lifetimeStats($member, $periodEnd, $cashAtEnd, $fundAtEnd, $allLoans, $profile);
         $fees = $this->feeBreakdown($member, $asOfEnd);
 
         $currency = Setting::get('general', 'currency', 'USD');
@@ -295,7 +295,7 @@ class MonthlyStatementService
     }
 
     /**
-     * @return list<array{year: int, contributions: float, repayments: float, cash_balance: float, fund_balance: float}>
+     * @return list<array{year: int, contributions: float, repayments: float, cash_balance: float, fund_balance: float, through: ?string}>
      */
     private function yearlyHistory(Member $member, Carbon $membershipStart, int $statementYear, int $statementMonth, Carbon $asOfEnd): array
     {
@@ -309,9 +309,10 @@ class MonthlyStatementService
 
         for ($year = $startYear; $year <= $throughYear; $year++) {
             $yearStart = Carbon::create($year, 1, 1)->startOfDay();
+            $calendarYearEnd = Carbon::create($year, 12, 31)->endOfDay();
             $yearEnd = $year === $throughYear
                 ? $end->copy()
-                : Carbon::create($year, 12, 31)->endOfDay();
+                : $calendarYearEnd->copy();
 
             // Contribution periods are stored as month-start dates (YYYY-MM-01). Clamping to the
             // join *day* would drop the join month (e.g. joined 2024-07-30 excludes period 2024-07-01).
@@ -329,13 +330,27 @@ class MonthlyStatementService
                 continue;
             }
 
+            // Align with year-end fund balance: only count amounts posted by year-end (not merely
+            // statement as-of). Periods paid after Dec 31 belong to the payment year as spillover
+            // (e.g. Dec 2024 paid 2025-01-02 → 2025 contributions, 2024 fund stays lower).
+            $paidBy = $this->observationEnd($yearEnd, $asOfEnd);
+            $spilloverStart = $activityStart->copy()->lt($yearStart) ? $yearStart->copy() : $activityStart->copy();
+
             $contrib = (float) Contribution::query()
                 ->where('member_id', $member->id)
                 ->where('status', 'posted')
-                ->whereBetween('period', [$contributionPeriodStart->toDateString(), $yearEnd->toDateString()])
-                ->where(function ($query) use ($asOfEnd): void {
-                    $query->whereNull('paid_at')
-                        ->orWhere('paid_at', '<=', $asOfEnd);
+                ->where(function ($query) use ($contributionPeriodStart, $yearEnd, $paidBy, $yearStart, $spilloverStart): void {
+                    $query->where(function ($q) use ($contributionPeriodStart, $yearEnd, $paidBy): void {
+                        $q->whereBetween('period', [$contributionPeriodStart->toDateString(), $yearEnd->toDateString()])
+                            ->where(function ($paid) use ($paidBy): void {
+                                $paid->whereNull('paid_at')
+                                    ->orWhere('paid_at', '<=', $paidBy);
+                            });
+                    })->orWhere(function ($q) use ($yearStart, $spilloverStart, $paidBy): void {
+                        $q->where('period', '<', $yearStart->toDateString())
+                            ->whereNotNull('paid_at')
+                            ->whereBetween('paid_at', [$spilloverStart, $paidBy]);
+                    });
                 })
                 ->sum('amount');
 
@@ -351,6 +366,8 @@ class MonthlyStatementService
                 'repayments' => round($repay, 2),
                 'cash_balance' => $this->balanceAtDate($member, 'cash', $yearEnd),
                 'fund_balance' => $this->balanceAtDate($member, 'fund', $yearEnd),
+                // Present when the statement period cuts the calendar year short (e.g. Oct statement).
+                'through' => $yearEnd->lt($calendarYearEnd) ? $yearEnd->toDateString() : null,
             ];
         }
 
@@ -360,6 +377,9 @@ class MonthlyStatementService
     /**
      * Rolling window of monthly contribution / repayment activity ending at the statement period
      * (or the business-day month when that is earlier).
+     *
+     * Contributions are bucketed by payment / fund-ledger date (not contribution period), so a
+     * June period paid on 2 Jul appears under July — matching the fund ledger the member sees.
      *
      * @return list<array{month: int, year: int, period: string, contributions: float, repayments: float, contribution_dates: list<string>, repayment_dates: list<string>}>
      */
@@ -374,19 +394,17 @@ class MonthlyStatementService
         for ($cursor = $start->copy(); $cursor->lte($end); $cursor->addMonthNoOverflow()) {
             $month = (int) $cursor->month;
             $rowYear = (int) $cursor->year;
-            $periodDate = Contribution::periodDate($month, $rowYear);
             $monthStart = $cursor->copy()->startOfDay();
             $monthEnd = $this->observationEnd($cursor->copy()->endOfMonth(), $asOfEnd);
 
             $contribs = Contribution::query()
                 ->where('member_id', $member->id)
-                ->where('period', $periodDate)
                 ->where('status', 'posted')
-                ->where(function ($query) use ($asOfEnd): void {
-                    $query->whereNull('paid_at')
-                        ->orWhere('paid_at', '<=', $asOfEnd);
-                })
+                ->whereNotNull('paid_at')
+                ->whereBetween('paid_at', [$monthStart, $monthEnd])
                 ->get(['amount', 'paid_at']);
+
+            $partialCredits = $this->unpostedContributionFundCredits($member, $monthStart, $monthEnd);
 
             $repayments = LoanInstallment::query()
                 ->whereHas('loan', fn ($q) => $q->where('member_id', $member->id))
@@ -394,19 +412,25 @@ class MonthlyStatementService
                 ->whereBetween('paid_at', [$monthStart, $monthEnd])
                 ->get(['amount', 'paid_at', 'late_fee_amount']);
 
+            $contributionDates = $contribs
+                ->map(fn(Contribution $c): ?string => $c->paid_at?->toDateString())
+                ->filter()
+                ->values()
+                ->all();
+
+            foreach ($partialCredits['dates'] as $date) {
+                $contributionDates[] = $date;
+            }
+
             $rows[] = [
                 'month' => $month,
                 'year' => $rowYear,
                 'period' => sprintf('%04d-%02d', $rowYear, $month),
-                'contributions' => round((float) $contribs->sum('amount'), 2),
+                'contributions' => round((float) $contribs->sum('amount') + $partialCredits['amount'], 2),
                 'repayments' => round((float) $repayments->sum(
                     fn (LoanInstallment $i): float => (float) $i->amount + (float) ($i->late_fee_amount ?? 0),
                 ), 2),
-                'contribution_dates' => $contribs
-                    ->map(fn (Contribution $c): ?string => $c->paid_at?->toDateString())
-                    ->filter()
-                    ->values()
-                    ->all(),
+                'contribution_dates' => collect($contributionDates)->unique()->sort()->values()->all(),
                 'repayment_dates' => $repayments
                     ->map(fn (LoanInstallment $i): ?string => $i->paid_at?->toDateString())
                     ->filter()
@@ -419,33 +443,41 @@ class MonthlyStatementService
     }
 
     /**
+     * Lifetime KPIs through the statement period end (not the generation / business day).
+     *
      * @param  list<array<string, mixed>>  $loans
      * @return array<string, mixed>
      */
     private function lifetimeStats(
         Member $member,
-        Carbon $asOf,
-        Carbon $asOfEnd,
+        Carbon $periodEnd,
         float $cashBalance,
         float $fundBalance,
         array $loans,
         ?MembershipApplication $profile,
     ): array {
-        $asOfPeriod = $asOfEnd->copy()->startOfMonth()->toDateString();
+        $periodMonthStart = $periodEnd->copy()->startOfMonth()->toDateString();
 
         $lifetimeContributions = (float) Contribution::query()
             ->where('member_id', $member->id)
             ->where('status', 'posted')
-            ->where('period', '<=', $asOfPeriod)
-            ->where(function ($query) use ($asOfEnd): void {
+            ->where('period', '<=', $periodMonthStart)
+            ->where(function ($query) use ($periodEnd): void {
                 $query->whereNull('paid_at')
-                    ->orWhere('paid_at', '<=', $asOfEnd);
+                    ->orWhere('paid_at', '<=', $periodEnd);
             })
             ->sum('amount');
 
+        // Open-cycle / partial collections hit the fund before status becomes posted.
+        $lifetimeContributions += $this->unpostedContributionFundCredits(
+            $member,
+            Carbon::parse('1970-01-01')->startOfDay(),
+            $periodEnd,
+        )['amount'];
+
         $lifetimeRepayments = (float) LoanRepayment::query()
             ->whereHas('loan', fn ($q) => $q->where('member_id', $member->id))
-            ->where('paid_at', '<=', $asOfEnd)
+            ->where('paid_at', '<=', $periodEnd)
             ->sum('amount');
 
         $loanCount = count($loans);
@@ -454,10 +486,10 @@ class MonthlyStatementService
         $lifetimeRepayments = round($lifetimeRepayments, 2);
 
         return [
-            'as_of' => $asOf->toDateString(),
+            'as_of' => $periodEnd->toDateString(),
             'joined_at' => $member->joined_at?->toDateString(),
             'membership_years' => $member->joined_at
-                ? max(0, (int) $member->joined_at->diffInYears($asOf))
+                ? max(0, (int) $member->joined_at->diffInYears($periodEnd))
                 : 0,
             'total_contributions' => $lifetimeContributions,
             'total_repayments' => $lifetimeRepayments,
@@ -468,6 +500,49 @@ class MonthlyStatementService
             'fund_balance' => round($fundBalance, 2),
             'monthly_contribution' => (float) $member->monthly_contribution_amount,
             'iban' => $profile?->iban,
+        ];
+    }
+
+    /**
+     * Fund credits posted against contributions that are not fully posted yet (partial open-cycle).
+     *
+     * @return array{amount: float, dates: list<string>}
+     */
+    private function unpostedContributionFundCredits(Member $member, Carbon $from, Carbon $to): array
+    {
+        $fundAccountId = Account::query()
+            ->where('member_id', $member->id)
+            ->where('type', 'fund')
+            ->value('id');
+
+        if ($fundAccountId === null) {
+            return ['amount' => 0.0, 'dates' => []];
+        }
+
+        $unpostedIds = Contribution::query()
+            ->where('member_id', $member->id)
+            ->where('status', '!=', 'posted')
+            ->pluck('id');
+
+        if ($unpostedIds->isEmpty()) {
+            return ['amount' => 0.0, 'dates' => []];
+        }
+
+        $credits = Transaction::query()
+            ->where('account_id', $fundAccountId)
+            ->where('type', 'credit')
+            ->where('reference_type', Contribution::class)
+            ->whereIn('reference_id', $unpostedIds)
+            ->whereBetween('transacted_at', [$from, $to])
+            ->get(['amount', 'transacted_at']);
+
+        return [
+            'amount' => (float) $credits->sum('amount'),
+            'dates' => $credits
+                ->map(fn(Transaction $tx): ?string => $tx->transacted_at?->toDateString())
+                ->filter()
+                ->values()
+                ->all(),
         ];
     }
 

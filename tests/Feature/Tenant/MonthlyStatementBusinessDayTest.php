@@ -182,6 +182,8 @@ test('statement activity yearly lifetime and closing balances clamp to business 
         ->and($details['lifetime']['total_contributions'])->toEqual(2000.0)
         ->and($details['lifetime']['total_repayments'])->toEqual(400.0)
         ->and($details['lifetime']['collection_total'])->toEqual(2400.0)
+        ->and($details['lifetime']['fund_balance'])->toEqual(700.0)
+        ->and($details['lifetime']['cash_balance'])->toEqual(500.0)
         ->and($details['current_year_totals']['to_period'])->toBe('2026-05')
         ->and($details['current_year_totals']['from_period'])->toBe('2025-12');
 
