@@ -2,8 +2,8 @@
 
 use App\Filament\Support\BankWorkspaceImportTableHeaderActions;
 use App\Filament\Tenant\Resources\BankAccounts\Pages\ListBankAccounts;
+use App\Filament\Tenant\Resources\SmsClearing\Pages\ListSmsClearing;
 use App\Filament\Tenant\Support\BankClearingTabRegistry;
-use App\Filament\Tenant\Widgets\SmsImportSessionsTableWidget;
 use App\Models\Tenant\User;
 use Filament\Actions\ActionGroup;
 use Filament\Facades\Filament;
@@ -64,7 +64,7 @@ it('shows the bank import action in workspace panel actions on the work queue ta
     expect($ledgerActionNames)->not->toContain('import');
 });
 
-it('shows the sms import action on the sms history table widget', function () {
+it('shows the sms import action in workspace panel actions on the sms clearing queue', function () {
     $this->initializeTenancy();
 
     $admin = User::create([
@@ -78,11 +78,17 @@ it('shows the sms import action on the sms history table widget', function () {
     Filament::setCurrentPanel('tenant');
 
     $component = Livewire::actingAs($admin, 'tenant')
-        ->test(SmsImportSessionsTableWidget::class);
+        ->test(ListSmsClearing::class);
 
-    $headerNames = collect($component->instance()->getTable()->getHeaderActions())
-        ->map(fn ($action) => $action->getName())
+    $actionNames = collect($component->instance()->getCachedWorkspacePanelActions())
+        ->flatMap(function ($action) {
+            if ($action instanceof ActionGroup) {
+                return collect($action->getFlatActions())->map->getName();
+            }
+
+                        return [$action->getName()];
+                    })
         ->all();
 
-    expect($headerNames)->toContain('importSms');
+    expect($actionNames)->toContain('importSms');
 });

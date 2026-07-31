@@ -122,6 +122,8 @@ class ListSmsClearing extends ListRecords
 
         $this->activeTab = $tab;
         $this->tableSort = null;
+        unset($this->cachedSchemas['content']);
+        $this->refreshWorkspacePanelActions();
         $this->reconfigureTableForActiveTab();
         $this->resetTable();
     }
@@ -150,6 +152,8 @@ class ListSmsClearing extends ListRecords
     public function updatedActiveTab(): void
     {
         $this->tableSort = null;
+        unset($this->cachedSchemas['content']);
+        $this->refreshWorkspacePanelActions();
         $this->reconfigureTableForActiveTab();
 
         parent::updatedActiveTab();

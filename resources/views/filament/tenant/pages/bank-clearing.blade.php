@@ -16,9 +16,9 @@ $queueFilter = $queueFilter ?? BankClearingTabRegistry::FILTER_ALL;
                 <p
                     class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
                     {{ __('Business day is set to :business (calendar :calendar). Deposit and cash-out dates use the business day; CSV lines keep statement dates. Adjust match windows under Settings → Reconciliation if Auto-match finds nothing.', [
-                'business' => \App\Support\BusinessDay::today()->toFormattedDateString(),
-                'calendar' => \App\Support\BusinessDay::calendarToday()->toFormattedDateString(),
-            ]) }}
+        'business' => \App\Support\BusinessDay::today()->toFormattedDateString(),
+        'calendar' => \App\Support\BusinessDay::calendarToday()->toFormattedDateString(),
+    ]) }}
                 </p>
         @endif
     </header>
@@ -51,3 +51,6 @@ $queueFilter = $queueFilter ?? BankClearingTabRegistry::FILTER_ALL;
         @endif
     </div>
 </section>
+
+{{-- History hides EmbeddedTable; HasTable pages omit page action modals otherwise. --}}
+@include('filament.tenant.partials.page-workspace-action-modals')

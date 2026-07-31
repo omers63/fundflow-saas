@@ -223,3 +223,41 @@ it('exposes the bank import action in workspace panel actions on the queue tab',
 
     expect($actionNames)->toContain('import');
 });
+
+it('keeps action modals and import available on import history where the table is hidden', function () {
+    $component = Livewire::actingAs($this->admin, 'tenant')
+        ->withQueryParams(['tab' => 'history'])
+        ->test(ListBankAccounts::class, [
+            'activeTab' => BankClearingTabRegistry::TAB_HISTORY,
+        ])
+        ->assertSuccessful()
+        ->assertSeeHtml('wire:partial="action-modals"')
+        ->assertActionExists('import');
+
+    $actionNames = collect($component->instance()->getCachedWorkspacePanelActions())
+        ->flatMap(function ($action) {
+            if ($action instanceof ActionGroup) {
+                return collect($action->getFlatActions())->map->getName();
+            }
+
+            return [$action->getName()];
+        })
+        ->all();
+
+    expect($actionNames)->toContain('import');
+});
+
+it('rebuilds page content when leaving import history so tabs stay interactive', function () {
+    $component = Livewire::actingAs($this->admin, 'tenant')
+        ->test(ListBankAccounts::class)
+        ->call('setBankTab', BankClearingTabRegistry::TAB_HISTORY)
+        ->assertSet('activeTab', BankClearingTabRegistry::TAB_HISTORY)
+        ->assertSeeHtml('wire:partial="action-modals"')
+        ->call('setBankTab', BankClearingTabRegistry::TAB_QUEUE)
+        ->assertSet('activeTab', BankClearingTabRegistry::TAB_QUEUE)
+        ->assertSuccessful();
+
+    foreach (['transaction_date', 'amount', 'status'] as $column) {
+        $component->assertTableColumnVisible($column);
+    }
+});

@@ -1,8 +1,8 @@
 @php
-    use App\Filament\Tenant\Support\SmsClearingTabRegistry;
+use App\Filament\Tenant\Support\SmsClearingTabRegistry;
 
-    $smsTab = $smsTab ?? SmsClearingTabRegistry::TAB_QUEUE;
-    $queueFilter = $queueFilter ?? SmsClearingTabRegistry::FILTER_ALL;
+$smsTab = $smsTab ?? SmsClearingTabRegistry::TAB_QUEUE;
+$queueFilter = $queueFilter ?? SmsClearingTabRegistry::FILTER_ALL;
 @endphp
 
 <section
@@ -15,22 +15,25 @@
     </header>
 
     @include('filament.tenant.partials.audit-system.workspace-actions', [
-        'class' => 'ff-audit-workspace-actions ff-sms-clearing-workspace-actions mb-4',
-    ])
+    'class' => 'ff-audit-workspace-actions ff-sms-clearing-workspace-actions mb-4',
+])
 
     @include('filament.tenant.partials.sms-clearing-tab-pills', [
-        'smsTab' => $smsTab,
-    ])
+    'smsTab' => $smsTab,
+])
 
     <div class="min-w-0 space-y-4" wire:key="sms-clearing-workspace-{{ $smsTab }}-{{ $queueFilter }}">
         @if ($smsTab === SmsClearingTabRegistry::TAB_QUEUE)
             @include('filament.tenant.partials.sms-clearing-queue-insights')
             @include('filament.tenant.partials.sms-clearing-workspace-shortcuts')
             @include('filament.tenant.partials.sms-clearing-queue-filters', [
-                'queueFilter' => $queueFilter,
-            ])
+        'queueFilter' => $queueFilter,
+    ])
         @elseif ($smsTab === SmsClearingTabRegistry::TAB_HISTORY)
             @include('filament.tenant.partials.sms-clearing-history-combined')
         @endif
     </div>
 </section>
+
+{{-- History hides EmbeddedTable; HasTable pages omit page action modals otherwise. --}}
+@include('filament.tenant.partials.page-workspace-action-modals')

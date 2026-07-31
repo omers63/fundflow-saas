@@ -173,6 +173,9 @@ class ListBankAccounts extends ListRecords
         $this->activeTab = $tab;
         $this->tableSort = null;
         $this->cachedHeaderWidgetsSchemaComponents = [];
+        // History omits EmbeddedTable; without flushing, the prior tab's content schema sticks.
+        unset($this->cachedSchemas['content']);
+        $this->refreshWorkspacePanelActions();
         $this->reconfigureTableForActiveTab();
         $this->resetTable();
     }
@@ -201,6 +204,8 @@ class ListBankAccounts extends ListRecords
     public function updatedActiveTab(): void
     {
         $this->tableSort = null;
+        unset($this->cachedSchemas['content']);
+        $this->refreshWorkspacePanelActions();
         $this->reconfigureTableForActiveTab();
 
         parent::updatedActiveTab();
