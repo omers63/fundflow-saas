@@ -17,6 +17,7 @@ use App\Services\AccountingService;
 use App\Services\MemberAnnualSubscriptionFeeService;
 use App\Services\MemberExportService;
 use App\Services\MemberImportService;
+use App\Services\Tenant\MemberMembershipProfileService;
 use App\Support\BusinessDay;
 use App\Support\LoanEligibilityGate;
 use Carbon\Carbon;
@@ -307,6 +308,55 @@ test('member import accepts arabic legacy status labels', function () {
         ->and(Member::query()->where('member_number', 'AR-WITHDRAWN')->value('status'))->toBe('withdrawn');
 });
 
+test('member import populates membership profile from optional columns', function () {
+    $path = writeMemberImportCsv(
+        'member_number,name,email,gender,marital_status,national_id,date_of_birth,city,address,'.
+        'mobile_phone,home_phone,work_phone,work_place,residency_place,occupation,employer,monthly_income,'.
+        'bank_account_number,iban,next_of_kin_name,next_of_kin_phone,'.
+        "application_fee_amount,application_fee_transfer_date,application_fee_transfer_reference,applicant_message\n".
+        'PROF-1,Profile Import Member,profile.import@fund.test,male,married,1234567890,1989-01-14,Riyadh,'.
+        '"King Fahd Rd",0501111222,0112223333,0114445555,Aramco HQ,Riyadh,Engineer,Aramco,18500,'.
+        '101000000099,SA03 0000 0000 0000 0101 0000 0099,Mona Profile,0509998888,'.
+        "75,2024-05-20,FEE-PROF-1,Hello from CSV\n"
+    );
+
+    $result = app(MemberImportService::class)->import($path, 'TempPass@123');
+
+    expect($result['created'])->toBe(1)
+        ->and($result['failed'])->toBe(0);
+
+    $member = Member::query()->where('member_number', 'PROF-1')->first();
+
+    expect($member)->not->toBeNull()
+        ->and($member->phone)->toBe('0501111222');
+
+    $profile = app(MemberMembershipProfileService::class)->findForMember($member);
+
+    expect($profile)->not->toBeNull()
+        ->and($profile->gender)->toBe('male')
+        ->and($profile->marital_status)->toBe('married')
+        ->and($profile->national_id)->toBe('1234567890')
+        ->and($profile->date_of_birth?->toDateString())->toBe('1989-01-14')
+        ->and($profile->city)->toBe('Riyadh')
+        ->and($profile->address)->toBe('King Fahd Rd')
+        ->and($profile->mobile_phone)->toBe('0501111222')
+        ->and($profile->home_phone)->toBe('0112223333')
+        ->and($profile->work_phone)->toBe('0114445555')
+        ->and($profile->work_place)->toBe('Aramco HQ')
+        ->and($profile->residency_place)->toBe('Riyadh')
+        ->and($profile->occupation)->toBe('Engineer')
+        ->and($profile->employer)->toBe('Aramco')
+        ->and((float) $profile->monthly_income)->toBe(18500.0)
+        ->and($profile->bank_account_number)->toBe('101000000099')
+        ->and($profile->iban)->toBe('SA03000000000000010100000099')
+        ->and($profile->next_of_kin_name)->toBe('Mona Profile')
+        ->and($profile->next_of_kin_phone)->toBe('0509998888')
+        ->and((float) $profile->membership_fee_amount)->toBe(75.0)
+        ->and($profile->membership_fee_transfer_date?->toDateString())->toBe('2024-05-20')
+        ->and($profile->membership_fee_transfer_reference)->toBe('FEE-PROF-1')
+        ->and($profile->message)->toBe('Hello from CSV');
+});
+
 test('member export includes roster and balance columns', function () {
     $member = Member::create([
         'member_number' => 'MEM-EXPORT-01',
@@ -350,7 +400,7 @@ test('import members modal uses collapsible csv guide sections', function () {
     $components = $schemaProperty->getValue($action);
 
     $sections = collect($components)
-        ->filter(fn($component): bool => $component instanceof Section)
+        ->filter(fn ($component): bool => $component instanceof Section)
         ->values();
 
     expect($sections)->toHaveCount(6)

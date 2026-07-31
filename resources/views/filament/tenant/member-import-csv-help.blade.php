@@ -66,26 +66,48 @@
             </thead>            
             <tbody class            ="divide-y divide-gray-100 dark:divide-white/10">
                 @foreach ([
-                        'member_number' => __('Optional fixed number; auto-generated when empty'),
-                        'phone' => __('Contact phone'),
-                        'monthly_contribution_amount' => __('500–3000 in steps of 500 (default 500)'),
-                        'joined_at' => __('YYYY-MM-DD (default today)'),
-                        'status' => __('active, inactive, withdrawn — legacy labels mapped on import'),
-                        'password' => __('Portal password (≥8 chars; otherwise uses default from modal)'),
-                        'parent_member_number' => __('Household parent member number (parent row may appear anywhere in the file)'),
-                        'parent_member_email' => __('Household parent email (alternative to number; parent row may appear anywhere in the file)'),
-                        'portal_pin' => __('Optional household profile PIN'),
-                        'contribution_arrears_cutoff_date' => __('Migration cut-off; overrides modal default per row'),
-                        'cutoff_cash_balance' => __('Opening cash credited on import when cut-off date is set'),
-                        'cutoff_fund_balance' => __('Opening fund credited on import when cut-off date is set'),
+                                    'member_number' => __('Optional fixed number; auto-generated when empty'),
+                                    'phone' => __('Contact phone'),
+                                    'monthly_contribution_amount' => __('500–3000 in steps of 500 (default 500)'),
+                                    'joined_at' => __('YYYY-MM-DD (default today)'),
+                                    'status' => __('active, inactive, withdrawn — legacy labels mapped on import'),
+                                    'password' => __('Portal password (≥8 chars; otherwise uses default from modal)'),
+                                    'parent_member_number' => __('Household parent member number (parent row may appear anywhere in the file)'),
+                                    'parent_member_email' => __('Household parent email (alternative to number; parent row may appear anywhere in the file)'),
+                                    'portal_pin' => __('Optional household profile PIN'),
+                                    'contribution_arrears_cutoff_date' => __('Migration cut-off; overrides modal default per row'),
+                                    'cutoff_cash_balance' => __('Opening cash credited on import when cut-off date is set'),
+                                    'cutoff_fund_balance' => __('Opening fund credited on import when cut-off date is set'),
+                        'gender' => __('male, female, other — populates member profile'),
+                        'marital_status' => __('single, married, divorced, widowed — populates member profile'),
+                        'national_id' => __('National ID / Iqama — populates member profile'),
+                        'date_of_birth' => __('YYYY-MM-DD or d/m/Y — populates member profile'),
+                        'city' => __('City — populates member profile'),
+                        'address' => __('Street address — populates member profile'),
+                        'mobile_phone' => __('Mobile phone — populates member profile (fills phone when phone is empty)'),
+                        'home_phone' => __('Home phone — populates member profile'),
+                        'work_phone' => __('Work phone — populates member profile'),
+                        'work_place' => __('Work place — populates member profile'),
+                        'residency_place' => __('Residency place — populates member profile'),
+                        'occupation' => __('Occupation — populates member profile'),
+                        'employer' => __('Employer — populates member profile'),
+                        'monthly_income' => __('Monthly income amount — populates member profile'),
+                        'bank_account_number' => __('Bank account number — populates member profile'),
+                        'iban' => __('IBAN — populates member profile'),
+                        'next_of_kin_name' => __('Next of kin name — populates member profile'),
+                        'next_of_kin_phone' => __('Next of kin phone — populates member profile'),
+                        'application_fee_amount' => __('Application fee amount (alias: membership_fee_amount)'),
+                        'application_fee_transfer_date' => __('Application fee transfer date (alias: membership_fee_transfer_date)'),
+                        'application_fee_transfer_reference' => __('Application fee transfer reference (alias: membership_fee_transfer_reference)'),
+                        'applicant_message' => __('Applicant message (alias: message)'),
                     ] as $col => $hint)
-                                        <tr>
-                                            <td class="px-3 py-2 align-top">
-                                                <code class="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-800 dark:bg-white/10 dark:text-gray-200">{{ $col }}</code>
-                                            </td>
+                                            <tr>
+                                                <td class="px-3 py-2 align-top">
+                                                    <code class="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-800 dark:bg-white/10 dark:text-gray-200">{{ $col }}</code>
+                                                </td>
 
-                                                                    <td class="px-3 py-2 text-gray-600 dark:text-gray-400">{{ $hint }}</td>
-                                        </tr>
+                                                                        <td class="px-3 py-2 text-gray-600 dark:text-gray-400">{{ $hint }}</td>
+                                            </tr>
                 @endforeach
             </tbody>
         </table>

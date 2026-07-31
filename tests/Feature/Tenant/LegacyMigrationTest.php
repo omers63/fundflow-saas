@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Filament\Tenant\Pages\LegacyMigrationPage;
 use App\Jobs\Tenant\RunLegacyMigrationPaymentsJob;
+use App\Models\Central\Tenant;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
@@ -93,8 +94,37 @@ test('tenant admin can access legacy migration page', function () {
         ->test(LegacyMigrationPage::class, ['embedded' => true])
         ->assertSuccessful()
         ->assertSee(__('Step 1: Import members'))
+        ->assertSee(__('Download members sample CSV'))
         ->call('goToStep', 2)
-        ->assertSee(__('Step 2: Import loans'));
+        ->assertSee(__('Step 2: Import loans'))
+        ->assertSee(__('Download loans sample CSV'))
+        ->assertSee(__('Download payments sample CSV'));
+});
+
+test('legacy migration sample csv downloads include profile columns', function () {
+    $tenant = Tenant::find('testing');
+    $domain = 'testing.localhost';
+
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
+        $tenant->domains()->create(['domain' => $domain]);
+    }
+
+    $this->actingAs($this->admin, 'tenant');
+
+    $members = $this->get('http://'.$domain.'/downloads/legacy-members-import-sample');
+    $members->assertSuccessful();
+    expect($members->streamedContent())
+        ->toContain('application_fee_amount')
+        ->toContain('applicant_message')
+        ->toContain('MEM-1001');
+
+    $loans = $this->get('http://'.$domain.'/downloads/legacy-loans-import-sample');
+    $loans->assertSuccessful();
+    expect($loans->streamedContent())->toContain('loan_id')->toContain('MEM-1001');
+
+    $payments = $this->get('http://'.$domain.'/downloads/legacy-payments-import-sample');
+    $payments->assertSuccessful();
+    expect($payments->streamedContent())->toContain('payment_date')->toContain('MEM-1001');
 });
 
 test('legacy migration preview service reads stored member csv upload', function () {
@@ -4659,7 +4689,7 @@ test('legacy excess loan repayment repair peels legacy overpayment before guaran
     $legacyRepayment = $loan->repayments()->create([
         'amount' => 4500,
         'paid_at' => '2022-03-16',
-        'notes' => 'ترحيل البيانات التاريخية [legacy-import:1|excess-guar-repair@fund.test|2022-03-16|4500|loan_repayment||' . $loan->id . ']',
+        'notes' => 'ترحيل البيانات التاريخية [legacy-import:1|excess-guar-repair@fund.test|2022-03-16|4500|loan_repayment||'.$loan->id.']',
     ]);
 
     app(LoanLedgerService::class)->postImportedLoanRepaymentWithCashFlow(

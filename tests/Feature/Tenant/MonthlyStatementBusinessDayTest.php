@@ -223,7 +223,7 @@ test('period contribution paid after business day is excluded from statement tot
         ->and($mayActivity['contributions'])->toEqual(0.0);
 });
 
-test('six-month activity and yearly history stop at business-day month when statement period is later', function () {
+test('six-cycle activity and yearly history stop at business-day cycle when statement period is later', function () {
     Contribution::query()->create([
         'member_id' => $this->member->id,
         'period' => Contribution::periodDate(5, 2026),

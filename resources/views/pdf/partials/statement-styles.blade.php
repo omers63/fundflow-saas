@@ -2,16 +2,26 @@
     $isArabic = $isArabic ?? app()->getLocale() === 'ar';
     $accent = $accent ?? '#059669';
     $align = $isArabic ? 'right' : 'left';
+    // Arabic needs a larger base than Latin, then ~25% down for denser statement pages.
+    $fs = static function (string $en, float $arPx) use ($isArabic): string {
+        if (! $isArabic) {
+            return $en;
+        }
+
+        $scaled = round($arPx * 0.75, 2);
+
+        return rtrim(rtrim(number_format($scaled, 2, '.', ''), '0'), '.').'px';
+    };
 @endphp
 <style>
     .stmt-body {
-        font-size: {{ $isArabic ? '13px' : '10px' }};
+        font-size: {{ $fs('10px', 13) }};
         line-height: {{ $isArabic ? '1.35' : '1.25' }};
         padding-bottom: 18px;
     }
 
     .stmt-body .section-title {
-        font-size: {{ $isArabic ? '18px' : '15px' }};
+        font-size: {{ $fs('15px', 18) }};
         font-weight: 700;
         margin: 10px 0 6px;
         padding-bottom: 3px;
@@ -23,7 +33,7 @@
     .stmt-body .section-title__meta {
         display: inline;
         margin: 0 6px;
-        font-size: {{ $isArabic ? '14px' : '11px' }};
+        font-size: {{ $fs('11px', 14) }};
         /* DomPDF + DejaVu: font-weight 600 falls back to Helvetica (Arabic → ?????). */
         font-weight: 700;
         color: #64748b;
@@ -40,7 +50,7 @@
     }
 
     .stmt-body .data-table th {
-        font-size: {{ $isArabic ? '13px' : '11px' }};
+        font-size: {{ $fs('11px', 13) }};
         font-weight: 700;
         letter-spacing: 0.02em;
         padding: 5px 6px;
@@ -110,7 +120,7 @@
     }
 
     .stmt-hero__eyebrow {
-        font-size: {{ $isArabic ? '13px' : '11px' }};
+        font-size: {{ $fs('11px', 13) }};
         font-weight: 700;
         letter-spacing: {{ $isArabic ? '0.04em' : '0.08em' }};
         text-transform: uppercase;
@@ -124,7 +134,7 @@
     }
 
     .stmt-hero__fund {
-        font-size: {{ $isArabic ? '22px' : '20px' }};
+        font-size: {{ $fs('20px', 22) }};
         font-weight: 700;
         color: #0f172a;
         line-height: 1.2;
@@ -146,7 +156,7 @@
         padding: 2px 0;
         vertical-align: middle;
         color: #334155;
-        font-size: {{ $isArabic ? '14px' : '12px' }};
+        font-size: {{ $fs('12px', 14) }};
         line-height: 1.35;
     }
 
@@ -269,7 +279,7 @@
     }
 
     .stmt-kpi__label {
-        font-size: {{ $isArabic ? '12px' : '10px' }};
+        font-size: {{ $fs('10px', 12) }};
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.03em;
@@ -279,7 +289,7 @@
     }
 
     .stmt-kpi__value {
-        font-size: {{ $isArabic ? '14px' : '12px' }};
+        font-size: {{ $fs('12px', 14) }};
         font-weight: 700;
         color: #0f172a;
         text-align: center;
@@ -311,7 +321,7 @@
     }
 
     .stmt-card__title {
-        font-size: {{ $isArabic ? '14px' : '11px' }};
+        font-size: {{ $fs('11px', 14) }};
         font-weight: 700;
         color:
             {{ $accent }}
@@ -338,7 +348,7 @@
     .stmt-meta__label {
         width: 42%;
         color: #64748b;
-        font-size: {{ $isArabic ? '12px' : '9px' }};
+        font-size: {{ $fs('9px', 12) }};
         font-weight: {{ $isArabic ? '700' : '400' }};
     }
 
@@ -346,7 +356,7 @@
         width: 58%;
         font-weight: 700;
         color: #0f172a;
-        font-size: {{ $isArabic ? '13px' : 'inherit' }};
+        font-size: {{ $fs('inherit', 13) }};
     }
 
     .stmt-meta--en .stmt-meta__label {

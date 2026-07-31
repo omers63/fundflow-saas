@@ -18,24 +18,37 @@
                 <div class="ff-maintenance-panel__body space-y-4">
                     @if ($membersImportRunning)
                         @include('filament.tenant.partials.legacy-migration-running-banner', [
-                'message' => __('Importing members in the background. This page will update when finished.'),
-            ])
+            'message' => __('Importing members in the background. This page will update when finished.'),
+        ])
                     @endif
 
                     {{ $this->form }}
 
                     @include('filament.tenant.partials.legacy-migration-csv-upload', [
-            'wireModel' => 'pendingMembersCsv',
-            'label' => __('Members CSV'),
-            'description' => __('One row per member. Include the opening balance columns as of the cut-off date.'),
-            'summary' => $uploadDiagnostics['members'] ?? null,
-            'icon' => 'heroicon-o-users',
-        ])
+                        'wireModel' => 'pendingMembersCsv',
+                        'label' => __('Members CSV'),
+                        'description' => __('One row per member. Include the opening balance columns as of the cut-off date.'),
+                        'summary' => $uploadDiagnostics['members'] ?? null,
+                        'sampleUrl' => route('tenant.downloads.legacy-members-import-sample'),
+                        'sampleLabel' => __('Download members sample CSV'),
+                        'icon' => 'heroicon-o-users',
+                    ])
 
                     @include('filament.tenant.partials.audit-system.workspace-actions', [
                         'names' => ['importMembers'],
                         'class' => '',
                     ])
+
+                    <details class="ff-legacy-wizard-format-docs rounded-lg border border-gray-200 dark:border-white/10">
+                        <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-gray-800 dark:text-gray-200">
+                            {{ __('Members CSV column reference') }}
+                        </summary>
+                        <div class="space-y-4 border-t border-gray-100 px-4 py-4 dark:border-white/10">
+                            @include('filament.tenant.partials.legacy-migration-column-table', [
+                                'columns' => \App\Support\LegacyMigrationSampleCsv::memberColumnDocs(),
+                            ])
+                        </div>
+                    </details>
                 </div>
             </section>
     @endif
@@ -79,6 +92,8 @@
                         'label' => __('Payments CSV'),
                         'description' => __('Needed here too: on each disbursement date the loan tops up the member fund from their contribution rows in this file. You will reuse the same file to classify payments in step 3.'),
                         'summary' => $uploadDiagnostics['payments'] ?? null,
+                        'sampleUrl' => route('tenant.downloads.legacy-payments-import-sample'),
+                        'sampleLabel' => __('Download payments sample CSV'),
                         'icon' => 'heroicon-o-credit-card',
                     ])
                 </div>
@@ -136,6 +151,8 @@
                     'label' => __('Payments CSV'),
                     'description' => __('This is the same file you uploaded in step 2. Replace it only if the payment data changed.'),
                     'summary' => $uploadDiagnostics['payments'] ?? null,
+                    'sampleUrl' => route('tenant.downloads.legacy-payments-import-sample'),
+                    'sampleLabel' => __('Download payments sample CSV'),
                     'icon' => 'heroicon-o-credit-card',
                 ])
 
@@ -143,6 +160,17 @@
                     'names' => ['classifyPayments'],
                     'class' => '',
                 ])
+
+                <details class="ff-legacy-wizard-format-docs rounded-lg border border-gray-200 dark:border-white/10">
+                    <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-gray-800 dark:text-gray-200">
+                        {{ __('Payments CSV column reference') }}
+                    </summary>
+                    <div class="space-y-4 border-t border-gray-100 px-4 py-4 dark:border-white/10">
+                        @include('filament.tenant.partials.legacy-migration-column-table', [
+                            'columns' => \App\Support\LegacyMigrationSampleCsv::paymentColumnDocs(),
+                        ])
+                    </div>
+                </details>
             </div>
         </section>
     @endif
@@ -206,9 +234,9 @@
                 @endif
 
                 @include('filament.tenant.partials.audit-system.workspace-actions', [
-                    'names' => ['dryRun', 'runMigration'],
-                    'class' => '',
-                ])
+        'names' => ['dryRun', 'runMigration'],
+        'class' => '',
+    ])
             </div>
         </section>
 
@@ -216,8 +244,8 @@
             <section class="ff-maintenance-panel" wire:poll.5s="pollMigrationStatus">
                 <div class="ff-maintenance-panel__body">
                     @include('filament.tenant.partials.legacy-migration-running-banner', [
-                        'message' => __('Migration is running in the background. Results will appear below when finished.'),
-                    ])
+            'message' => __('Migration is running in the background. Results will appear below when finished.'),
+        ])
                 </div>
             </section>
         @endif

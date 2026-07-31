@@ -7,6 +7,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\ContributionCycleService;
 use App\Services\MonthlyStatementService;
 use App\Support\BusinessDaySettings;
 use Carbon\Carbon;
@@ -17,6 +18,7 @@ uses(InitializesTenancy::class);
 beforeEach(function () {
     $this->initializeTenancy();
     BusinessDaySettings::saveFromForm(null);
+    app()->setLocale('en');
 
     $this->memberUser = User::create([
         'name' => 'Yearly History Member',
@@ -152,15 +154,23 @@ test('yearly history defers cross-year paid contributions to the payment year', 
     $row2024 = $history->firstWhere('year', 2024);
     $row2025 = $history->firstWhere('year', 2025);
 
-    // Period-only sum would show 30K contributions vs 27K fund for 2024.
+    // Period paid by Dec-cycle end stays in that year (Dec cycle ends early January).
     expect($row2024)->not->toBeNull();
-    expect($row2024['contributions'])->toEqual(27000);
-    expect($row2024['fund_balance'])->toEqual(27000);
+    expect($row2024['contributions'])->toEqual(30000);
+    expect($row2024['fund_balance'])->toEqual(30000);
     expect($row2024['through'] ?? null)->toBeNull();
+    expect($row2024['cycle_start'])->toBe(
+        app(ContributionCycleService::class)->cycleStartAt(1, 2024)->toDateString()
+    );
+    expect($row2024['cycle_end'])->toBe(
+        app(ContributionCycleService::class)->cycleDueEndAt(12, 2024)->toDateString()
+    );
     expect($row2025)->not->toBeNull();
-    expect($row2025['contributions'])->toEqual(3000);
+    expect($row2025['contributions'])->toEqual(0);
     expect($row2025['fund_balance'])->toEqual(30000);
-    expect($row2025['through'])->toBe('2025-10-31');
+        expect($row2025['through'])->toBe(
+            app(ContributionCycleService::class)->cycleDueEndAt(10, 2025)->toDateString()
+        );
 });
 
 test('october statement year row matches fund credits through october not full calendar year', function () {
@@ -214,14 +224,16 @@ test('october statement year row matches fund credits through october not full c
     $statement = app(MonthlyStatementService::class)->generateForMember($member, '2025-10');
     $row2025 = collect($statement->details['yearly_history'] ?? [])->firstWhere('year', 2025);
 
-    // Full-year fund credits = 33K; October statement must stop at Oct → 30K.
+    // Full-year fund credits = 33K; October statement must stop at Oct cycle end → 30K.
     expect($row2025)->not->toBeNull();
-    expect($row2025['through'])->toBe('2025-10-31');
+    expect($row2025['through'])->toBe(
+        app(ContributionCycleService::class)->cycleDueEndAt(10, 2025)->toDateString()
+    );
     expect($row2025['contributions'])->toEqual(30000);
     expect($row2025['fund_balance'])->toEqual(30000);
 });
 
-test('six-month activity buckets contributions by payment date to match the fund ledger', function () {
+test('six-cycle activity buckets contributions by payment date within cycle windows', function () {
     $user = User::create([
         'name' => 'Activity Ledger Member',
         'email' => 'yearly-activity@fund.test',
@@ -243,7 +255,9 @@ test('six-month activity buckets contributions by payment date to match the fund
 
     app(AccountingService::class)->createMemberAccounts($member);
 
-    // June period paid in July — ledger credit is July; activity must show under July, not June.
+    $cycles = app(ContributionCycleService::class);
+
+    // June period paid early July — still inside the June cycle window (starts day 6).
     Contribution::query()->create([
         'member_id' => $member->id,
         'period' => Contribution::periodDate(6, 2025),
@@ -262,18 +276,22 @@ test('six-month activity buckets contributions by payment date to match the fund
     $statement = app(MonthlyStatementService::class)->generateForMember($member, '2025-10');
     $months = collect($statement->details['current_year_months'] ?? []);
 
+    $june = $months->firstWhere('period', '2025-06');
     $july = $months->firstWhere('period', '2025-07');
     $august = $months->firstWhere('period', '2025-08');
-    $september = $months->firstWhere('period', '2025-09');
 
-    expect($july['contributions'])->toEqual(3000);
-    expect($july['contribution_dates'])->toBe(['2025-07-02']);
-    expect($august['contributions'])->toEqual(0);
-    expect($september['contributions'])->toEqual(1000);
-    expect($september['contribution_dates'])->toBe(['2025-09-01']);
+    expect($june['contributions'])->toEqual(3000);
+    expect($june['contribution_dates'])->toBe(['2025-07-02']);
+    expect($june['cycle_start'])->toBe($cycles->cycleStartAt(6, 2025)->toDateString());
+    expect($june['cycle_end'])->toBe($cycles->cycleDueEndAt(6, 2025)->toDateString());
+    expect($july['contributions'])->toEqual(0);
+    expect($august['contributions'])->toEqual(1000);
+    expect($august['contribution_dates'])->toBe(['2025-09-01']);
+    expect($august['label'])->not->toBeEmpty()
+        ->and($august['cycle_start'])->toBe($cycles->cycleStartAt(8, 2025)->toDateString())
+        ->and($august['cycle_end'])->toBe($cycles->cycleDueEndAt(8, 2025)->toDateString());
 });
-
-test('lifetime summary is capped to the statement period end', function () {
+test('lifetime summary is capped to the statement closing cycle end', function () {
     BusinessDaySettings::saveFromForm('2025-11-06');
 
     $user = User::create([
@@ -297,6 +315,8 @@ test('lifetime summary is capped to the statement period end', function () {
 
     app(AccountingService::class)->createMemberAccounts($member);
     $fund = $member->fundAccount;
+    $cycles = app(ContributionCycleService::class);
+    $octCycleEnd = $cycles->cycleDueEndAt(10, 2025)->toDateString();
 
     $posted = Contribution::query()->create([
         'member_id' => $member->id,
@@ -342,7 +362,7 @@ test('lifetime summary is capped to the statement period end', function () {
     $statement = app(MonthlyStatementService::class)->generateForMember($member, '2025-10');
     $lifetime = $statement->details['lifetime'];
 
-    expect($lifetime['as_of'])->toBe('2025-10-31');
+    expect($lifetime['as_of'])->toBe($octCycleEnd);
     expect($statement->details['fund_closing'])->toEqual(50000);
     expect($lifetime['total_contributions'])->toEqual(50000);
     expect($lifetime['fund_balance'])->toEqual(50000);

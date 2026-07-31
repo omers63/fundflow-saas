@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Tenant\Member;
+use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\User;
 use App\Services\Tenant\HouseholdMemberService;
+use App\Services\Tenant\MemberMembershipProfileService;
 use App\Support\BusinessDay;
 use App\Support\ContributionAmountSettings;
 use App\Support\LegacyMemberIdentifierResolver;
@@ -27,6 +29,7 @@ final class MemberImportService
         private readonly MemberOpeningBalanceService $openingBalances,
         private readonly ContributionCollectionCycleService $contributions,
         private readonly LegacyMemberIdentifierResolver $memberResolver,
+        private readonly MemberMembershipProfileService $membershipProfiles,
     ) {}
 
     /**
@@ -35,7 +38,12 @@ final class MemberImportService
      * Required: name and (email or member_number)
      * Optional: member_number when email is provided, phone, monthly_contribution_amount, joined_at, status, password,
      * parent_member_number, parent_member_email, portal_pin, contribution_arrears_cutoff_date,
-     * cutoff_cash_balance, cutoff_fund_balance
+     * cutoff_cash_balance, cutoff_fund_balance,
+     * and membership profile fields (gender, marital_status, national_id, date_of_birth, city, address,
+     * mobile_phone, home_phone, work_phone, work_place, residency_place, occupation, employer, monthly_income,
+     * bank_account_number, iban, next_of_kin_name, next_of_kin_phone, membership_fee_amount /
+     * application_fee_amount, membership_fee_transfer_date / application_fee_transfer_date,
+     * membership_fee_transfer_reference / application_fee_transfer_reference, message / applicant_message).
      *
      * Parent rows may appear after dependent rows; the importer resolves household links in multiple passes.
      *
@@ -173,8 +181,16 @@ final class MemberImportService
         }
 
         $phone = $this->cell($row, 'phone') ?: null;
+        $profileAttributes = $this->parseProfileAttributes($row);
 
-        return DB::transaction(function () use ($name, $email, $phone, $plainPassword, $parentMember, $monthlyContribution, $joinedAt, $status, $memberNumber, $portalPin, $arrearsCutoffDate, $cashBalance, $fundBalance): string {
+        if ($phone === null || $phone === '') {
+            $mobile = $profileAttributes['mobile_phone'] ?? null;
+            if (is_string($mobile) && $mobile !== '') {
+                $phone = $mobile;
+            }
+        }
+
+        return DB::transaction(function () use ($name, $email, $phone, $plainPassword, $parentMember, $monthlyContribution, $joinedAt, $status, $memberNumber, $portalPin, $arrearsCutoffDate, $cashBalance, $fundBalance, $profileAttributes): string {
             $attributes = [
                 'name' => $name,
                 'email' => $email,
@@ -214,6 +230,8 @@ final class MemberImportService
                     );
                 }
             }
+
+            $this->membershipProfiles->syncFromImportAttributes($member->fresh() ?? $member, $profileAttributes);
 
             return 'created';
         });
@@ -594,7 +612,7 @@ final class MemberImportService
 
         $headerLine = array_shift($lines);
         $headers = str_getcsv((string) $headerLine, ',', '"', '\\');
-        $headers = array_map(fn ($header) => strtolower(trim(str_replace(' ', '_', (string) $header))), $headers);
+        $headers = array_map(fn ($header) => $this->normalizeCsvHeaderKey((string) $header), $headers);
 
         $rows = [];
 
@@ -614,6 +632,211 @@ final class MemberImportService
         }
 
         return $rows;
+    }
+
+    private function normalizeCsvHeaderKey(string $header): string
+    {
+        $h = trim($header);
+        if (str_starts_with($h, "\xEF\xBB\xBF")) {
+            $h = substr($h, 3);
+        }
+
+        $h = strtolower(str_replace(["\xc2\xa0", ' ', '-'], ['_', '_', '_'], $h));
+        $h = preg_replace('/_+/', '_', $h) ?? $h;
+        $h = trim($h, '_');
+
+        return match ($h) {
+            'mobile', 'cell', 'mobile_number', 'cell_phone', 'whatsapp' => 'mobile_phone',
+            'national_id_number', 'nid', 'iqama', 'iqama_number' => 'national_id',
+            'dob', 'birth_date', 'birthdate' => 'date_of_birth',
+            'bank_account', 'account_number', 'bank_acc' => 'bank_account_number',
+            'kin_name', 'emergency_contact_name', 'nok_name' => 'next_of_kin_name',
+            'kin_phone', 'emergency_contact_phone', 'nok_phone' => 'next_of_kin_phone',
+            'application_fee_amount', 'app_fee_amount', 'subscription_fee_amount' => 'membership_fee_amount',
+            'application_fee_transfer_date', 'app_fee_transfer_date', 'fee_transfer_date' => 'membership_fee_transfer_date',
+            'application_fee_transfer_reference', 'app_fee_transfer_reference', 'fee_transfer_reference',
+            'membership_fee_reference' => 'membership_fee_transfer_reference',
+            'applicant_message', 'applicant_msg', 'application_message' => 'message',
+            'cut_off_cash_balance', 'opening_cash_balance' => 'cutoff_cash_balance',
+            'cut_off_fund_balance', 'opening_fund_balance' => 'cutoff_fund_balance',
+            default => $h,
+        };
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     * @return array<string, mixed>
+     */
+    private function parseProfileAttributes(array $row): array
+    {
+        $attrs = [];
+
+        foreach ([
+            'city',
+            'address',
+            'mobile_phone',
+            'home_phone',
+            'work_phone',
+            'work_place',
+            'residency_place',
+            'occupation',
+            'employer',
+            'bank_account_number',
+            'next_of_kin_name',
+            'next_of_kin_phone',
+            'message',
+            'membership_fee_transfer_reference',
+        ] as $key) {
+            $value = $this->cell($row, $key);
+            if ($value !== '') {
+                $attrs[$key] = $value;
+            }
+        }
+
+        $gender = $this->normalizeGender($this->cell($row, 'gender'));
+        if ($gender !== null) {
+            $attrs['gender'] = $gender;
+        }
+
+        $marital = $this->normalizeMaritalStatus($this->cell($row, 'marital_status'));
+        if ($marital !== null) {
+            $attrs['marital_status'] = $marital;
+        }
+
+        $nationalId = $this->cell($row, 'national_id');
+        if ($nationalId !== '') {
+            $attrs['national_id'] = $nationalId;
+        }
+
+        $dob = $this->cell($row, 'date_of_birth');
+        if ($dob !== '') {
+            $attrs['date_of_birth'] = $this->parseFlexibleDateToDateString($dob, 'date_of_birth');
+        }
+
+        $income = $this->cell($row, 'monthly_income');
+        if ($income !== '') {
+            if (! is_numeric($income) || (float) $income < 0) {
+                throw new InvalidArgumentException(__('monthly_income must be a non-negative number.'));
+            }
+            $attrs['monthly_income'] = round((float) $income, 2);
+        }
+
+        $iban = $this->cell($row, 'iban');
+        if ($iban !== '') {
+            $attrs['iban'] = strtoupper(preg_replace('/\s+/', '', $iban) ?? $iban);
+        }
+
+        $feeAmount = $this->cell($row, 'membership_fee_amount');
+        if ($feeAmount !== '') {
+            if (! is_numeric($feeAmount) || (float) $feeAmount < 0) {
+                throw new InvalidArgumentException(__('membership_fee_amount must be a non-negative number.'));
+            }
+            $attrs['membership_fee_amount'] = round((float) $feeAmount, 2);
+        }
+
+        $feeDate = $this->cell($row, 'membership_fee_transfer_date');
+        if ($feeDate !== '') {
+            $attrs['membership_fee_transfer_date'] = $this->parseFlexibleDateToDateString($feeDate, 'membership_fee_transfer_date');
+        }
+
+        return $attrs;
+    }
+
+    private function normalizeGender(string $value): ?string
+    {
+        if ($value === '') {
+            return null;
+        }
+
+        $t = trim($value);
+        $map = [
+            'ذكر' => 'male',
+            'أنثى' => 'female',
+            'انثى' => 'female',
+            'أنثي' => 'female',
+            'انثي' => 'female',
+            'أخرى' => 'other',
+            'أخر' => 'other',
+            'آخر' => 'other',
+        ];
+        if (isset($map[$t])) {
+            return $map[$t];
+        }
+
+        $v = strtolower($t);
+        $allowed = array_keys(MembershipApplication::genderOptions());
+        if (in_array($v, $allowed, true)) {
+            return $v;
+        }
+
+        throw new InvalidArgumentException(
+            __('gender must be one of: :values (got: :value).', [
+                'values' => implode(', ', $allowed),
+                'value' => $value,
+            ])
+        );
+    }
+
+    private function normalizeMaritalStatus(string $value): ?string
+    {
+        if ($value === '') {
+            return null;
+        }
+
+        $t = trim($value);
+        $map = [
+            'أعزب' => 'single',
+            'عزباء' => 'single',
+            'متزوج' => 'married',
+            'متزوجة' => 'married',
+            'مطلق' => 'divorced',
+            'مطلقة' => 'divorced',
+            'أرمل' => 'widowed',
+            'أرملة' => 'widowed',
+        ];
+        if (isset($map[$t])) {
+            return $map[$t];
+        }
+
+        $v = strtolower($t);
+        $allowed = array_keys(MembershipApplication::maritalStatusOptions());
+        if (in_array($v, $allowed, true)) {
+            return $v;
+        }
+
+        throw new InvalidArgumentException(
+            __('marital_status must be one of: :values (got: :value).', [
+                'values' => implode(', ', $allowed),
+                'value' => $value,
+            ])
+        );
+    }
+
+    private function parseFlexibleDateToDateString(string $value, string $fieldLabel): string
+    {
+        $v = trim($value);
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) {
+            try {
+                return Carbon::createFromFormat('!Y-m-d', $v)->toDateString();
+            } catch (Throwable) {
+                throw new InvalidArgumentException(__('Invalid :field: :value', ['field' => $fieldLabel, 'value' => $value]));
+            }
+        }
+
+        foreach (['d/m/Y', 'd/m/y', 'd-m-Y', 'm/d/Y', 'm/d/y', 'Y/m/d'] as $format) {
+            try {
+                return Carbon::createFromFormat($format, $v)->toDateString();
+            } catch (Throwable) {
+                continue;
+            }
+        }
+
+        try {
+            return Carbon::parse($v)->toDateString();
+        } catch (Throwable) {
+            throw new InvalidArgumentException(__('Invalid :field: :value', ['field' => $fieldLabel, 'value' => $value]));
+        }
     }
 
     /**

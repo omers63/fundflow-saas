@@ -320,7 +320,7 @@ test('year-by-year summary includes total cash and fund balance columns', functi
         ->toContain('900.00');
 });
 
-test('activity table uses rolling six-month window with date column', function () {
+test('activity table uses rolling six-cycle window with cycle bounds', function () {
     $statement = app(MonthlyStatementService::class)->generateForMember($this->member, '2026-05');
     $details = $statement->details ?? [];
 
@@ -328,13 +328,16 @@ test('activity table uses rolling six-month window with date column', function (
         ->and($details['current_year_totals']['month_count'])->toBe(6)
         ->and($details['current_year_totals']['from_period'])->toBe('2025-12')
         ->and($details['current_year_totals']['to_period'])->toBe('2026-05')
-        ->and($details['yearly_history'][0])->toHaveKeys(['cash_balance', 'fund_balance']);
+        ->and($details['yearly_history'][0])->toHaveKeys(['cash_balance', 'fund_balance', 'cycle_start', 'cycle_end']);
 
     $details['current_year_months'] = [
         [
             'month' => 5,
             'year' => 2026,
             'period' => '2026-05',
+            'label' => 'May Cycle 2026',
+            'cycle_start' => '2026-05-06',
+            'cycle_end' => '2026-06-05',
             'contributions' => 1000,
             'repayments' => 250,
             'contribution_dates' => ['2026-05-10'],
@@ -344,6 +347,7 @@ test('activity table uses rolling six-month window with date column', function (
     $details['current_year_totals'] = [
         'year' => 2026,
         'month_count' => 6,
+        'cycle_count' => 6,
         'from_period' => '2025-12',
         'to_period' => '2026-05',
         'from_year' => 2025,
@@ -375,9 +379,9 @@ test('activity table uses rolling six-month window with date column', function (
     });
 
     expect($html)
-        ->toContain('6-Month Activity')
-        ->toContain('Dec-2025')
-        ->toContain('May-2026')
+        ->toContain('6-Cycle Summary')
+        ->toContain('Dec Cycle 2025')
+        ->toContain('May Cycle 2026')
         ->toContain(' to ')
         ->toContain('stmt-tfoot-pill')
         ->toContain('stmt-kpi-pill')
@@ -394,10 +398,12 @@ test('activity table uses rolling six-month window with date column', function (
         ->toContain('table-header-group')
         ->toContain('stmt-section--keep')
         ->toContain('page-break-after: avoid')
+        ->toContain('>Cycle<')
         ->toContain('>Date<')
         ->toContain('2026-05-10')
-        ->toContain('6-Month contributions')
-        ->toContain('6-Month repayments')
+        ->not->toContain('>Cycle window<')
+        ->toContain('6-Cycle contributions')
+        ->toContain('6-Cycle repayments')
         ->toContain('stmt-progress')
         ->toContain('stmt-progress__cell')
         ->toContain('stmt-mini-track')
@@ -581,9 +587,9 @@ test('monthly statement pdf view renders arabic labels for arabic members', func
         ->toContain('direction: rtl')
         ->toContain('text-align: right')
         ->toContain('font-family: Amiri')
-        ->toContain('font-size: 13.5px')
-        ->toContain('font-size: 18px')
-        ->toContain('font-size: 14px')
+        ->toContain('font-size: 13.5px') // layout body + section title (18×0.75)
+        ->toContain('font-size: 10.5px')
+        ->toContain('font-size: 9.75px')
         ->toContain('stmt-hero__meta-label')
         ->toContain('font-weight: 700')
         ->toContain('stmt-hero__copy')
@@ -621,11 +627,11 @@ test('monthly statement pdf view renders arabic labels for arabic members', func
         ->toContain('data-table')
         ->toContain('اعتباراً من')
         ->toContain('رقم العضو')
-        ->toContain('نشاط 6 أشهر')
+        ->toContain('ملخص 6 دورات')
         ->toContain('السنة')
         ->toContain('إلى')
-        ->toContain('مساهمات 6 أشهر')
-        ->toContain('سداد 6 أشهر')
+        ->toContain('مساهمات 6 دورات')
+        ->toContain('سداد 6 دورات')
         ->not->toContain('stmt-bar-track')
         ->not->toContain('stmt-inline-totals')
         ->not->toContain('stmt-year-chart');
@@ -636,12 +642,12 @@ test('monthly statement pdf view renders arabic labels for arabic members', func
         ->toBeLessThan(strpos($html, 'الفترة:', $heroCopyPos));
     expect(strpos($html, '<span dir="ltr">2026</span>', $heroCopyPos))
         ->toBeLessThan(strpos($html, 'الفترة:', $heroCopyPos));
-    expect(strpos($html, 'نشاط 6 أشهر'))->toBeGreaterThan(0);
+    expect(strpos($html, 'ملخص 6 دورات'))->toBeGreaterThan(0);
 
-    // Activity date range: Arabic months stay outside dir=ltr (year digits only in LTR).
+    // Activity cycle range: Arabic months stay outside dir=ltr (year digits only in LTR).
     expect($html)
-        ->toContain('<span dir="ltr">2025</span> ديسمبر')
-        ->toContain('<span dir="ltr">2026</span> مايو')
+        ->toContain('<span dir="ltr">2025</span> ديسمبر الدورة')
+        ->toContain('<span dir="ltr">2026</span> مايو الدورة')
         ->toContain('إلى')
         ->not->toContain('<span dir="ltr">ديسمبر')
         ->not->toContain('<span dir="ltr">مايو');

@@ -146,4 +146,47 @@ final class MemberMembershipProfileService
 
         return $state;
     }
+
+    /**
+     * Persist optional profile columns from member / legacy CSV import onto the member's profile record.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public function syncFromImportAttributes(Member $member, array $attributes): ?MembershipApplication
+    {
+        $filtered = collect($attributes)
+            ->only(self::PROFILE_ATTRIBUTES)
+            ->reject(fn (mixed $value): bool => $value === null || $value === '')
+            ->map(function (mixed $value, string $key): mixed {
+                if ($key === 'iban' && filled($value)) {
+                    return strtoupper((string) $value);
+                }
+
+                return $value;
+            })
+            ->all();
+
+        if ($filtered === []) {
+            return $this->findForMember($member);
+        }
+
+        $application = $this->resolveForMember($member);
+        $application->update($filtered);
+
+        $mobilePhone = filled($filtered['mobile_phone'] ?? null)
+            ? (string) $filtered['mobile_phone']
+            : null;
+
+        if ($mobilePhone !== null && (string) $member->phone !== $mobilePhone) {
+            $member->update(['phone' => $mobilePhone]);
+        }
+
+        $user = $member->user;
+
+        if ($mobilePhone !== null && $user !== null && (string) $user->phone !== $mobilePhone) {
+            $user->update(['phone' => $mobilePhone]);
+        }
+
+        return $application->fresh();
+    }
 }
