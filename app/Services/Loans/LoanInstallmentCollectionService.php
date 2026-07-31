@@ -13,6 +13,7 @@ use App\Models\Tenant\Member;
 use App\Notifications\Tenant\LoanRepaymentAppliedNotification;
 use App\Services\ContributionCycleService;
 use App\Support\BusinessDay;
+use App\Support\ContributionPolicySettings;
 use App\Support\InstallmentCollectionStatus;
 use App\Support\LegacyImportedLoan;
 use Illuminate\Support\Facades\DB;
@@ -119,8 +120,20 @@ class LoanInstallmentCollectionService
                 return 'no_cash';
             }
 
+            if (! ContributionPolicySettings::allowsPartialCollectionFor(
+                $member,
+                $this->installmentIsOpenCycleObligation($installment, $cycleMonth, $cycleYear),
+            )) {
+                return 'no_cash';
+            }
+
             return $this->postPartialCollection($installment, $member, $cash, $principalRemaining);
         }
+
+        $allowPartial = ContributionPolicySettings::allowsPartialCollectionFor(
+            $member,
+            $this->installmentIsOpenCycleObligation($installment, $cycleMonth, $cycleYear),
+        );
 
         try {
             return $this->postFullCollection($installment, $loan, $member, $principalRemaining, $lateFee);
@@ -133,8 +146,29 @@ class LoanInstallmentCollectionService
                 return 'no_cash';
             }
 
+            if (! $allowPartial) {
+                return 'no_cash';
+            }
+
             return $this->postPartialCollection($installment, $member, $cash, $principalRemaining);
         }
+    }
+
+    /**
+     * Open-cycle EMI: due date falls in the current open period and is not overdue.
+     */
+    protected function installmentIsOpenCycleObligation(
+        LoanInstallment $installment,
+        int $cycleMonth,
+        int $cycleYear,
+    ): bool {
+        if ($installment->status === 'overdue') {
+            return false;
+        }
+
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+
+        return $cycleMonth === $openMonth && $cycleYear === $openYear;
     }
 
     public function requiredCashForInstallment(LoanInstallment $installment): float

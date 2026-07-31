@@ -147,8 +147,16 @@ class ContributionCollectionCycleService
         }
 
         $debitAmount = min($cashBalance, $required);
+        $allowPartial = ContributionPolicySettings::allowsPartialCollectionFor(
+            $member,
+            $this->contributionIsOpenCycleObligation($contribution),
+        );
 
         if ($debitAmount < $required - 0.00001) {
+            if (! $allowPartial) {
+                return 'insufficient';
+            }
+
             $contribution->update(['collection_status' => ContributionCollectionStatus::SETTLING]);
 
             return $this->postPartialCollection($contribution, $debitAmount, $lateFeeDue, $shortfall);
@@ -166,8 +174,38 @@ class ContributionCollectionCycleService
                 return 'insufficient';
             }
 
+            if (! $allowPartial) {
+                return 'insufficient';
+            }
+
             return $this->postPartialCollection($contribution, $available, $lateFeeDue, $shortfall);
         }
+    }
+
+    /**
+     * Open-cycle obligation: current open period and not yet marked overdue.
+     */
+    protected function contributionIsOpenCycleObligation(Contribution $contribution): bool
+    {
+        if ($contribution->period === null) {
+            return false;
+        }
+
+        if ($contribution->overdue_since !== null) {
+            return false;
+        }
+
+        if (in_array($contribution->collection_status, [
+            ContributionCollectionStatus::OVERDUE,
+            ...ContributionCollectionStatus::lateStates(),
+        ], true)) {
+            return false;
+        }
+
+        [$openMonth, $openYear] = app(ContributionCycleService::class)->currentOpenPeriod();
+
+        return (int) $contribution->period->month === $openMonth
+            && (int) $contribution->period->year === $openYear;
     }
 
     /**

@@ -6,7 +6,6 @@ namespace App\Filament\Tenant\Resources\Members\Concerns;
 
 use App\Filament\Support\ContributionCycleHeaderActions;
 use App\Filament\Support\ContributionTableActions;
-use App\Filament\Support\MemberContributionFilamentActions;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
@@ -204,22 +203,6 @@ trait InteractsWithMemberContributionHeaderActions
                     $this->resetTable();
                 }
             });
-    }
-
-    protected function buildMemberContributionTopUpAction(): Action
-    {
-        return MemberContributionFilamentActions::adminContributionTopUp(
-            fn (): ?Member => $this->resolveMemberForContributionAction(),
-        )->after(function (): void {
-            $target = $this->resolveContributionRefreshTarget();
-
-            if ($target === null) {
-                return;
-            }
-
-            ContributionTableActions::refreshContributionViews($target);
-            MemberResource::dispatchMemberDetailInsightsRefresh($target);
-        });
     }
 
     protected function resolveMemberForContributionAction(): ?Member

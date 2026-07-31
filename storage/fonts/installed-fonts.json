@@ -5,5 +5,32 @@
         "500": "\/var\/www\/fundflow-saas\/storage\/fonts\/amiri_normal_bbb7aa50db395c70b9436a747b21b1f0",
         "600": "\/var\/www\/fundflow-saas\/storage\/fonts\/amiri_bold_bbb7aa50db395c70b9436a747b21b1f0",
         "800": "\/var\/www\/fundflow-saas\/storage\/fonts\/amiri_bold_bbb7aa50db395c70b9436a747b21b1f0"
+    },
+    "dejavu sans": {
+        "bold": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSans-Bold",
+        "bold_italic": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSans-BoldOblique",
+        "italic": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSans-Oblique",
+        "normal": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSans",
+        "500": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSans",
+        "600": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSans-Bold",
+        "800": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSans-Bold"
+    },
+    "dejavu serif": {
+        "bold": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSerif-Bold",
+        "bold_italic": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSerif-BoldItalic",
+        "italic": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSerif-Italic",
+        "normal": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSerif",
+        "500": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSerif",
+        "600": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSerif-Bold",
+        "800": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSerif-Bold"
+    },
+    "dejavu sans mono": {
+        "bold": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSansMono-Bold",
+        "bold_italic": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSansMono-BoldOblique",
+        "italic": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSansMono-Oblique",
+        "normal": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSansMono",
+        "500": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSansMono",
+        "600": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSansMono-Bold",
+        "800": "\/var\/www\/fundflow-saas\/vendor\/dompdf\/dompdf\/lib\/fonts\/DejaVuSansMono-Bold"
     }
 }

@@ -50,7 +50,6 @@ class ListMyContributions extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            MemberContributionFilamentActions::voluntaryTopUp(),
             MemberContributionFilamentActions::requestOpenCycleAmount(),
             MemberContributionFilamentActions::applyOpenPeriodContribution(),
         ];

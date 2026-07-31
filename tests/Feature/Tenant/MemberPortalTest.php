@@ -18,6 +18,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Support\LoanFundingStrategy;
+use App\Support\LoanSettings;
 use App\Support\PublicPageSettings;
 use Filament\Facades\Filament;
 use Filament\Support\Facades\FilamentView;
@@ -275,7 +276,30 @@ test('loan calculator funding strategy options are translated in Arabic locale',
     expect($options[LoanFundingStrategy::MEMBER_FUND_TOPUP])
         ->toBe('استخدام رصيد صندوقي (تُكمل الإدارة الباقي)')
         ->and($options[LoanFundingStrategy::SPLIT_PERCENTAGE])
-        ->toContain('استخدام تقسيم الصندوق المُعرَّف');
+        ->toContain('استخدام تقسيم الصندوق المُعرَّف')
+        ->and($options[LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT])
+        ->toContain('تقسيم الصندوق مع تسوية مبكرة');
+});
+
+test('loan calculator exposes all available funding strategies and settlement choices', function () {
+    LoanSettings::save([
+        'allow_funding_strategy_member_topup' => true,
+        'allow_funding_strategy_split_percentage' => true,
+        'allow_funding_strategy_split_with_early_settlement' => true,
+        'allow_excess_fund_cash_out' => true,
+    ]);
+
+    $this->actingAs($this->memberUserA, 'tenant');
+
+    Livewire::test(LoanCalculatorPage::class)
+        ->assertSuccessful()
+        ->assertSee(__('Funding approach'), false)
+        ->assertSet('fundingStrategy', LoanFundingStrategy::defaultForApplication())
+        ->set('fundingStrategy', LoanFundingStrategy::SPLIT_PERCENTAGE)
+        ->assertSee(__('Remaining fund balance above your loan share'), false)
+        ->set('fundingStrategy', LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT)
+        ->assertSee(__('Apply remaining fund as early settlement (roll up schedule)'), false)
+        ->assertSee(__('Apply remaining fund as early settlement (skip installments)'), false);
 });
 
 test('member panel has database notifications enabled', function () {

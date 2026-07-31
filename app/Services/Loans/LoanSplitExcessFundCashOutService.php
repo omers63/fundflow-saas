@@ -53,7 +53,7 @@ final class LoanSplitExcessFundCashOutService
             return 0.0;
         }
 
-        if (LoanFundingStrategy::normalize($loan->funding_strategy) !== LoanFundingStrategy::SPLIT_PERCENTAGE) {
+        if (! LoanFundingStrategy::usesConfiguredSplit($loan->funding_strategy)) {
             return 0.0;
         }
 

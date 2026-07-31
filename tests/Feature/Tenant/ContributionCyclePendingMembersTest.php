@@ -9,6 +9,7 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
+use App\Support\ContributionCollectionStatus;
 use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
 
@@ -341,6 +342,38 @@ test('collected contributions exclude loan-exempt members for the period', funct
     expect($collectedIds)->toContain($liablePost->id)
         ->and($this->cycles->postedContributionCount($month, $year))->toBe(1)
         ->and($exempt->fresh()->isExemptFromContributions($month, $year))->toBeTrue();
+});
+
+test('collected contributions query includes partially paid pending rows', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+
+    [$month, $year] = $this->cycles->currentOpenPeriod();
+
+    $member = Member::create([
+        'member_number' => 'MEM-PARTIAL',
+        'name' => 'Partial Member',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $partial = Contribution::create([
+        'member_id' => $member->id,
+        'period' => Contribution::periodDate($month, $year),
+        'amount' => 500,
+        'amount_due' => 500,
+        'amount_collected' => 200,
+        'status' => 'pending',
+        'collection_status' => ContributionCollectionStatus::PARTIALLY_PENDING,
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+    ]);
+
+    $collectedIds = $this->cycles->postedContributionsQueryForPeriod($month, $year)->pluck('id');
+
+    expect($collectedIds)->toContain($partial->id)
+        ->and($this->cycles->postedContributionCount($month, $year))->toBe(1)
+        ->and($this->cycles->pendingMembersQueryForPeriod($month, $year)->whereKey($member->id)->exists())->toBeTrue();
 });
 
 test('pending members exclude periods before import arrears cut-off', function () {

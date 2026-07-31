@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Services\Loans\LoanDelinquencyService;
 
 final class ContributionPolicySettings
 {
@@ -51,7 +53,70 @@ final class ContributionPolicySettings
             'cash_deposit_unbanked_days' => 14,
             'timing_diff_defer_hours' => 24,
             'timing_diff_escalate_hours' => 48,
+            // When cash is short: debit available balance (true) or leave unpaid until full cash (false).
+            'allow_partial_open_cycle' => true,
+            'allow_partial_arrears' => true,
+            'allow_partial_delinquency' => true,
         ];
+    }
+
+    public const PARTIAL_CONTEXT_OPEN_CYCLE = 'open_cycle';
+
+    public const PARTIAL_CONTEXT_ARREARS = 'arrears';
+
+    public const PARTIAL_CONTEXT_DELINQUENCY = 'delinquency';
+
+    public static function allowPartialOpenCycle(): bool
+    {
+        return self::boolCollectionGet('allow_partial_open_cycle', true);
+    }
+
+    public static function allowPartialArrears(): bool
+    {
+        return self::boolCollectionGet('allow_partial_arrears', true);
+    }
+
+    public static function allowPartialDelinquency(): bool
+    {
+        return self::boolCollectionGet('allow_partial_delinquency', true);
+    }
+
+    /**
+     * Whether contribution / EMI collection may debit less than the full amount due
+     * for the given context. Delinquency (policy-breach members) is checked first by callers.
+     */
+    public static function allowsPartialCollection(string $context): bool
+    {
+        return match ($context) {
+            self::PARTIAL_CONTEXT_OPEN_CYCLE => self::allowPartialOpenCycle(),
+            self::PARTIAL_CONTEXT_ARREARS => self::allowPartialArrears(),
+            self::PARTIAL_CONTEXT_DELINQUENCY => self::allowPartialDelinquency(),
+            default => true,
+        };
+    }
+
+    /**
+     * Resolve which partial-collection policy applies.
+     *
+     * Delinquent members always use the delinquency toggle. Otherwise open-cycle
+     * vs arrears depends on whether the obligation is still in the live open period.
+     */
+    public static function resolvePartialCollectionContext(Member $member, bool $isOpenCycleObligation): string
+    {
+        if (app(LoanDelinquencyService::class)->isDelinquent($member)) {
+            return self::PARTIAL_CONTEXT_DELINQUENCY;
+        }
+
+        return $isOpenCycleObligation
+            ? self::PARTIAL_CONTEXT_OPEN_CYCLE
+            : self::PARTIAL_CONTEXT_ARREARS;
+    }
+
+    public static function allowsPartialCollectionFor(Member $member, bool $isOpenCycleObligation): bool
+    {
+        return self::allowsPartialCollection(
+            self::resolvePartialCollectionContext($member, $isOpenCycleObligation),
+        );
     }
 
     public static function timingDiffDeferHours(): int
@@ -218,6 +283,9 @@ final class ContributionPolicySettings
             'collection_cash_deposit_unbanked_days' => $collection['cash_deposit_unbanked_days'],
             'collection_timing_diff_defer_hours' => $collection['timing_diff_defer_hours'],
             'collection_timing_diff_escalate_hours' => $collection['timing_diff_escalate_hours'],
+            'collection_allow_partial_open_cycle' => filter_var($collection['allow_partial_open_cycle'] ?? true, FILTER_VALIDATE_BOOL),
+            'collection_allow_partial_arrears' => filter_var($collection['allow_partial_arrears'] ?? true, FILTER_VALIDATE_BOOL),
+            'collection_allow_partial_delinquency' => filter_var($collection['allow_partial_delinquency'] ?? true, FILTER_VALIDATE_BOOL),
         ];
     }
 
@@ -272,6 +340,9 @@ final class ContributionPolicySettings
         Setting::set(self::GROUP_COLLECTION, 'cash_deposit_unbanked_days', max(1, (int) ($state['collection_cash_deposit_unbanked_days'] ?? 14)));
         Setting::set(self::GROUP_COLLECTION, 'timing_diff_defer_hours', max(1, (int) ($state['collection_timing_diff_defer_hours'] ?? 24)));
         Setting::set(self::GROUP_COLLECTION, 'timing_diff_escalate_hours', max(1, (int) ($state['collection_timing_diff_escalate_hours'] ?? 48)));
+        Setting::set(self::GROUP_COLLECTION, 'allow_partial_open_cycle', (bool) ($state['collection_allow_partial_open_cycle'] ?? true) ? '1' : '0');
+        Setting::set(self::GROUP_COLLECTION, 'allow_partial_arrears', (bool) ($state['collection_allow_partial_arrears'] ?? true) ? '1' : '0');
+        Setting::set(self::GROUP_COLLECTION, 'allow_partial_delinquency', (bool) ($state['collection_allow_partial_delinquency'] ?? true) ? '1' : '0');
     }
 
     private static function delinquencyGet(string $key, mixed $default): mixed
@@ -286,5 +357,16 @@ final class ContributionPolicySettings
         $value = Setting::get(self::GROUP_COLLECTION, $key);
 
         return $value !== null ? $value : $default;
+    }
+
+    private static function boolCollectionGet(string $key, bool $default): bool
+    {
+        $value = Setting::get(self::GROUP_COLLECTION, $key);
+
+        if ($value === null) {
+            return $default;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOL);
     }
 }

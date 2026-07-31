@@ -8,6 +8,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\Tenant\HouseholdMemberService;
 use App\Support\BusinessDay;
+use App\Support\ContributionAmountSettings;
 use App\Support\LegacyMemberIdentifierResolver;
 use App\Support\LegacyMemberStatusMapper;
 use App\Support\MemberUserEmail;
@@ -458,10 +459,10 @@ final class MemberImportService
 
         $amount = round((float) $raw, 2);
 
-        if (! in_array((int) $amount, Member::CONTRIBUTION_STEPS, true)) {
+        if (! ContributionAmountSettings::isValidAmount((int) $amount)) {
             throw new InvalidArgumentException(
                 __('monthly_contribution_amount must be one of: :amounts.', [
-                    'amounts' => implode(', ', array_map('strval', Member::CONTRIBUTION_STEPS)),
+                    'amounts' => implode(', ', array_map('strval', ContributionAmountSettings::steps())),
                 ])
             );
         }

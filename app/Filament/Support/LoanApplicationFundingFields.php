@@ -6,6 +6,7 @@ namespace App\Filament\Support;
 
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Support\LoanExcessFundSettlementOption;
 use App\Support\LoanFundExcessDisposition;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
@@ -18,7 +19,7 @@ use Illuminate\Support\HtmlString;
 final class LoanApplicationFundingFields
 {
     /**
-     * @return array{Radio|Placeholder, Radio|null, Placeholder|null}
+     * @return list<Radio|Placeholder>
      */
     public static function components(
         Closure $memberResolver,
@@ -96,6 +97,65 @@ final class LoanApplicationFundingFields
                 ) > 0;
             });
 
+        $settlementDisposition = Radio::make('excess_fund_settlement_option')
+            ->label(__('Remaining fund balance above your loan share'))
+            ->options(LoanExcessFundSettlementOption::options())
+            ->default(LoanExcessFundSettlementOption::defaultForApplication())
+            ->required()
+            ->live()
+            ->helperText(function (Get $get) use ($memberResolver, $amountField, $currency): ?string {
+                $amount = (float) ($get($amountField) ?? 0);
+                $member = $memberResolver($get);
+                $choice = LoanExcessFundSettlementOption::normalize(
+                    (string) ($get('excess_fund_settlement_option') ?? LoanExcessFundSettlementOption::KEEP_IN_FUND),
+                );
+
+                if ($amount <= 0 || ! $member instanceof Member) {
+                    return __('Choose whether remaining fund above your share stays in the fund account or is applied as early settlement when the loan is disbursed.');
+                }
+
+                $excess = LoanSettings::excessFundCashOutAmount(
+                    $amount,
+                    $member->getFundBalance(),
+                    LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT,
+                );
+
+                if ($excess <= 0) {
+                    return __('No fund balance above the configured share for this amount.');
+                }
+
+                if ($choice === LoanExcessFundSettlementOption::KEEP_IN_FUND) {
+                    return __('Estimated excess left in fund: :amount', [
+                        'amount' => MoneyDisplay::format($excess, $currency) ?? '—',
+                    ]);
+                }
+
+                return __('Estimated early settlement from remaining fund: :amount (:mode)', [
+                    'amount' => MoneyDisplay::format($excess, $currency) ?? '—',
+                    'mode' => $choice === LoanExcessFundSettlementOption::ROLL_UP
+                        ? __('roll up')
+                        : __('skip installments'),
+                ]);
+            })
+            ->visible(function (Get $get) use ($memberResolver, $amountField): bool {
+                if (($get('funding_strategy') ?? '') !== LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT) {
+                    return false;
+                }
+
+                $member = $memberResolver($get);
+                $amount = (float) ($get($amountField) ?? 0);
+
+                if ($amount <= 0 || ! $member instanceof Member) {
+                    return true;
+                }
+
+                return LoanSettings::excessFundCashOutAmount(
+                    $amount,
+                    $member->getFundBalance(),
+                    LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT,
+                ) > 0;
+            });
+
         $preview = Placeholder::make('funding_preview')
             ->label(__('Funding preview'))
             ->content(function (Get $get) use ($memberResolver, $amountField, $currency): HtmlString {
@@ -122,7 +182,7 @@ final class LoanApplicationFundingFields
                     [__('Master portion'), MoneyDisplay::format($portions['master_portion'], $currency) ?? '—'],
                 ];
 
-                if ($strategy === LoanFundingStrategy::SPLIT_PERCENTAGE) {
+                if (LoanFundingStrategy::usesConfiguredSplit($strategy)) {
                     $excess = LoanSettings::excessFundCashOutAmount($amount, $fundBal, $strategy);
                     $rows[] = [__('Excess fund above share'), MoneyDisplay::format($excess, $currency) ?? '—'];
                 }
@@ -141,6 +201,6 @@ final class LoanApplicationFundingFields
             })
             ->columnSpanFull();
 
-        return [$strategyRadio, $strategyFixed, $excessDisposition, $preview];
+        return [$strategyRadio, $strategyFixed, $excessDisposition, $settlementDisposition, $preview];
     }
 }

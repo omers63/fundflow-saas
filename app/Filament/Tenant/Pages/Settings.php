@@ -20,6 +20,7 @@ use App\Support\ArabicDisplaySettings;
 use App\Support\BusinessDay;
 use App\Support\BusinessDaySettings;
 use App\Support\CommunicationSettings;
+use App\Support\ContributionAmountSettings;
 use App\Support\ContributionPolicySettings;
 use App\Support\DefaultTenantSettings;
 use App\Support\FiscalSettings;
@@ -233,6 +234,7 @@ class Settings extends Page implements HasForms
             'loan_member_funding_split_pct' => (float) ($loan['member_funding_split_pct'] ?? $loanDefaults['member_funding_split_pct']),
             'loan_allow_funding_strategy_member_topup' => (bool) ($loan['allow_funding_strategy_member_topup'] ?? $loanDefaults['allow_funding_strategy_member_topup']),
             'loan_allow_funding_strategy_split' => (bool) ($loan['allow_funding_strategy_split_percentage'] ?? $loanDefaults['allow_funding_strategy_split_percentage']),
+            'loan_allow_funding_strategy_split_with_early_settlement' => (bool) ($loan['allow_funding_strategy_split_with_early_settlement'] ?? $loanDefaults['allow_funding_strategy_split_with_early_settlement']),
             'loan_allow_excess_fund_cash_out' => (bool) ($loan['allow_excess_fund_cash_out'] ?? $loanDefaults['allow_excess_fund_cash_out']),
             'loan_auto_allocate_repayment' => (bool) ($loan['auto_allocate_loan_repayment'] ?? $loanDefaults['auto_allocate_loan_repayment']),
             'loan_default_grace_cycles' => $loan['default_grace_cycles'] ?? $loanDefaults['default_grace_cycles'],
@@ -242,6 +244,7 @@ class Settings extends Page implements HasForms
             'loan_late_payment_lookback_months' => $loan['late_payment_lookback_months'] ?? $loanDefaults['late_payment_lookback_months'],
             ...LoanQueueProjectionSettings::allForForm(),
             ...ContributionPolicySettings::allForForm(),
+            ...ContributionAmountSettings::forForm(),
             ...StatementSettings::allForForm(),
             ...CommunicationSettings::allForForm(),
             ...PushEventSettings::allForForm(),
@@ -626,6 +629,20 @@ class Settings extends Page implements HasForms
                             ->maxValue(240)
                             ->required(),
                     ]),
+                Section::make(__('Partial collection'))
+                    ->description(__('When member cash is less than the amount due, choose whether contribution and loan EMI collection may take the available cash (partial) or wait until the full amount is available. Applies to both automatic and manual collection.'))
+                    ->columns(3)
+                    ->schema([
+                        Toggle::make('collection_allow_partial_open_cycle')
+                            ->label(__('Allow partial — open cycle'))
+                            ->helperText(__('Current open period contributions and EMIs that are not yet overdue.')),
+                        Toggle::make('collection_allow_partial_arrears')
+                            ->label(__('Allow partial — arrears'))
+                            ->helperText(__('Overdue prior-cycle contributions and overdue loan installments.')),
+                        Toggle::make('collection_allow_partial_delinquency')
+                            ->label(__('Allow partial — delinquency'))
+                            ->helperText(__('Members flagged for delinquency policy breach. Overrides open-cycle and arrears for those members.')),
+                    ]),
                 Section::make(__('Late contribution thresholds'))
                     ->description(__('Members with too many late-settled contribution cycles cannot apply for new loans. Counts posted contributions marked late after the cycle deadline.'))
                     ->columns(3)
@@ -702,6 +719,30 @@ class Settings extends Page implements HasForms
                             ->minValue(0)
                             ->required()
                             ->helperText(__('Charged on join-date anniversary; set to 0 to disable.')),
+                    ]),
+                Section::make(__('Standing contribution amounts'))
+                    ->description(__('Electable monthly contribution amounts for members and dependents. Options run from the minimum upward in denomination steps up to the maximum.'))
+                    ->columns(3)
+                    ->schema([
+                        TextInput::make('contribution_amount_min')
+                            ->label(__('Minimum contribution amount'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->required()
+                            ->live()
+                            ->helperText(__('Lowest electable standing monthly contribution.')),
+                        TextInput::make('contribution_amount_step')
+                            ->label(__('Denomination step'))
+                            ->numeric()
+                            ->minValue(1)
+                            ->required()
+                            ->helperText(__('Contribution choices increase by this amount (e.g. 500 → 500, 1000, 1500…).')),
+                        TextInput::make('contribution_amount_max')
+                            ->label(__('Maximum contribution amount'))
+                            ->numeric()
+                            ->minValue(fn (Get $get): int => max(1, (int) ($get('contribution_amount_min') ?? ContributionAmountSettings::DEFAULT_MIN)))
+                            ->required()
+                            ->helperText(__('Highest electable standing monthly contribution.')),
                     ]),
                 Section::make(__('Collection window tiers'))
                     ->description(__('Days after cycle deadline when late fee tiers apply.'))
@@ -985,6 +1026,9 @@ class Settings extends Page implements HasForms
                         Toggle::make('loan_allow_funding_strategy_split')
                             ->label(__('Allow configured fund split'))
                             ->helperText(__('Member share follows the percentage below; master fund covers the rest.')),
+                        Toggle::make('loan_allow_funding_strategy_split_with_early_settlement')
+                            ->label(__('Allow fund split with early settlement'))
+                            ->helperText(__('Same split percentage, with the option to apply remaining fund above the share as early settlement (roll up or skip installments) at disbursement.')),
                         Toggle::make('loan_allow_excess_fund_cash_out')
                             ->label(__('Allow excess fund cash-out'))
                             ->helperText(__('When split funding is used, members may transfer fund balance above their loan share to cash at disbursement (member and master cash mirrors).'))
@@ -1373,11 +1417,13 @@ class Settings extends Page implements HasForms
         $loanDefaults = LoanSettings::defaults();
         $allowMemberTopup = (bool) ($state['loan_allow_funding_strategy_member_topup'] ?? $loanDefaults['allow_funding_strategy_member_topup']);
         $allowSplit = (bool) ($state['loan_allow_funding_strategy_split'] ?? $loanDefaults['allow_funding_strategy_split_percentage']);
+        $allowSplitWithSettlement = (bool) ($state['loan_allow_funding_strategy_split_with_early_settlement'] ?? $loanDefaults['allow_funding_strategy_split_with_early_settlement']);
+        $allowExcessCashOut = (bool) ($state['loan_allow_excess_fund_cash_out'] ?? $loanDefaults['allow_excess_fund_cash_out']);
 
-        if (! $allowMemberTopup && ! $allowSplit) {
+        if (! $allowMemberTopup && ! $allowSplit && ! $allowSplitWithSettlement) {
             Notification::make()
                 ->title(__('Settings not saved'))
-                ->body(__('Enable at least one loan funding strategy (member fund top-up or configured split).'))
+                ->body(__('Enable at least one loan funding strategy (member fund top-up, configured split, or split with early settlement).'))
                 ->danger()
                 ->send();
 
@@ -1425,7 +1471,8 @@ class Settings extends Page implements HasForms
             'member_funding_split_pct' => max(0, min(100, (float) ($state['loan_member_funding_split_pct'] ?? $loanDefaults['member_funding_split_pct']))),
             'allow_funding_strategy_member_topup' => $allowMemberTopup,
             'allow_funding_strategy_split_percentage' => $allowSplit,
-            'allow_excess_fund_cash_out' => (bool) ($state['loan_allow_excess_fund_cash_out'] ?? $loanDefaults['allow_excess_fund_cash_out']),
+            'allow_funding_strategy_split_with_early_settlement' => $allowSplitWithSettlement,
+            'allow_excess_fund_cash_out' => $allowExcessCashOut && $allowSplit,
             'auto_allocate_loan_repayment' => (bool) ($state['loan_auto_allocate_repayment'] ?? $loanDefaults['auto_allocate_loan_repayment']),
             'late_payment_consecutive_threshold' => max(1, min(36, (int) ($state['loan_late_payment_consecutive'] ?? $loanDefaults['late_payment_consecutive_threshold']))),
             'late_payment_rolling_threshold' => max(1, min(240, (int) ($state['loan_late_payment_rolling'] ?? $loanDefaults['late_payment_rolling_threshold']))),
@@ -1433,6 +1480,7 @@ class Settings extends Page implements HasForms
         ]);
 
         ContributionPolicySettings::saveFromForm($state);
+        ContributionAmountSettings::saveFromForm($state);
         StatementSettings::saveFromForm($state);
         CommunicationSettings::saveFromForm($state);
         PushEventSettings::saveFromForm($state);

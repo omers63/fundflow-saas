@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\SmsTransactions\Tables;
 
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
@@ -20,10 +21,10 @@ use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
-use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Fieldset;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
@@ -148,25 +149,21 @@ final class SmsTransactionsTable
                     ->trueLabel(__('Duplicates only'))
                     ->falseLabel(__('Non-duplicates only'))
                     ->placeholder(__('All')),
-                Filter::make('date_range')
-                    ->schema([
-                        DatePicker::make('date_from')->label(__('From')),
-                        DatePicker::make('date_to')->label(__('To')),
-                    ])
-                    ->query(fn ($query, array $data) => $query
-                        ->when($data['date_from'] ?? null, fn ($q, $value) => $q->whereDate('transaction_date', '>=', $value))
-                        ->when($data['date_to'] ?? null, fn ($q, $value) => $q->whereDate('transaction_date', '<=', $value)))
-                    ->columns(2),
+                DateColumnRangeFilter::make('transaction_date', __('Transaction date')),
                 SelectFilter::make('member_id')
                     ->label(__('Member'))
                     ->searchable()
                     ->options($memberOptions),
                 Filter::make('amount')
+                    ->label(__('Amount'))
                     ->schema([
-                        TextInput::make('amount_min')->label(__('Min amount'))->numeric(),
-                        TextInput::make('amount_max')->label(__('Max amount'))->numeric(),
+                        Fieldset::make(__('Amount'))
+                            ->schema([
+                                TextInput::make('amount_min')->label(__('Min amount'))->numeric(),
+                                TextInput::make('amount_max')->label(__('Max amount'))->numeric(),
+                            ])
+                            ->columns(2),
                     ])
-                    ->columns(2)
                     ->query(function ($query, array $data) {
                         return $query
                             ->when(filled($data['amount_min'] ?? null), fn ($q) => $q->where('amount', '>=', $data['amount_min']))

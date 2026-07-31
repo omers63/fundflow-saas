@@ -114,6 +114,8 @@ class ListContributions extends ListRecords
 
         $this->cacheSchema('tableFiltersForm', $this->getTableFiltersForm(...));
 
+        $this->tableColumns = [];
+        $this->cachedDefaultTableColumnState = null;
         $this->initTableColumnManager();
 
         $this->tableFilters = [];

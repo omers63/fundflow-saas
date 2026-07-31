@@ -32,6 +32,7 @@ final class LoanSettings
             'member_funding_split_pct' => 50,
             'allow_funding_strategy_member_topup' => false,
             'allow_funding_strategy_split_percentage' => true,
+            'allow_funding_strategy_split_with_early_settlement' => true,
             'allow_excess_fund_cash_out' => true,
             'auto_allocate_loan_repayment' => false,
             'late_payment_consecutive_threshold' => 3,
@@ -170,6 +171,14 @@ final class LoanSettings
         return (bool) self::get('allow_funding_strategy_split_percentage', true);
     }
 
+    public static function allowSplitWithEarlySettlementStrategy(): bool
+    {
+        return (bool) self::get(
+            'allow_funding_strategy_split_with_early_settlement',
+            self::defaults()['allow_funding_strategy_split_with_early_settlement'],
+        );
+    }
+
     public static function allowExcessFundCashOut(): bool
     {
         return (bool) self::get('allow_excess_fund_cash_out', true);
@@ -177,7 +186,9 @@ final class LoanSettings
 
     public static function hasAvailableFundingStrategy(): bool
     {
-        return self::allowMemberFundTopupStrategy() || self::allowSplitPercentageStrategy();
+        return self::allowMemberFundTopupStrategy()
+            || self::allowSplitPercentageStrategy()
+            || self::allowSplitWithEarlySettlementStrategy();
     }
 
     /**
@@ -196,7 +207,7 @@ final class LoanSettings
 
         $strategy = LoanFundingStrategy::normalize($fundingStrategy);
 
-        if ($strategy === LoanFundingStrategy::SPLIT_PERCENTAGE) {
+        if (LoanFundingStrategy::usesConfiguredSplit($strategy)) {
             $memberPortion = round($loanAmount * (self::memberFundingSplitPercent() / 100), 2);
 
             return [
@@ -224,7 +235,7 @@ final class LoanSettings
 
         $strategy = LoanFundingStrategy::normalize($fundingStrategy);
 
-        if ($strategy === LoanFundingStrategy::SPLIT_PERCENTAGE) {
+        if (LoanFundingStrategy::usesConfiguredSplit($strategy)) {
             return round($loanAmount * (self::memberFundingSplitPercent() / 100), 2);
         }
 
@@ -236,7 +247,7 @@ final class LoanSettings
         float $memberFundBalance,
         ?string $fundingStrategy = null,
     ): float {
-        if (LoanFundingStrategy::normalize($fundingStrategy) !== LoanFundingStrategy::SPLIT_PERCENTAGE) {
+        if (! LoanFundingStrategy::usesConfiguredSplit($fundingStrategy)) {
             return 0.0;
         }
 

@@ -10,6 +10,7 @@ use App\Models\Tenant\Setting;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
+use App\Support\InstallmentCollectionStatus;
 use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
 
@@ -284,6 +285,52 @@ test('collected installment count reflects paid emis in open period', function (
     ]);
 
     expect($this->catalog->collectedInstallmentCount($month, $year))->toBe(1);
+});
+
+test('collected installments query includes partially paid open installments', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    [$month, $year] = app(ContributionCycleService::class)->currentOpenPeriod();
+
+    $member = Member::create([
+        'member_number' => 'EMI-PARTIAL',
+        'name' => 'Partial EMI Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    $partial = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::create($year, $month, 10),
+        'status' => 'pending',
+        'collection_status' => InstallmentCollectionStatus::PARTIALLY_PENDING,
+        'amount_collected' => 400,
+    ]);
+
+    expect($this->catalog->collectedInstallmentsQuery($month, $year)->pluck('id'))->toContain($partial->id)
+        ->and($this->catalog->collectedInstallmentCount($month, $year))->toBe(1)
+        ->and($this->catalog->membersWithCollectableEmisQuery($month, $year)->whereKey($member->id)->exists())->toBeTrue();
+
+    Carbon::setTestNow();
 });
 
 test('emi collection lists use labelled cycle from due date not payment window', function () {

@@ -7,6 +7,7 @@ use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\LoanService;
 use App\Services\MemberMonthlyAllocationService;
+use App\Support\ContributionAmountSettings;
 use App\Support\ContributionExemptionPolicy;
 use App\Support\MemberMembershipPolicy;
 use App\Support\MemberNumberSettings;
@@ -24,9 +25,6 @@ class Member extends Model
     use HasFactory;
 
     private static bool $bypassSelfAllocationGuard = false;
-
-    /** @var list<int> */
-    public const CONTRIBUTION_STEPS = [500, 1000, 1500, 2000, 2500, 3000];
 
     /** @var list<string> */
     public const STATUSES = ['active', 'inactive', 'withdrawn'];
@@ -474,9 +472,12 @@ class Member extends Model
         return MemberNumberSettings::generate();
     }
 
+    /**
+     * Standing monthly contribution steps — see {@see ContributionAmountSettings}.
+     */
     public static function isValidContributionAmount(int $amount): bool
     {
-        return in_array($amount, self::CONTRIBUTION_STEPS, true);
+        return ContributionAmountSettings::isValidAmount($amount);
     }
 
     public static function isValidDependentContributionAmount(int $amount): bool
@@ -492,7 +493,7 @@ class Member extends Model
         $currency = Setting::get('general', 'currency', 'USD');
         $options = [];
 
-        foreach (self::CONTRIBUTION_STEPS as $amount) {
+        foreach (ContributionAmountSettings::steps() as $amount) {
             $options[$amount] = MoneyDisplay::format($amount, $currency, precision: 0) ?? '';
         }
 
@@ -500,7 +501,7 @@ class Member extends Model
     }
 
     /**
-     * Dependent contribution amount options (same steps as members: 500–3000).
+     * Dependent contribution amount options (same steps as members).
      * Household funding exclusion is a separate flag.
      *
      * @return array<int, string>

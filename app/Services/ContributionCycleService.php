@@ -14,6 +14,7 @@ use App\Services\Loans\LateFeeService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Support\BusinessDay;
 use App\Support\CollectionInsightsCache;
+use App\Support\ContributionCollectionStatus;
 use App\Support\ContributionExemptionPolicy;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -442,19 +443,28 @@ class ContributionCycleService
      */
     private function computeCollectedContributionIdsForPeriod(int $month, int $year): array
     {
-        $posted = Contribution::query()
+        $candidates = Contribution::query()
             ->forPeriod($month, $year)
-            ->posted()
+            ->where(function (Builder $query): void {
+                $query->where('status', 'posted')
+                    ->orWhere(function (Builder $query): void {
+                        $query->where('status', 'pending')
+                            ->where(function (Builder $query): void {
+                                $query->where('collection_status', ContributionCollectionStatus::PARTIALLY_PENDING)
+                                    ->orWhere('amount_collected', '>', 0);
+                            });
+                    });
+            })
             ->with(['member.loans'])
             ->get();
 
-        if ($posted->isEmpty()) {
+        if ($candidates->isEmpty()) {
             return [];
         }
 
         $policy = app(ContributionExemptionPolicy::class);
 
-        return $posted
+        return $candidates
             ->filter(function (Contribution $contribution) use ($policy, $month, $year): bool {
                 $member = $contribution->member;
 
@@ -1219,9 +1229,15 @@ class ContributionCycleService
 
                 $transfers++;
                 $allocatedDependentIds[] = $dependent->id;
+                $fulfilled = $this->dependentAllocationFulfilledForPeriod($dependent->fresh() ?? $dependent, $month, $year);
                 $details[] = $this->dependentAllocationDetailLine(
                     $dependent,
-                    __('Transferred :amount for :period.', [
+                    $fulfilled
+                    ? __('Transferred :amount for :period.', [
+                        'amount' => MoneyDisplay::format($transferred, $currency) ?? '',
+                        'period' => $periodLabel,
+                    ])
+                    : __('Partially allocated :amount for :period.', [
                         'amount' => MoneyDisplay::format($transferred, $currency) ?? '',
                         'period' => $periodLabel,
                     ]),

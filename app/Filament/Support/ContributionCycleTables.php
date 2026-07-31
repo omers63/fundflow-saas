@@ -274,6 +274,10 @@ final class ContributionCycleTables
                 MemberTableColumns::relationName()
                     ->sortable(query: fn (Builder $query, string $direction): Builder => self::sortCollectedByMemberName($query, $direction)),
                 TextColumn::make('amount')->money($currency),
+                TextColumn::make('amount_collected')
+                    ->label(__('Amount collected'))
+                    ->money($currency)
+                    ->placeholder(__('—')),
                 TextColumn::make('status')
                     ->label(__('Status'))
                     ->badge()

@@ -11,6 +11,8 @@ use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Setting;
 use App\Services\MemberLoanCalculatorService;
+use App\Support\LoanExcessFundSettlementOption;
+use App\Support\LoanFundExcessDisposition;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use App\Support\Tenant\CurrentMember;
@@ -39,9 +41,22 @@ class LoanCalculatorPage extends Page
 
     public string $fundingStrategy = '';
 
+    public string $excessFundDisposition = LoanFundExcessDisposition::KEEP_IN_FUND;
+
+    public string $excessFundSettlementOption = LoanExcessFundSettlementOption::KEEP_IN_FUND;
+
     public function mount(): void
     {
         $this->fundingStrategy = LoanFundingStrategy::defaultForApplication();
+        $this->excessFundDisposition = LoanFundExcessDisposition::defaultForApplication();
+        $this->excessFundSettlementOption = LoanExcessFundSettlementOption::defaultForApplication();
+    }
+
+    public function updatedFundingStrategy(string $value): void
+    {
+        if (! LoanFundingStrategy::isAvailableForApplication($value)) {
+            $this->fundingStrategy = LoanFundingStrategy::defaultForApplication();
+        }
     }
 
     public static function canAccess(): bool
@@ -67,7 +82,11 @@ class LoanCalculatorPage extends Page
      *     member_portion: float,
      *     master_portion: float,
      *     settlement_amt: float,
-     *     total_repay: float
+     *     total_repay: float,
+     *     excess_fund: float,
+     *     early_settlement_amount: float,
+     *     installments_covered: int,
+     *     remaining_payment_months: int|null
      * }>
      */
     #[Computed]
@@ -84,6 +103,7 @@ class LoanCalculatorPage extends Page
             $amount,
             $member,
             $this->fundingStrategy,
+            $this->excessFundSettlementOption,
         );
     }
 
@@ -121,6 +141,43 @@ class LoanCalculatorPage extends Page
     public function fundingStrategyOptions(): array
     {
         return LoanFundingStrategy::availableOptions();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Computed]
+    public function excessDispositionOptions(): array
+    {
+        return LoanFundExcessDisposition::availableOptions();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Computed]
+    public function settlementOptionOptions(): array
+    {
+        return LoanExcessFundSettlementOption::options();
+    }
+
+    #[Computed]
+    public function showsExcessDisposition(): bool
+    {
+        return LoanFundingStrategy::normalize($this->fundingStrategy) === LoanFundingStrategy::SPLIT_PERCENTAGE
+            && count($this->excessDispositionOptions) > 1;
+    }
+
+    #[Computed]
+    public function showsSettlementOptions(): bool
+    {
+        return LoanFundingStrategy::normalize($this->fundingStrategy) === LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT;
+    }
+
+    #[Computed]
+    public function usesConfiguredSplit(): bool
+    {
+        return LoanFundingStrategy::usesConfiguredSplit($this->fundingStrategy);
     }
 
     #[Computed]

@@ -12,6 +12,7 @@ use App\Services\ContributionCycleService;
 use App\Services\DependentAllocationService;
 use App\Services\MemberOpeningBalanceService;
 use App\Support\ContributionCollectionStatus;
+use App\Support\ContributionPolicySettings;
 use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
 
@@ -87,6 +88,75 @@ test('partial debit leaves partially pending until deposit covers shortfall', fu
 
     expect($contribution->fresh()->collection_status)->toBe(ContributionCollectionStatus::COLLECTED)
         ->and($contribution->fresh()->status)->toBe('posted');
+});
+
+test('disabling open-cycle partial collection skips shortfall instead of partial debit', function () {
+    ContributionPolicySettings::saveFromForm([
+        ...ContributionPolicySettings::allForForm(),
+        'collection_allow_partial_open_cycle' => false,
+    ]);
+
+    [$month, $year] = $this->cycles->currentOpenPeriod();
+
+    $member = Member::create([
+        'member_number' => 'MEM-PARTIAL-OFF',
+        'name' => 'No Partial',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::create($year, $month, 1)->startOfMonth(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->accounting->credit($member->cashAccount, 200, 'Seed cash'),
+    );
+
+    $this->collection->initializeOpenPeriod($month, $year);
+    $contribution = Contribution::query()->forPeriod($month, $year)->where('member_id', $member->id)->firstOrFail();
+
+    expect($this->collection->attemptCollection($contribution))->toBe('insufficient')
+        ->and((float) $contribution->fresh()->amount_collected)->toBe(0.0)
+        ->and($contribution->fresh()->collection_status)->toBe(ContributionCollectionStatus::PENDING)
+        ->and($member->fresh()->getCashBalance())->toBe(200.0);
+});
+
+test('disabling arrears partial collection skips shortfall on overdue contributions', function () {
+    ContributionPolicySettings::saveFromForm([
+        ...ContributionPolicySettings::allForForm(),
+        'collection_allow_partial_arrears' => false,
+    ]);
+
+    $prior = now()->subMonths(2);
+    $month = (int) $prior->month;
+    $year = (int) $prior->year;
+
+    $member = Member::create([
+        'member_number' => 'MEM-ARREARS-OFF',
+        'name' => 'Arrears No Partial',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->accounting->credit($member->cashAccount, 200, 'Seed cash'),
+    );
+
+    $contribution = Contribution::create([
+        'member_id' => $member->id,
+        'period' => Contribution::periodDate($month, $year),
+        'amount' => 500,
+        'amount_due' => 500,
+        'amount_collected' => 0,
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+        'status' => 'pending',
+        'collection_status' => ContributionCollectionStatus::OVERDUE,
+        'overdue_since' => now()->subMonth(),
+        'cycle_open_cash_balance' => 0,
+    ]);
+
+    expect($this->collection->attemptCollection($contribution, manualApply: true))->toBe('insufficient')
+        ->and((float) $contribution->fresh()->amount_collected)->toBe(0.0)
+        ->and($member->fresh()->getCashBalance())->toBe(200.0);
 });
 
 test('close window flags overdue contributions', function () {

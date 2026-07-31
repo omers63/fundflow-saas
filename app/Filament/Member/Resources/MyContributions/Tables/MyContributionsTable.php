@@ -39,6 +39,7 @@ class MyContributionsTable
                 ])
                 ->filters([
                     SelectFilter::make('status')
+                        ->label(__('Status'))
                         ->options([
                             'pending' => __('Pending'),
                             'posted' => __('Posted'),

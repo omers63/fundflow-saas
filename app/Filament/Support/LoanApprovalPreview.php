@@ -8,6 +8,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanTier;
+use App\Support\LoanExcessFundSettlementOption;
 use App\Support\LoanFundExcessDisposition;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
@@ -70,6 +71,13 @@ final class LoanApprovalPreview
 
         if ($strategy === LoanFundingStrategy::SPLIT_PERCENTAGE) {
             $rows[] = [__('Remaining fund balance'), LoanFundExcessDisposition::labelFromCashOutFlag((bool) $loan->cash_out_excess_fund)];
+        }
+
+        if ($strategy === LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT) {
+            $rows[] = [
+                __('Remaining fund balance'),
+                LoanExcessFundSettlementOption::label($loan->excess_fund_settlement_option),
+            ];
         }
 
         $rows = array_merge($rows, [

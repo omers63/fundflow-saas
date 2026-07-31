@@ -16,6 +16,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanLifecycleService;
 use App\Services\LoanService;
+use App\Support\LoanExcessFundSettlementOption;
 use App\Support\LoanFundExcessDisposition;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
@@ -102,6 +103,7 @@ class ApplyForLoan extends Page implements HasForms
             'has_grace_cycle' => true,
             'funding_strategy' => LoanFundingStrategy::defaultForApplication(),
             'excess_fund_disposition' => LoanFundExcessDisposition::defaultForApplication(),
+            'excess_fund_settlement_option' => LoanExcessFundSettlementOption::defaultForApplication(),
         ]);
     }
 
@@ -120,7 +122,7 @@ class ApplyForLoan extends Page implements HasForms
         $member = CurrentMember::get();
         $currency = Setting::get('general', 'currency', 'USD');
 
-        [$strategyRadio, $strategyFixed, $excessDisposition] = LoanApplicationFundingFields::components(
+        [$strategyRadio, $strategyFixed, $excessDisposition, $settlementDisposition, $fundingPreview] = LoanApplicationFundingFields::components(
             fn (Get $get): ?Member => $member,
             amountField: 'amount',
         );
@@ -171,6 +173,8 @@ class ApplyForLoan extends Page implements HasForms
                             $strategyRadio,
                             $strategyFixed,
                             $excessDisposition,
+                            $settlementDisposition,
+                            $fundingPreview,
                         ]),
                     Step::make(__('Purpose'))
                         ->icon(Heroicon::OutlinedChatBubbleLeftEllipsis)
@@ -282,6 +286,12 @@ class ApplyForLoan extends Page implements HasForms
                                 ->content(fn (Get $get): string => LoanFundExcessDisposition::label(
                                     (string) ($get('excess_fund_disposition') ?? LoanFundExcessDisposition::defaultForApplication()),
                                 )),
+                            Placeholder::make('review_excess_settlement')
+                                ->label(__('Remaining fund balance'))
+                                ->visible(fn (Get $get): bool => ($get('funding_strategy') ?? '') === LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT)
+                                ->content(fn (Get $get): string => LoanExcessFundSettlementOption::label(
+                                    (string) ($get('excess_fund_settlement_option') ?? LoanExcessFundSettlementOption::defaultForApplication()),
+                                )),
                         ]),
                 ])
                     ->submitAction(new HtmlString(Blade::render(<<<'BLADE'
@@ -321,9 +331,13 @@ class ApplyForLoan extends Page implements HasForms
                 filled($data['witness2_name'] ?? null) ? (string) $data['witness2_name'] : null,
                 filled($data['witness2_phone'] ?? null) ? (string) $data['witness2_phone'] : null,
                 fundingStrategy: $fundingStrategy,
-                cashOutExcessFund: LoanFundExcessDisposition::toCashOutFlag(
-                    (string) ($data['excess_fund_disposition'] ?? LoanFundExcessDisposition::defaultForApplication()),
-                ),
+                cashOutExcessFund: $fundingStrategy === LoanFundingStrategy::SPLIT_PERCENTAGE
+                    && LoanFundExcessDisposition::toCashOutFlag(
+                        (string) ($data['excess_fund_disposition'] ?? LoanFundExcessDisposition::defaultForApplication()),
+                    ),
+                excessFundSettlementOption: $fundingStrategy === LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT
+                    ? (string) ($data['excess_fund_settlement_option'] ?? LoanExcessFundSettlementOption::defaultForApplication())
+                    : null,
                 guarantorName: filled($data['guarantor_name'] ?? null) ? (string) $data['guarantor_name'] : null,
                 applicationFormPath: filled($data['application_form_path'] ?? null) ? (string) $data['application_form_path'] : null,
             );

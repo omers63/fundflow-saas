@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 use App\Filament\Member\Resources\MyDependents\Support\DependentOpenCycleStatus;
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\DependentCashAllocation;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Support\BusinessDaySettings;
+use App\Support\InstallmentCollectionStatus;
 use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
 
@@ -101,6 +103,98 @@ test('open cycle status hides exempt contribution description during EMI cycle',
         ->and($status['label'])->toBe(__('EMI: :status', ['status' => __('Pending')]))
         ->and($status['color'])->toBe('warning')
         ->and($status['description'])->toBeNull();
+
+    Carbon::setTestNow();
+});
+
+test('open cycle status shows partially paid for partial EMI collection', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $member = Member::factory()->create([
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    [$openMonth, $openYear] = app(ContributionCycleService::class)->currentOpenPeriod();
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::create($openYear, $openMonth, 15),
+        'status' => 'pending',
+        'collection_status' => InstallmentCollectionStatus::PARTIALLY_PENDING,
+        'amount_collected' => 400,
+    ]);
+
+    $status = DependentOpenCycleStatus::resolve($member->fresh(), $openMonth, $openYear);
+
+    expect($status['label'])->toBe(__('EMI: :status', ['status' => __('Partially paid')]))
+        ->and($status['color'])->toBe('warning');
+
+    Carbon::setTestNow();
+});
+
+test('open cycle status shows partially allocated for parent-funded dependent', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+
+    $parent = Member::factory()->create([
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+        'parent_member_id' => null,
+    ]);
+    $dependent = Member::factory()->create([
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+        'parent_member_id' => $parent->id,
+        'exclude_from_household_contribution_funding' => false,
+    ]);
+    app(AccountingService::class)->createMemberAccounts($dependent);
+
+    [$openMonth, $openYear] = app(ContributionCycleService::class)->currentOpenPeriod();
+
+    Contribution::create([
+        'member_id' => $dependent->id,
+        'period' => Contribution::periodDate($openMonth, $openYear),
+        'amount' => 500,
+        'amount_due' => 500,
+        'amount_collected' => 0,
+        'status' => 'pending',
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+    ]);
+
+    DependentCashAllocation::create([
+        'parent_member_id' => $parent->id,
+        'dependent_member_id' => $dependent->id,
+        'allocation_month' => $openMonth,
+        'allocation_year' => $openYear,
+        'amount' => 200,
+    ]);
+
+    $status = DependentOpenCycleStatus::resolve($dependent->fresh(), $openMonth, $openYear);
+
+    expect($status['label'])->toBe(__('Partially allocated'))
+        ->and($status['color'])->toBe('warning')
+        ->and($status['description'])->toBe(__('Contribution: :status', ['status' => __('Pending')]));
 
     Carbon::setTestNow();
 });

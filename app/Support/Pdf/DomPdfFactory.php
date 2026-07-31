@@ -31,6 +31,7 @@ final class DomPdfFactory
 
         $pdf = PdfFacade::loadHTML($html)->setPaper($paper, $orientation);
         self::ensureCustomFontsRegistered($pdf->getDomPDF());
+        self::aliasNumericFontWeights($pdf->getDomPDF());
 
         return $pdf;
     }
@@ -136,5 +137,47 @@ final class DomPdfFactory
         }
 
         $metrics->setFontFamily('Amiri', $aliased);
+    }
+
+    /**
+     * DomPDF resolves CSS weights like 600 to Helvetica when the family has no matching face,
+     * which turns shaped Arabic into "?????". Alias intermediate weights to normal/bold.
+     */
+    public static function aliasNumericFontWeights(Dompdf $dompdf): void
+    {
+        $metrics = $dompdf->getFontMetrics();
+        $families = $metrics->getFontFamilies();
+
+        foreach (['dejavu sans', 'dejavu serif', 'dejavu sans mono', 'amiri'] as $familyKey) {
+            $family = $families[$familyKey] ?? null;
+
+            if (! is_array($family)) {
+                continue;
+            }
+
+            $normal = $family['normal'] ?? null;
+            $bold = $family['bold'] ?? $normal;
+
+            if (! is_string($normal) || ! is_string($bold)) {
+                continue;
+            }
+
+            if (
+                ($family['500'] ?? null) === $normal
+                && ($family['600'] ?? null) === $bold
+                && ($family['800'] ?? null) === $bold
+            ) {
+                continue;
+            }
+
+            $aliased = $family;
+            $aliased['normal'] = $normal;
+            $aliased['bold'] = $bold;
+            $aliased['500'] = $normal;
+            $aliased['600'] = $bold;
+            $aliased['800'] = $bold;
+
+            $metrics->setFontFamily($familyKey, $aliased);
+        }
     }
 }

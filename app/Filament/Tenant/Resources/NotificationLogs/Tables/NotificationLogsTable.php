@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\NotificationLogs\Tables;
 
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -11,13 +12,10 @@ use App\Filament\Tenant\Support\ViewNotificationLogAction;
 use App\Models\Tenant\NotificationLog;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
-use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
 
 class NotificationLogsTable
 {
@@ -88,17 +86,7 @@ class NotificationLogsTable
                         'failed' => __('Failed'),
                         'skipped' => __('Skipped'),
                     ]),
-                Filter::make('sent_at')
-                    ->schema([
-                        DatePicker::make('from')->label(__('From')),
-                        DatePicker::make('until')->label(__('Until')),
-                    ])
-                    ->columns(2)
-                    ->query(function (Builder $query, array $data): Builder {
-                        return $query
-                            ->when($data['from'] ?? null, fn (Builder $q, mixed $from): Builder => $q->whereDate('sent_at', '>=', $from))
-                            ->when($data['until'] ?? null, fn (Builder $q, mixed $until): Builder => $q->whereDate('sent_at', '<=', $until));
-                    }),
+                DateColumnRangeFilter::make('sent_at', __('Sent')),
                 TrashedFilter::make(),
             ])
             ->defaultSort('sent_at', 'desc')

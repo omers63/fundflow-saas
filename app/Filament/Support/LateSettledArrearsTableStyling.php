@@ -7,6 +7,7 @@ namespace App\Filament\Support;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\LoanInstallment;
 use App\Support\ContributionCollectionStatus;
+use App\Support\InstallmentCollectionStatus;
 
 /**
  * Visual treatment for contribution/repayment rows settled after their deadline.
@@ -36,6 +37,10 @@ final class LateSettledArrearsTableStyling
 
     public static function contributionStatusLabel(Contribution $contribution): string
     {
+        if (self::contributionIsPartiallyPaid($contribution)) {
+            return __('Partially paid');
+        }
+
         if (self::contributionWasSettledLate($contribution)) {
             return __('Posted (late)');
         }
@@ -51,6 +56,10 @@ final class LateSettledArrearsTableStyling
 
     public static function contributionStatusColor(Contribution $contribution): string
     {
+        if (self::contributionIsPartiallyPaid($contribution)) {
+            return 'warning';
+        }
+
         if (self::contributionWasSettledLate($contribution)) {
             return 'danger';
         }
@@ -64,8 +73,22 @@ final class LateSettledArrearsTableStyling
         };
     }
 
+    public static function contributionIsPartiallyPaid(Contribution $contribution): bool
+    {
+        if ($contribution->collection_status === ContributionCollectionStatus::PARTIALLY_PENDING) {
+            return true;
+        }
+
+        return $contribution->status === 'pending'
+            && (float) ($contribution->amount_collected ?? 0) > 0.00001;
+    }
+
     public static function installmentStatusLabel(LoanInstallment $installment): string
     {
+        if (self::installmentIsPartiallyPaid($installment)) {
+            return __('Partially paid');
+        }
+
         if ($installment->status === 'paid' && $installment->paid_by_guarantor) {
             return __('Guarantor paid');
         }
@@ -85,6 +108,10 @@ final class LateSettledArrearsTableStyling
 
     public static function installmentStatusColor(LoanInstallment $installment): string
     {
+        if (self::installmentIsPartiallyPaid($installment)) {
+            return 'warning';
+        }
+
         if ($installment->status === 'paid' && $installment->paid_by_guarantor) {
             return 'warning';
         }
@@ -99,6 +126,20 @@ final class LateSettledArrearsTableStyling
             'waived' => 'info',
             default => 'warning',
         };
+    }
+
+    public static function installmentIsPartiallyPaid(LoanInstallment $installment): bool
+    {
+        if ($installment->status === 'paid') {
+            return false;
+        }
+
+        if ($installment->collection_status === InstallmentCollectionStatus::PARTIALLY_PENDING) {
+            return true;
+        }
+
+        return in_array($installment->status, ['pending', 'overdue'], true)
+            && (float) ($installment->amount_collected ?? 0) > 0.00001;
     }
 
     public static function eligibilityHint(): string

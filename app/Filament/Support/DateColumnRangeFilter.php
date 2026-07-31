@@ -4,6 +4,7 @@ namespace App\Filament\Support;
 
 use Carbon\Carbon;
 use Filament\Forms\Components\DatePicker;
+use Filament\Schemas\Components\Fieldset;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\Indicator;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,15 +20,10 @@ final class DateColumnRangeFilter
         $filterName = 'date_range_last_activity_at';
         $label ??= __('Last activity');
 
-        return Filter::make($filterName)
-            ->label($label)
-            ->schema([
-                DatePicker::make('from')
-                    ->label(__('From')),
-                DatePicker::make('until')
-                    ->label(__('Until')),
-            ])
-            ->query(function (Builder $query, array $data): Builder {
+        return self::configure(
+            Filter::make($filterName),
+            $label,
+            function (Builder $query, array $data): Builder {
                 return $query
                     ->when(
                         filled($data['from'] ?? null),
@@ -37,28 +33,8 @@ final class DateColumnRangeFilter
                         filled($data['until'] ?? null),
                         fn (Builder $query): Builder => $query->whereLastActivityDateOnOrBefore((string) $data['until']),
                     );
-            })
-            ->indicateUsing(function (array $data) use ($label): array {
-                $indicators = [];
-
-                if (filled($data['from'] ?? null)) {
-                    $indicators[] = Indicator::make(__(':label from :date', [
-                        'label' => __($label),
-                        'date' => Carbon::parse($data['from'])->toFormattedDateString(),
-                    ]))
-                        ->removeField('from');
-                }
-
-                if (filled($data['until'] ?? null)) {
-                    $indicators[] = Indicator::make(__(':label until :date', [
-                        'label' => __($label),
-                        'date' => Carbon::parse($data['until'])->toFormattedDateString(),
-                    ]))
-                        ->removeField('until');
-                }
-
-                return $indicators;
-            });
+            },
+        );
     }
 
     /**
@@ -69,15 +45,10 @@ final class DateColumnRangeFilter
         $filterName = 'date_range_'.str_replace(['.', '-'], '_', $column);
         $label ??= Str::headline(str_replace('_', ' ', Str::afterLast($column, '.')));
 
-        return Filter::make($filterName)
-            ->label($label)
-            ->schema([
-                DatePicker::make('from')
-                    ->label(__('From')),
-                DatePicker::make('until')
-                    ->label(__('Until')),
-            ])
-            ->query(function (Builder $query, array $data) use ($column): Builder {
+        return self::configure(
+            Filter::make($filterName),
+            $label,
+            function (Builder $query, array $data) use ($column): Builder {
                 $qualified = $query->qualifyColumn($column);
 
                 return $query
@@ -89,7 +60,31 @@ final class DateColumnRangeFilter
                         filled($data['until'] ?? null),
                         fn (Builder $query): Builder => $query->whereDate($qualified, '<=', $data['until']),
                     );
-            })
+            },
+        );
+    }
+
+    /**
+     * Schema filters do not render the filter label — only schema fields — so wrap From/Until
+     * in a fieldset titled with the column name (avoids two identical unlabeled date pairs).
+     *
+     * @param  callable(Builder, array<string, mixed>): Builder  $query
+     */
+    private static function configure(Filter $filter, string $label, callable $query): Filter
+    {
+        return $filter
+            ->label($label)
+            ->schema([
+                Fieldset::make($label)
+                    ->schema([
+                        DatePicker::make('from')
+                            ->label(__('From')),
+                        DatePicker::make('until')
+                            ->label(__('Until')),
+                    ])
+                    ->columns(2),
+            ])
+            ->query($query)
             ->indicateUsing(function (array $data) use ($label): array {
                 $indicators = [];
 

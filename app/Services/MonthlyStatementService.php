@@ -313,18 +313,26 @@ class MonthlyStatementService
                 ? $end->copy()
                 : Carbon::create($year, 12, 31)->endOfDay();
 
-            if ($yearStart->lt($membershipStart)) {
-                $yearStart = $membershipStart->copy();
+            // Contribution periods are stored as month-start dates (YYYY-MM-01). Clamping to the
+            // join *day* would drop the join month (e.g. joined 2024-07-30 excludes period 2024-07-01).
+            $contributionPeriodStart = $yearStart->copy();
+            if ($contributionPeriodStart->lt($membershipStart)) {
+                $contributionPeriodStart = $membershipStart->copy()->startOfMonth();
             }
 
-            if ($yearEnd->lt($yearStart)) {
+            $activityStart = $yearStart->copy();
+            if ($activityStart->lt($membershipStart)) {
+                $activityStart = $membershipStart->copy();
+            }
+
+            if ($yearEnd->lt($contributionPeriodStart) && $yearEnd->lt($activityStart)) {
                 continue;
             }
 
             $contrib = (float) Contribution::query()
                 ->where('member_id', $member->id)
                 ->where('status', 'posted')
-                ->whereBetween('period', [$yearStart->toDateString(), $yearEnd->toDateString()])
+                ->whereBetween('period', [$contributionPeriodStart->toDateString(), $yearEnd->toDateString()])
                 ->where(function ($query) use ($asOfEnd): void {
                     $query->whereNull('paid_at')
                         ->orWhere('paid_at', '<=', $asOfEnd);
@@ -334,7 +342,7 @@ class MonthlyStatementService
             $repay = (float) LoanInstallment::query()
                 ->whereHas('loan', fn ($q) => $q->where('member_id', $member->id))
                 ->where('status', 'paid')
-                ->whereBetween('paid_at', [$yearStart, $yearEnd])
+                ->whereBetween('paid_at', [$activityStart, $yearEnd])
                 ->sum('amount');
 
             $rows[] = [

@@ -299,12 +299,20 @@ final class LoanEmiCollectionTables
                         ->date()
                         ->sortable(),
                     CollectedEmiCashColumn::make()
-                        ->label(__('Amount')),
+                        ->label(__('Amount collected')),
                     LoanOutstandingColumn::fromLoanResolver(
                         fn (LoanInstallment $record): ?Loan => $record->loan,
                         $currency,
                         sortQuery: fn (Builder $query, string $direction): Builder => $query->orderByLoanOutstanding($direction),
                     ),
+                    TextColumn::make('status')
+                        ->label(__('Status'))
+                        ->badge()
+                        ->formatStateUsing(fn (string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusLabel($record))
+                        ->color(fn (string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusColor($record))
+                        ->tooltip(fn (LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentWasSettledLate($record)
+                            ? LateSettledArrearsTableStyling::eligibilityHint()
+                            : null),
                     TextColumn::make('late_fee_amount')
                         ->label(__('Late fee'))
                         ->money($currency)
@@ -312,6 +320,7 @@ final class LoanEmiCollectionTables
                     TextColumn::make('paid_at')
                         ->label(__('Paid on'))
                         ->dateTime()
+                        ->placeholder(__('—'))
                         ->sortable(),
                 ])
                 ->recordAction(null)

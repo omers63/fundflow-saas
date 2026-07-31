@@ -39,7 +39,6 @@ final class MyDependentTableActions
                 })
                 ->visible(fn (Member $record): bool => ! in_array($record->status, Member::PORTAL_BLOCKED_STATUSES, true)),
             MemberContributionFilamentActions::requestOpenCycleAmountForDependentRow(),
-            MemberContributionFilamentActions::voluntaryTopUpForDependentRow(),
             ...DependentAllocationFilamentActions::forRow($parentResolver),
         ]);
     }

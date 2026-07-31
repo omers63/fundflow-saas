@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\SmsImportSessions\Tables;
 
 use App\Filament\Support\BankWorkspaceImportTableHeaderActions;
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -19,10 +20,8 @@ use App\Support\Lang;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
-use Filament\Forms\Components\DatePicker;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
@@ -110,16 +109,7 @@ final class SmsImportSessionsTable
                         'partially_completed' => __('Partially completed'),
                         'failed' => __('Failed'),
                     ])),
-                Filter::make('imported_between')
-                    ->schema([
-                        DatePicker::make('from')->label(__('From')),
-                        DatePicker::make('until')->label(__('Until')),
-                    ])
-                    ->query(function ($query, array $data) {
-                        return $query
-                            ->when($data['from'] ?? null, fn ($q, $from) => $q->whereDate('created_at', '>=', $from))
-                            ->when($data['until'] ?? null, fn ($q, $until) => $q->whereDate('created_at', '<=', $until));
-                    }),
+                DateColumnRangeFilter::make('created_at', __('Imported')),
                 TrashedFilter::make(),
             ])
             ->recordActions(TableRecordActionGroups::wrap([

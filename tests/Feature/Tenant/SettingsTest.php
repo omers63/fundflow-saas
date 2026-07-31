@@ -2,6 +2,7 @@
 
 use App\Models\Tenant\Setting;
 use App\Support\CommunicationSettings;
+use App\Support\ContributionAmountSettings;
 use App\Support\ContributionPolicySettings;
 use App\Support\StatementSettings;
 use Tests\Concerns\InitializesTenancy;
@@ -83,6 +84,40 @@ test('contribution policy settings persist bank clearing match windows', functio
     ]);
 
     expect(ContributionPolicySettings::bankMatchManualDateRangeDays())->toBe(7);
+});
+
+test('contribution amount min, max and denomination step persist from form state', function () {
+    ContributionAmountSettings::saveFromForm([
+        'contribution_amount_min' => 1000,
+        'contribution_amount_step' => 500,
+        'contribution_amount_max' => 7500,
+    ]);
+
+    expect(ContributionAmountSettings::minAmount())->toBe(1000)
+        ->and(ContributionAmountSettings::stepAmount())->toBe(500)
+        ->and(ContributionAmountSettings::maxAmount())->toBe(7500)
+        ->and(ContributionAmountSettings::steps())->toBe(range(1000, 7500, 500))
+        ->and(ContributionAmountSettings::forForm())->toBe([
+            'contribution_amount_min' => 1000,
+            'contribution_amount_step' => 500,
+            'contribution_amount_max' => 7500,
+        ]);
+});
+
+test('partial collection toggles persist from form state', function () {
+    ContributionPolicySettings::saveFromForm([
+        ...ContributionPolicySettings::allForForm(),
+        'collection_allow_partial_open_cycle' => false,
+        'collection_allow_partial_arrears' => true,
+        'collection_allow_partial_delinquency' => false,
+    ]);
+
+    expect(ContributionPolicySettings::allowPartialOpenCycle())->toBeFalse()
+        ->and(ContributionPolicySettings::allowPartialArrears())->toBeTrue()
+        ->and(ContributionPolicySettings::allowPartialDelinquency())->toBeFalse()
+        ->and(ContributionPolicySettings::allowsPartialCollection(ContributionPolicySettings::PARTIAL_CONTEXT_OPEN_CYCLE))->toBeFalse()
+        ->and(ContributionPolicySettings::allowsPartialCollection(ContributionPolicySettings::PARTIAL_CONTEXT_ARREARS))->toBeTrue()
+        ->and(ContributionPolicySettings::allowsPartialCollection(ContributionPolicySettings::PARTIAL_CONTEXT_DELINQUENCY))->toBeFalse();
 });
 
 test('statement and communication settings persist from form state', function () {

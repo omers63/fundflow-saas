@@ -7,12 +7,12 @@ use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Services\MemberLoanCalculatorService;
+use App\Support\LoanExcessFundSettlementOption;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
@@ -78,5 +78,42 @@ test('uses split percentage strategy when selected', function () {
     )[0];
 
     expect($calc['member_portion'])->toBe(3000.0)
-        ->and($calc['master_portion'])->toBe(7000.0);
+        ->and($calc['master_portion'])->toBe(7000.0)
+        ->and($calc['excess_fund'])->toBe(17_000.0);
+});
+
+test('split with early settlement estimates roll-up remaining months', function () {
+    LoanSettings::save([
+        'member_funding_split_pct' => 50,
+        'allow_funding_strategy_split_with_early_settlement' => true,
+    ]);
+    $this->member->fundAccount->update(['balance' => 15_000]);
+
+    $calc = $this->service->calculationsForAmount(
+        10_000,
+        $this->member->fresh(),
+        LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT,
+        LoanExcessFundSettlementOption::ROLL_UP,
+    )[0];
+
+    expect($calc['member_portion'])->toBe(5000.0)
+        ->and($calc['master_portion'])->toBe(5000.0)
+        ->and($calc['excess_fund'])->toBe(10_000.0)
+        ->and($calc['early_settlement_amount'])->toBe(10_000.0)
+        ->and($calc['installments_covered'])->toBe(20)
+        ->and($calc['remaining_payment_months'])->toBeInt();
+});
+
+test('member fund top-up uses available fund balance for portions', function () {
+    $this->member->fundAccount->update(['balance' => 3500]);
+
+    $calc = $this->service->calculationsForAmount(
+        10_000,
+        $this->member->fresh(),
+        LoanFundingStrategy::MEMBER_FUND_TOPUP,
+    )[0];
+
+    expect($calc['member_portion'])->toBe(3500.0)
+        ->and($calc['master_portion'])->toBe(6500.0)
+        ->and($calc['excess_fund'])->toBe(0.0);
 });

@@ -43,6 +43,7 @@ final class DefaultTenantSettings
         // Automation → Schedule (job clocks, behaviour, notification suppressions)
         AutomationScheduleSettings::seedDefaults();
         ContributionPolicySettings::saveFromForm(ContributionPolicySettings::allForForm());
+        ContributionAmountSettings::seedDefaults();
 
         // Loans + guarantor rules + loan queue projection
         LoanSettings::save(LoanSettings::defaults());

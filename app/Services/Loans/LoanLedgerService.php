@@ -109,7 +109,7 @@ final class LoanLedgerService
         $memberFundDebit = round($portions['member_portion'] * $ratio, 2);
         $masterFundDebit = round($portions['master_portion'] * $ratio, 2);
         $fullMasterPortion = round($portions['master_portion'], 2);
-        $isSplitStrategy = $strategy === LoanFundingStrategy::SPLIT_PERCENTAGE;
+        $isSplitStrategy = LoanFundingStrategy::usesConfiguredSplit($strategy);
         $fundBalForMemberPortionCheck = $memberFundBalanceAtDisbursement ?? (float) $memberFund->balance;
         $willCompleteDisbursement = ((float) $loan->amount_disbursed + $amount) >= $approved - 0.01;
 
@@ -190,7 +190,12 @@ final class LoanLedgerService
                 return;
             }
 
-            if ($loan->cash_out_excess_fund) {
+            if ($loan->cash_out_excess_fund
+                || (
+                    LoanFundingStrategy::normalize($strategy) === LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT
+                    && filled($loan->excess_fund_settlement_option)
+                )
+            ) {
                 $excess = LoanSettings::excessFundCashOutAmount(
                     $approved,
                     $memberFundBalanceAtDisbursement ?? (float) $memberFund->fresh()->balance,

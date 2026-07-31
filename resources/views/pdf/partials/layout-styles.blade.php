@@ -213,7 +213,7 @@ $logoDataUri = $logoDataUri ?? null;
 
     .data-table td.num {
         text-align: center;
-        font-weight: 600;
+        font-weight: 700;
         width: 36px;
     }
 

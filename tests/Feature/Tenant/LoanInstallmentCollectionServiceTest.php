@@ -11,6 +11,7 @@ use App\Notifications\Tenant\LoanRepaymentAppliedNotification;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanInstallmentCollectionService;
+use App\Support\ContributionPolicySettings;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Notification;
 use Tests\Concerns\InitializesTenancy;
@@ -266,4 +267,54 @@ test('collecting an installment notifies the member like applyOne', function () 
                 && $notification->installment->id === $installment->id;
         },
     );
+});
+
+test('disabling open-cycle partial collection leaves EMI unpaid when cash is short', function () {
+    ContributionPolicySettings::saveFromForm([
+        ...ContributionPolicySettings::allForForm(),
+        'collection_allow_partial_open_cycle' => false,
+    ]);
+
+    $member = Member::create([
+        'member_number' => 'MEM-EMI-PARTIAL-OFF',
+        'name' => 'EMI No Partial',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'master_portion' => 6000,
+        'settlement_threshold' => 0,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    $installment = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2026-06-15'),
+        'status' => 'pending',
+    ]);
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->accounting->credit($member->cashAccount, 400, 'Short deposit'),
+    );
+
+    expect($this->collection->attemptCollection($installment->fresh(), $member->fresh()))->toBe('no_cash')
+        ->and((float) $installment->fresh()->amount_collected)->toBe(0.0)
+        ->and($installment->fresh()->status)->toBe('pending')
+        ->and($member->fresh()->getCashBalance())->toBe(400.0);
 });

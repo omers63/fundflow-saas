@@ -195,7 +195,7 @@ final class LoanTransferUnwindService
 
         $strategy = LoanFundingStrategy::normalize($loan->funding_strategy);
 
-        if ($strategy === LoanFundingStrategy::SPLIT_PERCENTAGE) {
+        if (LoanFundingStrategy::usesConfiguredSplit($strategy)) {
             // Split takes master via member-fund mirror; reversing member fund restores master.
             return 0.0;
         }

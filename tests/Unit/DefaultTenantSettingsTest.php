@@ -186,6 +186,7 @@ it('seeds every settings-tab policy group used by the admin Settings page', func
     expect($groups)->toContain(
         'general',
         'contribution',
+        'contribution_amounts',
         'automation',
         'collection',
         'delinquency',

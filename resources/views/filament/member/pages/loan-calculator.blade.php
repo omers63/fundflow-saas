@@ -1,7 +1,7 @@
-<x-filament-panels::page>
+                            <x-filament-panels::page>
     @php
-        $currency = $this->currency;
-        $loanAmount = (float) ($this->loanAmount ?? 0);
+$currency = $this->currency;
+$loanAmount = (float) ($this->loanAmount ?? 0);
     @endphp
 
     <div class="space-y-4 sm:space-y-6">
@@ -19,10 +19,12 @@
     'amount' => \App\Filament\Support\MoneyDisplay::format($this->memberFundBalance, $currency) ?? '—',
 ]) }}
                         {{ __('and the active loan tier settings.') }}
-                        {{ __('If you choose the configured split at application, :member% comes from your fund and :master% from the master fund.', [
-    'member' => number_format($this->memberFundingSplitPercent, 1),
-    'master' => number_format($this->masterFundingSplitPercent, 1),
-]) }}
+                        @if ($this->usesConfiguredSplit)
+                                                    {{ __('If you choose a configured fund split, :member% comes from your fund and :master% from the master fund.', [
+                                'member' => number_format($this->memberFundingSplitPercent, 1),
+                                'master' => number_format($this->masterFundingSplitPercent, 1),
+                            ]) }}
+                        @endif
                         {{ __('The :percent% settlement threshold is included.', [
     'percent' => round($this->settlementPct * 100),
 ]) }}
@@ -33,27 +35,64 @@
 
         <div
             class="rounded-xl bg-gradient-to-br from-sky-100 via-white to-indigo-50 p-4 shadow-md ring-1 ring-sky-200/80 dark:from-slate-800 dark:via-sky-950/35 dark:to-indigo-950/30 dark:ring-sky-600/40 sm:p-5">
+            <div class="mb-4 space-y-4">
+                <div>
+                    <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {{ __('Funding approach') }}
+                    </label>
+                    @if (count($this->fundingStrategyOptions) > 1)
+                        <select wire:model.live="fundingStrategy"
+                            class="block w-full rounded-lg border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                            @foreach ($this->fundingStrategyOptions as $value => $label)
+                                <option value="{{ $value }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    @else
+                        <p class="text-sm text-gray-700 dark:text-gray-300">
+                            {{ $this->fundingStrategyOptions[$this->fundingStrategy] ?? '—' }}
+                        </p>
+                    @endif
+                </div>
+
+                @if ($this->showsExcessDisposition)
+                    <div>
+                        <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {{ __('Remaining fund balance above your loan share') }}
+                        </label>
+                        <div class="space-y-2">
+                            @foreach ($this->excessDispositionOptions as $value => $label)
+                                <label class="flex cursor-pointer items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                    <input type="radio" wire:model.live="excessFundDisposition" value="{{ $value }}"
+                                        class="mt-1 border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700" />
+                                    <span>{{ $label }}</span>
+                                </label>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+
+                @if ($this->showsSettlementOptions)
+                    <div>
+                        <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {{ __('Remaining fund balance above your loan share') }}
+                        </label>
+                        <div class="space-y-2">
+                            @foreach ($this->settlementOptionOptions as $value => $label)
+                                <label class="flex cursor-pointer items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                    <input type="radio" wire:model.live="excessFundSettlementOption" value="{{ $value }}"
+                                        class="mt-1 border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700" />
+                                    <span>{{ $label }}</span>
+                                </label>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+            </div>
+
             <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 {{ __('Loan amount') }} (<span
                     dir="ltr">{!! \App\Filament\Support\MoneyDisplay::symbolHtml($currency)->toHtml() !!}</span>)
             </label>
-            <div class="mb-4">
-                <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {{ __('Funding approach') }}
-                </label>
-                @if (count($this->fundingStrategyOptions) > 1)
-                    <select wire:model.live="fundingStrategy"
-                        class="block w-full rounded-lg border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:max-w-md">
-                        @foreach ($this->fundingStrategyOptions as $value => $label)
-                            <option value="{{ $value }}">{{ $label }}</option>
-                        @endforeach
-                    </select>
-                @else
-                    <p class="text-sm text-gray-700 dark:text-gray-300">
-                        {{ $this->fundingStrategyOptions[$this->fundingStrategy] ?? '—' }}
-                    </p>
-                @endif
-            </div>
             <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                 <input type="number" wire:model.live.debounce.400ms="loanAmount" min="0" step="500"
                     placeholder="{{ __('e.g. 20000') }}"
@@ -81,134 +120,175 @@
         @if ($loanAmount > 0)
             @if (count($this->calculations) > 0)
                 @foreach ($this->calculations as $calc)
-                    <div
-                        class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
-                        <div
-                            class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50 sm:px-5 sm:py-4">
-                            <div class="min-w-0">
-                                <span
-                                    class="text-sm font-semibold text-gray-800 dark:text-gray-100">{{ $calc['tier']->label }}</span>
-                                <span
-                                    class="ml-2 text-xs text-gray-500 dark:text-gray-400">{{ $this->formatTierRange($calc['tier']) }}</span>
-                            </div>
-                            <div class="text-end tabular-nums">
-                                <span
-                                    class="text-2xl font-bold text-primary-600 dark:text-primary-400">{{ $calc['installments'] }}</span>
-                                <span class="ms-1 text-sm text-gray-500 dark:text-gray-400">{{ __('months') }}</span>
-                            </div>
-                        </div>
+                            <div
+                                class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
+                                <div
+                                    class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50 sm:px-5 sm:py-4">
+                                    <div class="min-w-0">
+                                        <span
+                                            class="text-sm font-semibold text-gray-800 dark:text-gray-100">{{ $calc['tier']->label }}</span>
+                                        <span
+                                            class="ml-2 text-xs text-gray-500 dark:text-gray-400">{{ $this->formatTierRange($calc['tier']) }}</span>
+                                    </div>
+                                    <div class="text-end tabular-nums">
+                                        <span
+                                            class="text-2xl font-bold text-primary-600 dark:text-primary-400">{{ $calc['remaining_payment_months'] ?? $calc['installments'] }}</span>
+                                        <span class="ms-1 text-sm text-gray-500 dark:text-gray-400">{{ __('months') }}</span>
+                                    </div>
+                                </div>
 
-                        <div class="grid grid-cols-2 gap-4 px-4 py-4 sm:grid-cols-3 sm:px-5">
-                            <div>
-                                <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                    {{ __('Monthly installment') }}
-                                </p>
-                                <p class="mt-1 text-base font-semibold text-gray-900 dark:text-white">
-                                    {!! \App\Filament\Support\MoneyDisplay::html($calc['min_installment'], $currency)?->toHtml() !!}
-                                </p>
-                                <p class="text-xs text-gray-400">{{ __('minimum') }}</p>
-                            </div>
-                            <div>
-                                <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                    {{ __('Your fund portion') }}
-                                </p>
-                                <p class="mt-1 text-base font-semibold text-emerald-600 dark:text-emerald-400">
-                                    {!! \App\Filament\Support\MoneyDisplay::html($calc['member_portion'], $currency)?->toHtml() !!}
-                                </p>
-                                <p class="text-xs text-gray-400">{{ __('from your fund account') }}</p>
-                            </div>
-                            <div>
-                                <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                    {{ __('Fund contribution') }}
-                                </p>
-                                <p class="mt-1 text-base font-semibold text-amber-600 dark:text-amber-400">
-                                    {!! \App\Filament\Support\MoneyDisplay::html($calc['master_portion'], $currency)?->toHtml() !!}
-                                </p>
-                                <p class="text-xs text-gray-400">{{ __('from master fund') }}</p>
-                            </div>
-                            <div>
-                                <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                    {{ __('Settlement amount') }}
-                                </p>
-                                <p class="mt-1 text-base font-semibold text-gray-700 dark:text-gray-300">
-                                    {!! \App\Filament\Support\MoneyDisplay::html($calc['settlement_amt'], $currency)?->toHtml() !!}
-                                </p>
-                                <p class="text-xs text-gray-400">
-                                    {{ __(':percent% of loan', ['percent' => round($this->settlementPct * 100)]) }}
-                                </p>
-                            </div>
-                            <div>
-                                <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                    {{ __('Total to repay') }}
-                                </p>
-                                <p class="mt-1 text-base font-semibold text-gray-900 dark:text-white">
-                                    {!! \App\Filament\Support\MoneyDisplay::html($calc['total_repay'], $currency)?->toHtml() !!}
-                                </p>
-                                <p class="text-xs text-gray-400">{{ __('master portion + settlement') }}</p>
-                            </div>
-                            <div>
-                                <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ __('Duration') }}</p>
-                                <p class="mt-1 text-base font-semibold text-gray-900 dark:text-white">
-                                    {{ __('~:years years', ['years' => number_format($calc['installments'] / 12, 1)]) }}
-                                </p>
-                                <p class="text-xs text-gray-400">
-                                    {{ __(':count monthly payments', ['count' => $calc['installments']]) }}
-                                </p>
-                            </div>
-                        </div>
+                                <div class="grid grid-cols-2 gap-4 px-4 py-4 sm:grid-cols-3 sm:px-5">
+                                    <div>
+                                        <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                            {{ __('Monthly installment') }}
+                                        </p>
+                                        <p class="mt-1 text-base font-semibold text-gray-900 dark:text-white">
+                                            {!! \App\Filament\Support\MoneyDisplay::html($calc['min_installment'], $currency)?->toHtml() !!}
+                                        </p>
+                                        <p class="text-xs text-gray-400">{{ __('minimum') }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                            {{ __('Your fund portion') }}
+                                        </p>
+                                        <p class="mt-1 text-base font-semibold text-emerald-600 dark:text-emerald-400">
+                                            {!! \App\Filament\Support\MoneyDisplay::html($calc['member_portion'], $currency)?->toHtml() !!}
+                                        </p>
+                                        <p class="text-xs text-gray-400">{{ __('from your fund account') }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                            {{ __('Fund contribution') }}
+                                        </p>
+                                        <p class="mt-1 text-base font-semibold text-amber-600 dark:text-amber-400">
+                                            {!! \App\Filament\Support\MoneyDisplay::html($calc['master_portion'], $currency)?->toHtml() !!}
+                                        </p>
+                                        <p class="text-xs text-gray-400">{{ __('from master fund') }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                            {{ __('Settlement amount') }}
+                                        </p>
+                                        <p class="mt-1 text-base font-semibold text-gray-700 dark:text-gray-300">
+                                            {!! \App\Filament\Support\MoneyDisplay::html($calc['settlement_amt'], $currency)?->toHtml() !!}
+                                        </p>
+                                        <p class="text-xs text-gray-400">
+                                            {{ __(':percent% of loan', ['percent' => round($this->settlementPct * 100)]) }}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                            {{ __('Total to repay') }}
+                                        </p>
+                                        <p class="mt-1 text-base font-semibold text-gray-900 dark:text-white">
+                                            {!! \App\Filament\Support\MoneyDisplay::html($calc['total_repay'], $currency)?->toHtml() !!}
+                                        </p>
+                                        <p class="text-xs text-gray-400">{{ __('master portion + settlement') }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ __('Duration') }}</p>
+                                        <p class="mt-1 text-base font-semibold text-gray-900 dark:text-white">
+                                            {{ __('~:years years', [
+                        'years' => number_format(($calc['remaining_payment_months'] ?? $calc['installments']) / 12, 1),
+                    ]) }}
+                                        </p>
+                                        <p class="text-xs text-gray-400">
+                                            {{ __(':count monthly payments', [
+                        'count' => $calc['remaining_payment_months'] ?? $calc['installments'],
+                    ]) }}
+                                        </p>
+                                    </div>
+                                </div>
 
-                        @php
-                            $memberPct = $loanAmount > 0 ? min(100, $calc['member_portion'] / $loanAmount * 100) : 0;
-                            $masterPct = 100 - $memberPct;
-                        @endphp
-                        <div class="px-4 pb-4 sm:px-5">
-                            <p class="mb-1 text-xs text-gray-500 dark:text-gray-400">{{ __('Loan funding split') }}</p>
-                            <div class="flex h-3 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
-                                @if ($memberPct > 0)
-                                    <div class="h-full bg-emerald-500 transition-all" style="width: {{ $memberPct }}%"></div>
+                                @if ($this->usesConfiguredSplit && $calc['excess_fund'] > 0)
+                                    <div class="border-t border-gray-100 px-4 py-4 dark:border-gray-700 sm:px-5">
+                                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                            <div>
+                                                <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                                    {{ __('Excess fund above share') }}
+                                                </p>
+                                                <p class="mt-1 text-base font-semibold text-gray-900 dark:text-white">
+                                                    {!! \App\Filament\Support\MoneyDisplay::html($calc['excess_fund'], $currency)?->toHtml() !!}
+                                                </p>
+                                            </div>
+                                            @if ($this->showsSettlementOptions && $calc['early_settlement_amount'] > 0)
+                                                <div>
+                                                    <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                                        {{ __('Estimated early settlement') }}
+                                                    </p>
+                                                    <p class="mt-1 text-base font-semibold text-sky-700 dark:text-sky-300">
+                                                        {!! \App\Filament\Support\MoneyDisplay::html($calc['early_settlement_amount'], $currency)?->toHtml() !!}
+                                                    </p>
+                                                    <p class="text-xs text-gray-400">
+                                                        {{ __('~:count installment(s)', ['count' => $calc['installments_covered']]) }}
+                                                    </p>
+                                                </div>
+                                            @elseif ($this->showsExcessDisposition && $this->excessFundDisposition === \App\Support\LoanFundExcessDisposition::CASH_OUT)
+                                                <div>
+                                                    <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                                        {{ __('Estimated cash transfer') }}
+                                                    </p>
+                                                    <p class="mt-1 text-base font-semibold text-sky-700 dark:text-sky-300">
+                                                        {!! \App\Filament\Support\MoneyDisplay::html($calc['excess_fund'], $currency)?->toHtml() !!}
+                                                    </p>
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
                                 @endif
-                                @if ($masterPct > 0)
-                                    <div class="h-full bg-amber-400 transition-all" style="width: {{ $masterPct }}%"></div>
-                                @endif
+
+                                @php
+                                    $memberPct = $loanAmount > 0 ? min(100, $calc['member_portion'] / $loanAmount * 100) : 0;
+                                    $masterPct = 100 - $memberPct;
+                                @endphp
+                                <div class="px-4 pb-4 sm:px-5">
+                                    <p class="mb-1 text-xs text-gray-500 dark:text-gray-400">{{ __('Loan funding split') }}</p>
+                                    <div class="flex h-3 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
+                                        @if ($memberPct > 0)
+                                            <div class="h-full bg-emerald-500 transition-all" style="width: {{ $memberPct }}%"></div>
+                                        @endif
+                                        @if ($masterPct > 0)
+                                            <div class="h-full bg-amber-400 transition-all" style="width: {{ $masterPct }}%"></div>
+                                        @endif
+                                    </div>
+                                    <div class="mt-1 flex flex-wrap gap-3 text-xs text-gray-500 dark:text-gray-400">
+                                        <span class="flex items-center gap-1">
+                                            <span class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
+                                            {{ __('Your fund (:percent%)', ['percent' => round($memberPct)]) }}
+                                        </span>
+                                        <span class="flex items-center gap-1">
+                                            <span class="inline-block h-2 w-2 rounded-full bg-amber-400"></span>
+                                            {{ __('Master fund (:percent%)', ['percent' => round($masterPct)]) }}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="mt-1 flex flex-wrap gap-3 text-xs text-gray-500 dark:text-gray-400">
-                                <span class="flex items-center gap-1">
-                                    <span class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
-                                    {{ __('Your fund (:percent%)', ['percent' => round($memberPct)]) }}
-                                </span>
-                                <span class="flex items-center gap-1">
-                                    <span class="inline-block h-2 w-2 rounded-full bg-amber-400"></span>
-                                    {{ __('Master fund (:percent%)', ['percent' => round($masterPct)]) }}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
                 @endforeach
 
                 <p class="mt-2 text-center text-xs text-gray-400 dark:text-gray-500">
                     {{ __('* These are estimates based on current tier settings and your fund balance. Actual terms may vary upon approval.') }}
                 </p>
             @else
-                <div
-                    class="rounded-xl bg-white p-6 text-center shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700 sm:p-8">
-                    <x-heroicon-o-exclamation-triangle class="mx-auto mb-3 h-10 w-10 text-amber-400" />
-                    <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ __('No matching loan tier') }}</p>
-                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        {{ __(':amount does not fall within any active loan tier range.', [
+                        <div
+                            class="rounded-xl bg-white p-6 text-center shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700 sm:p-8">
+                            <x-heroicon-o-exclamation-triangle class="mx-auto mb-3 h-10 w-10 text-amber-400" />
+                            <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ __('No matching loan tier') }}</p>
+                            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                {{ __(':amount does not fall within any active loan tier range.', [
                     'amount' => \App\Filament\Support\MoneyDisplay::format($loanAmount, $currency) ?? '—',
                 ]) }}
-                    </p>
-                    @if ($this->activeTiers->isNotEmpty())
-                        <div class="mt-4 flex flex-wrap justify-center gap-2">
-                            @foreach ($this->activeTiers as $tier)
-                                <span
-                                    class="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-400">
-                                    {{ $tier->label }}: {{ $this->formatTierRange($tier) }}
-                                </span>
-                            @endforeach
+                            </p>
+                            @if ($this->activeTiers->isNotEmpty())
+                                <div class="mt-4 flex flex-wrap justify-center gap-2">
+                                    @foreach ($this->activeTiers as $tier)
+                                        <span
+                                            class="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+                                            {{ $tier->label }}: {{ $this->formatTierRange($tier) }}
+                                        </span>
+                                    @endforeach
+                                </div>
+                            @endif
                         </div>
-                    @endif
-                </div>
             @endif
         @else
             <div

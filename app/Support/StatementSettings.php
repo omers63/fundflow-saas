@@ -35,7 +35,8 @@ final class StatementSettings
             'include_loan_section' => true,
             'include_compliance' => true,
             'font_en' => self::FONT_DEJAVU_SANS,
-            'font_ar' => self::FONT_DEJAVU_SANS,
+            // Amiri covers Arabic presentation forms DomPDF needs after ArPHP shaping.
+            'font_ar' => self::FONT_AMIRI,
         ];
     }
 
@@ -61,9 +62,9 @@ final class StatementSettings
     public static function arabicFontOptions(): array
     {
         return [
-            self::FONT_DEJAVU_SANS => __('DejaVu Sans (default)'),
+            self::FONT_AMIRI => __('Amiri (default Arabic)'),
+            self::FONT_DEJAVU_SANS => __('DejaVu Sans'),
             self::FONT_DEJAVU_SERIF => __('DejaVu Serif'),
-            self::FONT_AMIRI => __('Amiri (traditional Arabic)'),
         ];
     }
 
@@ -159,11 +160,14 @@ final class StatementSettings
 
     public static function arabicFont(): string
     {
-        $font = (string) self::get('font_ar', self::FONT_DEJAVU_SANS);
+        $fallback = self::customFontPath(self::FONT_AMIRI) !== null
+            ? self::FONT_AMIRI
+            : self::FONT_DEJAVU_SANS;
+        $font = (string) self::get('font_ar', $fallback);
 
         return array_key_exists($font, self::arabicFontOptions())
             ? $font
-            : self::FONT_DEJAVU_SANS;
+            : $fallback;
     }
 
     /**
@@ -229,11 +233,14 @@ final class StatementSettings
             array_key_exists($fontEn, self::englishFontOptions()) ? $fontEn : self::FONT_DEJAVU_SANS,
         );
 
-        $fontAr = (string) ($state['statement_font_ar'] ?? self::FONT_DEJAVU_SANS);
+        $fontArFallback = self::customFontPath(self::FONT_AMIRI) !== null
+            ? self::FONT_AMIRI
+            : self::FONT_DEJAVU_SANS;
+        $fontAr = (string) ($state['statement_font_ar'] ?? $fontArFallback);
         Setting::set(
             self::GROUP,
             'font_ar',
-            array_key_exists($fontAr, self::arabicFontOptions()) ? $fontAr : self::FONT_DEJAVU_SANS,
+            array_key_exists($fontAr, self::arabicFontOptions()) ? $fontAr : $fontArFallback,
         );
     }
 

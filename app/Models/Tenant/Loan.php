@@ -80,6 +80,7 @@ class Loan extends Model
         'is_emergency',
         'funding_strategy',
         'cash_out_excess_fund',
+        'excess_fund_settlement_option',
         'member_fund_balance_at_disbursement',
         'payout_at',
         'rejected_at',

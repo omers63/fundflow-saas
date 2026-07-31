@@ -1000,7 +1000,16 @@ class LoanEmiCollectionCatalogService
         [$start, $end] = $this->cycles->cycleDueDateBounds($month, $year);
 
         return LoanInstallment::query()
-            ->where('status', 'paid')
+            ->where(function (Builder $query): void {
+                $query->where('status', 'paid')
+                    ->orWhere(function (Builder $query): void {
+                        $query->whereIn('status', ['pending', 'overdue'])
+                            ->where(function (Builder $query): void {
+                                $query->where('collection_status', InstallmentCollectionStatus::PARTIALLY_PENDING)
+                                    ->orWhere('amount_collected', '>', 0);
+                            });
+                    });
+            })
             ->whereBetween('due_date', [$start, $end])
             ->whereHas('loan', function (Builder $loan) use ($month, $year): void {
                 $loan->whereIn('status', ['active', 'transferred', 'completed', 'early_settled'])

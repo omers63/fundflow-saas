@@ -102,6 +102,7 @@ it('computes excess fund cash out only for split strategy', function () {
     LoanSettings::save(['member_funding_split_pct' => 50]);
 
     expect(LoanSettings::excessFundCashOutAmount(10_000, 12_000, LoanFundingStrategy::SPLIT_PERCENTAGE))->toBe(7000.0)
+        ->and(LoanSettings::excessFundCashOutAmount(10_000, 12_000, LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT))->toBe(7000.0)
         ->and(LoanSettings::excessFundCashOutAmount(10_000, 12_000, LoanFundingStrategy::MEMBER_FUND_TOPUP))->toBe(0.0);
 });
 

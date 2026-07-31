@@ -6,6 +6,7 @@ use App\Filament\Support\LateSettledArrearsTableStyling;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\LoanInstallment;
 use App\Support\ContributionCollectionStatus;
+use App\Support\InstallmentCollectionStatus;
 
 test('waived contribution uses info styling', function () {
     $contribution = new Contribution([
@@ -67,4 +68,30 @@ test('paid installment on time stays success styling', function () {
 
     expect(LateSettledArrearsTableStyling::installmentWasSettledLate($installment))->toBeFalse()
         ->and(LateSettledArrearsTableStyling::installmentStatusColor($installment))->toBe('success');
+});
+
+test('partially paid contribution uses warning styling and label', function () {
+    $contribution = new Contribution([
+        'status' => 'pending',
+        'collection_status' => ContributionCollectionStatus::PARTIALLY_PENDING,
+        'amount_collected' => 250,
+        'is_late' => false,
+    ]);
+
+    expect(LateSettledArrearsTableStyling::contributionIsPartiallyPaid($contribution))->toBeTrue()
+        ->and(LateSettledArrearsTableStyling::contributionStatusLabel($contribution))->toBe(__('Partially paid'))
+        ->and(LateSettledArrearsTableStyling::contributionStatusColor($contribution))->toBe('warning');
+});
+
+test('partially paid installment uses warning styling and label', function () {
+    $installment = new LoanInstallment([
+        'status' => 'pending',
+        'collection_status' => InstallmentCollectionStatus::PARTIALLY_PENDING,
+        'amount_collected' => 250,
+        'is_late' => false,
+    ]);
+
+    expect(LateSettledArrearsTableStyling::installmentIsPartiallyPaid($installment))->toBeTrue()
+        ->and(LateSettledArrearsTableStyling::installmentStatusLabel($installment))->toBe(__('Partially paid'))
+        ->and(LateSettledArrearsTableStyling::installmentStatusColor($installment))->toBe('warning');
 });

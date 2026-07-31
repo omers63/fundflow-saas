@@ -6,6 +6,7 @@ use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Loans\Schemas\LoanForm;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanLifecycleService;
+use App\Support\LoanExcessFundSettlementOption;
 use App\Support\LoanFundExcessDisposition;
 use App\Support\LoanFundingStrategy;
 use Filament\Actions\Action;
@@ -32,6 +33,7 @@ class CreateLoan extends CreateRecord
         $fill = [
             'funding_strategy' => LoanFundingStrategy::defaultForApplication(),
             'excess_fund_disposition' => LoanFundExcessDisposition::defaultForApplication(),
+            'excess_fund_settlement_option' => LoanExcessFundSettlementOption::defaultForApplication(),
             'grace_cycles' => 1,
         ];
 
@@ -87,9 +89,13 @@ class CreateLoan extends CreateRecord
                 ? (string) $data['eligibility_override_reason']
                 : null,
                 fundingStrategy: $fundingStrategy,
-                cashOutExcessFund: LoanFundExcessDisposition::toCashOutFlag(
-                    (string) ($data['excess_fund_disposition'] ?? LoanFundExcessDisposition::defaultForApplication()),
-                ),
+                cashOutExcessFund: $fundingStrategy === LoanFundingStrategy::SPLIT_PERCENTAGE
+                    && LoanFundExcessDisposition::toCashOutFlag(
+                        (string) ($data['excess_fund_disposition'] ?? LoanFundExcessDisposition::defaultForApplication()),
+                    ),
+                excessFundSettlementOption: $fundingStrategy === LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT
+                    ? (string) ($data['excess_fund_settlement_option'] ?? LoanExcessFundSettlementOption::defaultForApplication())
+                    : null,
                 applicationFormPath: filled($data['application_form_path'] ?? null)
                     ? (string) $data['application_form_path']
                     : null,

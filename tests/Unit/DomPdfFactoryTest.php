@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Support\Pdf\DomPdfFactory;
 use App\Support\StatementSettings;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 it('shapes arabic html into presentation forms for dompdf', function (): void {
     $source = '<html><body><p>جدول سداد القرض</p></body></html>';
@@ -92,4 +93,28 @@ it('registers amiri normal and bold then aliases numeric css weights', function 
         }
         @rmdir($fontDir);
     }
+});
+
+it('aliases dejavu numeric weights so shaped arabic is not question marks', function (): void {
+    if (trim((string) shell_exec('command -v pdftotext')) === '') {
+        $this->markTestSkipped('pdftotext is required to assert rendered Arabic PDF text.');
+    }
+
+    $html = <<<'HTML'
+<html><head><meta charset="UTF-8"><style>
+body { font-family: "DejaVu Sans", sans-serif; font-size: 14px; font-weight: 600; }
+</style></head><body><p>الملخص حتى تاريخ</p></body></html>
+HTML;
+
+    $shaped = DomPdfFactory::shapeArabicHtml($html);
+    $doc = Pdf::loadHTML($shaped)->setPaper('a4');
+    DomPdfFactory::aliasNumericFontWeights($doc->getDomPDF());
+    $path = tempnam(sys_get_temp_dir(), 'dejavu-ar-');
+    file_put_contents($path, $doc->output());
+    $text = shell_exec('pdftotext -layout '.escapeshellarg($path).' -') ?? '';
+    @unlink($path);
+
+    expect($text)
+        ->not->toContain('?????')
+        ->and(preg_match('/الملخص|اﻟﻤﻠﺨﺺ/u', $text))->toBe(1);
 });

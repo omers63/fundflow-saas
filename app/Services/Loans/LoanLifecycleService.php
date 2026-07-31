@@ -22,6 +22,7 @@ use App\Notifications\Tenant\LoanSubmittedNotification;
 use App\Notifications\Tenant\NewLoanApplicationNotification;
 use App\Services\OperationalReviewWorkflowService;
 use App\Support\BusinessDay;
+use App\Support\LoanExcessFundSettlementOption;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanRepaymentWindowPolicy;
 use App\Support\LoanSettings;
@@ -94,6 +95,7 @@ final class LoanLifecycleService
         ?string $eligibilityOverrideReason = null,
         ?string $fundingStrategy = null,
         bool $cashOutExcessFund = false,
+        ?string $excessFundSettlementOption = null,
         ?string $guarantorName = null,
         ?string $applicationFormPath = null,
         bool $bypassLoanAmountValidation = false,
@@ -127,8 +129,13 @@ final class LoanLifecycleService
             throw new InvalidArgumentException(__('The selected loan funding option is not available.'));
         }
 
+        $settlementOption = null;
+
         if ($fundingStrategy === LoanFundingStrategy::MEMBER_FUND_TOPUP) {
             $cashOutExcessFund = false;
+        } elseif ($fundingStrategy === LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT) {
+            $cashOutExcessFund = false;
+            $settlementOption = LoanExcessFundSettlementOption::toSettlementOption($excessFundSettlementOption);
         } elseif (! LoanSettings::allowExcessFundCashOut()) {
             $cashOutExcessFund = false;
         }
@@ -175,6 +182,7 @@ final class LoanLifecycleService
             'is_emergency' => $isEmergency,
             'funding_strategy' => $fundingStrategy,
             'cash_out_excess_fund' => $cashOutExcessFund,
+            'excess_fund_settlement_option' => $settlementOption,
             'has_grace_cycle' => $hasGraceCycle,
             'grace_cycles' => LoanSettings::clampGraceCycles($graceCycles ?? ($hasGraceCycle ? 1 : 0)),
             'status' => 'pending',
@@ -348,7 +356,7 @@ final class LoanLifecycleService
             ? (float) $loan->member_fund_balance_at_disbursement
             : ($memberFundBalanceOverride ?? $memberFundBalanceBefore);
         $strategy = LoanFundingStrategy::normalize($loan->funding_strategy);
-        $skipMemberFundSufficiencyCheck = $strategy === LoanFundingStrategy::SPLIT_PERCENTAGE
+        $skipMemberFundSufficiencyCheck = LoanFundingStrategy::usesConfiguredSplit($strategy)
             || $hadPriorDisbursements
             || $memberFundBalanceOverride !== null;
         $at = $disbursedAt ?? BusinessDay::now();
@@ -438,7 +446,7 @@ final class LoanLifecycleService
             ? (float) $loan->member_fund_balance_at_disbursement
             : (float) ($loan->member->fundAccount?->balance ?? 0)
             + (float) $loan->disbursements()->sum('member_portion')
-            + (LoanFundingStrategy::normalize($loan->funding_strategy) === LoanFundingStrategy::SPLIT_PERCENTAGE
+            + (LoanFundingStrategy::usesConfiguredSplit($loan->funding_strategy)
                 ? (float) LoanSettings::resolveFundingPortions(
                     (float) $loan->amount_approved,
                     0,
@@ -534,6 +542,14 @@ final class LoanLifecycleService
         });
 
         $loan->refresh();
+
+        if (LoanFundingStrategy::normalize($loan->funding_strategy) === LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT
+            && filled($loan->excess_fund_settlement_option)
+        ) {
+            app(LoanSplitExcessFundEarlySettlementService::class)->applyAfterDisbursement($loan->fresh() ?? $loan);
+            $loan->refresh();
+        }
+
         $this->notifyMember($loan, new LoanDisbursedNotification($loan));
     }
 

@@ -48,7 +48,7 @@ class LoanForm
         $currency = Setting::get('general', 'currency', 'USD');
         $memberResolver = self::memberResolver();
 
-        [$strategyRadio, $strategyFixed, $excessDisposition, $fundingPreview] = LoanApplicationFundingFields::components(
+        [$strategyRadio, $strategyFixed, $excessDisposition, $settlementDisposition, $fundingPreview] = LoanApplicationFundingFields::components(
             $memberResolver,
             amountField: 'amount_requested',
         );
@@ -112,6 +112,7 @@ class LoanForm
                             $strategyRadio,
                             $strategyFixed,
                             $excessDisposition,
+                            $settlementDisposition,
                             $fundingPreview,
                         ])
                         ->columns(2),
@@ -269,7 +270,7 @@ class LoanForm
             ->with('fundAccount')
             ->find($get('member_id'));
 
-        [$strategyRadio, $strategyFixed, $excessDisposition, $fundingPreview] = LoanApplicationFundingFields::components(
+        [$strategyRadio, $strategyFixed, $excessDisposition, $settlementDisposition, $fundingPreview] = LoanApplicationFundingFields::components(
             $memberResolver,
             amountField: 'amount_requested',
         );
@@ -401,6 +402,7 @@ class LoanForm
                         $strategyRadio,
                         $strategyFixed,
                         $excessDisposition,
+                        $settlementDisposition,
                         $fundingPreview,
                     ]),
                 self::loanSection(__('Approval preview'), __('Estimated tier, fund split, and repayment period if you approve at the requested amount.'))

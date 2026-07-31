@@ -18,7 +18,6 @@ use App\Filament\Member\Resources\MyGuaranteedLoans\MyGuaranteedLoanResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Member\Resources\MyMessages\MyMessageResource;
 use App\Filament\Member\Resources\MyStatements\MyStatementResource;
-use App\Filament\Support\MemberContributionFilamentActions;
 use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DirectMessage;
@@ -143,8 +142,6 @@ final class MemberPortalInsightsService
         $overrideRequests = app(LoanEligibilityOverrideRequestService::class);
         $canRequestOverride = $overrideRequests->canSubmit($member);
         $hasPendingOverrideRequest = $overrideRequests->pendingRequestFor($member) !== null;
-
-        $canVoluntaryTopUp = MemberContributionFilamentActions::canRequestVoluntaryTopUpForHousehold($member);
 
         $hero = $this->buildHero(
             $member,
@@ -379,7 +376,6 @@ final class MemberPortalInsightsService
                 $unreadMessages,
                 $canRequestOverride,
                 $hasPendingOverrideRequest,
-                $canVoluntaryTopUp,
             ),
             'recent_deposits' => FundPosting::query()
                 ->where('member_id', $member->id)
@@ -1020,7 +1016,6 @@ final class MemberPortalInsightsService
         int $unreadMessages = 0,
         bool $canRequestOverride = false,
         bool $hasPendingOverrideRequest = false,
-        bool $canVoluntaryTopUp = false,
     ): array {
         return [
             [
@@ -1032,16 +1027,6 @@ final class MemberPortalInsightsService
                 'tone' => 'deposit',
                 'badge' => null,
                 'visible' => true,
-            ],
-            [
-                'label' => __('Contribution top-up'),
-                'subtitle' => __('Add extra to this cycle\'s contribution'),
-                'description' => __('Add extra to this cycle\'s contribution'),
-                'url' => MyContributionResource::getUrl('index'),
-                'icon' => 'heroicon-o-arrow-trending-up',
-                'tone' => 'deposit',
-                'badge' => null,
-                'visible' => $canVoluntaryTopUp,
             ],
             [
                 'label' => __('Apply for loan'),

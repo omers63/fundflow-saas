@@ -70,6 +70,8 @@ test('cash account page shows balance grid deposit form and ledger widgets', fun
     $this->get('http://'.$this->domain.'/member/cash-account')
         ->assertSuccessful()
         ->assertSee('ff-member-cash-account', false)
+        ->assertSee('ff-member-cash-account w-full max-w-none', false)
+        ->assertDontSee('lg:grid-cols-2', false)
         ->assertSee(__('Current balance'), false)
         ->assertSee(__('Bank transfer details'), false)
         ->assertSee(__('Submit a deposit'), false)

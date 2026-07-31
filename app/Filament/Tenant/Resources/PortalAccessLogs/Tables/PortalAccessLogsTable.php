@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Resources\PortalAccessLogs\Tables;
 
+use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -12,13 +13,10 @@ use App\Models\Tenant\PortalAccessLog;
 use App\Support\Lang;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
-use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
 
 class PortalAccessLogsTable
 {
@@ -72,17 +70,7 @@ class PortalAccessLogsTable
                         PortalAccessLog::PANEL_MEMBER => 'Member portal',
                         PortalAccessLog::PANEL_ADMIN => 'Admin portal',
                     ])),
-                Filter::make('accessed_at')
-                    ->schema([
-                        DatePicker::make('from')->label(__('From')),
-                        DatePicker::make('until')->label(__('Until')),
-                    ])
-                    ->columns(2)
-                    ->query(function (Builder $query, array $data): Builder {
-                        return $query
-                            ->when($data['from'] ?? null, fn (Builder $q, mixed $from): Builder => $q->whereDate('accessed_at', '>=', $from))
-                            ->when($data['until'] ?? null, fn (Builder $q, mixed $until): Builder => $q->whereDate('accessed_at', '<=', $until));
-                    }),
+                DateColumnRangeFilter::make('accessed_at', __('Accessed')),
                 TrashedFilter::make(),
             ])
             ->defaultSort('accessed_at', 'desc')

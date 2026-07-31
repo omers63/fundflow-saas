@@ -15,6 +15,7 @@ use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\MonthlyStatementService;
+use App\Services\Tenant\MonthlyStatementPdfService;
 use App\Support\MemberLocale;
 use App\Support\Pdf\DomPdfFactory;
 use App\Support\PublicPageSettings;
@@ -637,10 +638,83 @@ test('monthly statement pdf view renders arabic labels for arabic members', func
         ->toBeLessThan(strpos($html, 'الفترة:', $heroCopyPos));
     expect(strpos($html, 'نشاط 6 أشهر'))->toBeGreaterThan(0);
 
+    // Activity date range: Arabic months stay outside dir=ltr (year digits only in LTR).
+    expect($html)
+        ->toContain('<span dir="ltr">2025</span> ديسمبر')
+        ->toContain('<span dir="ltr">2026</span> مايو')
+        ->toContain('إلى')
+        ->not->toContain('<span dir="ltr">ديسمبر')
+        ->not->toContain('<span dir="ltr">مايو');
+
     expect(strpos($html, 'رصيد الصندوق في نهاية الفترة'))->toBeLessThan(strpos($html, 'رصيد الصندوق في بداية الفترة'));
     expect(strpos($html, 'class="stmt-meta__value"'))->toBeLessThan(strpos($html, 'class="stmt-meta__label"'));
 
     $shaped = DomPdfFactory::shapeArabicHtml($html);
 
     expect(preg_match('/[\x{FE70}-\x{FEFF}\x{FB50}-\x{FDFF}]/u', $shaped))->toBe(1);
+});
+
+test('arabic statement section meta avoids font-weight 600 which breaks dejavu arabic', function () {
+    $styles = file_get_contents(resource_path('views/pdf/partials/statement-styles.blade.php'));
+    $metaBlockStart = strpos($styles, '.stmt-body .section-title__meta');
+    expect($metaBlockStart)->toBeGreaterThan(0);
+    $metaBlock = substr($styles, $metaBlockStart, 400);
+
+    expect($metaBlock)
+        ->toContain('font-weight: 700;')
+        ->not->toContain('font-weight: 600;');
+});
+
+test('arabic statement pdf with dejavu font renders lifetime meta without question marks', function () {
+    if (trim((string) shell_exec('command -v pdftotext')) === '') {
+        $this->markTestSkipped('pdftotext is required to assert rendered Arabic PDF text.');
+    }
+
+    $this->memberUser->update(['preferred_locale' => 'ar']);
+    Setting::set(StatementSettings::GROUP, 'font_ar', StatementSettings::FONT_DEJAVU_SANS);
+
+    $statement = app(MonthlyStatementService::class)->generateForMember($this->member, '2026-05');
+    $details = $statement->details ?? [];
+    $details['as_of'] = '2025-11-06';
+    $details['current_year_months'] = [
+        [
+            'month' => 5,
+            'year' => 2026,
+            'period' => '2026-05',
+            'contributions' => 1000,
+            'repayments' => 250,
+            'contribution_dates' => ['2026-05-10'],
+            'repayment_dates' => ['2026-05-03'],
+        ],
+    ];
+    $details['current_year_totals'] = [
+        'year' => 2026,
+        'month_count' => 6,
+        'from_period' => '2025-12',
+        'to_period' => '2026-05',
+        'from_year' => 2025,
+        'from_month' => 12,
+        'to_year' => 2026,
+        'to_month' => 5,
+        'contributions' => 1000,
+        'repayments' => 250,
+        'max_activity' => 1000,
+    ];
+    $statement->details = $details;
+
+    $pdf = app(MonthlyStatementPdfService::class)->binary($statement->fresh(['member.user']));
+    $path = tempnam(sys_get_temp_dir(), 'stmt-ar-');
+    file_put_contents($path, $pdf);
+    $textPath = $path.'.txt';
+    exec('pdftotext -layout '.escapeshellarg($path).' '.escapeshellarg($textPath));
+    $text = file_get_contents($textPath) ?: '';
+    @unlink($path);
+    @unlink($textPath);
+
+    // pdftotext returns presentation forms after ArPHP shaping — assert no glyph holes.
+    expect($text)
+        ->not->toContain('?????')
+        ->and(preg_match('/مدى|ﻣﺪى/u', $text))->toBe(1)
+        ->and(preg_match('/الملخص|اﻟﻤﻠﺨﺺ/u', $text))->toBe(1)
+        ->and(preg_match('/2025/', $text))->toBe(1);
 });

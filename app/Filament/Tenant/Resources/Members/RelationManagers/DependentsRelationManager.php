@@ -3,10 +3,10 @@
 namespace App\Filament\Tenant\Resources\Members\RelationManagers;
 
 use App\Filament\Concerns\TranslatesRelationManagerTitle;
+use App\Filament\Member\Resources\MyDependents\Support\DependentOpenCycleStatus;
 use App\Filament\Resources\RelationManagers\RelationManager;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\HouseholdDependentFilamentActions;
-use App\Filament\Support\MemberContributionFilamentActions;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\MoneyDisplay;
 use App\Filament\Support\TableGrouping;
@@ -17,6 +17,7 @@ use App\Filament\Tenant\Resources\Members\Concerns\SuppressesMemberWorkspaceTabB
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Services\ContributionCycleService;
 use Filament\Actions\BulkActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -48,6 +49,10 @@ class DependentsRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
+        $cycles = app(ContributionCycleService::class);
+        [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+        $cycleStatus = fn (Member $record): array => DependentOpenCycleStatus::resolve($record, $openMonth, $openYear);
+
         return TableGrouping::apply($table
             ->recordTitleAttribute('name')
             ->columns([
@@ -72,6 +77,14 @@ class DependentsRelationManager extends RelationManager
                             precision: 0,
                         )
                         : null),
+                TextColumn::make('open_cycle_status')
+                    ->label(__('This cycle'))
+                    ->badge()
+                    ->searchable(false)
+                    ->sortable(false)
+                    ->state(fn (Member $record): string => $cycleStatus($record)['label'])
+                    ->color(fn (Member $record): string => $cycleStatus($record)['color'])
+                    ->description(fn (Member $record): ?string => $cycleStatus($record)['description']),
                 TextColumn::make('status')
                     ->badge()
                     ->formatStateUsing(fn (string $state, Member $record): string => $record->adminStatusLabel())
@@ -89,14 +102,10 @@ class DependentsRelationManager extends RelationManager
             ->headerActions([
                 ...HouseholdDependentFilamentActions::headerActions(fn (): Member => $this->getOwnerRecord()),
                 $this->buildMemberAllocateDependentsAction(),
-                $this->buildMemberContributionTopUpAction(),
             ])
             ->recordUrl(fn (Member $record): string => MemberResource::getUrl('view', ['record' => $record]))
             ->recordActions(TableRecordActionGroups::wrap([
                 ...HouseholdDependentFilamentActions::forRow(fn (): Member => $this->getOwnerRecord()),
-                MemberContributionFilamentActions::adminContributionTopUpForDependentRow(
-                    fn (): Member => $this->getOwnerRecord(),
-                ),
             ]))
             ->toolbarActions([
                 BulkActionGroup::make([

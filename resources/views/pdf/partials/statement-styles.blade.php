@@ -24,7 +24,8 @@
         display: inline;
         margin: 0 6px;
         font-size: {{ $isArabic ? '14px' : '11px' }};
-        font-weight: 600;
+        /* DomPDF + DejaVu: font-weight 600 falls back to Helvetica (Arabic → ?????). */
+        font-weight: 700;
         color: #64748b;
         letter-spacing: 0;
         text-transform: none;

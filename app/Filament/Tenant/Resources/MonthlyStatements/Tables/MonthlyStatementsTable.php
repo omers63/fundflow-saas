@@ -86,8 +86,11 @@ class MonthlyStatementsTable
             ->filters([
                 MemberSelect::filter('member_id'),
                 Filter::make('period')
+                    ->label(__('Period'))
                     ->schema([
-                        TextInput::make('period')->placeholder(__('YYYY-MM')),
+                        TextInput::make('period')
+                            ->label(__('Period'))
+                            ->placeholder(__('YYYY-MM')),
                     ])
                     ->query(fn (Builder $query, array $data): Builder => filled($data['period'] ?? null)
                         ? $query->where('period', $data['period'])

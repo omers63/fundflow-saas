@@ -12,6 +12,7 @@ use App\Services\Loans\LoanLifecycleService;
 use App\Services\LoanService;
 use App\Services\ReconciliationReportService;
 use App\Support\ContributionCollectionStatus;
+use App\Support\LoanExcessFundSettlementOption;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use Carbon\Carbon;
@@ -21,6 +22,13 @@ uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
+
+    LoanSettings::save([
+        'allow_funding_strategy_member_topup' => true,
+        'allow_funding_strategy_split_percentage' => true,
+        'allow_funding_strategy_split_with_early_settlement' => true,
+        'allow_excess_fund_cash_out' => true,
+    ]);
 
     Account::query()->delete();
     Member::query()->delete();
@@ -261,4 +269,101 @@ test('split strategy excess fund cash-out passes loan disbursement cash payout r
 
     expect($check['severity'])->toBe('ok')
         ->and($check['mismatch_count'])->toBe(0);
+});
+
+test('split with early settlement stores settlement option and clears cash-out flag', function () {
+    $member = createEligibleMemberForFundingTest($this->accounting);
+
+    $loan = $this->lifecycle->applyForLoan(
+        $member,
+        10_000,
+        'Education',
+        fundingStrategy: LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT,
+        cashOutExcessFund: true,
+        excessFundSettlementOption: LoanExcessFundSettlementOption::ROLL_UP,
+    );
+
+    expect($loan->funding_strategy)->toBe(LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT)
+        ->and($loan->cash_out_excess_fund)->toBeFalse()
+        ->and($loan->excess_fund_settlement_option)->toBe('roll_up');
+});
+
+test('split with early settlement keep-in-fund leaves excess in fund at disbursement', function () {
+    LoanSettings::save(['member_funding_split_pct' => 50]);
+
+    $member = createEligibleMemberForFundingTest($this->accounting, 15_000);
+
+    $loan = $this->lifecycle->applyForLoan(
+        $member,
+        10_000,
+        'Keep excess settlement',
+        fundingStrategy: LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT,
+        excessFundSettlementOption: LoanExcessFundSettlementOption::KEEP_IN_FUND,
+    );
+    $this->loanService->approveLoan($loan, 10_000);
+    $this->loanService->disburseLoan($loan);
+
+    $member->refresh();
+    $loan->refresh();
+
+    expect($loan->excess_fund_settlement_option)->toBeNull()
+        ->and((float) $member->cashAccount->balance)->toBe(10_000.0)
+        ->and((float) $member->fundAccount->balance)->toBe(5000.0)
+        ->and($loan->installments()->where('status', 'pending')->count())->toBeGreaterThan(0);
+});
+
+test('split with early settlement roll-up applies remaining fund after disbursement', function () {
+    LoanSettings::save(['member_funding_split_pct' => 50]);
+
+    $member = createEligibleMemberForFundingTest($this->accounting, 8_000);
+
+    $loan = $this->lifecycle->applyForLoan(
+        $member,
+        10_000,
+        'Roll-up excess',
+        fundingStrategy: LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT,
+        excessFundSettlementOption: LoanExcessFundSettlementOption::ROLL_UP,
+    );
+    $this->loanService->approveLoan($loan, 10_000);
+    $this->loanService->disburseLoan($loan);
+
+    $loan->refresh();
+    $member->unsetRelation('fundAccount');
+    $member->unsetRelation('cashAccount');
+    $member->refresh();
+
+    expect($loan->status)->toBe('active')
+        ->and($loan->excess_fund_settlement_option)->toBe('roll_up')
+        ->and($loan->installments()->where('status', 'paid')->count())->toBe(3)
+        ->and($loan->installments()->where('status', 'pending')->count())->toBeGreaterThan(0)
+        // Excess 3k transferred then repaid into fund (3 × 1k EMI); fund ends at -2k.
+        ->and((float) $member->fundAccount->balance)->toBe(-2000.0)
+        ->and((float) $member->cashAccount->balance)->toBe(10_000.0);
+});
+
+test('split with early settlement skip installments marks future cycles waived', function () {
+    LoanSettings::save(['member_funding_split_pct' => 50]);
+
+    $member = createEligibleMemberForFundingTest($this->accounting, 8_000);
+
+    $loan = $this->lifecycle->applyForLoan(
+        $member,
+        10_000,
+        'Skip excess',
+        fundingStrategy: LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT,
+        excessFundSettlementOption: LoanExcessFundSettlementOption::SKIP_FUTURE,
+    );
+    $this->loanService->approveLoan($loan, 10_000);
+    $this->loanService->disburseLoan($loan);
+
+    $loan->refresh();
+    $member->unsetRelation('cashAccount');
+    $member->unsetRelation('fundAccount');
+    $member->refresh();
+
+    expect($loan->status)->toBe('active')
+        ->and($loan->excess_fund_settlement_option)->toBe('skip_future')
+        ->and($loan->installments()->where('status', 'waived')->count())->toBe(3)
+        ->and((float) $member->cashAccount->balance)->toBe(10_000.0)
+        ->and((float) $member->fundAccount->balance)->toBe(-2000.0);
 });

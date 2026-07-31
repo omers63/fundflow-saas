@@ -114,7 +114,7 @@ class BankTransactionsTable
                         ->label(__('Description'))
                         ->schema([
                             TextInput::make('value')
-                                ->label(__('Contains')),
+                                ->label(__('Description contains')),
                         ])
                         ->query(function (Builder $query, array $data): Builder {
                             $needle = $data['value'] ?? null;

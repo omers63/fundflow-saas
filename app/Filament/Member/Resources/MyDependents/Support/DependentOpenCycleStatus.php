@@ -19,25 +19,85 @@ final class DependentOpenCycleStatus
      */
     public static function resolve(Member $member, int $month, int $year): array
     {
+        $allocation = self::allocationStatus($member, $month, $year);
         $emi = self::emiStatus($member, $month, $year);
         $contribution = self::contributionStatus($member, $month, $year);
 
         if ($emi !== null) {
-            $description = $member->isExemptFromContributions($month, $year)
-                ? null
-                : __('Contribution: :status', ['status' => $contribution['label']]);
+            $descriptionParts = [];
+
+            if ($allocation !== null) {
+                $descriptionParts[] = __('Allocation: :status', ['status' => $allocation['label']]);
+            }
+
+            if (! $member->isExemptFromContributions($month, $year)) {
+                $descriptionParts[] = __('Contribution: :status', ['status' => $contribution['label']]);
+            }
 
             return [
                 'label' => __('EMI: :status', ['status' => $emi['label']]),
                 'color' => $emi['color'],
-                'description' => $description,
+                'description' => $descriptionParts === [] ? null : implode(' · ', $descriptionParts),
             ];
         }
+
+        if ($allocation !== null && $allocation['partial']) {
+            return [
+                'label' => $allocation['label'],
+                'color' => $allocation['color'],
+                'description' => __('Contribution: :status', ['status' => $contribution['label']]),
+            ];
+        }
+
+        $description = $allocation !== null
+            ? __('Allocation: :status', ['status' => $allocation['label']])
+            : null;
 
         return [
             'label' => $contribution['label'],
             'color' => $contribution['color'],
-            'description' => null,
+            'description' => $description,
+        ];
+    }
+
+    /**
+     * @return array{label: string, color: string, partial: bool}|null
+     */
+    private static function allocationStatus(Member $member, int $month, int $year): ?array
+    {
+        if (! $member->isSponsoredDependent() || ! $member->isFundedByParent()) {
+            return null;
+        }
+
+        $cycles = app(ContributionCycleService::class);
+        $dues = $cycles->dependentCycleDuesForPeriod($member, $month, $year);
+
+        if ($dues <= 0.00001) {
+            return null;
+        }
+
+        $allocated = $cycles->dependentAllocatedAmountForPeriod($member, $month, $year);
+
+        if ($allocated <= 0.00001) {
+            return [
+                'label' => __('Not allocated'),
+                'color' => 'gray',
+                'partial' => false,
+            ];
+        }
+
+        if ($allocated + 0.00001 >= $dues) {
+            return [
+                'label' => __('Allocated'),
+                'color' => 'success',
+                'partial' => false,
+            ];
+        }
+
+        return [
+            'label' => __('Partially allocated'),
+            'color' => 'warning',
+            'partial' => true,
         ];
     }
 
@@ -94,6 +154,14 @@ final class DependentOpenCycleStatus
      */
     private static function summarizeOpenInstallments(Collection $installments): array
     {
+        if (
+            $installments->contains(
+                fn (LoanInstallment $installment): bool => LateSettledArrearsTableStyling::installmentIsPartiallyPaid($installment),
+            )
+        ) {
+            return ['label' => __('Partially paid'), 'color' => 'warning'];
+        }
+
         if ($installments->contains(fn (LoanInstallment $installment): bool => $installment->status === 'overdue')) {
             return ['label' => __('Overdue'), 'color' => 'danger'];
         }

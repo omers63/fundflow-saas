@@ -147,6 +147,44 @@ test('collected segment pill shows posted contribution count badge', function ()
     Carbon::setTestNow();
 });
 
+test('collected segment includes partially paid contributions', function () {
+    Carbon::setTestNow(Carbon::parse('2026-06-15'));
+    CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_CONTRIBUTIONS);
+
+    $cycles = app(ContributionCycleService::class);
+    [$month, $year] = $cycles->currentOpenPeriod();
+
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $partial = Contribution::factory()->for($member)->create([
+        'period' => Contribution::periodDate($month, $year),
+        'amount' => 500,
+        'amount_due' => 500,
+        'amount_collected' => 200,
+        'status' => 'pending',
+        'collection_status' => ContributionCollectionStatus::PARTIALLY_PENDING,
+        'posted_at' => null,
+    ]);
+
+    expect(ContributionResource::collectedContributionCount())->toBe(1)
+        ->and($cycles->postedContributionsQueryForPeriod($month, $year)->pluck('id'))->toContain($partial->id)
+        ->and($cycles->pendingMembersQueryForPeriod($month, $year)->whereKey($member->id)->exists())->toBeTrue();
+
+    Livewire::test(ListContributions::class)
+        ->set('cycleSegment', 'collected')
+        ->assertSuccessful()
+        ->assertCanSeeTableRecords([$partial])
+        ->assertTableColumnFormattedStateSet('status', __('Partially paid'), $partial);
+
+    Carbon::setTestNow();
+});
+
 test('legacy contribution tab urls redirect to cycle and ledger routes', function () {
     $path = parse_url(ContributionResource::getUrl('index'), PHP_URL_PATH) ?? '/admin/contributions';
 

@@ -7,6 +7,7 @@ namespace App\Filament\Tenant\Resources\Loans\Schemas;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Setting;
+use App\Support\LoanExcessFundSettlementOption;
 use App\Support\LoanFundExcessDisposition;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
@@ -131,6 +132,10 @@ final class LoanViewInfolist
                                 ? LoanFundExcessDisposition::labelFromCashOutFlag($state)
                                 : __('—'))
                             ->visible(fn (Loan $record): bool => LoanFundingStrategy::normalize($record->funding_strategy) === LoanFundingStrategy::SPLIT_PERCENTAGE),
+                        TextEntry::make('excess_fund_settlement_option')
+                            ->label(__('Remaining fund balance'))
+                            ->formatStateUsing(fn (?string $state): string => LoanExcessFundSettlementOption::label($state))
+                            ->visible(fn (Loan $record): bool => LoanFundingStrategy::normalize($record->funding_strategy) === LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT),
                         TextEntry::make('loanTier.label')
                             ->label(__('Loan tier (EMI)'))
                             ->placeholder(__('—')),
