@@ -165,7 +165,7 @@ test('process defaults debits guarantor only for the overdue top-up shortfall', 
 
     $accounting = app(AccountingService::class);
     $borrower = createUserAndMemberForDefaults($accounting);
-    $guarantor = createUserAndMemberForDefaults($accounting, ['member_number' => 'G-' . uniqid()]);
+    $guarantor = createUserAndMemberForDefaults($accounting, ['member_number' => 'G-'.uniqid()]);
 
     $borrower->cashAccount()->update(['balance' => 1000]);
     $guarantor->fundAccount()->update(['balance' => 50000]);
@@ -260,16 +260,20 @@ test('process defaults debits guarantor for every overdue installment once past 
 
     $result = app(LoanDefaultService::class)->processDefaults();
 
-    foreach ($installments as $installment) {
-        expect($installment->fresh()->status)->toBe('paid')
-            ->and($installment->fresh()->paid_by_guarantor)->toBeTrue();
-    }
+    $fresh = $installments->map(fn (LoanInstallment $installment): LoanInstallment => $installment->fresh());
+
+    expect($fresh->every(fn (LoanInstallment $i): bool => $i->status === 'paid'))->toBeTrue()
+        // First EMI is topped up by the guarantor; repayment credits restore borrower fund,
+        // which covers later EMIs in the same run without further guarantor debit.
+        ->and($fresh[0]->paid_by_guarantor)->toBeTrue()
+        ->and($fresh[1]->paid_by_guarantor)->toBeFalse()
+        ->and($fresh[2]->paid_by_guarantor)->toBeFalse();
 
     $guarantorFundAfter = (float) $guarantor->fresh()->fundAccount?->balance;
 
     expect($result['warned'])->toBe(0)
-        ->and($result['debited_from_guarantor'])->toBe(3)
-        ->and($guarantorFundAfter)->toBe($guarantorFundBefore - 7500.0);
+        ->and($result['debited_from_guarantor'])->toBe(1)
+        ->and($guarantorFundAfter)->toBe($guarantorFundBefore - 2500.0);
 
     Notification::assertSentTo($guarantor->user, LoanDefaultGuarantorNotification::class);
     Notification::assertSentTo($borrower->user, LoanDefaultBorrowerGuarantorPaidNotification::class);
@@ -329,15 +333,130 @@ test('process defaults keeps debiting remaining overdues after a prior guarantor
 
     $result = app(LoanDefaultService::class)->processDefaults();
 
-    foreach ($remaining as $installment) {
-        expect($installment->fresh()->status)->toBe('paid')
-            ->and($installment->fresh()->paid_by_guarantor)->toBeTrue();
-    }
+    $fresh = $remaining->map(fn (LoanInstallment $installment): LoanInstallment => $installment->fresh());
+
+    expect($fresh->every(fn (LoanInstallment $i): bool => $i->status === 'paid'))->toBeTrue()
+        ->and($fresh[0]->paid_by_guarantor)->toBeTrue()
+        ->and($fresh[1]->paid_by_guarantor)->toBeFalse();
 
     expect($result['warned'])->toBe(0)
-        ->and($result['debited_from_guarantor'])->toBe(2)
-        ->and((float) $guarantor->fresh()->fundAccount?->balance)->toBe($guarantorFundBefore - 5000.0)
+        ->and($result['debited_from_guarantor'])->toBe(1)
+        ->and((float) $guarantor->fresh()->fundAccount?->balance)->toBe($guarantorFundBefore - 2500.0)
         ->and($loan->fresh()->late_repayment_count)->toBe(2);
+});
+
+test('process defaults drains borrower fund before tapping the guarantor', function () {
+    Notification::fake();
+    Setting::set('loan', 'default_grace_cycles', 1);
+    Setting::set('late_fee', 'repayment_day_30', 0);
+
+    $accounting = app(AccountingService::class);
+    $borrower = createUserAndMemberForDefaults($accounting);
+    $guarantor = createUserAndMemberForDefaults($accounting, ['member_number' => 'G-'.uniqid()]);
+
+    $borrower->cashAccount()->update(['balance' => 0]);
+    $borrower->fundAccount()->update(['balance' => 1000]);
+    $guarantor->fundAccount()->update(['balance' => 50_000]);
+
+    $loan = Loan::query()->create([
+        'member_id' => $borrower->id,
+        'guarantor_member_id' => $guarantor->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 2400,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'late_repayment_count' => 2,
+        'applied_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    $installment = LoanInstallment::query()->create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 2400,
+        'due_date' => Carbon::now()->subMonths(3),
+        'status' => 'overdue',
+        'paid_by_guarantor' => false,
+    ]);
+
+    $guarantorFundBefore = (float) $guarantor->fresh()->fundAccount?->balance;
+    $borrowerFundBefore = (float) $borrower->fresh()->fundAccount?->balance;
+
+    $result = app(LoanDefaultService::class)->processDefaults();
+
+    $installment->refresh();
+    $guarantorFundAfter = (float) $guarantor->fresh()->fundAccount?->balance;
+    $borrowerFundAfter = (float) $borrower->fresh()->fundAccount?->balance;
+
+    expect($result['warned'])->toBe(0)
+        ->and($result['debited_from_guarantor'])->toBe(1)
+        ->and($installment->status)->toBe('paid')
+        ->and($installment->paid_by_guarantor)->toBeTrue()
+        // 1000 fund applied first; guarantor covers the 1400 shortfall only.
+        ->and($guarantorFundAfter)->toBe($guarantorFundBefore - 1400.0)
+        // Fund drained 1000 then repayment credits 2400 principal back.
+        ->and($borrowerFundAfter)->toBe($borrowerFundBefore - 1000.0 + 2400.0);
+
+    Notification::assertSentTo($guarantor->user, LoanDefaultGuarantorNotification::class);
+});
+
+test('process defaults settles overdue from borrower fund alone when sufficient', function () {
+    Notification::fake();
+    Setting::set('loan', 'default_grace_cycles', 1);
+    Setting::set('late_fee', 'repayment_day_30', 0);
+
+    $accounting = app(AccountingService::class);
+    $borrower = createUserAndMemberForDefaults($accounting);
+    $guarantor = createUserAndMemberForDefaults($accounting, ['member_number' => 'G-'.uniqid()]);
+
+    $borrower->cashAccount()->update(['balance' => 0]);
+    $borrower->fundAccount()->update(['balance' => 5000]);
+    $guarantor->fundAccount()->update(['balance' => 50_000]);
+
+    $loan = Loan::query()->create([
+        'member_id' => $borrower->id,
+        'guarantor_member_id' => $guarantor->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 2400,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'late_repayment_count' => 2,
+        'applied_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    $installment = LoanInstallment::query()->create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 2400,
+        'due_date' => Carbon::now()->subMonths(3),
+        'status' => 'overdue',
+        'paid_by_guarantor' => false,
+    ]);
+
+    $guarantorFundBefore = (float) $guarantor->fresh()->fundAccount?->balance;
+
+    $result = app(LoanDefaultService::class)->processDefaults();
+
+    $installment->refresh();
+
+    expect($result['warned'])->toBe(0)
+        ->and($result['debited_from_guarantor'])->toBe(0)
+        ->and($installment->status)->toBe('paid')
+        ->and($installment->paid_by_guarantor)->toBeFalse()
+        ->and((float) $guarantor->fresh()->fundAccount?->balance)->toBe($guarantorFundBefore);
+
+    Notification::assertNotSentTo($guarantor->user, LoanDefaultGuarantorNotification::class);
 });
 
 test('check settlements marks ready active loan as completed and notifies borrower', function () {

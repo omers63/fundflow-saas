@@ -440,6 +440,24 @@ class LoanDelinquencyService
     }
 
     /**
+     * Members shown on Delinquency → Policy breaches: full policy breaches plus
+     * members with outstanding contribution/EMI arrears (at risk).
+     *
+     * @return list<int>
+     */
+    public function policyQueueMemberIds(): array
+    {
+        $ids = array_values(array_unique(array_merge(
+            $this->delinquentMemberIds(),
+            $this->membersWithOutstandingArrearsIds(),
+        )));
+
+        sort($ids);
+
+        return $ids;
+    }
+
+    /**
      * Members with outstanding contribution and/or loan EMI arrears for any labelled cycle.
      *
      * Broader than {@see delinquentMemberIds()} (policy breach): any unpaid contribution

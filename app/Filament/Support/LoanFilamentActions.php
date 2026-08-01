@@ -942,37 +942,6 @@ final class LoanFilamentActions
         return new HtmlString($html);
     }
 
-    public static function transferGuarantorLiability(): Action
-    {
-        return Action::make('transferGuarantorLiability')
-            ->label(__('Guarantor Transfer'))
-            ->icon('heroicon-o-shield-exclamation')
-            ->color('warning')
-            ->visible(fn (Loan $record): bool => $record->status === 'active'
-                && $record->guarantor_member_id
-                && $record->guarantor_liability_transferred_at === null
-                && ! $record->isGuarantorReleased())
-            ->requiresConfirmation()
-            ->modalHeading(__('Guarantor Transfer'))
-            ->modalDescription(__('Future overdue installments will be collected from the guarantor fund immediately instead of following the borrower warning cycle. This is separate from Loan Transfer.'))
-            ->action(function (Loan $record, Action $action, LoanDelinquencyService $delinquency): void {
-                if (
-                    ! ActionModalFailure::attemptThrowable(
-                        $action,
-                        fn () => $delinquency->transferGuarantorLiability($record),
-                        __('Cannot transfer liability'),
-                    )
-                ) {
-                    return;
-                }
-
-                Notification::make()
-                    ->title(__('Guarantor liability active'))
-                    ->success()
-                    ->send();
-            });
-    }
-
     public static function reinstateSuspendedBorrower(): Action
     {
         return Action::make('reinstateSuspendedBorrower')
@@ -994,33 +963,6 @@ final class LoanFilamentActions
                 }
 
                 Notification::make()->title(__('Borrower reinstated'))->success()->send();
-            });
-    }
-
-    public static function restoreBorrowerLiability(): Action
-    {
-        return Action::make('restoreBorrowerLiability')
-            ->label(__('Restore borrower liability'))
-            ->icon('heroicon-o-arrow-uturn-left')
-            ->color('gray')
-            ->visible(fn (Loan $record): bool => $record->guarantor_liability_transferred_at !== null)
-            ->requiresConfirmation()
-            ->modalDescription(__('Returns default handling to the standard borrower warning cycle.'))
-            ->action(function (Loan $record, Action $action, LoanDelinquencyService $delinquency): void {
-                if (
-                    ! ActionModalFailure::attemptThrowable(
-                        $action,
-                        fn () => $delinquency->restoreBorrowerLiability($record),
-                        __('Cannot restore liability'),
-                    )
-                ) {
-                    return;
-                }
-
-                Notification::make()
-                    ->title(__('Borrower liability restored'))
-                    ->success()
-                    ->send();
             });
     }
 
@@ -1098,20 +1040,6 @@ final class LoanFilamentActions
             ->url(fn (Loan $record): string => $record->status === 'pending'
                 ? LoanResource::getUrl('edit', ['record' => $record])
                 : LoanResource::getUrl('view', ['record' => $record]));
-    }
-
-    /**
-     * Guarantor liability transfer/restore. Home: Operations → Delinquency → Guarantor.
-     * Admin loan reassignment lives on Overdue rows instead.
-     *
-     * @return list<Action>
-     */
-    public static function guarantorLiabilityActions(): array
-    {
-        return [
-            self::transferGuarantorLiability(),
-            self::restoreBorrowerLiability(),
-        ];
     }
 
     /**

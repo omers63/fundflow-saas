@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Filament\Support\LoanFilamentActions;
+use App\Filament\Support\LoanDelinquencyTables;
 use App\Filament\Tenant\Pages\DelinquencyWorkspacePage;
 use App\Filament\Tenant\Support\DelinquencyTabRegistry;
 use App\Models\Tenant\Loan;
@@ -10,6 +10,7 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\Loans\LoanDelinquencyService;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
@@ -64,21 +65,17 @@ it('switches delinquency side tabs via Livewire without full navigation', functi
         ->toContain('wire:click.prevent="setSideTab');
 });
 
-it('exposes admin loan transfer on overdue and guarantor liability on guarantor', function () {
-    expect(collect(LoanFilamentActions::guarantorLiabilityActions())->map->getName()->all())
-        ->toBe([
-            'transferGuarantorLiability',
-            'restoreBorrowerLiability',
-        ]);
-
+it('exposes admin loan transfer on overdue and not on guarantor', function () {
     Livewire::test(DelinquencyWorkspacePage::class, ['sideTab' => 'overdue'])
         ->assertSuccessful()
         ->assertTableActionExists('transferLoanAdmin');
 
     Livewire::test(DelinquencyWorkspacePage::class, ['sideTab' => 'guarantor'])
         ->assertSuccessful()
-        ->assertTableActionExists('transferGuarantorLiability')
-        ->assertTableActionExists('restoreBorrowerLiability')
+        ->assertTableActionDoesNotExist('view_loan')
+        ->assertTableActionDoesNotExist('view')
+        ->assertTableActionDoesNotExist('transferGuarantorLiability')
+        ->assertTableActionDoesNotExist('restoreBorrowerLiability')
         ->assertTableActionDoesNotExist('transferLoanAdmin');
 });
 
@@ -186,10 +183,176 @@ it('paginates overdue installments without resetting to page one', function () {
         ->assertCanNotSeeTableRecords([$installments->first()]);
 });
 
-it('uses a dedicated query string identifier for overdue pagination', function () {
-    $component = Livewire::test(DelinquencyWorkspacePage::class, ['sideTab' => 'overdue']);
+it('includes completed loans with guarantor-paid installments on the guarantor tab', function () {
+    $accounting = app(AccountingService::class);
 
-    expect($component->instance()->getTable()->getQueryStringIdentifier())->toBe('delinquency_overdue');
+    $borrower = Member::create([
+        'member_number' => 'MEM-DEL-G-B',
+        'name' => 'Completed Guarantor Borrower',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $guarantor = Member::create([
+        'member_number' => 'MEM-DEL-G-G',
+        'name' => 'Completed Guarantor Guarantor',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($borrower);
+    $accounting->createMemberAccounts($guarantor);
+
+    $loan = Loan::create([
+        'member_id' => $borrower->id,
+        'guarantor_member_id' => $guarantor->id,
+        'amount' => 5_000,
+        'amount_requested' => 5_000,
+        'amount_approved' => 5_000,
+        'amount_disbursed' => 5_000,
+        'interest_rate' => 10,
+        'term_months' => 5,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 5_000,
+        'status' => 'completed',
+        'settled_at' => now()->subDay(),
+        'guarantor_released_at' => now()->subDay(),
+        'late_repayment_count' => 2,
+        'applied_at' => now()->subYear(),
+        'disbursed_at' => now()->subYear(),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 5,
+        'amount' => 1000,
+        'due_date' => now()->subMonths(2)->startOfMonth(),
+        'status' => 'paid',
+        'paid_at' => now()->subDay(),
+        'paid_by_guarantor' => true,
+    ]);
+
+    expect(LoanDelinquencyTables::guarantorExposureQuery()->whereKey($loan->id)->exists())->toBeTrue();
+
+    Livewire::test(DelinquencyWorkspacePage::class, ['sideTab' => 'guarantor'])
+        ->assertSuccessful()
+        ->call('loadTable')
+        ->assertCanSeeTableRecords([$loan])
+        ->assertSee('Completed Guarantor Borrower', false)
+        ->assertSee('#'.$loan->id, false)
+        ->assertSee(__('Guarantor paid'), false);
+});
+
+it('shows installment-based late count on the guarantor tab instead of the grace counter', function () {
+    $accounting = app(AccountingService::class);
+
+    $borrower = Member::create([
+        'member_number' => 'MEM-DEL-LATE-B',
+        'name' => 'Late Count Borrower',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $guarantor = Member::create([
+        'member_number' => 'MEM-DEL-LATE-G',
+        'name' => 'Late Count Guarantor',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($borrower);
+    $accounting->createMemberAccounts($guarantor);
+
+    $loan = Loan::create([
+        'member_id' => $borrower->id,
+        'guarantor_member_id' => $guarantor->id,
+        'amount' => 9_000,
+        'amount_requested' => 9_000,
+        'amount_approved' => 9_000,
+        'amount_disbursed' => 9_000,
+        'interest_rate' => 10,
+        'term_months' => 6,
+        'monthly_repayment' => 1500,
+        'total_repaid' => 4500,
+        'status' => 'active',
+        // Grace counter under-counts relative to guarantor-paid installments.
+        'late_repayment_count' => 1,
+        'applied_at' => now()->subYear(),
+        'disbursed_at' => now()->subYear(),
+    ]);
+
+    foreach ([1, 2, 3] as $number) {
+        LoanInstallment::create([
+            'loan_id' => $loan->id,
+            'installment_number' => $number,
+            'amount' => 1500,
+            'due_date' => now()->subMonths(4 - $number)->startOfMonth(),
+            'status' => 'paid',
+            'paid_at' => now()->subDay(),
+            'paid_by_guarantor' => true,
+            'is_late' => $number === 1,
+        ]);
+    }
+
+    $row = LoanDelinquencyTables::guarantorExposureQuery()->whereKey($loan->id)->first();
+
+    expect($row)->not->toBeNull()
+        ->and((int) $row->late_repayment_count)->toBe(1)
+        ->and((int) $row->late_installments_count)->toBe(3)
+        ->and((int) $row->guarantor_paid_installments_count)->toBe(3);
+
+    Livewire::test(DelinquencyWorkspacePage::class, ['sideTab' => 'guarantor'])
+        ->assertSuccessful()
+        ->call('loadTable')
+        ->assertCanSeeTableRecords([$loan]);
+});
+
+it('includes at-risk arrears members on the policy breaches tab', function () {
+    $accounting = app(AccountingService::class);
+
+    $member = Member::create([
+        'member_number' => 'MEM-DEL-AT-RISK',
+        'name' => 'At Risk Policy Member',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 5_000,
+        'amount_requested' => 5_000,
+        'amount_approved' => 5_000,
+        'amount_disbursed' => 5_000,
+        'interest_rate' => 10,
+        'term_months' => 5,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => now()->subYear(),
+        'disbursed_at' => now()->subYear(),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => now()->subMonths(2)->startOfMonth(),
+        'status' => 'overdue',
+    ]);
+
+    $delinquency = app(LoanDelinquencyService::class);
+
+    expect($delinquency->membersWithOutstandingArrearsIds())->toContain($member->id)
+        ->and($delinquency->policyQueueMemberIds())->toContain($member->id);
+
+    Livewire::test(DelinquencyWorkspacePage::class, ['sideTab' => 'policy'])
+        ->assertSuccessful()
+        ->call('loadTable')
+        ->assertCanSeeTableRecords([$member])
+        ->assertSee('At Risk Policy Member', false)
+        ->assertSee(__('At risk'), false);
 });
 
 it('loads each delinquency panel from the sideTab query string', function () {

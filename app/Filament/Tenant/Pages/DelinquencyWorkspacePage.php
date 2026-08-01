@@ -102,7 +102,7 @@ class DelinquencyWorkspacePage extends Page implements HasTable
         return match ($this->sideTab) {
             'overdue' => __('Active loans with installments past due. Run the delinquency check after cycle close to refresh statuses.'),
             'guarantor' => __('Loans in warning or with liability transferred to the guarantor.'),
-            'policy' => __('Members who breach consecutive or rolling missed-cycle delinquency policy.'),
+            'policy' => __('Members who breach delinquency policy or have outstanding contribution/EMI arrears (at risk).'),
             'related' => __('Contribution arrears, member arrears inventory, and policy settings live on their own pages.'),
             default => __('Risk and enforcement: mark overdue installments, review guarantor exposure, and sync policy breaches. Not cycle-scoped.'),
         };
@@ -344,7 +344,7 @@ class DelinquencyWorkspacePage extends Page implements HasTable
                 return [
                     'overdue' => LoanResource::overdueInstallmentsCount(),
                     'guarantor' => LoanResource::guarantorExposureCount(),
-                    'policy' => count($delinquency->delinquentMemberIds()),
+                    'policy' => count($delinquency->policyQueueMemberIds()),
                 ];
             },
         );

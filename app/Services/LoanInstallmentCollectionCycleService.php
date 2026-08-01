@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Tenant\LoanInstallment;
+use App\Support\BusinessDay;
 use App\Support\InstallmentCollectionStatus;
 
 /**
@@ -17,11 +18,17 @@ class LoanInstallmentCollectionCycleService
     ) {}
 
     /**
-     * Mark open EMIs due in the period as overdue when the collection window closes.
+     * Mark open EMIs due in the period as overdue when the collection window has ended.
      */
     public function closeCollectionWindow(int $month, int $year): int
     {
         $closedAt = $this->cycles->cycleDueEndAt($month, $year);
+
+        // Refuse to close a window that is still open on the business day.
+        if (! BusinessDay::now()->greaterThan($closedAt)) {
+            return 0;
+        }
+
         $windowStart = $this->cycles->cycleStartAt($month, $year);
         $windowEnd = $closedAt->copy();
         $flagged = 0;

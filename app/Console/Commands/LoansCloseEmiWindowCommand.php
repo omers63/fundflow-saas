@@ -18,7 +18,7 @@ class LoansCloseEmiWindowCommand extends Command
 
     protected $signature = 'loans:close-emi-window {--month=} {--year=} {--force : Run even when not in the configured EMI close slot}';
 
-    protected $description = 'Close the EMI collection window and mark unpaid installments overdue';
+    protected $description = 'Close the prior EMI collection window and mark unpaid installments overdue';
 
     public function handle(
         LoanInstallmentCollectionCycleService $emiCycles,
@@ -28,15 +28,7 @@ class LoansCloseEmiWindowCommand extends Command
             return self::SUCCESS;
         }
 
-        $forcedPeriod = $this->option('month') && $this->option('year');
-
-        if (! $this->option('force') && ! $forcedPeriod && ! AutomationScheduleSettings::isEmiCloseSlot()) {
-            $this->skipScheduledRunRecording = true;
-            $this->info(__('Skipped: EMI close runs on day :day at :time.', [
-                'day' => AutomationScheduleSettings::emiCloseDay(),
-                'time' => AutomationScheduleSettings::emiCloseTime(),
-            ]));
-
+        if ($this->shouldSkipUntilCycleTransition($cycles)) {
             return self::SUCCESS;
         }
 
@@ -60,6 +52,38 @@ class LoansCloseEmiWindowCommand extends Command
             return [(int) $this->option('month'), (int) $this->option('year')];
         }
 
-        return $cycles->currentOpenPeriod();
+        // On cycle start day, close the period that just ended — never the newly opened cycle.
+        return $cycles->periodClosedByTransition();
+    }
+
+    protected function shouldSkipUntilCycleTransition(ContributionCycleService $cycles): bool
+    {
+        if ($this->option('month') && $this->option('year')) {
+            return false;
+        }
+
+        if ($this->option('force')) {
+            return false;
+        }
+
+        if (! $cycles->isCycleTransitionDay()) {
+            $this->skipScheduledRunRecording = true;
+            $this->info(__('Skipped: today is not the contribution cycle start day (:day).', [
+                'day' => $cycles->cycleStartDay(),
+            ]));
+
+            return true;
+        }
+
+        if (! AutomationScheduleSettings::isEmiCloseSlot()) {
+            $this->skipScheduledRunRecording = true;
+            $this->info(__('Skipped: not the configured EMI close-window time (:time).', [
+                'time' => AutomationScheduleSettings::emiCloseTime(),
+            ]));
+
+            return true;
+        }
+
+        return false;
     }
 }

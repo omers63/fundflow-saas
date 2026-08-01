@@ -25,6 +25,9 @@ final class MemberFundCashTransferService
         ?CarbonInterface $transactedAt = null,
     ): float {
         $this->accounting->createMemberAccounts($member);
+        $member->unsetRelation('fundAccount');
+        $member->unsetRelation('cashAccount');
+        $member->unsetRelation('accounts');
         $member->load(['cashAccount', 'fundAccount']);
 
         $amount = round(max(0.0, $member->getFundBalance()), 2);
@@ -49,21 +52,25 @@ final class MemberFundCashTransferService
             throw new InvalidArgumentException(__('Enter an amount greater than zero.'));
         }
 
-        $member->loadMissing(['cashAccount', 'fundAccount']);
-        $memberFund = $member->fundAccount;
-        $memberCash = $member->cashAccount;
-
-        if ($memberFund === null || $memberCash === null) {
-            throw new RuntimeException(__('Member fund and cash accounts are required.'));
-        }
-
-        if ($member->getFundBalance() < $amount - 0.00001) {
-            throw new InvalidArgumentException(__('Insufficient fund balance for the requested transfer.'));
-        }
-
         $at = $transactedAt ?? BusinessDay::now();
 
-        DB::transaction(function () use ($member, $memberFund, $memberCash, $amount, $description, $reference, $at): void {
+        DB::transaction(function () use ($member, $amount, $description, $reference, $at): void {
+            $member->unsetRelation('fundAccount');
+            $member->unsetRelation('cashAccount');
+            $member->unsetRelation('accounts');
+            $member->load(['cashAccount', 'fundAccount']);
+
+            $memberFund = $member->fundAccount;
+            $memberCash = $member->cashAccount;
+
+            if ($memberFund === null || $memberCash === null) {
+                throw new RuntimeException(__('Member fund and cash accounts are required.'));
+            }
+
+            if ((float) $memberFund->balance < $amount - 0.00001) {
+                throw new InvalidArgumentException(__('Insufficient fund balance for the requested transfer.'));
+            }
+
             $this->accounting->debitMemberFundWithMasterMirror(
                 $memberFund,
                 $amount,

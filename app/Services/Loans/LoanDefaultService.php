@@ -12,6 +12,7 @@ use App\Notifications\Tenant\LoanDefaultWarningNotification;
 use App\Notifications\Tenant\LoanSettledNotification;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
+use App\Services\MemberFundCashTransferService;
 use App\Support\BusinessDay;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +23,7 @@ class LoanDefaultService
         protected LoanLedgerService $ledger,
         protected ContributionCycleService $cycles,
         protected LateFeeService $lateFees,
+        protected MemberFundCashTransferService $fundCashTransfer,
     ) {}
 
     /**
@@ -197,11 +199,38 @@ class LoanDefaultService
                     throw new \RuntimeException(__('Borrower or guarantor is missing.'));
                 }
 
-                $borrowerCash = (float) $borrower->fresh()->getCashBalance();
-                $guarantorTopUp = max(0.0, $requiredCash - $borrowerCash);
-                $guarantorCovered = $guarantorTopUp > 0.00001;
+                AccountingService::withoutMemberCashCollection(function () use ($installment, $borrower, $guarantor, $principalOutstanding, $feeAmount, $requiredCash, $isLate, &$guarantorCovered): void {
+                    // Prefer the borrower's positive fund balance before tapping the guarantor.
+                    $borrower->unsetRelation('fundAccount');
+                    $borrower->unsetRelation('cashAccount');
+                    $borrower->unsetRelation('accounts');
+                    $borrower->load(['cashAccount', 'fundAccount']);
 
-                AccountingService::withoutMemberCashCollection(function () use ($installment, $borrower, $guarantor, $principalOutstanding, $feeAmount, $guarantorTopUp, $guarantorCovered, $isLate): void {
+                    $borrowerCash = (float) $borrower->getCashBalance();
+                    $cashShortfall = max(0.0, $requiredCash - $borrowerCash);
+                    $borrowerFund = (float) $borrower->getFundBalance();
+                    $fundToApply = round(min(max(0.0, $borrowerFund), $cashShortfall), 2);
+
+                    if ($fundToApply > 0.00001) {
+                        $this->fundCashTransfer->transferAmount(
+                            $borrower,
+                            $fundToApply,
+                            $installment,
+                            __('Borrower fund applied – loan #:id installment #:num', [
+                                'id' => $installment->loan_id,
+                                'num' => $installment->installment_number,
+                            ]),
+                        );
+                        $borrower->unsetRelation('fundAccount');
+                        $borrower->unsetRelation('cashAccount');
+                        $borrower->unsetRelation('accounts');
+                        $borrower->load(['cashAccount', 'fundAccount']);
+                        $borrowerCash = (float) $borrower->getCashBalance();
+                    }
+
+                    $guarantorTopUp = max(0.0, $requiredCash - $borrowerCash);
+                    $guarantorCovered = $guarantorTopUp > 0.00001;
+
                     if ($guarantorTopUp > 0.00001) {
                         $this->ledger->topUpBorrowerCashFromGuarantorFund(
                             $guarantor,

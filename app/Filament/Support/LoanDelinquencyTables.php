@@ -16,9 +16,9 @@ use App\Services\ContributionArrearsClearanceService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanDelinquencyService;
 use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
+use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
@@ -44,12 +44,18 @@ final class LoanDelinquencyTables
         $grace = Setting::loanDefaultGraceCycles();
 
         return Loan::query()
-            ->where('status', 'active')
             ->whereNotNull('guarantor_member_id')
             ->where(function (Builder $q) use ($grace): void {
+                // Historical / current guarantor intervention (any loan status, including completed).
                 $q->whereNotNull('guarantor_liability_transferred_at')
+                    ->orWhereHas(
+                        'installments',
+                        fn(Builder $i): Builder => $i->where('paid_by_guarantor', true),
+                    )
+                    // Active loans past grace with overdue EMIs (ready for guarantor action).
                     ->orWhere(function (Builder $inner) use ($grace): void {
-                        $inner->whereNull('guarantor_liability_transferred_at')
+                    $inner->where('status', 'active')
+                        ->whereNull('guarantor_liability_transferred_at')
                             ->where('late_repayment_count', '>=', $grace)
                             ->whereHas('installments', fn (Builder $i): Builder => $i->where('status', 'overdue'));
                     });
@@ -57,6 +63,12 @@ final class LoanDelinquencyTables
             ->with(['member', 'guarantor'])
             ->withCount([
                 'installments as overdue_installments_count' => fn (Builder $q): Builder => $q->where('status', 'overdue'),
+                'installments as guarantor_paid_installments_count' => fn(Builder $q): Builder => $q->where('paid_by_guarantor', true),
+                'installments as late_installments_count' => fn(Builder $q): Builder => $q->where(function (Builder $inner): void {
+                    $inner->where('is_late', true)
+                        ->orWhere('status', 'overdue')
+                        ->orWhere('paid_by_guarantor', true);
+                }),
             ]);
     }
 
@@ -154,90 +166,120 @@ final class LoanDelinquencyTables
     {
         $currency = Setting::get('general', 'currency', 'USD');
 
-        $transferActions = array_map(
-            fn (Action $action): Action => self::withDelinquencyRefresh($action, $livewire),
-            LoanFilamentActions::guarantorLiabilityActions(),
+        return TableGrouping::apply(
+            TableRecordActionGroups::apply(
+                $table
+                    ->query(self::guarantorExposureQuery())
+                    ->queryStringIdentifier('delinquency_guarantor')
+                    ->deferLoading()
+                    ->columnManager(true)
+                    ->columns([
+                        TextColumn::make('id')
+                            ->label(__('Loan'))
+                            ->formatStateUsing(fn(int $state): string => '#' . $state)
+                            ->url(fn(Loan $record): string => LoanResource::getUrl('view', ['record' => $record]))
+                            ->sortable()
+                            ->searchable(),
+                        MemberTableColumns::relationNumber()
+                            ->label(__('Borrower #')),
+                        TextColumn::make('member.name')
+                            ->label(__('Borrower'))
+                            ->searchable()
+                            ->wrap(),
+                        MemberTableColumns::guarantorNumber(
+                            memberIdColumn: 'loans.guarantor_id',
+                        )
+                            ->placeholder(__('—')),
+                        TextColumn::make('guarantor.name')
+                            ->label(__('Guarantor'))
+                            ->placeholder(__('—')),
+                        TextColumn::make('status')
+                            ->label(__('Loan status'))
+                            ->badge()
+                            ->formatStateUsing(fn(string $state): string => __(ucfirst($state)))
+                            ->color(fn(string $state): string => match ($state) {
+                                'active' => 'success',
+                                'completed' => 'gray',
+                                default => 'warning',
+                            }),
+                        TextColumn::make('delinquency_stage')
+                            ->label(__('Stage'))
+                            ->state(function (Loan $record): string {
+                                if ($record->guarantor_liability_transferred_at !== null) {
+                                    return __('Liability on guarantor');
+                                }
+
+                                $grace = Setting::loanDefaultGraceCycles();
+                                $hasOverdue = (int) ($record->overdue_installments_count ?? 0) > 0;
+                                $guarantorPaid = (int) ($record->guarantor_paid_installments_count ?? 0) > 0;
+
+                                if ($record->status === 'active' && $hasOverdue && $record->late_repayment_count >= $grace) {
+                                    return __('Ready for guarantor action');
+                                }
+
+                                if ($guarantorPaid) {
+                                    return __('Guarantor paid');
+                                }
+
+                                return $record->late_repayment_count >= $grace
+                                    ? __('Ready for guarantor action')
+                                    : __('Warning cycle');
+                            })
+                            ->badge()
+                            ->color(function (Loan $record): string {
+                                if ($record->guarantor_liability_transferred_at !== null) {
+                                    return 'warning';
+                                }
+
+                                if (
+                                    (int) ($record->guarantor_paid_installments_count ?? 0) > 0
+                                    && (int) ($record->overdue_installments_count ?? 0) === 0
+                                ) {
+                                    return 'info';
+                                }
+
+                                return Setting::loanDefaultGraceCycles() <= $record->late_repayment_count
+                                    ? 'danger'
+                                    : 'gray';
+                            })
+                            ->searchable(false)
+                            ->sortable(false),
+                        TextColumn::make('late_installments_count')
+                            ->label(__('Late count'))
+                            ->numeric()
+                            ->tooltip(__('Installments that are overdue, marked late, or paid by the guarantor.')),
+                        TextColumn::make('guarantor_paid_installments_count')
+                            ->label(__('Guarantor paid'))
+                            ->numeric(),
+                        TextColumn::make('overdue_installments_count')
+                            ->label(__('Overdue'))
+                            ->numeric(),
+                        TextColumn::make('amount_disbursed')
+                            ->label(__('Disbursed'))
+                            ->money($currency),
+                    ])
+                    ->toolbarActions([
+                        BulkActionGroup::make([
+                            TableToolbar::refreshBulkAction(),
+                        ]),
+                    ])
+                    ->emptyStateHeading(__('No guarantor exposure'))
+                    ->emptyStateDescription(__('Active loans past grace, loans with guarantor liability transferred, and loans where the guarantor paid installments (including completed) appear here.')),
+                [
+                    ViewAction::make(),
+                ],
+                recordUrl: fn(Loan $record): string => LoanResource::getUrl('view', ['record' => $record]),
+            ),
+            TableGrouping::delinquencyGuarantorLoans(),
         );
-
-        return TableGrouping::apply($table
-            ->query(self::guarantorExposureQuery())
-            ->queryStringIdentifier('delinquency_guarantor')
-            ->deferLoading()
-            ->columnManager(true)
-            ->columns([
-                MemberTableColumns::relationNumber()
-                    ->label(__('Borrower #')),
-                TextColumn::make('member.name')
-                    ->label(__('Borrower'))
-                    ->searchable()
-                    ->wrap(),
-                MemberTableColumns::guarantorNumber(
-                    memberIdColumn: 'loans.guarantor_id',
-                )
-                    ->placeholder(__('—')),
-                TextColumn::make('guarantor.name')
-                    ->label(__('Guarantor'))
-                    ->placeholder(__('—')),
-                TextColumn::make('delinquency_stage')
-                    ->label(__('Stage'))
-                    ->state(function (Loan $record): string {
-                        if ($record->guarantor_liability_transferred_at !== null) {
-                            return __('Liability on guarantor');
-                        }
-
-                        $grace = Setting::loanDefaultGraceCycles();
-
-                        return $record->late_repayment_count >= $grace
-                            ? __('Ready for guarantor action')
-                            : __('Warning cycle');
-                    })
-                    ->badge()
-                    ->color(function (Loan $record): string {
-                        if ($record->guarantor_liability_transferred_at !== null) {
-                            return 'warning';
-                        }
-
-                        return Setting::loanDefaultGraceCycles() <= $record->late_repayment_count
-                            ? 'danger'
-                            : 'gray';
-                    })
-                    ->searchable(false)
-                    ->sortable(false),
-                TextColumn::make('late_repayment_count')
-                    ->label(__('Late count'))
-                    ->numeric(),
-                TextColumn::make('overdue_installments_count')
-                    ->label(__('Overdue'))
-                    ->numeric(),
-                TextColumn::make('amount_disbursed')
-                    ->label(__('Disbursed'))
-                    ->money($currency),
-                TextColumn::make('guarantor_liability_transferred_at')
-                    ->label(__('Transferred'))
-                    ->dateTime()
-                    ->placeholder(__('—')),
-            ])
-            ->recordActions(TableRecordActionGroups::wrap([
-                self::viewLoanAction(),
-                ActionGroup::make($transferActions)
-                    ->label(__('Delinquency transfer'))
-                    ->icon('heroicon-o-shield-exclamation')
-                    ->color('warning')
-                    ->button(),
-            ]))
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    TableToolbar::refreshBulkAction(),
-                ]),
-            ])
-            ->emptyStateHeading(__('No guarantor exposure'))
-            ->emptyStateDescription(__('Loans at warning stage or with liability transferred to the guarantor appear here.')), TableGrouping::delinquencyGuarantorLoans());
     }
 
     public static function configurePolicyBreachesTable(Table $table, ?Component $livewire = null): Table
     {
         $currency = Setting::get('general', 'currency', 'USD');
-        $ids = app(LoanDelinquencyService::class)->delinquentMemberIds();
+        $delinquency = app(LoanDelinquencyService::class);
+        $ids = $delinquency->policyQueueMemberIds();
+        $policyBreachIds = array_fill_keys($delinquency->delinquentMemberIds(), true);
 
         return TableGrouping::apply($table
             ->query(
@@ -254,6 +296,17 @@ final class LoanDelinquencyTables
                 MemberTableColumns::name()
                     ->searchable()
                     ->sortable(),
+                TextColumn::make('policy_risk')
+                    ->label(__('Risk'))
+                    ->state(fn(Member $record): string => isset($policyBreachIds[(int) $record->id])
+                        ? __('Policy breach')
+                        : __('At risk'))
+                    ->badge()
+                    ->color(fn(Member $record): string => isset($policyBreachIds[(int) $record->id])
+                        ? 'danger'
+                        : 'warning')
+                    ->searchable(false)
+                    ->sortable(false),
                 TextColumn::make('status')
                     ->badge()
                     ->formatStateUsing(fn (string $state, Member $record): string => $record->adminStatusLabel())
@@ -292,7 +345,7 @@ final class LoanDelinquencyTables
                 ]),
             ])
             ->emptyStateHeading(__('No policy breaches'))
-            ->emptyStateDescription(__('Members appear here when consecutive or rolling missed closed cycles exceed Settings → Delinquency policy.')), TableGrouping::members());
+            ->emptyStateDescription(__('Members appear here when they breach delinquency policy or have outstanding contribution/EMI arrears (at risk).')), TableGrouping::members());
     }
 
     public static function configureContributionArrearsTable(Table $table): Table
