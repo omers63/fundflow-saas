@@ -34,10 +34,7 @@ class LoanQueueProjectionService
     /** @var list<array{id: int, need: float}>|null */
     private ?array $queuedGlobal = null;
 
-    /** @var array<int, list<array{id: int, need: float}>> Pending intake per expected tier, emergencies first then FIFO. */
-    private array $pendingByTier = [];
-
-    /** @var list<array{id: int, need: float}>|null */
+    /** @var list<array{id: int, need: float, priority: int, tier_id: int}>|null */
     private ?array $pendingGlobal = null;
 
     private ?float $expectedMonthlyInflow = null;
@@ -111,18 +108,7 @@ class LoanQueueProjectionService
 
         if ($loan->status === 'pending') {
             $ahead += array_sum(array_column($queued, 'need'));
-
-            $pending = LoanQueueProjectionSettings::pendingDemandScope() === LoanQueueProjectionSettings::SCOPE_PENDING_ACROSS_ALL
-                ? $this->pendingGlobally()
-                : $this->pendingForTier($tier);
-
-            foreach ($pending as $row) {
-                if ($row['id'] === (int) $loan->id) {
-                    break;
-                }
-                $ahead += $row['need'];
-            }
-
+            $ahead += $this->pendingDemandAheadOf($loan, $tier);
             $ownNeed = (float) ($loan->amount_approved ?? $loan->amount_requested);
         } else {
             foreach ($queued as $row) {
@@ -191,57 +177,102 @@ class LoanQueueProjectionService
     }
 
     /**
-     * @return list<array{id: int, need: float}>
+     * Pending demand ahead of this loan, honouring fund-tier intake priority.
+     * Higher-priority (lower number) applications always count as ahead; same-priority
+     * peers use FIFO, optionally scoped to the same tier.
      */
-    private function pendingForTier(FundTier $tier): array
+    private function pendingDemandAheadOf(Loan $loan, FundTier $tier): float
     {
-        if (! array_key_exists($tier->id, $this->pendingByTier)) {
-            /** @var Collection<int, Loan> $pending */
-            $pending = Loan::query()
-                ->where('status', 'pending')
-                ->with('loanTier')
-                ->orderByDesc('is_emergency')
-                ->orderBy('applied_at')
-                ->orderBy('id')
-                ->get();
+        $ownPriority = FundTier::intakePriorityForLoan($loan);
+        $acrossAll = LoanQueueProjectionSettings::pendingDemandScope()
+            === LoanQueueProjectionSettings::SCOPE_PENDING_ACROSS_ALL;
+        $ahead = 0.0;
 
-            $byTier = [];
-            foreach ($pending as $loan) {
-                $expected = FundTier::resolveForLoan($loan);
-                if ($expected === null) {
-                    continue;
-                }
-                $byTier[$expected->id][] = [
-                    'id' => (int) $loan->id,
-                    'need' => (float) ($loan->amount_approved ?? $loan->amount_requested),
-                ];
+        foreach ($this->pendingGlobally() as $row) {
+            if ($row['id'] === (int) $loan->id) {
+                break;
             }
 
-            foreach (FundTier::query()->where('is_active', true)->pluck('id') as $tierId) {
-                $this->pendingByTier[(int) $tierId] = $byTier[(int) $tierId] ?? [];
+            if ($row['priority'] < $ownPriority) {
+                $ahead += $row['need'];
+
+                continue;
             }
-            $this->pendingByTier[$tier->id] ??= $byTier[$tier->id] ?? [];
+
+            if ($row['priority'] > $ownPriority) {
+                break;
+            }
+
+            // Same priority: FIFO; within-tier scope only counts the same expected pool.
+            if ($acrossAll || $row['tier_id'] === (int) $tier->id) {
+                $ahead += $row['need'];
+            }
         }
 
-        return $this->pendingByTier[$tier->id] ?? [];
+        return $ahead;
     }
 
     /**
-     * @return list<array{id: int, need: float}>
+     * @return list<array{id: int, need: float, priority: int, tier_id: int}>
      */
     private function pendingGlobally(): array
     {
-        return $this->pendingGlobal ??= Loan::query()
+        if ($this->pendingGlobal === null) {
+            $this->hydratePendingCaches();
+        }
+
+        return $this->pendingGlobal ?? [];
+    }
+
+    private function hydratePendingCaches(): void
+    {
+        /** @var Collection<int, Loan> $pending */
+        $pending = Loan::query()
             ->where('status', 'pending')
-            ->orderByDesc('is_emergency')
+            ->with('loanTier')
             ->orderBy('applied_at')
             ->orderBy('id')
-            ->get(['id', 'amount_requested', 'amount_approved'])
-            ->map(fn (Loan $loan): array => [
+            ->get();
+
+        $rows = [];
+
+        foreach ($pending as $loan) {
+            $expected = FundTier::resolveForLoan($loan);
+            if ($expected === null) {
+                continue;
+            }
+
+            $rows[] = [
                 'id' => (int) $loan->id,
                 'need' => (float) ($loan->amount_approved ?? $loan->amount_requested),
-            ])
-            ->all();
+                'priority' => FundTier::intakePriorityForLoan($loan),
+                'tier_id' => (int) $expected->id,
+                'applied_at' => $loan->applied_at,
+            ];
+        }
+
+        usort($rows, function (array $a, array $b): int {
+            if ($a['priority'] !== $b['priority']) {
+                return $a['priority'] <=> $b['priority'];
+            }
+
+            $applied = ($a['applied_at'] ?? null) <=> ($b['applied_at'] ?? null);
+            if ($applied !== 0) {
+                return $applied;
+            }
+
+            return $a['id'] <=> $b['id'];
+        });
+
+        $this->pendingGlobal = array_map(
+            fn (array $row): array => [
+                'id' => $row['id'],
+                'need' => $row['need'],
+                'priority' => $row['priority'],
+                'tier_id' => $row['tier_id'],
+            ],
+            $rows,
+        );
     }
 
     /**

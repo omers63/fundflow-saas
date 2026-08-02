@@ -27,6 +27,18 @@ class FundTierForm
         return [
             TextInput::make('label')
                 ->maxLength(100),
+            TextInput::make('priority')
+                ->label(__('Intake priority'))
+                ->helperText(__('Lower numbers rank ahead in the loan intake queue. Emergency is locked at 0.'))
+                ->numeric()
+                ->required()
+                ->minValue(fn (?FundTier $record): int => $record?->isEmergency() ? 0 : 1)
+                ->maxValue(999)
+                ->default(fn (?FundTier $record): int => $record?->isEmergency()
+                    ? 0
+                    : ($record?->priority ?? FundTier::nextPriority()))
+                ->disabled(fn (?FundTier $record): bool => $record?->isEmergency() ?? false)
+                ->dehydrated(),
             TextInput::make('percentage')
                 ->numeric()
                 ->required()
@@ -78,6 +90,7 @@ class FundTierForm
     {
         return [
             'label' => $record->getAttributes()['label'] ?? null,
+            'priority' => $record->isEmergency() ? 0 : (int) $record->priority,
             'percentage' => $record->percentage,
             'is_active' => $record->is_active,
             'loan_tier_ids' => $record->loanTiers()->pluck('id')->map(fn ($id): int => (int) $id)->all(),
@@ -97,6 +110,10 @@ class FundTierForm
             ->all();
 
         unset($data['loan_tier_ids']);
+
+        if (array_key_exists('priority', $data)) {
+            $data['priority'] = (int) $data['priority'];
+        }
 
         return [$data, $loanTierIds];
     }

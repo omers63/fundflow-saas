@@ -14,6 +14,7 @@ class FundTier extends Model
 
     protected $fillable = [
         'tier_number',
+        'priority',
         'label',
         'percentage',
         'is_active',
@@ -22,6 +23,7 @@ class FundTier extends Model
     protected function casts(): array
     {
         return [
+            'priority' => 'integer',
             'percentage' => 'decimal:2',
             'is_active' => 'boolean',
         ];
@@ -29,6 +31,14 @@ class FundTier extends Model
 
     protected static function booted(): void
     {
+        static::saving(function (FundTier $tier): void {
+            if ($tier->isEmergency()) {
+                $tier->priority = 0;
+            } else {
+                $tier->priority = max(1, (int) ($tier->priority ?? 1));
+            }
+        });
+
         static::deleting(function (FundTier $tier): bool {
             if ($tier->isEmergency()) {
                 return false;
@@ -71,6 +81,33 @@ class FundTier extends Model
         $max = (int) static::query()->where('tier_number', '>', 0)->max('tier_number');
 
         return max(1, $max + 1);
+    }
+
+    /** Next non-emergency intake priority for a newly created fund tier. */
+    public static function nextPriority(): int
+    {
+        $max = (int) static::query()->where('tier_number', '>', 0)->max('priority');
+
+        return max(1, $max + 1);
+    }
+
+    /**
+     * Intake ranking priority for a loan (lower = ahead in the queue).
+     * Emergency loans always rank as 0.
+     */
+    public static function intakePriorityForLoan(Loan $loan): int
+    {
+        if ($loan->is_emergency) {
+            return 0;
+        }
+
+        $tier = static::resolveForLoan($loan);
+
+        if ($tier === null) {
+            return 9999;
+        }
+
+        return max(0, (int) $tier->priority);
     }
 
     /**

@@ -36,17 +36,17 @@ final class DefaultFundAndLoanTiers
     }
 
     /**
-     * @return list<array{tier_number: int, label: string, percentage: float|int, loan_tier_numbers: list<int>}>
+     * @return list<array{tier_number: int, priority: int, label: string, percentage: float|int, loan_tier_numbers: list<int>}>
      */
     public static function fundTiers(): array
     {
         return [
-            ['tier_number' => 0, 'label' => 'Emergency', 'percentage' => 100, 'loan_tier_numbers' => []],
-            ['tier_number' => 1, 'label' => 'Tier 1', 'percentage' => 40, 'loan_tier_numbers' => [0, 1]],
-            ['tier_number' => 2, 'label' => 'Tier 2', 'percentage' => 30, 'loan_tier_numbers' => [2, 3]],
-            ['tier_number' => 3, 'label' => 'Tier 3', 'percentage' => 10, 'loan_tier_numbers' => [4, 5]],
-            ['tier_number' => 4, 'label' => 'Tier 4', 'percentage' => 10, 'loan_tier_numbers' => [6, 7]],
-            ['tier_number' => 5, 'label' => 'Tier 5', 'percentage' => 10, 'loan_tier_numbers' => [8, 9, 10]],
+            ['tier_number' => 0, 'priority' => 0, 'label' => 'Emergency', 'percentage' => 100, 'loan_tier_numbers' => []],
+            ['tier_number' => 1, 'priority' => 1, 'label' => 'Tier 1', 'percentage' => 40, 'loan_tier_numbers' => [0, 1]],
+            ['tier_number' => 2, 'priority' => 2, 'label' => 'Tier 2', 'percentage' => 30, 'loan_tier_numbers' => [2, 3]],
+            ['tier_number' => 3, 'priority' => 3, 'label' => 'Tier 3', 'percentage' => 10, 'loan_tier_numbers' => [4, 5]],
+            ['tier_number' => 4, 'priority' => 4, 'label' => 'Tier 4', 'percentage' => 10, 'loan_tier_numbers' => [6, 7]],
+            ['tier_number' => 5, 'priority' => 5, 'label' => 'Tier 5', 'percentage' => 10, 'loan_tier_numbers' => [8, 9, 10]],
         ];
     }
 
@@ -88,6 +88,7 @@ final class DefaultFundAndLoanTiers
         foreach (self::fundTiers() as $row) {
             $fundTierId = DB::table('fund_tiers')->insertGetId([
                 'tier_number' => $row['tier_number'],
+                'priority' => $row['priority'],
                 'label' => $row['label'],
                 'percentage' => $row['percentage'],
                 'is_active' => true,

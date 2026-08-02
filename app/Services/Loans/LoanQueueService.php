@@ -38,7 +38,8 @@ class LoanQueueService
     }
 
     /**
-     * Pending applications in submission order, emergencies first.
+     * Pending applications ordered by fund-tier intake priority (lower first), then FIFO.
+     * Emergency loans always rank as priority 0.
      */
     public function intakeQuery(): Builder
     {
@@ -46,9 +47,39 @@ class LoanQueueService
             ->with(['member', 'loanTier', 'fundTier'])
             ->select('loans.*')
             ->where('loans.status', 'pending')
-            ->orderByDesc('loans.is_emergency')
+            ->orderByRaw(self::intakePriorityOrderSql())
             ->orderBy('loans.applied_at')
             ->orderBy('loans.id');
+    }
+
+    /**
+     * SQL expression yielding the intake priority for each pending loan row.
+     */
+    public static function intakePriorityOrderSql(): string
+    {
+        return <<<'SQL'
+CASE
+    WHEN loans.is_emergency = 1 THEN 0
+    ELSE COALESCE(
+        (
+            SELECT ft.priority
+            FROM fund_tiers ft
+            WHERE ft.id = loans.fund_tier_id
+              AND ft.deleted_at IS NULL
+            LIMIT 1
+        ),
+        (
+            SELECT ft.priority
+            FROM fund_tiers ft
+            INNER JOIN loan_tiers lt ON lt.fund_tier_id = ft.id
+            WHERE lt.id = loans.loan_tier_id
+              AND ft.deleted_at IS NULL
+            LIMIT 1
+        ),
+        9999
+    )
+END
+SQL;
     }
 
     /**
@@ -62,7 +93,7 @@ class LoanQueueService
             ->whereIn('loans.status', ['approved', 'partially_disbursed'])
             ->whereRaw('COALESCE(loans.amount_disbursed, 0) < COALESCE(loans.amount_approved, loans.amount_requested, 0)')
             ->leftJoin('fund_tiers', 'fund_tiers.id', '=', 'loans.fund_tier_id')
-            ->orderBy('fund_tiers.tier_number')
+            ->orderByRaw('CASE WHEN loans.is_emergency = 1 THEN 0 ELSE COALESCE(fund_tiers.priority, 9999) END')
             ->orderByRaw('loans.queue_position IS NULL, loans.queue_position')
             ->orderBy('loans.applied_at');
     }
@@ -76,7 +107,7 @@ class LoanQueueService
             ->with([
                 'member',
                 'loanTier',
-                'fundTier' => fn($query) => $query->withTrashed(),
+                'fundTier' => fn ($query) => $query->withTrashed(),
             ])
             ->select('loans.*')
             ->whereIn('loans.status', ['completed', 'early_settled'])

@@ -608,6 +608,11 @@
 
     @if (($cfg['include_txns'] ?? true) && !empty($d['period_transactions']))
         <h2 class="section-title">{{ __('Period transactions') }}</h2>
+        @if (! empty($d['cycle_start']) && ! empty($d['cycle_end']))
+            <p class="muted" style="margin-top:-0.35rem;margin-bottom:0.65rem;font-size:0.8rem;">
+                {{ $d['cycle_start'] }} – {{ $d['cycle_end'] }}
+            </p>
+        @endif
         <table class="data-table">
             <thead>
                 <tr>

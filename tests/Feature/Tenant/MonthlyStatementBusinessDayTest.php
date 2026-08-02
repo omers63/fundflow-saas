@@ -11,6 +11,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\ContributionCycleService;
 use App\Services\MonthlyStatementService;
 use App\Support\BusinessDaySettings;
 use Carbon\Carbon;
@@ -203,6 +204,60 @@ test('statement activity yearly lifetime and closing balances clamp to business 
         ->and($year2026['cash_balance'])->toEqual(500.0)
         ->and(collect($details['period_transactions'])->pluck('amount')->map(fn ($amount) => (float) $amount)->all())
         ->toEqual([500.0, 200.0]);
+});
+
+test('period transactions include all cash and fund ledger rows inside the contribution cycle', function () {
+    $cycles = app(ContributionCycleService::class);
+    $cash = $this->member->cashAccount;
+    $fund = $this->member->fundAccount;
+
+    // Calendar days 1–5 are outside the May cycle when start day is 6.
+    Transaction::query()->create([
+        'account_id' => $cash->id,
+        'member_id' => $this->member->id,
+        'type' => 'credit',
+        'amount' => 111,
+        'balance_after' => 111,
+        'description' => 'Before cycle start cash',
+        'transacted_at' => '2026-05-03 12:00:00',
+    ]);
+    Transaction::query()->create([
+        'account_id' => $fund->id,
+        'member_id' => $this->member->id,
+        'type' => 'credit',
+        'amount' => 222,
+        'balance_after' => 222,
+        'description' => 'In-cycle fund credit',
+        'transacted_at' => '2026-05-06 08:00:00',
+    ]);
+    Transaction::query()->create([
+        'account_id' => $cash->id,
+        'member_id' => $this->member->id,
+        'type' => 'debit',
+        'amount' => 50,
+        'balance_after' => 61,
+        'description' => 'In-cycle cash debit',
+        'transacted_at' => '2026-05-12 09:00:00',
+    ]);
+    Transaction::query()->create([
+        'account_id' => $cash->id,
+        'member_id' => $this->member->id,
+        'type' => 'credit',
+        'amount' => 333,
+        'balance_after' => 394,
+        'description' => 'After business day cash',
+        'transacted_at' => '2026-05-20 12:00:00',
+    ]);
+
+    $statement = app(MonthlyStatementService::class)->generateForMember($this->member, '2026-05');
+    $details = $statement->details;
+    $descriptions = collect($details['period_transactions'])->pluck('description')->all();
+
+    expect($details['cycle_start'])->toBe($cycles->cycleStartAt(5, 2026)->toDateString())
+        ->and($details['cycle_end'])->toBe('2026-05-15')
+        ->and($descriptions)->toBe(['In-cycle fund credit', 'In-cycle cash debit'])
+        ->and(collect($details['period_transactions'])->pluck('account_type')->all())
+        ->toBe(['fund', 'cash']);
 });
 
 test('period contribution paid after business day is excluded from statement totals', function () {

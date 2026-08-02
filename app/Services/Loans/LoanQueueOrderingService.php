@@ -13,9 +13,9 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Loan queue display and persisted queue_position follow business rules:
- * emergencies first (FIFO by applied_at), then by fund tier priority, loan tier 1 before higher tiers (FIFO),
- * and within each fund tier bucket a capacity-aware pass (requests that fit the tier's currently
- * disbursable pool first, preserving relative order). Queued = approved or partially disbursed.
+ * intake uses fund-tier priority (lower first; emergency = 0) then FIFO by applied_at;
+ * tier process queues use emergency-first, loan-tier order, then a capacity-aware pass.
+ * Queued = approved or partially disbursed.
  */
 class LoanQueueOrderingService
 {
@@ -32,60 +32,41 @@ class LoanQueueOrderingService
 
         $fundTiers = FundTier::query()->where('is_active', true)->get()->keyBy('id');
 
-        [$emergency, $rest] = $c->partition(fn (Loan $l) => (bool) $l->is_emergency);
-        $out = $emergency->sort(fn (Loan $a, Loan $b) => $a->applied_at <=> $b->applied_at)->values();
-
-        $byFund = $rest->groupBy(fn (Loan $l) => self::expectedFundTierId($l) ?? 'none');
-
-        $sortedKeys = $byFund->keys()->sort(function ($ka, $kb) use ($fundTiers) {
-            if ($ka === $kb) {
-                return 0;
-            }
-            if ($ka === 'none') {
-                return 1;
-            }
-            if ($kb === 'none') {
-                return -1;
-            }
-            $ta = $fundTiers->get((int) $ka);
-            $tb = $fundTiers->get((int) $kb);
-            if ($ta === null) {
-                return 1;
-            }
-            if ($tb === null) {
-                return -1;
-            }
-
-            return $ta->tier_number <=> $tb->tier_number;
-        })->values();
-
-        foreach ($sortedKeys as $key) {
-            $group = $byFund->get($key) ?? collect();
-            if ($group->isEmpty()) {
-                continue;
-            }
-            $sorted = $group->sort(function (Loan $a, Loan $b) {
-                $da = self::effectiveLoanTierNumber($a);
-                $db = self::effectiveLoanTierNumber($b);
-                if ($da !== $db) {
-                    return $da <=> $db;
+        return $c
+            ->sort(function (Loan $a, Loan $b) use ($fundTiers): int {
+                $pa = self::intakePriorityForLoan($a, $fundTiers);
+                $pb = self::intakePriorityForLoan($b, $fundTiers);
+                if ($pa !== $pb) {
+                    return $pa <=> $pb;
                 }
 
-                return $a->applied_at <=> $b->applied_at;
-            })->values();
+                $applied = $a->applied_at <=> $b->applied_at;
+                if ($applied !== 0) {
+                    return $applied;
+                }
 
-            $avail = $key === 'none'
-                ? PHP_FLOAT_MAX
-                : (float) ($fundTiers->get((int) $key)?->disbursable_pool ?? 0);
+                return $a->id <=> $b->id;
+            })
+            ->values();
+    }
 
-            $out = $out->concat(self::applyCapacityBucket(
-                $sorted,
-                $avail,
-                fn (Loan $l) => (float) $l->amount_requested,
-            ));
+    /**
+     * @param  Collection<int|string, FundTier>  $fundTiers
+     */
+    private static function intakePriorityForLoan(Loan $loan, Collection $fundTiers): int
+    {
+        if ($loan->is_emergency) {
+            return 0;
         }
 
-        return $out;
+        $fundTierId = self::expectedFundTierId($loan);
+        if ($fundTierId === null) {
+            return 9999;
+        }
+
+        $tier = $fundTiers->get($fundTierId);
+
+        return $tier !== null ? max(0, (int) $tier->priority) : 9999;
     }
 
     /**

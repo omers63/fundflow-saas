@@ -7,6 +7,7 @@ use App\Models\Tenant\FundTier;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Services\Loans\LoanQueueProjectionService;
 use App\Support\LoanQueueProjectionSettings;
@@ -16,6 +17,7 @@ uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
+    app()->setLocale('en');
 
     Account::query()->delete();
     Member::query()->delete();
@@ -87,6 +89,9 @@ test('projects months until expected contributions cover the shortfall', functio
     $borrower = makeProjectionMember(0);
     $loan = makeProjectionLoan($borrower, $this->fundTier);
 
+    Setting::set(LoanQueueProjectionSettings::GROUP, 'include_contribution_arrears', false);
+    Setting::set(LoanQueueProjectionSettings::GROUP, 'use_historical_inflow', false);
+
     $projection = app(LoanQueueProjectionService::class)->projectionFor($loan);
 
     expect($projection['ready_now'])->toBeFalse()
@@ -119,6 +124,9 @@ test('falls back to historical master fund growth when no expected inflow exists
 });
 
 test('pending loans wait behind queued demand in the same tier', function () {
+    Setting::set(LoanQueueProjectionSettings::GROUP, 'include_contribution_arrears', false);
+    Setting::set(LoanQueueProjectionSettings::GROUP, 'use_historical_inflow', false);
+
     makeProjectionMember(5000);
     $member = makeProjectionMember(0);
     $queued = makeProjectionLoan($member, $this->fundTier, [

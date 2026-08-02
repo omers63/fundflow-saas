@@ -27,8 +27,7 @@ class MonthlyStatementService
 {
     public function __construct(
         private readonly ContributionCycleService $cycles,
-    ) {
-    }
+    ) {}
 
     public function generateForAllMembers(string $period, bool $notify = false): int
     {
@@ -107,18 +106,20 @@ class MonthlyStatementService
     {
         $asOf = BusinessDay::now();
         $asOfEnd = $asOf->copy()->endOfDay();
-        $periodStart = Carbon::create($year, $month, 1)->startOfDay();
-        $periodEnd = $this->observationEnd(
-            (clone $periodStart)->endOfMonth(),
+
+        // Statement period is the labelled contribution cycle (e.g. start day 6 → 6th–5th).
+        $cycleStart = $this->cycles->cycleStartAt($month, $year);
+        $cycleEnd = $this->observationEnd(
+            $this->cycles->cycleDueEndAt($month, $year),
             $asOfEnd,
         );
 
-        $openingCutoff = $periodStart->copy()->subSecond();
+        $openingCutoff = $cycleStart->copy()->subSecond();
         $openingCash = $this->balanceAtDate($member, 'cash', $openingCutoff);
         $openingFund = $this->balanceAtDate($member, 'fund', $openingCutoff);
 
         $periodDate = Contribution::periodDate($month, $year);
-        $membershipStart = $member->joined_at?->copy()->startOfDay() ?? $periodStart->copy();
+        $membershipStart = $member->joined_at?->copy()->startOfDay() ?? $cycleStart->copy();
 
         $periodContribs = Contribution::query()
             ->where('member_id', $member->id)
@@ -134,7 +135,7 @@ class MonthlyStatementService
 
         $paidInstallments = LoanInstallment::query()
             ->whereHas('loan', fn ($q) => $q->where('member_id', $member->id))
-            ->whereBetween('paid_at', [$periodStart, $periodEnd])
+            ->whereBetween('paid_at', [$cycleStart, $cycleEnd])
             ->where('status', 'paid')
             ->with('loan:id')
             ->orderBy('paid_at')
@@ -147,11 +148,13 @@ class MonthlyStatementService
             ->whereIn('type', ['cash', 'fund'])
             ->pluck('id');
 
+        // Full cash + fund ledger for everything that posted inside this cycle window.
         $periodTransactions = Transaction::query()
             ->whereIn('account_id', $memberAccountIds)
-            ->whereBetween('transacted_at', [$periodStart, $periodEnd])
+            ->whereBetween('transacted_at', [$cycleStart, $cycleEnd])
             ->with('account')
             ->orderBy('transacted_at')
+            ->orderBy('id')
             ->get()
             ->map(fn (Transaction $tx): array => [
                 'date' => $tx->transacted_at?->toDateTimeString(),
@@ -163,8 +166,8 @@ class MonthlyStatementService
             ])
             ->all();
 
-        $cashAtEnd = $this->balanceAtDate($member, 'cash', $periodEnd);
-        $fundAtEnd = $this->balanceAtDate($member, 'fund', $periodEnd);
+        $cashAtEnd = $this->balanceAtDate($member, 'cash', $cycleEnd);
+        $fundAtEnd = $this->balanceAtDate($member, 'fund', $cycleEnd);
 
         $profile = app(MemberMembershipProfileService::class)->findForMember($member);
         $allLoans = $this->loanSummaries($member);
@@ -205,6 +208,8 @@ class MonthlyStatementService
             'closing_balance' => $fundAtEnd,
             'period' => $period,
             'period_label' => Carbon::create($year, $month, 1)->format('Y-m'),
+            'cycle_start' => $cycleStart->toDateString(),
+            'cycle_end' => $cycleEnd->toDateString(),
             'currency' => $currency,
             'generated_at' => $asOf->toDateTimeString(),
             'as_of' => $asOf->toDateString(),
@@ -327,7 +332,7 @@ class MonthlyStatementService
     private function yearlyHistory(Member $member, Carbon $membershipStart, int $statementYear, int $statementMonth, Carbon $asOfEnd): array
     {
         [$throughMonth, $throughYear] = $this->activityThroughCycle($statementYear, $statementMonth, $asOfEnd);
-                $startYear = (int) $membershipStart->year;
+        $startYear = (int) $membershipStart->year;
         $rows = [];
 
         for ($year = $startYear; $year <= $throughYear; $year++) {
@@ -443,7 +448,7 @@ class MonthlyStatementService
                 ->get(['amount', 'paid_at', 'late_fee_amount']);
 
             $contributionDates = $contribs
-                ->map(fn(Contribution $c): ?string => $c->paid_at?->toDateString())
+                ->map(fn (Contribution $c): ?string => $c->paid_at?->toDateString())
                 ->filter()
                 ->values()
                 ->all();
@@ -599,7 +604,7 @@ class MonthlyStatementService
         return [
             'amount' => (float) $credits->sum('amount'),
             'dates' => $credits
-                ->map(fn(Transaction $tx): ?string => $tx->transacted_at?->toDateString())
+                ->map(fn (Transaction $tx): ?string => $tx->transacted_at?->toDateString())
                 ->filter()
                 ->values()
                 ->all(),

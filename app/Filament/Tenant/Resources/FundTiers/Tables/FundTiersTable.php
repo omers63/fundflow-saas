@@ -33,6 +33,10 @@ class FundTiersTable
             ->columns([
                 TextColumn::make('tier_number')
                     ->sortable(),
+                TextColumn::make('priority')
+                    ->label(__('Intake priority'))
+                    ->sortable()
+                    ->tooltip(__('Lower numbers rank ahead in the loan intake queue.')),
                 TextColumn::make('label'),
                 TextColumn::make('loan_tiers')
                     ->label(__('Loan tiers'))
@@ -69,7 +73,7 @@ class FundTiersTable
                 TernaryFilter::make('is_active')
                     ->label(__('Active')),
             ])
-            ->defaultSort('tier_number')
+            ->defaultSort('priority')
             ->modifyQueryUsing(fn ($query) => $query->with('loanTiers'))
             ->recordActions(TableRecordActionGroups::wrap([
                 EditAction::make()
@@ -77,6 +81,9 @@ class FundTiersTable
                     ->fillForm(fn (FundTier $record): array => FundTierForm::fillData($record))
                     ->action(function (array $data, FundTier $record, EditAction $action): void {
                         [$attributes, $loanTierIds] = FundTierForm::extractLoanTierIds($data);
+                        if ($record->isEmergency()) {
+                            $attributes['priority'] = 0;
+                        }
                         $record->update($attributes);
                         $record->syncLoanTiers($loanTierIds);
                         $action->success();

@@ -41,6 +41,7 @@ class FundTiersManageTableWidget extends TableWidget
                     ->using(function (array $data): FundTier {
                         [$attributes, $loanTierIds] = FundTierForm::extractLoanTierIds($data);
                         $attributes['tier_number'] = FundTier::nextTierNumber();
+                        $attributes['priority'] = max(1, (int) ($attributes['priority'] ?? FundTier::nextPriority()));
 
                         $record = FundTier::query()->create($attributes);
                         $record->syncLoanTiers($loanTierIds);

@@ -25,10 +25,12 @@ test('default fund and loan tier definitions match the samman production shape',
         ->and($loanTiers[10]['label'])->toBe('271K->300K - 5.5K')
         ->and($fundTiers[0])->toMatchArray([
             'tier_number' => 0,
+            'priority' => 0,
             'label' => 'Emergency',
             'percentage' => 100,
             'loan_tier_numbers' => [],
         ])
+        ->and(collect($fundTiers)->pluck('priority')->all())->toBe([0, 1, 2, 3, 4, 5])
         ->and(collect($fundTiers)->where('tier_number', '>', 0)->pluck('percentage')->all())
         ->toBe([40, 30, 10, 10, 10])
         ->and(collect($fundTiers)->where('tier_number', '>', 0)->pluck('loan_tier_numbers')->all())
@@ -52,6 +54,7 @@ test('seedIfEmpty inserts linked defaults only when both tier tables are empty',
 
     expect($emergency)->not->toBeNull()
         ->and($emergency->label)->toBe('Emergency')
+        ->and((int) $emergency->priority)->toBe(0)
         ->and((float) $emergency->percentage)->toBe(100.0)
         ->and($emergency->loanTiers)->toHaveCount(0)
         ->and($tier1->label)->toBe('Tier 1')
