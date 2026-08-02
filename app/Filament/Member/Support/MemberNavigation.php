@@ -42,19 +42,21 @@ final class MemberNavigation
 
     public const SORT_CASH_OUTS = 2;
 
-    public const SORT_CASH_TRANSFERS = 3;
+    public const SORT_FUND_OUTS = 3;
 
-    public const SORT_STATEMENTS = 4;
+    public const SORT_CASH_TRANSFERS = 4;
 
-    public const SORT_REQUESTS = 5;
+    public const SORT_STATEMENTS = 5;
+
+    public const SORT_REQUESTS = 6;
 
     public const SORT_DEPOSITS = 1;
 
-    public const SORT_DEPENDENTS = 6;
+    public const SORT_DEPENDENTS = 7;
 
-    public const SORT_SETTINGS = 7;
+    public const SORT_SETTINGS = 8;
 
-    public const SORT_HELP = 8;
+    public const SORT_HELP = 9;
 
     /** Legacy hidden pages — group/sort retained for redirects and tests. */
     public const SORT_ACCOUNTS = 6;

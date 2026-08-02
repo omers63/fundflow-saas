@@ -5,16 +5,15 @@ declare(strict_types=1);
 namespace App\Filament\Member\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
-use App\Filament\Member\Resources\MyCashOutRequests\MyCashOutRequestResource;
 use App\Filament\Member\Resources\MyFundPostings\Schemas\MyFundPostingForm;
 use App\Filament\Member\Support\MemberNavigation;
+use App\Filament\Member\Support\MemberWithdrawalFilamentActions;
 use App\Filament\Pages\Page;
 use App\Services\FundPostingService;
 use App\Services\MemberCashOutService;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
-use Filament\Actions\Action;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
@@ -133,11 +132,6 @@ class CashAccountPage extends Page implements HasForms
      */
     protected function getHeaderActions(): array
     {
-        return [
-            Action::make('cashOut')
-                ->label(__('Request cash out'))
-                ->icon('heroicon-o-arrow-up-tray')
-                ->url(MyCashOutRequestResource::getUrl('create')),
-        ];
+        return MemberWithdrawalFilamentActions::headerActions();
     }
 }

@@ -83,6 +83,60 @@ class ViewMemberRequest extends ViewRecord
 
     protected function getHeaderActions(): array
     {
+        $approve = Action::make('approve')
+            ->label(__('Approve'))
+            ->icon('heroicon-o-check-circle')
+            ->color('success')
+            ->visible(fn (): bool => $this->record->isPending())
+            ->requiresConfirmation()
+            ->modalHeading(__('Approve this request?'))
+            ->modalDescription(fn (): string => match ($this->record->type) {
+                MemberRequest::TYPE_ADD_DEPENDENT => __('Review the dependent details (and new parent email if provided), then approve when the household link is complete.'),
+                MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => __('The member will leave the fund and portal access will end. Settlement early-settles loans and auto-accepts residual cash-out (uncleared bank line).'),
+                MemberRequest::TYPE_FREEZE_MEMBERSHIP => __('The member will be frozen per their plan (cycles, household). Contributions and cash-out pause; EMIs shift one cycle at a time. Portal becomes read-only.'),
+                MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => __('The member returns to active. If the freeze plan had not ended, deferred EMIs are pulled back.'),
+                MemberRequest::TYPE_EXTEND_FREEZE_MEMBERSHIP => __('Adds cycles to the freeze plan and resumes fee suppression until the new plan ends.'),
+                MemberRequest::TYPE_REINSTATE_MEMBERSHIP => __('The member will return to active membership. Cash and fund balances will be cleared to zero.'),
+                MemberRequest::TYPE_RELEASE_PAYOUT => __('Clears the payout hold only. Membership stays withdrawn until reinstated.'),
+                MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION => __('This cycle\'s contribution due will be replaced with the requested amount. The member\'s standing monthly allocation stays unchanged.'),
+                MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION => __('This cycle\'s contribution due will be raised by the top-up amount. The member\'s standing monthly allocation stays unchanged. The combined total will be collected from the member\'s cash account on the normal collection day.'),
+                default => __('The change will be applied immediately for supported request types.'),
+            })
+            ->action(function (array $data): void {
+                try {
+                    app(MemberRequestService::class)->approve(
+                        $this->record,
+                        auth('tenant')->user(),
+                        $data,
+                    );
+                    Notification::make()->title(__('Request approved'))->success()->send();
+                    $this->refreshResolvedRecord();
+                } catch (ValidationException $exception) {
+                    Notification::make()
+                        ->title(__('Cannot approve'))
+                        ->body(collect($exception->errors())->flatten()->first() ?? $exception->getMessage())
+                        ->danger()
+                        ->send();
+                }
+            });
+
+        if (
+            in_array($this->record->type, [
+                MemberRequest::TYPE_FREEZE_MEMBERSHIP,
+                MemberRequest::TYPE_WITHDRAW_MEMBERSHIP,
+            ], true)
+        ) {
+            $approve->schema(match ($this->record->type) {
+                MemberRequest::TYPE_FREEZE_MEMBERSHIP => [
+                    MemberFilamentActions::freezeDateField(),
+                ],
+                MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => [
+                    MemberFilamentActions::withdrawDateField(),
+                ],
+                default => [],
+            });
+        }
+
         return [
             Action::make('viewMember')
                 ->label(__('Open member'))
@@ -92,57 +146,15 @@ class ViewMemberRequest extends ViewRecord
                 ->url(fn (): ?string => $this->record->requester
                     ? MemberTableColumns::memberRecordUrl($this->record->requester)
                     : null),
-            Action::make('approve')
-                ->label(__('Approve'))
-                ->icon('heroicon-o-check-circle')
-                ->color('success')
-                ->visible(fn (): bool => $this->record->isPending())
-                ->requiresConfirmation()
-                ->modalHeading(__('Approve this request?'))
-                ->modalDescription(fn (): string => match ($this->record->type) {
-                    MemberRequest::TYPE_ADD_DEPENDENT => __('Review the dependent details (and new parent email if provided), then approve when the household link is complete.'),
-                    MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => __('The member will leave the fund and portal access will end. Settlement may create a pending cash-out.'),
-                    MemberRequest::TYPE_FREEZE_MEMBERSHIP => __('The member will be marked inactive until unfrozen.'),
-                    MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => __('The member will be set to active. Portal access stays blocked while arrears remain.'),
-                    MemberRequest::TYPE_REINSTATE_MEMBERSHIP => __('The member will return to active membership. Cash and fund balances will be cleared to zero.'),
-                    MemberRequest::TYPE_RELEASE_PAYOUT => __('Clears the payout hold only. Membership stays withdrawn until reinstated.'),
-                    MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION => __('This cycle\'s contribution due will be replaced with the requested amount. The member\'s standing monthly allocation stays unchanged.'),
-                    MemberRequest::TYPE_VOLUNTARY_CONTRIBUTION => __('This cycle\'s contribution due will be raised by the top-up amount. The member\'s standing monthly allocation stays unchanged. The combined total will be collected from the member\'s cash account on the normal collection day.'),
-                    default => __('The change will be applied immediately for supported request types.'),
-                })
-                ->schema(function (): array {
-                    return match ($this->record->type) {
-                        MemberRequest::TYPE_FREEZE_MEMBERSHIP => [
-                            MemberFilamentActions::freezeDateField(),
-                        ],
-                        MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => [
-                            MemberFilamentActions::withdrawDateField(),
-                        ],
-                        default => [],
-                    };
-                })
-                ->action(function (array $data): void {
-                    try {
-                        app(MemberRequestService::class)->approve(
-                            $this->record,
-                            auth('tenant')->user(),
-                            $data,
-                        );
-                        Notification::make()->title(__('Request approved'))->success()->send();
-                        $this->refreshResolvedRecord();
-                    } catch (ValidationException $exception) {
-                        Notification::make()
-                            ->title(__('Cannot approve'))
-                            ->body(collect($exception->errors())->flatten()->first() ?? $exception->getMessage())
-                            ->danger()
-                            ->send();
-                    }
-                }),
+            $approve,
             Action::make('reject')
                 ->label(__('Reject'))
                 ->icon('heroicon-o-x-circle')
                 ->color('danger')
                 ->visible(fn (): bool => $this->record->isPending())
+                ->requiresConfirmation()
+                ->modalHeading(__('Reject this request?'))
+                ->modalDescription(__('The member will be notified. You can optionally include a note explaining the decision.'))
                 ->schema([
                     Textarea::make('admin_note')
                         ->label(__('Note to member (optional)'))

@@ -14,6 +14,7 @@ use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\NewMemberRequestNotification;
 use App\Services\DependentAllocationService;
+use App\Services\MemberFreezeService;
 use App\Services\MemberStatusService;
 use App\Services\MemberWithdrawalSettlementService;
 use App\Services\OpenCycleContributionOverrideService;
@@ -32,6 +33,7 @@ class MemberRequestService
         private readonly HouseholdMemberService $householdMembers,
         private readonly DependentAllocationService $allocations,
         private readonly MemberStatusService $statuses,
+        private readonly MemberFreezeService $freezes,
         private readonly OpenCycleContributionOverrideService $openCycleOverrides,
         private readonly OperationalReviewWorkflowService $reviewWorkflow,
     ) {}
@@ -66,6 +68,10 @@ class MemberRequestService
                 'payload' => $payload,
             ]);
 
+            if ($type === MemberRequest::TYPE_FREEZE_MEMBERSHIP) {
+                $this->freezes->notifyFreezeRequested($requester, $payload);
+            }
+
             if ($notifyAdmins) {
                 $this->reviewWorkflow->notifyAdmins(new NewMemberRequestNotification($request, $requester));
             }
@@ -87,6 +93,7 @@ class MemberRequestService
             MemberRequest::TYPE_REQUEST_INDEPENDENCE => $this->validateIndependence($requester),
             MemberRequest::TYPE_FREEZE_MEMBERSHIP => $this->validateFreezeMembership($requester, $payload),
             MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => $this->validateUnfreezeMembership($requester),
+            MemberRequest::TYPE_EXTEND_FREEZE_MEMBERSHIP => $this->validateExtendFreezeMembership($requester, $payload),
             MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => $this->validateWithdrawMembership($requester, $payload),
             MemberRequest::TYPE_REINSTATE_MEMBERSHIP => $this->validateReinstateMembership($requester),
             MemberRequest::TYPE_RELEASE_PAYOUT => $this->validateReleasePayout($requester),
@@ -197,6 +204,15 @@ class MemberRequestService
                 'member' => __('Only active members can request a membership freeze.'),
             ]);
         }
+
+        $this->freezes->validatePlan($requester, [
+            'cycles' => (int) ($payload['cycles'] ?? 0),
+            'household_mode' => (string) ($payload['household_mode'] ?? MemberFreezeService::HOUSEHOLD_SELF_ONLY),
+            'temporary_parent_member_id' => $payload['temporary_parent_member_id'] ?? null,
+            'reason' => (string) ($payload['reason'] ?? ''),
+        ]);
+
+        $this->freezes->assertCanSubmitOrApprove($requester, forApprove: false);
     }
 
     protected function validateUnfreezeMembership(Member $requester): void
@@ -204,6 +220,26 @@ class MemberRequestService
         if ($requester->status !== 'inactive' || $requester->frozen_at === null) {
             throw ValidationException::withMessages([
                 'member' => __('Only frozen members can request to unfreeze membership.'),
+            ]);
+        }
+    }
+
+    protected function validateExtendFreezeMembership(Member $requester, array $payload): void
+    {
+        if (! $this->freezes->isFrozen($requester)) {
+            throw ValidationException::withMessages([
+                'member' => __('Only frozen members can extend a freeze plan.'),
+            ]);
+        }
+
+        $cycles = (int) ($payload['cycles'] ?? 0);
+
+        if ($cycles < MemberFreezeService::MIN_CYCLES || $cycles > MemberFreezeService::MAX_CYCLES) {
+            throw ValidationException::withMessages([
+                'cycles' => __('Extension must be between :min and :max cycles.', [
+                    'min' => MemberFreezeService::MIN_CYCLES,
+                    'max' => MemberFreezeService::MAX_CYCLES,
+                ]),
             ]);
         }
     }
@@ -240,13 +276,21 @@ class MemberRequestService
             ]);
         }
 
-        try {
-            app(MemberWithdrawalSettlementService::class)->assertWithdrawable($requester);
-        } catch (\InvalidArgumentException $exception) {
+        if ($requester->frozen_at !== null) {
             throw ValidationException::withMessages([
-                'member' => $exception->getMessage(),
+                'member' => __('Unfreeze membership before requesting to leave the fund.'),
             ]);
         }
+
+        $plan = [
+            'reason' => (string) ($payload['reason'] ?? ''),
+            'household_mode' => (string) ($payload['household_mode'] ?? MemberWithdrawalSettlementService::HOUSEHOLD_SELF_ONLY),
+            'permanent_parent_member_id' => $payload['permanent_parent_member_id'] ?? null,
+        ];
+
+        $settlement = app(MemberWithdrawalSettlementService::class);
+        $settlement->validatePlan($requester, $plan);
+        $settlement->assertCanSubmitOrApprove($requester, forApprove: false);
     }
 
     protected function assertNoPendingDuplicate(Member $requester, string $type): void
@@ -284,6 +328,7 @@ class MemberRequestService
                 MemberRequest::TYPE_REQUEST_INDEPENDENCE => $this->applyIndependence($requester),
                 MemberRequest::TYPE_FREEZE_MEMBERSHIP => $this->applyFreezeMembership($requester, $payload, $options),
                 MemberRequest::TYPE_UNFREEZE_MEMBERSHIP => $this->applyUnfreezeMembership($requester),
+                MemberRequest::TYPE_EXTEND_FREEZE_MEMBERSHIP => $this->applyExtendFreezeMembership($requester, $payload),
                 MemberRequest::TYPE_WITHDRAW_MEMBERSHIP => $this->applyWithdrawMembership($requester, $payload, $options),
                 MemberRequest::TYPE_REINSTATE_MEMBERSHIP => $this->applyReinstateMembership($requester, $payload),
                 MemberRequest::TYPE_RELEASE_PAYOUT => $this->applyReleasePayout($requester, $payload),
@@ -412,17 +457,39 @@ class MemberRequestService
             ? MemberFilamentActions::resolveFreezeDate($options['freeze_date'])
             : null;
 
-        $this->statuses->freeze(
-            $member,
-            (string) ($payload['reason'] ?? ''),
-            $freezeDate,
-        );
+        try {
+            $this->freezes->applyFreeze($member, [
+                'cycles' => (int) ($payload['cycles'] ?? 0),
+                'household_mode' => (string) ($payload['household_mode'] ?? MemberFreezeService::HOUSEHOLD_SELF_ONLY),
+                'temporary_parent_member_id' => $payload['temporary_parent_member_id'] ?? null,
+                'reason' => (string) ($payload['reason'] ?? ''),
+            ], $freezeDate, null);
+        } catch (\InvalidArgumentException $exception) {
+            throw ValidationException::withMessages([
+                'member' => $exception->getMessage(),
+            ]);
+        }
     }
 
     protected function applyUnfreezeMembership(Member $member): void
     {
         try {
-            $this->statuses->unfreeze($member);
+            $this->freezes->applyUnfreeze($member);
+        } catch (\InvalidArgumentException $exception) {
+            throw ValidationException::withMessages([
+                'member' => $exception->getMessage(),
+            ]);
+        }
+    }
+
+    protected function applyExtendFreezeMembership(Member $member, array $payload): void
+    {
+        try {
+            $this->freezes->extendFreeze(
+                $member,
+                (int) ($payload['cycles'] ?? 0),
+                (string) ($payload['reason'] ?? ''),
+            );
         } catch (\InvalidArgumentException $exception) {
             throw ValidationException::withMessages([
                 'member' => $exception->getMessage(),
@@ -436,12 +503,23 @@ class MemberRequestService
             ? MemberFilamentActions::resolveWithdrawDate($options['withdraw_date'])
             : null;
 
-        $this->statuses->withdraw(
-            $member,
-            (string) ($payload['reason'] ?? ''),
-            holdPayout: false,
-            withdrawDate: $withdrawDate,
-        );
+        try {
+            $this->statuses->withdraw(
+                $member,
+                (string) ($payload['reason'] ?? ''),
+                holdPayout: false,
+                withdrawDate: $withdrawDate,
+                plan: [
+                    'reason' => (string) ($payload['reason'] ?? ''),
+                    'household_mode' => (string) ($payload['household_mode'] ?? MemberWithdrawalSettlementService::HOUSEHOLD_SELF_ONLY),
+                    'permanent_parent_member_id' => $payload['permanent_parent_member_id'] ?? null,
+                ],
+            );
+        } catch (\InvalidArgumentException $exception) {
+            throw ValidationException::withMessages([
+                'member' => $exception->getMessage(),
+            ]);
+        }
     }
 
     protected function applyReinstateMembership(Member $member, array $payload): void

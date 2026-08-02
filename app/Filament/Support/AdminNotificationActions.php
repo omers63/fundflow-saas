@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Filament\Support;
 
 use App\Filament\Tenant\Resources\CashOutRequests\CashOutRequestResource;
+use App\Filament\Tenant\Resources\FundOutRequests\FundOutRequestResource;
 use App\Filament\Tenant\Resources\MemberRequests\MemberRequestResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\SupportRequests\SupportRequestResource;
 use App\Models\Tenant\CashOutRequest;
+use App\Models\Tenant\FundOutRequest;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\SupportRequest;
@@ -67,6 +69,27 @@ final class AdminNotificationActions
         }
 
         return CashOutRequestResource::listUrl([
+            'status' => ['value' => 'pending'],
+        ]);
+    }
+
+    public static function reviewFundOutRequest(FundOutRequest $request, ?string $label = null): Action
+    {
+        return self::review(
+            $label ?? __('Review request'),
+            self::fundOutRequestUrl($request),
+        );
+    }
+
+    public static function fundOutRequestUrl(FundOutRequest $request): string
+    {
+        $request->loadMissing('member');
+
+        if ($request->member instanceof Member) {
+            return FundOutRequestResource::indexUrlForMember($request->member, 'pending');
+        }
+
+        return FundOutRequestResource::listUrl([
             'status' => ['value' => 'pending'],
         ]);
     }

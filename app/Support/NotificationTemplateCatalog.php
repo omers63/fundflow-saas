@@ -15,6 +15,8 @@ use App\Notifications\Tenant\ContributionLateFeeAppliedNotification;
 use App\Notifications\Tenant\ContributionPostedNotification;
 use App\Notifications\Tenant\DelinquencyDigestNotification;
 use App\Notifications\Tenant\DependentAllocationChangedNotification;
+use App\Notifications\Tenant\FundOutRequestAcceptedNotification;
+use App\Notifications\Tenant\FundOutRequestRejectedNotification;
 use App\Notifications\Tenant\FundPostingAcceptedNotification;
 use App\Notifications\Tenant\FundPostingBankClearedNotification;
 use App\Notifications\Tenant\FundPostingRejectedNotification;
@@ -49,6 +51,7 @@ use App\Notifications\Tenant\MembershipApplicationRejectedNotification;
 use App\Notifications\Tenant\MemberStatusChangedNotification;
 use App\Notifications\Tenant\MonthlyStatementNotification;
 use App\Notifications\Tenant\NewCashOutRequestNotification;
+use App\Notifications\Tenant\NewFundOutRequestNotification;
 use App\Notifications\Tenant\NewFundPostingNotification;
 use App\Notifications\Tenant\NewLoanApplicationNotification;
 use App\Notifications\Tenant\NewLoanEligibilityOverrideRequestNotification;
@@ -665,6 +668,21 @@ MD,
                     'body' => '{{member_name}} طلب {{amount}}.',
                 ],
             ],
+            'new_fund_out_request' => [
+                'audience' => 'admin',
+                'category' => 'operations',
+                'label' => 'New fund-out request (admin)',
+                'variables' => ['member_name', 'amount', 'action_url'],
+                'supported' => $bellPush,
+                'en' => [
+                    'subject' => 'New fund-out request',
+                    'body' => '{{member_name}} requested a fund out of {{amount}}.',
+                ],
+                'ar' => [
+                    'subject' => 'طلب تحويل من الصندوق جديد',
+                    'body' => '{{member_name}} طلب تحويل {{amount}} من الصندوق.',
+                ],
+            ],
             'new_member_cash_transfer_request' => [
                 'audience' => 'admin',
                 'category' => 'operations',
@@ -881,6 +899,14 @@ MD,
                 'key' => 'generic_member_alert',
                 'category' => NotificationPreferenceService::ACCOUNT_ALERTS,
             ],
+            FundOutRequestAcceptedNotification::class => [
+                'key' => 'generic_member_alert',
+                'category' => NotificationPreferenceService::ACCOUNT_ALERTS,
+            ],
+            FundOutRequestRejectedNotification::class => [
+                'key' => 'generic_member_alert',
+                'category' => NotificationPreferenceService::ACCOUNT_ALERTS,
+            ],
             MemberCashTransferAcceptedNotification::class => [
                 'key' => 'generic_member_alert',
                 'category' => NotificationPreferenceService::ACCOUNT_ALERTS,
@@ -1003,6 +1029,10 @@ MD,
             ],
             NewCashOutRequestNotification::class => [
                 'key' => 'new_cash_out_request',
+                'category' => 'operations',
+            ],
+            NewFundOutRequestNotification::class => [
+                'key' => 'new_fund_out_request',
                 'category' => 'operations',
             ],
             NewMemberCashTransferRequestNotification::class => [

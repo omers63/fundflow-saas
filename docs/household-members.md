@@ -57,6 +57,7 @@ This document describes how parent–dependent households, login, and membership
 |------|----------|
 | **Parent not active** | Cannot assign new dependents to that parent |
 | **Parent suspended / withdrawn** | Household login may still reach the picker; only members with **active** status can open the portal. Separated dependents can use **direct login** if their own membership is active |
+| **Parent leaves fund** | Leave-fund plan must **elect a permanent parent** (reassigns `parent_member_id`) or **withdraw all dependents** with full settlement — see `docs/member-status-spec.md` leave-fund v3 |
 | **Removing parent** | Member becomes an independent household head with their own email |
 | **Email changes** | `HouseholdAccessService` handles separating from or rejoining the household |
 | **Circular parent assignment** | Rejected (member cannot be parent of their dependent, etc.) |

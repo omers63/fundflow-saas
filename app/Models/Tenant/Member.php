@@ -56,6 +56,13 @@ class Member extends Model
         'status_reason',
         'status_changed_at',
         'frozen_at',
+        'freeze_cycles_requested',
+        'freeze_cycles_remaining',
+        'freeze_emi_cycles_pushed',
+        'freeze_plan_ended_at',
+        'freeze_household_mode',
+        'freeze_temporary_parent_member_id',
+        'freeze_origin_member_id',
     ];
 
     protected function casts(): array
@@ -72,6 +79,7 @@ class Member extends Model
             'payout_frozen_at' => 'datetime',
             'status_changed_at' => 'datetime',
             'frozen_at' => 'datetime',
+            'freeze_plan_ended_at' => 'datetime',
             'is_separated' => 'boolean',
             'direct_login_enabled' => 'boolean',
         ];

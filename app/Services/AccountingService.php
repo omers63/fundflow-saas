@@ -1976,7 +1976,10 @@ class AccountingService
             throw new InvalidArgumentException(__('Amount must be greater than zero.'));
         }
 
-        if ((int) ($dependent->parent_member_id ?? 0) !== (int) $parent->id) {
+        if (
+            (int) ($dependent->parent_member_id ?? 0) !== (int) $parent->id
+            && ! $this->isTemporaryFreezeFundingSponsor($parent, $dependent)
+        ) {
             throw new InvalidArgumentException(__('Cash can only be transferred to your own dependents.'));
         }
 
@@ -2023,6 +2026,26 @@ class AccountingService
         if ($triggerCollection) {
             $this->triggerMemberCashCollection($dependent->fresh() ?? $dependent);
         }
+    }
+
+    /**
+     * Temporary funding sponsor elected while the legal parent is frozen.
+     */
+    private function isTemporaryFreezeFundingSponsor(Member $sponsor, Member $dependent): bool
+    {
+        $legalParentId = (int) ($dependent->parent_member_id ?? 0);
+
+        if ($legalParentId <= 0) {
+            return false;
+        }
+
+        return Member::query()
+            ->whereKey($legalParentId)
+            ->where('status', 'inactive')
+            ->whereNotNull('frozen_at')
+            ->where('freeze_household_mode', 'temp_parent')
+            ->where('freeze_temporary_parent_member_id', $sponsor->id)
+            ->exists();
     }
 
     /**

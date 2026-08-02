@@ -25,6 +25,10 @@ class MyGuaranteedLoansTable
             $table
                 ->description(__('Loans you guarantee. This list is read-only.'))
                 ->columns([
+                    TextColumn::make('id')
+                        ->label(__('Loan #'))
+                        ->sortable()
+                        ->searchable(),
                     MemberTableColumns::relationNumber()
                         ->label(__('Borrower #')),
                     TextColumn::make('member.name')

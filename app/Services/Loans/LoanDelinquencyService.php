@@ -16,6 +16,7 @@ use App\Support\BusinessDay;
 use App\Support\CollectionInsightsCache;
 use App\Support\InstallmentCollectionStatus;
 use App\Support\LegacyImportedLoan;
+use App\Support\MemberMembershipPolicy;
 use App\Support\TenantRuntimeCache;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -332,9 +333,18 @@ class LoanDelinquencyService
         LoanInstallment::query()
             ->where('status', 'pending')
             ->whereHas('loan', fn ($q) => $q->whereIn('status', ['active', 'transferred']))
-            ->with('loan')
+            ->with(['loan.member'])
             ->each(function (LoanInstallment $installment) use (&$marked, &$loanIds): void {
                 if (! $this->installmentIsPastDeadline($installment)) {
+                    return;
+                }
+
+                $loan = $installment->loan;
+                $borrower = $loan?->member;
+                if (
+                    $borrower instanceof Member
+                    && app(MemberMembershipPolicy::class)->suppressesLoanDelinquency($borrower)
+                ) {
                     return;
                 }
 

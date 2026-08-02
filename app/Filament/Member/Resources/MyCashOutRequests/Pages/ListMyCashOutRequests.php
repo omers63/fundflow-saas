@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyCashOutRequests\Pages;
 
 use App\Filament\Member\Resources\MyCashOutRequests\MyCashOutRequestResource;
-use Filament\Actions\CreateAction;
+use App\Filament\Member\Support\MemberWithdrawalFilamentActions;
 use Filament\Resources\Pages\ListRecords;
 
 class ListMyCashOutRequests extends ListRecords
@@ -14,15 +14,13 @@ class ListMyCashOutRequests extends ListRecords
 
     public function getSubheading(): ?string
     {
-        return __('Request a withdrawal from your cash account to your registered bank account.');
+        return __('Request a cash withdrawal to your registered bank account after admin approval.');
     }
 
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make()
-                ->label(__('Request cash out'))
-                ->icon('heroicon-o-plus-circle'),
+            MemberWithdrawalFilamentActions::requestCashOut(),
         ];
     }
 }

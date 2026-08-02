@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyCashTransfers\Pages;
 
 use App\Filament\Member\Resources\MyCashTransfers\MyCashTransferResource;
-use Filament\Actions\CreateAction;
+use App\Filament\Member\Support\MemberCashTransferFilamentActions;
 use Filament\Resources\Pages\ListRecords;
 
 class ListMyCashTransfers extends ListRecords
@@ -15,8 +15,7 @@ class ListMyCashTransfers extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make()
-                ->label(__('Request transfer')),
+            MemberCashTransferFilamentActions::requestTransfer(),
         ];
     }
 }

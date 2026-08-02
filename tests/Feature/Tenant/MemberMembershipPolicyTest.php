@@ -19,7 +19,23 @@ test('member statuses are simplified to active inactive withdrawn', function () 
         'inactive',
         'withdrawn',
     ])
-        ->and(Member::PORTAL_BLOCKED_STATUSES)->toContain('inactive', 'withdrawn');
+        ->and(Member::PORTAL_BLOCKED_STATUSES)->toBe(['withdrawn']);
+});
+
+test('frozen members may access a read-only portal', function () {
+    $policy = app(MemberMembershipPolicy::class);
+    $member = Member::factory()->make([
+        'status' => 'inactive',
+        'frozen_at' => now(),
+        'monthly_contribution_amount' => 1000,
+    ]);
+
+    expect($policy->canAccessPortal($member))->toBeTrue()
+        ->and($policy->isFrozenReadOnly($member))->toBeTrue()
+        ->and($policy->canMutatePortal($member))->toBeFalse()
+        ->and($policy->canRequestCashOut($member))->toBeFalse()
+        ->and($policy->canRequestFundOut($member))->toBeFalse()
+        ->and($policy->canParticipateInContributionCycles($member))->toBeFalse();
 });
 
 test('membership policy allows active members to contribute', function () {

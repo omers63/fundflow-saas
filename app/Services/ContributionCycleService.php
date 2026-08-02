@@ -1156,6 +1156,7 @@ class ContributionCycleService
         }
 
         $parent->load(['dependents']);
+        $funder = $this->resolveHouseholdFundingMember($parent);
         $currency = Setting::get('general', 'currency', 'USD');
         $totalShortfall = $this->totalDependentShortfallForParentForPeriod($parent, $month, $year);
 
@@ -1167,12 +1168,12 @@ class ContributionCycleService
             ];
         }
 
-        if ($parent->getCashBalance() < $totalShortfall - 0.00001) {
+        if ($funder->getCashBalance() < $totalShortfall - 0.00001) {
             return [
                 'transfers' => 0,
                 'details' => [
                     __('Parent cash (:cash) is insufficient to cover total shortfalls (:total).', [
-                        'cash' => MoneyDisplay::format($parent->getCashBalance(), $currency) ?? '',
+                        'cash' => MoneyDisplay::format($funder->getCashBalance(), $currency) ?? '',
                         'total' => MoneyDisplay::format($totalShortfall, $currency) ?? '',
                     ]),
                 ],
@@ -1210,7 +1211,7 @@ class ContributionCycleService
 
             try {
                 $transferred = $this->transferDependentAllocationTowardFulfillment(
-                    $parent,
+                    $funder,
                     $dependent,
                     $shortfall,
                     $month,
@@ -1318,6 +1319,27 @@ class ContributionCycleService
         } catch (UniqueConstraintViolationException) {
             return 0.0;
         }
+    }
+
+    /**
+     * While a parent is frozen with a temporary funding sponsor, that sponsor funds dependents.
+     */
+    public function resolveHouseholdFundingMember(Member $legalParent): Member
+    {
+        if (
+            $legalParent->status === 'inactive'
+            && $legalParent->frozen_at !== null
+            && $legalParent->freeze_household_mode === 'temp_parent'
+            && $legalParent->freeze_temporary_parent_member_id
+        ) {
+            $sponsor = Member::query()->find($legalParent->freeze_temporary_parent_member_id);
+
+            if ($sponsor instanceof Member) {
+                return $sponsor;
+            }
+        }
+
+        return $legalParent;
     }
 
     private function dependentAllocationDetailLine(Member $dependent, string $message): string

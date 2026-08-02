@@ -3,7 +3,6 @@
 namespace App\Filament\Member\Resources\MyCashOutRequests;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
-use App\Filament\Member\Resources\MyCashOutRequests\Pages\CreateMyCashOutRequest;
 use App\Filament\Member\Resources\MyCashOutRequests\Pages\ListMyCashOutRequests;
 use App\Filament\Member\Resources\MyCashOutRequests\Schemas\MyCashOutRequestForm;
 use App\Filament\Member\Resources\MyCashOutRequests\Tables\MyCashOutRequestsTable;
@@ -34,6 +33,11 @@ class MyCashOutRequestResource extends Resource
 
     protected static ?int $navigationSort = MemberNavigation::SORT_CASH_OUTS;
 
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
     public static function getEloquentQuery(): Builder
     {
         $member = auth('tenant')->user()?->member;
@@ -56,7 +60,6 @@ class MyCashOutRequestResource extends Resource
     {
         return [
             'index' => ListMyCashOutRequests::route('/'),
-            'create' => CreateMyCashOutRequest::route('/create'),
         ];
     }
 }

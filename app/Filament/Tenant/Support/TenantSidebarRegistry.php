@@ -19,6 +19,7 @@ use App\Filament\Tenant\Resources\Accounts\AccountResource;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\CashOutRequests\CashOutRequestResource;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
+use App\Filament\Tenant\Resources\FundOutRequests\FundOutRequestResource;
 use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
 use App\Filament\Tenant\Resources\MasterAccounts\MasterAccountResource;
 use App\Filament\Tenant\Resources\MemberCashTransferRequests\MemberCashTransferRequestResource;
@@ -66,6 +67,7 @@ final class TenantSidebarRegistry
             DelinquencyWorkspacePage::class,
             FundPostingResource::class,
             CashOutRequestResource::class,
+            FundOutRequestResource::class,
             MemberCashTransferRequestResource::class,
             MemberRequestResource::class,
             BankAccountsResource::class,
@@ -93,6 +95,7 @@ final class TenantSidebarRegistry
             Lang::formatUiLabel(__('Delinquency')),
             Lang::formatUiLabel(__('Deposits')),
             Lang::formatUiLabel(__('Cash outs')),
+            Lang::formatUiLabel(__('Fund outs')),
             Lang::formatUiLabel(__('Cash transfers')),
             Lang::formatUiLabel(__('Requests')),
             Lang::formatUiLabel(__('Bank clearing')),

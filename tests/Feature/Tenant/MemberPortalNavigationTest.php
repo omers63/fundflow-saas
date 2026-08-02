@@ -101,10 +101,10 @@ test('legacy member paths redirect to redesigned destinations', function () {
     $this->get('http://'.$this->domain.'/member/my-messages')
         ->assertRedirect('/member/messages?tab=messages');
 
-    $this->get('http://' . $this->domain . '/member/help?tab=messages')
+    $this->get('http://'.$this->domain.'/member/help?tab=messages')
         ->assertRedirect('/member/messages?tab=messages');
 
-    $this->get('http://' . $this->domain . '/member/messages?tab=requests')
+    $this->get('http://'.$this->domain.'/member/messages?tab=requests')
         ->assertRedirect('/member/requests');
 });
 
@@ -157,10 +157,8 @@ test('requests appears in sidebar after statements', function () {
         ->and(RequestsPage::shouldRegisterNavigation())->toBeTrue();
 });
 
-test('deposit create route remains available when list nav is hidden', function () {
+test('deposit create route is removed in favor of list modal', function () {
     Filament::setCurrentPanel('member');
-    $this->actingAs($this->memberUser, 'tenant');
 
-    $this->get('http://'.$this->domain.'/member/'.MyFundPostingResource::getSlug().'/create')
-        ->assertSuccessful();
+    expect(array_keys(MyFundPostingResource::getPages()))->toBe(['index']);
 });

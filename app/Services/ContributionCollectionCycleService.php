@@ -37,6 +37,8 @@ class ContributionCollectionCycleService
 
     public function initializeOpenPeriod(int $month, int $year): int
     {
+        app(MemberFreezeService::class)->onContributionCycleOpened($month, $year);
+
         $period = Contribution::periodDate($month, $year);
         $created = 0;
 

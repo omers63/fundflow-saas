@@ -7,6 +7,7 @@ use App\Filament\Support\LoanDelinquencyHeaderActions;
 use App\Filament\Tenant\Support\TenantPortalActionModal;
 use Filament\Actions\DeleteAction;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\TextInput;
 use Illuminate\Support\Facades\App;
 
 beforeEach(function (): void {
@@ -116,7 +117,37 @@ it('shows progress while the delinquency check confirmation runs', function (): 
         ->and($html)->toContain(__('Running delinquency check. This can take a minute on large funds.'));
 });
 
-it('keeps the modal confirm button distinct from the parent action', function (): void {
+it('marks confirmation modals with fields and ignores empty schemas', function (): void {
+    $withFields = TenantPortalActionModal::applyConfirmation(
+        Action::make('approve_with_date')
+            ->requiresConfirmation()
+            ->schema([
+                TextInput::make('note'),
+            ]),
+    );
+
+    $emptySchema = TenantPortalActionModal::applyConfirmation(
+        Action::make('approve_plain')
+            ->requiresConfirmation()
+            ->schema([]),
+    );
+
+    $noSchema = TenantPortalActionModal::applyConfirmation(
+        Action::make('approve_bare')->requiresConfirmation(),
+    );
+
+    expect((string) $withFields->getExtraModalWindowAttributeBag()->get('class'))
+        ->toContain('ff-confirm-modal-window--with-fields')
+        ->and($withFields->hasFormWrapper())->toBeTrue()
+        ->and((string) $emptySchema->getExtraModalWindowAttributeBag()->get('class'))
+        ->not->toContain('ff-confirm-modal-window--with-fields')
+        ->and($emptySchema->hasFormWrapper())->toBeFalse()
+        ->and((string) $noSchema->getExtraModalWindowAttributeBag()->get('class'))
+        ->not->toContain('ff-confirm-modal-window--with-fields')
+        ->and($noSchema->hasFormWrapper())->toBeFalse();
+});
+
+it('keeps the modal confirm button as a distinct submit action (not the parent)', function (): void {
     $action = Action::make('pause_scheduler')
         ->label(__('Pause scheduler'))
         ->requiresConfirmation()

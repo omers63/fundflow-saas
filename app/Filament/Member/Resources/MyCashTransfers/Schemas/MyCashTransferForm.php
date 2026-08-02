@@ -10,6 +10,7 @@ use App\Services\MemberCashOutService;
 use App\Services\MemberCashTransferService;
 use App\Support\Insights\InsightFormatter;
 use App\Support\Tenant\CurrentMember;
+use Filament\Forms\Components\Component;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -22,69 +23,76 @@ class MyCashTransferForm
 {
     public static function configure(Schema $schema): Schema
     {
-        return $schema
-            ->components([
-                Placeholder::make('availability')
-                    ->label(__('Available to transfer'))
-                    ->content(function (MemberCashTransferService $service): HtmlString {
-                        $member = CurrentMember::get();
-                        $currency = InsightFormatter::currency();
-                        $available = $member !== null ? $service->availableCashForTransfer($member) : 0.0;
-                        $cashBalance = $member?->getCashBalance() ?? 0.0;
-                        $reserved = $member !== null
-                            ? app(MemberCashOutService::class)->reservedForNextEmi($member)
-                            : 0.0;
-                        $availableHtml = MoneyDisplay::html($available, $currency)?->toHtml() ?? '—';
-                        $cashHtml = MoneyDisplay::html($cashBalance, $currency)?->toHtml() ?? '—';
+        return $schema->components(self::components());
+    }
 
-                        $html = '<div class="space-y-1 text-sm">'
-                            .__('Available: :amount', ['amount' => $availableHtml]);
+    /**
+     * @return list<Component>
+     */
+    public static function components(): array
+    {
+        return [
+            Placeholder::make('availability')
+                ->label(__('Available to transfer'))
+                ->content(function (MemberCashTransferService $service): HtmlString {
+                    $member = CurrentMember::get();
+                    $currency = InsightFormatter::currency();
+                    $available = $member !== null ? $service->availableCashForTransfer($member) : 0.0;
+                    $cashBalance = $member?->getCashBalance() ?? 0.0;
+                    $reserved = $member !== null
+                        ? app(MemberCashOutService::class)->reservedForNextEmi($member)
+                        : 0.0;
+                    $availableHtml = MoneyDisplay::html($available, $currency)?->toHtml() ?? '—';
+                    $cashHtml = MoneyDisplay::html($cashBalance, $currency)?->toHtml() ?? '—';
 
-                        if ($reserved > 0.00001) {
-                            $reservedHtml = MoneyDisplay::html($reserved, $currency)?->toHtml() ?? '—';
-                            $html .= '<br><span class="text-gray-500">'
-                                .__('Cash balance: :cash · Next EMI reserved for cash-out only: :reserved', [
-                                    'cash' => $cashHtml,
-                                    'reserved' => $reservedHtml,
-                                ])
-                                .'</span>';
-                        }
+                    $html = '<div class="space-y-1 text-sm">'
+                        .__('Available: :amount', ['amount' => $availableHtml]);
 
-                        $html .= '</div>';
+                    if ($reserved > 0.00001) {
+                        $reservedHtml = MoneyDisplay::html($reserved, $currency)?->toHtml() ?? '—';
+                        $html .= '<br><span class="text-gray-500">'
+                            .__('Cash balance: :cash · Next EMI reserved for cash-out only: :reserved', [
+                                'cash' => $cashHtml,
+                                'reserved' => $reservedHtml,
+                            ])
+                            .'</span>';
+                    }
 
-                        return new HtmlString($html);
-                    }),
-                Select::make('transfer_mode')
-                    ->label(__('Transfer to'))
-                    ->options(fn (): array => self::transferModeOptions())
-                    ->default(fn (): string => self::defaultTransferMode())
-                    ->required()
-                    ->live()
-                    ->native(false),
-                Select::make('to_member_id')
-                    ->label(__('Dependent'))
-                    ->options(fn (): array => self::dependentOptions())
-                    ->required(fn (Get $get): bool => $get('transfer_mode') === 'dependent')
-                    ->visible(fn (Get $get): bool => $get('transfer_mode') === 'dependent')
-                    ->searchable()
-                    ->native(false)
-                    ->helperText(__('Transfers to your dependents are completed immediately — no admin approval.')),
-                TextInput::make('recipient_name')
-                    ->label(__('Recipient member name'))
-                    ->required(fn (Get $get): bool => $get('transfer_mode') !== 'dependent')
-                    ->visible(fn (Get $get): bool => $get('transfer_mode') !== 'dependent')
-                    ->maxLength(255)
-                    ->helperText(__('Enter the full name of the member who should receive the cash. An administrator will confirm the match.')),
-                TextInput::make('amount')
-                    ->label(__('Amount'))
-                    ->numeric()
-                    ->required()
-                    ->minValue(0.01),
-                Textarea::make('notes')
-                    ->label(__('Notes'))
-                    ->rows(2)
-                    ->maxLength(500),
-            ]);
+                    $html .= '</div>';
+
+                    return new HtmlString($html);
+                }),
+            Select::make('transfer_mode')
+                ->label(__('Transfer to'))
+                ->options(fn (): array => self::transferModeOptions())
+                ->default(fn (): string => self::defaultTransferMode())
+                ->required()
+                ->live()
+                ->native(false),
+            Select::make('to_member_id')
+                ->label(__('Dependent'))
+                ->options(fn (): array => self::dependentOptions())
+                ->required(fn (Get $get): bool => $get('transfer_mode') === 'dependent')
+                ->visible(fn (Get $get): bool => $get('transfer_mode') === 'dependent')
+                ->searchable()
+                ->native(false)
+                ->helperText(__('Transfers to your dependents are completed immediately — no admin approval.')),
+            TextInput::make('recipient_name')
+                ->label(__('Recipient member name'))
+                ->required(fn (Get $get): bool => $get('transfer_mode') !== 'dependent')
+                ->visible(fn (Get $get): bool => $get('transfer_mode') !== 'dependent')
+                ->maxLength(255)
+                ->helperText(__('Enter the full name of the member who should receive the cash. An administrator will confirm the match.')),
+            TextInput::make('amount')
+                ->label(__('Amount'))
+                ->numeric()
+                ->required()
+                ->minValue(0.01),
+            Textarea::make('notes')
+                ->label(__('Notes'))
+                ->rows(2)
+                ->maxLength(500),
+        ];
     }
 
     /**

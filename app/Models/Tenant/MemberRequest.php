@@ -33,6 +33,8 @@ class MemberRequest extends Model
 
     public const TYPE_UNFREEZE_MEMBERSHIP = 'unfreeze_membership';
 
+    public const TYPE_EXTEND_FREEZE_MEMBERSHIP = 'extend_freeze_membership';
+
     public const TYPE_WITHDRAW_MEMBERSHIP = 'withdraw_membership';
 
     public const TYPE_REINSTATE_MEMBERSHIP = 'reinstate_membership';
@@ -86,6 +88,7 @@ class MemberRequest extends Model
             self::TYPE_REQUEST_INDEPENDENCE => __('Become independent'),
             self::TYPE_FREEZE_MEMBERSHIP => __('Freeze membership'),
             self::TYPE_UNFREEZE_MEMBERSHIP => __('Unfreeze membership'),
+            self::TYPE_EXTEND_FREEZE_MEMBERSHIP => __('Extend freeze'),
             self::TYPE_WITHDRAW_MEMBERSHIP => __('Leave fund'),
             self::TYPE_REINSTATE_MEMBERSHIP => __('Reinstate membership'),
             self::TYPE_RELEASE_PAYOUT => __('Release payout'),
@@ -147,6 +150,7 @@ class MemberRequest extends Model
             self::TYPE_REQUEST_INDEPENDENCE => self::typeLabel(self::TYPE_REQUEST_INDEPENDENCE),
             self::TYPE_FREEZE_MEMBERSHIP => self::typeLabel(self::TYPE_FREEZE_MEMBERSHIP),
             self::TYPE_UNFREEZE_MEMBERSHIP => self::typeLabel(self::TYPE_UNFREEZE_MEMBERSHIP),
+            self::TYPE_EXTEND_FREEZE_MEMBERSHIP => self::typeLabel(self::TYPE_EXTEND_FREEZE_MEMBERSHIP),
             self::TYPE_WITHDRAW_MEMBERSHIP => self::typeLabel(self::TYPE_WITHDRAW_MEMBERSHIP),
             self::TYPE_REINSTATE_MEMBERSHIP => self::typeLabel(self::TYPE_REINSTATE_MEMBERSHIP),
             self::TYPE_RELEASE_PAYOUT => self::typeLabel(self::TYPE_RELEASE_PAYOUT),
@@ -220,9 +224,12 @@ class MemberRequest extends Model
                 ? ' → '.(string) (int) $payload['requested_amount']
                 : ''),
             self::TYPE_REQUEST_INDEPENDENCE => __('Unlink from household parent'),
-            self::TYPE_FREEZE_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Pause membership'),
+            self::TYPE_FREEZE_MEMBERSHIP => $this->formatFreezePayload($payload),
             self::TYPE_UNFREEZE_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Resume membership'),
-            self::TYPE_WITHDRAW_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Voluntary leave'),
+            self::TYPE_EXTEND_FREEZE_MEMBERSHIP => __('Extend by :cycles cycle(s)', [
+                'cycles' => (int) ($payload['cycles'] ?? 0),
+            ]),
+            self::TYPE_WITHDRAW_MEMBERSHIP => $this->formatWithdrawPayload($payload),
             self::TYPE_REINSTATE_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Request to rejoin'),
             self::TYPE_RELEASE_PAYOUT => trim((string) ($payload['reason'] ?? '')) ?: __('Request payout release'),
             self::TYPE_OPEN_CYCLE_CONTRIBUTION => $this->formatOpenCycleContributionPayload($payload),
@@ -259,6 +266,56 @@ class MemberRequest extends Model
 
         if (filled($payload['note'] ?? null)) {
             $parts[] = (string) $payload['note'];
+        }
+
+        return implode(' · ', $parts);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function formatFreezePayload(array $payload): string
+    {
+        $cycles = (int) ($payload['cycles'] ?? 0);
+        $mode = (string) ($payload['household_mode'] ?? 'self_only');
+        $modeLabel = match ($mode) {
+            'include_dependents' => __('freeze dependents'),
+            'temp_parent' => __('temporary funding parent'),
+            default => __('self only'),
+        };
+        $reason = trim((string) ($payload['reason'] ?? ''));
+
+        $parts = [
+            __(':cycles cycle(s)', ['cycles' => $cycles]),
+            $modeLabel,
+        ];
+
+        if ($reason !== '') {
+            $parts[] = $reason;
+        }
+
+        return implode(' · ', $parts);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function formatWithdrawPayload(array $payload): string
+    {
+        $mode = (string) ($payload['household_mode'] ?? 'self_only');
+        $modeLabel = match ($mode) {
+            'include_dependents' => __('withdraw dependents'),
+            'permanent_parent' => __('permanent household parent'),
+            default => __('self only'),
+        };
+        $reason = trim((string) ($payload['reason'] ?? ''));
+
+        $parts = [$modeLabel];
+
+        if ($reason !== '') {
+            $parts[] = $reason;
+        } else {
+            $parts[] = __('Voluntary leave');
         }
 
         return implode(' · ', $parts);

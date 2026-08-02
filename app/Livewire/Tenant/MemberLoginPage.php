@@ -489,7 +489,7 @@ class MemberLoginPage extends Component
         if ($member->status === 'inactive') {
             if ($member->frozen_at !== null) {
                 $this->statusType = 'inactive';
-                $this->statusMessage = __('Your membership is inactive (frozen). Member portal access is paused until your account is unfrozen.');
+                $this->statusMessage = __('Your membership is frozen. Sign in for a read-only portal to review status and request unfreeze, or submit an unfreeze request below.');
                 $this->enableStatusRequestForm($member, $user);
 
                 return;

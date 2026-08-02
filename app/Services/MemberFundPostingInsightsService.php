@@ -63,7 +63,7 @@ final class MemberFundPostingInsightsService
             'pending_amount' => InsightFormatter::money($pendingAmount),
             'accepted_amount' => InsightFormatter::money($acceptedAmount),
             'deposits_url' => MyFundPostingResource::getUrl('index'),
-            'create_url' => MyFundPostingResource::getUrl('create'),
+            'create_url' => MyFundPostingResource::getUrl('index'),
             'recent' => $recent,
             'sparkline' => $this->monthlySparkline($member),
         ];

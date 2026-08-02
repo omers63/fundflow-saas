@@ -17,6 +17,7 @@ use App\Services\Loans\LoanEligibilityService;
 use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Services\MemberAnnualSubscriptionFeeService;
 use App\Services\MemberCashOutService;
+use App\Services\MemberFreezeService;
 use App\Services\MemberStatusService;
 use App\Services\MemberWithdrawalSettlementService;
 use App\Services\Tenant\DirectMessagingService;
@@ -42,8 +43,8 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
+use Filament\Support\Enums\Width;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use Livewire\Component;
 
@@ -464,20 +465,32 @@ final class MemberFilamentActions
             ->color('warning')
             ->visible(fn (Member $record): bool => $record->status === 'active')
             ->requiresConfirmation()
-            ->modalDescription(__('Pauses membership. Portal access and contribution cycles stop. Loan repayments continue until unfrozen.'))
+            ->modalHeading(__('Freeze membership'))
+            ->modalDescription(__('Pauses contributions and cash-out. Portal becomes read-only. Loan EMIs shift one cycle per planned freeze cycle. Guarantor replacements must be accepted first if this member guarantees others.'))
+            ->modalWidth('2xl')
+            ->extraModalWindowAttributes([
+                'class' => 'ff-tenant-form-modal-window ff-freeze-modal',
+            ])
+            ->fillForm(fn (Member $record): array => [
+                'cycles' => 1,
+                'household_mode' => MemberFreezeService::HOUSEHOLD_SELF_ONLY,
+                'freeze_date' => BusinessDay::today()->toDateString(),
+            ])
             ->schema(fn (Member $record): array => self::freezeFormSchema($record))
-            ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
-                $cashOutFund = (bool) ($data['cash_out_fund'] ?? false);
-
+            ->action(function (Member $record, array $data, Action $action, Component $livewire): void {
                 if (
                     ! ActionModalFailure::attemptThrowable(
                         $action,
-                        fn () => $statuses->freeze(
+                        fn () => app(MemberFreezeService::class)->applyFreeze(
                             $record,
-                            (string) ($data['reason'] ?? ''),
+                            [
+                                'cycles' => (int) ($data['cycles'] ?? 0),
+                                'household_mode' => (string) ($data['household_mode'] ?? MemberFreezeService::HOUSEHOLD_SELF_ONLY),
+                                'temporary_parent_member_id' => $data['temporary_parent_member_id'] ?? null,
+                                'reason' => (string) ($data['reason'] ?? ''),
+                            ],
                             self::resolveFreezeDate($data['freeze_date'] ?? null),
-                            $cashOutFund,
-                            auth('tenant')->id(),
+                            auth('tenant')->user(),
                         ),
                         __('Cannot freeze'),
                     )
@@ -485,46 +498,26 @@ final class MemberFilamentActions
                     return;
                 }
 
-                $notification = Notification::make()
+                Notification::make()
                     ->title(__('Member frozen'))
-                    ->success();
-
-                if ($cashOutFund) {
-                    $notification->body(__('Fund balance was moved to cash and the cash-out was posted on the freeze date.'));
-                }
-
-                $notification->send();
+                    ->success()
+                    ->send();
                 self::refreshMembersList($livewire);
             });
     }
 
     /**
-     * @return list<Textarea|DatePicker|Placeholder|Toggle>
+     * @return list<\Filament\Schemas\Components\Component>
      */
     public static function freezeFormSchema(Member $record): array
     {
-        $fields = [
-            Textarea::make('reason')
-                ->label(__('Reason'))
-                ->rows(3)
-                ->maxLength(500),
-            self::freezeDateField(),
-        ];
+        $freezes = app(MemberFreezeService::class);
 
-        if (self::canOfferFundCashOutOnFreeze($record)) {
-            $fields[] = Placeholder::make('fund_balance')
-                ->label(__('Fund balance'))
-                ->content(fn (): string => MoneyDisplay::format(
-                    $record->getFundBalance(),
-                    Setting::get('general', 'currency', 'USD'),
-                ) ?? '—');
-            $fields[] = Toggle::make('cash_out_fund')
-                ->label(__('Cash out fund balance'))
-                ->helperText(__('Moves the member\'s fund balance to cash and records the cash-out on the freeze date. Match the bank line when the transfer clears.'))
-                ->default(false);
-        }
-
-        return $fields;
+        return MemberFreezeFormSchema::requestSections(
+            $record,
+            $freezes->blockingReasons($record, forApprove: true),
+            includeFreezeDate: true,
+        );
     }
 
     public static function freezeDateField(): DatePicker
@@ -560,11 +553,11 @@ final class MemberFilamentActions
             ->visible(fn (Member $record): bool => $record->status === 'inactive' && $record->frozen_at !== null)
             ->requiresConfirmation()
             ->modalDescription(__('Restores membership to active status.'))
-            ->action(function (Member $record, Action $action, MemberStatusService $statuses, Component $livewire): void {
+            ->action(function (Member $record, Action $action, Component $livewire): void {
                 if (
                     ! ActionModalFailure::attemptThrowable(
                         $action,
-                        fn () => $statuses->unfreeze($record),
+                        fn () => app(MemberFreezeService::class)->applyUnfreeze($record),
                         __('Cannot unfreeze'),
                     )
                 ) {
@@ -610,8 +603,21 @@ final class MemberFilamentActions
             ->visible(fn (Member $record): bool => self::isTenantAdmin()
                 && $record->status !== 'withdrawn')
             ->modalHeading(__('Withdraw member'))
-            ->modalDescription(__('Ends membership. Active loans are early-settled from cash and fund, then remaining balances are submitted as a pending cash-out unless payout is held for review.'))
+            ->modalDescription(__('Ends membership. Active loans are early-settled from cash and fund, then residual cash is auto cash-out accepted unless payout is held for review.'))
+            ->modalWidth(Width::TwoExtraLarge)
             ->schema(fn (Member $record): array => self::withdrawFormSchema($record))
+            ->fillForm(function (Member $record): array {
+                $hasDependents = $record->isParent()
+                    && $record->dependents()->where('status', 'active')->exists();
+
+                return [
+                    'household_mode' => $hasDependents
+                        ? MemberWithdrawalSettlementService::HOUSEHOLD_INCLUDE_DEPENDENTS
+                        : MemberWithdrawalSettlementService::HOUSEHOLD_SELF_ONLY,
+                    'withdraw_date' => BusinessDay::today()->toDateString(),
+                    'hold_payout' => false,
+                ];
+            })
             ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
                 if (
                     ! ActionModalFailure::attemptThrowable(
@@ -621,6 +627,11 @@ final class MemberFilamentActions
                             (string) ($data['reason'] ?? ''),
                             (bool) ($data['hold_payout'] ?? false),
                             self::resolveWithdrawDate($data['withdraw_date'] ?? null),
+                            [
+                                'reason' => (string) ($data['reason'] ?? ''),
+                                'household_mode' => (string) ($data['household_mode'] ?? MemberWithdrawalSettlementService::HOUSEHOLD_SELF_ONLY),
+                                'permanent_parent_member_id' => $data['permanent_parent_member_id'] ?? null,
+                            ],
                         ),
                         __('Cannot withdraw'),
                     )
@@ -634,61 +645,18 @@ final class MemberFilamentActions
     }
 
     /**
-     * @return list<Placeholder|Textarea|Toggle>
+     * @return list<\Filament\Schemas\Components\Component|\Filament\Forms\Components\Component>
      */
     public static function withdrawFormSchema(Member $member): array
     {
-        return [
-            Placeholder::make('withdrawal_summary')
-                ->label(__('Withdrawal summary'))
-                ->content(function () use ($member): HtmlString {
-                    $assessment = app(MemberWithdrawalSettlementService::class)->assess($member);
+        $settlement = app(MemberWithdrawalSettlementService::class);
 
-                    $lines = [
-                        __('Active loans to settle: :count', ['count' => $assessment['active_loan_count']]),
-                        __('Settlement cash required: :amount', ['amount' => number_format($assessment['settlement_required_cash'], 2)]),
-                        __('Member cash balance: :amount', ['amount' => number_format($assessment['member_cash_balance'], 2)]),
-                        __('Member fund balance: :amount', ['amount' => number_format($assessment['member_fund_balance'], 2)]),
-                        __('Projected cash-out: :amount', ['amount' => number_format($assessment['projected_cash_out'], 2)]),
-                    ];
-
-                    if ($assessment['pipeline_loan_count'] > 0) {
-                        $lines[] = __('Open loan applications: :count', ['count' => $assessment['pipeline_loan_count']]);
-                    }
-
-                    if ($assessment['guarantor_obligation_count'] > 0) {
-                        $lines[] = __('Active guarantor obligations: :count', ['count' => $assessment['guarantor_obligation_count']]);
-                    }
-
-                    $html = '<ul class="list-disc space-y-1 ps-4 text-sm">';
-
-                    foreach ($lines as $line) {
-                        $html .= '<li>'.e($line).'</li>';
-                    }
-
-                    if ($assessment['blockers'] !== []) {
-                        $html .= '</ul><ul class="mt-2 list-disc space-y-1 ps-4 text-sm text-danger-600 dark:text-danger-400">';
-
-                        foreach ($assessment['blockers'] as $blocker) {
-                            $html .= '<li>'.e($blocker).'</li>';
-                        }
-                    }
-
-                    $html .= '</ul>';
-
-                    return new HtmlString($html);
-                })
-                ->columnSpanFull(),
-            Textarea::make('reason')
-                ->label(__('Reason'))
-                ->rows(3)
-                ->maxLength(500),
-            self::withdrawDateField(),
-            Toggle::make('hold_payout')
-                ->label(__('Hold payout for admin review'))
-                ->helperText(__('Settles loans but keeps balances in the member account until payout is released.'))
-                ->default(false),
-        ];
+        return MemberWithdrawFormSchema::requestSections(
+            $member,
+            $settlement->blockingReasons($member, forApprove: true),
+            includeWithdrawDate: true,
+            includeHoldPayout: true,
+        );
     }
 
     public static function withdrawDateField(): DatePicker
@@ -794,10 +762,18 @@ final class MemberFilamentActions
             ->modalHeading(__('Withdraw member'))
             ->modalDescription(__('Ends membership and holds payout for admin review after loan settlement.'))
             ->schema(fn (Member $record): array => self::withdrawFormSchema($record))
-            ->fillForm(fn (): array => [
-                'hold_payout' => true,
-                'withdraw_date' => BusinessDay::today()->toDateString(),
-            ])
+            ->fillForm(function (Member $record): array {
+                $hasDependents = $record->isParent()
+                    && $record->dependents()->where('status', 'active')->exists();
+
+                return [
+                    'household_mode' => $hasDependents
+                        ? MemberWithdrawalSettlementService::HOUSEHOLD_INCLUDE_DEPENDENTS
+                        : MemberWithdrawalSettlementService::HOUSEHOLD_SELF_ONLY,
+                    'hold_payout' => true,
+                    'withdraw_date' => BusinessDay::today()->toDateString(),
+                ];
+            })
             ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {
                 if (
                     ! ActionModalFailure::attemptThrowable(
@@ -807,6 +783,11 @@ final class MemberFilamentActions
                             (string) ($data['reason'] ?? ''),
                             true,
                             self::resolveWithdrawDate($data['withdraw_date'] ?? null),
+                            [
+                                'reason' => (string) ($data['reason'] ?? ''),
+                                'household_mode' => (string) ($data['household_mode'] ?? MemberWithdrawalSettlementService::HOUSEHOLD_SELF_ONLY),
+                                'permanent_parent_member_id' => $data['permanent_parent_member_id'] ?? null,
+                            ],
                         ),
                         __('Cannot withdraw'),
                     )
@@ -1004,8 +985,9 @@ final class MemberFilamentActions
             ->icon('heroicon-o-pause-circle')
             ->color('warning')
             ->requiresConfirmation()
-            ->modalDescription(__('Pauses selected active members. Portal access and contribution cycles stop.'))
-            ->action(function (Collection $records, MemberStatusService $statuses, Component $livewire): void {
+            ->modalDescription(__('Freezes selected active members for a 1-cycle plan (self only). Members with blockers are skipped.'))
+            ->action(function (Collection $records, Component $livewire): void {
+                $freezes = app(MemberFreezeService::class);
                 $frozen = 0;
                 $failed = 0;
 
@@ -1015,7 +997,11 @@ final class MemberFilamentActions
                     }
 
                     try {
-                        $statuses->freeze($record);
+                        $freezes->applyFreeze($record, [
+                            'cycles' => 1,
+                            'household_mode' => MemberFreezeService::HOUSEHOLD_SELF_ONLY,
+                            'reason' => __('Bulk freeze'),
+                        ]);
                         $frozen++;
                     } catch (\Throwable) {
                         $failed++;
@@ -1352,7 +1338,7 @@ final class MemberFilamentActions
             ->color('danger')
             ->visible(fn (): bool => self::isTenantAdmin())
             ->modalHeading(__('Withdraw selected members'))
-            ->modalDescription(__('Early-settles active loans and submits pending cash-out requests for remaining balances.'))
+            ->modalDescription(__('Early-settles active loans and auto-accepts cash-out for remaining balances (or holds payout). Parents with dependents withdraw the household.'))
             ->schema([
                 Textarea::make('reason')
                     ->label(__('Reason'))
@@ -1376,8 +1362,16 @@ final class MemberFilamentActions
                         continue;
                     }
 
+                    $hasDependents = $record->isParent()
+                        && $record->dependents()->where('status', 'active')->exists();
+
                     try {
-                        $statuses->withdraw($record, $reason, $holdPayout, $withdrawAt);
+                        $statuses->withdraw($record, $reason, $holdPayout, $withdrawAt, [
+                            'reason' => $reason,
+                            'household_mode' => $hasDependents
+                                ? MemberWithdrawalSettlementService::HOUSEHOLD_INCLUDE_DEPENDENTS
+                                : MemberWithdrawalSettlementService::HOUSEHOLD_SELF_ONLY,
+                        ]);
                         $withdrawn++;
                     } catch (\Throwable) {
                         $failed++;

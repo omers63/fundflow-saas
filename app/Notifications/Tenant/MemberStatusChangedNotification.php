@@ -17,6 +17,7 @@ class MemberStatusChangedNotification extends Notification
         public readonly string $status,
         public readonly string $title,
         public readonly string $body,
+        public readonly ?string $url = null,
     ) {}
 
     /**
@@ -45,6 +46,7 @@ class MemberStatusChangedNotification extends Notification
             'member_name' => $this->member->name,
             'icon' => 'heroicon-o-user-circle',
             'color' => $color,
+            'url' => $this->url,
         ];
     }
 }

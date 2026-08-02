@@ -190,7 +190,7 @@ final class MemberPortalAccountsInsightsService
                 'fund' => MyAccountResource::listUrl('fund'),
                 'loans' => MyAccountResource::listUrl('loans'),
                 'deposits' => MyFundPostingResource::getUrl('index'),
-                'deposits_create' => MyFundPostingResource::getUrl('create'),
+                'deposits_create' => MyFundPostingResource::getUrl('index'),
                 'contributions' => MyContributionResource::getUrl('index'),
                 'loans_resource' => MyLoanResource::getUrl('index'),
                 'active_loan' => $activeLoan
@@ -257,7 +257,7 @@ final class MemberPortalAccountsInsightsService
                 'title' => __('Top up your cash account'),
                 'subtitle' => __('Submit a deposit to cover contributions or loan repayments.'),
                 'cta_label' => __('New deposit'),
-                'cta_url' => MyFundPostingResource::getUrl('create'),
+                'cta_url' => MyFundPostingResource::getUrl('index'),
             ];
         }
 

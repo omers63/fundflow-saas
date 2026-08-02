@@ -4,6 +4,7 @@ namespace App\Models\Tenant;
 
 use App\Support\AppLocale;
 use App\Support\LocalizationSettings;
+use App\Support\MemberMembershipPolicy;
 use App\Support\MemberNotificationChannels;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasAvatar;
@@ -80,8 +81,11 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         if ($panel->getId() === 'member') {
             $member = $this->activeMember();
 
-            return $member !== null
-                && ! in_array($member->status, Member::PORTAL_BLOCKED_STATUSES, true);
+            if ($member === null) {
+                return false;
+            }
+
+            return ! app(MemberMembershipPolicy::class)->isPortalAccessBlocked($member);
         }
 
         return false;

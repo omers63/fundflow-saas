@@ -3,7 +3,7 @@
 namespace App\Filament\Member\Resources\MyFundPostings\Pages;
 
 use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
-use Filament\Actions\CreateAction;
+use App\Filament\Member\Support\MemberDepositFilamentActions;
 use Filament\Resources\Pages\ListRecords;
 
 class ListMyFundPostings extends ListRecords
@@ -18,9 +18,7 @@ class ListMyFundPostings extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make()
-                ->label(__('New deposit'))
-                ->icon('heroicon-o-plus-circle'),
+            MemberDepositFilamentActions::requestDeposit(),
         ];
     }
 }

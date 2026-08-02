@@ -1022,7 +1022,7 @@ final class MemberPortalInsightsService
                 'label' => __('New deposit'),
                 'subtitle' => __('Submit a fund posting'),
                 'description' => __('Submit a fund posting'),
-                'url' => MyFundPostingResource::getUrl('create'),
+                'url' => MyFundPostingResource::getUrl('index'),
                 'icon' => 'heroicon-o-plus-circle',
                 'tone' => 'deposit',
                 'badge' => null,
@@ -1514,7 +1514,7 @@ final class MemberPortalInsightsService
                 ],
                 [
                     'label' => __('Cash out'),
-                    'url' => MyCashOutRequestResource::getUrl('create'),
+                    'url' => MyCashOutRequestResource::getUrl('index'),
                     'icon' => 'heroicon-o-arrow-up-tray',
                 ],
                 [

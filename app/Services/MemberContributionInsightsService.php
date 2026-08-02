@@ -228,7 +228,7 @@ final class MemberContributionInsightsService
                     : null,
                 'posted_this_cycle' => $postedThisCycle,
                 'contributions_url' => $baseUrl,
-                'deposits_url' => MyFundPostingResource::getUrl('create'),
+                'deposits_url' => MyFundPostingResource::getUrl('index'),
                 'cash_account_url' => $member->cashAccount
                     ? MyAccountResource::getUrl('view', ['record' => $member->cashAccount])
                     : MyAccountResource::getUrl('index'),
@@ -323,7 +323,7 @@ final class MemberContributionInsightsService
                 'title' => __('Top up cash for :period', ['period' => $openPeriodLabel]),
                 'subtitle' => __('Need :amount more in your cash account', ['amount' => InsightFormatter::money($cashShortfall)]),
                 'cta_label' => __('Submit deposit'),
-                'cta_url' => MyFundPostingResource::getUrl('create'),
+                'cta_url' => MyFundPostingResource::getUrl('index'),
             ];
         }
 
@@ -335,7 +335,7 @@ final class MemberContributionInsightsService
                 'title' => __(':period is overdue', ['period' => $openPeriodLabel]),
                 'subtitle' => __('Post or deposit before fees accrue'),
                 'cta_label' => __('Submit deposit'),
-                'cta_url' => MyFundPostingResource::getUrl('create'),
+                'cta_url' => MyFundPostingResource::getUrl('index'),
             ];
         }
 

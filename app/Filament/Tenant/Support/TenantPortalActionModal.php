@@ -34,15 +34,15 @@ final class TenantPortalActionModal
         $parent = $action;
 
         $action = $parent
-            ->modalAutofocus(fn(): bool => !self::shouldStyle())
-            ->formWrapper(fn(): bool => self::shouldStyle()
+            ->modalAutofocus(fn (): bool => ! self::shouldStyle())
+            ->formWrapper(fn (): bool => self::shouldStyle()
                 ? self::hasFormFields($parent)
                 : true)
-            ->modalWidth(fn(): Width|string => self::shouldStyle()
+            ->modalWidth(fn (): Width|string => self::shouldStyle()
                 ? self::confirmationModalWidth($parent)
                 : Width::Medium)
             ->extraModalWindowAttributes(
-                fn(): array => self::shouldStyle()
+                fn (): array => self::shouldStyle()
                 ? ['class' => self::confirmWindowClasses($parent)]
                 : [],
                 merge: true,
@@ -60,7 +60,7 @@ final class TenantPortalActionModal
 
     private static function decorateConfirmSubmit(Action $submit, Action $parent): Action
     {
-        if (!self::shouldStyle()) {
+        if (! self::shouldStyle()) {
             return $submit;
         }
 
@@ -79,7 +79,7 @@ final class TenantPortalActionModal
         }
 
         return $action->modalContentFooter(
-            fn(Action $action): ?View => self::shouldStyle() && self::shouldShowProgress($action)
+            fn (Action $action): ?View => self::shouldStyle() && self::shouldShowProgress($action)
             ? self::progressFooterView($action)
             : null,
         );
@@ -155,7 +155,7 @@ final class TenantPortalActionModal
         $classes = [
             'ff-confirm-modal-window',
             'ff-confirm-modal-window--native',
-            'ff-confirm-modal-window--' . self::confirmationTone($action),
+            'ff-confirm-modal-window--'.self::confirmationTone($action),
         ];
 
         if (self::shouldShowProgress($action)) {
@@ -186,6 +186,29 @@ final class TenantPortalActionModal
             $action,
         )();
 
-        return $schema !== null;
+        if ($schema === null) {
+            return false;
+        }
+
+        $resolved = $schema;
+
+        if ($schema instanceof \Closure) {
+            try {
+                $resolved = $action->evaluate($schema);
+            } catch (\Throwable) {
+                // Closure needs Livewire/record context — treat as having fields.
+                return true;
+            }
+        }
+
+        if ($resolved === null) {
+            return false;
+        }
+
+        if (is_array($resolved)) {
+            return $resolved !== [];
+        }
+
+        return true;
     }
 }

@@ -12,6 +12,7 @@ use App\Filament\Tenant\Resources\Accounts\AccountResource;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\CashOutRequests\CashOutRequestResource;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
+use App\Filament\Tenant\Resources\FundOutRequests\FundOutRequestResource;
 use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
 use App\Filament\Tenant\Resources\LoanEligibilityOverrideRequests\LoanEligibilityOverrideRequestResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
@@ -69,7 +70,7 @@ final class TenantDashboardService
         return TenantRuntimeCache::remember(
             'tenant_dashboard_snapshot',
             60,
-            fn(): array => array_merge($this->buildCoreSnapshot(), $this->buildDetailsSnapshot()),
+            fn (): array => array_merge($this->buildCoreSnapshot(), $this->buildDetailsSnapshot()),
         );
     }
 
@@ -83,7 +84,7 @@ final class TenantDashboardService
         return TenantRuntimeCache::remember(
             'tenant_dashboard_core',
             60,
-            fn(): array => $this->buildCoreSnapshot(),
+            fn (): array => $this->buildCoreSnapshot(),
         );
     }
 
@@ -97,7 +98,7 @@ final class TenantDashboardService
         return TenantRuntimeCache::remember(
             'tenant_dashboard_details',
             60,
-            fn(): array => $this->buildDetailsSnapshot(),
+            fn (): array => $this->buildDetailsSnapshot(),
         );
     }
 
@@ -202,7 +203,7 @@ final class TenantDashboardService
     {
         $now = BusinessDay::now();
         $masters = Account::master()->get()->keyBy('type');
-        $masterBalance = fn(string $type): float => (float) ($masters->get($type)?->balance ?? 0);
+        $masterBalance = fn (string $type): float => (float) ($masters->get($type)?->balance ?? 0);
         $loanPortfolio = $this->loanInsights->dashboardPortfolioSlice();
         $treasuryForecast = $this->treasuryForecasts->snapshot();
         $delinquencyCounts = $this->delinquency->digestCounts();
@@ -1260,6 +1261,7 @@ final class TenantDashboardService
                     ['label' => Lang::ui('Bank workspace'), 'icon' => 'heroicon-o-building-office-2', 'url' => BankAccountsResource::getUrl('index')],
                     ['label' => Lang::ui('Deposits'), 'icon' => 'heroicon-o-inbox-arrow-down', 'url' => FundPostingResource::getUrl('index')],
                     ['label' => Lang::ui('Cash outs'), 'icon' => 'heroicon-o-arrow-up-tray', 'url' => CashOutRequestResource::getUrl('index')],
+                    ['label' => Lang::ui('Fund outs'), 'icon' => 'heroicon-o-arrow-right-circle', 'url' => FundOutRequestResource::getUrl('index')],
                 ],
             ],
             [

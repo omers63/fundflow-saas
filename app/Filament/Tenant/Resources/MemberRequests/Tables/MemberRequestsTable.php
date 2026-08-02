@@ -137,14 +137,15 @@ final class MemberRequestsTable
                                 ->label(__('Reject selected'))
                                 ->icon('heroicon-o-x-circle')
                                 ->color('danger')
+                                ->requiresConfirmation()
+                                ->modalHeading(__('Reject selected requests'))
+                                ->modalDescription(__('The note below is stored on each selected row that is still pending. Other rows are skipped.'))
                                 ->schema([
                                     Textarea::make('admin_note')
                                         ->label(__('Note to members (optional)'))
                                         ->rows(3)
                                         ->maxLength(2000),
                                 ])
-                                ->modalHeading(__('Reject selected requests'))
-                                ->modalDescription(__('The note below is stored on each selected row that is still pending. Other rows are skipped.'))
                                 ->action(function (Collection $records, array $data): void {
                                     $service = app(MemberRequestService::class);
                                     $admin = auth('tenant')->user();

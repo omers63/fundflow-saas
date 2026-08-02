@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyAccounts\Pages;
 
 use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
-use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
+use App\Filament\Member\Support\MemberDepositFilamentActions;
 use App\Models\Tenant\Loan;
-use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
 use Illuminate\Contracts\Support\Htmlable;
@@ -61,11 +60,7 @@ class ListMyAccounts extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('newDeposit')
-                ->label(__('New deposit'))
-                ->icon('heroicon-o-plus-circle')
-                ->color('primary')
-                ->url(MyFundPostingResource::getUrl('create')),
+            MemberDepositFilamentActions::requestDeposit(),
         ];
     }
 

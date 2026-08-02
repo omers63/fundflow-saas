@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyCashTransfers;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
-use App\Filament\Member\Resources\MyCashTransfers\Pages\CreateMyCashTransfer;
 use App\Filament\Member\Resources\MyCashTransfers\Pages\ListMyCashTransfers;
 use App\Filament\Member\Resources\MyCashTransfers\Schemas\MyCashTransferForm;
 use App\Filament\Member\Resources\MyCashTransfers\Tables\MyCashTransfersTable;
@@ -57,11 +56,15 @@ class MyCashTransferResource extends Resource
         return MyCashTransfersTable::configure($table);
     }
 
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
     public static function getPages(): array
     {
         return [
             'index' => ListMyCashTransfers::route('/'),
-            'create' => CreateMyCashTransfer::route('/create'),
         ];
     }
 }

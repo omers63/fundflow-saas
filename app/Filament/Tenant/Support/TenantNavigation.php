@@ -38,9 +38,11 @@ final class TenantNavigation
 
     public const SORT_CASH_OUTS = 18;
 
-    public const SORT_CASH_TRANSFERS = 19;
+    public const SORT_FUND_OUTS = 19;
 
-    public const SORT_MEMBER_REQUESTS = 20;
+    public const SORT_CASH_TRANSFERS = 20;
+
+    public const SORT_MEMBER_REQUESTS = 21;
 
     /** Consolidated sidebar — Finance */
     public const SORT_BANK_CLEARING = 10;

@@ -10,6 +10,7 @@ use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\MemberStatusService;
 use App\Services\Tenant\MemberRequestService;
+use App\Support\MemberMembershipPolicy;
 use Livewire\Livewire;
 use Tests\Concerns\InitializesTenancy;
 
@@ -55,34 +56,26 @@ beforeEach(function () {
     ]);
 });
 
-test('frozen member can request unfreeze from login without portal session', function () {
+test('frozen member logs into read-only portal', function () {
     app(MemberStatusService::class)->freeze($this->member, 'Travel');
 
     expect($this->member->fresh()->status)->toBe('inactive')
         ->and($this->member->fresh()->frozen_at)->not->toBeNull();
 
-    $component = Livewire::test(MemberLoginPage::class)
+    Livewire::test(MemberLoginPage::class)
         ->set('email', 'blocked@fund.test')
         ->set('password', 'password')
         ->call('login')
-        ->assertSet('statusType', 'inactive')
-        ->assertSet('showStatusRequestForm', true)
-        ->assertSet('statusRequestType', MemberRequest::TYPE_UNFREEZE_MEMBERSHIP)
-        ->assertNoRedirect();
+        ->assertRedirect();
 
-    expect(auth('tenant')->check())->toBeFalse();
+    expect(auth('tenant')->check())->toBeTrue()
+        ->and(app(MemberMembershipPolicy::class)->isFrozenReadOnly($this->member->fresh()))->toBeTrue();
 
-    $component
-        ->set('statusRequestReason', 'Back from travel')
-        ->call('submitStatusRequest')
-        ->assertSet('statusRequestSuccess', __('Request submitted. Fund administration will review it shortly.'));
-
-    $request = MemberRequest::query()->first();
-
-    expect($request)->not->toBeNull()
-        ->and($request->type)->toBe(MemberRequest::TYPE_UNFREEZE_MEMBERSHIP)
-        ->and($request->status)->toBe(MemberRequest::STATUS_PENDING)
-        ->and($request->requester_member_id)->toBe($this->member->id);
+    $request = app(MemberRequestService::class)->submit(
+        $this->member->fresh(),
+        MemberRequest::TYPE_UNFREEZE_MEMBERSHIP,
+        ['reason' => 'Back from travel'],
+    );
 
     app(MemberRequestService::class)->approve($request->fresh(), $this->admin);
 

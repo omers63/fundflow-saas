@@ -73,6 +73,8 @@ test('guaranteed loans list table has no row navigation or mutating actions', fu
     Livewire::test(ListMyGuaranteedLoans::class)
         ->assertSuccessful()
         ->assertSee('Borrower List Member')
+        ->assertSee((string) $this->guaranteedLoan->id)
+        ->assertTableColumnExists('id')
         ->assertTableActionDoesNotExist('edit')
         ->assertTableActionDoesNotExist('delete')
         ->assertTableActionDoesNotExist('view');

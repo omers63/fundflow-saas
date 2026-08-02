@@ -5,6 +5,7 @@
 @import '../portal-topbar-shortcuts.css';
 @import '../portal-bottom-bar.css';
 @import '../confirm-modals.css';
+@import '../freeze-membership.css';
 @import './tenant-portal-components.css';
 
 @source '../../../../vendor/bezhansalleh/filament-language-switch/resources/views/**/*.blade.php';

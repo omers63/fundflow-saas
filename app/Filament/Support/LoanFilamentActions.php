@@ -14,6 +14,7 @@ use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanAdminTransferService;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanEarlySettlementService;
+use App\Services\Loans\LoanGuarantorReplacementService;
 use App\Services\Loans\LoanLifecycleService;
 use App\Services\Loans\LoanQueueOrderingService;
 use App\Services\Loans\LoanRepaymentService;
@@ -1058,9 +1059,72 @@ final class LoanFilamentActions
                 self::waiveThresholdInstallments(),
                 self::applyOpenRepayment(),
                 self::reinstateSuspendedBorrower(),
+                self::assignGuarantorReplacement(),
                 self::cancel(),
             ],
         );
+    }
+
+    public static function assignGuarantorReplacement(): Action
+    {
+        return Action::make('assignGuarantorReplacement')
+            ->label(__('Match guarantor nomination'))
+            ->icon('heroicon-o-user-plus')
+            ->color('warning')
+            ->visible(function (Loan $record): bool {
+                $open = app(LoanGuarantorReplacementService::class)->latestOpenRequestForLoan($record);
+
+                return $open?->isPendingAdmin() ?? false;
+            })
+            ->modalHeading(__('Match guarantor nomination'))
+            ->modalDescription(function (Loan $record): string {
+                $open = app(LoanGuarantorReplacementService::class)->latestOpenRequestForLoan($record);
+
+                return __('Borrower nominated “:name”. Select the matching member. They must then accept.', [
+                    'name' => $open?->proposed_guarantor_name ?? __('(unnamed)'),
+                ]).($open?->note
+                    ? ' '.__('Note: :note', ['note' => $open->note])
+                    : '');
+            })
+            ->schema([
+                MemberSelect::make('proposed_guarantor_member_id')
+                    ->label(__('Matched member'))
+                    ->required(),
+            ])
+            ->action(function (Loan $record, array $data, Action $action): void {
+                $open = app(LoanGuarantorReplacementService::class)->latestOpenRequestForLoan($record);
+
+                if ($open === null || ! $open->isPendingAdmin()) {
+                    Notification::make()
+                        ->title(__('No pending nomination'))
+                        ->warning()
+                        ->send();
+
+                    return;
+                }
+
+                $proposed = Member::query()->findOrFail((int) $data['proposed_guarantor_member_id']);
+
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => app(LoanGuarantorReplacementService::class)->assignProposedGuarantor(
+                            $open,
+                            $proposed,
+                            auth('tenant')->user(),
+                        ),
+                        __('Could not match guarantor'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__('Guarantor matched'))
+                    ->body(__('The proposed guarantor has been notified to accept.'))
+                    ->success()
+                    ->send();
+            });
     }
 
     private static function withInsightsRefresh(Action $action): Action

@@ -10,6 +10,7 @@ use App\Support\BusinessDay;
 use App\Support\MemberMembershipPolicy;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 
 final class MemberStatusService
@@ -22,12 +23,16 @@ final class MemberStatusService
         private readonly MemberCashOutService $cashOuts,
     ) {}
 
+    /**
+     * @param  array<string, mixed>  $freezeMeta  Planned freeze fields (cycles, household, etc.)
+     */
     public function freeze(
         Member $member,
         string $reason = '',
         ?CarbonInterface $freezeDate = null,
         bool $cashOutFund = false,
         ?int $reviewedBy = null,
+        array $freezeMeta = [],
     ): void {
         if ($member->status !== 'active') {
             throw new InvalidArgumentException(__('Only active members can be frozen.'));
@@ -35,12 +40,13 @@ final class MemberStatusService
 
         $frozenAt = $this->normalizeFreezeDate($freezeDate);
 
-        DB::transaction(function () use ($member, $reason, $frozenAt, $cashOutFund, $reviewedBy): void {
-            $this->transition($member, 'inactive', [
+        DB::transaction(function () use ($member, $reason, $frozenAt, $cashOutFund, $reviewedBy, $freezeMeta): void {
+            $this->transition($member, 'inactive', array_merge([
                 'contribution_cycles_active' => false,
                 'frozen_at' => $frozenAt,
-            ], 'MEMBER_FROZEN', $reason, $member->status, $frozenAt);
+            ], $freezeMeta), 'MEMBER_FROZEN', $reason, $member->status, $frozenAt);
 
+            // Fund cash-out on freeze is deprecated — cash-out stays frozen during membership freeze.
             if (! $cashOutFund) {
                 return;
             }
@@ -65,6 +71,13 @@ final class MemberStatusService
         $this->transition($member, 'active', [
             'contribution_cycles_active' => true,
             'frozen_at' => null,
+            'freeze_cycles_requested' => null,
+            'freeze_cycles_remaining' => null,
+            'freeze_emi_cycles_pushed' => null,
+            'freeze_plan_ended_at' => null,
+            'freeze_household_mode' => null,
+            'freeze_temporary_parent_member_id' => null,
+            'freeze_origin_member_id' => null,
         ], 'MEMBER_UNFROZEN', '', 'inactive');
     }
 
@@ -100,28 +113,95 @@ final class MemberStatusService
         ], 'MEMBER_RESTORED', '', 'inactive');
     }
 
+    /**
+     * @param  array{
+     *     reason?: string,
+     *     household_mode?: string,
+     *     permanent_parent_member_id?: int|null,
+     * }  $plan
+     */
     public function withdraw(
         Member $member,
         string $reason = '',
         bool $holdPayout = false,
         ?CarbonInterface $withdrawDate = null,
+        array $plan = [],
     ): void {
         if ($member->status === 'withdrawn') {
             throw new InvalidArgumentException(__('Member has already withdrawn.'));
         }
 
-        $previousStatus = $member->status;
+        $plan = array_merge([
+            'reason' => $reason,
+            'household_mode' => MemberWithdrawalSettlementService::HOUSEHOLD_SELF_ONLY,
+        ], $plan);
+
+        if ($reason === '' && filled($plan['reason'] ?? null)) {
+            $reason = (string) $plan['reason'];
+        }
+
         $withdrawnAt = $this->normalizeWithdrawDate($withdrawDate);
 
-        DB::transaction(function () use ($member, $reason, $holdPayout, $previousStatus, $withdrawnAt): void {
-            $this->withdrawalSettlement->executeSettlement($member, $reason, $holdPayout, $withdrawnAt);
+        try {
+            DB::transaction(function () use ($member, $reason, $holdPayout, $withdrawnAt, $plan): void {
+                $this->withdrawalSettlement->validatePlan($member, $plan);
+                $this->withdrawalSettlement->assertCanSubmitOrApprove($member, forApprove: true);
 
-            $this->transition($member, 'withdrawn', [
-                'contribution_cycles_active' => false,
-                'frozen_at' => null,
-                'payout_frozen_at' => $holdPayout ? $withdrawnAt : null,
-            ], 'MEMBER_WITHDRAWN', $reason, $previousStatus, $withdrawnAt);
-        });
+                $mode = (string) ($plan['household_mode'] ?? MemberWithdrawalSettlementService::HOUSEHOLD_SELF_ONLY);
+
+                if ($mode === MemberWithdrawalSettlementService::HOUSEHOLD_INCLUDE_DEPENDENTS) {
+                    foreach ($this->withdrawalSettlement->cascadeWithdrawDependents($member) as $dependent) {
+                        $this->withdrawMemberCore($dependent, $reason, $holdPayout, $withdrawnAt);
+                    }
+                } elseif ($mode === MemberWithdrawalSettlementService::HOUSEHOLD_PERMANENT_PARENT) {
+                    $this->withdrawalSettlement->reassignPermanentParent(
+                        $member,
+                        (int) ($plan['permanent_parent_member_id'] ?? 0),
+                    );
+                }
+
+                $this->withdrawMemberCore($member, $reason, $holdPayout, $withdrawnAt);
+            });
+        } catch (ValidationException $exception) {
+            $message = collect($exception->errors())->flatten()->first() ?? $exception->getMessage();
+
+            throw new InvalidArgumentException((string) $message, 0, $exception);
+        }
+    }
+
+    /**
+     * Settle one member and mark withdrawn (no household orchestration).
+     */
+    private function withdrawMemberCore(
+        Member $member,
+        string $reason,
+        bool $holdPayout,
+        CarbonInterface $withdrawnAt,
+    ): void {
+        $member = $member->fresh() ?? $member;
+
+        if ($member->status === 'withdrawn') {
+            return;
+        }
+
+        $this->withdrawalSettlement->assertCanSubmitOrApprove($member, forApprove: true);
+
+        $previousStatus = $member->status;
+
+        $this->withdrawalSettlement->executeSettlement($member, $reason, $holdPayout, $withdrawnAt);
+
+        $this->transition($member->fresh() ?? $member, 'withdrawn', [
+            'contribution_cycles_active' => false,
+            'frozen_at' => null,
+            'payout_frozen_at' => $holdPayout ? $withdrawnAt : null,
+            'freeze_cycles_requested' => null,
+            'freeze_cycles_remaining' => null,
+            'freeze_emi_cycles_pushed' => null,
+            'freeze_plan_ended_at' => null,
+            'freeze_household_mode' => null,
+            'freeze_temporary_parent_member_id' => null,
+            'freeze_origin_member_id' => null,
+        ], 'MEMBER_WITHDRAWN', $reason, $previousStatus, $withdrawnAt);
     }
 
     public function terminate(Member $member, string $reason = '', ?CarbonInterface $withdrawDate = null): void

@@ -162,9 +162,7 @@ final class MemberPortalAccountDetailInsightsService
                     ? trans_choice(':count deposit pending approval|:count deposits pending approval', $pending, ['count' => $pending])
                     : __('Submit a deposit to fund contributions or repayments.'),
                 'cta_label' => $pending > 0 ? __('Deposits') : __('New deposit'),
-                'cta_url' => $pending > 0
-                    ? MyFundPostingResource::getUrl('index')
-                    : MyFundPostingResource::getUrl('create'),
+                'cta_url' => MyFundPostingResource::getUrl('index'),
             ];
         }
 

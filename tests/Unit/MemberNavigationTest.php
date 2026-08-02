@@ -17,6 +17,7 @@ use App\Filament\Member\Resources\MyCashOutRequests\MyCashOutRequestResource;
 use App\Filament\Member\Resources\MyCashTransfers\MyCashTransferResource;
 use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyDependents\MyDependentResource;
+use App\Filament\Member\Resources\MyFundOutRequests\MyFundOutRequestResource;
 use App\Filament\Member\Resources\MyFundPostings\MyFundPostingResource;
 use App\Filament\Member\Resources\MyGuaranteedLoans\MyGuaranteedLoanResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
@@ -52,9 +53,10 @@ test('member resources use navigation groups and sort order', function (string $
     'contributions' => [MyContributionResource::class, MemberNavigation::GROUP_HISTORY, MemberNavigation::SORT_CONTRIBUTIONS],
     'transactions' => [MemberActivityPage::class, MemberNavigation::GROUP_HISTORY, MemberNavigation::SORT_ACTIVITY],
     'cash out' => [MyCashOutRequestResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_CASH_OUTS],
-            'cash transfer' => [MyCashTransferResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_CASH_TRANSFERS],
+    'fund out' => [MyFundOutRequestResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_FUND_OUTS],
+    'cash transfer' => [MyCashTransferResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_CASH_TRANSFERS],
     'statements' => [MyStatementResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_STATEMENTS],
-            'requests' => [RequestsPage::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_REQUESTS],
+    'requests' => [RequestsPage::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_REQUESTS],
     'deposits' => [MyFundPostingResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_DEPOSITS],
     'dependents' => [MyDependentResource::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_DEPENDENTS],
     'settings' => [MemberSettingsPage::class, MemberNavigation::GROUP_SELF_SERVICE, MemberNavigation::SORT_SETTINGS],
@@ -76,19 +78,19 @@ test('apply for loan page is hidden from member navigation', function () {
 test('legacy member resources remain hidden from navigation', function (string $class) {
     expect($class::shouldRegisterNavigation())->toBeFalse();
 })->with([
-            'accounts' => [MyAccountResource::class],
-            'messages' => [MyMessageResource::class],
-            'support' => [SupportPage::class],
-            'contribution settings' => [MyContributionSettingsPage::class],
-            'notification preferences' => [MyNotificationPreferencesPage::class],
-            'business day testing' => [BusinessDayTestingPage::class],
+    'accounts' => [MyAccountResource::class],
+    'messages' => [MyMessageResource::class],
+    'support' => [SupportPage::class],
+    'contribution settings' => [MyContributionSettingsPage::class],
+    'notification preferences' => [MyNotificationPreferencesPage::class],
+    'business day testing' => [BusinessDayTestingPage::class],
 ]);
 
 test('restored member features register in navigation', function (string $class) {
     expect($class::shouldRegisterNavigation())->toBeTrue();
 })->with([
-            'deposits' => [MyFundPostingResource::class],
-            'loan calculator' => [LoanCalculatorPage::class],
-            'cash transfer' => [MyCashTransferResource::class],
-            'requests' => [RequestsPage::class],
+    'deposits' => [MyFundPostingResource::class],
+    'loan calculator' => [LoanCalculatorPage::class],
+    'cash transfer' => [MyCashTransferResource::class],
+    'requests' => [RequestsPage::class],
 ]);

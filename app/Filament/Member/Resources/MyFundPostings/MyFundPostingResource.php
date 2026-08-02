@@ -3,7 +3,6 @@
 namespace App\Filament\Member\Resources\MyFundPostings;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
-use App\Filament\Member\Resources\MyFundPostings\Pages\CreateMyFundPosting;
 use App\Filament\Member\Resources\MyFundPostings\Pages\ListMyFundPostings;
 use App\Filament\Member\Resources\MyFundPostings\Schemas\MyFundPostingForm;
 use App\Filament\Member\Resources\MyFundPostings\Tables\MyFundPostingsTable;
@@ -52,11 +51,15 @@ class MyFundPostingResource extends Resource
         return MyFundPostingsTable::configure($table);
     }
 
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
     public static function getPages(): array
     {
         return [
             'index' => ListMyFundPostings::route('/'),
-            'create' => CreateMyFundPosting::route('/create'),
         ];
     }
 }

@@ -16,6 +16,7 @@ use App\Services\MemberStatusService;
 use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
 use App\Support\LegacyMemberStatusMapper;
+use App\Support\LoanSettings;
 use Carbon\Carbon;
 use Tests\Concerns\InitializesTenancy;
 
@@ -27,6 +28,12 @@ beforeEach(function () {
     $this->accounting = app(AccountingService::class);
     $this->loanService = app(LoanService::class);
     $this->lifecycle = app(LoanLifecycleService::class);
+
+    LoanSettings::save([
+        'allow_funding_strategy_member_topup' => true,
+        'allow_funding_strategy_split_percentage' => true,
+        'allow_funding_strategy_split_with_early_settlement' => true,
+    ]);
 
     Account::query()->delete();
     Member::query()->delete();
@@ -82,6 +89,12 @@ function membershipTestEligibleMember(AccountingService $accounting, float $fund
 
 function membershipTestActiveLoan(LoanService $service, AccountingService $accounting, float $amount = 10_000): Loan
 {
+    LoanSettings::save([
+        'allow_funding_strategy_member_topup' => true,
+        'allow_funding_strategy_split_percentage' => true,
+        'allow_funding_strategy_split_with_early_settlement' => true,
+    ]);
+
     $member = membershipTestEligibleMember($accounting, 30_000);
     Account::masterFund()->update(['balance' => 100_000]);
     Account::masterCash()->update(['balance' => 100_000]);
@@ -161,7 +174,7 @@ test('freeze and unfreeze membership without cash-out', function () {
         ->and($member->fresh()->frozen_at)->toBeNull();
 });
 
-test('withdraw early-settles active loan and creates pending cash-out', function () {
+test('withdraw early-settles active loan and auto-accepts cash-out', function () {
     $loan = membershipTestActiveLoan($this->loanService, $this->accounting, 10_000);
     $member = $loan->member->fresh();
     $required = app(LoanEarlySettlementService::class)->requiredCash($loan);
@@ -169,6 +182,7 @@ test('withdraw early-settles active loan and creates pending cash-out', function
     $member->fundAccount()->update(['balance' => 1_000]);
     Account::masterCash()->update(['balance' => 500_000]);
     Account::masterFund()->update(['balance' => 500_000]);
+    Account::masterBank()->update(['balance' => 500_000]);
 
     $this->statuses->withdraw($member->fresh(), 'Voluntary exit');
 
@@ -178,14 +192,14 @@ test('withdraw early-settles active loan and creates pending cash-out', function
     expect($member->status)->toBe('withdrawn')
         ->and($member->payout_frozen_at)->toBeNull()
         ->and($loan->status)->toBe('early_settled')
-        ->and($member->getFundBalance())->toBe(0.0);
+        ->and($member->getFundBalance())->toBe(0.0)
+        ->and($member->getCashBalance())->toBe(0.0);
 
     $cashOut = CashOutRequest::query()->where('member_id', $member->id)->first();
 
     expect($cashOut)->not->toBeNull()
-        ->and($cashOut->status)->toBe('pending')
-        ->and((float) $cashOut->amount)->toBe($member->getCashBalance())
-        ->and($member->getCashBalance())->toBeGreaterThan(0);
+        ->and($cashOut->status)->toBe('accepted')
+        ->and((float) $cashOut->amount)->toBeGreaterThan(0);
 });
 
 test('withdraw with hold payout settles loan but keeps balances for review', function () {

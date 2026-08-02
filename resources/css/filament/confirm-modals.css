@@ -42,7 +42,30 @@
     > .fi-modal-window.ff-tenant-confirm-modal-window--with-fields
     > .fi-modal-content {
     overflow: visible;
-    padding-bottom: 0.25rem;
+    padding: 1rem 1.25rem 0.85rem !important;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window--with-fields .fi-sc,
+.fi-body .fi-modal-window.ff-confirm-modal-window--with-fields .fi-fo-component-ctn,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window--with-fields .fi-sc,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window--with-fields .fi-fo-component-ctn {
+    gap: 0.875rem;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window--with-fields .fi-fo-field-wrp,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window--with-fields .fi-fo-field-wrp {
+    gap: 0.5rem;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window--with-fields .fi-fo-field-wrp-label,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window--with-fields .fi-fo-field-wrp-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window--with-fields .fi-input-wrp,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window--with-fields .fi-input-wrp {
+    border-radius: 0.625rem;
 }
 
 .fi-body .fi-modal-window.ff-confirm-modal-window--with-fields .fi-select-input .fi-dropdown-panel,

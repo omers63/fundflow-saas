@@ -6,6 +6,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\Tenant\ImpersonationService;
 use App\Support\AuthSessionPasswordHash;
+use App\Support\MemberMembershipPolicy;
 use Closure;
 use Filament\Facades\Filament;
 use Filament\Http\Middleware\Authenticate;
@@ -69,7 +70,7 @@ class AuthenticateMemberPanel extends Authenticate
                 $panel->getId() === 'member'
                 && $authUser instanceof User
                 && ($member = $authUser->activeMember()) !== null
-                && in_array($member->status, Member::PORTAL_BLOCKED_STATUSES, true)
+                && app(MemberMembershipPolicy::class)->isPortalAccessBlocked($member)
             ) {
                 $memberStatus = $member->status;
                 $guard->logout();
