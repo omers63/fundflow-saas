@@ -83,6 +83,27 @@ final class MemberFreezeService
             );
     }
 
+    public function hasPendingFreezeRequest(Member $member): bool
+    {
+        return MemberRequest::query()
+            ->where('requester_member_id', $member->id)
+            ->where('type', MemberRequest::TYPE_FREEZE_MEMBERSHIP)
+            ->where('status', MemberRequest::STATUS_PENDING)
+            ->exists();
+    }
+
+    /**
+     * Dashboard / checklist: only nag about guarantor replacement while freeze is in play.
+     */
+    public function shouldPromptGuarantorReplacement(Member $member): bool
+    {
+        if (! $this->isFrozen($member) && ! $this->hasPendingFreezeRequest($member)) {
+            return false;
+        }
+
+        return $this->unresolvedGuarantorLoans($member) !== [];
+    }
+
     /**
      * @return list<string>
      */

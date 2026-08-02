@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\MonthlyStatements\Pages;
 
 use App\Filament\Support\Action;
 use App\Filament\Support\MemberSelect;
+use App\Filament\Support\TableHeaderIconAction;
 use App\Filament\Tenant\Resources\MonthlyStatements\MonthlyStatementResource;
 use App\Filament\Tenant\Widgets\MonthlyStatementInsightsWidget;
 use App\Models\Tenant\Member;
@@ -31,7 +32,7 @@ class ListMonthlyStatements extends ListRecords
     {
         $previousPeriod = BusinessDay::today()->subMonthNoOverflow()->format('Y-m');
 
-        return [
+        return TableHeaderIconAction::normalize([
             CreateAction::make()
                 ->label(__('New'))
                 ->icon('heroicon-o-plus-circle'),
@@ -156,7 +157,6 @@ class ListMonthlyStatements extends ListRecords
                 ->label(__('Generate'))
                 ->icon('heroicon-o-document-plus')
                 ->color('primary')
-                ->button()
                 ->dropdownPlacement('bottom-end'),
             ActionGroup::make([
                 Action::make('notify_unsent')
@@ -211,9 +211,8 @@ class ListMonthlyStatements extends ListRecords
                 ->label(__('Deliver'))
                 ->icon('heroicon-o-paper-airplane')
                 ->color('gray')
-                ->button()
                 ->dropdownPlacement('bottom-end'),
-        ];
+        ]);
     }
 
     private function bulkDeliverUnsent(

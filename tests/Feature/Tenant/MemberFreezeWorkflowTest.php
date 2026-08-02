@@ -2,14 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Filament\Member\Widgets\MembershipFreezeStatusWidget;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\MemberRequest;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\MemberStatusChangedNotification;
 use App\Services\AccountingService;
 use App\Services\MemberFreezeService;
+use App\Services\Tenant\MemberRequestService;
 use App\Support\BusinessDaySettings;
 use App\Support\MemberMembershipPolicy;
 use Carbon\Carbon;
@@ -275,4 +278,90 @@ test('portal blocked statuses no longer include inactive so frozen members can e
     expect($policy->canAccessPortal($frozen))->toBeTrue()
         ->and($policy->isPortalAccessBlocked($hold))->toBeTrue()
         ->and($policy->canAccessPortal($hold))->toBeFalse();
+});
+
+test('guarantor replacement banner is freeze-gated and clears after freeze request rejection', function () {
+    $borrowerUser = User::create([
+        'name' => 'Guaranteed Borrower',
+        'email' => 'guaranteed-borrower@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+    ]);
+
+    $borrower = Member::create([
+        'user_id' => $borrowerUser->id,
+        'member_number' => 'MEM-FRZ-BOR',
+        'name' => 'Guaranteed Borrower',
+        'email' => 'guaranteed-borrower@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => Carbon::parse('2025-01-01'),
+        'status' => 'active',
+    ]);
+
+    $tier = LoanTier::query()->create([
+        'tier_number' => 88,
+        'label' => 'Guarantor Banner Tier',
+        'min_amount' => 1000,
+        'max_amount' => 50000,
+        'min_monthly_installment' => 500,
+        'is_active' => true,
+    ]);
+
+    Loan::query()->create([
+        'member_id' => $borrower->id,
+        'guarantor_member_id' => $this->member->id,
+        'loan_tier_id' => $tier->id,
+        'amount' => 5000,
+        'amount_requested' => 5000,
+        'amount_approved' => 5000,
+        'amount_disbursed' => 5000,
+        'interest_rate' => 0,
+        'term_months' => 5,
+        'monthly_repayment' => 1000,
+        'status' => 'active',
+        'applied_at' => '2026-01-01',
+        'approved_at' => '2026-01-05',
+        'disbursed_at' => '2026-01-10',
+    ]);
+
+    $freezes = app(MemberFreezeService::class);
+    $admin = User::create([
+        'name' => 'Freeze Admin',
+        'email' => 'freeze-admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    // Active guarantor with no freeze in play must not see the dashboard banner.
+    expect($freezes->shouldPromptGuarantorReplacement($this->member))->toBeFalse()
+        ->and($freezes->unresolvedGuarantorLoans($this->member))->not->toBeEmpty();
+
+    $this->actingAs($this->user, 'tenant');
+    Filament\Facades\Filament::setCurrentPanel('member');
+    expect(MembershipFreezeStatusWidget::canView())->toBeFalse();
+
+    // Pending freeze request (created directly — submit is blocked while guaranteeing loans)
+    // still surfaces the replacement prompt until rejected.
+    $request = MemberRequest::query()->create([
+        'requester_member_id' => $this->member->id,
+        'type' => MemberRequest::TYPE_FREEZE_MEMBERSHIP,
+        'status' => MemberRequest::STATUS_PENDING,
+        'payload' => [
+            'cycles' => 1,
+            'household_mode' => MemberFreezeService::HOUSEHOLD_SELF_ONLY,
+            'reason' => 'Travel',
+        ],
+    ]);
+
+    expect($freezes->shouldPromptGuarantorReplacement($this->member))->toBeTrue()
+        ->and($freezes->hasPendingFreezeRequest($this->member))->toBeTrue()
+        ->and(MembershipFreezeStatusWidget::canView())->toBeTrue();
+
+    app(MemberRequestService::class)->reject($request, $admin, 'Not approved');
+
+    expect($freezes->hasPendingFreezeRequest($this->member))->toBeFalse()
+        ->and($freezes->shouldPromptGuarantorReplacement($this->member))->toBeFalse()
+        ->and($freezes->isFrozen($this->member))->toBeFalse()
+        ->and(MembershipFreezeStatusWidget::canView())->toBeFalse();
 });

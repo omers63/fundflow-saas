@@ -27,7 +27,7 @@
     <div class="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div
             class="overflow-hidden rounded-2xl border border-gray-200/90 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900">
-            <div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-800">
+            <div class="grid grid-cols-1 divide-y divide-gray-100 dark:divide-gray-800 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
                 <a href="{{ $pipeline['applications_pending_url'] }}"
                     class="px-3 py-3 text-center transition hover:bg-amber-50/60 dark:hover:bg-amber-950/20">
                     <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{{ __('Pending') }}</p>

@@ -28,12 +28,15 @@ class MembershipFreezeStatusWidget extends Widget
         }
 
         $policy = app(MemberMembershipPolicy::class);
+        $freezes = app(MemberFreezeService::class);
 
         if ($policy->isFrozen($member)) {
             return true;
         }
 
-        if (app(LoanGuarantorReplacementService::class)->unresolvedLoansForOutgoingGuarantor($member) !== []) {
+        // Guarantor-replacement callout is freeze-gated (pending freeze or already frozen),
+        // not a permanent banner for every active guarantor.
+        if ($freezes->shouldPromptGuarantorReplacement($member)) {
             return true;
         }
 
@@ -57,8 +60,9 @@ class MembershipFreezeStatusWidget extends Widget
             ->where('status', LoanGuarantorReplacementRequest::STATUS_PENDING_GUARANTOR)
             ->get();
 
-        $needsReplacement = $member === null ? [] : app(LoanGuarantorReplacementService::class)
-            ->unresolvedLoansForOutgoingGuarantor($member);
+        $needsReplacement = $member !== null && $freezes->shouldPromptGuarantorReplacement($member)
+            ? app(LoanGuarantorReplacementService::class)->unresolvedLoansForOutgoingGuarantor($member)
+            : [];
 
         return [
             'member' => $member,

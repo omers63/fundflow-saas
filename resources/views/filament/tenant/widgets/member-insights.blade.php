@@ -32,7 +32,7 @@
                 <div class="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
                     <div
                         class="ff-members-roster-panel overflow-hidden rounded-2xl border border-gray-200/90 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900">
-                        <div class="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-800 sm:grid-cols-4">
+                        <div class="grid grid-cols-1 divide-y divide-gray-100 dark:divide-gray-800 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
                             <a href="{{ $pipeline['members_active_url'] }}"
                                 class="px-3 py-2.5 text-center transition hover:bg-emerald-50/60 dark:hover:bg-emerald-950/20">
                                 <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{{ __('Active') }}</p>

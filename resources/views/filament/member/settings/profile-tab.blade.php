@@ -35,7 +35,7 @@ $member = $member ?? $user?->member;
             <p class="ff-member-dashboard-meta mb-3">
                 {{ __('Switch to a dependent profile to manage their portal view.') }}
             </p>
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                 @foreach ($householdProfiles as $profile)
                                 @php
                                     $isCurrent = (int) $profile->user_id === (int) auth('tenant')->id();

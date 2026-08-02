@@ -31,6 +31,24 @@
     padding: 1rem 1.125rem !important;
 }
 
+@media (max-width: 639px) {
+    .ff-freeze-modal .fi-modal-content {
+        padding-inline: 0.75rem !important;
+        padding-block: 0.65rem 0.85rem !important;
+    }
+
+    .ff-freeze-modal .fi-modal-header,
+    .ff-freeze-modal .fi-modal-footer {
+        padding-inline: 0.75rem;
+    }
+
+    .ff-freeze-modal .fi-section-content-ctn,
+    .ff-freeze-modal .fi-sc-section-content,
+    .ff-freeze-modal .fi-section-content {
+        padding: 0.75rem !important;
+    }
+}
+
 .ff-freeze-modal .fi-fo-field-wrp {
     gap: 0.5rem;
 }

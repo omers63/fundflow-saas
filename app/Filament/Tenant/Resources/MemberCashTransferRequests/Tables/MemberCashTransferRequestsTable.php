@@ -86,8 +86,7 @@ class MemberCashTransferRequestsTable
                             'pending' => __('Pending'),
                             'accepted' => __('Accepted'),
                             'rejected' => __('Rejected'),
-                        ])
-                        ->default('pending'),
+                        ]),
                     SelectFilter::make('from_member_id')
                         ->label(__('From member'))
                         ->relationship('fromMember', 'name')

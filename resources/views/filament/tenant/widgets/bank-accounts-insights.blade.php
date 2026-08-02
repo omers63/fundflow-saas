@@ -48,7 +48,7 @@ $forecast = $d['treasury_forecast'] ?? null;
             </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div class="flex flex-col gap-0.5 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
                 <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ __('Master cash') }}</p>
                 <p class="text-[20px] font-bold tabular-nums leading-none text-gray-900 dark:text-white">

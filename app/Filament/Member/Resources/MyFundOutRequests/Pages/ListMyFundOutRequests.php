@@ -6,6 +6,7 @@ namespace App\Filament\Member\Resources\MyFundOutRequests\Pages;
 
 use App\Filament\Member\Resources\MyFundOutRequests\MyFundOutRequestResource;
 use App\Filament\Member\Support\MemberWithdrawalFilamentActions;
+use App\Filament\Support\TableHeaderIconAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListMyFundOutRequests extends ListRecords
@@ -20,7 +21,7 @@ class ListMyFundOutRequests extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            MemberWithdrawalFilamentActions::requestFundOut(),
+            TableHeaderIconAction::apply(MemberWithdrawalFilamentActions::requestFundOut()),
         ];
     }
 }

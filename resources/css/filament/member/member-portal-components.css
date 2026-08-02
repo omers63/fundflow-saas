@@ -202,6 +202,17 @@
     white-space: nowrap;
 }
 
+@media (max-width: 639px) {
+    .ff-member-stat-card__label,
+    .ff-member-stat-card__value,
+    .ff-member-stat-card__hint {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: unset;
+        overflow-wrap: anywhere;
+    }
+}
+
 .ff-member-quick-action {
     display: flex;
     align-items: center;

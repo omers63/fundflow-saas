@@ -6,6 +6,7 @@ namespace App\Filament\Member\Resources\MyAccounts\Pages;
 
 use App\Filament\Member\Resources\MyAccounts\MyAccountResource;
 use App\Filament\Member\Support\MemberDepositFilamentActions;
+use App\Filament\Support\TableHeaderIconAction;
 use App\Models\Tenant\Loan;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -60,7 +61,7 @@ class ListMyAccounts extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            MemberDepositFilamentActions::requestDeposit(),
+            TableHeaderIconAction::apply(MemberDepositFilamentActions::requestDeposit()),
         ];
     }
 

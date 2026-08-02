@@ -6,6 +6,7 @@ namespace App\Filament\Member\Resources\MyCashTransfers\Pages;
 
 use App\Filament\Member\Resources\MyCashTransfers\MyCashTransferResource;
 use App\Filament\Member\Support\MemberCashTransferFilamentActions;
+use App\Filament\Support\TableHeaderIconAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListMyCashTransfers extends ListRecords
@@ -15,7 +16,7 @@ class ListMyCashTransfers extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            MemberCashTransferFilamentActions::requestTransfer(),
+            TableHeaderIconAction::apply(MemberCashTransferFilamentActions::requestTransfer()),
         ];
     }
 }

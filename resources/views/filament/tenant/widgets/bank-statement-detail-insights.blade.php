@@ -29,7 +29,7 @@
                     </div>
                     <span class="text-[10px] text-gray-400">{{ $d['post_rate'] }}% {{ __('posted') }}</span>
                 </div>
-                <div class="grid grid-cols-2 gap-2 px-3 py-3 sm:grid-cols-5">
+                <div class="grid grid-cols-1 gap-2 px-3 py-3 sm:grid-cols-2 lg:grid-cols-5">
                     @foreach ($d['status_breakdown'] as $status)
                         <div class="rounded-lg border border-gray-100 px-2 py-2 text-center dark:border-gray-700">
                             <p class="text-[10px] text-gray-500">{{ $status['label'] }}</p>

@@ -71,8 +71,7 @@ class CashOutRequestsTable
                             'pending' => __('Pending'),
                             'accepted' => __('Accepted'),
                             'rejected' => __('Rejected'),
-                        ])
-                        ->default('pending'),
+                        ]),
                     SelectFilter::make('member_id')
                         ->label(__('Member'))
                         ->relationship('member', 'name')

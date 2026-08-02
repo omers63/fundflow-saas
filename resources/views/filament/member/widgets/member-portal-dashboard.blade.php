@@ -278,7 +278,7 @@ $currency = $currency ?? null;
                                             <p class="ff-member-dashboard-insights-group__label">{{ $group['label'] }}</p>
                                         @endif
                                         <div
-                                            class="ff-member-dashboard-insights-stats grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                                            class="ff-member-dashboard-insights-stats grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                                             @foreach ($group['stats'] as $stat)
                                                 <x-member::stat-card :label="$stat['label']" :value="$stat['value'] ?? null"
                                                     :amount="$stat['amount'] ?? null" :currency="$currency" />

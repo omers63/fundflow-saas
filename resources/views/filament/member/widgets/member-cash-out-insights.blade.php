@@ -1,5 +1,5 @@
 @php
-    $d = $this->getData();
+$d = $this->getData();
 @endphp
 
 @if (empty($d))
@@ -14,30 +14,30 @@
 
             <div class="lg:col-span-2">
                 @include('filament.member.widgets.partials.insights-kpi-strip', [
-                    'kpis' => $d['kpis'],
-                    'sparkline' => $d['sparkline'],
-                    'sparklineMax' => $d['sparkline_max'],
-                ])
+        'kpis' => $d['kpis'],
+        'sparkline' => $d['sparkline'],
+        'sparklineMax' => $d['sparkline_max'],
+    ])
             </div>
         </div>
 
         <div
-            class="grid grid-cols-2 gap-2 rounded-xl border border-gray-200/80 bg-white px-3 py-2 text-xs shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:grid-cols-4">
+            class="grid grid-cols-1 gap-2 rounded-xl border border-gray-200/80 bg-white px-3 py-2 text-xs shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:grid-cols-2 lg:grid-cols-4">
             <div class="ff-member-exposure-stat min-w-0">
-                <p class="truncate text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ __('Cash balance') }}</p>
-                <p class="truncate font-semibold tabular-nums text-gray-900 dark:text-white" title="{{ $d['availability']['cash_balance'] }}">{{ $d['availability']['cash_balance'] }}</p>
+                <p class="break-words text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ __('Cash balance') }}</p>
+                <p class="break-words font-semibold tabular-nums text-gray-900 dark:text-white" title="{{ $d['availability']['cash_balance'] }}">{{ $d['availability']['cash_balance'] }}</p>
             </div>
             <div class="ff-member-exposure-stat min-w-0">
-                <p class="truncate text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ __('EMI reserved') }}</p>
-                <p class="truncate font-semibold tabular-nums text-gray-900 dark:text-white" title="{{ $d['availability']['emi_reserved'] }}">{{ $d['availability']['emi_reserved'] }}</p>
+                <p class="break-words text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ __('EMI reserved') }}</p>
+                <p class="break-words font-semibold tabular-nums text-gray-900 dark:text-white" title="{{ $d['availability']['emi_reserved'] }}">{{ $d['availability']['emi_reserved'] }}</p>
             </div>
             <div class="ff-member-exposure-stat min-w-0">
-                <p class="truncate text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ __('Pending withdrawals') }}</p>
-                <p class="truncate font-semibold tabular-nums text-amber-700 dark:text-amber-300" title="{{ $d['availability']['pending_withdrawals'] }}">{{ $d['availability']['pending_withdrawals'] }}</p>
+                <p class="break-words text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ __('Pending withdrawals') }}</p>
+                <p class="break-words font-semibold tabular-nums text-amber-700 dark:text-amber-300" title="{{ $d['availability']['pending_withdrawals'] }}">{{ $d['availability']['pending_withdrawals'] }}</p>
             </div>
             <div class="ff-member-exposure-stat min-w-0">
-                <p class="truncate text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ __('Available to withdraw') }}</p>
-                <p class="truncate font-semibold tabular-nums text-teal-700 dark:text-teal-300" title="{{ $d['availability']['available'] }}">{{ $d['availability']['available'] }}</p>
+                <p class="break-words text-[10px] font-medium uppercase tracking-wide text-gray-500">{{ __('Available to withdraw') }}</p>
+                <p class="break-words font-semibold tabular-nums text-teal-700 dark:text-teal-300" title="{{ $d['availability']['available'] }}">{{ $d['availability']['available'] }}</p>
             </div>
         </div>
 

@@ -1,40 +1,40 @@
 @props(['kpis', 'sparkline' => null, 'sparklineMax' => 1])
 
 @php
-$kpis = $kpis ?? [];
-$count = count($kpis);
+    $kpis = $kpis ?? [];
+    $count = count($kpis);
 
-$accentBar = [
-    'amber' => 'bg-amber-500',
-    'emerald' => 'bg-emerald-500',
-    'rose' => 'bg-rose-500',
-    'sky' => 'bg-sky-500',
-    'violet' => 'bg-violet-500',
-    'teal' => 'bg-teal-500',
-    'indigo' => 'bg-indigo-500',
-    'gray' => 'bg-gray-400',
-    'slate' => 'bg-slate-400',
-];
-$accentIcon = [
-    'amber' => 'text-amber-500',
-    'emerald' => 'text-emerald-500',
-    'rose' => 'text-rose-500',
-    'sky' => 'text-sky-500',
-    'violet' => 'text-violet-500',
-    'teal' => 'text-teal-500',
-    'indigo' => 'text-indigo-500',
-    'gray' => 'text-gray-400',
-    'slate' => 'text-slate-400',
-];
+    $accentBar = [
+        'amber' => 'bg-amber-500',
+        'emerald' => 'bg-emerald-500',
+        'rose' => 'bg-rose-500',
+        'sky' => 'bg-sky-500',
+        'violet' => 'bg-violet-500',
+        'teal' => 'bg-teal-500',
+        'indigo' => 'bg-indigo-500',
+        'gray' => 'bg-gray-400',
+        'slate' => 'bg-slate-400',
+    ];
+    $accentIcon = [
+        'amber' => 'text-amber-500',
+        'emerald' => 'text-emerald-500',
+        'rose' => 'text-rose-500',
+        'sky' => 'text-sky-500',
+        'violet' => 'text-violet-500',
+        'teal' => 'text-teal-500',
+        'indigo' => 'text-indigo-500',
+        'gray' => 'text-gray-400',
+        'slate' => 'text-slate-400',
+    ];
 
-$gridCols = match (true) {
-    $count <= 1 => 'grid-cols-1',
-    $count === 2 => 'grid-cols-2',
-    $count === 3 => 'grid-cols-2 sm:grid-cols-3',
-    $count === 4 => 'grid-cols-2 sm:grid-cols-4',
-    $count === 5 => 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-5',
-    default => 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-6',
-};
+    $gridCols = match (true) {
+        $count <= 1 => 'grid-cols-1',
+        $count === 2 => 'grid-cols-1 sm:grid-cols-2',
+        $count === 3 => 'grid-cols-1 sm:grid-cols-3',
+        $count === 4 => 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
+        $count === 5 => 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5',
+        default => 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6',
+    };
 @endphp
 
 <div
@@ -44,7 +44,7 @@ $gridCols = match (true) {
     $gridCols,
 ])>
         @foreach ($kpis as $i => $card)
-                    @php
+                            @php
             $accent = $card['accent'] ?? 'gray';
             if ($accent === 'gray') {
                 $accent = 'slate';
@@ -55,28 +55,28 @@ $gridCols = match (true) {
             $labelText = ui_label($card['label']);
             $subText = ui_label($card['sub']);
             $valueText = (string) $card['value'];
-                    @endphp
-                    <{{ $tag }}
-                        @if ($tag === 'a')
-                            href="{{ $card['url'] }}"
-                        @endif
-                        @class([
+                            @endphp
+                            <{{ $tag }}
+                                @if ($tag === 'a')
+                                    href="{{ $card['url'] }}"
+                                @endif
+                                @class([
                 'ff-app-insights-kpi ff-member-stat-card relative min-w-0 px-2 py-1.5 transition sm:px-2.5 sm:py-2',
             ])
-                        data-accent="{{ $accent }}"
-                        style="animation: ff-stat-in 0.35s ease-out {{ 0.02 + ($i * 0.03) }}s forwards">
-                        <div @class(['absolute inset-y-0 left-0 w-0.5 opacity-100', $barClass])></div>
-                        <div class="flex items-center justify-between gap-0.5 pl-1">
-                            <x-dynamic-component :component="$card['icon']" @class(['h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5', $iconClass]) />
-                        </div>
-                        <x-ff-stat-line :text="$labelText"
-                            class="mt-0.5 truncate pl-1 text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400" />
-                        <x-ff-stat-line :text="$valueText" @class([
-                            'truncate pl-1 text-base font-bold tabular-nums leading-tight sm:text-lg',
-                            $card['value_class'] ?? 'text-gray-900 dark:text-white',
-                        ]) />
-                        <x-ff-stat-line :text="$subText" class="truncate pl-1 text-[10px] text-gray-400 dark:text-gray-500" />
-                    </{{ $tag }}>
+                                data-accent="{{ $accent }}"
+                                style="animation: ff-stat-in 0.35s ease-out {{ 0.02 + ($i * 0.03) }}s forwards">
+                                <div @class(['absolute inset-y-0 left-0 w-0.5 opacity-100', $barClass])></div>
+                                <div class="flex items-center justify-between gap-0.5 pl-1">
+                                    <x-dynamic-component :component="$card['icon']" @class(['h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5', $iconClass]) />
+                                </div>
+                                <x-ff-stat-line :text="$labelText"
+                                    class="mt-0.5 break-words pl-1 text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400" />
+                                <x-ff-stat-line :text="$valueText" @class([
+                                    'break-words pl-1 text-base font-bold tabular-nums leading-tight sm:text-lg',
+                                    $card['value_class'] ?? 'text-gray-900 dark:text-white',
+                                ]) />
+                                <x-ff-stat-line :text="$subText" class="break-words pl-1 text-[10px] text-gray-400 dark:text-gray-500" />
+                            </{{ $tag }}>
         @endforeach
     </div>
 

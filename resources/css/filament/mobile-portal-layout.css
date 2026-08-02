@@ -367,8 +367,20 @@
         border-bottom-color: rgb(255 255 255 / 0.08);
     }
 
-    .fi-body .ff-app-insights-kpi-strip {
+    .fi-body .ff-app-insights-kpi-strip > .grid,
+    .fi-body .ff-app-insights-kpi-strip.grid,
+    .fi-body .ff-member-dashboard-insights-stats {
         grid-template-columns: 1fr !important;
+    }
+
+    .fi-body .ff-member-record-modal__hero {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+
+    .fi-body .ff-member-record-modal__hero-amount {
+        overflow-wrap: anywhere;
     }
 }
 

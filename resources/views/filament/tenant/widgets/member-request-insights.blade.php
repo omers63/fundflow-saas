@@ -1,22 +1,22 @@
-@php
-    $d = $this->getData();
-    $pipeline = $d['pipeline'];
-    $maxType = max(1, collect($d['type_breakdown'])->max('count'));
+            @php
+$d = $this->getData();
+$pipeline = $d['pipeline'];
+$maxType = max(1, collect($d['type_breakdown'])->max('count'));
 
-    $hero = $d['pending'] > 0
-        ? [
-            'title' => __('Member requests need review'),
-            'subtitle' => trans_choice(':count pending', $d['pending'], ['count' => $d['pending']])
-                . ($d['pending_over_sla'] > 0 ? ' · ' . trans_choice(':count past SLA', $d['pending_over_sla'], ['count' => $d['pending_over_sla']]) : ''),
-            'tone' => 'amber',
-            'cta_url' => $pipeline['pending_url'],
-            'cta_label' => __('Review pending'),
-        ]
-        : [
-            'title' => __('Request inbox clear'),
-            'subtitle' => __('No pending household or allocation changes.'),
-            'tone' => 'success',
-        ];
+$hero = $d['pending'] > 0
+    ? [
+        'title' => __('Member requests need review'),
+        'subtitle' => trans_choice(':count pending', $d['pending'], ['count' => $d['pending']])
+            . ($d['pending_over_sla'] > 0 ? ' · ' . trans_choice(':count past SLA', $d['pending_over_sla'], ['count' => $d['pending_over_sla']]) : ''),
+        'tone' => 'amber',
+        'cta_url' => $pipeline['pending_url'],
+        'cta_label' => __('Review pending'),
+    ]
+    : [
+        'title' => __('Request inbox clear'),
+        'subtitle' => __('No pending household or allocation changes.'),
+        'tone' => 'success',
+    ];
 @endphp
 
 <div class="ff-app-insights ff-member-requests-insights w-full max-w-none space-y-3 mb-1" @if (filled($pollingInterval ?? null)) wire:poll.{{ $pollingInterval }} @endif>
@@ -25,7 +25,7 @@
     <div class="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <div
             class="overflow-hidden rounded-2xl border border-gray-200/90 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900">
-            <div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-800">
+            <div class="grid grid-cols-1 divide-y divide-gray-100 dark:divide-gray-800 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
                 <a href="{{ $pipeline['pending_url'] }}"
                     class="px-3 py-3 text-center transition hover:bg-amber-50/60 dark:hover:bg-amber-950/20">
                     <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{{ __('Pending') }}</p>
@@ -38,10 +38,11 @@
                     <p class="mt-1 text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
                         {{ $d['approved'] }}</p>
                 </a>
-                <a href="{{ $pipeline['members_url'] }}"
-                    class="px-3 py-3 text-center transition hover:bg-sky-50/60 dark:hover:bg-sky-950/20">
-                    <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{{ __('Members') }}</p>
-                    <p class="mt-1 text-2xl font-bold tabular-nums text-sky-600 dark:text-sky-400">{{ __('Open') }}</p>
+                <a href="{{ $pipeline['rejected_url'] }}"
+                    class="px-3 py-3 text-center transition hover:bg-rose-50/60 dark:hover:bg-rose-950/20">
+                    <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{{ __('Rejected') }}</p>
+                    <p class="mt-1 text-2xl font-bold tabular-nums text-rose-600 dark:text-rose-400">
+                        {{ $d['rejected'] }}</p>
                 </a>
             </div>
             <div class="border-t border-gray-100 px-3 py-2.5 dark:border-gray-800">
@@ -91,10 +92,10 @@
                             <p class="truncate text-[11px] text-gray-400">{{ $request['type'] }}</p>
                         </div>
                         <span @class([
-                            'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
-                            'bg-amber-100 text-amber-800 dark:bg-amber-900/40' => $request['days_waiting'] <= 3,
-                            'bg-rose-100 text-rose-800 dark:bg-rose-900/40' => $request['days_waiting'] > 3,
-                        ])>{{ $request['days_waiting'] }}d</span>
+        'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
+        'bg-amber-100 text-amber-800 dark:bg-amber-900/40' => $request['days_waiting'] <= 3,
+        'bg-rose-100 text-rose-800 dark:bg-rose-900/40' => $request['days_waiting'] > 3,
+    ])>{{ $request['days_waiting'] }}d</span>
                     </a>
                 @empty
                     <div class="px-3 py-8 text-center">

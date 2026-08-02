@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Member\Support;
 
 use App\Filament\Support\MoneyDisplay;
+use App\Filament\Support\TableHeaderIconAction;
 use App\Services\MemberCashOutService;
 use App\Services\MemberFundOutService;
 use App\Support\Insights\InsightFormatter;
@@ -17,7 +18,6 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
-use Filament\Support\Enums\Width;
 use Illuminate\Support\HtmlString;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -29,86 +29,88 @@ final class MemberWithdrawalFilamentActions
      */
     public static function headerActions(): array
     {
-        return [
+        return TableHeaderIconAction::applyMany([
             self::requestCashOut(),
             self::requestFundOut(),
-        ];
+        ]);
     }
 
     public static function requestCashOut(): Action
     {
-        return Action::make('requestCashOut')
-            ->label(__('Request cash out'))
-            ->icon('heroicon-o-arrow-up-tray')
-            ->color('primary')
-            ->visible(fn (): bool => self::canRequestWithdrawals())
-            ->modalHeading(__('Request cash out'))
-            ->modalDescription(__('Withdraw from your cash account to your registered bank account after admin approval.'))
-            ->modalWidth(Width::Large)
-            ->schema(self::cashOutSchema())
-            ->action(function (array $data): void {
-                $member = CurrentMember::get();
+        return MemberPortalViewModal::applyToForm(
+            Action::make('requestCashOut')
+                ->label(__('Request cash out'))
+                ->icon('heroicon-o-arrow-up-tray')
+                ->color('primary')
+                ->visible(fn (): bool => self::canRequestWithdrawals())
+                ->modalHeading(__('Request cash out'))
+                ->modalDescription(__('Withdraw from your cash account to your registered bank account after admin approval.'))
+                ->schema(self::cashOutSchema())
+                ->action(function (array $data): void {
+                    $member = CurrentMember::get();
 
-                if ($member === null) {
-                    return;
-                }
+                    if ($member === null) {
+                        return;
+                    }
 
-                try {
-                    app(MemberCashOutService::class)->submit(
-                        member: $member,
-                        amount: (float) $data['amount'],
-                        notes: $data['notes'] ?? null,
-                    );
-                } catch (InvalidArgumentException $exception) {
-                    throw ValidationException::withMessages([
-                        'amount' => $exception->getMessage(),
-                    ]);
-                }
+                    try {
+                        app(MemberCashOutService::class)->submit(
+                            member: $member,
+                            amount: (float) $data['amount'],
+                            notes: $data['notes'] ?? null,
+                        );
+                    } catch (InvalidArgumentException $exception) {
+                        throw ValidationException::withMessages([
+                            'amount' => $exception->getMessage(),
+                        ]);
+                    }
 
-                Notification::make()
-                    ->title(__('Cash-out submitted'))
-                    ->body(__('Your request has been sent to the admin for review.'))
-                    ->success()
-                    ->send();
-            });
+                    Notification::make()
+                        ->title(__('Cash-out submitted'))
+                        ->body(__('Your request has been sent to the admin for review.'))
+                        ->success()
+                        ->send();
+                })
+        );
     }
 
     public static function requestFundOut(): Action
     {
-        return Action::make('requestFundOut')
-            ->label(__('Request fund out'))
-            ->icon('heroicon-o-arrow-right-circle')
-            ->color('warning')
-            ->visible(fn (): bool => self::canRequestWithdrawals())
-            ->modalHeading(__('Request fund out'))
-            ->modalDescription(__('Move money from your fund account to your cash account after admin approval. This does not send money to your bank.'))
-            ->modalWidth(Width::Large)
-            ->schema(self::fundOutSchema())
-            ->action(function (array $data): void {
-                $member = CurrentMember::get();
+        return MemberPortalViewModal::applyToForm(
+            Action::make('requestFundOut')
+                ->label(__('Request fund out'))
+                ->icon('heroicon-o-arrow-right-circle')
+                ->color('warning')
+                ->visible(fn (): bool => self::canRequestWithdrawals())
+                ->modalHeading(__('Request fund out'))
+                ->modalDescription(__('Move money from your fund account to your cash account after admin approval. This does not send money to your bank.'))
+                ->schema(self::fundOutSchema())
+                ->action(function (array $data): void {
+                    $member = CurrentMember::get();
 
-                if ($member === null) {
-                    return;
-                }
+                    if ($member === null) {
+                        return;
+                    }
 
-                try {
-                    app(MemberFundOutService::class)->submit(
-                        member: $member,
-                        amount: (float) $data['amount'],
-                        notes: $data['notes'] ?? null,
-                    );
-                } catch (InvalidArgumentException $exception) {
-                    throw ValidationException::withMessages([
-                        'amount' => $exception->getMessage(),
-                    ]);
-                }
+                    try {
+                        app(MemberFundOutService::class)->submit(
+                            member: $member,
+                            amount: (float) $data['amount'],
+                            notes: $data['notes'] ?? null,
+                        );
+                    } catch (InvalidArgumentException $exception) {
+                        throw ValidationException::withMessages([
+                            'amount' => $exception->getMessage(),
+                        ]);
+                    }
 
-                Notification::make()
-                    ->title(__('Fund-out submitted'))
-                    ->body(__('Your request has been sent to the admin for review.'))
-                    ->success()
-                    ->send();
-            });
+                    Notification::make()
+                        ->title(__('Fund-out submitted'))
+                        ->body(__('Your request has been sent to the admin for review.'))
+                        ->success()
+                        ->send();
+                })
+        );
     }
 
     /**

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Filament\Tenant\Resources\MemberRequests\MemberRequestResource;
-use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\MemberRequest;
 use App\Support\BusinessDay;
 use Carbon\Carbon;
@@ -73,7 +72,7 @@ final class MemberRequestInsightsService
             'pipeline' => [
                 'pending_url' => MemberRequestResource::listTabUrl('pending'),
                 'approved_url' => MemberRequestResource::listTabUrl('approved'),
-                'members_url' => MemberResource::getUrl('index'),
+                'rejected_url' => MemberRequestResource::listTabUrl('rejected'),
             ],
         ];
     }

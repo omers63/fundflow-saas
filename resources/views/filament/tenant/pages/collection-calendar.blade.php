@@ -31,6 +31,8 @@
         </div>
     </div>
 
+    <div class="-mx-1 overflow-x-auto px-1 pb-1">
+        <div class="min-w-[40rem]">
     <div
         class="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
         @foreach ([__('Sun'), __('Mon'), __('Tue'), __('Wed'), __('Thu'), __('Fri'), __('Sat')] as $weekday)
@@ -121,6 +123,9 @@
                 @endif
             </button>
         @endforeach
+    </div>
+
+        </div>
     </div>
 
     @if ($selectedDate)

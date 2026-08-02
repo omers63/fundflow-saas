@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\Members\Pages;
 
 use App\Filament\Concerns\RefreshesResourceRecord;
 use App\Filament\Support\MemberFilamentActions;
+use App\Filament\Support\TableHeaderIconAction;
 use App\Filament\Tenant\Resources\Members\Concerns\InteractsWithMemberContributionHeaderActions;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\Members\Schemas\MemberViewInfolist;
@@ -115,13 +116,14 @@ class ViewMember extends ViewRecord
 
     protected function getHeaderActions(): array
     {
-        return [
+        return TableHeaderIconAction::normalize([
             ...MemberFilamentActions::forMemberEditHeader(
                 $this->buildMemberAllocateDependentsAction(),
             ),
             EditAction::make()
-                ->label(__('Edit profile')),
-        ];
+                ->label(__('Edit profile'))
+                ->icon('heroicon-o-pencil-square'),
+        ]);
     }
 
     public function infolist(Schema $schema): Schema

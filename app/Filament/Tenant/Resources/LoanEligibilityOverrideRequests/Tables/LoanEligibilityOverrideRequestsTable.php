@@ -83,8 +83,7 @@ class LoanEligibilityOverrideRequestsTable
                             'pending' => 'Pending',
                             'approved' => 'Approved',
                             'rejected' => 'Rejected',
-                        ])
-                        ->default('pending'),
+                        ]),
                     SelectFilter::make('member_id')
                         ->label(__('Member'))
                         ->relationship('member', 'name')

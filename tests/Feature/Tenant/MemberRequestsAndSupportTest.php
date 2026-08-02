@@ -15,6 +15,7 @@ use App\Models\Tenant\User;
 use App\Notifications\Tenant\NewMemberRequestNotification;
 use App\Notifications\Tenant\NewSupportRequestNotification;
 use App\Services\AccountingService;
+use App\Services\MemberFreezeService;
 use App\Services\Tenant\MemberRequestService;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Notification;
@@ -113,6 +114,28 @@ test('member can submit support request and household request from support page'
     Filament::setCurrentPanel('member');
     $this->actingAs($this->memberUser, 'tenant');
 
+    // Freeze first — pending support tickets block freeze submission.
+    Livewire::test(MyMemberRequestsTableWidget::class)
+        ->mountTableAction('requestFreezeMembership')
+        ->setTableActionData([
+            'cycles' => 1,
+            'household_mode' => MemberFreezeService::HOUSEHOLD_SELF_ONLY,
+            'reason' => 'Traveling abroad for six months.',
+        ])
+        ->callMountedTableAction()
+        ->assertHasNoTableActionErrors()
+        ->assertNotified();
+
+    expect(MemberRequest::query()->count())->toBe(1)
+        ->and(MemberRequest::query()->first()->type)->toBe(MemberRequest::TYPE_FREEZE_MEMBERSHIP);
+
+    Notification::assertSentTo(
+        $this->admin,
+        NewMemberRequestNotification::class,
+        fn (NewMemberRequestNotification $notification, array $channels): bool => in_array('database', $channels, true)
+        && in_array(WebPushChannel::class, $channels, true),
+    );
+
     Livewire::test(SupportPage::class)
         ->assertSuccessful()
         ->mountAction('submit_request')
@@ -130,22 +153,6 @@ test('member can submit support request and household request from support page'
         $this->admin,
         NewSupportRequestNotification::class,
         fn (NewSupportRequestNotification $notification, array $channels): bool => in_array('database', $channels, true)
-        && in_array(WebPushChannel::class, $channels, true),
-    );
-
-    Livewire::test(MyMemberRequestsTableWidget::class)
-        ->mountTableAction('requestFreezeMembership')
-        ->setTableActionData(['reason' => 'Traveling abroad for six months.'])
-        ->callMountedTableAction()
-        ->assertNotified();
-
-    expect(MemberRequest::query()->count())->toBe(1)
-        ->and(MemberRequest::query()->first()->type)->toBe(MemberRequest::TYPE_FREEZE_MEMBERSHIP);
-
-    Notification::assertSentTo(
-        $this->admin,
-        NewMemberRequestNotification::class,
-        fn (NewMemberRequestNotification $notification, array $channels): bool => in_array('database', $channels, true)
         && in_array(WebPushChannel::class, $channels, true),
     );
 });

@@ -7,6 +7,7 @@ namespace App\Filament\Tenant\Resources\MemberRequests\Pages;
 use App\Filament\Concerns\RefreshesResourceRecord;
 use App\Filament\Support\MemberFilamentActions;
 use App\Filament\Support\MemberTableColumns;
+use App\Filament\Support\TableHeaderIconAction;
 use App\Filament\Tenant\Resources\MemberRequests\MemberRequestResource;
 use App\Filament\Tenant\Resources\MemberRequests\Schemas\MemberRequestViewInfolist;
 use App\Models\Tenant\MemberRequest;
@@ -137,7 +138,7 @@ class ViewMemberRequest extends ViewRecord
             });
         }
 
-        return [
+        return TableHeaderIconAction::normalize([
             Action::make('viewMember')
                 ->label(__('Open member'))
                 ->icon('heroicon-o-user')
@@ -171,7 +172,7 @@ class ViewMemberRequest extends ViewRecord
                     $this->refreshResolvedRecord();
                 }),
             DeleteAction::make(),
-        ];
+        ]);
     }
 
     protected function resolveRecord(int|string $key): Model

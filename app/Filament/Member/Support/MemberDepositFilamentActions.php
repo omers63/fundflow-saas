@@ -11,7 +11,6 @@ use App\Support\MemberMembershipPolicy;
 use App\Support\Tenant\CurrentMember;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
-use Filament\Support\Enums\Width;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use RuntimeException;
@@ -20,39 +19,40 @@ final class MemberDepositFilamentActions
 {
     public static function requestDeposit(): Action
     {
-        return Action::make('requestDeposit')
-            ->label(__('New deposit'))
-            ->icon('heroicon-o-plus-circle')
-            ->color('primary')
-            ->visible(fn (): bool => self::canSubmit())
-            ->modalHeading(__('New deposit'))
-            ->modalDescription(__('Submit a bank deposit for admin review. Accepted deposits credit your cash account.'))
-            ->modalWidth(Width::Large)
-            ->schema(MyFundPostingForm::components())
-            ->action(function (array $data): void {
-                $member = CurrentMember::get();
+        return MemberPortalViewModal::applyToForm(
+            Action::make('requestDeposit')
+                ->label(__('New deposit'))
+                ->icon('heroicon-o-plus-circle')
+                ->color('primary')
+                ->visible(fn (): bool => self::canSubmit())
+                ->modalHeading(__('New deposit'))
+                ->modalDescription(__('Submit a bank deposit for admin review. Accepted deposits credit your cash account.'))
+                ->schema(MyFundPostingForm::components())
+                ->action(function (array $data): void {
+                    $member = CurrentMember::get();
 
-                if ($member === null) {
-                    return;
-                }
+                    if ($member === null) {
+                        return;
+                    }
 
-                try {
-                    $posting = app(FundPostingService::class)->submit(
-                        member: $member,
-                        amount: (float) $data['amount'],
-                        postingDate: $data['posting_date'],
-                        reference: $data['reference'] ?? null,
-                        attachment: $data['attachment'] ?? null,
-                        comments: $data['comments'] ?? null,
-                    );
-                } catch (InvalidArgumentException|RuntimeException $exception) {
-                    throw ValidationException::withMessages([
-                        'amount' => $exception->getMessage(),
-                    ]);
-                }
+                    try {
+                        $posting = app(FundPostingService::class)->submit(
+                            member: $member,
+                            amount: (float) $data['amount'],
+                            postingDate: $data['posting_date'],
+                            reference: $data['reference'] ?? null,
+                            attachment: $data['attachment'] ?? null,
+                            comments: $data['comments'] ?? null,
+                        );
+                    } catch (InvalidArgumentException|RuntimeException $exception) {
+                        throw ValidationException::withMessages([
+                            'amount' => $exception->getMessage(),
+                        ]);
+                    }
 
-                self::notifySubmitted($posting);
-            });
+                    self::notifySubmitted($posting);
+                })
+        );
     }
 
     private static function notifySubmitted(FundPosting $posting): void

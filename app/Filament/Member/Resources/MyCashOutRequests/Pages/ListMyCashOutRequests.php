@@ -6,6 +6,7 @@ namespace App\Filament\Member\Resources\MyCashOutRequests\Pages;
 
 use App\Filament\Member\Resources\MyCashOutRequests\MyCashOutRequestResource;
 use App\Filament\Member\Support\MemberWithdrawalFilamentActions;
+use App\Filament\Support\TableHeaderIconAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListMyCashOutRequests extends ListRecords
@@ -20,7 +21,7 @@ class ListMyCashOutRequests extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            MemberWithdrawalFilamentActions::requestCashOut(),
+            TableHeaderIconAction::apply(MemberWithdrawalFilamentActions::requestCashOut()),
         ];
     }
 }

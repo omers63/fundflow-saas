@@ -33,7 +33,7 @@
                     {{ $healthBadge[0] }}
                 </span>
             </div>
-            <div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-700">
+            <div class="grid grid-cols-1 divide-y divide-gray-100 dark:divide-gray-700 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
                 <div class="px-3 py-2.5 text-center">
                     <p class="text-[10px] text-gray-500">{{ __('Master fund') }}</p>
                     <p class="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">

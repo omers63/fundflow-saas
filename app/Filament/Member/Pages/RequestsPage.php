@@ -89,6 +89,7 @@ class RequestsPage extends Page
                 ->where('status', MemberRequest::STATUS_PENDING)
                 ->whereIn('type', [
                     MemberRequest::TYPE_FREEZE_MEMBERSHIP,
+                    MemberRequest::TYPE_EXTEND_FREEZE_MEMBERSHIP,
                     MemberRequest::TYPE_UNFREEZE_MEMBERSHIP,
                     MemberRequest::TYPE_WITHDRAW_MEMBERSHIP,
                     MemberRequest::TYPE_REINSTATE_MEMBERSHIP,

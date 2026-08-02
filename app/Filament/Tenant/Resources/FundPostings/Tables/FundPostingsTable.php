@@ -82,8 +82,7 @@ class FundPostingsTable
                             'pending' => 'Pending',
                             'accepted' => 'Accepted',
                             'rejected' => 'Rejected',
-                        ])
-                        ->default('pending'),
+                        ]),
                     SelectFilter::make('member_id')
                         ->label('Member')
                         ->relationship('member', 'name')

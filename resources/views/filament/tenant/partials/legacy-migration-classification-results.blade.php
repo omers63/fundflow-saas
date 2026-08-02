@@ -1,5 +1,5 @@
-<div class="space-y-4 text-sm">
-    <ul class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+    <div class="space-y-4 text-sm">
+    <ul class="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
         <li>{{ __('Contributions') }}:
             {{ $classificationStats['contributions'] ?? $classificationStats['contribution'] ?? 0 }}
         </li>

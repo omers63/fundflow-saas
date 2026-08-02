@@ -8,6 +8,7 @@ use App\Filament\Support\ContributionListTableHeaderActions;
 use App\Filament\Support\LoanListTableHeaderActions;
 use App\Filament\Support\MemberListTableHeaderActions;
 use App\Filament\Support\TableHeaderIconAction;
+use App\Filament\Tenant\Resources\MonthlyStatements\Pages\ListMonthlyStatements;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Facades\Filament;
@@ -85,4 +86,17 @@ test('member contribution and bank import export new actions are icon only', fun
     expect($cycleCollection)->toBeInstanceOf(ActionGroup::class)
         ->and($cycleCollection->isIconButton())->toBeTrue()
         ->and($cycleCollection->getTooltip())->toBe(__('Cycle collection'));
+});
+
+test('monthly statements list header actions are icon only', function () {
+    $page = new ListMonthlyStatements;
+    $method = new ReflectionMethod($page, 'getHeaderActions');
+    $method->setAccessible(true);
+    /** @var list<Action|ActionGroup> $actions */
+    $actions = $method->invoke($page);
+
+    foreach ($actions as $action) {
+        expect($action->isIconButton())->toBeTrue()
+            ->and($action->getTooltip())->not->toBeEmpty();
+    }
 });

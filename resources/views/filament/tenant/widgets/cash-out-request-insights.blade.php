@@ -52,7 +52,7 @@
                     </span>
                 @endif
             </div>
-            <div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-700">
+            <div class="grid grid-cols-1 divide-y divide-gray-100 dark:divide-gray-700 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
                 <a href="{{ $pipeline['pending_url'] }}"
                     class="flex flex-col items-center px-2 py-3 text-center transition hover:bg-amber-50/70 dark:hover:bg-amber-950/20">
                     <span

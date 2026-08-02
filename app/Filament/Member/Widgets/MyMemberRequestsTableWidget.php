@@ -41,6 +41,7 @@ class MyMemberRequestsTableWidget extends TableWidget
             ->where('requester_member_id', $member->id)
             ->whereIn('type', [
                 MemberRequest::TYPE_FREEZE_MEMBERSHIP,
+                MemberRequest::TYPE_EXTEND_FREEZE_MEMBERSHIP,
                 MemberRequest::TYPE_UNFREEZE_MEMBERSHIP,
                 MemberRequest::TYPE_WITHDRAW_MEMBERSHIP,
                 MemberRequest::TYPE_REINSTATE_MEMBERSHIP,

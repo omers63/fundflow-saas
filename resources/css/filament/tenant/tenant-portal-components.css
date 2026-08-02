@@ -288,8 +288,12 @@
 }
 
 @media (max-width: 639px) {
+    .ff-tenant-detail-grid,
     .ff-tenant-detail-grid--3col {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr;
+        gap: 0.5rem 0;
+        padding-inline: 0.75rem;
+        padding-block: 0.65rem;
     }
 }
 
@@ -824,7 +828,7 @@ html[dir='rtl'] .fi-body.fi-panel-tenant .ff-tenant-create-loan .fi-sc-wizard-he
 
 @media (max-width: 640px) {
     .fi-body.fi-panel-tenant .ff-audit-wizard-steps {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: 1fr;
     }
 }
 

@@ -1,16 +1,16 @@
 @php
-    $d = $this->getData();
-    $sparkMax = max(1, max($d['sparkline'] ?? [1]));
+$d = $this->getData();
+$sparkMax = max(1, max($d['sparkline'] ?? [1]));
 @endphp
 
-@if (! empty($d))
+@if (!empty($d))
     <div class="ff-app-insights w-full max-w-none space-y-3 mb-1">
         <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
             <div @class([
-                'overflow-hidden rounded-xl border px-3 py-2.5 shadow-sm lg:col-span-1',
-                'border-amber-200/80 bg-gradient-to-r from-amber-50 to-emerald-50/80 dark:border-amber-500/30 dark:from-amber-950/40 dark:to-emerald-950/20' => $d['pending'] > 0,
-                'border-emerald-200/70 bg-gradient-to-r from-emerald-50 to-teal-50/60 dark:border-emerald-500/25 dark:from-emerald-950/30 dark:to-teal-950/20' => $d['pending'] === 0,
-            ])>
+        'overflow-hidden rounded-xl border px-3 py-2.5 shadow-sm lg:col-span-1',
+        'border-amber-200/80 bg-gradient-to-r from-amber-50 to-emerald-50/80 dark:border-amber-500/30 dark:from-amber-950/40 dark:to-emerald-950/20' => $d['pending'] > 0,
+        'border-emerald-200/70 bg-gradient-to-r from-emerald-50 to-teal-50/60 dark:border-emerald-500/25 dark:from-emerald-950/30 dark:to-teal-950/20' => $d['pending'] === 0,
+    ])>
                 <div class="flex flex-col items-stretch gap-2">
                     <div class="min-w-0">
                         <p class="text-xs font-semibold text-gray-900 dark:text-white">
@@ -32,19 +32,20 @@
 
             <div
                 class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 lg:col-span-2">
-                <div class="grid grid-cols-4 divide-x divide-gray-100 dark:divide-gray-700">
+                <div class="grid grid-cols-1 divide-y divide-gray-100 dark:divide-gray-700 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
                     @foreach ([
-                        ['label' => __('Total'), 'value' => $d['total'], 'accent' => 'sky'],
-                        ['label' => __('Pending'), 'value' => $d['pending'], 'accent' => 'amber'],
-                        ['label' => __('Accepted'), 'value' => $d['accepted'], 'accent' => 'emerald'],
-                        ['label' => __('Rejected'), 'value' => $d['rejected'], 'accent' => 'rose'],
-                    ] as $card)
-                        <div class="ff-app-insights-kpi ff-member-stat-card min-w-0 px-3 py-2.5 text-center" data-accent="{{ $card['accent'] }}">
+                            ['label' => __('Total'), 'value' => $d['total'], 'accent' => 'sky'],
+                            ['label' => __('Pending'), 'value' => $d['pending'], 'accent' => 'amber'],
+                            ['label' => __('Accepted'), 'value' => $d['accepted'], 'accent' => 'emerald'],
+                            ['label' => __('Rejected'), 'value' => $d['rejected'], 'accent' => 'rose'],
+                        ] as $card)
+                        <div class="ff-app-insights-kpi ff-member-stat-card min-w-0 px-3 py-2.5 text-center"
+                            data-accent="{{ $card['accent'] }}">
                             <x-ff-stat-line :text="(string) $card['value']"
-                                class="truncate text-lg font-bold tabular-nums text-gray-900 dark:text-white" />
+                                class="break-words text-lg font-bold tabular-nums text-gray-900 dark:text-white" />
                             <x-ff-stat-line :text="ui_label($card['label'])"
-                                class="truncate text-[10px] font-medium uppercase tracking-wide text-gray-500" />
-                        </div>
+                                class="break-words text-[10px] font-medium uppercase tracking-wide text-gray-500" />
+                            </div>
                     @endforeach
                 </div>
                 <div class="border-t border-gray-100 px-3 py-2 dark:border-gray-700">

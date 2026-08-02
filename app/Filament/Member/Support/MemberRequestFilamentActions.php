@@ -6,6 +6,7 @@ namespace App\Filament\Member\Support;
 
 use App\Filament\Support\MemberFreezeFormSchema;
 use App\Filament\Support\MemberWithdrawFormSchema;
+use App\Filament\Support\TableHeaderIconAction;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberRequest;
 use App\Services\MemberFreezeService;
@@ -23,24 +24,25 @@ use Illuminate\Validation\ValidationException;
 final class MemberRequestFilamentActions
 {
     /**
-     * @return list<Action>
+     * @return list<Action|ActionGroup>
      */
     public static function membershipHeaderActions(): array
     {
         $service = app(MemberRequestService::class);
 
         return [
-            ActionGroup::make([
-                self::freezeMembershipAction($service),
-                self::extendFreezeMembershipAction($service),
-                self::unfreezeMembershipAction($service),
-                self::withdrawMembershipAction($service),
-                self::independenceAction($service),
-            ])
-                ->label(__('New request'))
-                ->icon('heroicon-o-plus')
-                ->color('primary')
-                ->button(),
+            TableHeaderIconAction::applyGroup(
+                ActionGroup::make([
+                    self::freezeMembershipAction($service),
+                    self::extendFreezeMembershipAction($service),
+                    self::unfreezeMembershipAction($service),
+                    self::withdrawMembershipAction($service),
+                    self::independenceAction($service),
+                ])
+                    ->label(__('New request'))
+                    ->icon('heroicon-o-plus')
+                    ->color('primary')
+            ),
         ];
     }
 
