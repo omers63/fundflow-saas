@@ -15,6 +15,8 @@ final class AuditSystemTabRegistry
     {
         return [
             'audit' => __('Audit log'),
+            'remittances' => __('Outbound remittances'),
+            'inbound_remittances' => __('Inbound remittances'),
             'access' => __('Access log'),
             'notifications' => __('Notification log'),
             'jobs' => __('Automation'),

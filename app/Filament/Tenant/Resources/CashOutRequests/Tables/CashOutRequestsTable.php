@@ -86,7 +86,7 @@ class CashOutRequestsTable
                         ->color('success')
                         ->requiresConfirmation()
                         ->modalHeading(__('Accept cash out'))
-                        ->modalDescription(__('Debits the member and master cash accounts. Match the pending bank line to a statement import later to clear it.'))
+                        ->modalDescription(__('Debits the member and master cash accounts, adds a remittance checklist item, and creates a pending bank line. Transfer money, then mark remittance completed; clear the bank line when the statement imports.'))
                         ->hidden(fn ($record) => $record->status !== 'pending')
                         ->schema([
                             Textarea::make('admin_remarks')

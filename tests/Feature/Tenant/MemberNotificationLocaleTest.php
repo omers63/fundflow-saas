@@ -314,7 +314,7 @@ test('admin cash-out database notification uses admin preferred locale', functio
 
     $stored = $admin->fresh()->notifications()->firstOrFail();
 
-    expect($stored->data['title'] ?? null)->toBe('طلب سحب جديد')
+    expect($stored->data['title'] ?? null)->toBe('طلب سحب نقدي جديد')
         ->and($stored->data['actions'] ?? [])->not->toBeEmpty();
 });
 

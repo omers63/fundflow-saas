@@ -7,6 +7,7 @@ namespace App\Jobs\Tenant;
 use App\Filament\Support\RecipientDatabaseNotification;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
+use App\Services\LegacyMigration\LegacyImportFailureRecorder;
 use App\Services\LegacyMigration\LegacyMigrationOrchestrator;
 use App\Services\LegacyMigration\LegacyMigrationWorkingCopy;
 use App\Services\LegacyMigration\LegacyPaymentClassifierService;
@@ -100,16 +101,30 @@ final class ClassifyLegacyPaymentsJob implements ShouldQueue
 
             $result = $orchestrator->classifyAndPersistPayments($this->migrationOptions);
             Setting::set('legacy_migration', 'classify_errors', json_encode(
-                array_slice($result['errors'] ?? [], 0, 10),
-                JSON_THROW_ON_ERROR,
+                array_slice($result['errors'] ?? [], 0, 50),
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
             ));
             Setting::set('legacy_migration', 'classify_status', 'completed');
             Setting::set('legacy_migration', 'classify_error', '');
+            Setting::set('legacy_migration', LegacyImportFailureRecorder::CLASSIFY_FAILURE_SETTING, '');
         } catch (Throwable $exception) {
             report($exception);
 
+            $payload = LegacyImportFailureRecorder::buildPayload(
+                section: 'classification',
+                message: $exception->getMessage(),
+                exception: $exception,
+                result: null,
+                stage: LegacyImportFailureRecorder::exceptionStage($exception, 'classification'),
+            );
+
             Setting::set('legacy_migration', 'classify_status', 'failed');
             Setting::set('legacy_migration', 'classify_error', $exception->getMessage());
+            Setting::set(
+                'legacy_migration',
+                LegacyImportFailureRecorder::CLASSIFY_FAILURE_SETTING,
+                json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            );
 
             $this->notifyRequester(
                 fn (Notification $notification): Notification => $notification

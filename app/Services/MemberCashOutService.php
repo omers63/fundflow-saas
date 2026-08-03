@@ -31,6 +31,7 @@ final class MemberCashOutService
         private OperationalReviewWorkflowService $reviewWorkflow,
         private SyntheticBankStatementFactory $syntheticStatements,
         private BankClearanceLinkageResolver $clearanceLinkageResolver,
+        private OutboundPaymentService $outboundPayments,
     ) {}
 
     /**
@@ -291,6 +292,13 @@ final class MemberCashOutService
             $this->reviewWorkflow->markReviewed($request, 'accepted', $reviewedBy, $remarks, $reviewedAt, [
                 'bank_transaction_id' => $bankTxn->id,
             ]);
+
+            $this->outboundPayments->recordCashOut(
+                $request->fresh(),
+                $bankTxn,
+                $reviewedBy,
+                $reviewedAt,
+            );
 
             $this->notifyMemberAboutCashOut($request, true);
         });

@@ -54,6 +54,34 @@
                         {{ $this->table }}
                     </div>
                 </div>
+            @elseif ($this->sideTab === 'remittances')
+                <div>
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                            {{ __('Outbound bank remittances') }}
+                        </h3>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {{ __('Checklist of approved payouts that still need a transfer, wire, or check. Mark transferred when money leaves the bank; clear the bank line separately under Bank Clearing.') }}
+                        </p>
+                    </div>
+                    <div wire:key="audit-system-table-remittances">
+                        {{ $this->table }}
+                    </div>
+                </div>
+            @elseif ($this->sideTab === 'inbound_remittances')
+                <div>
+                    <div class="mb-4">
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                            {{ __('Inbound bank remittances') }}
+                        </h3>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {{ __('Checklist of expected receipts (deposits, invest returns). Mark received when funds or a check arrive; clear the bank line separately under Bank Clearing.') }}
+                        </p>
+                    </div>
+                    <div wire:key="audit-system-table-inbound-remittances">
+                        {{ $this->table }}
+                    </div>
+                </div>
             @elseif ($this->sideTab === 'access')
                 <div>
                     <div class="mb-4">

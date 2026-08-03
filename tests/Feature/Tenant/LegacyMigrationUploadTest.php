@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Filament\Tenant\Pages\LegacyMigrationPage;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
+use App\Services\LegacyMigration\LegacyImportFailureRecorder;
 use App\Services\LegacyMigration\LegacyMigrationWorkingCopy;
 use App\Services\LegacyMigration\LegacyPaymentClassifierService;
 use App\Support\AssociativeCsv;
@@ -170,6 +171,42 @@ test('legacy migration import members reads working copy from disk', function ()
         ])
         ->call('importMembers')
         ->assertNotified(__('Members imported'));
+
+    Storage::disk('local')->delete(LegacyMigrationWorkingCopy::MEMBERS_RELATIVE);
+});
+
+test('legacy migration members import failure shows detailed results on the page', function () {
+    Filament::setCurrentPanel('tenant');
+
+    Storage::disk('local')->put(LegacyMigrationWorkingCopy::MEMBERS_RELATIVE, implode("\n", [
+        'member_number,name,email',
+        '101,,broken@fund.test',
+    ]));
+
+    $component = Livewire::actingAs($this->admin, 'tenant')
+        ->test(LegacyMigrationPage::class, ['embedded' => true])
+        ->fillForm([
+            'cutoff_date' => '2025-12-31',
+            'default_password' => 'password123',
+        ])
+        ->call('importMembers');
+
+    expect($component->get('membersResultsPanel'))->toBeArray()
+        ->and($component->get('membersResultsPanel')['tone'] ?? null)->toBe('danger')
+        ->and($component->get('membersResultsPanel')['errors'] ?? [])->not->toBeEmpty();
+
+    $component
+        ->assertSee(__('Members import failed'), false)
+        ->assertSee(__('Row issues'), false)
+        ->assertSee('Row 2', false);
+
+    $failure = json_decode((string) Setting::get('legacy_migration', LegacyImportFailureRecorder::MEMBERS_FAILURE_SETTING), true);
+
+    expect($failure)->toBeArray()
+        ->and($failure['section'] ?? null)->toBe('members')
+        ->and($failure['stage'] ?? null)->toBe('completeness_check')
+        ->and($failure['errors'] ?? [])->not->toBeEmpty()
+        ->and(Setting::get('legacy_migration', 'members_import_status'))->toBe('failed');
 
     Storage::disk('local')->delete(LegacyMigrationWorkingCopy::MEMBERS_RELATIVE);
 });

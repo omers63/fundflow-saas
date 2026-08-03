@@ -7,14 +7,18 @@ namespace App\Jobs\Tenant;
 use App\Filament\Support\RecipientDatabaseNotification;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
+use App\Services\LegacyMigration\IncompleteLegacyImportException;
+use App\Services\LegacyMigration\LegacyImportFailureRecorder;
 use App\Services\LegacyMigration\LegacyMigrationOrchestrator;
 use App\Services\LegacyMigration\LegacyMigrationWorkingCopy;
 use Filament\Notifications\Notification;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use InvalidArgumentException;
 use Throwable;
 
 final class ImportLegacyLoansJob implements ShouldQueue
@@ -66,28 +70,85 @@ final class ImportLegacyLoansJob implements ShouldQueue
                 ?? null;
 
             $result = $orchestrator->importLoans($this->migrationOptions);
+            $summarized = LegacyMigrationOrchestrator::summarizeForDisplay($result);
 
             Setting::set('legacy_migration', 'loans_imported', '1');
             Setting::set('legacy_migration', 'loans_import_result', json_encode(
-                LegacyMigrationOrchestrator::summarizeForDisplay($result),
-                JSON_THROW_ON_ERROR,
+                $summarized,
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
             ));
             Setting::set('legacy_migration', 'loans_import_status', 'completed');
             Setting::set('legacy_migration', 'loans_import_error', '');
+            Setting::set('legacy_migration', LegacyImportFailureRecorder::LOANS_FAILURE_SETTING, '');
+
+            $loans = $summarized['loans'] ?? [];
+            $failed = (int) ($loans['failed'] ?? 0);
+            $errorCount = count($loans['errors'] ?? []);
+
+            if ($failed > 0 || $errorCount > 0) {
+                $this->notifyRequester(
+                    fn (Notification $notification): Notification => $notification
+                        ->title(__('Loans imported with warnings'))
+                        ->body(__('Loans created: :loans · Failed: :failed. Review row errors on the migration page.', [
+                            'loans' => $loans['created'] ?? 0,
+                            'failed' => $failed,
+                        ])),
+                    'warning',
+                );
+            }
         } catch (Throwable $exception) {
             report($exception);
-
-            Setting::set('legacy_migration', 'loans_import_status', 'failed');
-            Setting::set('legacy_migration', 'loans_import_error', $exception->getMessage());
+            $this->recordFailure($exception);
 
             $this->notifyRequester(
                 fn (Notification $notification): Notification => $notification
                     ->title(__('Import failed'))
-                    ->body($exception->getMessage()),
+                    ->body($exception->getMessage() !== '' ? $exception->getMessage() : __('Import failed')),
                 'danger',
             );
 
             throw $exception;
+        }
+    }
+
+    private function recordFailure(Throwable $exception): void
+    {
+        $result = $exception instanceof IncompleteLegacyImportException
+            ? $exception->result
+            : null;
+
+        $stage = match (true) {
+            $exception instanceof IncompleteLegacyImportException => $exception->stage,
+            $exception instanceof AuthorizationException => 'authorization',
+            $exception instanceof InvalidArgumentException => 'validation',
+            default => 'import',
+        };
+
+        $payload = LegacyImportFailureRecorder::buildPayload(
+            section: 'loans',
+            message: $exception->getMessage(),
+            exception: $exception,
+            result: $result,
+            stage: $stage,
+        );
+
+        Setting::set('legacy_migration', 'loans_import_status', 'failed');
+        Setting::set('legacy_migration', 'loans_import_error', $exception->getMessage());
+        Setting::set(
+            'legacy_migration',
+            LegacyImportFailureRecorder::LOANS_FAILURE_SETTING,
+            json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+        );
+
+        if ($result !== null) {
+            Setting::set(
+                'legacy_migration',
+                'loans_import_result',
+                json_encode(
+                    LegacyMigrationOrchestrator::summarizeForDisplay(['loans' => $result]),
+                    JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
+                ),
+            );
         }
     }
 

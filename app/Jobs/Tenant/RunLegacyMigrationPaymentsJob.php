@@ -7,6 +7,7 @@ namespace App\Jobs\Tenant;
 use App\Filament\Support\RecipientDatabaseNotification;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
+use App\Services\LegacyMigration\LegacyImportFailureRecorder;
 use App\Services\LegacyMigration\LegacyMigrationOrchestrator;
 use Filament\Notifications\Notification;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -60,6 +61,8 @@ final class RunLegacyMigrationPaymentsJob implements ShouldQueue
 
             Setting::set('legacy_migration', 'last_run', json_encode($summarized, JSON_UNESCAPED_UNICODE));
             Setting::set('legacy_migration', 'run_status', 'completed');
+            Setting::set('legacy_migration', 'last_error', '');
+            Setting::set('legacy_migration', LegacyImportFailureRecorder::APPLY_FAILURE_SETTING, '');
 
             $members = $summarized['members'] ?? [];
 
@@ -77,8 +80,21 @@ final class RunLegacyMigrationPaymentsJob implements ShouldQueue
         } catch (Throwable $exception) {
             report($exception);
 
+            $payload = LegacyImportFailureRecorder::buildPayload(
+                section: 'payments',
+                message: $exception->getMessage(),
+                exception: $exception,
+                result: null,
+                stage: LegacyImportFailureRecorder::exceptionStage($exception, 'apply'),
+            );
+
             Setting::set('legacy_migration', 'run_status', 'failed');
             Setting::set('legacy_migration', 'last_error', $exception->getMessage());
+            Setting::set(
+                'legacy_migration',
+                LegacyImportFailureRecorder::APPLY_FAILURE_SETTING,
+                json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            );
 
             $this->notifyRequester(
                 fn (Notification $notification): Notification => $notification

@@ -6,9 +6,10 @@ namespace App\Providers;
 
 use App\Http\Livewire\LanguageSwitchComponent;
 use App\Http\Livewire\TenantTopbarLanguageSwitch;
-use App\Models\Tenant\User;
 use App\Support\AppLocale;
 use App\Support\ShowsFundPublicShell;
+use App\Support\TenantAuthUser;
+use App\Support\UserPreferredLocale;
 use BezhanSalleh\LanguageSwitch\Enums\Placement;
 use BezhanSalleh\LanguageSwitch\Events\LocaleChanged;
 use BezhanSalleh\LanguageSwitch\LanguageSwitch;
@@ -58,13 +59,9 @@ class LocalizationServiceProvider extends ServiceProvider
                 ->outsidePanelPlacement(Placement::TopRight)
                 ->renderHook(PanelsRenderHook::USER_MENU_BEFORE)
                 ->userPreferredLocale(function (): ?string {
-                    $user = auth()->user();
+                    $user = TenantAuthUser::user();
 
-                    if ($user instanceof User) {
-                        return $user->preferredLocale();
-                    }
-
-                    return null;
+                    return $user?->preferredLocale();
                 });
         });
     }
@@ -74,17 +71,17 @@ class LocalizationServiceProvider extends ServiceProvider
         Event::listen(function (LocaleChanged $event): void {
             session()->put('locale', $event->locale);
 
-            $user = auth()->user();
-
-            if (! $user instanceof User || ! AppLocale::isSupported($event->locale)) {
+            if (! AppLocale::isSupported($event->locale)) {
                 return;
             }
 
-            if ($user->preferred_locale === $event->locale) {
+            $user = TenantAuthUser::user();
+
+            if ($user === null) {
                 return;
             }
 
-            $user->forceFill(['preferred_locale' => $event->locale])->save();
+            UserPreferredLocale::persist($user, $event->locale);
         });
     }
 }

@@ -57,7 +57,7 @@ class CreateCashOutRequest extends CreateRecord
     {
         return Notification::make()
             ->title(__('Cash out approved'))
-            ->body(__('Member and master cash have been debited. Match the bank line when the transfer clears.'))
+            ->body(__('Member and master cash have been debited. Complete the remittance checklist under Audit & System, then clear the bank line when the statement imports.'))
             ->success();
     }
 }

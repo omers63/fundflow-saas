@@ -15,12 +15,14 @@ use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\FundAuditLog;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\FundTier;
+use App\Models\Tenant\InboundPayment;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
+use App\Models\Tenant\OutboundPayment;
 use App\Models\Tenant\PortalAccessLog;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\SmsImportSession;
@@ -866,6 +868,52 @@ final class TableGrouping
             Group::make('accessed_at')
                 ->label(__('Accessed at'))
                 ->date(),
+        ];
+    }
+
+    /**
+     * @return array<int, Group>
+     */
+    public static function outboundPayments(): array
+    {
+        return [
+            Group::make('status')
+                ->label(__('Status'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn(OutboundPayment $record): string => $record->statusLabel()),
+            Group::make('type')
+                ->label(__('Type'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn(OutboundPayment $record): string => $record->typeLabel()),
+            Group::make('instruction_date')
+                ->label(__('Date'))
+                ->date(),
+            Group::make('payee_name')
+                ->label(__('Payee'))
+                ->titlePrefixedWithLabel(false),
+        ];
+    }
+
+    /**
+     * @return array<int, Group>
+     */
+    public static function inboundPayments(): array
+    {
+        return [
+            Group::make('status')
+                ->label(__('Status'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn(InboundPayment $record): string => $record->statusLabel()),
+            Group::make('type')
+                ->label(__('Type'))
+                ->titlePrefixedWithLabel(false)
+                ->getTitleFromRecordUsing(fn(InboundPayment $record): string => $record->typeLabel()),
+            Group::make('instruction_date')
+                ->label(__('Date'))
+                ->date(),
+            Group::make('payer_name')
+                ->label(__('Payer'))
+                ->titlePrefixedWithLabel(false),
         ];
     }
 }

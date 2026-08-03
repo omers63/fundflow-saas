@@ -24,6 +24,7 @@ final class MasterExpenseDisbursementService
         private BankTransactionClearanceService $bankClearance,
         private SyntheticBankStatementFactory $syntheticStatements,
         private BankClearanceLinkageResolver $clearanceLinkageResolver,
+        private OutboundPaymentService $outboundPayments,
     ) {}
 
     public function disburse(
@@ -31,6 +32,7 @@ final class MasterExpenseDisbursementService
         float $amount,
         string $description,
         ?DateTimeInterface $transactedAt = null,
+        ?int $createdBy = null,
     ): ExpenseDisbursement {
         $this->assertMasterExpenseAccount($masterExpense);
 
@@ -50,8 +52,8 @@ final class MasterExpenseDisbursementService
 
         $transactedAt = $transactedAt ?? BusinessDay::now();
 
-        return ReconciliationService::withoutRealtimeChecks(function () use ($masterExpense, $amount, $description, $transactedAt): ExpenseDisbursement {
-            return DB::transaction(function () use ($masterExpense, $amount, $description, $transactedAt): ExpenseDisbursement {
+        return ReconciliationService::withoutRealtimeChecks(function () use ($masterExpense, $amount, $description, $transactedAt, $createdBy): ExpenseDisbursement {
+            return DB::transaction(function () use ($masterExpense, $amount, $description, $transactedAt, $createdBy): ExpenseDisbursement {
                 $disbursement = ExpenseDisbursement::create([
                     'amount' => $amount,
                     'description' => $description,
@@ -81,6 +83,12 @@ final class MasterExpenseDisbursementService
                 );
 
                 $disbursement->update(['bank_transaction_id' => $bankTxn->id]);
+
+                $this->outboundPayments->recordExpenseDisbursement(
+                    $disbursement->fresh(),
+                    $bankTxn,
+                    $createdBy,
+                );
 
                 return $disbursement->fresh(['bankTransaction']);
             });

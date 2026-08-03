@@ -116,7 +116,17 @@ final class LegacyMigrationOrchestrator
             $cutoff,
         );
 
-        $this->assertAllCsvMembersPresent((string) $options['members_path'], $members);
+        try {
+            $this->assertAllCsvMembersPresent((string) $options['members_path'], $members);
+        } catch (\RuntimeException $exception) {
+            throw new IncompleteLegacyImportException(
+                $exception->getMessage(),
+                $members,
+                'members',
+                'completeness_check',
+                $exception,
+            );
+        }
 
         return ['members' => $members];
     }

@@ -24,6 +24,7 @@ final class MasterInvestDisbursementService
         private BankTransactionClearanceService $bankClearance,
         private SyntheticBankStatementFactory $syntheticStatements,
         private BankClearanceLinkageResolver $clearanceLinkageResolver,
+        private OutboundPaymentService $outboundPayments,
     ) {}
 
     public function disburse(
@@ -32,6 +33,7 @@ final class MasterInvestDisbursementService
         string $description,
         ?DateTimeInterface $transactedAt = null,
         ?InvestDisbursement $disbursement = null,
+        ?int $createdBy = null,
     ): InvestDisbursement {
         $this->assertMasterInvestAccount($masterInvest);
 
@@ -51,8 +53,8 @@ final class MasterInvestDisbursementService
 
         $transactedAt = $transactedAt ?? BusinessDay::now();
 
-        return ReconciliationService::withoutRealtimeChecks(function () use ($masterInvest, $amount, $description, $transactedAt, $disbursement): InvestDisbursement {
-            return DB::transaction(function () use ($masterInvest, $amount, $description, $transactedAt, $disbursement): InvestDisbursement {
+        return ReconciliationService::withoutRealtimeChecks(function () use ($masterInvest, $amount, $description, $transactedAt, $disbursement, $createdBy): InvestDisbursement {
+            return DB::transaction(function () use ($masterInvest, $amount, $description, $transactedAt, $disbursement, $createdBy): InvestDisbursement {
                 $disbursement ??= InvestDisbursement::create([
                     'amount' => $amount,
                     'description' => $description,
@@ -82,6 +84,12 @@ final class MasterInvestDisbursementService
                 );
 
                 $disbursement->update(['bank_transaction_id' => $bankTxn->id]);
+
+                $this->outboundPayments->recordInvestDisbursement(
+                    $disbursement->fresh(),
+                    $bankTxn,
+                    $createdBy,
+                );
 
                 return $disbursement->fresh(['bankTransaction']);
             });

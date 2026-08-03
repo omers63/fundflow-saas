@@ -25,6 +25,7 @@ final class MasterInvestReturnService
         private BankTransactionClearanceService $bankClearance,
         private SyntheticBankStatementFactory $syntheticStatements,
         private BankClearanceLinkageResolver $clearanceLinkageResolver,
+        private InboundPaymentService $inboundPayments,
     ) {}
 
     public function record(
@@ -32,6 +33,7 @@ final class MasterInvestReturnService
         float $amount,
         string $description,
         ?DateTimeInterface $transactedAt = null,
+        ?int $createdBy = null,
     ): InvestReturn {
         $this->assertMasterInvestAccount($masterInvest);
 
@@ -47,8 +49,8 @@ final class MasterInvestReturnService
 
         $transactedAt = $transactedAt ?? BusinessDay::now();
 
-        return ReconciliationService::withoutRealtimeChecks(function () use ($masterInvest, $amount, $description, $transactedAt): InvestReturn {
-            return DB::transaction(function () use ($masterInvest, $amount, $description, $transactedAt): InvestReturn {
+        return ReconciliationService::withoutRealtimeChecks(function () use ($masterInvest, $amount, $description, $transactedAt, $createdBy): InvestReturn {
+            return DB::transaction(function () use ($masterInvest, $amount, $description, $transactedAt, $createdBy): InvestReturn {
                 $investReturn = InvestReturn::create([
                     'amount' => $amount,
                     'description' => $description,
@@ -78,6 +80,12 @@ final class MasterInvestReturnService
                 );
 
                 $investReturn->update(['bank_transaction_id' => $bankTxn->id]);
+
+                $this->inboundPayments->recordInvestReturn(
+                    $investReturn->fresh(),
+                    $bankTxn,
+                    $createdBy,
+                );
 
                 return $investReturn->fresh(['bankTransaction']);
             });

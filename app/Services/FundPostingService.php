@@ -24,6 +24,7 @@ class FundPostingService
         private OperationalReviewWorkflowService $reviewWorkflow,
         private SyntheticBankStatementFactory $syntheticStatements,
         private BankClearanceLinkageResolver $clearanceLinkageResolver,
+        private InboundPaymentService $inboundPayments,
     ) {}
 
     /**
@@ -68,6 +69,15 @@ class FundPostingService
             ]);
 
             $posting->update(['bank_transaction_id' => $bankTxn->id]);
+
+            $isAdminSession = auth('tenant')->user()?->is_admin === true;
+
+            $this->inboundPayments->recordFundPosting(
+                $posting->fresh() ?? $posting,
+                $bankTxn,
+                auth('tenant')->id(),
+                notify: $isAdminSession,
+            );
 
             $this->notifyAdminsOfNewPosting($posting);
 
@@ -137,6 +147,12 @@ class FundPostingService
             $this->reviewWorkflow->markReviewed($posting, 'rejected', $reviewedBy, $remarks);
 
             $this->updateLinkedBankTransactionStatus($posting, 'ignored');
+
+            $this->inboundPayments->cancelForSource(
+                $posting,
+                $reviewedBy,
+                $remarks ?? __('Deposit rejected'),
+            );
 
             $this->notifyMemberOfReview($posting, 'rejected');
         });

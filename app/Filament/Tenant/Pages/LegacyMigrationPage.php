@@ -14,6 +14,8 @@ use App\Jobs\Tenant\ImportLegacyLoansJob;
 use App\Jobs\Tenant\ImportLegacyMembersJob;
 use App\Jobs\Tenant\RunLegacyMigrationPaymentsJob;
 use App\Models\Tenant\Setting;
+use App\Services\LegacyMigration\IncompleteLegacyImportException;
+use App\Services\LegacyMigration\LegacyImportFailureRecorder;
 use App\Services\LegacyMigration\LegacyMigrationOrchestrator;
 use App\Services\LegacyMigration\LegacyMigrationWorkingCopy;
 use App\Services\LegacyMigration\LegacyPaymentClassifierService;
@@ -91,6 +93,22 @@ class LegacyMigrationPage extends Page implements HasForms
     public bool $migrationRunning = false;
 
     public ?string $migrationLastError = null;
+
+    /**
+     * Foldable results panels (members / loans / classify / apply).
+     *
+     * @var array<string, mixed>|null
+     */
+    public ?array $membersResultsPanel = null;
+
+    /** @var array<string, mixed>|null */
+    public ?array $loansResultsPanel = null;
+
+    /** @var array<string, mixed>|null */
+    public ?array $classificationResultsPanel = null;
+
+    /** @var array<string, mixed>|null */
+    public ?array $migrationResultsPanel = null;
 
     public ?string $lastKnownMigrationStatus = null;
 
@@ -178,22 +196,31 @@ class LegacyMigrationPage extends Page implements HasForms
 
         if ($previousStatus === 'running' && $currentStatus === 'completed') {
             $members = $this->decodedImportResult('members_import_result')['members'] ?? [];
+            $failed = (int) ($members['failed'] ?? 0);
+            $hasErrors = $failed > 0 || count($members['errors'] ?? []) > 0;
 
             Notification::make()
-                ->title(__('Members imported'))
+                ->title($hasErrors ? __('Members imported with warnings') : __('Members imported'))
                 ->body(__('Members created: :created · Skipped: :skipped · Failed: :failed', [
                     'created' => $members['created'] ?? 0,
                     'skipped' => $members['skipped'] ?? 0,
-                    'failed' => $members['failed'] ?? 0,
-                ]))
-                ->success()
+                    'failed' => $failed,
+                ]).(
+                    $hasErrors
+                    ? ' '.__('Open the import results panel for row-level details.')
+                    : ''
+                ))
+                ->color($hasErrors ? 'warning' : 'success')
                 ->send();
         }
 
         if ($previousStatus === 'running' && $currentStatus === 'failed') {
+            $message = (string) ($this->membersResultsPanel['message']
+                ?? Setting::get('legacy_migration', 'members_import_error', __('Import failed')));
+
             Notification::make()
                 ->title(__('Import failed'))
-                ->body((string) Setting::get('legacy_migration', 'members_import_error', __('Import failed')))
+                ->body(filled($message) ? $message : __('Import failed'))
                 ->danger()
                 ->persistent()
                 ->send();
@@ -215,21 +242,29 @@ class LegacyMigrationPage extends Page implements HasForms
 
         if ($previousStatus === 'running' && $currentStatus === 'completed') {
             $loans = $this->decodedImportResult('loans_import_result')['loans'] ?? [];
+            $failed = (int) ($loans['failed'] ?? 0);
+            $hasErrors = $failed > 0 || count($loans['errors'] ?? []) > 0;
 
             Notification::make()
-                ->title(__('Loans imported'))
+                ->title($hasErrors ? __('Loans imported with warnings') : __('Loans imported'))
                 ->body(__('Loans created: :loans · Failed: :failed', [
                     'loans' => $loans['created'] ?? 0,
-                    'failed' => $loans['failed'] ?? 0,
-                ]))
-                ->success()
+                    'failed' => $failed,
+                ]).(
+                    $hasErrors
+                    ? ' '.__('Open the import results panel for row-level details.')
+                    : ''
+                ))
+                ->color($hasErrors ? 'warning' : 'success')
                 ->send();
         }
 
         if ($previousStatus === 'running' && $currentStatus === 'failed') {
+            $message = (string) ($this->loansResultsPanel['message'] ?? Setting::get('legacy_migration', 'loans_import_error', __('Import failed')));
+
             Notification::make()
                 ->title(__('Import failed'))
-                ->body((string) Setting::get('legacy_migration', 'loans_import_error', __('Import failed')))
+                ->body(filled($message) ? $message : __('Import failed'))
                 ->danger()
                 ->persistent()
                 ->send();
@@ -683,9 +718,23 @@ class LegacyMigrationPage extends Page implements HasForms
         } catch (\Throwable $e) {
             report($e);
 
+            $payload = LegacyImportFailureRecorder::buildPayload(
+                section: 'classification',
+                message: $e->getMessage(),
+                exception: $e,
+                result: null,
+                stage: LegacyImportFailureRecorder::exceptionStage($e, 'classification'),
+            );
+
             Setting::set('legacy_migration', 'classify_status', 'failed');
             Setting::set('legacy_migration', 'classify_error', $e->getMessage());
+            Setting::set(
+                'legacy_migration',
+                LegacyImportFailureRecorder::CLASSIFY_FAILURE_SETTING,
+                json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            );
             $this->classificationRunning = false;
+            $this->refreshClassificationStateFromSettings();
 
             Notification::make()
                 ->title(__('Classification failed'))
@@ -780,16 +829,23 @@ class LegacyMigrationPage extends Page implements HasForms
         try {
             Setting::set('legacy_migration', 'run_status', 'running');
             Setting::set('legacy_migration', 'last_error', '');
+            Setting::set('legacy_migration', LegacyImportFailureRecorder::APPLY_FAILURE_SETTING, '');
             $this->migrationRunning = true;
             $this->lastKnownMigrationStatus = 'running';
+            $this->migrationResultsPanel = null;
 
             if (app()->environment('testing')) {
                 dispatch_sync(new RunLegacyMigrationPaymentsJob($options, [], auth('tenant')->id()));
                 $this->refreshMigrationStateFromSettings();
 
+                $status = (string) Setting::get('legacy_migration', 'run_status', 'idle');
+
                 Notification::make()
-                    ->title(__('Migration complete'))
-                    ->success()
+                    ->title($status === 'failed' ? __('Migration failed') : __('Migration complete'))
+                    ->body($status === 'failed'
+                        ? (string) ($this->migrationResultsPanel['message'] ?? __('Migration failed'))
+                        : null)
+                    ->color($status === 'failed' ? 'danger' : 'success')
                     ->send();
             } else {
                 RunLegacyMigrationPaymentsJob::dispatch($options, [], auth('tenant')->id());
@@ -803,10 +859,24 @@ class LegacyMigrationPage extends Page implements HasForms
         } catch (\Throwable $e) {
             report($e);
 
+            $payload = LegacyImportFailureRecorder::buildPayload(
+                section: 'payments',
+                message: $e->getMessage(),
+                exception: $e,
+                result: null,
+                stage: LegacyImportFailureRecorder::exceptionStage($e, 'apply'),
+            );
+
             Setting::set('legacy_migration', 'run_status', 'failed');
             Setting::set('legacy_migration', 'last_error', $e->getMessage());
+            Setting::set(
+                'legacy_migration',
+                LegacyImportFailureRecorder::APPLY_FAILURE_SETTING,
+                json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            );
             $this->migrationRunning = false;
             $this->migrationLastError = $e->getMessage();
+            $this->refreshMigrationStateFromSettings();
 
             Notification::make()
                 ->title(__('Migration failed'))
@@ -841,6 +911,9 @@ class LegacyMigrationPage extends Page implements HasForms
         $status = (string) Setting::get('legacy_migration', 'classify_status', 'idle');
         $this->classificationRunning = $status === 'running';
         $this->classifiedPaymentsReady = Storage::disk('local')->exists(self::CLASSIFIED_PAYMENTS_PATH);
+        $this->classificationStats = null;
+        $this->classificationErrors = [];
+        $this->classificationResultsPanel = null;
 
         $statsJson = Setting::get('legacy_migration', 'classify_stats');
 
@@ -858,8 +931,144 @@ class LegacyMigrationPage extends Page implements HasForms
             $decoded = json_decode($errorsJson, true);
 
             if (is_array($decoded)) {
-                $this->classificationErrors = $decoded;
+                $this->classificationErrors = LegacyImportFailureRecorder::normalizeErrors($decoded);
             }
+        }
+
+        $failure = $this->decodedImportResult(LegacyImportFailureRecorder::CLASSIFY_FAILURE_SETTING);
+        $errorMessage = (string) Setting::get('legacy_migration', 'classify_error', '');
+        $stats = $this->classificationStats ?? [];
+        $errors = $this->classificationErrors;
+
+        if ($failure !== []) {
+            $errors = LegacyImportFailureRecorder::normalizeErrors($failure['errors'] ?? $errors);
+            $errorMessage = (string) ($failure['message'] ?? $errorMessage);
+        }
+
+        $panelStatus = match (true) {
+            $status === 'failed' => 'failed',
+            $errors !== [] || (int) ($stats['failed'] ?? 0) > 0 => 'warning',
+            $status === 'completed' || $stats !== [] => 'completed',
+            default => 'idle',
+        };
+
+        $this->classificationResultsPanel = LegacyImportFailureRecorder::finalizePanel([
+            'wire_key' => 'classification-results',
+            'status' => $panelStatus,
+            'title_failed' => __('Classification failed'),
+            'title_warning' => __('Classification finished with warnings'),
+            'title_success' => __('Last classification result'),
+            'message' => $errorMessage !== '' ? $errorMessage : null,
+            'stage' => $failure['stage'] ?? ($status === 'failed' ? 'classification' : null),
+            'location' => $failure['location'] ?? null,
+            'stats' => [
+                ['label' => __('Contributions'), 'value' => (int) ($stats['contributions'] ?? $stats['contribution'] ?? $failure['contributions'] ?? 0)],
+                ['label' => __('Loan repayments'), 'value' => (int) ($stats['loan_repayments'] ?? $stats['loan_repayment'] ?? $failure['loan_repayments'] ?? 0)],
+                ['label' => __('Reclassified as contribution'), 'value' => (int) ($stats['reclassified_as_contribution'] ?? 0)],
+                ['label' => __('Failed rows'), 'value' => (int) ($stats['failed'] ?? $failure['failed'] ?? count($errors))],
+            ],
+            'errors' => $errors,
+            'errors_total' => (int) ($failure['errors_total'] ?? count($errors)),
+            'errors_truncated' => (bool) ($failure['errors_truncated'] ?? false),
+        ]);
+    }
+
+    private function refreshMigrationStateFromSettings(): void
+    {
+        $status = (string) Setting::get('legacy_migration', 'run_status', 'idle');
+        $this->migrationRunning = $status === 'running';
+        $this->migrationLastError = (string) Setting::get('legacy_migration', 'last_error', '');
+        $this->lastRun = null;
+        $this->migrationResultsPanel = null;
+
+        $lastRunJson = Setting::get('legacy_migration', 'last_run');
+
+        if (is_string($lastRunJson) && $lastRunJson !== '') {
+            $decoded = json_decode($lastRunJson, true);
+
+            if (is_array($decoded)) {
+                $this->lastRun = $decoded;
+            }
+        }
+
+        $failure = $this->decodedImportResult(LegacyImportFailureRecorder::APPLY_FAILURE_SETTING);
+        $payments = is_array($this->lastRun['payments'] ?? null) ? $this->lastRun['payments'] : [];
+        $errors = LegacyImportFailureRecorder::normalizeErrors($payments['errors'] ?? []);
+        $errorMessage = $this->migrationLastError;
+
+        if ($failure !== []) {
+            $errors = LegacyImportFailureRecorder::normalizeErrors($failure['errors'] ?? $errors);
+            $errorMessage = (string) ($failure['message'] ?? $errorMessage);
+        }
+
+        $panelStatus = match (true) {
+            $status === 'failed' => 'failed',
+            $errors !== [] || (int) ($payments['failed'] ?? 0) > 0 => 'warning',
+            $status === 'completed' || $payments !== [] => 'completed',
+            default => 'idle',
+        };
+
+        $this->migrationResultsPanel = LegacyImportFailureRecorder::finalizePanel([
+            'wire_key' => 'apply-migration-results',
+            'status' => $panelStatus,
+            'title_failed' => __('Migration failed'),
+            'title_warning' => __('Migration finished with warnings'),
+            'title_success' => __('Last apply result'),
+            'message' => filled($errorMessage) ? $errorMessage : null,
+            'stage' => $failure['stage'] ?? ($status === 'failed' ? 'apply' : null),
+            'location' => $failure['location'] ?? null,
+            'stats' => [
+                ['label' => __('Contributions'), 'value' => (int) ($payments['contributions'] ?? $failure['contributions'] ?? 0)],
+                ['label' => __('Loan repayments'), 'value' => (int) ($payments['loan_repayments'] ?? $failure['loan_repayments'] ?? 0)],
+                ['label' => __('Reclassified as contribution'), 'value' => (int) ($payments['reclassified_as_contribution'] ?? 0)],
+                ['label' => __('Failed rows'), 'value' => (int) ($payments['failed'] ?? $failure['failed'] ?? count($errors))],
+            ],
+            'errors' => $errors,
+            'errors_total' => (int) ($failure['errors_total'] ?? $payments['errors_total'] ?? count($errors)),
+            'errors_truncated' => (bool) ($failure['errors_truncated'] ?? $payments['errors_truncated'] ?? false),
+        ]);
+    }
+
+    private function invalidateMembersImportReady(): void
+    {
+        Setting::set('legacy_migration', self::SETTING_MEMBERS_IMPORTED, '0');
+        Setting::set('legacy_migration', self::SETTING_MEMBERS_IMPORT_STATUS, 'idle');
+        Setting::set('legacy_migration', 'members_import_error', '');
+        Setting::set('legacy_migration', LegacyImportFailureRecorder::MEMBERS_FAILURE_SETTING, '');
+        Setting::set('legacy_migration', 'members_import_result', '');
+        $this->membersImportRunning = false;
+        $this->lastKnownMembersImportStatus = 'idle';
+        $this->membersResultsPanel = null;
+    }
+
+    private function invalidateLoansImportReady(): void
+    {
+        Setting::set('legacy_migration', self::SETTING_LOANS_IMPORTED, '0');
+        Setting::set('legacy_migration', self::SETTING_LOANS_IMPORT_STATUS, 'idle');
+        Setting::set('legacy_migration', 'loans_import_error', '');
+        Setting::set('legacy_migration', LegacyImportFailureRecorder::LOANS_FAILURE_SETTING, '');
+        Setting::set('legacy_migration', 'loans_import_result', '');
+        $this->loansImportRunning = false;
+        $this->lastKnownLoansImportStatus = 'idle';
+        $this->loansResultsPanel = null;
+    }
+
+    private function invalidateClassificationAfterUploadChange(): void
+    {
+        Setting::set('legacy_migration', 'classify_status', 'idle');
+        Setting::set('legacy_migration', 'classify_error', '');
+        Setting::set('legacy_migration', LegacyImportFailureRecorder::CLASSIFY_FAILURE_SETTING, '');
+        Setting::set('legacy_migration', 'classify_errors', '');
+        Setting::set('legacy_migration', 'classify_stats', '');
+        $this->classificationRunning = false;
+        $this->classifiedPaymentsReady = false;
+        $this->classificationStats = null;
+        $this->classificationErrors = [];
+        $this->classificationResultsPanel = null;
+        $this->lastKnownClassificationStatus = 'idle';
+
+        if (Storage::disk('local')->exists(self::CLASSIFIED_PAYMENTS_PATH)) {
+            Storage::disk('local')->delete(self::CLASSIFIED_PAYMENTS_PATH);
         }
     }
 
@@ -920,8 +1129,10 @@ class LegacyMigrationPage extends Page implements HasForms
         try {
             Setting::set('legacy_migration', self::SETTING_MEMBERS_IMPORT_STATUS, 'running');
             Setting::set('legacy_migration', 'members_import_error', '');
+            Setting::set('legacy_migration', LegacyImportFailureRecorder::MEMBERS_FAILURE_SETTING, '');
             $this->membersImportRunning = true;
             $this->lastKnownMembersImportStatus = 'running';
+            $this->membersResultsPanel = null;
 
             $job = new ImportLegacyMembersJob($options, $cutoff, auth('tenant')->id());
 
@@ -929,17 +1140,30 @@ class LegacyMigrationPage extends Page implements HasForms
                 dispatch_sync($job);
                 $this->refreshMembersImportStateFromSettings();
 
+                $status = (string) Setting::get('legacy_migration', self::SETTING_MEMBERS_IMPORT_STATUS, 'idle');
                 $members = $this->decodedImportResult('members_import_result')['members'] ?? [];
 
-                Notification::make()
-                    ->title(__('Members imported'))
-                    ->body(__('Members created: :created · Skipped: :skipped · Failed: :failed', [
-                        'created' => $members['created'] ?? 0,
-                        'skipped' => $members['skipped'] ?? 0,
-                        'failed' => $members['failed'] ?? 0,
-                    ]))
-                    ->success()
-                    ->send();
+                if ($status === 'failed') {
+                    Notification::make()
+                        ->title(__('Import failed'))
+                        ->body((string) ($this->membersResultsPanel['message'] ?? __('Import failed')))
+                        ->danger()
+                        ->persistent()
+                        ->send();
+                } else {
+                    $failed = (int) ($members['failed'] ?? 0);
+                    $hasErrors = $failed > 0 || count($members['errors'] ?? []) > 0;
+
+                    Notification::make()
+                        ->title($hasErrors ? __('Members imported with warnings') : __('Members imported'))
+                        ->body(__('Members created: :created · Skipped: :skipped · Failed: :failed', [
+                            'created' => $members['created'] ?? 0,
+                            'skipped' => $members['skipped'] ?? 0,
+                            'failed' => $failed,
+                        ]))
+                        ->color($hasErrors ? 'warning' : 'success')
+                        ->send();
+                }
             } else {
                 ImportLegacyMembersJob::dispatch($options, $cutoff, auth('tenant')->id());
 
@@ -952,13 +1176,12 @@ class LegacyMigrationPage extends Page implements HasForms
         } catch (\Throwable $e) {
             report($e);
 
-            Setting::set('legacy_migration', self::SETTING_MEMBERS_IMPORT_STATUS, 'failed');
-            Setting::set('legacy_migration', 'members_import_error', $e->getMessage());
-            $this->membersImportRunning = false;
+            $this->persistMembersImportFailure($e);
+            $this->refreshMembersImportStateFromSettings();
 
             Notification::make()
                 ->title(__('Import failed'))
-                ->body($e->getMessage())
+                ->body($e->getMessage() !== '' ? $e->getMessage() : __('Import failed'))
                 ->danger()
                 ->persistent()
                 ->send();
@@ -1021,8 +1244,10 @@ class LegacyMigrationPage extends Page implements HasForms
         try {
             Setting::set('legacy_migration', self::SETTING_LOANS_IMPORT_STATUS, 'running');
             Setting::set('legacy_migration', 'loans_import_error', '');
+            Setting::set('legacy_migration', LegacyImportFailureRecorder::LOANS_FAILURE_SETTING, '');
             $this->loansImportRunning = true;
             $this->lastKnownLoansImportStatus = 'running';
+            $this->loansResultsPanel = null;
 
             $job = new ImportLegacyLoansJob($options, auth('tenant')->id());
 
@@ -1030,16 +1255,29 @@ class LegacyMigrationPage extends Page implements HasForms
                 dispatch_sync($job);
                 $this->refreshLoansImportStateFromSettings();
 
+                $status = (string) Setting::get('legacy_migration', self::SETTING_LOANS_IMPORT_STATUS, 'idle');
                 $loans = $this->decodedImportResult('loans_import_result')['loans'] ?? [];
 
-                Notification::make()
-                    ->title(__('Loans imported'))
-                    ->body(__('Loans created: :loans · Failed: :failed', [
-                        'loans' => $loans['created'] ?? 0,
-                        'failed' => $loans['failed'] ?? 0,
-                    ]))
-                    ->success()
-                    ->send();
+                if ($status === 'failed') {
+                    Notification::make()
+                        ->title(__('Import failed'))
+                        ->body((string) ($this->loansResultsPanel['message'] ?? __('Import failed')))
+                        ->danger()
+                        ->persistent()
+                        ->send();
+                } else {
+                    $failed = (int) ($loans['failed'] ?? 0);
+                    $hasErrors = $failed > 0 || count($loans['errors'] ?? []) > 0;
+
+                    Notification::make()
+                        ->title($hasErrors ? __('Loans imported with warnings') : __('Loans imported'))
+                        ->body(__('Loans created: :loans · Failed: :failed', [
+                            'loans' => $loans['created'] ?? 0,
+                            'failed' => $failed,
+                        ]))
+                        ->color($hasErrors ? 'warning' : 'success')
+                        ->send();
+                }
             } else {
                 ImportLegacyLoansJob::dispatch($options, auth('tenant')->id());
 
@@ -1052,13 +1290,12 @@ class LegacyMigrationPage extends Page implements HasForms
         } catch (\Throwable $e) {
             report($e);
 
-            Setting::set('legacy_migration', self::SETTING_LOANS_IMPORT_STATUS, 'failed');
-            Setting::set('legacy_migration', 'loans_import_error', $e->getMessage());
-            $this->loansImportRunning = false;
+            $this->persistLoansImportFailure($e);
+            $this->refreshLoansImportStateFromSettings();
 
             Notification::make()
                 ->title(__('Import failed'))
-                ->body($e->getMessage())
+                ->body($e->getMessage() !== '' ? $e->getMessage() : __('Import failed'))
                 ->danger()
                 ->persistent()
                 ->send();
@@ -1069,12 +1306,184 @@ class LegacyMigrationPage extends Page implements HasForms
     {
         $status = (string) Setting::get('legacy_migration', self::SETTING_MEMBERS_IMPORT_STATUS, 'idle');
         $this->membersImportRunning = $status === 'running';
+        $this->membersResultsPanel = $this->hydrateResultsPanel(
+            wireKey: 'members-import-results',
+            status: $status,
+            failureSetting: LegacyImportFailureRecorder::MEMBERS_FAILURE_SETTING,
+            errorSetting: 'members_import_error',
+            resultSetting: 'members_import_result',
+            resultSection: 'members',
+            titleFailed: __('Members import failed'),
+            titleWarning: __('Members imported with warnings'),
+            titleSuccess: __('Last members import result'),
+            statsFrom: fn (array $row): array => [
+                ['label' => __('Created'), 'value' => (int) ($row['created'] ?? 0)],
+                ['label' => __('Skipped'), 'value' => (int) ($row['skipped'] ?? 0)],
+                ['label' => __('Failed rows'), 'value' => (int) ($row['failed'] ?? 0)],
+            ],
+        );
     }
 
     private function refreshLoansImportStateFromSettings(): void
     {
         $status = (string) Setting::get('legacy_migration', self::SETTING_LOANS_IMPORT_STATUS, 'idle');
         $this->loansImportRunning = $status === 'running';
+        $this->loansResultsPanel = $this->hydrateResultsPanel(
+            wireKey: 'loans-import-results',
+            status: $status,
+            failureSetting: LegacyImportFailureRecorder::LOANS_FAILURE_SETTING,
+            errorSetting: 'loans_import_error',
+            resultSetting: 'loans_import_result',
+            resultSection: 'loans',
+            titleFailed: __('Loans import failed'),
+            titleWarning: __('Loans imported with warnings'),
+            titleSuccess: __('Last loans import result'),
+            statsFrom: fn (array $row): array => [
+                ['label' => __('Created'), 'value' => (int) ($row['created'] ?? 0)],
+                ['label' => __('Failed rows'), 'value' => (int) ($row['failed'] ?? 0)],
+            ],
+        );
+    }
+
+    /**
+     * @param  callable(array<string, mixed>): list<array{label: string, value: int|string}>  $statsFrom
+     * @return array<string, mixed>|null
+     */
+    private function hydrateResultsPanel(
+        string $wireKey,
+        string $status,
+        string $failureSetting,
+        string $errorSetting,
+        string $resultSetting,
+        string $resultSection,
+        string $titleFailed,
+        string $titleWarning,
+        string $titleSuccess,
+        callable $statsFrom,
+    ): ?array {
+        $failure = $this->decodedImportResult($failureSetting);
+        $resultRoot = $this->decodedImportResult($resultSetting);
+        $section = is_array($resultRoot[$resultSection] ?? null) ? $resultRoot[$resultSection] : [];
+
+        if ($failure !== []) {
+            return LegacyImportFailureRecorder::finalizePanel([
+                'wire_key' => $wireKey,
+                'status' => 'failed',
+                'title_failed' => $titleFailed,
+                'title_warning' => $titleWarning,
+                'title_success' => $titleSuccess,
+                'message' => (string) ($failure['message'] ?? Setting::get('legacy_migration', $errorSetting, '')),
+                'stage' => (string) ($failure['stage'] ?? ''),
+                'location' => isset($failure['location']) ? (string) $failure['location'] : null,
+                'stats' => $statsFrom($failure),
+                'errors' => $failure['errors'] ?? [],
+                'errors_total' => (int) ($failure['errors_total'] ?? count($failure['errors'] ?? [])),
+                'errors_truncated' => (bool) ($failure['errors_truncated'] ?? false),
+            ]);
+        }
+
+        $errorMessage = (string) Setting::get('legacy_migration', $errorSetting, '');
+        $errors = LegacyImportFailureRecorder::normalizeErrors($section['errors'] ?? []);
+        $panelStatus = $status;
+
+        if ($status === 'failed') {
+            $panelStatus = 'failed';
+            if ($errors === [] && $errorMessage !== '') {
+                $errors = [$errorMessage];
+            }
+        } elseif ($errors !== [] || (int) ($section['failed'] ?? 0) > 0) {
+            $panelStatus = 'warning';
+        } elseif ($status === 'completed' || $section !== []) {
+            $panelStatus = 'completed';
+        } else {
+            $panelStatus = 'idle';
+        }
+
+        if ($panelStatus === 'idle' && $errorMessage === '' && $errors === [] && $section === []) {
+            return null;
+        }
+
+        return LegacyImportFailureRecorder::finalizePanel([
+            'wire_key' => $wireKey,
+            'status' => $panelStatus,
+            'title_failed' => $titleFailed,
+            'title_warning' => $titleWarning,
+            'title_success' => $titleSuccess,
+            'message' => $errorMessage !== '' ? $errorMessage : null,
+            'stage' => null,
+            'location' => null,
+            'stats' => $statsFrom($section !== [] ? $section : ['failed' => count($errors)]),
+            'errors' => $errors,
+            'errors_total' => (int) ($section['errors_total'] ?? count($errors)),
+            'errors_truncated' => (bool) ($section['errors_truncated'] ?? false),
+        ]);
+    }
+
+    private function persistStepImportFailure(
+        string $section,
+        string $statusSetting,
+        string $errorSetting,
+        string $failureSetting,
+        string $resultSetting,
+        \Throwable $exception,
+        string $defaultStage = 'import',
+    ): void {
+        $result = $exception instanceof IncompleteLegacyImportException
+            ? $exception->result
+            : null;
+
+        $payload = LegacyImportFailureRecorder::buildPayload(
+            section: $section,
+            message: $exception->getMessage(),
+            exception: $exception,
+            result: $result,
+            stage: LegacyImportFailureRecorder::exceptionStage($exception, $defaultStage),
+        );
+
+        Setting::set('legacy_migration', $statusSetting, 'failed');
+        Setting::set('legacy_migration', $errorSetting, $exception->getMessage());
+        Setting::set(
+            'legacy_migration',
+            $failureSetting,
+            json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+        );
+
+        if ($result !== null) {
+            Setting::set(
+                'legacy_migration',
+                $resultSetting,
+                json_encode(
+                    LegacyMigrationOrchestrator::summarizeForDisplay([$section => $result]),
+                    JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
+                ),
+            );
+        }
+    }
+
+    private function persistMembersImportFailure(\Throwable $exception): void
+    {
+        $this->persistStepImportFailure(
+            section: 'members',
+            statusSetting: self::SETTING_MEMBERS_IMPORT_STATUS,
+            errorSetting: 'members_import_error',
+            failureSetting: LegacyImportFailureRecorder::MEMBERS_FAILURE_SETTING,
+            resultSetting: 'members_import_result',
+            exception: $exception,
+        );
+        $this->membersImportRunning = false;
+    }
+
+    private function persistLoansImportFailure(\Throwable $exception): void
+    {
+        $this->persistStepImportFailure(
+            section: 'loans',
+            statusSetting: self::SETTING_LOANS_IMPORT_STATUS,
+            errorSetting: 'loans_import_error',
+            failureSetting: LegacyImportFailureRecorder::LOANS_FAILURE_SETTING,
+            resultSetting: 'loans_import_result',
+            exception: $exception,
+        );
+        $this->loansImportRunning = false;
     }
 
     public function membersImported(): bool
@@ -1198,59 +1607,9 @@ class LegacyMigrationPage extends Page implements HasForms
         }
     }
 
-    private function invalidateMembersImportReady(): void
-    {
-        Setting::set('legacy_migration', self::SETTING_MEMBERS_IMPORTED, '0');
-        Setting::set('legacy_migration', self::SETTING_MEMBERS_IMPORT_STATUS, 'idle');
-        Setting::set('legacy_migration', 'members_import_error', '');
-        $this->membersImportRunning = false;
-        $this->lastKnownMembersImportStatus = 'idle';
-    }
-
-    private function invalidateLoansImportReady(): void
-    {
-        Setting::set('legacy_migration', self::SETTING_LOANS_IMPORTED, '0');
-        Setting::set('legacy_migration', self::SETTING_LOANS_IMPORT_STATUS, 'idle');
-        Setting::set('legacy_migration', 'loans_import_error', '');
-        $this->loansImportRunning = false;
-        $this->lastKnownLoansImportStatus = 'idle';
-    }
-
-    private function invalidateClassificationAfterUploadChange(): void
-    {
-        Setting::set('legacy_migration', 'classify_status', 'idle');
-        Setting::set('legacy_migration', 'classify_error', '');
-        $this->classificationRunning = false;
-        $this->classifiedPaymentsReady = false;
-        $this->classificationStats = null;
-        $this->classificationErrors = [];
-        $this->lastKnownClassificationStatus = 'idle';
-
-        if (Storage::disk('local')->exists(self::CLASSIFIED_PAYMENTS_PATH)) {
-            Storage::disk('local')->delete(self::CLASSIFIED_PAYMENTS_PATH);
-        }
-    }
-
     private function refreshUploadDiagnostics(): void
     {
         $this->uploadDiagnostics = app(LegacyMigrationUploadDiagnostics::class)->summarize();
-    }
-
-    private function refreshMigrationStateFromSettings(): void
-    {
-        $status = (string) Setting::get('legacy_migration', 'run_status', 'idle');
-        $this->migrationRunning = $status === 'running';
-        $this->migrationLastError = (string) Setting::get('legacy_migration', 'last_error', '');
-
-        $lastRunJson = Setting::get('legacy_migration', 'last_run');
-
-        if (is_string($lastRunJson) && $lastRunJson !== '') {
-            $decoded = json_decode($lastRunJson, true);
-
-            if (is_array($decoded)) {
-                $this->lastRun = $decoded;
-            }
-        }
     }
 
     private function notifyFormValidationFailed(ValidationException $exception): void

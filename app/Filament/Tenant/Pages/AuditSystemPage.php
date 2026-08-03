@@ -10,12 +10,16 @@ use App\Filament\Tenant\Concerns\InteractsWithAdvancedUi;
 use App\Filament\Tenant\Concerns\InteractsWithAutomationScheduleForm;
 use App\Filament\Tenant\Concerns\InteractsWithJobsTable;
 use App\Filament\Tenant\Resources\FundAuditLogs\Tables\FundAuditLogsTable;
+use App\Filament\Tenant\Resources\InboundPayments\Tables\InboundPaymentsTable;
 use App\Filament\Tenant\Resources\NotificationLogs\Tables\NotificationLogsTable;
+use App\Filament\Tenant\Resources\OutboundPayments\Tables\OutboundPaymentsTable;
 use App\Filament\Tenant\Resources\PortalAccessLogs\Tables\PortalAccessLogsTable;
 use App\Filament\Tenant\Support\AuditSystemTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\FundAuditLog;
+use App\Models\Tenant\InboundPayment;
 use App\Models\Tenant\NotificationLog;
+use App\Models\Tenant\OutboundPayment;
 use App\Models\Tenant\PortalAccessLog;
 use App\Models\Tenant\ReconciliationException;
 use App\Services\SystemLogMaintenanceService;
@@ -60,7 +64,7 @@ class AuditSystemPage extends Page implements HasForms, HasTable
 
     protected string $view = 'filament.tenant.pages.audit-system';
 
-    /** @var 'audit'|'access'|'notifications'|'jobs'|'maintenance'|'migration'|'fiscal' */
+    /** @var 'audit'|'remittances'|'inbound_remittances'|'access'|'notifications'|'jobs'|'maintenance'|'migration'|'fiscal' */
     #[Url(as: 'sideTab')]
     public string $sideTab = 'audit';
 
@@ -106,7 +110,7 @@ class AuditSystemPage extends Page implements HasForms, HasTable
 
     public function getSubheading(): ?string
     {
-        return __('Audit trail, portal access, notification delivery, automation, maintenance, migration, and year-end close.');
+        return __('Audit trail, outbound and inbound bank remittances, portal access, notification delivery, automation, maintenance, migration, and year-end close.');
     }
 
     /**
@@ -180,7 +184,7 @@ class AuditSystemPage extends Page implements HasForms, HasTable
         $this->sideTab = $tab;
         $this->tableSort = null;
 
-        if (in_array($tab, ['audit', 'access', 'notifications', 'jobs'], true)) {
+        if (in_array($tab, ['audit', 'remittances', 'inbound_remittances', 'access', 'notifications', 'jobs'], true)) {
             $this->reconfigureTableForSideTab();
             $this->resetTable();
         }
@@ -368,6 +372,12 @@ class AuditSystemPage extends Page implements HasForms, HasTable
     public function table(Table $table): Table
     {
         return match ($this->sideTab) {
+            'remittances' => OutboundPaymentsTable::configure(
+                $table->query(OutboundPayment::query())
+            ),
+            'inbound_remittances' => InboundPaymentsTable::configure(
+                $table->query(InboundPayment::query())
+            ),
             'access' => PortalAccessLogsTable::configure(
                 $table->query(PortalAccessLog::query())
             ),
