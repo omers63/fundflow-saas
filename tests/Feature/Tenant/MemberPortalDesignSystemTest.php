@@ -238,6 +238,31 @@ test('member portal component css defines record modal layout hooks', function (
         ->toContain('width: 1.5rem');
 });
 
+test('member and freeze modal css keep header and footer sticky while body scrolls', function () {
+    $components = file_get_contents(resource_path('css/filament/member/member-portal-components.css'));
+    $freeze = file_get_contents(resource_path('css/filament/freeze-membership.css'));
+    $tenant = file_get_contents(resource_path('css/filament/tenant/tenant-portal-components.css'));
+    $theme = file_get_contents(resource_path('css/filament/member/theme.css'));
+
+    expect($theme)->toContain("@import '../freeze-membership.css'");
+
+    expect($components)
+        ->toContain('max-height: min(90dvh, calc(100dvh - 2rem))')
+        ->toContain('-webkit-overflow-scrolling: touch')
+        ->toContain('ff-member-form-modal-window.ff-freeze-modal')
+        ->toContain('ff-member-form-modal-window:not(.ff-freeze-modal)');
+
+    expect($freeze)
+        ->toContain('fi-modal-window.ff-freeze-modal')
+        ->toContain('max-height: min(90dvh, calc(100dvh - 2rem))')
+        ->toContain('position: sticky')
+        ->toContain('fi-modal-footer .fi-btn');
+
+    expect($tenant)
+        ->toContain('ff-tenant-form-modal-window.ff-freeze-modal')
+        ->toContain('ff-tenant-form-modal-window:not(.ff-freeze-modal)');
+});
+
 test('x-member.amount renders negative fund balances in red without signed prop', function () {
     $html = Blade::render(
         '<x-member::amount :value="-1500" currency="SAR" class="ff-member-dashboard-balance__value ff-member-dashboard-balance__value--fund" />',

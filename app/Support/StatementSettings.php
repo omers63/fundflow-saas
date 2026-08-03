@@ -30,13 +30,13 @@ final class StatementSettings
             'footer_disclaimer' => 'Computer-generated statement. Confidential.',
             'signature_line' => 'Fund administration',
             'auto_email' => true,
-            'attach_pdf' => false,
+            'attach_pdf' => true,
             'include_transactions' => true,
             'include_loan_section' => true,
             'include_compliance' => true,
             'font_en' => self::FONT_DEJAVU_SANS,
-            // Amiri covers Arabic presentation forms DomPDF needs after ArPHP shaping.
-            'font_ar' => self::FONT_AMIRI,
+            // Live Samman default; Amiri remains available as an Arabic option.
+            'font_ar' => self::FONT_DEJAVU_SANS,
         ];
     }
 
@@ -62,8 +62,8 @@ final class StatementSettings
     public static function arabicFontOptions(): array
     {
         return [
-            self::FONT_AMIRI => __('Amiri (default Arabic)'),
-            self::FONT_DEJAVU_SANS => __('DejaVu Sans'),
+            self::FONT_AMIRI => __('Amiri'),
+            self::FONT_DEJAVU_SANS => __('DejaVu Sans (default)'),
             self::FONT_DEJAVU_SERIF => __('DejaVu Serif'),
         ];
     }
@@ -89,11 +89,11 @@ final class StatementSettings
             'statement_accent_color' => $all['accent_color'],
             'statement_footer_disclaimer' => $all['footer_disclaimer'],
             'statement_signature_line' => $all['signature_line'],
-            'statement_auto_email' => (bool) ($all['auto_email'] ?? false),
-            'statement_attach_pdf' => (bool) ($all['attach_pdf'] ?? false),
+            'statement_auto_email' => (bool) ($all['auto_email'] ?? true),
+            'statement_attach_pdf' => (bool) ($all['attach_pdf'] ?? true),
             'statement_include_transactions' => (bool) ($all['include_transactions'] ?? true),
             'statement_include_loan_section' => (bool) ($all['include_loan_section'] ?? true),
-            'statement_include_compliance' => (bool) ($all['include_compliance'] ?? false),
+            'statement_include_compliance' => (bool) ($all['include_compliance'] ?? true),
             'statement_font_en' => self::englishFont(),
             'statement_font_ar' => self::arabicFont(),
         ];
@@ -126,12 +126,12 @@ final class StatementSettings
 
     public static function autoEmail(): bool
     {
-        return (bool) self::get('auto_email', false);
+        return (bool) self::get('auto_email', true);
     }
 
     public static function attachPdf(): bool
     {
-        return (bool) self::get('attach_pdf', false);
+        return (bool) self::get('attach_pdf', true);
     }
 
     public static function includeTransactions(): bool
@@ -146,7 +146,7 @@ final class StatementSettings
 
     public static function includeCompliance(): bool
     {
-        return (bool) self::get('include_compliance', false);
+        return (bool) self::get('include_compliance', true);
     }
 
     public static function englishFont(): string
@@ -160,9 +160,7 @@ final class StatementSettings
 
     public static function arabicFont(): string
     {
-        $fallback = self::customFontPath(self::FONT_AMIRI) !== null
-            ? self::FONT_AMIRI
-            : self::FONT_DEJAVU_SANS;
+        $fallback = (string) self::defaults()['font_ar'];
         $font = (string) self::get('font_ar', $fallback);
 
         return array_key_exists($font, self::arabicFontOptions())
@@ -220,11 +218,11 @@ final class StatementSettings
 
         Setting::set(self::GROUP, 'footer_disclaimer', trim((string) ($state['statement_footer_disclaimer'] ?? '')));
         Setting::set(self::GROUP, 'signature_line', trim((string) ($state['statement_signature_line'] ?? '')));
-        Setting::set(self::GROUP, 'auto_email', (bool) ($state['statement_auto_email'] ?? false));
-        Setting::set(self::GROUP, 'attach_pdf', (bool) ($state['statement_attach_pdf'] ?? false));
+        Setting::set(self::GROUP, 'auto_email', (bool) ($state['statement_auto_email'] ?? true));
+        Setting::set(self::GROUP, 'attach_pdf', (bool) ($state['statement_attach_pdf'] ?? true));
         Setting::set(self::GROUP, 'include_transactions', (bool) ($state['statement_include_transactions'] ?? true));
         Setting::set(self::GROUP, 'include_loan_section', (bool) ($state['statement_include_loan_section'] ?? true));
-        Setting::set(self::GROUP, 'include_compliance', (bool) ($state['statement_include_compliance'] ?? false));
+        Setting::set(self::GROUP, 'include_compliance', (bool) ($state['statement_include_compliance'] ?? true));
 
         $fontEn = (string) ($state['statement_font_en'] ?? self::FONT_DEJAVU_SANS);
         Setting::set(
@@ -233,9 +231,7 @@ final class StatementSettings
             array_key_exists($fontEn, self::englishFontOptions()) ? $fontEn : self::FONT_DEJAVU_SANS,
         );
 
-        $fontArFallback = self::customFontPath(self::FONT_AMIRI) !== null
-            ? self::FONT_AMIRI
-            : self::FONT_DEJAVU_SANS;
+        $fontArFallback = self::defaults()['font_ar'];
         $fontAr = (string) ($state['statement_font_ar'] ?? $fontArFallback);
         Setting::set(
             self::GROUP,

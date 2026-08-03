@@ -338,12 +338,93 @@
     max-width: min(56rem, 96vw);
 }
 
-.fi-body.fi-panel-member .fi-modal-window.ff-member-record-modal-window .fi-modal-content {
+.fi-body.fi-panel-member .fi-modal-window.ff-member-record-modal-window .fi-modal-content,
+.fi-body.fi-panel-member .fi-modal-window.ff-member-form-modal-window .fi-modal-content {
     padding-block: 0.5rem 0.75rem;
 }
 
 .fi-body.fi-panel-member .fi-modal-window.ff-member-form-modal-window {
     max-width: min(42rem, 94vw);
+}
+
+/* Tall modals: cap height, scroll the body, keep header + footer reachable (esp. freeze wizard) */
+.fi-body.fi-panel-member .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window {
+    display: flex;
+    flex-direction: column;
+    max-height: min(90dvh, calc(100dvh - 2rem));
+    overflow: hidden;
+}
+
+.fi-body.fi-panel-member .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window
+    > .fi-modal-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.fi-body.fi-panel-member .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window
+    > .fi-modal-header,
+.fi-body.fi-panel-member .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window
+    > .fi-modal-footer {
+    flex-shrink: 0;
+}
+
+.fi-body.fi-panel-member .fi-modal-window.ff-member-form-modal-window .fi-select-input .fi-dropdown-panel {
+    max-height: min(16rem, 40dvh);
+}
+
+/*
+ * Form dialogs may open nested selects — allow the panel to paint past edges.
+ * Freeze wizards need overflow:hidden so only the body scrolls (override below).
+ */
+.fi-body.fi-panel-member .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-member-form-modal-window:not(.ff-freeze-modal) {
+    overflow: visible;
+}
+
+.fi-body.fi-panel-member .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-member-form-modal-window
+    > .fi-modal-content {
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-bottom: 0.75rem;
+}
+
+.fi-body.fi-panel-member .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-member-form-modal-window.ff-freeze-modal {
+    overflow: hidden;
+}
+
+@media (max-width: 639px) {
+    .fi-body.fi-panel-member .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+        > .fi-modal-window-ctn
+        > .fi-modal-window {
+        max-height: min(92dvh, calc(100dvh - 1rem));
+    }
+
+    .fi-body.fi-panel-member .ff-member-record-modal__hero {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.625rem;
+    }
+
+    .fi-body.fi-panel-member .ff-member-record-modal__hero-badges {
+        justify-content: flex-start;
+    }
 }
 
 .ff-member-record-modal {

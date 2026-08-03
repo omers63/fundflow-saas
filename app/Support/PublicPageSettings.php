@@ -250,7 +250,7 @@ final class PublicPageSettings
             'rules_and_conditions_url' => '',
             'membership_application_document_url' => '',
             'fee_transfer_bank_name' => 'Al Rajhi Bank',
-            'fee_transfer_iban' => 'SA761234560000123101',
+            'fee_transfer_iban' => 'SA4580000432608010017802',
             'contact_email' => 'admin@fundflow.sa',
             'contact_phone' => '+966 557744668',
         ];

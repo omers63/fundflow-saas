@@ -62,12 +62,12 @@ final class BusinessDaySettings
 
     public static function showBannerOnAdmin(): bool
     {
-        return self::booleanSetting(self::KEY_BANNER_ADMIN, default: true);
+        return self::booleanSetting(self::KEY_BANNER_ADMIN, default: false);
     }
 
     public static function showBannerOnMember(): bool
     {
-        return self::booleanSetting(self::KEY_BANNER_MEMBER, default: true);
+        return self::booleanSetting(self::KEY_BANNER_MEMBER, default: false);
     }
 
     /**
@@ -75,7 +75,7 @@ final class BusinessDaySettings
      */
     public static function shouldShowFooterBanner(?string $panelId = null): bool
     {
-        if (!self::isOverridden()) {
+        if (! self::isOverridden()) {
             return false;
         }
 
@@ -99,12 +99,12 @@ final class BusinessDaySettings
             Setting::set(
                 self::GROUP,
                 self::KEY_BANNER_ADMIN,
-                (bool) ($state['business_day_banner_admin'] ?? true) ? '1' : '0',
+                (bool) ($state['business_day_banner_admin'] ?? false) ? '1' : '0',
             );
             Setting::set(
                 self::GROUP,
                 self::KEY_BANNER_MEMBER,
-                (bool) ($state['business_day_banner_member'] ?? true) ? '1' : '0',
+                (bool) ($state['business_day_banner_member'] ?? false) ? '1' : '0',
             );
 
             return;

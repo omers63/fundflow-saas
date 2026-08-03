@@ -40,6 +40,10 @@ final class DefaultTenantSettings
         Setting::set('general', 'fund_name', (string) $public['fund_name_en']);
         Setting::set('contribution', 'cycle_start_day', (string) self::CYCLE_START_DAY);
 
+        // Business-day override off; banners off by default (Samman).
+        Setting::set('general', BusinessDaySettings::KEY_BANNER_ADMIN, '0');
+        Setting::set('general', BusinessDaySettings::KEY_BANNER_MEMBER, '0');
+
         // Automation → Schedule (job clocks, behaviour, notification suppressions)
         AutomationScheduleSettings::seedDefaults();
         ContributionPolicySettings::saveFromForm(ContributionPolicySettings::allForForm());
@@ -83,5 +87,37 @@ final class DefaultTenantSettings
         Setting::set('reconciliation', 'bank_variance_critical', '0');
         Setting::set('reconciliation', 'bank_statement_balance', '');
         Setting::set('reconciliation', 'bank_statement_date', '');
+    }
+
+    /**
+     * Ensure settings exist after migrate (empty DB → full seed; otherwise backfill missing keys only).
+     */
+    public static function ensureInstalled(): void
+    {
+        if (! class_exists(Setting::class)) {
+            return;
+        }
+
+        if (Setting::query()->count() === 0) {
+            self::seed();
+
+            return;
+        }
+
+        AutomationScheduleSettings::seedDefaults(onlyMissing: true);
+        ContributionAmountSettings::seedDefaults();
+
+        if (Setting::get('general', 'currency') === null) {
+            Setting::set('general', 'currency', self::CURRENCY);
+        }
+        if (Setting::get('contribution', 'cycle_start_day') === null) {
+            Setting::set('contribution', 'cycle_start_day', (string) self::CYCLE_START_DAY);
+        }
+        if (Setting::get('general', BusinessDaySettings::KEY_BANNER_ADMIN) === null) {
+            Setting::set('general', BusinessDaySettings::KEY_BANNER_ADMIN, '0');
+        }
+        if (Setting::get('general', BusinessDaySettings::KEY_BANNER_MEMBER) === null) {
+            Setting::set('general', BusinessDaySettings::KEY_BANNER_MEMBER, '0');
+        }
     }
 }

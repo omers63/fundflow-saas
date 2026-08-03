@@ -40,7 +40,7 @@ final class ContributionPolicySettings
     {
         return [
             'late_fee_reminder_days' => 3,
-            'late_fee_tier_1_day' => 3,
+            'late_fee_tier_1_day' => 5,
             'late_fee_tier_2_day' => 10,
             'late_fee_tier_3_day' => 20,
             'late_fee_tier_4_day' => 30,
@@ -163,7 +163,7 @@ final class ContributionPolicySettings
 
     public static function lateFeeTier1Day(): int
     {
-        return max(1, (int) self::collectionGet('late_fee_tier_1_day', 3));
+        return max(1, (int) self::collectionGet('late_fee_tier_1_day', 5));
     }
 
     public static function lateFeeTier2Day(): int
@@ -324,7 +324,7 @@ final class ContributionPolicySettings
         Setting::set(self::GROUP_SUBSCRIPTION, 'annual_fee', max(0, (float) ($state['annual_subscription_fee'] ?? 0)));
 
         Setting::set(self::GROUP_COLLECTION, 'late_fee_reminder_days', max(0, (int) ($state['collection_late_fee_reminder_days'] ?? 3)));
-        Setting::set(self::GROUP_COLLECTION, 'late_fee_tier_1_day', max(1, (int) ($state['collection_late_fee_tier_1_day'] ?? 3)));
+        Setting::set(self::GROUP_COLLECTION, 'late_fee_tier_1_day', max(1, (int) ($state['collection_late_fee_tier_1_day'] ?? 5)));
         Setting::set(self::GROUP_COLLECTION, 'late_fee_tier_2_day', max(1, (int) ($state['collection_late_fee_tier_2_day'] ?? 10)));
         Setting::set(self::GROUP_COLLECTION, 'late_fee_tier_3_day', max(1, (int) ($state['collection_late_fee_tier_3_day'] ?? 20)));
         Setting::set(self::GROUP_COLLECTION, 'late_fee_tier_4_day', max(1, (int) ($state['collection_late_fee_tier_4_day'] ?? 30)));

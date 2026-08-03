@@ -29,14 +29,14 @@ final class AutomationScheduleSettings
             // One or two HH:MM times (comma-separated) while the cycle is open.
             'contribution_apply_times' => '06:00',
             'loan_apply_times' => '06:00',
-            // Day of month for monthly reconcile + statements (null → cycle start day).
-            'month_boundary_day' => null,
+            // Day of month for monthly reconcile + statements (explicit; same as cycle start).
+            'month_boundary_day' => 6,
             'month_boundary_time' => '00:30',
             // Cycle transition (close previous / init next) times on cycle start day.
             'cycle_close_time' => '00:30',
             'cycle_init_time' => '00:35',
-            // EMI window close (null day → cycle start day).
-            'emi_close_day' => null,
+            // EMI window close (explicit; same as cycle start).
+            'emi_close_day' => 6,
             'emi_close_time' => '00:45',
             // Daily fund / bank / delinquency jobs (legacy single-time, kept for backward compatibility).
             'master_invariants_time' => '06:00',
@@ -68,13 +68,13 @@ final class AutomationScheduleSettings
             'fund_status_digest_frequency' => 'daily',
             'fund_status_digest_weekdays' => '',
             'fund_status_digest_month_days' => '',
-            'fund_status_digest_times' => '07:15',
+            'fund_status_digest_times' => '04:00',
             // Statements (defaults follow month-boundary day/time when unset).
-            'statements_day' => null,
+            'statements_day' => 6,
             'statements_time' => '00:30',
             // Messaging / chained maintenance.
             'dispatch_announcements_enabled' => true,
-            'dispatch_announcements_interval_minutes' => 1,
+            'dispatch_announcements_interval_minutes' => 15,
             'onboarding_greeting_enabled' => true,
             'onboarding_greeting_time' => '10:00',
             'late_fees_enabled' => true,
@@ -245,7 +245,7 @@ final class AutomationScheduleSettings
             'nightly_reconcile' => ['default_times' => '06:30'],
             'bank_auto_match' => ['default_times' => '08:00'],
             'delinquency_digest' => ['default_times' => '07:30'],
-            'fund_status_digest' => ['default_times' => '07:15'],
+            'fund_status_digest' => ['default_times' => '04:00'],
         ] as $job => $meta) {
             $freq = self::normalizeCadenceFrequency($state["automation_{$job}_frequency"] ?? 'daily');
             Setting::set(self::GROUP, "{$job}_frequency", $freq);
@@ -543,7 +543,7 @@ final class AutomationScheduleSettings
     /** @return list<string> */
     public static function fundStatusDigestTimes(): array
     {
-        return self::parseCadenceTimes(self::get('fund_status_digest_times', ''), '07:15');
+        return self::parseCadenceTimes(self::get('fund_status_digest_times', ''), '04:00');
     }
 
     public static function notifyContributionDue(): bool

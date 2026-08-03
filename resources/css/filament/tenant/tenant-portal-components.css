@@ -42,6 +42,8 @@
 .fi-body.fi-panel-tenant .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
     > .fi-modal-window-ctn
     > .fi-modal-window {
+    display: flex;
+    flex-direction: column;
     max-height: min(90dvh, calc(100dvh - 2rem));
     overflow: hidden;
 }
@@ -81,7 +83,7 @@
 
 .fi-body.fi-panel-tenant .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
     > .fi-modal-window-ctn
-    > .fi-modal-window.ff-tenant-form-modal-window {
+    > .fi-modal-window.ff-tenant-form-modal-window:not(.ff-freeze-modal) {
     overflow: visible;
 }
 
@@ -92,6 +94,12 @@
     overflow-x: hidden;
     overflow-y: auto;
     padding-bottom: 0.75rem;
+}
+
+.fi-body.fi-panel-tenant .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-tenant-form-modal-window.ff-freeze-modal {
+    overflow: hidden;
 }
 
 .fi-body.fi-panel-tenant .fi-modal-window .fi-modal-header {

@@ -15,6 +15,61 @@
     padding-block: 0.85rem 1.1rem;
 }
 
+/*
+ * Tall freeze form (wizard / multi-section): pin chrome, scroll body only.
+ * Class lands on the modal *window* via extraModalWindowAttributes.
+ */
+.fi-body .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-freeze-modal {
+    display: flex;
+    flex-direction: column;
+    max-height: min(90dvh, calc(100dvh - 2rem));
+    overflow: hidden;
+}
+
+.fi-body .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-freeze-modal
+    > .fi-modal-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.fi-body .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-freeze-modal
+    > .fi-modal-header,
+.fi-body .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+    > .fi-modal-window-ctn
+    > .fi-modal-window.ff-freeze-modal
+    > .fi-modal-footer {
+    flex-shrink: 0;
+}
+
+/* Wizard step strip stays visible while scrolling form body on small screens */
+.ff-freeze-modal .fi-sc-wizard-header,
+.ff-freeze-modal .fi-wizard-header,
+.ff-freeze-modal .fi-fo-wizard .fi-sc-wizard-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: color-mix(in oklab, var(--fi-modal-bg, #fff) 94%, transparent);
+    backdrop-filter: blur(6px);
+    padding-block: 0.35rem 0.5rem;
+    margin-block-end: 0.15rem;
+}
+
+.dark .ff-freeze-modal .fi-sc-wizard-header,
+.dark .ff-freeze-modal .fi-wizard-header,
+.dark .ff-freeze-modal .fi-fo-wizard .fi-sc-wizard-header {
+    background: color-mix(in oklab, var(--gray-900, #111827) 92%, transparent);
+}
+
 .ff-freeze-modal .fi-sc,
 .ff-freeze-modal .fi-fo-component-ctn {
     gap: 0.875rem;
@@ -32,6 +87,12 @@
 }
 
 @media (max-width: 639px) {
+    .fi-body .fi-modal:not(.fi-modal-slide-over):not(.fi-width-screen)
+        > .fi-modal-window-ctn
+        > .fi-modal-window.ff-freeze-modal {
+        max-height: min(92dvh, calc(100dvh - 1rem));
+    }
+
     .ff-freeze-modal .fi-modal-content {
         padding-inline: 0.75rem !important;
         padding-block: 0.65rem 0.85rem !important;
@@ -46,6 +107,37 @@
     .ff-freeze-modal .fi-sc-section-content,
     .ff-freeze-modal .fi-section-content {
         padding: 0.75rem !important;
+    }
+
+    /* Footer actions always reachable: full-width, wrap cleanly */
+    .ff-freeze-modal .fi-modal-footer .fi-ac {
+        flex-wrap: wrap;
+        width: 100%;
+        gap: 0.5rem;
+    }
+
+    .ff-freeze-modal .fi-modal-footer .fi-btn {
+        flex: 1 1 calc(50% - 0.25rem);
+        min-width: min(100%, 7.5rem);
+        justify-content: center;
+    }
+
+    /* Long helper text under freeze duration */
+    .ff-freeze-modal .fi-fo-field-wrp-helper-text,
+    .ff-freeze-modal .fi-fo-helper-text {
+        font-size: 0.75rem;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+    }
+
+    /* Wizard labels: compact + keep strip scrollable */
+    .ff-freeze-modal .fi-wizard-header-step-label,
+    .ff-freeze-modal .fi-sc-wizard-header-step-label {
+        font-size: 0.75rem;
+        max-width: 5.5rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 }
 

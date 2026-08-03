@@ -61,7 +61,7 @@ it('persists every automation schedule default key for a fresh tenant', function
         ->and($stored['late_fees_time'])->toBe('06:05')
         ->and($stored['loan_defaults_time'])->toBe('06:05')
         ->and($stored['onboarding_greeting_time'])->toBe('10:00')
-        ->and($stored['dispatch_announcements_interval_minutes'])->toBe('1')
+        ->and($stored['dispatch_announcements_interval_minutes'])->toBe('15')
         ->and($stored['auto_accept_deposits'])->toBe('1')
         ->and($stored['auto_apply_collections'])->toBe('1')
         ->and($stored['late_fees_enabled'])->toBe('1')
@@ -74,7 +74,11 @@ it('persists every automation schedule default key for a fresh tenant', function
         ->and($stored['notify_reconciliation_digest'])->toBe('1')
         ->and($stored['notify_monthly_statements'])->toBe('1')
         ->and($stored['notify_announcements'])->toBe('1')
-        ->and($stored['notify_onboarding_greeting'])->toBe('1');
+        ->and($stored['notify_onboarding_greeting'])->toBe('1')
+        ->and($stored['month_boundary_day'])->toBe('6')
+        ->and($stored['emi_close_day'])->toBe('6')
+        ->and($stored['statements_day'])->toBe('6')
+        ->and($stored['fund_status_digest_times'])->toBe('04:00');
 });
 
 it('backfills only missing automation schedule keys', function () {
@@ -156,6 +160,8 @@ it('persists samman-shaped settings defaults for a fresh tenant', function () {
         ->and(Setting::get('subscription', 'annual_fee'))->toBe('0')
         ->and(Setting::get(StatementSettings::GROUP, 'auto_email'))->toBe('1')
         ->and(Setting::get(StatementSettings::GROUP, 'include_compliance'))->toBe('1')
+        ->and(Setting::get(StatementSettings::GROUP, 'attach_pdf'))->toBe('1')
+        ->and(Setting::get(StatementSettings::GROUP, 'font_ar'))->toBe(StatementSettings::FONT_DEJAVU_SANS)
         ->and(Setting::get('loan_queue_projection', 'include_contribution_arrears'))->toBe('1')
         ->and(Setting::get('reconciliation', 'digest_push_enabled'))->toBe('1')
         ->and(Setting::get(AutomationScheduleSettings::GROUP, 'contribution_apply_times'))->toBe('06:00')
@@ -169,13 +175,22 @@ it('persists samman-shaped settings defaults for a fresh tenant', function () {
         ->and(Setting::get(AutomationScheduleSettings::GROUP, 'daily_reconcile_time'))->toBe('06:20')
         ->and(Setting::get(AutomationScheduleSettings::GROUP, 'bank_auto_match_time'))->toBe('08:00')
         ->and(Setting::get(AutomationScheduleSettings::GROUP, 'month_boundary_time'))->toBe('00:30')
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'month_boundary_day'))->toBe('6')
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'emi_close_day'))->toBe('6')
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'statements_day'))->toBe('6')
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'dispatch_announcements_interval_minutes'))->toBe('15')
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'fund_status_digest_times'))->toBe('04:00')
         ->and(Setting::get(AutomationScheduleSettings::GROUP, 'notify_contribution_due'))->toBe('1')
         ->and(Setting::get(AutomationScheduleSettings::GROUP, 'notify_reconciliation_digest'))->toBe('1')
         ->and(Setting::get(CommunicationSettings::GROUP, 'email_enabled'))->toBe('1')
         ->and(Setting::get(LedgerSettings::GROUP, 'show_manual_credit_debit'))->toBe('0')
         ->and(Setting::get(FiscalSettings::GROUP, 'fiscal_year_start_month'))->toBe('1')
         ->and(Setting::get(PushEventSettings::GROUP, 'contribution_due'))->toBe('1')
-        ->and(Setting::get(PushEventSettings::GROUP, 'member_onboarding_greeting'))->toBe('1');
+        ->and(Setting::get(PushEventSettings::GROUP, 'member_onboarding_greeting'))->toBe('1')
+        ->and(Setting::get('collection', 'late_fee_tier_1_day'))->toBe('5')
+        ->and(Setting::get(PublicPageSettings::GROUP, 'fee_transfer_iban'))->toBe('SA4580000432608010017802')
+        ->and(Setting::get('general', 'business_day_banner_admin'))->toBe('0')
+        ->and(Setting::get('general', 'business_day_banner_member'))->toBe('0');
 });
 
 it('seeds every settings-tab policy group used by the admin Settings page', function () {
@@ -217,7 +232,30 @@ it('does not seed frozen business day or twilio secrets', function () {
         ->and(Setting::query()->where('group', 'like', 'legacy%')->exists())->toBeFalse();
 });
 
+it('full seeds when settings table is empty via ensureInstalled', function () {
+    expect(Setting::query()->count())->toBe(0);
+
+    DefaultTenantSettings::ensureInstalled();
+
+    expect(Setting::query()->count())->toBeGreaterThan(50)
+        ->and(Setting::get('general', 'currency'))->toBe(DefaultTenantSettings::CURRENCY)
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'dispatch_announcements_interval_minutes'))->toBe('15');
+});
+
+it('ensureInstalled does not overwrite an existing tenant setting', function () {
+    Setting::set(AutomationScheduleSettings::GROUP, 'dispatch_announcements_interval_minutes', '7');
+    Setting::set('general', 'currency', 'USD');
+
+    DefaultTenantSettings::ensureInstalled();
+
+    expect(Setting::get(AutomationScheduleSettings::GROUP, 'dispatch_announcements_interval_minutes'))->toBe('7')
+        ->and(Setting::get('general', 'currency'))->toBe('USD')
+        // Missing automation keys still backfill
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'fund_status_digest_times'))->toBe('04:00');
+});
+
 it('aligns loan queue arrears default with samman policy', function () {
     expect(LoanQueueProjectionSettings::defaults()['include_contribution_arrears'])->toBeTrue()
-        ->and(ContributionPolicySettings::collectionDefaults()['bank_match_manual_date_range_days'])->toBe(0);
+        ->and(ContributionPolicySettings::collectionDefaults()['bank_match_manual_date_range_days'])->toBe(0)
+        ->and(ContributionPolicySettings::collectionDefaults()['late_fee_tier_1_day'])->toBe(5);
 });
