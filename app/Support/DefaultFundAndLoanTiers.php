@@ -85,16 +85,25 @@ final class DefaultFundAndLoanTiers
         /** @var array<int, int> $loanTierIdsByNumber */
         $loanTierIdsByNumber = DB::table('loan_tiers')->pluck('id', 'tier_number')->all();
 
+        // Called from early migrations before priority exists (e.g. upgrade_loans_to_legacy).
+        // Later migration backfills priority from tier_number when the column is added.
+        $hasPriority = Schema::hasColumn('fund_tiers', 'priority');
+
         foreach (self::fundTiers() as $row) {
-            $fundTierId = DB::table('fund_tiers')->insertGetId([
+            $attributes = [
                 'tier_number' => $row['tier_number'],
-                'priority' => $row['priority'],
                 'label' => $row['label'],
                 'percentage' => $row['percentage'],
                 'is_active' => true,
                 'created_at' => $now,
                 'updated_at' => $now,
-            ]);
+            ];
+
+            if ($hasPriority) {
+                $attributes['priority'] = $row['priority'];
+            }
+
+            $fundTierId = DB::table('fund_tiers')->insertGetId($attributes);
 
             foreach ($row['loan_tier_numbers'] as $loanTierNumber) {
                 $loanTierId = $loanTierIdsByNumber[$loanTierNumber] ?? null;

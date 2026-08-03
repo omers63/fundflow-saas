@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\LoanTier;
 use App\Support\DefaultFundAndLoanTiers;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -81,4 +83,32 @@ test('seedIfEmpty inserts linked defaults only when both tier tables are empty',
 
     expect(LoanTier::query()->count())->toBe(11)
         ->and(FundTier::query()->count())->toBe(6);
+});
+
+test('seedIfEmpty omits priority when the fund_tiers column is not present yet', function () {
+    FundTier::query()->forceDelete();
+    LoanTier::query()->forceDelete();
+
+    expect(Schema::hasColumn('fund_tiers', 'priority'))->toBeTrue();
+
+    Schema::table('fund_tiers', function (Blueprint $table): void {
+        $table->dropColumn('priority');
+    });
+
+    try {
+        DefaultFundAndLoanTiers::seedIfEmpty();
+
+        expect(LoanTier::query()->count())->toBe(11)
+            ->and(FundTier::query()->count())->toBe(6)
+            ->and(Schema::hasColumn('fund_tiers', 'priority'))->toBeFalse();
+    } finally {
+        Schema::table('fund_tiers', function (Blueprint $table): void {
+            $table->unsignedSmallInteger('priority')->default(0)->after('tier_number');
+        });
+
+        // Mirror the priority column migration backfill for later tests.
+        FundTier::query()->get()->each(function (FundTier $tier): void {
+            $tier->forceFill(['priority' => (int) $tier->tier_number])->saveQuietly();
+        });
+    }
 });
