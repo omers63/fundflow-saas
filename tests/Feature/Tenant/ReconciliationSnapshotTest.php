@@ -131,6 +131,68 @@ test('contribution integrity checks ignore pending rows and flag posted rows mis
         ->toBe($postedMissingLegs->id);
 });
 
+test('contributions ledger check ignores in-flight partial posts on pending rows', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-CONTRIB-PARTIAL',
+        'name' => 'Partial Contribution Member',
+        'email' => 'contrib-partial@fund.test',
+        'monthly_contribution_amount' => 10_000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $accounting = app(AccountingService::class);
+    $accounting->createMemberAccounts($member);
+    AccountingService::withoutMemberCashCollection(function () use ($accounting, $member): void {
+        $accounting->creditMemberCashWithMasterMirror(
+            $member->fresh()->cashAccount,
+            5_000,
+            'Seed cash',
+            '(test)',
+            $member,
+            now(),
+            $member->id,
+        );
+    });
+
+    $pendingPartial = Contribution::create([
+        'member_id' => $member->id,
+        'period' => now()->startOfMonth()->toDateString(),
+        'amount' => 10_000,
+        'amount_due' => 10_000,
+        'amount_collected' => 5_000,
+        'status' => 'pending',
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+    ]);
+
+    // Cycle partial: principal legs only for the collected slice, status still pending.
+    $accounting->postContributionPrincipal($pendingPartial, 5_000);
+
+    $postedFull = Contribution::create([
+        'member_id' => $member->id,
+        'period' => now()->subMonthNoOverflow()->startOfMonth()->toDateString(),
+        'amount' => 1_000,
+        'amount_due' => 1_000,
+        'amount_collected' => 1_000,
+        'status' => 'posted',
+        'posted_at' => now()->subDay(),
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+    ]);
+    $accounting->postContributionPrincipal($postedFull, 1_000);
+
+    $check = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    )['checks']['contributions_ledger'];
+
+    expect($check['severity'])->toBe('ok')
+        ->and($check['missing_ledger_count'])->toBe(0)
+        ->and($check['sum_contribution_rows'])->toBe(1000.0)
+        ->and($check['sum_master_fund_credits_sourced_contribution'])->toBe(1000.0)
+        ->and($check['sum_master_fund_net_sourced_contribution'])->toBe(1000.0)
+        ->and($check['master_fund_delta'])->toBe(0.0)
+        ->and($check['in_flight_pending_master_fund_credits'])->toBe(5000.0);
+});
+
 test('global trial diagnostics surface suspected unbalanced posting groups', function () {
     $masterCash = Account::masterCash();
     expect($masterCash)->not->toBeNull();

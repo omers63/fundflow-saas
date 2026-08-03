@@ -1,5 +1,5 @@
 @php
-    /** @var \App\Models\Tenant\Member|null $member */
+/** @var \App\Models\Tenant\Member|null $member */
 @endphp
 
 <div class="fi-wi-widget ff-freeze-status-stack">
@@ -7,11 +7,13 @@
         <div class="ff-freeze-callout ff-freeze-callout--warning">
             <p class="ff-freeze-callout__title">{{ __('Membership frozen — read-only portal') }}</p>
             <p class="ff-freeze-callout__body">
-                @if ($withinPlan)
+                @if ($withinPlan && $indefinitePlan)
+                    {{ __('Indefinite freeze. Contributions and cash-out are paused. EMIs are deferred each cycle; late fees stay suppressed until you or an admin unfreeze.') }}
+                @elseif ($withinPlan)
                         {{ __('Planned freeze: :remaining of :requested cycle(s) remaining. Contributions and cash-out are paused. EMIs are deferred; late fees are suppressed until the plan ends.', [
-                        'remaining' => (int) $member->freeze_cycles_remaining,
-                        'requested' => (int) $member->freeze_cycles_requested,
-                    ]) }}
+            'remaining' => (int) $member->freeze_cycles_remaining,
+            'requested' => (int) $member->freeze_cycles_requested,
+        ]) }}
                 @elseif ($planExhausted)
                     {{ __('Your freeze plan has ended, but membership stays frozen until you or an admin unfreezes. Late fees and delinquency may apply again. Use Requests → Unfreeze when ready.') }}
                 @else
@@ -46,9 +48,9 @@
                                 </div>
                                 <div class="mt-0.5 text-sm text-gray-600 dark:text-gray-300">
                                     {{ __('Borrower: :name · Replacing: :outgoing', [
-                        'name' => $req->loan?->member?->name ?? '—',
-                        'outgoing' => $req->outgoingGuarantor?->name ?? '—',
-                    ]) }}
+            'name' => $req->loan?->member?->name ?? '—',
+            'outgoing' => $req->outgoingGuarantor?->name ?? '—',
+        ]) }}
                                 </div>
                             </div>
                             <div class="ff-freeze-accept-item__actions">

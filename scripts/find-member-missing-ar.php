@@ -4,11 +4,26 @@ declare(strict_types=1);
 
 function extractKeys(string $file): array
 {
-    $content = file_get_contents($file);
+    $content = (string) file_get_contents($file);
 
-    preg_match_all('/__\(\s*([\'"])(.*?)\1/s', $content, $matches);
+    // Match escaped quotes inside single/double-quoted keys (member\'s, etc.).
+    preg_match_all(
+        '/(?:__|@lang|trans|trans_choice)\(\s*(\'(?:\\\\.|[^\'])*\'|"(?:\\\\.|[^"])*")/',
+        $content,
+        $matches,
+    );
 
-    return $matches[2] ?? [];
+    $keys = [];
+
+    foreach ($matches[1] ?? [] as $quoted) {
+        $key = stripcslashes(substr($quoted, 1, -1));
+
+        if ($key !== '' && ! str_contains($key, "\n")) {
+            $keys[] = $key;
+        }
+    }
+
+    return $keys;
 }
 
 $paths = array_merge(
@@ -21,9 +36,17 @@ $paths = array_merge(
         __DIR__.'/../app/Services/MemberContributionInsightsService.php',
         __DIR__.'/../app/Services/MemberDependentsInsightsService.php',
         __DIR__.'/../app/Services/LoanInsightsService.php',
+        __DIR__.'/../app/Services/MemberFreezeService.php',
+        __DIR__.'/../app/Services/MemberWithdrawalSettlementService.php',
+        __DIR__.'/../app/Services/Tenant/MemberRequestService.php',
+        __DIR__.'/../app/Services/Loans/LoanGuarantorReplacementService.php',
+        __DIR__.'/../app/Filament/Support/MemberFreezeFormSchema.php',
+        __DIR__.'/../app/Filament/Support/MemberWithdrawFormSchema.php',
+        __DIR__.'/../app/Filament/Support/MemberFilamentActions.php',
         __DIR__.'/../app/Filament/Support/ViewActions/ViewAccountTransactionAction.php',
         __DIR__.'/../app/Filament/Livewire/MemberDatabaseNotifications.php',
         __DIR__.'/../app/Providers/Filament/MemberPanelProvider.php',
+        __DIR__.'/../resources/views/filament/partials/freeze-callout.blade.php',
     ],
 );
 

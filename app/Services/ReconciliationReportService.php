@@ -254,9 +254,17 @@ class ReconciliationReportService
         }
 
         // --- 3c) Contributions vs master fund ledger ---
+        // Partial collections post master/member fund legs while the row stays pending
+        // until amount_collected covers amount_due. Sum master fund credits only for
+        // posted contributions so in-flight partials do not create a false warning.
         $contribMorph = Contribution::class;
         $missingLedgerContributions = [];
         if ($masterFund !== null) {
+            $postedContributionIdSubquery = fn () => Contribution::query()
+                ->posted()
+                ->whereNull('deleted_at')
+                ->select('id');
+
             Contribution::query()
                 ->posted()
                 ->whereNull('deleted_at')
@@ -285,11 +293,22 @@ class ReconciliationReportService
                     }
                 });
 
-            $ledgerContribMaster = (float) Transaction::query()
+            $ledgerContribMasterCredits = (float) Transaction::query()
                 ->where('account_id', $masterFund->id)
                 ->where('reference_type', $contribMorph)
                 ->where('type', 'credit')
+                ->whereIn('reference_id', $postedContributionIdSubquery())
                 ->sum('amount');
+
+            // Principal reversals debit master fund against the same contribution reference.
+            $ledgerContribMasterDebits = (float) Transaction::query()
+                ->where('account_id', $masterFund->id)
+                ->where('reference_type', $contribMorph)
+                ->where('type', 'debit')
+                ->whereIn('reference_id', $postedContributionIdSubquery())
+                ->sum('amount');
+
+            $ledgerContribMaster = round($ledgerContribMasterCredits - $ledgerContribMasterDebits, 2);
 
             $contribSum = (float) Contribution::query()
                 ->posted()
@@ -298,7 +317,25 @@ class ReconciliationReportService
             $masterDelta = abs($ledgerContribMaster - $contribSum);
             $masterMatch = $masterDelta <= self::AMOUNT_TOLERANCE;
 
-            if ($missingLedgerContributions !== []) {
+            // Diagnostics only: partial cycle posts keep status pending (not a ledger error).
+            $inFlightLedgerCredits = (float) Transaction::query()
+                ->where('account_id', $masterFund->id)
+                ->where('reference_type', $contribMorph)
+                ->where('type', 'credit')
+                ->whereNotIn('reference_id', $postedContributionIdSubquery())
+                ->sum('amount');
+
+            $orphanCreditCount = (int) Transaction::query()
+                ->where('account_id', $masterFund->id)
+                ->where('reference_type', $contribMorph)
+                ->where('type', 'credit')
+                ->whereNotIn(
+                    'reference_id',
+                    Contribution::query()->whereNull('deleted_at')->select('id'),
+                )
+                ->count();
+
+            if ($missingLedgerContributions !== [] || $orphanCreditCount > 0) {
                 $incrementCritical();
             }
             if (! $masterMatch) {
@@ -307,13 +344,19 @@ class ReconciliationReportService
 
             $checks['contributions_ledger'] = [
                 'label' => 'Contributions — ledger presence and master fund credits',
-                'severity' => $missingLedgerContributions === [] && $masterMatch ? 'ok' : ($missingLedgerContributions !== [] ? 'critical' : 'warning'),
+                'severity' => ($missingLedgerContributions === [] && $orphanCreditCount === 0 && $masterMatch)
+                    ? 'ok'
+                    : (($missingLedgerContributions !== [] || $orphanCreditCount > 0) ? 'critical' : 'warning'),
                 'missing_ledger_count' => count($missingLedgerContributions),
                 'missing_ledger_sample' => array_slice($missingLedgerContributions, 0, 50),
                 'sum_contribution_rows' => round($contribSum, 2),
-                'sum_master_fund_credits_sourced_contribution' => round($ledgerContribMaster, 2),
+                'sum_master_fund_credits_sourced_contribution' => round($ledgerContribMasterCredits, 2),
+                'sum_master_fund_debits_sourced_contribution' => round($ledgerContribMasterDebits, 2),
+                'sum_master_fund_net_sourced_contribution' => $ledgerContribMaster,
                 'master_fund_delta' => round($ledgerContribMaster - $contribSum, 2),
-                'note' => 'Posted contributions only: each should have paired master+member fund credits. Pending/failed rows are excluded until posted.',
+                'in_flight_pending_master_fund_credits' => round($inFlightLedgerCredits, 2),
+                'orphan_master_fund_credit_count' => $orphanCreditCount,
+                'note' => 'Posted contributions only: each should have paired master+member fund credits; master fund net credits for posted rows should match Σ posted amounts. Partial collections may credit the fund while still pending — those amounts are tracked separately and excluded from the posted delta.',
             ];
         } else {
             $checks['contributions_ledger'] = [

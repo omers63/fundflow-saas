@@ -26,7 +26,14 @@ final class TableRecordActionGroups
         $flat = self::flatten($actions);
 
         if (self::isSinglePrimaryAction($flat)) {
-            return self::configureSinglePrimaryActionRowClick($table, $flat[0], $recordUrl);
+            // Prefer modal / seeded row-click over Filament ListRecords default record URLs
+            // (those set hasCustomRecordUrl before configureTable runs).
+            return self::configureSinglePrimaryActionRowClick(
+                $table,
+                $flat[0],
+                $recordUrl,
+                preferExistingRecordUrl: false,
+            );
         }
 
         $table = $table->recordActions(self::wrap($actions));
@@ -54,7 +61,12 @@ final class TableRecordActionGroups
             return $table;
         }
 
-        return self::configureSinglePrimaryActionRowClick($table, $flat[0]);
+        // Keep an intentionally configured recordUrl (e.g. navigate to resource page).
+        return self::configureSinglePrimaryActionRowClick(
+            $table,
+            $flat[0],
+            preferExistingRecordUrl: true,
+        );
     }
 
     /**
@@ -136,6 +148,7 @@ final class TableRecordActionGroups
         Table $table,
         Action $action,
         ?Closure $recordUrl = null,
+        bool $preferExistingRecordUrl = false,
     ): Table {
         if ($recordUrl !== null) {
             return $table
@@ -143,7 +156,7 @@ final class TableRecordActionGroups
                 ->recordActions([]);
         }
 
-        if ($table->hasCustomRecordUrl()) {
+        if ($preferExistingRecordUrl && $table->hasCustomRecordUrl()) {
             return $table->recordActions([]);
         }
 

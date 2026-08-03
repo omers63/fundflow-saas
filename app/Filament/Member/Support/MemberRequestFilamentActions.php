@@ -79,7 +79,7 @@ final class MemberRequestFilamentActions
             })
             ->action(function (array $data) use ($service): void {
                 self::submit($service, MemberRequest::TYPE_FREEZE_MEMBERSHIP, [
-                    'cycles' => (int) ($data['cycles'] ?? 0),
+                    'cycles' => MemberFreezeService::normalizeCycles($data['cycles'] ?? null),
                     'household_mode' => (string) ($data['household_mode'] ?? MemberFreezeService::HOUSEHOLD_SELF_ONLY),
                     'temporary_parent_member_id' => $data['temporary_parent_member_id'] ?? null,
                     'reason' => $data['reason'] ?? '',

@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Models\Tenant;
 
 use App\Services\ContributionCycleService;
+use App\Services\MemberFreezeService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Str;
 
 class MemberRequest extends Model
 {
@@ -160,88 +160,70 @@ class MemberRequest extends Model
     }
 
     /**
-     * @return list<string>
+     * Human-readable, type-specific detail rows for modals and detail pages (not raw JSON keys).
+     *
+     * @return list<array{label: string, value: string}>
      */
-    protected function flattenPayloadLines(array $data, string $prefix = ''): array
-    {
-        $lines = [];
-
-        foreach ($data as $key => $value) {
-            $path = $prefix === '' ? (string) $key : $prefix.'.'.$key;
-
-            if (is_array($value)) {
-                if ($value === []) {
-                    $lines[] = $path.': '.__('(empty)');
-
-                    continue;
-                }
-
-                $lines = array_merge($lines, $this->flattenPayloadLines($value, $path));
-            } else {
-                $lines[] = $path.': '.$this->formatPayloadScalar($value);
-            }
-        }
-
-        return $lines;
-    }
-
-    protected function formatPayloadScalar(mixed $value): string
-    {
-        if ($value === null) {
-            return '';
-        }
-
-        if (is_bool($value)) {
-            return $value ? __('yes') : __('no');
-        }
-
-        return trim((string) $value);
-    }
-
-    public function payloadAsPlainText(): string
-    {
-        $payload = $this->payload ?? [];
-
-        if ($payload === []) {
-            return __('—');
-        }
-
-        return implode("\n", $this->flattenPayloadLines($payload));
-    }
-
-    public function describePayload(): string
+    public function payloadDetailItems(): array
     {
         $payload = $this->payload ?? [];
 
         return match ($this->type) {
-            self::TYPE_ADD_DEPENDENT => $this->formatAddDependentPayload($payload),
-            self::TYPE_REMOVE_DEPENDENT => $this->formatRemoveDependentPayload($payload),
-            self::TYPE_OWN_ALLOCATION => isset($payload['requested_amount'])
-            ? (string) (int) $payload['requested_amount']
-            : __('—'),
-            self::TYPE_DEPENDENT_ALLOCATION => $this->formatDependentLabel($payload['dependent_member_id'] ?? null)
-            .(isset($payload['requested_amount'])
-                ? ' → '.(string) (int) $payload['requested_amount']
-                : ''),
-            self::TYPE_REQUEST_INDEPENDENCE => __('Unlink from household parent'),
-            self::TYPE_FREEZE_MEMBERSHIP => $this->formatFreezePayload($payload),
-            self::TYPE_UNFREEZE_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Resume membership'),
-            self::TYPE_EXTEND_FREEZE_MEMBERSHIP => __('Extend by :cycles cycle(s)', [
-                'cycles' => (int) ($payload['cycles'] ?? 0),
-            ]),
-            self::TYPE_WITHDRAW_MEMBERSHIP => $this->formatWithdrawPayload($payload),
-            self::TYPE_REINSTATE_MEMBERSHIP => trim((string) ($payload['reason'] ?? '')) ?: __('Request to rejoin'),
-            self::TYPE_RELEASE_PAYOUT => trim((string) ($payload['reason'] ?? '')) ?: __('Request payout release'),
-            self::TYPE_OPEN_CYCLE_CONTRIBUTION => $this->formatOpenCycleContributionPayload($payload),
-            self::TYPE_VOLUNTARY_CONTRIBUTION => $this->formatVoluntaryContributionPayload($payload),
-            default => __('—'),
+            self::TYPE_ADD_DEPENDENT => $this->detailItemsAddDependent($payload),
+            self::TYPE_REMOVE_DEPENDENT => $this->detailItemsRemoveDependent($payload),
+            self::TYPE_OWN_ALLOCATION => $this->detailItemsAmountOnly(
+                __('Requested amount'),
+                $payload['requested_amount'] ?? null,
+            ),
+            self::TYPE_DEPENDENT_ALLOCATION => array_values(array_filter([
+                ['label' => __('Dependent'), 'value' => $this->formatDependentLabel($payload['dependent_member_id'] ?? null)],
+                isset($payload['requested_amount'])
+                ? ['label' => __('Requested amount'), 'value' => (string) (int) $payload['requested_amount']]
+                : null,
+            ])),
+            self::TYPE_REQUEST_INDEPENDENCE => [
+                ['label' => __('Request'), 'value' => __('Unlink from household parent')],
+            ],
+            self::TYPE_FREEZE_MEMBERSHIP => $this->detailItemsFreeze($payload),
+            self::TYPE_UNFREEZE_MEMBERSHIP => $this->detailItemsReasonFirst(
+                __('Resume membership'),
+                $payload['reason'] ?? null,
+            ),
+            self::TYPE_EXTEND_FREEZE_MEMBERSHIP => array_values(array_filter([
+                ['label' => __('Additional cycles'), 'value' => (string) (int) ($payload['cycles'] ?? 0)],
+                filled(trim((string) ($payload['reason'] ?? '')))
+                ? ['label' => __('Reason'), 'value' => trim((string) $payload['reason'])]
+                : null,
+            ])),
+            self::TYPE_WITHDRAW_MEMBERSHIP => $this->detailItemsWithdraw($payload),
+            self::TYPE_REINSTATE_MEMBERSHIP => $this->detailItemsReasonFirst(
+                __('Request to rejoin'),
+                $payload['reason'] ?? null,
+            ),
+            self::TYPE_RELEASE_PAYOUT => $this->detailItemsReasonFirst(
+                __('Request payout release'),
+                $payload['reason'] ?? null,
+            ),
+            self::TYPE_OPEN_CYCLE_CONTRIBUTION => $this->detailItemsOpenCycle($payload),
+            self::TYPE_VOLUNTARY_CONTRIBUTION => $this->detailItemsVoluntary($payload),
+            default => [],
         };
+    }
+
+    public function describePayload(): string
+    {
+        return collect($this->payloadDetailItems())
+            ->map(fn(array $item): string => $item['value'])
+            ->filter(fn(string $value): bool => $value !== '' && $value !== __('—'))
+            ->implode(' · ')
+            ?: __('—');
     }
 
     /**
      * @param  array<string, mixed>  $payload
+     * @return list<array{label: string, value: string}>
      */
-    protected function formatOpenCycleContributionPayload(array $payload): string
+    protected function detailItemsOpenCycle(array $payload): array
     {
         $amount = isset($payload['amount']) ? number_format((float) $payload['amount'], 2) : __('—');
         $month = (int) ($payload['period_month'] ?? 0);
@@ -249,82 +231,31 @@ class MemberRequest extends Model
         $period = ($month > 0 && $year > 0)
             ? app(ContributionCycleService::class)->periodLabel($month, $year)
             : __('—');
-        $target = $this->formatDependentLabel($payload['target_member_id'] ?? $this->requester_member_id);
-        $standing = isset($payload['standing_amount'])
-            ? number_format((float) $payload['standing_amount'], 2)
-            : null;
-
-        $parts = [
-            __('Period: :period', ['period' => $period]),
-            __('Member: :name', ['name' => $target]),
-            __('Requested: :amount', ['amount' => $amount]),
+        $items = [
+            ['label' => __('Period'), 'value' => $period],
+            ['label' => __('Member'), 'value' => $this->formatDependentLabel($payload['target_member_id'] ?? $this->requester_member_id)],
+            ['label' => __('Requested amount'), 'value' => $amount],
         ];
 
-        if ($standing !== null) {
-            $parts[] = __('Standing allocation unchanged: :amount', ['amount' => $standing]);
+        if (isset($payload['standing_amount'])) {
+            $items[] = [
+                'label' => __('Standing monthly allocation'),
+                'value' => number_format((float) $payload['standing_amount'], 2),
+            ];
         }
 
         if (filled($payload['note'] ?? null)) {
-            $parts[] = (string) $payload['note'];
+            $items[] = ['label' => __('Note'), 'value' => (string) $payload['note']];
         }
 
-        return implode(' · ', $parts);
+        return $items;
     }
 
     /**
      * @param  array<string, mixed>  $payload
+     * @return list<array{label: string, value: string}>
      */
-    protected function formatFreezePayload(array $payload): string
-    {
-        $cycles = (int) ($payload['cycles'] ?? 0);
-        $mode = (string) ($payload['household_mode'] ?? 'self_only');
-        $modeLabel = match ($mode) {
-            'include_dependents' => __('freeze dependents'),
-            'temp_parent' => __('temporary funding parent'),
-            default => __('self only'),
-        };
-        $reason = trim((string) ($payload['reason'] ?? ''));
-
-        $parts = [
-            __(':cycles cycle(s)', ['cycles' => $cycles]),
-            $modeLabel,
-        ];
-
-        if ($reason !== '') {
-            $parts[] = $reason;
-        }
-
-        return implode(' · ', $parts);
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    protected function formatWithdrawPayload(array $payload): string
-    {
-        $mode = (string) ($payload['household_mode'] ?? 'self_only');
-        $modeLabel = match ($mode) {
-            'include_dependents' => __('withdraw dependents'),
-            'permanent_parent' => __('permanent household parent'),
-            default => __('self only'),
-        };
-        $reason = trim((string) ($payload['reason'] ?? ''));
-
-        $parts = [$modeLabel];
-
-        if ($reason !== '') {
-            $parts[] = $reason;
-        } else {
-            $parts[] = __('Voluntary leave');
-        }
-
-        return implode(' · ', $parts);
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    protected function formatVoluntaryContributionPayload(array $payload): string
+    protected function detailItemsVoluntary(array $payload): array
     {
         $amount = isset($payload['amount']) ? number_format((float) $payload['amount'], 2) : __('—');
         $standing = isset($payload['standing_amount']) ? number_format((float) $payload['standing_amount'], 2) : null;
@@ -336,27 +267,166 @@ class MemberRequest extends Model
         $period = ($month > 0 && $year > 0)
             ? app(ContributionCycleService::class)->periodLabel($month, $year)
             : __('—');
-        $target = $this->formatDependentLabel($payload['target_member_id'] ?? $this->requester_member_id);
 
-        $parts = [
-            __('Period: :period', ['period' => $period]),
-            __('Member: :name', ['name' => $target]),
-            __('Total due: :amount', ['amount' => $amount]),
+        $items = [
+            ['label' => __('Period'), 'value' => $period],
+            ['label' => __('Member'), 'value' => $this->formatDependentLabel($payload['target_member_id'] ?? $this->requester_member_id)],
+            ['label' => __('Total due this cycle'), 'value' => $amount],
         ];
 
         if ($extra !== null) {
-            $parts[] = __('Top-up: +:extra', ['extra' => $extra]);
+            $items[] = ['label' => __('Top-up'), 'value' => '+' . $extra];
         }
 
         if ($standing !== null) {
-            $parts[] = __('Standing allocation unchanged: :amount', ['amount' => $standing]);
+            $items[] = ['label' => __('Standing monthly allocation'), 'value' => $standing];
         }
 
         if (filled($payload['note'] ?? null)) {
-            $parts[] = (string) $payload['note'];
+            $items[] = ['label' => __('Note'), 'value' => (string) $payload['note']];
         }
 
-        return implode(' · ', $parts);
+        return $items;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return list<array{label: string, value: string}>
+     */
+    protected function detailItemsFreeze(array $payload): array
+    {
+        $mode = (string) ($payload['household_mode'] ?? 'self_only');
+        $modeLabel = match ($mode) {
+            'include_dependents' => __('Freeze me and all dependents'),
+            'temp_parent' => __('Elect a temporary funding parent'),
+            default => __('Freeze me only'),
+        };
+
+        $items = [
+            [
+                'label' => __('Freeze length'),
+                'value' => MemberFreezeService::formatCyclesLabel(
+                    MemberFreezeService::normalizeCycles($payload['cycles'] ?? null),
+                ),
+            ],
+            ['label' => __('Household during freeze'), 'value' => $modeLabel],
+        ];
+
+        if ($mode === 'temp_parent' && filled($payload['temporary_parent_member_id'] ?? null)) {
+            $items[] = [
+                'label' => __('Temporary funding parent'),
+                'value' => $this->formatDependentLabel($payload['temporary_parent_member_id']),
+            ];
+        }
+
+        if (filled(trim((string) ($payload['reason'] ?? '')))) {
+            $items[] = ['label' => __('Reason'), 'value' => trim((string) $payload['reason'])];
+        }
+
+        return $items;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return list<array{label: string, value: string}>
+     */
+    protected function detailItemsWithdraw(array $payload): array
+    {
+        $mode = (string) ($payload['household_mode'] ?? 'self_only');
+        $modeLabel = match ($mode) {
+            'include_dependents' => __('Withdraw me and all dependents'),
+            'permanent_parent' => __('Elect a permanent household parent'),
+            default => __('Leave as self only'),
+        };
+
+        $items = [
+            ['label' => __('Household when leaving'), 'value' => $modeLabel],
+        ];
+
+        if ($mode === 'permanent_parent' && filled($payload['permanent_parent_member_id'] ?? null)) {
+            $items[] = [
+                'label' => __('Permanent household parent'),
+                'value' => $this->formatDependentLabel($payload['permanent_parent_member_id']),
+            ];
+        }
+
+        $reason = trim((string) ($payload['reason'] ?? ''));
+        $items[] = [
+            'label' => __('Reason'),
+            'value' => $reason !== '' ? $reason : __('Voluntary leave'),
+        ];
+
+        return $items;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return list<array{label: string, value: string}>
+     */
+    protected function detailItemsAddDependent(array $payload): array
+    {
+        $items = [];
+
+        if (filled($payload['new_email'] ?? null)) {
+            $items[] = ['label' => __('New parent email'), 'value' => (string) $payload['new_email']];
+        }
+
+        $details = trim((string) ($payload['details'] ?? ''));
+
+        if ($details !== '') {
+            $items[] = ['label' => __('Details'), 'value' => $details];
+        }
+
+        if (filled($payload['dependent_name'] ?? null)) {
+            $items[] = ['label' => __('Dependent name'), 'value' => (string) $payload['dependent_name']];
+        }
+
+        return $items !== [] ? $items : [['label' => __('Details'), 'value' => __('—')]];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return list<array{label: string, value: string}>
+     */
+    protected function detailItemsRemoveDependent(array $payload): array
+    {
+        $items = [
+            ['label' => __('Dependent'), 'value' => $this->formatDependentLabel($payload['dependent_member_id'] ?? null)],
+        ];
+
+        if (filled($payload['separated_email'] ?? null)) {
+            $items[] = ['label' => __('Separated email'), 'value' => (string) $payload['separated_email']];
+        }
+
+        return $items;
+    }
+
+    /**
+     * @return list<array{label: string, value: string}>
+     */
+    protected function detailItemsAmountOnly(string $label, mixed $amount): array
+    {
+        return [
+            [
+                'label' => $label,
+                'value' => $amount !== null ? (string) (int) $amount : __('—'),
+            ]
+        ];
+    }
+
+    /**
+     * @return list<array{label: string, value: string}>
+     */
+    protected function detailItemsReasonFirst(string $fallback, mixed $reason): array
+    {
+        $text = trim((string) ($reason ?? ''));
+
+        return [
+            [
+                'label' => __('Reason'),
+                'value' => $text !== '' ? $text : $fallback,
+            ]
+        ];
     }
 
     protected function formatDependentLabel(mixed $memberId): string
@@ -370,45 +440,7 @@ class MemberRequest extends Model
         $member = Member::query()->find($id);
 
         return $member instanceof Member
-            ? $member->name.' ('.$member->member_number.')'
+            ? $member->name . ' (' . $member->member_number . ')'
             : __('Member #:id', ['id' => $id]);
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    protected function formatRemoveDependentPayload(array $payload): string
-    {
-        $parts = [$this->formatDependentLabel($payload['dependent_member_id'] ?? null)];
-
-        if (filled($payload['separated_email'] ?? null)) {
-            $parts[] = __('Separated email: :email', ['email' => $payload['separated_email']]);
-        }
-
-        return Str::limit(implode(' · ', $parts), 120);
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    protected function formatAddDependentPayload(array $payload): string
-    {
-        $parts = [];
-
-        if (filled($payload['new_email'] ?? null)) {
-            $parts[] = __('New parent email: :email', ['email' => $payload['new_email']]);
-        }
-
-        $details = trim((string) ($payload['details'] ?? ''));
-
-        if ($details !== '') {
-            $parts[] = $details;
-        }
-
-        if ($parts === []) {
-            return __('—');
-        }
-
-        return Str::limit(implode(' · ', $parts), 120);
     }
 }

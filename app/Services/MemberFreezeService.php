@@ -21,6 +21,7 @@ use App\Services\Loans\LoanFreezeScheduleService;
 use App\Services\Loans\LoanGuarantorReplacementService;
 use App\Support\BusinessDay;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
@@ -41,9 +42,16 @@ final class MemberFreezeService
 
     public const HOUSEHOLD_TEMP_PARENT = 'temp_parent';
 
+    /** Minimum for *finite* freeze plans and extensions. */
     public const MIN_CYCLES = 1;
 
     public const MAX_CYCLES = 36;
+
+    /**
+     * Planned cycle count of 0 (or blank on submit) means indefinite:
+     * fee/EMI protection continues until unfreeze (no {@see freeze_plan_ended_at}).
+     */
+    public const INDEFINITE_CYCLES = 0;
 
     /** Rate limit for pre-submit “notify borrowers to replace guarantor”. */
     public const BORROWER_REPLACE_NOTIFY_DECAY_SECONDS = 900;
@@ -62,25 +70,63 @@ final class MemberFreezeService
     }
 
     /**
+     * Normalize form/payload cycle counts: blank / null / 0 → indefinite.
+     */
+    public static function normalizeCycles(mixed $value): int
+    {
+        if ($value === null || $value === '') {
+            return self::INDEFINITE_CYCLES;
+        }
+
+        return max(0, (int) $value);
+    }
+
+    public static function isIndefiniteCycles(int $cycles): bool
+    {
+        return $cycles === self::INDEFINITE_CYCLES;
+    }
+
+    public function isIndefiniteFreeze(Member $member): bool
+    {
+        return $this->isFrozen($member)
+            && self::isIndefiniteCycles((int) ($member->freeze_cycles_requested ?? self::INDEFINITE_CYCLES));
+    }
+
+    /**
      * Planned freeze still protects from late fees / delinquency / EMI push continues.
      */
     public function isWithinFreezePlan(Member $member): bool
     {
-        return $this->isFrozen($member)
-            && $member->freeze_plan_ended_at === null
-            && (int) ($member->freeze_cycles_remaining ?? 0) > 0;
+        if (!$this->isFrozen($member) || $member->freeze_plan_ended_at !== null) {
+            return false;
+        }
+
+        if ($this->isIndefiniteFreeze($member)) {
+            return true;
+        }
+
+        return (int) ($member->freeze_cycles_remaining ?? 0) > 0;
     }
 
     /**
      * Frozen past the planned cycle count — still frozen until unfreeze, but fees resume.
+     * Indefinite freezes never exhaust until unfreeze.
      */
     public function isFreezePlanExhausted(Member $member): bool
     {
-        return $this->isFrozen($member)
-            && (
-                $member->freeze_plan_ended_at !== null
-                || (int) ($member->freeze_cycles_remaining ?? 0) <= 0
-            );
+        if (!$this->isFrozen($member) || $this->isIndefiniteFreeze($member)) {
+            return false;
+        }
+
+        return $member->freeze_plan_ended_at !== null
+            || (int) ($member->freeze_cycles_remaining ?? 0) <= 0;
+    }
+
+    public static function formatCyclesLabel(int $cycles): string
+    {
+        return self::isIndefiniteCycles($cycles)
+            ? __('Indefinite')
+            : __(':cycles cycle(s)', ['cycles' => $cycles]);
     }
 
     public function hasPendingFreezeRequest(Member $member): bool
@@ -168,11 +214,12 @@ final class MemberFreezeService
      */
     public function validatePlan(Member $member, array $plan): void
     {
-        $cycles = (int) ($plan['cycles'] ?? 0);
+        $cycles = self::normalizeCycles($plan['cycles'] ?? null);
 
-        if ($cycles < self::MIN_CYCLES || $cycles > self::MAX_CYCLES) {
+        // 0 = indefinite; otherwise 1–MAX
+        if ($cycles > self::MAX_CYCLES || ($cycles !== self::INDEFINITE_CYCLES && $cycles < self::MIN_CYCLES)) {
             throw ValidationException::withMessages([
-                'cycles' => __('Freeze duration must be between :min and :max cycles.', [
+                'cycles' => __('Freeze duration must be blank or 0 (indefinite) or between :min and :max cycles.', [
                     'min' => self::MIN_CYCLES,
                     'max' => self::MAX_CYCLES,
                 ]),
@@ -259,10 +306,11 @@ final class MemberFreezeService
             throw new InvalidArgumentException(__('Only active members can be frozen.'));
         }
 
+        $plan['cycles'] = self::normalizeCycles($plan['cycles'] ?? null);
         $this->validatePlan($member, $plan);
         $this->assertCanSubmitOrApprove($member, forApprove: true);
 
-        $cycles = (int) $plan['cycles'];
+        $cycles = self::normalizeCycles($plan['cycles']);
         $mode = (string) ($plan['household_mode'] ?? self::HOUSEHOLD_SELF_ONLY);
         $tempParentId = $mode === self::HOUSEHOLD_TEMP_PARENT
             ? (int) ($plan['temporary_parent_member_id'] ?? 0)
@@ -375,12 +423,13 @@ final class MemberFreezeService
     {
         $ticked = 0;
 
-        Member::query()
-            ->where('status', 'inactive')
-            ->whereNotNull('frozen_at')
-            ->whereNull('freeze_plan_ended_at')
-            ->where('freeze_cycles_remaining', '>', 0)
+        $this->membersInActiveFreezePlanQuery()
             ->each(function (Member $member) use (&$ticked): void {
+                // Indefinite freezes are advanced with period context in onContributionCycleOpened().
+                if ($this->isIndefiniteFreeze($member)) {
+                    return;
+                }
+
                 // First push already consumed one cycle at approve; subsequent cycle opens tick remaining.
                 if ((int) $member->freeze_emi_cycles_pushed >= (int) $member->freeze_cycles_requested) {
                     $this->markPlanEnded($member);
@@ -408,15 +457,22 @@ final class MemberFreezeService
     {
         $ticked = 0;
 
-        Member::query()
-            ->where('status', 'inactive')
-            ->whereNotNull('frozen_at')
-            ->whereNull('freeze_plan_ended_at')
-            ->where('freeze_cycles_remaining', '>', 0)
-            ->each(function (Member $member) use (&$ticked): void {
+        $this->membersInActiveFreezePlanQuery()
+            ->each(function (Member $member) use (&$ticked, $month, $year): void {
                 // Do not double-push if frozen during this same open cycle after approve already pushed.
                 $frozenAt = $member->frozen_at;
                 $cycleStart = $this->cycles->cycleStartAt($month, $year);
+
+                if ($this->isIndefiniteFreeze($member)) {
+                    if ($frozenAt !== null && $frozenAt->greaterThanOrEqualTo($cycleStart)) {
+                        return;
+                    }
+
+                    $this->pushEmiAndConsumeCycle($member);
+                    $ticked++;
+
+                    return;
+                }
 
                 if (
                     $frozenAt !== null && $frozenAt->greaterThanOrEqualTo($cycleStart)
@@ -456,15 +512,26 @@ final class MemberFreezeService
         $title = $requested
             ? __('Membership freeze requested')
             : __('Membership frozen');
+        $cycles = (int) ($member->freeze_cycles_requested ?? self::INDEFINITE_CYCLES);
         $body = $requested
-            ? __(':name requested a membership freeze for :cycles cycle(s).', [
-                'name' => $member->name,
-                'cycles' => (int) ($member->freeze_cycles_requested ?? 0) ?: __('several'),
-            ])
-            : __(':name is frozen for :cycles planned cycle(s). Contributions and cash-out are paused.', [
-                'name' => $member->name,
-                'cycles' => (int) ($member->freeze_cycles_requested ?? 0),
-            ]);
+            ? (
+                self::isIndefiniteCycles($cycles)
+                ? __(':name requested an indefinite membership freeze.', ['name' => $member->name])
+                : __(':name requested a membership freeze for :cycles cycle(s).', [
+                    'name' => $member->name,
+                    'cycles' => $cycles,
+                ])
+            )
+            : (
+                self::isIndefiniteCycles($cycles)
+                ? __(':name is frozen indefinitely. Contributions and cash-out are paused.', [
+                    'name' => $member->name,
+                ])
+                : __(':name is frozen for :cycles planned cycle(s). Contributions and cash-out are paused.', [
+                    'name' => $member->name,
+                    'cycles' => $cycles,
+                ])
+            );
 
         // Guarantors of the member's active loans
         Loan::query()
@@ -523,7 +590,7 @@ final class MemberFreezeService
     public function notifyFreezeRequested(Member $member, array $plan): void
     {
         // Attach plan fields temporarily for message context
-        $member->freeze_cycles_requested = (int) ($plan['cycles'] ?? 0);
+        $member->freeze_cycles_requested = self::normalizeCycles($plan['cycles'] ?? null);
         $this->notifyFreezeStakeholders($member, requested: true);
     }
 
@@ -612,11 +679,38 @@ final class MemberFreezeService
         }
     }
 
+    /**
+     * Frozen members still covered by the freeze plan (finite remaining, or indefinite).
+     *
+     * @return Builder<Member>
+     */
+    private function membersInActiveFreezePlanQuery()
+    {
+        return Member::query()
+            ->where('status', 'inactive')
+            ->whereNotNull('frozen_at')
+            ->whereNull('freeze_plan_ended_at')
+            ->where(function ($query): void {
+                $query->where('freeze_cycles_remaining', '>', 0)
+                    ->orWhere('freeze_cycles_requested', self::INDEFINITE_CYCLES);
+            });
+    }
+
     private function pushEmiAndConsumeCycle(Member $member): void
     {
         $this->schedules->pushOneCycleForMember($member);
 
         $pushed = (int) $member->freeze_emi_cycles_pushed + 1;
+
+        if ($this->isIndefiniteFreeze($member) || self::isIndefiniteCycles((int) ($member->freeze_cycles_requested ?? -1))) {
+            $member->update([
+                'freeze_emi_cycles_pushed' => $pushed,
+                'freeze_cycles_remaining' => self::INDEFINITE_CYCLES,
+            ]);
+
+            return;
+        }
+
         $remaining = max(0, (int) $member->freeze_cycles_remaining - 1);
 
         $member->update([

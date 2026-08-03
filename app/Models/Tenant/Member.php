@@ -55,6 +55,8 @@ class Member extends Model
         'payout_frozen_at',
         'status_reason',
         'status_changed_at',
+        'last_withdrawn_at',
+        'reinstated_at',
         'frozen_at',
         'freeze_cycles_requested',
         'freeze_cycles_remaining',
@@ -78,6 +80,8 @@ class Member extends Model
             'contribution_cycles_active' => 'boolean',
             'payout_frozen_at' => 'datetime',
             'status_changed_at' => 'datetime',
+            'last_withdrawn_at' => 'datetime',
+            'reinstated_at' => 'datetime',
             'frozen_at' => 'datetime',
             'freeze_plan_ended_at' => 'datetime',
             'is_separated' => 'boolean',
@@ -273,8 +277,9 @@ class Member extends Model
      * Members who were active (or contribution-cycle participants) as of the labelled cycle start.
      *
      * Reconstructs membership from current row timestamps: members who later froze/withdrew
-     * remain included for cycles that opened before that exit. Limitation: a member who withdrew
-     * then reinstated looks active today, so past cycles during the withdrawn gap may still match.
+     * remain included for cycles that opened before that exit. Members who withdrew then
+     * reinstated are excluded only while the cycle start falls inside the last withdrawn gap
+     * ({@see last_withdrawn_at} → {@see reinstated_at}).
      */
     public function scopeActiveAsOfPeriod(Builder $query, int $month, int $year): Builder
     {
@@ -282,7 +287,16 @@ class Member extends Model
 
         return $query->where(function (Builder $subQuery) use ($cycleStart): void {
             $subQuery
-                ->where('status', 'active')
+                ->where(function (Builder $active) use ($cycleStart): void {
+                    $active->where('status', 'active')
+                        ->where(function (Builder $episode) use ($cycleStart): void {
+                            $episode
+                                ->whereNull('last_withdrawn_at')
+                                ->orWhereNull('reinstated_at')
+                                ->orWhere('last_withdrawn_at', '>=', $cycleStart)
+                                ->orWhere('reinstated_at', '<=', $cycleStart);
+                        });
+                })
                 ->orWhere(function (Builder $inner): void {
                     $inner->where('status', 'inactive')
                         ->where('contribution_cycles_active', true);
@@ -313,7 +327,7 @@ class Member extends Model
         $cycleStart = app(ContributionCycleService::class)->cycleStartAt($month, $year);
 
         if ($this->status === 'active') {
-            return true;
+            return ! $this->wasWithdrawnAtCycleOpen($cycleStart);
         }
 
         if ($this->status === 'inactive' && (bool) $this->contribution_cycles_active) {
@@ -335,6 +349,19 @@ class Member extends Model
         }
 
         return false;
+    }
+
+    /**
+     * True when the last leave → reinstate gap covered this cycle open (member was withdrawn then).
+     */
+    public function wasWithdrawnAtCycleOpen(\DateTimeInterface $cycleStart): bool
+    {
+        if ($this->last_withdrawn_at === null || $this->reinstated_at === null) {
+            return false;
+        }
+
+        return $this->last_withdrawn_at->lessThan($cycleStart)
+            && $this->reinstated_at->greaterThan($cycleStart);
     }
 
     /**

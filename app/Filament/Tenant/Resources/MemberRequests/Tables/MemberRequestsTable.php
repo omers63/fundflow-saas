@@ -10,7 +10,7 @@ use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
-use App\Filament\Tenant\Resources\MemberRequests\MemberRequestResource;
+use App\Filament\Tenant\Support\ViewMemberRequestAction;
 use App\Models\Tenant\MemberRequest;
 use App\Services\Tenant\MemberRequestService;
 use Filament\Actions\BulkAction;
@@ -193,8 +193,7 @@ final class MemberRequestsTable
                         ->getTitleFromRecordUsing(fn (MemberRequest $record): string => MemberRequest::typeLabel($record->type)),
                 ],
             ),
-            [],
-            fn (MemberRequest $record): string => MemberRequestResource::getUrl('view', ['record' => $record]),
+            [ViewMemberRequestAction::make()],
         );
     }
 }

@@ -102,3 +102,16 @@ test('apply configures row click for a single view action without record url', f
         ->and($configured->getRecordAction([]))->toBe(ViewAction::getDefaultName())
         ->and($configured->hasAction(ViewAction::getDefaultName()))->toBeTrue();
 });
+
+test('apply overrides a pre-existing list record url so single view opens as modal', function () {
+    $livewire = Mockery::mock(HasTable::class);
+    $table = Table::make($livewire)
+        ->recordUrl(fn (): string => '/default-resource-view');
+
+    $configured = TableRecordActionGroups::apply($table, [ViewAction::make()]);
+
+    expect($configured->getRecordActions())->toBe([])
+        ->and($configured->getRecordAction([]))->toBe(ViewAction::getDefaultName())
+        ->and($configured->getRecordUrl([]))->toBeNull()
+        ->and($configured->hasAction(ViewAction::getDefaultName()))->toBeTrue();
+});

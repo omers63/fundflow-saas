@@ -167,9 +167,14 @@ final class ReconciliationSnapshotPresenter
                     'variance' => MoneyDisplay::format((float) ($check['variance_book_minus_stated'] ?? 0), $currency) ?? '—',
                 ])
                 : null,
-            'contributions_ledger' => __('Missing ledger rows: :missing · Master fund Δ :delta', [
+            'contributions_ledger' => __('Missing ledger rows: :missing · Master fund Δ :delta:inflight', [
                 'missing' => number_format((int) ($check['missing_ledger_count'] ?? 0)),
                 'delta' => MoneyDisplay::format((float) ($check['master_fund_delta'] ?? 0), $currency) ?? '—',
+                'inflight' => ((float) ($check['in_flight_pending_master_fund_credits'] ?? 0)) > 0.00001
+                    ? ' · '.__('In-flight partials :amount', [
+                        'amount' => MoneyDisplay::format((float) $check['in_flight_pending_master_fund_credits'], $currency) ?? '—',
+                    ])
+                    : '',
             ]),
             'bank_pipeline' => __(':unposted unposted · :uncleared uncleared', [
                 'unposted' => number_format((int) ($check['bank_unposted_count'] ?? 0)),

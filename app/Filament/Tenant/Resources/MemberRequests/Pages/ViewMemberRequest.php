@@ -45,7 +45,7 @@ class ViewMemberRequest extends ViewRecord
         $status = MemberRequest::statusOptions()[$this->record->status] ?? $this->record->status;
 
         return match ($this->record->status) {
-            MemberRequest::STATUS_PENDING => __(':member · :status — review the payload, then approve or reject.', [
+            MemberRequest::STATUS_PENDING => __(':member · :status — review the request, then approve or reject.', [
                 'member' => $requester,
                 'status' => $status,
             ]),

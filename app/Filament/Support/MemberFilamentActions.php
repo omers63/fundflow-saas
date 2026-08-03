@@ -474,7 +474,7 @@ final class MemberFilamentActions
             ->fillForm(fn (Member $record): array => [
                 'cycles' => 1,
                 'household_mode' => MemberFreezeService::HOUSEHOLD_SELF_ONLY,
-                'freeze_date' => BusinessDay::today()->toDateString(),
+                'freeze_date' => self::businessDayPickerDefault(),
             ])
             ->schema(fn (Member $record): array => self::freezeFormSchema($record))
             ->action(function (Member $record, array $data, Action $action, Component $livewire): void {
@@ -484,7 +484,7 @@ final class MemberFilamentActions
                         fn () => app(MemberFreezeService::class)->applyFreeze(
                             $record,
                             [
-                                'cycles' => (int) ($data['cycles'] ?? 0),
+                                'cycles' => MemberFreezeService::normalizeCycles($data['cycles'] ?? null),
                                 'household_mode' => (string) ($data['household_mode'] ?? MemberFreezeService::HOUSEHOLD_SELF_ONLY),
                                 'temporary_parent_member_id' => $data['temporary_parent_member_id'] ?? null,
                                 'reason' => (string) ($data['reason'] ?? ''),
@@ -527,8 +527,8 @@ final class MemberFilamentActions
             ->helperText(__('Recorded as the date membership was frozen.'))
             ->required()
             ->native(false)
-            ->default(fn (): string => BusinessDay::today()->toDateString())
-            ->maxDate(fn (): string => BusinessDay::today()->toDateString());
+            ->default(fn(): string => self::businessDayPickerDefault())
+            ->maxDate(fn(): string => self::businessDayPickerMaxDate());
     }
 
     public static function resolveFreezeDate(mixed $freezeDate): Carbon
@@ -614,7 +614,7 @@ final class MemberFilamentActions
                     'household_mode' => $hasDependents
                         ? MemberWithdrawalSettlementService::HOUSEHOLD_INCLUDE_DEPENDENTS
                         : MemberWithdrawalSettlementService::HOUSEHOLD_SELF_ONLY,
-                    'withdraw_date' => BusinessDay::today()->toDateString(),
+                    'withdraw_date' => self::businessDayPickerDefault(),
                     'hold_payout' => false,
                 ];
             })
@@ -666,8 +666,8 @@ final class MemberFilamentActions
             ->helperText(__('Settlement and membership status are recorded as of this date.'))
             ->required()
             ->native(false)
-            ->default(fn (): string => BusinessDay::today()->toDateString())
-            ->maxDate(fn (): string => BusinessDay::today()->toDateString());
+            ->default(fn(): string => self::businessDayPickerDefault())
+            ->maxDate(fn(): string => self::businessDayPickerMaxDate());
     }
 
     public static function cashOutDateField(): DatePicker
@@ -677,8 +677,24 @@ final class MemberFilamentActions
             ->helperText(__('Fund transfer and cash-out ledger entries are recorded as of this date.'))
             ->required()
             ->native(false)
-            ->default(fn (): string => BusinessDay::today()->toDateString())
-            ->maxDate(fn (): string => BusinessDay::today()->toDateString());
+            ->default(fn(): string => self::businessDayPickerDefault())
+            ->maxDate(fn(): string => self::businessDayPickerMaxDate());
+    }
+
+    /**
+     * Date-only defaults for non-native pickers store as {@code Y-m-d H:i:s}; a bare
+     * Y-m-d is parsed with the current clock time, which then fails date-only maxDate.
+     * Start-of-day datetime avoids that, and maxDate is end of the business day so the
+     * whole calendar day remains selectable.
+     */
+    public static function businessDayPickerDefault(): string
+    {
+        return BusinessDay::today()->startOfDay()->toDateTimeString();
+    }
+
+    public static function businessDayPickerMaxDate(): string
+    {
+        return BusinessDay::today()->endOfDay()->toDateTimeString();
     }
 
     public static function resolveCashOutDate(mixed $cashOutDate): Carbon
@@ -771,7 +787,7 @@ final class MemberFilamentActions
                         ? MemberWithdrawalSettlementService::HOUSEHOLD_INCLUDE_DEPENDENTS
                         : MemberWithdrawalSettlementService::HOUSEHOLD_SELF_ONLY,
                     'hold_payout' => true,
-                    'withdraw_date' => BusinessDay::today()->toDateString(),
+                    'withdraw_date' => self::businessDayPickerDefault(),
                 ];
             })
             ->action(function (Member $record, array $data, Action $action, MemberStatusService $statuses, Component $livewire): void {

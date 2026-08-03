@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Filament\Support\MemberRequestViewSections;
 use App\Filament\Tenant\Support\ViewBankStatementAction;
 use App\Filament\Tenant\Support\ViewBankTransactionAction;
 use App\Filament\Tenant\Support\ViewContributionAction;
 use App\Filament\Tenant\Support\ViewFundAuditLogAction;
-use App\Filament\Tenant\Support\ViewMemberRequestAction;
 use App\Filament\Tenant\Support\ViewNotificationLogAction;
 use App\Filament\Tenant\Support\ViewSmsImportSessionAction;
 use App\Filament\Tenant\Support\ViewSmsTransactionAction;
@@ -204,23 +204,29 @@ test('support request view modal sections include message body', function () {
         ->and($sections[2]['prose'])->toBe('What is my outstanding loan balance?');
 });
 
-test('member request view modal sections include payload', function () {
+test('member request view modal sections show structured details without raw payload', function () {
     $member = Member::factory()->create(['name' => 'Request Member']);
 
     $request = MemberRequest::create([
         'requester_member_id' => $member->id,
         'type' => MemberRequest::TYPE_ADD_DEPENDENT,
         'status' => MemberRequest::STATUS_PENDING,
-        'payload' => ['dependent_name' => 'Child One'],
+        'payload' => ['details' => 'Child One details'],
     ]);
 
     $request->load('requester');
 
-    $sections = ViewMemberRequestAction::sections($request);
+    $sections = MemberRequestViewSections::forAdmin($request);
 
-    expect($sections)->toHaveCount(4)
-        ->and($sections[0]['hero']['chip'])->toBe(__('Pending'))
-        ->and($sections[3]['prose'])->toContain('Child One');
+    $titles = collect($sections)->pluck('title')->filter()->values()->all();
+
+    expect($sections[0]['hero']['chip'])->toBe(__('Pending'))
+        ->and($titles)->toContain(__('What was requested'))
+        ->and($titles)->not->toContain(__('Payload'))
+        ->and(collect($sections)->pluck('prose')->filter(fn ($p) => is_string($p) && str_contains($p, 'details'))->isEmpty())->toBeTrue();
+
+    $contentSection = collect($sections)->first(fn (array $s): bool => ($s['title'] ?? null) === __('What was requested'));
+    expect($contentSection['items'][0]['value'] ?? null)->toBe('Child One details');
 });
 
 test('bank statement view modal sections include import summary', function () {

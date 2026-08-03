@@ -171,3 +171,39 @@ test('guest hitting auth tenant admin route redirects to tenant admin login', fu
     $this->get('http://'.$domain.'/admin/statements/1/pdf')
         ->assertRedirect(route('filament.tenant.auth.login'));
 });
+
+test('member visiting admin panel is redirected to admin login instead of forbidden', function () {
+    $tenant = Tenant::find('testing');
+    $domain = 'testing.localhost';
+
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
+        $tenant->domains()->create(['domain' => $domain]);
+    }
+
+    $this->actingAs($this->memberUser, 'tenant')
+        ->get('http://'.$domain.'/admin')
+        ->assertRedirect(route('filament.tenant.auth.login'))
+        ->assertDontSee(__('Forbidden'));
+});
+
+test('admin without member profile visiting member panel is redirected to member login instead of forbidden', function () {
+    $tenant = Tenant::find('testing');
+    $domain = 'testing.localhost';
+
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
+        $tenant->domains()->create(['domain' => $domain]);
+    }
+
+    $adminUser = User::create([
+        'name' => 'Admin Only',
+        'email' => 'admin-only-panel@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $this->actingAs($adminUser, 'tenant')
+        ->get('http://'.$domain.'/member')
+        ->assertRedirect(route('filament.member.auth.login'))
+        ->assertDontSee(__('Forbidden'));
+});

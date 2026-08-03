@@ -69,6 +69,7 @@ class MembershipFreezeStatusWidget extends Widget
             'isFrozen' => $member !== null && $freezes->isFrozen($member),
             'withinPlan' => $member !== null && $freezes->isWithinFreezePlan($member),
             'planExhausted' => $member !== null && $freezes->isFreezePlanExhausted($member),
+            'indefinitePlan' => $member !== null && $freezes->isIndefiniteFreeze($member),
             'pendingAccept' => $pendingAccept,
             'needsReplacement' => $needsReplacement,
         ];

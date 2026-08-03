@@ -237,7 +237,7 @@ test('admin can approve independence request', function () {
         ->and($request->fresh()->status)->toBe(MemberRequest::STATUS_APPROVED);
 });
 
-test('member requests list opens view page on row click without row actions column', function () {
+test('member requests list opens view modal on row click without row actions column', function () {
     $request = MemberRequest::query()->create([
         'requester_member_id' => $this->member->id,
         'type' => MemberRequest::TYPE_ADD_DEPENDENT,
@@ -247,20 +247,31 @@ test('member requests list opens view page on row click without row actions colu
 
     Filament::setCurrentPanel('tenant');
 
-    $component = Livewire::actingAs($this->admin, 'tenant')
+    $list = Livewire::actingAs($this->admin, 'tenant')
         ->test(ListMemberRequests::class)
         ->assertSuccessful()
         ->assertSee('ff-member-requests-insights', false);
 
-    expect($component->instance()->getTable()->getRecordActions())->toBe([])
-        ->and($component->instance()->getTable()->getRecordUrl($request))
-        ->toBe(MemberRequestResource::getUrl('view', ['record' => $request]));
+    expect($list->instance()->getTable()->getRecordActions())->toBe([])
+        ->and($list->instance()->getTable()->hasAction('view'))->toBeTrue()
+        ->and($list->instance()->getTable()->getRecordAction($request))->toBe('view');
+
+    $list->mountTableAction('view', $request)
+        ->assertHasNoErrors();
+
+    expect($list->instance()->getMountedAction()?->getName())->toBe('view');
+
+    $list->assertSee('Add dependent from list test.')
+        ->assertDontSee('details:')
+        ->assertDontSee(__('Raw payload'));
 
     Livewire::actingAs($this->admin, 'tenant')
         ->test(ViewMemberRequest::class, ['record' => $request->getRouteKey()])
         ->assertSuccessful()
         ->assertSee(__('Approve'))
-        ->assertSee('Add dependent from list test.');
+        ->assertSee('Add dependent from list test.')
+        ->assertDontSee(__('Raw payload'))
+        ->assertDontSee('details:');
 });
 
 test('view member request reject action refreshes the record without error', function () {

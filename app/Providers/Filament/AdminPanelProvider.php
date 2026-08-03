@@ -6,9 +6,9 @@ use App\Filament\Concerns\RegistersFundPublicShell;
 use App\Filament\Widgets\MyTenants;
 use App\Filament\Widgets\StatsOverview;
 use App\Filament\Widgets\TenantGrowthChart;
+use App\Http\Middleware\AuthenticateFilamentPanel;
 use App\Support\FundflowBrand;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
-use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
@@ -65,12 +65,12 @@ class AdminPanelProvider extends PanelProvider
                 MyTenants::class,
                 TenantGrowthChart::class,
             ])
-            ->renderHook(PanelsRenderHook::HEAD_END, fn(): HtmlString => new HtmlString(
+            ->renderHook(PanelsRenderHook::HEAD_END, fn (): HtmlString => new HtmlString(
                 view('partials.arabic-fonts')->render()
-                . view('partials.arabic-display-body-class')->render()
-                . view('partials.pwa-head')->render()
+                .view('partials.arabic-display-body-class')->render()
+                .view('partials.pwa-head')->render()
             ))
-            ->renderHook(PanelsRenderHook::BODY_END, fn(): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))
+            ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
@@ -83,7 +83,7 @@ class AdminPanelProvider extends PanelProvider
                 DispatchServingFilamentEvent::class,
             ])
             ->authMiddleware([
-                Authenticate::class,
+                AuthenticateFilamentPanel::class,
             ])
             ->plugins([
                 FilamentShieldPlugin::make(),

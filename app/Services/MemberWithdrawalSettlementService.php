@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Models\Tenant\CashOutRequest;
+use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FundOutRequest;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
@@ -352,6 +353,48 @@ final class MemberWithdrawalSettlementService
 
                 return $this->submitAndAcceptRemainingCashOut($member, $reason, $at);
             });
+        });
+    }
+
+    /**
+     * Drop open pending contribution cycle rows (including partial collections) before leave-fund settlement.
+     */
+    public function cancelOpenPendingContributions(Member $member): void
+    {
+        AccountingService::withoutMemberCashCollection(function () use ($member): void {
+            Contribution::query()
+                ->where('member_id', $member->id)
+                ->where('status', 'pending')
+                ->orderBy('period')
+                ->get()
+                ->each(function (Contribution $contribution): void {
+                    DB::transaction(function () use ($contribution): void {
+                        $lateFeeCollected = $this->accounting->contributionLateFeeCollectedAmount($contribution);
+
+                        if ($lateFeeCollected > 0.00001) {
+                            $this->accounting->reverseContributionLateFee($contribution, $lateFeeCollected);
+                        }
+
+                        $principalCollected = max(
+                            0.0,
+                            (float) ($contribution->amount_collected ?? 0),
+                        );
+
+                        if ($principalCollected > 0.00001) {
+                            $this->accounting->reverseContributionPrincipal($contribution, $principalCollected);
+                        }
+
+                        $contribution->update([
+                            'late_fee_amount' => null,
+                            'late_fee_tier' => null,
+                            'overdue_since' => null,
+                            'is_late' => false,
+                            'notes' => trim(($contribution->notes ?? '').' '.__('Cancelled: membership withdrawal.')),
+                        ]);
+
+                        DB::table('contributions')->where('id', $contribution->id)->delete();
+                    });
+                });
         });
     }
 

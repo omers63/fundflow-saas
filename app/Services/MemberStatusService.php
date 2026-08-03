@@ -188,12 +188,15 @@ final class MemberStatusService
 
         $previousStatus = $member->status;
 
-        $this->withdrawalSettlement->executeSettlement($member, $reason, $holdPayout, $withdrawnAt);
+        $this->withdrawalSettlement->cancelOpenPendingContributions($member->fresh() ?? $member);
+        $this->withdrawalSettlement->executeSettlement($member->fresh() ?? $member, $reason, $holdPayout, $withdrawnAt);
 
         $this->transition($member->fresh() ?? $member, 'withdrawn', [
             'contribution_cycles_active' => false,
             'frozen_at' => null,
             'payout_frozen_at' => $holdPayout ? $withdrawnAt : null,
+            'last_withdrawn_at' => $withdrawnAt,
+            'reinstated_at' => null,
             'freeze_cycles_requested' => null,
             'freeze_cycles_remaining' => null,
             'freeze_emi_cycles_pushed' => null,
@@ -216,13 +219,17 @@ final class MemberStatusService
         }
 
         $previousStatus = $member->status;
+        $lastWithdrawnAt = $member->last_withdrawn_at ?? $member->status_changed_at ?? BusinessDay::now();
+        $reinstatedAt = BusinessDay::now();
 
         $this->resetMembershipBalances($member);
 
         $this->transition($member, 'active', [
             'contribution_cycles_active' => true,
             'payout_frozen_at' => null,
-        ], 'MEMBER_REINSTATED', $reason, $previousStatus);
+            'last_withdrawn_at' => $lastWithdrawnAt,
+            'reinstated_at' => $reinstatedAt,
+        ], 'MEMBER_REINSTATED', $reason, $previousStatus, $reinstatedAt);
     }
 
     public function releasePayoutReview(Member $member, string $reason = ''): void
@@ -288,7 +295,15 @@ final class MemberStatusService
             'reason' => trim($reason),
         ]);
 
+        $this->forgetMembershipInsightCaches((int) $member->id);
+
         $this->notifyMemberOfStatusChange($member->fresh(), $auditEvent, trim($reason));
+    }
+
+    private function forgetMembershipInsightCaches(int $memberId): void
+    {
+        MemberWorkspaceSummaryService::forgetCached($memberId);
+        MemberDetailInsightsService::forgetCachedSnapshot($memberId);
     }
 
     private function notifyMemberOfStatusChange(Member $member, string $auditEvent, string $reason): void

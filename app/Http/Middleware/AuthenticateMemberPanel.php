@@ -9,12 +9,10 @@ use App\Support\AuthSessionPasswordHash;
 use App\Support\MemberMembershipPolicy;
 use Closure;
 use Filament\Facades\Filament;
-use Filament\Http\Middleware\Authenticate;
-use Filament\Models\Contracts\FilamentUser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
-class AuthenticateMemberPanel extends Authenticate
+class AuthenticateMemberPanel extends AuthenticateFilamentPanel
 {
     /**
      * @param  Request  $request
@@ -60,14 +58,14 @@ class AuthenticateMemberPanel extends Authenticate
             }
         }
 
-        parent::authenticate($request, $guards);
+        // Special member portal block (withdrawn / suspended, etc.) before the
+        // default “no panel access → login redirect” behaviour.
+        if ($guard->check()) {
+            $authUser = $guard->user();
 
-        Auth::shouldUse($guardName);
-
-        $authUser = $guard->user();
-        if ($authUser instanceof FilamentUser && $panel !== null && ! $authUser->canAccessPanel($panel)) {
             if (
-                $panel->getId() === 'member'
+                $panel !== null
+                && $panel->getId() === 'member'
                 && $authUser instanceof User
                 && ($member = $authUser->activeMember()) !== null
                 && app(MemberMembershipPolicy::class)->isPortalAccessBlocked($member)
@@ -82,9 +80,11 @@ class AuthenticateMemberPanel extends Authenticate
 
                 exit;
             }
-
-            abort(403);
         }
+
+        parent::authenticate($request, $guards);
+
+        Auth::shouldUse($guardName);
     }
 
     protected function redirectTo($request): ?string

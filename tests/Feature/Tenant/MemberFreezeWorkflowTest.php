@@ -52,6 +52,51 @@ afterEach(function () {
     BusinessDaySettings::saveFromForm(null);
 });
 
+test('zero or blank freeze cycles mean indefinite plan with ongoing protection', function () {
+    $freezes = app(MemberFreezeService::class);
+
+    expect(MemberFreezeService::normalizeCycles(null))->toBe(0)
+        ->and(MemberFreezeService::normalizeCycles(''))->toBe(0)
+        ->and(MemberFreezeService::normalizeCycles(0))->toBe(0)
+        ->and(MemberFreezeService::normalizeCycles(3))->toBe(3);
+
+    $freezes->applyFreeze($this->member, [
+        'cycles' => 0,
+        'household_mode' => MemberFreezeService::HOUSEHOLD_SELF_ONLY,
+        'reason' => 'Open-ended',
+    ]);
+
+    $this->member->refresh();
+
+    expect($freezes->isIndefiniteFreeze($this->member))->toBeTrue()
+        ->and($freezes->isWithinFreezePlan($this->member))->toBeTrue()
+        ->and($freezes->isFreezePlanExhausted($this->member))->toBeFalse()
+        ->and((int) $this->member->freeze_cycles_requested)->toBe(0)
+        ->and($this->member->freeze_plan_ended_at)->toBeNull()
+        ->and((int) $this->member->freeze_emi_cycles_pushed)->toBe(1);
+
+    $freezes->onContributionCycleOpened(6, 2026);
+
+    $this->member->refresh();
+
+    expect($freezes->isWithinFreezePlan($this->member))->toBeTrue()
+        ->and($this->member->freeze_plan_ended_at)->toBeNull()
+        ->and((int) $this->member->freeze_emi_cycles_pushed)->toBe(2);
+});
+
+test('blank cycles on freeze request payload are stored as indefinite', function () {
+    $service = app(MemberRequestService::class);
+
+    $request = $service->submit($this->member, MemberRequest::TYPE_FREEZE_MEMBERSHIP, [
+        'cycles' => '',
+        'household_mode' => MemberFreezeService::HOUSEHOLD_SELF_ONLY,
+        'reason' => 'No end date',
+    ]);
+
+    expect((int) ($request->payload['cycles'] ?? -1))->toBe(0)
+        ->and(MemberFreezeService::formatCyclesLabel(0))->toBe(__('Indefinite'));
+});
+
 test('frozen members get read-only portal and blocked cash-out', function () {
     $policy = app(MemberMembershipPolicy::class);
     $freezes = app(MemberFreezeService::class);

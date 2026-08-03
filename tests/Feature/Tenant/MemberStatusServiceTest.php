@@ -374,3 +374,45 @@ test('legacy delinquent import maps to active status', function () {
         ->and(LegacyMemberStatusMapper::normalize('suspended'))->toBe('inactive')
         ->and(LegacyMemberStatusMapper::normalize('terminated'))->toBe('withdrawn');
 });
+
+test('reinstated members are not liable for contribution cycles during the withdrawn gap', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-REIN-GAP-'.uniqid(),
+        'name' => 'Reinstated Gap Member',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+        'contribution_cycles_active' => true,
+    ]);
+    $this->accounting->createMemberAccounts($member);
+    AccountingService::withoutMemberCashCollection(function () use ($member): void {
+        $this->accounting->creditMemberCashWithMasterMirror(
+            $member->fresh()->cashAccount,
+            1_000,
+            'Seed',
+            '(test)',
+            $member,
+            now(),
+            $member->id,
+        );
+    });
+
+    $withdrawAt = Carbon::parse('2025-10-15')->endOfDay();
+    $this->statuses->withdraw($member->fresh(), 'Leaving for travel', holdPayout: true, withdrawDate: $withdrawAt);
+
+    expect($member->fresh()->last_withdrawn_at?->toDateString())->toBe('2025-10-15');
+
+    $this->statuses->reinstate($member->fresh(), 'Welcome back after travel');
+
+    $member = $member->fresh();
+    $cycles = app(ContributionCycleService::class);
+
+    expect($member->status)->toBe('active')
+        ->and($member->reinstated_at)->not->toBeNull()
+        ->and($member->last_withdrawn_at?->toDateString())->toBe('2025-10-15')
+        ->and($member->isActiveAsOfPeriod(9, 2025))->toBeTrue()
+        ->and($member->isActiveAsOfPeriod(11, 2025))->toBeFalse()
+        ->and($cycles->memberIsLiableForContributionPeriod($member, 11, 2025))->toBeFalse()
+        ->and(Member::query()->activeAsOfPeriod(11, 2025)->whereKey($member->id)->exists())->toBeFalse()
+        ->and(Member::query()->activeAsOfPeriod(9, 2025)->whereKey($member->id)->exists())->toBeTrue();
+});

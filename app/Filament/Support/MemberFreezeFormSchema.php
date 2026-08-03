@@ -112,15 +112,18 @@ final class MemberFreezeFormSchema
             TextInput::make('cycles')
                 ->label(__('Expected freeze cycles'))
                 ->numeric()
-                ->required()
-                ->minValue(MemberFreezeService::MIN_CYCLES)
+                ->minValue(MemberFreezeService::INDEFINITE_CYCLES)
                 ->maxValue(MemberFreezeService::MAX_CYCLES)
                 ->default(1)
                 ->live(debounce: 300)
-                ->helperText(__('A plan only — membership stays frozen until unfrozen. After these cycles, late fees and delinquency resume.')),
+                ->helperText(__('Leave blank or enter 0 for indefinite. Otherwise 1–:max contribution cycles. A plan only — membership stays frozen until unfrozen. After a finite plan ends, late fees and delinquency resume.', [
+                    'max' => MemberFreezeService::MAX_CYCLES,
+                ])),
             Placeholder::make('cycle_preview')
                 ->hiddenLabel()
-                ->content(fn ($get): HtmlString => self::cyclePreviewHtml((int) ($get('cycles') ?? 0))),
+                ->content(fn($get): HtmlString => self::cyclePreviewHtml(
+                    MemberFreezeService::normalizeCycles($get('cycles')),
+                )),
             Textarea::make('reason')
                 ->label(__('Reason (optional)'))
                 ->rows(3)
@@ -265,11 +268,19 @@ final class MemberFreezeFormSchema
 
     public static function cyclePreviewHtml(int $cycles): HtmlString
     {
-        if ($cycles < 1) {
+        if (MemberFreezeService::isIndefiniteCycles($cycles)) {
             return new HtmlString(view('filament.partials.freeze-callout', [
                 'tone' => 'info',
                 'title' => __('Estimated window'),
-                'body' => e(__('Enter a cycle count to preview the plan window.')),
+                'body' => e(__('Indefinite freeze — fees and EMI shifts continue until unfreeze.')),
+            ])->render());
+        }
+
+        if ($cycles < MemberFreezeService::MIN_CYCLES) {
+            return new HtmlString(view('filament.partials.freeze-callout', [
+                'tone' => 'info',
+                'title' => __('Estimated window'),
+                'body' => e(__('Enter a cycle count to preview the plan window, or leave blank / 0 for indefinite.')),
             ])->render());
         }
 

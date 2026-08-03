@@ -49,6 +49,10 @@ class MemberRequestService
         if ($type === MemberRequest::TYPE_OPEN_CYCLE_CONTRIBUTION) {
             $payload = $this->openCycleOverrides->normalizePayload($requester, $payload);
         } else {
+            if ($type === MemberRequest::TYPE_FREEZE_MEMBERSHIP) {
+                $payload['cycles'] = MemberFreezeService::normalizeCycles($payload['cycles'] ?? null);
+            }
+
             $this->validatePayload($requester, $type, $payload);
             $this->assertNoPendingDuplicate($requester, $type);
         }
@@ -206,7 +210,7 @@ class MemberRequestService
         }
 
         $this->freezes->validatePlan($requester, [
-            'cycles' => (int) ($payload['cycles'] ?? 0),
+            'cycles' => MemberFreezeService::normalizeCycles($payload['cycles'] ?? null),
             'household_mode' => (string) ($payload['household_mode'] ?? MemberFreezeService::HOUSEHOLD_SELF_ONLY),
             'temporary_parent_member_id' => $payload['temporary_parent_member_id'] ?? null,
             'reason' => (string) ($payload['reason'] ?? ''),
@@ -459,7 +463,7 @@ class MemberRequestService
 
         try {
             $this->freezes->applyFreeze($member, [
-                'cycles' => (int) ($payload['cycles'] ?? 0),
+                'cycles' => MemberFreezeService::normalizeCycles($payload['cycles'] ?? null),
                 'household_mode' => (string) ($payload['household_mode'] ?? MemberFreezeService::HOUSEHOLD_SELF_ONLY),
                 'temporary_parent_member_id' => $payload['temporary_parent_member_id'] ?? null,
                 'reason' => (string) ($payload['reason'] ?? ''),

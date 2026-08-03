@@ -6,11 +6,11 @@ use App\Filament\Concerns\RegistersFundPublicShell;
 use App\Filament\Support\DatabaseNotificationsRefresh;
 use App\Filament\Tenant\Pages\Dashboard;
 use App\Filament\Tenant\Support\TenantNavigation;
+use App\Http\Middleware\AuthenticateFilamentPanel;
 use App\Http\Middleware\StartWallClockSession;
 use App\Http\Middleware\UseWallClockForSessions;
 use App\Livewire\Tenant\TenantAdminLoginPage;
 use App\Support\PublicPageSettings;
-use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
@@ -73,8 +73,8 @@ class TenantPanelProvider extends PanelProvider
             ))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(
                 view('partials.portal-bottom-bar')->render()
-                . view('partials.status-footer-banners')->render()
-                . view('partials.pwa-sw')->render()
+                .view('partials.status-footer-banners')->render()
+                .view('partials.pwa-sw')->render()
                 .view('filament.tenant.partials.webpush-admin')->render()
             ))
             ->middleware([
@@ -92,7 +92,7 @@ class TenantPanelProvider extends PanelProvider
                 InitializeTenancyByDomain::class,
             ])
             ->authMiddleware([
-                Authenticate::class,
+                AuthenticateFilamentPanel::class,
             ]));
     }
 }

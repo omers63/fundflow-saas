@@ -16,6 +16,7 @@ $supplements = [
     require __DIR__.'/../lang/app_ar_misc.php',
     require __DIR__.'/../lang/app_ar_misc_b.php',
     require __DIR__.'/../lang/app_ar_gap.php',
+    require __DIR__.'/../lang/app_ar_freeze_withdraw.php',
 ];
 $arPath = __DIR__.'/../lang/ar.json';
 $ar = json_decode((string) file_get_contents($arPath), true, 512, JSON_THROW_ON_ERROR);

@@ -97,6 +97,8 @@ return [
     'More runs' => 'المزيد من التشغيلات',
     'Mismatches' => 'عدم التطابق',
     'Missing ledger rows' => 'سطور دفتر مفقودة',
+    'Missing ledger rows: :missing · Master fund Δ :delta:inflight' => 'سطور دفتر مفقودة: :missing · فرق صندوق الرئيسي :delta:inflight',
+    'In-flight partials :amount' => 'تحصيلات جزئية قيد التنفيذ :amount',
     'Mode' => 'الوضع',
     'Monthly snapshot' => 'لقطة شهرية',
     'Newest first. Select a row to preview summary and download the complete machine-readable report.' => 'الأحدث أولاً. اختر صفاً لمعاينة الملخص وتنزيل التقرير الكامل القابل للقراءة آلياً.',

@@ -12,10 +12,16 @@ final class TenantPortalViewModal
 {
     /**
      * Read-only record detail modals — wider, compact prototype layout.
+     *
+     * @template TAction of Action
+     *
+     * @param  TAction  $action
+     * @return TAction
      */
     public static function apply(Action $action): Action
     {
-        return $action
+        /** @var TAction $action */
+        $action = $action
             ->modalWidth(fn (): ?string => self::onTenantPanel() ? '4xl' : null)
             ->modalSubmitAction(fn (): ?bool => self::onTenantPanel() ? false : null)
             ->modalCancelActionLabel(fn (): ?string => self::onTenantPanel() ? __('Close') : null)
@@ -23,6 +29,8 @@ final class TenantPortalViewModal
                 fn (): array => self::onTenantPanel() ? ['class' => 'ff-tenant-record-modal-window'] : [],
                 merge: true,
             );
+
+        return $action;
     }
 
     /**
